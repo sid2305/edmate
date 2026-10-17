@@ -307,7 +307,7 @@
 <div class="table-wrap"><table class="agents">
   <thead><tr><th>Agent</th><th>From</th><th>Its job on Edmate</th><th>Edits code</th><th>Model</th><th>Phase</th></tr></thead>
   <tbody>
-    <tr><td><code>planner</code></td><td><span class="tag ecc">ECC</span></td><td>Turns one board task into a step-by-step plan with files and tests</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
+    <tr><td><code>planner</code></td><td><span class="tag ecc">ECC</span></td><td>Turns one board task into a step-by-step plan with files and tests</td><td>Plan file only</td><td>Sonnet</td><td>1 · Harness</td></tr>
     <tr><td><code>architect</code></td><td><span class="tag ecc">ECC</span></td><td>Design questions, decision records (ADRs), ports and adapters</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
     <tr><td><code>tdd-guide</code></td><td><span class="tag ecc">ECC</span></td><td><b>Writes the code</b>, tests first, in its own worktree</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
     <tr><td><code>build-error-resolver</code></td><td><span class="tag ecc">ECC</span></td><td>Fixes broken builds and type errors with the smallest change</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
@@ -332,6 +332,7 @@
   </tbody>
 </table></div>
 <p>The team lead is not in the table: it is your main session, and it only plans, delegates and integrates.</p>
+<p><b>Models are chosen per task.</b> The "Model" column is each agent's cheap default. The team lead moves an agent up to Opus only for risky or core tasks, or after two failed fix rounds, and down to Haiku for docs-only or mechanical work. <code>safety-reviewer</code> always runs on Opus. The model used is recorded per task on the board, so the defaults can be tuned from real results (rules in <code>.claude/skills/team-lead</code>).</p>
 
 <!-- ============================================================ -->
 <h2 id="skills">6. Skills by phase</h2>
@@ -370,7 +371,7 @@
     <tr><td><code>investor-materials</code></td><td>One-pagers and decks, used here for grant and CSR applications</td><td>Team lead</td><td>3</td></tr>
   </tbody>
 </table></div>
-<p>Four Edmate-only skills sit beside these: <code>board</code> (the task-board script), <code>merge-gate</code> (the merge checklist and its script), <code>edmate-pedagogy</code> (help ladder, skills and teaching moves) and <code>india-context</code> (₹, UPI, Hinglish, Tele-MANAS 14416, educate never advise). Both are still to be written.</p>
+<p>Four Edmate-only skills sit beside these: <code>board</code> (the task-board script), <code>merge-gate</code> (the merge checklist and its script), <code>edmate-pedagogy</code> (help ladder, skills and teaching moves) and <code>locale-context</code> (₹, UPI, Hinglish, Tele-MANAS 14416, educate never advise). Both are still to be written.</p>
 
 <!-- ============================================================ -->
 <h2 id="flow">7. How one task flows</h2>
@@ -724,7 +725,7 @@ python3 .claude/skills/board/board.py decide licence "MIT"</code></pre>
 
 <!-- ============================================================ -->
 <h2 id="status">16. Status and open decisions</h2>
-<p>The plumbing, merge gate and decision log are built and tested, and the PRD, build plan and board are on v0.3. The ECC agents and skills are chosen but not yet copied in, and nothing is committed yet.</p>
+<p>The harness team is in place and committed (first commit on 17 Oct 2026). Next is a supervised dry run of task 0.1, then the GitHub repo.</p>
 <ul class="check">
   <li class="done">Repo created at <code>~/edmate</code>; PRD and build plan copied into <code>docs/</code></li>
   <li class="done">Task board with dependencies, risk tiers and decisions, plus the <code>board.py</code> script</li>
@@ -738,10 +739,13 @@ python3 .claude/skills/board/board.py decide licence "MIT"</code></pre>
   <li class="done">PRD v0.3 and build plan v0.3 in <code>docs/</code> (v0.2 in <code>docs/archive/</code>); board regenerated: 94 tasks, 30 risky, 12 open decisions</li>
   <li class="done">Agent setup updated for v0.3: <code>pedagogy-author</code> replaces <code>content-author</code>; safety and eval agents cover locked content and advice; access filter, payments and skill templates are risky paths</li>
   <li class="done">This architecture page</li>
-  <li class="todo">Copy the 12 phase-1 ECC agents and 14 skills; remove "Use PROACTIVELY"; give <code>tdd-guide</code> a worktree</li>
-  <li class="todo">Delete the 4 draft agents ECC replaces (<code>planner</code>, <code>builder</code>, <code>reviewer</code>, <code>researcher</code>)</li>
-  <li class="todo">Write <code>CLAUDE.md</code>, the path-scoped rules, and the <code>edmate-pedagogy</code> and <code>india-context</code> skills</li>
-  <li class="todo">Add Context7 in <code>.mcp.json</code>; add <code>.gitignore</code>; first commit</li>
+  <li class="done">Harness team copied from ECC (11 agents, 12 skills), adapted: no proactive triggers, cheap default models, worktrees for builders, Edmate notes on top</li>
+  <li class="done">Draft agents replaced by the ECC versions</li>
+  <li class="done"><code>CLAUDE.md</code>, the <code>team-lead</code> skill with the model policy, and the <code>edmate-pedagogy</code> and <code>locale-context</code> skills</li>
+  <li class="done">Country-neutral plan: prices as amount + currency, locale packs (task 3.10), per-market payments and compliance</li>
+  <li class="todo">Path-scoped rules in <code>.claude/rules/</code> (optional; CLAUDE.md covers the essentials)</li>
+  <li class="done">Context7 in <code>.mcp.json</code>, <code>.gitignore</code>, first commit</li>
+  <li class="todo">Dry run of task 0.1 with you watching</li>
   <li class="todo">You: create the GitHub App and do the repo settings in <code>docs/setup/github.md</code>. Claude: create the public repo, push, wire in the bot</li>
 </ul>
 

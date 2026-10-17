@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · Setup · decided by you · risk: medium
+Decided: The team lead picks each agent's model per task to save tokens. Every agent has a cheap default (mostly Sonnet, Haiku for docs lookup); the lead moves up to Opus only for risky or core tasks, or after two failed fix rounds. The safety reviewer always runs on Opus. The model used is recorded per task on the board.
+Why: Most tasks don't need the most expensive model; the record shows where it is worth paying for.
+Alternatives: One fixed model per agent.
+Reversible: Yes, edit the table in the team-lead skill.
+
+### 17 Oct 2026 · Product · decided by you · risk: medium
+Decided: Edmate is country-neutral. Currency, language, helplines, payments, tax and privacy rules live in a locale pack per market; prices are stored as amount + currency. The pilot launches in one market, chosen later.
+Why: Keep the platform open to any market; adding one later should mean adding a pack, not rewriting code.
+Alternatives: India only.
+Reversible: Yes, but cheapest to decide now, before the contracts freeze (task 0.3).
+
 ### 17 Oct 2026 · Setup · decided by Claude · risk: medium
 Decided: The agent team changes for v0.3. The life-skills content-author is replaced by a pedagogy-author (platform prompt packs, skill and persona templates, the demo course). The safety-reviewer and eval-author now also cover locked content and regulated-subject advice. The access filter, payments and webhooks, and skill templates count as risky paths. marketing-agent and market-research move into the Validate phase; seo-specialist moves to the website phase; search-first is added for library choices.
 Why: Teachers now bring their own course material, and the new promises (locked packages, payments) need the same protection as safety code.
