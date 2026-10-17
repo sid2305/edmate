@@ -2,7 +2,8 @@
 name: tdd-guide
 description: Test-Driven Development specialist enforcing write-tests-first methodology. Ensures 80%+ test coverage.
 tools: Read, Write, Edit, Bash, Grep
-model: sonnet
+model: claude-opus-5-5
+effort: medium
 isolation: worktree
 ---
 <!-- Adapted from ECC (https://github.com/affaan-m/ECC, MIT licence, commit 76aaa77). Edmate changes: description, model default, Edmate notes below. -->

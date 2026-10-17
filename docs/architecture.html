@@ -309,8 +309,8 @@
   <tbody>
     <tr><td><code>planner</code></td><td><span class="tag ecc">ECC</span></td><td>Turns one board task into a step-by-step plan with files and tests</td><td>Plan file only</td><td>Sonnet</td><td>1 · Harness</td></tr>
     <tr><td><code>architect</code></td><td><span class="tag ecc">ECC</span></td><td>Design questions, decision records (ADRs), ports and adapters</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
-    <tr><td><code>tdd-guide</code></td><td><span class="tag ecc">ECC</span></td><td><b>Writes the code</b>, tests first, in its own worktree</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
-    <tr><td><code>build-error-resolver</code></td><td><span class="tag ecc">ECC</span></td><td>Fixes broken builds and type errors with the smallest change</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>tdd-guide</code></td><td><span class="tag ecc">ECC</span></td><td><b>Writes the code</b>, tests first, in its own worktree</td><td>Yes</td><td>Opus 5.5, medium effort</td><td>1 · Harness</td></tr>
+    <tr><td><code>build-error-resolver</code></td><td><span class="tag ecc">ECC</span></td><td>Fixes broken builds and type errors with the smallest change</td><td>Yes</td><td>Opus 5.5, medium effort</td><td>1 · Harness</td></tr>
     <tr><td><code>code-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>General review of every task</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
     <tr><td><code>typescript-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Strict types, async bugs, Zod at every boundary</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
     <tr><td><code>database-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Postgres schema, migrations, the payments ledger, each teacher's and student's data kept apart</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
@@ -332,7 +332,7 @@
   </tbody>
 </table></div>
 <p>The team lead is not in the table: it is your main session, and it only plans, delegates and integrates.</p>
-<p><b>Models are chosen per task.</b> The "Model" column is each agent's cheap default. The team lead moves an agent up to Opus only for risky or core tasks, or after two failed fix rounds, and down to Haiku for docs-only or mechanical work. <code>safety-reviewer</code> always runs on Opus. The model used is recorded per task on the board, so the defaults can be tuned from real results (rules in <code>.claude/skills/team-lead</code>).</p>
+<p><b>Models are chosen per task.</b> Coding agents (<code>tdd-guide</code>, <code>build-error-resolver</code>) always run on Opus 5.5 at medium effort. For the other agents the "Model" column is a cheap default: the team lead moves them up to Opus only for risky or core tasks, and down to Haiku for docs-only work. <code>safety-reviewer</code> always runs on Opus. The model used is recorded per task on the board, so the defaults can be tuned from real results (rules in <code>.claude/skills/team-lead</code>).</p>
 
 <!-- ============================================================ -->
 <h2 id="skills">6. Skills by phase</h2>

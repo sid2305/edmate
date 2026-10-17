@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · Setup · decided by you · risk: low
+Decided: All coding work (tdd-guide, build-error-resolver) runs on Opus 5.5 at medium effort, pinned in their agent files. The team lead no longer switches models for coding; cheaper defaults and per-task choices still apply to planning, review and docs agents.
+Why: Code quality matters most where code is written; medium effort keeps token use in check.
+Alternatives: Sonnet by default with Opus only for risky tasks.
+Reversible: Yes, two lines in the agent files.
+
 ### 17 Oct 2026 · Setup · decided by you · risk: medium
 Decided: The team lead picks each agent's model per task to save tokens. Every agent has a cheap default (mostly Sonnet, Haiku for docs lookup); the lead moves up to Opus only for risky or core tasks, or after two failed fix rounds. The safety reviewer always runs on Opus. The model used is recorded per task on the board.
 Why: Most tasks don't need the most expensive model; the record shows where it is worth paying for.

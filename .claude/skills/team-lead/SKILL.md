@@ -16,13 +16,13 @@ You are the team lead: the main Claude session in `~/edmate`. You hold the end-t
 3. Choose up to **3 tasks in parallel**, and only if they touch different packages. Run tasks with risky paths in the foreground, so the hooks' "ask" prompts reach the human.
 
 ## 2. Choose the model (token efficiency)
-Each agent file has a cheap default. Override it per job with the Agent tool's `model` parameter, only when the task needs more. Record what ran with `board.py set <id> <status> --model "plan:sonnet build:opus review:sonnet"`.
+**Coding is always Opus 5.5 at medium effort** (the human's decision, 17 Oct 2026): `tdd-guide` and `build-error-resolver` pin `model: claude-opus-5-5` and `effort: medium` in their files, so never pass a `model` override when starting them. Effort can't be changed per call; if a coding task seems to need more depth, ask the human rather than changing the file. The other agents have cheap defaults; override those per job with the Agent tool's `model` parameter only when the task needs more. Record what ran with `board.py set <id> <status> --model "plan:sonnet build:opus-5.5/medium review:sonnet"`.
 
 | Agent | Default | Use **opus** when | Use **haiku** when |
 | --- | --- | --- | --- |
 | `planner` | sonnet | Risky task; core design tasks (3.1, 3.5, 3.7, 5.4, 10.3); task spans 2+ packages | Docs- or config-only tasks |
-| `tdd-guide` | sonnet | Risky task; or after 2 failed review/gate rounds on sonnet | Docs/config-only or mechanical changes fully covered by tests |
-| `build-error-resolver` | sonnet | Errors persist after one attempt | Lint, format or simple type errors |
+| `tdd-guide` | **Opus 5.5, medium effort (fixed)** | — | — |
+| `build-error-resolver` | **Opus 5.5, medium effort (fixed)** | — | — |
 | `code-reviewer`, `typescript-reviewer` | sonnet | Risky task (use opus for one of the two) | Never for code |
 | `database-reviewer`, `rag-pipeline-reviewer`, `silent-failure-hunter` | sonnet | Risky task in their area | — |
 | `security-reviewer` | sonnet | Access filter, payments, webhooks, sign-in, keys | — |
@@ -50,7 +50,7 @@ The human picks your own model (the main session); opus is recommended for the l
    - access filter, payments, auth or keys: `security-reviewer`;
    - safety paths (guardrails, prompt packs, skill templates, safety or locked evals, alerts): `safety-reviewer`, which writes `safety-review.md`.
 4. **Write `review.md`** on the branch in the merge-gate format (see `merge-gate` skill). Each finding is `[SEV] [fixed|open|deferred <id>|wontfix]`.
-5. **Fix:** send CRITICAL and HIGH findings back to the same builder. Then re-run **the reviewer that raised them** to verify. After 2 rounds, move the builder up a model once; if it still fails, ask the human.
+5. **Fix:** send CRITICAL and HIGH findings back to the same builder. Then re-run **the reviewer that raised them** to verify. After 2 failed rounds, ask the human.
 6. **Gate:** `python3 .claude/skills/merge-gate/merge_gate.py <id>` (or `--pr <n>` once on GitHub).
    - exit 1: go back to step 5;
    - exit 3: risky. Tell the human what to check in 3–5 bullets and wait for the `human-approved` label (or their explicit OK before GitHub exists).

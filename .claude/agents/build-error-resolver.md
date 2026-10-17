@@ -2,7 +2,8 @@
 name: build-error-resolver
 description: Build and TypeScript error resolution specialist. Fixes build/type errors only with minimal diffs, no architectural edits. Focuses on getting the build green quickly.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
+model: claude-opus-5-5
+effort: medium
 isolation: worktree
 ---
 <!-- Adapted from ECC (https://github.com/affaan-m/ECC, MIT licence, commit 76aaa77). Edmate changes: description, model default, Edmate notes below. -->
