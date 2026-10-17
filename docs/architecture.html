@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edmate Build Architecture</title>
+<meta name="description" content="How Edmate is built by a team of Claude Code agents: ECC agents and skills, the task board, hooks and human sign-offs.">
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --text: #1b1f24; --muted: #5b6470; --line: #c9cfd6; --grid: #e3e7eb;
+    --axis: #7a848f; --accent: #2f6fde; --accent-soft: rgba(47,111,222,.10);
+    --human: #c46f00; --human-soft: rgba(196,111,0,.10); --edm: #8a3ab9; --good: #2e8b57;
+    --band: rgba(122,132,143,.08); --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b; --surface: #1c2026; --text: #e7eaee; --muted: #a2abb5; --line: #3a424c; --grid: #2a3038;
+      --axis: #8d97a2; --accent: #6a9cff; --accent-soft: rgba(106,156,255,.14);
+      --human: #f0a040; --human-soft: rgba(240,160,64,.14); --edm: #c58af0; --good: #5cc28a;
+      --band: rgba(141,151,162,.10); --code-bg: #1f242b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171b; --surface: #1c2026; --text: #e7eaee; --muted: #a2abb5; --line: #3a424c; --grid: #2a3038;
+    --axis: #8d97a2; --accent: #6a9cff; --accent-soft: rgba(106,156,255,.14);
+    --human: #f0a040; --human-soft: rgba(240,160,64,.14); --edm: #c58af0; --good: #5cc28a;
+    --band: rgba(141,151,162,.10); --code-bg: #1f242b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 56px 0 8px; padding-top: 8px; border-top: 1px solid var(--grid); }
+  h3 { font-size: 17px; margin: 28px 0 6px; }
+  p { margin: 8px 0; max-width: 760px; }
+  .byline { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .lead { font-size: 18px; max-width: 800px; }
+  a { color: var(--accent); }
+  table.agents td:last-child { white-space: nowrap; }
+  nav.toc { background: var(--surface); border: 1px solid var(--grid); border-radius: 10px; padding: 12px 16px; margin: 20px 0 8px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; font-size: 14px; }
+  nav.toc a { color: var(--text); text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  @media (max-width: 640px) { nav.toc ol { columns: 1; } }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 10px; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--grid); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.nowrap, td code { white-space: nowrap; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .tag.ecc { color: var(--accent); border-color: var(--accent); }
+  .tag.edm { color: var(--edm); border-color: var(--edm); }
+  .tag.human { color: var(--human); border-color: var(--human); }
+  .tag.good { color: var(--good); border-color: var(--good); }
+  figure { margin: 20px 0 8px; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; max-width: 800px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 14px 0; }
+  .card { background: var(--surface); border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+  .card b { display: block; margin-bottom: 4px; }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+  ul.check { list-style: none; padding-left: 0; } ul.check li { padding-left: 26px; position: relative; margin: 4px 0; }
+  ul.check li::before { position: absolute; left: 0; font-weight: 700; }
+  ul.check li.done::before { content: "\2713"; color: var(--good); }
+  ul.check li.todo::before { content: "\25CB"; color: var(--muted); }
+
+  /* diagram vocabulary */
+  .d-box   { fill: var(--surface); stroke: var(--line); stroke-width: 1.25; }
+  .d-acc   { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .d-human { fill: var(--human-soft); stroke: var(--human); stroke-width: 1.5; }
+  .d-good  { fill: none; stroke: var(--good); stroke-width: 2; }
+  .d-band  { fill: var(--band); stroke: var(--axis); stroke-width: 1.25; stroke-dasharray: 6 4; }
+  .conn    { fill: none; stroke: var(--axis); stroke-width: 1.25; }
+  .dash    { stroke-dasharray: 5 4; }
+  .rule    { stroke: var(--grid); stroke-width: 1.5; }
+  .mk      { fill: var(--axis); }
+  .t-title { font-size: 16px; font-weight: 600; fill: var(--text); }
+  .t-sub   { font-size: 12px; fill: var(--muted); }
+  .t-name  { font-size: 14px; font-weight: 600; fill: var(--text); }
+  .t-head  { font-size: 12px; font-weight: 600; fill: var(--text); }
+  .t-line  { font-size: 12px; fill: var(--muted); }
+  .t-item  { font-size: 12.5px; fill: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .t-edm   { fill: var(--edm); }
+  .t-small { font-size: 11px; fill: var(--muted); }
+  .t-val   { font-size: 13px; font-weight: 600; fill: var(--text); }
+  .bar-grey { fill: var(--axis); fill-opacity: .55; }
+  .bar-acc  { fill: var(--accent); }
+  .bar-acc2 { fill: var(--accent); fill-opacity: .55; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Edmate build architecture</h1>
+<p class="byline">16 Oct 2026 · Siddhant Lahoti · lives in <code>docs/architecture.html</code></p>
+
+<p class="lead">Edmate is built by a team of AI agents in Claude Code. One main session leads; specialist agents from ECC plan, write, test and review each task. The team lead merges PRs itself once a merge gate passes; you decide only risky or ambiguous calls, and every decision is logged.</p>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#glance">At a glance</a></li>
+    <li><a href="#blocks">The building blocks</a></li>
+    <li><a href="#picture">The big picture</a></li>
+    <li><a href="#ecc">Where it comes from: ECC</a></li>
+    <li><a href="#agents">The agent team</a></li>
+    <li><a href="#skills">Skills by phase</a></li>
+    <li><a href="#flow">How one task flows</a></li>
+    <li><a href="#merge">Merge policy</a></li>
+    <li><a href="#log">Decision log</a></li>
+    <li><a href="#parallel">Running tasks in parallel</a></li>
+    <li><a href="#board">The task board</a></li>
+    <li><a href="#safety">Safety rails</a></li>
+    <li><a href="#github">GitHub and Actions</a></li>
+    <li><a href="#timeline">Build timeline</a></li>
+    <li><a href="#folders">Folder layout</a></li>
+    <li><a href="#status">Status and open decisions</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="glance">1. At a glance</h2>
+<p>The setup turns the 94 tasks in the build plan (v0.3) into reviewed, merged code, with a human in charge of every risky call.</p>
+<div class="cards">
+  <div class="card"><b>What it builds</b><p>Edmate v0.3: teachers turn their knowledge into an AI teaching agent and sell packages; students subscribe and learn with it. The agent first, then the teacher studio, student app and payments (<code>docs/edmate-harness-build-plan.md</code>).</p></div>
+  <div class="card"><b>Who builds it</b><p>22 agents: 19 copied from ECC, 3 written for Edmate. Only those a phase needs are added.</p></div>
+  <div class="card"><b>How work moves</b><p>Board → plan → build → review → gates → merge gate → merge. Agents hand over through files, not chat.</p></div>
+  <div class="card"><b>What keeps it safe</b><p>Hooks and the merge gate enforce the rules. You approve only risky PRs: child safety, contracts, keys, data.</p></div>
+  <div class="card"><b>What gets recorded</b><p>Every decision the spec did not make, in plain words, in <code>docs/decisions/log.md</code>.</p></div>
+  <div class="card"><b>Where it lives</b><p>Only inside <code>~/edmate</code>. Nothing global, so other projects are untouched.</p></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="blocks">2. The building blocks</h2>
+<p>Claude Code has six kinds of building block. Only hooks and an agent's tool list are enforced; the rest is guidance the model reads.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Block</th><th>What it is, in simple words</th><th>Loaded when</th><th>Enforced?</th></tr></thead>
+  <tbody>
+    <tr><td><code>CLAUDE.md</code></td><td>The project's standing brief: what Edmate is, the rules, where things live</td><td>Every session</td><td>No, guidance</td></tr>
+    <tr><td><code>.claude/rules/</code></td><td>Extra rules for one part of the code, e.g. "harness code never imports the database"</td><td>Only when working on matching files</td><td>No, guidance</td></tr>
+    <tr><td><code>.claude/agents/</code></td><td>A specialist with its own job, allowed tools and model. Works in its own context, returns a short result</td><td>When the lead hands it a job</td><td>Its tool list, yes</td></tr>
+    <tr><td><code>.claude/skills/</code></td><td>A playbook or body of know-how, e.g. test-first development</td><td>When relevant; until then only its one-line description is visible</td><td>No, guidance</td></tr>
+    <tr><td><code>.claude/hooks/</code></td><td>Small scripts Claude Code runs before or after every file edit and shell command</td><td>Always, automatically</td><td><b>Yes</b></td></tr>
+    <tr><td><code>.mcp.json</code></td><td>Connections to outside tools, e.g. Context7 for current library docs</td><td>At startup</td><td>—</td></tr>
+  </tbody>
+</table></div>
+<p>One rule of Claude Code shapes everything below: <b>an agent cannot start another agent</b>. So the main session is always the team lead, and every handoff passes through it.</p>
+
+<!-- ============================================================ -->
+<h2 id="picture">3. The big picture</h2>
+<p>You talk only to the team lead. The lead reads the board, hands one job at a time to a specialist, and collects the result from a file.</p>
+<figure>
+<svg viewBox="0 0 960 636" role="img" aria-label="One lead session hands work to specialist agents; hooks guard every step">
+  <defs><marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text class="t-title" x="30" y="30">One lead session hands work to specialist agents; hooks guard every step</text>
+
+  <!-- row 1 -->
+  <rect class="d-human" x="30" y="52" width="220" height="80" rx="8"/>
+  <text class="t-name" x="140" y="78" text-anchor="middle">You (human)</text>
+  <text class="t-line" x="140" y="98" text-anchor="middle">decide risky or unclear calls</text>
+  <text class="t-line" x="140" y="114" text-anchor="middle">read the decision log anytime</text>
+
+  <rect class="d-acc" x="280" y="52" width="400" height="80" rx="8"/>
+  <text class="t-name" x="480" y="78" text-anchor="middle">Team lead · main Claude session</text>
+  <text class="t-line" x="480" y="98" text-anchor="middle">reads CLAUDE.md + rules, runs team-agent-orchestration</text>
+  <text class="t-line" x="480" y="114" text-anchor="middle">delegates, runs the merge gate, merges; writes no features</text>
+
+  <rect class="d-box" x="710" y="52" width="220" height="80" rx="8"/>
+  <text class="t-name" x="820" y="78" text-anchor="middle">Task board</text>
+  <text class="t-line" x="820" y="98" text-anchor="middle">docs/board/tasks.yaml</text>
+  <text class="t-line" x="820" y="114" text-anchor="middle">94 tasks · states · decisions</text>
+
+  <g class="conn">
+    <path d="M252 92H278" marker-start="url(#m1)" marker-end="url(#m1)"/>
+    <path d="M682 92H708" marker-start="url(#m1)" marker-end="url(#m1)"/>
+    <path d="M480 132V160"/><path d="M135 160H825"/>
+    <path d="M135 160V188" marker-end="url(#m1)"/><path d="M365 160V188" marker-end="url(#m1)"/>
+    <path d="M595 160V188" marker-end="url(#m1)"/><path d="M825 160V188" marker-end="url(#m1)"/>
+  </g>
+  <text class="t-small" x="492" y="152">one job each · short result back</text>
+
+  <!-- row 2: plan -->
+  <rect class="d-box" x="30" y="190" width="210" height="210" rx="8"/>
+  <text class="t-name" x="135" y="214" text-anchor="middle">1 · Plan</text>
+  <text class="t-item" x="46" y="242">planner</text>
+  <text class="t-item" x="46" y="260">architect</text>
+  <text class="t-item" x="46" y="278">docs-lookup</text>
+  <text class="t-small" x="46" y="388">writes plan.md</text>
+
+  <!-- build -->
+  <rect class="d-box" x="260" y="190" width="210" height="210" rx="8"/>
+  <text class="t-name" x="365" y="214" text-anchor="middle">2 · Build</text>
+  <text class="t-item" x="276" y="242">tdd-guide</text>
+  <text class="t-item" x="276" y="260">build-error-resolver</text>
+  <text class="t-item t-edm" x="276" y="278">pedagogy-author</text>
+  <text class="t-item t-edm" x="276" y="296">eval-author</text>
+  <text class="t-small" x="276" y="372">own git worktree per task</text>
+  <text class="t-small" x="276" y="388">writes code + handoff.md</text>
+
+  <!-- review -->
+  <rect class="d-box" x="490" y="190" width="210" height="210" rx="8"/>
+  <text class="t-name" x="595" y="214" text-anchor="middle">3 · Review</text>
+  <text class="t-item" x="506" y="242">code-reviewer</text>
+  <text class="t-item" x="506" y="260">typescript-reviewer</text>
+  <text class="t-item" x="506" y="278">database-reviewer</text>
+  <text class="t-item" x="506" y="296">security-reviewer</text>
+  <text class="t-item" x="506" y="314">silent-failure-hunter</text>
+  <text class="t-item" x="506" y="332">rag-pipeline-reviewer</text>
+  <text class="t-item t-edm" x="506" y="350">safety-reviewer</text>
+  <text class="t-small" x="506" y="372">read-only</text>
+  <text class="t-small" x="506" y="388">findings → review.md</text>
+
+  <!-- later -->
+  <rect class="d-box" x="720" y="190" width="210" height="320" rx="8"/>
+  <text class="t-name" x="825" y="214" text-anchor="middle">Later phases</text>
+  <text class="t-head" x="736" y="242">Website (phase 2)</text>
+  <text class="t-item" x="736" y="262">react-reviewer</text>
+  <text class="t-item" x="736" y="280">react-build-resolver</text>
+  <text class="t-item" x="736" y="298">e2e-runner</text>
+  <text class="t-item" x="736" y="316">a11y-architect</text>
+  <text class="t-item" x="736" y="334">performance-optimizer</text>
+  <text class="t-item" x="736" y="352">gan-evaluator</text>
+  <text class="t-item" x="736" y="370">seo-specialist</text>
+  <text class="t-head" x="736" y="402">Validate (no code)</text>
+  <text class="t-item" x="736" y="422">marketing-agent</text>
+  <text class="t-small" x="736" y="494">added when its phase starts</text>
+
+  <!-- row 3 -->
+  <g class="conn">
+    <path d="M135 400V438" marker-end="url(#m1)"/><path d="M365 400V438" marker-end="url(#m1)"/><path d="M595 400V438" marker-end="url(#m1)"/>
+  </g>
+  <rect class="d-box" x="30" y="440" width="670" height="70" rx="8"/>
+  <text class="t-name" x="365" y="466" text-anchor="middle">Handoff files · docs/tasks/&lt;id&gt;/</text>
+  <text class="t-line" x="365" y="488" text-anchor="middle">plan.md → handoff.md → review.md · decisions copied to docs/decisions/log.md</text>
+
+  <!-- row 4 -->
+  <rect class="d-band" x="30" y="540" width="900" height="72" rx="8"/>
+  <text class="t-name" x="480" y="564" text-anchor="middle">Hooks · enforced by Claude Code on every edit and shell command</text>
+  <text class="t-line" x="480" y="584" text-anchor="middle">ask before editing contracts or safety code · block .env writes · reject impure harness imports and API keys</text>
+  <text class="t-line" x="480" y="600" text-anchor="middle">no force-push or push to main · merges only through the merge gate · only you add human-approved</text>
+</svg>
+<figcaption>Purple names are the 3 Edmate-made agents; all others come from ECC. The team lead runs in your terminal with <code>claude</code> inside <code>~/edmate</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="ecc">4. Where it comes from: ECC</h2>
+<p><a href="https://github.com/affaan-m/ECC">ECC</a> (MIT licence) is a large, community-built Claude Code setup. We use it as a library: we copy the parts each phase needs and leave the rest.</p>
+
+<h3>How ECC is built</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Layer</th><th>What it holds</th></tr></thead>
+  <tbody>
+    <tr><td>Source</td><td>71 agents, 311 skills, 97 commands, 27 hooks, rules for about 20 languages</td></tr>
+    <tr><td>Manifests</td><td>Group the source into 33 modules and 7 install profiles (<code>minimal</code>, <code>core</code>, <code>developer</code>, <code>security</code>, <code>research</code>, <code>full</code>, OpenCode)</td></tr>
+    <tr><td>Installer</td><td><code>install.sh</code> copies a profile into <code>~/.claude/</code>, or the plugin installs it with <code>ecc:</code> names</td></tr>
+    <tr><td>Adapters</td><td>Config folders for about 15 other AI coding tools (Cursor, Codex, Gemini and more)</td></tr>
+    <tr><td><code>ecc2/</code></td><td>An alpha Rust dashboard for many sessions at once: SQLite session store, worktree-aware sessions</td></tr>
+  </tbody>
+</table></div>
+
+<h3>What we take</h3>
+<ul>
+  <li><b>19 agents and 29 skills</b>, copied phase by phase (sections 5 and 6).</li>
+  <li><b>The phase pipeline:</b> research → plan → build → review → verify, each phase writing a file the next one reads.</li>
+  <li><b>Worktrees for parallel work:</b> one builder per git worktree, no overlapping files, at most 3 at once.</li>
+  <li><b>Task cards with merge gates</b>, from <code>team-agent-orchestration</code>: owner, scope, state, evidence, gate.</li>
+  <li><b>The "collect your own results" rule:</b> whoever delegates must wait and integrate, never end on "waiting".</li>
+</ul>
+
+<h3>What we leave out, and why</h3>
+<ul>
+  <li><b>The full install.</b> ~400 items you would not use, all listed in every session (chart below).</li>
+  <li><b>Generic rules that clash with the build plan</b>, e.g. 80% coverage everywhere where the plan demands 100% for the simulator and guards.</li>
+  <li><b>"Use PROACTIVELY" wording</b> in agent descriptions, which makes agents start without being asked. We remove it when copying.</li>
+  <li><b>Global hooks</b> that would run in every project on your laptop.</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 960 230" role="img" aria-label="All of ECC would add about 35 thousand tokens to every session; our phase-1 setup adds about 2.4 thousand">
+  <text class="t-title" x="30" y="30">All of ECC adds ~35k tokens to every session; our phase-1 setup adds ~2.4k</text>
+  <text class="t-sub" x="30" y="50">Names + descriptions Claude reads before any work starts, in tokens</text>
+  <line class="rule" x1="270" y1="70" x2="270" y2="214"/>
+  <text class="t-name" x="30" y="96">All of ECC</text>
+  <text class="t-small" x="30" y="112">311 skills · 71 agents · 97 commands</text>
+  <rect class="bar-grey" x="270" y="82" width="600" height="32" rx="3"><title>All of ECC: about 34,600 tokens</title></rect>
+  <text class="t-val" x="878" y="103">34.6k</text>
+  <text class="t-name" x="30" y="146">Edmate, phase 1</text>
+  <text class="t-small" x="30" y="162">15 agents · 14 skills</text>
+  <rect class="bar-acc" x="270" y="132" width="42" height="32" rx="3"><title>Edmate phase 1: about 2,400 tokens</title></rect>
+  <text class="t-val" x="320" y="153">2.4k</text>
+  <text class="t-name" x="30" y="196">Edmate, phases 1 + 2</text>
+  <text class="t-small" x="30" y="212">22 agents · 25 skills</text>
+  <rect class="bar-acc2" x="270" y="182" width="66" height="32" rx="3"><title>Edmate phases 1 and 2: about 3,800 tokens</title></rect>
+  <text class="t-val" x="344" y="203">3.8k</text>
+</svg>
+<figcaption>Estimated on 17 Oct 2026 from the ECC repo: characters of each name + description ÷ 4. The bigger cost of a full install is wrong guidance, not tokens.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="agents">5. The agent team</h2>
+<p>22 agents in total; 15 work in phase 1 (one of them, <code>marketing-agent</code>, on the Validate phase rather than code). "Edits code: No" means the agent can read and run tests but never change files, so a reviewer cannot quietly fix and hide a problem.</p>
+<div class="table-wrap"><table class="agents">
+  <thead><tr><th>Agent</th><th>From</th><th>Its job on Edmate</th><th>Edits code</th><th>Model</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td><code>planner</code></td><td><span class="tag ecc">ECC</span></td><td>Turns one board task into a step-by-step plan with files and tests</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
+    <tr><td><code>architect</code></td><td><span class="tag ecc">ECC</span></td><td>Design questions, decision records (ADRs), ports and adapters</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
+    <tr><td><code>tdd-guide</code></td><td><span class="tag ecc">ECC</span></td><td><b>Writes the code</b>, tests first, in its own worktree</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>build-error-resolver</code></td><td><span class="tag ecc">ECC</span></td><td>Fixes broken builds and type errors with the smallest change</td><td>Yes</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>code-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>General review of every task</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>typescript-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Strict types, async bugs, Zod at every boundary</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>database-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Postgres schema, migrations, the payments ledger, each teacher's and student's data kept apart</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>security-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Sign-in, payments and webhooks, entitlement bypass, OWASP checks</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>silent-failure-hunter</code></td><td><span class="tag ecc">ECC</span></td><td>Finds swallowed errors, so guards fail closed for minors</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>rag-pipeline-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>Search over each teacher's material and the access filter (tasks 5.3, 5.4)</td><td>No</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>docs-lookup</code></td><td><span class="tag ecc">ECC</span></td><td>Current docs for AI SDK, Drizzle, Auth.js via Context7</td><td>No</td><td>Haiku</td><td>1 · Harness</td></tr>
+    <tr><td><code>safety-reviewer</code></td><td><span class="tag edm">Edmate</span></td><td>Student safety, locked-content leaks, distress alerts, regulated-subject advice, Hinglish attacks. Prepares your sign-off</td><td>No</td><td>Opus</td><td>1 · Harness</td></tr>
+    <tr><td><code>pedagogy-author</code></td><td><span class="tag edm">Edmate</span></td><td>Platform prompt packs, skill and persona templates, style-interview questions, the demo teacher course</td><td>Content only</td><td>Opus</td><td>1 · Harness</td></tr>
+    <tr><td><code>eval-author</code></td><td><span class="tag edm">Edmate</span></td><td>Writes locked, leak, safety, persona, pedagogy and advice test cases</td><td>Eval files only</td><td>Sonnet</td><td>1 · Harness</td></tr>
+    <tr><td><code>react-reviewer</code></td><td><span class="tag ecc">ECC</span></td><td>React and Next.js review</td><td>No</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>react-build-resolver</code></td><td><span class="tag ecc">ECC</span></td><td>Fixes Next.js build and hydration errors</td><td>Yes</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>e2e-runner</code></td><td><span class="tag ecc">ECC</span></td><td>Playwright tests of whole user journeys</td><td>Tests only</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>a11y-architect</code></td><td><span class="tag ecc">ECC</span></td><td>WCAG 2.2 AA, keyboard use, screen readers</td><td>Yes</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>performance-optimizer</code></td><td><span class="tag ecc">ECC</span></td><td>4 GB laptops, a 40-student lab on one internet line</td><td>Yes</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>gan-evaluator</code></td><td><span class="tag ecc">ECC</span></td><td>Uses the running site like a student and scores it</td><td>No</td><td>Sonnet</td><td>2 · Website</td></tr>
+    <tr><td><code>marketing-agent</code></td><td><span class="tag ecc">ECC</span></td><td>Teacher recruitment and competitor tests in the Validate phase; launch copy later</td><td>No</td><td>Sonnet</td><td>1 · Validate</td></tr>
+    <tr><td><code>seo-specialist</code></td><td><span class="tag ecc">ECC</span></td><td>Teacher pages found by search</td><td>No</td><td>Sonnet</td><td>2 · Website</td></tr>
+  </tbody>
+</table></div>
+<p>The team lead is not in the table: it is your main session, and it only plans, delegates and integrates.</p>
+
+<!-- ============================================================ -->
+<h2 id="skills">6. Skills by phase</h2>
+<p>14 ECC skills come in now, 11 with the website and 4 for launch. An agent reads a skill only when its task needs it.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Skill</th><th>What it teaches</th><th>Used by</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td><code>team-agent-orchestration</code></td><td>Running agents as a team: task cards, board states, merge gates, one integrator</td><td>Team lead</td><td>1</td></tr>
+    <tr><td><code>strategic-compact</code></td><td>When to compact a long session so context is not lost mid-task</td><td>Team lead</td><td>1</td></tr>
+    <tr><td><code>tdd-workflow</code></td><td>Test first, watch it fail, make it pass, then tidy</td><td><code>tdd-guide</code></td><td>1</td></tr>
+    <tr><td><code>verification-loop</code></td><td>Build, types, lint, tests, security scan and diff check before handoff</td><td><code>tdd-guide</code>, reviewers</td><td>1</td></tr>
+    <tr><td><code>coding-standards</code></td><td>Naming, readability, small functions</td><td><code>typescript-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>backend-patterns</code></td><td>Server-side patterns for Node and Next.js routes</td><td><code>typescript-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>postgres-patterns</code></td><td>Indexes, queries, row-level security</td><td><code>database-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>database-migrations</code></td><td>Safe migrations up and down</td><td><code>database-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>api-design</code></td><td>Route names, status codes, error shapes, rate limits</td><td><code>planner</code>, <code>tdd-guide</code></td><td>1</td></tr>
+    <tr><td><code>docker-patterns</code></td><td>Docker Compose on one VM</td><td><code>tdd-guide</code></td><td>1</td></tr>
+    <tr><td><code>security-review</code></td><td>Checklist for sign-in, secrets, user input</td><td><code>security-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>agent-security-hardening</code></td><td>Defending an AI system against prompt injection from untrusted input</td><td><code>safety-reviewer</code>, <code>security-reviewer</code></td><td>1</td></tr>
+    <tr><td><code>search-first</code></td><td>Look for an existing library before writing custom code (parsers, payment SDKs)</td><td><code>planner</code>, <code>tdd-guide</code></td><td>1</td></tr>
+    <tr><td><code>market-research</code></td><td>Sourced research on competitors and teachers, for the Validate phase</td><td><code>marketing-agent</code></td><td>1</td></tr>
+    <tr><td><code>nextjs-turbopack</code></td><td>Next.js 16 builds and dev server</td><td><code>tdd-guide</code>, <code>react-build-resolver</code></td><td>2</td></tr>
+    <tr><td><code>react-patterns</code></td><td>Server and client components, hooks, forms</td><td><code>tdd-guide</code>, <code>react-reviewer</code></td><td>2</td></tr>
+    <tr><td><code>react-testing</code></td><td>Component tests with Vitest and axe</td><td><code>tdd-guide</code></td><td>2</td></tr>
+    <tr><td><code>react-performance</code></td><td>Fast pages on slow laptops</td><td><code>performance-optimizer</code></td><td>2</td></tr>
+    <tr><td><code>frontend-patterns</code></td><td>State, data loading, UI structure</td><td><code>typescript-reviewer</code></td><td>2</td></tr>
+    <tr><td><code>e2e-testing</code></td><td>Playwright page objects, fixing flaky tests</td><td><code>e2e-runner</code></td><td>2</td></tr>
+    <tr><td><code>accessibility</code></td><td>WCAG 2.2 AA rules</td><td><code>a11y-architect</code></td><td>2</td></tr>
+    <tr><td><code>frontend-a11y</code></td><td>Keyboard, focus and labels in React</td><td><code>a11y-architect</code></td><td>2</td></tr>
+    <tr><td><code>i18n-sync</code></td><td>Keeping Hindi and English strings in step</td><td><code>tdd-guide</code></td><td>2</td></tr>
+    <tr><td><code>design-system</code></td><td>Colours, type and spacing as tokens</td><td><code>a11y-architect</code></td><td>2</td></tr>
+    <tr><td><code>marketing-campaign</code></td><td>Planning a campaign end to end</td><td><code>marketing-agent</code></td><td>3</td></tr>
+    <tr><td><code>brand-voice</code></td><td>A consistent voice across copy</td><td><code>marketing-agent</code></td><td>3</td></tr>
+    <tr><td><code>content-engine</code></td><td>Content for WhatsApp, YouTube, LinkedIn</td><td><code>marketing-agent</code></td><td>3</td></tr>
+    <tr><td><code>seo</code></td><td>Search-friendly teacher pages</td><td><code>seo-specialist</code></td><td>2</td></tr>
+    <tr><td><code>investor-materials</code></td><td>One-pagers and decks, used here for grant and CSR applications</td><td>Team lead</td><td>3</td></tr>
+  </tbody>
+</table></div>
+<p>Four Edmate-only skills sit beside these: <code>board</code> (the task-board script), <code>merge-gate</code> (the merge checklist and its script), <code>edmate-pedagogy</code> (help ladder, skills and teaching moves) and <code>india-context</code> (₹, UPI, Hinglish, Tele-MANAS 14416, educate never advise). Both are still to be written.</p>
+
+<!-- ============================================================ -->
+<h2 id="flow">7. How one task flows</h2>
+<p>Every task takes the same seven steps. Two loops send work back and end with you only if they repeat; risky PRs wait for your label at the last step.</p>
+<figure>
+<svg viewBox="0 0 960 700" role="img" aria-label="Every task goes from the board through plan, build, review and gates to the merge gate">
+  <defs><marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text class="t-title" x="30" y="30">Every task goes board → plan → build → review → gates → merge gate</text>
+
+  <rect class="d-box" x="180" y="56" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="79" text-anchor="middle">1 · Task is ready on the board</text>
+  <text class="t-line" x="360" y="98" text-anchor="middle">deps done, no open decision · status: planning</text>
+
+  <rect class="d-box" x="180" y="146" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="169" text-anchor="middle">2 · planner writes plan.md</text>
+  <text class="t-line" x="360" y="188" text-anchor="middle">files, tests, acceptance check · READY or BLOCKED</text>
+
+  <rect class="d-box" x="180" y="236" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="259" text-anchor="middle">3 · tdd-guide builds in its own worktree</text>
+  <text class="t-line" x="360" y="278" text-anchor="middle">tests first → code → handoff.md · status: running</text>
+
+  <rect class="d-box" x="180" y="326" width="360" height="72" rx="8"/>
+  <text class="t-name" x="360" y="349" text-anchor="middle">4 · Reviews run in parallel</text>
+  <text class="t-line" x="360" y="368" text-anchor="middle">code + typescript reviewers, plus a specialist</text>
+  <text class="t-line" x="360" y="384" text-anchor="middle">safety-reviewer when safety paths change</text>
+
+  <rect class="d-box" x="180" y="432" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="455" text-anchor="middle">5 · Gates</text>
+  <text class="t-line" x="360" y="474" text-anchor="middle">typecheck · lint · tests · evals · status: review</text>
+
+  <rect class="d-box" x="180" y="522" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="545" text-anchor="middle">6 · PR opened</text>
+  <text class="t-line" x="360" y="564" text-anchor="middle">titled "&lt;id&gt;: &lt;title&gt;", evidence attached</text>
+
+  <rect class="d-acc" x="180" y="612" width="360" height="56" rx="8"/>
+  <text class="t-name" x="360" y="635" text-anchor="middle">7 · Merge gate passes, the lead merges</text>
+  <text class="t-line" x="360" y="654" text-anchor="middle">reviews done, HIGH+ fixed · decisions logged · done</text>
+
+  <rect class="d-human" x="600" y="604" width="320" height="72" rx="8"/>
+  <text class="t-name" x="760" y="628" text-anchor="middle">Risky → you approve first</text>
+  <text class="t-line" x="760" y="648" text-anchor="middle">safety, contracts, keys, data, config:</text>
+  <text class="t-line" x="760" y="664" text-anchor="middle">you add the human-approved label</text>
+  <path class="conn" d="M542 640H598" marker-start="url(#m3)" marker-end="url(#m3)"/>
+  <text class="t-small" x="570" y="632" text-anchor="middle">risky</text>
+
+  <g class="conn">
+    <path d="M360 112V144" marker-end="url(#m3)"/><path d="M360 202V234" marker-end="url(#m3)"/>
+    <path d="M360 292V324" marker-end="url(#m3)"/><path d="M360 398V430" marker-end="url(#m3)"/>
+    <path d="M360 488V520" marker-end="url(#m3)"/><path d="M360 578V610" marker-end="url(#m3)"/>
+  </g>
+
+  <!-- blocked side loop -->
+  <rect class="d-human" x="600" y="138" width="320" height="72" rx="8"/>
+  <text class="t-name" x="760" y="162" text-anchor="middle">Blocked → you decide</text>
+  <text class="t-line" x="760" y="182" text-anchor="middle">open decision, unclear spec, or a</text>
+  <text class="t-line" x="760" y="198" text-anchor="middle">contract change that needs an ADR</text>
+  <g class="conn">
+    <path d="M540 174H598" marker-end="url(#m3)"/>
+    <path d="M760 138V84H542" marker-end="url(#m3)"/>
+  </g>
+  <text class="t-small" x="570" y="166" text-anchor="middle">blocked</text>
+  <text class="t-small" x="650" y="76" text-anchor="middle">answer recorded on board</text>
+
+  <!-- build error side -->
+  <rect class="d-box" x="600" y="236" width="320" height="56" rx="8"/>
+  <text class="t-name" x="760" y="259" text-anchor="middle">build-error-resolver</text>
+  <text class="t-line" x="760" y="278" text-anchor="middle">fixes a broken build with the smallest change</text>
+  <path class="conn" d="M542 264H598" marker-start="url(#m3)" marker-end="url(#m3)"/>
+  <text class="t-small" x="570" y="228" text-anchor="middle">build breaks</text>
+
+  <!-- left loop -->
+  <g class="conn">
+    <path d="M180 362H140"/>
+    <path d="M180 460H140V264H178" marker-end="url(#m3)"/>
+  </g>
+  <text class="t-small" x="130" y="340" text-anchor="end">changes</text>
+  <text class="t-small" x="130" y="354" text-anchor="end">requested, or</text>
+  <text class="t-small" x="130" y="368" text-anchor="end">a gate fails</text>
+  <text class="t-small" x="130" y="388" text-anchor="end">max 2 rounds,</text>
+  <text class="t-small" x="130" y="402" text-anchor="end">then you</text>
+</svg>
+<figcaption>"HIGH+" means every CRITICAL and HIGH finding is fixed and re-checked by a reviewer. The handoff files for task <code>3.5</code> live in <code>docs/tasks/3.5/</code>. Branches are named <code>m&lt;milestone&gt;/&lt;id&gt;-&lt;slug&gt;</code>, e.g. <code>m3/3.5-help-ladder</code>.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="merge">8. Merge policy</h2>
+<p>The team lead merges PRs itself. It holds the full picture (PRD, build plan, board, every handoff), so it checks the gate and decides. You are asked only when a change is risky or the spec is unclear.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Tier</th><th>What falls in it</th><th>Who merges</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag good">Normal</span></td><td>Most tasks: pipeline steps, routes, UI, tests, tooling</td><td>Team lead, after the merge gate</td></tr>
+    <tr><td><span class="tag human">Risky</span></td><td>Student safety (guardrails, prompt packs, skill and persona templates, safety and locked evals, alerts) · <b>the access filter</b> · <b>payments, subscriptions and webhooks</b> · frozen contracts and ADRs · keys, sign-in, each teacher's and student's data kept apart · migrations that drop or delete data · <code>.claude/</code> and <code>.github/</code> config</td><td>You add the <code>human-approved</code> label, then the lead merges</td></tr>
+    <tr><td><span class="tag human">Ambiguous</span></td><td>Unclear or conflicting spec, or a trade-off that changes how the product behaves</td><td>The lead asks you <b>before building</b>, and logs your answer</td></tr>
+    <tr><td><span class="tag">Reviewer</span></td><td>Platform prompt packs, skill templates and eval cases</td><td>A named person signs off in <code>reviewed_by</code>. Teachers own and review their own course material</td></tr>
+  </tbody>
+</table></div>
+<h3>The merge gate: all must hold</h3>
+<ol>
+  <li><b>Reviews ran:</b> <code>code-reviewer</code> and <code>typescript-reviewer</code>, plus the specialist for the area, plus <code>safety-reviewer</code> when safety code changes.</li>
+  <li><b>Every CRITICAL and HIGH finding is fixed</b>, and a reviewer re-ran its checks to confirm it. The builder's word is not enough.</li>
+  <li><b>MEDIUM and LOW findings</b> are fixed, deferred to a new board task, or marked won't-fix with a decision-log entry saying why.</li>
+  <li><b>CI and eval gates are green.</b></li>
+  <li><b>Decisions are written down</b> in the handoff (or "None").</li>
+  <li><b><code>merge_gate.py</code> passes.</b> It reads <code>review.md</code> and <code>handoff.md</code> from the branch and the list of changed files, then answers PASS, FAIL or NEEDS HUMAN.</li>
+</ol>
+<p>The gate's risky list lives in <code>.claude/skills/merge-gate/risk-paths.txt</code>; the architect updates it as code lands. The gate was tested on 16 Oct 2026 against six cases: a clean pass, an open HIGH finding, changes requested, a missing safety review, risky code, and a migration that drops a column.</p>
+
+<!-- ============================================================ -->
+<h2 id="log">9. Decision log</h2>
+<p>Every decision the spec did not already make is written down in plain words in one file: <code>docs/decisions/log.md</code>, newest first. You can read it whenever you like.</p>
+<ul>
+  <li><b>What gets logged:</b> a library choice, a data shape, a trade-off, how an unclear line was read, a deviation from the plan, a finding left unfixed, and every answer you give.</li>
+  <li><b>What does not:</b> naming and formatting.</li>
+  <li><b>Who writes it:</b> agents note decisions in their task's handoff; the team lead copies them in when the PR merges. One writer on <code>main</code> means no merge conflicts.</li>
+  <li><b>How to skim it:</b> each entry has a risk level. <code>medium</code> entries are the ones worth a look; <code>high</code> ones are yours.</li>
+</ul>
+<pre><code>### 20 Oct 2026 · 3.5 Help ladder · decided by tdd-guide · risk: low
+Decided: Keep help-ladder state as JSON on the session row.
+Why: The plan says "per student per problem"; a new table adds joins for no gain.
+Alternatives: A separate help_states table.
+Reversible: Yes, one migration.</code></pre>
+<p>The log already holds the seven setup decisions made on 15–16 Oct 2026.</p>
+
+<!-- ============================================================ -->
+<h2 id="parallel">10. Running tasks in parallel</h2>
+<p>Up to 3 builders run at once. Each gets its own git worktree (a separate copy of the repo on its own branch), so they never overwrite each other.</p>
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Up to three builders work at once, each in its own worktree and branch">
+  <defs><marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text class="t-title" x="30" y="30">Up to 3 builders work at once, each in its own worktree and branch</text>
+
+  <rect class="d-box" x="30" y="128" width="170" height="72" rx="8"/>
+  <text class="t-name" x="115" y="154" text-anchor="middle">main</text>
+  <text class="t-line" x="115" y="174" text-anchor="middle">~/edmate</text>
+  <text class="t-line" x="115" y="190" text-anchor="middle">always green</text>
+
+  <rect class="d-human" x="260" y="64" width="400" height="56" rx="8"/>
+  <text class="t-name" x="276" y="88">tdd-guide #1 · m4/4.2-pii-scrub</text>
+  <text class="t-line" x="276" y="106">packages/harness/src/guardrails/ · risky: you approve</text>
+  <rect class="d-box" x="260" y="136" width="400" height="56" rx="8"/>
+  <text class="t-name" x="276" y="160">tdd-guide #2 · m5/5.1-doc-ingestion</text>
+  <text class="t-line" x="276" y="178">packages/ingest/</text>
+  <rect class="d-box" x="260" y="208" width="400" height="56" rx="8"/>
+  <text class="t-name" x="276" y="232">tdd-guide #3 · m10/10.3-subscriptions</text>
+  <text class="t-line" x="276" y="250">packages/payments/ · risky: you approve</text>
+
+  <rect class="d-acc" x="720" y="116" width="210" height="96" rx="8"/>
+  <text class="t-name" x="825" y="142" text-anchor="middle">Team lead integrates</text>
+  <text class="t-line" x="825" y="162" text-anchor="middle">merge gate per PR</text>
+  <text class="t-line" x="825" y="178" text-anchor="middle">risky ones wait for you</text>
+  <text class="t-line" x="825" y="194" text-anchor="middle">one PR at a time</text>
+
+  <g class="conn">
+    <path d="M200 164H230"/>
+    <path d="M230 164V92H258" marker-end="url(#m4)"/>
+    <path d="M230 164H258" marker-end="url(#m4)"/>
+    <path d="M230 164V236H258" marker-end="url(#m4)"/>
+    <path d="M660 92H690V164"/><path d="M660 236H690V164"/>
+    <path d="M660 164H718" marker-end="url(#m4)"/>
+    <path d="M825 212V276H115V202" marker-end="url(#m4)"/>
+  </g>
+  <text class="t-small" x="470" y="270" text-anchor="middle">merged into main</text>
+</svg>
+<figcaption>Example: once M3 and M1 are done, tasks 4.2, 5.1 and 10.3 touch different folders, so they can run side by side. Lanes that touch safety code (orange) run in the foreground, so the "ask" prompts reach you.</figcaption>
+</figure>
+<ul>
+  <li><b>Different folders per lane.</b> Two tasks that edit the same package wait for each other.</li>
+  <li><b>No lane edits the contracts.</b> <code>packages/contracts</code> is frozen after task 0.3.</li>
+  <li><b>One integrator.</b> Only the team lead merges, one PR at a time, and re-runs the gate on the next PR after rebasing it.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="board">11. The task board</h2>
+<p>The board (<code>docs/board/tasks.yaml</code>) holds all 94 tasks of plan v0.3, their dependencies, each task's risk tier (30 risky, 1 needing a named reviewer) and 12 open human decisions. A task starts only when its dependencies are done and its decisions are answered.</p>
+<figure>
+<svg viewBox="0 0 960 280" role="img" aria-label="Each task moves left to right; only a human unblocks it">
+  <defs><marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text class="t-title" x="30" y="30">Each task moves left to right; only a human unblocks it</text>
+
+  <rect class="d-box" x="30" y="80" width="150" height="64" rx="8"/>
+  <text class="t-name" x="105" y="106" text-anchor="middle">todo</text>
+  <text class="t-line" x="105" y="126" text-anchor="middle">waiting on deps</text>
+  <rect class="d-box" x="210" y="80" width="150" height="64" rx="8"/>
+  <text class="t-name" x="285" y="106" text-anchor="middle">planning</text>
+  <text class="t-line" x="285" y="126" text-anchor="middle">planner at work</text>
+  <rect class="d-box" x="390" y="80" width="150" height="64" rx="8"/>
+  <text class="t-name" x="465" y="106" text-anchor="middle">running</text>
+  <text class="t-line" x="465" y="126" text-anchor="middle">tdd-guide at work</text>
+  <rect class="d-box" x="570" y="80" width="150" height="64" rx="8"/>
+  <text class="t-name" x="645" y="106" text-anchor="middle">review</text>
+  <text class="t-line" x="645" y="126" text-anchor="middle">reviewers + gates</text>
+  <rect class="d-good" x="750" y="80" width="150" height="64" rx="8"/>
+  <text class="t-name" x="825" y="106" text-anchor="middle">done</text>
+  <text class="t-line" x="825" y="126" text-anchor="middle">merged after the gate</text>
+
+  <rect class="d-human" x="260" y="200" width="440" height="56" rx="8"/>
+  <text class="t-name" x="480" y="224" text-anchor="middle">blocked</text>
+  <text class="t-line" x="480" y="242" text-anchor="middle">needs a human: decision, ADR or unclear spec</text>
+
+  <g class="conn">
+    <path d="M180 112H208" marker-end="url(#m5)"/><path d="M360 112H388" marker-end="url(#m5)"/>
+    <path d="M540 112H568" marker-end="url(#m5)"/><path d="M720 112H748" marker-end="url(#m5)"/>
+    <path d="M645 80V58H465V78" marker-end="url(#m5)"/>
+    <path class="dash" d="M285 144V198" marker-end="url(#m5)"/>
+    <path class="dash" d="M465 144V198" marker-end="url(#m5)"/>
+    <path class="dash" d="M645 144V198" marker-end="url(#m5)"/>
+    <path d="M260 228H105V146" marker-end="url(#m5)"/>
+  </g>
+  <text class="t-small" x="555" y="52" text-anchor="middle">changes requested</text>
+  <text class="t-small" x="195" y="164" text-anchor="middle">deps done +</text>
+  <text class="t-small" x="195" y="178" text-anchor="middle">decisions answered</text>
+  <text class="t-small" x="114" y="220">answered → back to todo</text>
+</svg>
+</figure>
+<p>The lead drives the board with one small script:</p>
+<pre><code>python3 .claude/skills/board/board.py next            # ready tasks, and tasks waiting on a decision
+python3 .claude/skills/board/board.py status          # counts, work in progress, open decisions
+python3 .claude/skills/board/board.py show 3.5        # one task
+python3 .claude/skills/board/board.py set 3.5 running --branch m3/3.5-help-ladder
+python3 .claude/skills/board/board.py decide licence "MIT"</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="safety">12. Safety rails</h2>
+<p>Hooks enforce the build plan's rules on every edit and shell command. Only risky or unclear work reaches you.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Rail</th><th>Kind</th><th>When it fires</th><th>What happens</th><th>Plan rule</th></tr></thead>
+  <tbody>
+    <tr><td>Frozen contracts</td><td><span class="tag">hook</span></td><td>Edit to <code>packages/contracts/</code></td><td>Claude must ask you first; a change needs an ADR</td><td>2</td></tr>
+    <tr><td>Safety code</td><td><span class="tag">hook</span></td><td>Edit to guardrails, prompt packs, skill templates, safety or locked evals</td><td>Ask first; the PR needs <code>safety-reviewer</code> + you</td><td>6</td></tr>
+    <tr><td>Access filter and payments</td><td><span class="tag">hook</span></td><td>Edit to <code>harness/src/access</code>, <code>packages/payments</code> or payment webhooks</td><td>Ask first; the PR needs <code>security-reviewer</code> + you</td><td>6</td></tr>
+    <tr><td>Spec and harness config</td><td><span class="tag">hook</span></td><td>Edit to the PRD, build plan, <code>.claude/settings.json</code> or hooks</td><td>Ask first</td><td>2</td></tr>
+    <tr><td>Secrets files</td><td><span class="tag">hook</span></td><td>Write to <code>.env</code> files; read of <code>.env</code></td><td>Write blocked; read denied; shell use asks</td><td>5</td></tr>
+    <tr><td>Pure harness</td><td><span class="tag">hook</span></td><td><code>packages/harness</code> imports Next.js, Drizzle, Redis, BullMQ or a provider SDK</td><td>Edit rejected, reason sent back to the agent</td><td>3</td></tr>
+    <tr><td>API keys in files</td><td><span class="tag">hook</span></td><td>Any file containing an OpenAI, Anthropic, Gemini or OpenRouter key</td><td>Edit rejected, reason sent back</td><td>5</td></tr>
+    <tr><td>Git safety</td><td><span class="tag">hook</span></td><td>Force-push; push to <code>main</code>; commit or merge on <code>main</code></td><td>First two blocked; the others ask, except the lead's board and decision-log commits</td><td>1</td></tr>
+    <tr><td>Merge gate</td><td><span class="tag">hook</span></td><td><code>gh pr merge &lt;n&gt;</code></td><td>Runs <code>merge_gate.py</code>; the merge is blocked unless it passes</td><td>11</td></tr>
+    <tr><td>Secret scan</td><td><span class="tag">hook</span></td><td>Every file an agent edits, and every <code>git commit</code></td><td>Blocks API keys, tokens, private keys, passwords in code, personal emails and home-folder paths</td><td>5</td></tr>
+    <tr><td>Key and credential files</td><td><span class="tag">hook</span></td><td>An agent writes a <code>.pem</code>, <code>.key</code>, <code>id_rsa</code> or <code>credentials.json</code></td><td>Blocked; such files also sit in <code>.gitignore</code></td><td>5</td></tr>
+    <tr><td>Approval label</td><td><span class="tag">hook</span></td><td>An agent tries to add <code>human-approved</code></td><td>Blocked: only you add it</td><td>6</td></tr>
+    <tr><td>Risky PRs</td><td><span class="tag human">you</span></td><td>Paths in <code>risk-paths.txt</code>, or a migration that deletes data</td><td>The lead waits for your <code>human-approved</code> label</td><td>6</td></tr>
+    <tr><td>Unclear spec</td><td><span class="tag human">you</span></td><td>A task's <code>needs_decision</code> is open, or the spec conflicts</td><td>The task cannot start; the lead asks you and logs the answer</td><td>8</td></tr>
+    <tr><td>Platform content</td><td><span class="tag">reviewer</span></td><td>Prompt packs, skill templates, eval cases</td><td><code>reviewed_by</code> must name a person before merge</td><td>7</td></tr>
+  </tbody>
+</table></div>
+<p>The hook scripts were tested on 15–16 Oct 2026 against 20 allowed and blocked cases. The secret scan was tested against 10 planted leaks: it blocked the commit and caught every real-format one. A placeholder <code>localhost</code> database URL and a marked fake test key passed, as intended.</p>
+
+<!-- ============================================================ -->
+<h2 id="github">13. GitHub and Actions</h2>
+<p>The code lives in a <b>public</b> GitHub repo under the MIT licence. Agents act through a <b>private GitHub App</b> (<code>edmate-bot</code>), never your account, and GitHub Actions enforces the merge rules on every PR. The workflows arrive with task 0.5; setup steps are in <code>docs/setup/github.md</code>.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Workflow</th><th>What it does</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td>CI gates</td><td>Typecheck, lint, tests and eval suites on replayed model responses, so no API keys are needed</td><td>Every PR (task 0.5)</td></tr>
+    <tr><td>Merge-gate check</td><td>Runs <code>merge_gate.py --pr</code>; a required check, so GitHub itself refuses a merge that fails it</td><td>Every PR (task 0.5)</td></tr>
+    <tr><td>Secret scan</td><td>Runs <code>.githooks/secret-scan.py --all</code>; a required check, beside GitHub's own secret scanning and push protection</td><td>Every PR (task 0.5)</td></tr>
+    <tr><td>Risk labels</td><td>Labels a PR <code>needs-human</code> when it touches a risky path, so you only open those</td><td>Every PR (task 0.5)</td></tr>
+    <tr><td>Nightly live evals</td><td>Runs the eval suites against real models with a provider key stored as a GitHub secret</td><td>Later (task 7.4)</td></tr>
+    <tr><td>Decision-log page</td><td>Rebuilds a readable page from <code>docs/decisions/log.md</code> on every merge</td><td>Optional</td></tr>
+  </tbody>
+</table></div>
+<h3>Keeping private things out of a public repo</h3>
+<p>Anything pushed to a public repo can be copied within minutes, so there are five layers, and a leaked key is always rotated, never just deleted.</p>
+<ol>
+  <li><b><code>.gitignore</code></b> keeps <code>.env</code> files, keys, local databases and Claude's local state out of git.</li>
+  <li><b>Claude Code hooks</b> stop an agent writing a key file, and scan every file it edits.</li>
+  <li><b>A git pre-commit hook</b> runs the same scan on everything staged, so a commit with a secret never happens.</li>
+  <li><b>CI</b> runs the scan again on every PR (task 0.5).</li>
+  <li><b>GitHub secret scanning and push protection</b> reject known key formats at push time.</li>
+</ol>
+<p>Commits in this repo use your private GitHub address (<code>…+sid2305@users.noreply.github.com</code>), not your Gmail. Your global git settings are unchanged. Your name does appear in the licence and the doc bylines, which is normal for open source.</p>
+<h3>The bot</h3>
+<ul>
+  <li><b>Why a GitHub App:</b> GitHub can then tell agent actions from yours. Only you can add <code>human-approved</code>, and the <code>merge-gate</code> check confirms the label came from you.</li>
+  <li><b>Its key</b> lives outside the repo, in <code>~/.edmate-bot/</code>, and is turned into a 1-hour token for each push or PR.</li>
+  <li><b>It cannot bypass</b> the <code>main</code> ruleset; only you are on the bypass list.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="timeline">14. Build timeline</h2>
+<p>The teacher's agent comes first, including the access filter, and must pass the exit gate with zero locked-content leaks. Payments and the trust console run alongside; the studio and student app start after the gate.</p>
+<figure>
+<svg viewBox="0 0 960 524" role="img" aria-label="The studio and student app start only after the agent passes its exit gate">
+  <defs><marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker></defs>
+  <text class="t-title" x="30" y="30">The studio and student app start only after the agent passes its exit gate</text>
+  <text class="t-head" x="30" y="56">Phase 1 · Build and prove the agent (M0–M7)</text><line class="rule" x1="30" y1="64" x2="580" y2="64"/>
+  <text class="t-head" x="610" y="56">Phase 2 · Product and pilot (M8–M13)</text><line class="rule" x1="610" y1="64" x2="940" y2="64"/>
+  <rect class="d-box" x="30" y="80" width="190" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="125" y="107" text-anchor="middle">M0 · Foundations</text><rect class="d-box" x="30" y="144" width="190" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="125" y="171" text-anchor="middle">M1 · Accounts and auth</text><rect class="d-box" x="30" y="208" width="190" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="125" y="235" text-anchor="middle">M2 · Model gateway</text><rect class="d-box" x="30" y="272" width="190" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="125" y="299" text-anchor="middle">M3 · Harness core</text><rect class="d-box" x="270" y="80" width="210" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="375" y="107" text-anchor="middle">M4 · Guardrails, safety</text><rect class="d-box" x="270" y="144" width="210" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="375" y="171" text-anchor="middle">M5 · Access filter, skills</text><rect class="d-box" x="270" y="208" width="210" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="375" y="235" text-anchor="middle">M6 · Learner memory</text><rect class="d-box" x="270" y="272" width="210" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="375" y="299" text-anchor="middle">M7 · Evals, quality gate</text><rect class="d-box" x="610" y="80" width="200" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="710" y="107" text-anchor="middle">M8 · Teacher studio</text><rect class="d-box" x="610" y="144" width="200" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="710" y="171" text-anchor="middle">M9 · Student app</text><rect class="d-box" x="610" y="208" width="200" height="44" rx="8"/><text class="t-line" style="fill:var(--text)" x="710" y="235" text-anchor="middle">M11 · Live classes, insights</text>
+  <rect class="d-human" x="840" y="144" width="100" height="88" rx="8"/>
+  <text class="t-head" x="890" y="176" text-anchor="middle">M13</text>
+  <text class="t-line" x="890" y="194" text-anchor="middle">Hardening,</text>
+  <text class="t-line" x="890" y="210" text-anchor="middle">pilot</text>
+  <rect class="d-box" x="30" y="340" width="450" height="36" rx="8"/>
+  <text class="t-line" style="fill:var(--text)" x="255" y="363" text-anchor="middle">M10 · Payments and payouts · runs alongside, from M1</text>
+  <rect class="d-box" x="30" y="388" width="450" height="36" rx="8"/>
+  <text class="t-line" style="fill:var(--text)" x="255" y="411" text-anchor="middle">M12 · Trust and safety console · runs alongside, from M4</text>
+  <polygon class="d-acc" points="545,164 579,198 545,232 511,198"/>
+  <text class="t-head" x="545" y="195" text-anchor="middle">Exit</text>
+  <text class="t-head" x="545" y="209" text-anchor="middle">gate</text>
+  <text class="t-small" x="545" y="140" text-anchor="middle">0 leaks,</text>
+  <text class="t-small" x="545" y="154" text-anchor="middle">2 providers</text>
+  <g class="conn">
+    <path d="M125 124V142" marker-end="url(#m6)"/><path d="M125 188V206" marker-end="url(#m6)"/><path d="M125 252V270" marker-end="url(#m6)"/>
+    <path d="M220 294H245"/><path d="M245 294V102"/>
+    <path d="M245 102H268" marker-end="url(#m6)"/><path d="M245 166H268" marker-end="url(#m6)"/>
+    <path d="M245 230H268" marker-end="url(#m6)"/><path d="M245 294H268" marker-end="url(#m6)"/>
+    <path d="M480 102H490"/><path d="M480 166H490"/><path d="M480 230H490"/><path d="M480 294H490"/>
+    <path d="M490 102V294"/><path d="M490 198H509" marker-end="url(#m6)"/>
+    <path d="M579 198H595"/><path d="M595 102V230"/>
+    <path d="M595 102H608" marker-end="url(#m6)"/><path d="M595 166H608" marker-end="url(#m6)"/><path d="M595 230H608" marker-end="url(#m6)"/>
+    <path d="M810 102H825"/><path d="M810 166H825"/><path d="M810 230H825"/><path d="M825 102V230"/><path d="M825 188H838" marker-end="url(#m6)"/>
+    <path d="M480 358H890V234" marker-end="url(#m6)"/><path d="M480 406H890V358"/>
+  </g>
+  <text class="t-small" x="30" y="456">Busy: planner, architect, tdd-guide, build-error-resolver, docs-lookup,</text>
+  <text class="t-small" x="30" y="472">code-, typescript-, database-, security-reviewer, silent-failure-hunter,</text>
+  <text class="t-small" x="30" y="488">rag-pipeline-reviewer, safety-reviewer, eval-author, pedagogy-author</text>
+  <text class="t-small" x="30" y="504">Validate phase (no code): marketing-agent</text>
+  <text class="t-small" x="610" y="456">Joins: react-reviewer, react-build-resolver,</text>
+  <text class="t-small" x="610" y="472">e2e-runner, a11y-architect, performance-optimizer,</text>
+  <text class="t-small" x="610" y="488">gan-evaluator, seo-specialist</text>
+</svg>
+<figcaption>Simplified: milestones, not dates. M8 and M9 also need some M1 and M5 tasks; M11 needs M6. Exact task-level dependencies are on the board.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="folders">15. Folder layout</h2>
+<p>Everything the agents need lives in the repo, so it is versioned and shared with anyone who joins.</p>
+<pre><code>edmate/
+├── CLAUDE.md                                 team brief: what Edmate is, the rules, how to run tasks (to write)
+├── LICENSE                                   MIT for code; teachers own their content
+├── .gitignore                                keeps secrets, keys and local data out of git
+├── .githooks/                                pre-commit + secret-scan.py (also used by Claude hooks and CI)
+├── .mcp.json                                 Context7 for docs-lookup, this project only (to add)
+├── .claude/
+│   ├── settings.json                         permissions + the three hooks
+│   ├── hooks/                                guard-paths.sh · check-edit.sh · guard-bash.sh
+│   ├── agents/                               ECC agents (copied per phase) + 3 Edmate agents
+│   ├── skills/                               ECC skills (per phase) + board/ · merge-gate/ · edmate-pedagogy/ · india-context/
+│   ├── rules/                                path-scoped rules: harness, safety, content, web (to write)
+│   └── worktrees/                            one per running builder, git-ignored
+├── docs/
+│   ├── architecture.html                     this page
+│   ├── edmate-prd.md                         what and why
+│   ├── edmate-harness-build-plan.md          how: 14 milestones, 94 tasks, the rules (v0.3)
+│   ├── board/tasks.yaml                      the task board
+│   ├── decisions/log.md                      every decision, in plain words
+│   ├── setup/github.md                       repo, bot and security settings, step by step
+│   ├── tasks/&lt;id&gt;/                           plan.md · handoff.md · review.md · safety-review.md
+│   └── adr/                                  decision records, approved by a human
+├── .github/workflows/                        CI, merge-gate check, risk labels (task 0.5)
+└── apps/ packages/ content/ evals/ docker/   product code, created from task 0.1 on</code></pre>
+
+<!-- ============================================================ -->
+<h2 id="status">16. Status and open decisions</h2>
+<p>The plumbing, merge gate and decision log are built and tested, and the PRD, build plan and board are on v0.3. The ECC agents and skills are chosen but not yet copied in, and nothing is committed yet.</p>
+<ul class="check">
+  <li class="done">Repo created at <code>~/edmate</code>; PRD and build plan copied into <code>docs/</code></li>
+  <li class="done">Task board with dependencies, risk tiers and decisions, plus the <code>board.py</code> script</li>
+  <li class="done">Three hooks and <code>settings.json</code>, tested against 20 cases</li>
+  <li class="done">Merge gate: skill, <code>merge_gate.py</code> and <code>risk-paths.txt</code>, tested against 6 cases</li>
+  <li class="done">Decision log started in <code>docs/decisions/log.md</code> with the 7 setup decisions</li>
+  <li class="done">Build plan rules updated: 6 (risky changes), 8 (ask), 10 (board), new 11 (merge gate) and 12 (log decisions)</li>
+  <li class="done">Edmate agents drafted: <code>safety-reviewer</code>, <code>pedagogy-author</code>, <code>eval-author</code></li>
+  <li class="done">Secret protection: <code>.gitignore</code>, pre-commit hook and shared scanner, wired into the Claude Code hooks; commit email switched to your noreply address</li>
+  <li class="done">Decided: MIT licence, public repo, private GitHub App bot; <code>LICENSE</code> added</li>
+  <li class="done">PRD v0.3 and build plan v0.3 in <code>docs/</code> (v0.2 in <code>docs/archive/</code>); board regenerated: 94 tasks, 30 risky, 12 open decisions</li>
+  <li class="done">Agent setup updated for v0.3: <code>pedagogy-author</code> replaces <code>content-author</code>; safety and eval agents cover locked content and advice; access filter, payments and skill templates are risky paths</li>
+  <li class="done">This architecture page</li>
+  <li class="todo">Copy the 12 phase-1 ECC agents and 14 skills; remove "Use PROACTIVELY"; give <code>tdd-guide</code> a worktree</li>
+  <li class="todo">Delete the 4 draft agents ECC replaces (<code>planner</code>, <code>builder</code>, <code>reviewer</code>, <code>researcher</code>)</li>
+  <li class="todo">Write <code>CLAUDE.md</code>, the path-scoped rules, and the <code>edmate-pedagogy</code> and <code>india-context</code> skills</li>
+  <li class="todo">Add Context7 in <code>.mcp.json</code>; add <code>.gitignore</code>; first commit</li>
+  <li class="todo">You: create the GitHub App and do the repo settings in <code>docs/setup/github.md</code>. Claude: create the public repo, push, wire in the bot</li>
+</ul>
+
+<h3>Decisions only you can make</h3>
+<p>The licence, repo and bot are decided, so task 0.1 is ready to start. These block later tasks; most can wait until their milestone.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Decision</th><th>Options</th><th>Plan's recommendation</th><th>Blocks</th></tr></thead>
+  <tbody>
+    <tr><td>Minimum learner age</td><td>18+ only · also 13–17 with parental consent</td><td>18+ for the MVP</td><td>1.7</td></tr>
+    <tr><td>Payment provider</td><td>Razorpay · Cashfree · Stripe (India)</td><td>UPI AutoPay subscriptions and split payouts; compare fees</td><td>8.1, 10.1</td></tr>
+    <tr><td>Revenue share and floor price</td><td>Edmate % + minimum package price</td><td>Decide after cost data from 7.6</td><td>8.6, 10.4</td></tr>
+    <tr><td>SMS / OTP provider</td><td>Indian SMS gateway · global provider · Firebase Auth</td><td>Indian DLT-compliant delivery</td><td>1.4</td></tr>
+    <tr><td>Transcription</td><td>Provider speech-to-text · self-hosted Whisper</td><td>Provider API for the MVP</td><td>2.7</td></tr>
+    <tr><td>Moderation</td><td>Classifier · Llama Guard · provider moderation</td><td>Provider where available, classifier otherwise</td><td>4.4</td></tr>
+    <tr><td>Judge model for evals</td><td>Fixed judge on an Edmate key</td><td>One mid-tier model, pinned per release</td><td>7.1</td></tr>
+    <tr><td>Default model mix</td><td>By cost and eval results</td><td>Decide after 7.6</td><td>8.6</td></tr>
+    <tr><td>Teacher view of conversations</td><td>Aggregated only · students may opt in</td><td>Aggregated by default, opt-in sharing</td><td>11.3</td></tr>
+    <tr><td>Refund policy</td><td>Pro-rata · first 7 days full · none</td><td>First 7 days full</td><td>10.6</td></tr>
+    <tr><td>Hosting region</td><td>AWS / GCP Mumbai · Azure Pune · Indian cloud</td><td>Any Indian region</td><td>13.6</td></tr>
+    <tr><td>Pilot subjects and anchor teachers</td><td>Coding · exam prep · languages · professional skills</td><td>1–2 subjects, 20 committed teachers</td><td>Pilot</td></tr>
+  </tbody>
+</table></div>
+
+</main>
+</body>
+</html>

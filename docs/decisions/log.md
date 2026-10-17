@@ -1,0 +1,102 @@
+# Edmate decision log
+
+Every decision the spec did not already make, in plain words, newest first. Agents write entries in their task's handoff, and the team lead copies them here when the PR merges. Your own decisions are logged too.
+
+- **risk: low** · the agent decided and moved on
+- **risk: medium** · the agent or lead decided; worth a skim
+- **risk: high** · you decided (risky or ambiguous)
+
+Format and rules: `.claude/skills/merge-gate/SKILL.md`.
+
+---
+
+### 17 Oct 2026 · Setup · decided by Claude · risk: medium
+Decided: The agent team changes for v0.3. The life-skills content-author is replaced by a pedagogy-author (platform prompt packs, skill and persona templates, the demo course). The safety-reviewer and eval-author now also cover locked content and regulated-subject advice. The access filter, payments and webhooks, and skill templates count as risky paths. marketing-agent and market-research move into the Validate phase; seo-specialist moves to the website phase; search-first is added for library choices.
+Why: Teachers now bring their own course material, and the new promises (locked packages, payments) need the same protection as safety code.
+Alternatives: Keep the v0.2 agents unchanged.
+Reversible: Yes.
+
+### 17 Oct 2026 · Build plan v0.3 · decided by Claude · risk: medium
+Decided: Rewrote the build plan for PRD v0.3: 14 milestones, 94 tasks. The harness is still built and proven first (M0–M7), now with the access filter at its centre (task 5.4) and an exit gate requiring zero locked-content leaks. Payments (M10) and the trust console (M12) can run alongside. The v0.2 plan and PRD are archived in docs/archive/.
+Why: The product changed from a school harness to a teacher-agent marketplace.
+Alternatives: Patch the v0.2 plan.
+Reversible: Yes; task IDs changed, so nothing built against the old plan exists yet.
+
+### 17 Oct 2026 · Product · decided by you · risk: high
+Decided: Edmate is a platform where a student finds the right teacher and learns with that teacher's AI agent. Teachers build the agent from their own knowledge and sell packages that control what the agent knows and can do. Not classroom-based, not a school replacement.
+Why: Your direction for the product (PRD v0.3).
+Alternatives: The v0.2 free, school-based life-skills harness.
+Reversible: Yes, before code is built.
+
+### 16 Oct 2026 · Setup · decided by you · risk: high
+Decided: Nothing private or personal goes into the repo. A secret scan blocks credentials, private keys, personal emails and home-folder paths at three points: when an agent edits a file, at every git commit, and (from task 0.5) in CI. GitHub secret scanning and push protection are switched on when the repo is created.
+Why: The repo is public, and anything pushed can be copied before it is deleted.
+Alternatives: Rely on .gitignore only.
+Reversible: Yes, but a leaked key must always be rotated, never just deleted.
+
+### 16 Oct 2026 · Setup · decided by Claude · risk: low
+Decided: This repo's commits use your private GitHub address (11736444+sid2305@users.noreply.github.com) instead of your Gmail. Your global git settings are unchanged.
+Why: Every commit's email is public in a public repo.
+Alternatives: Keep the Gmail address.
+Reversible: Yes, one git setting.
+
+### 16 Oct 2026 · Setup · decided by you · risk: medium
+Decided: Agents act on GitHub through a private GitHub App (edmate-bot), not your account. Its key lives outside the repo in ~/.edmate-bot/.
+Why: GitHub can then tell agent actions from yours, so only you can give the human-approved label, and you can approve the bot's PRs.
+Alternatives: A second "machine" GitHub account; your own account with a hook.
+Reversible: Yes.
+
+### 16 Oct 2026 · Setup · decided by you · risk: medium
+Decided: The GitHub repo is public.
+Why: Edmate is open source; branch protection and Actions minutes are free for public repos.
+Alternatives: Private until the exit gate (needs GitHub Pro for branch protection).
+Reversible: Partly. Anything already public may have been copied.
+
+### 16 Oct 2026 · Setup · decided by you · risk: medium
+Decided: Code is MIT-licensed. Curriculum content stays CC BY-SA 4.0, as the PRD says.
+Why: MIT is the easiest for schools, NGOs and other programmes to adopt.
+Alternatives: Apache 2.0; AGPL.
+Reversible: Only for future versions.
+
+### 16 Oct 2026 · Setup · decided by you · risk: high
+Decided: The team lead merges PRs itself once reviews are done, every CRITICAL and HIGH finding is fixed and re-checked, and the gates are green. You are asked only for risky or ambiguous changes.
+Why: Waiting on you for every PR would stall the build; the lead holds the full context.
+Alternatives: You approve every PR.
+Reversible: Yes, by editing `risk-paths.txt` or the merge-gate skill.
+
+### 16 Oct 2026 · Setup · decided by you · risk: high
+Decided: Child-safety code, frozen contracts and ADRs, keys, sign-in, data isolation, migrations that delete data, and the `.claude/` and `.github/` config count as risky and need your `human-approved` label.
+Why: The PRD calls a safety incident with a minor "existential", and these areas are hard to undo.
+Alternatives: The lead also merges these.
+Reversible: Yes, edit `.claude/skills/merge-gate/risk-paths.txt`.
+
+### 16 Oct 2026 · Setup · decided by you · risk: medium
+Decided: Keep this decision log as one Markdown file, newest first, written only by the team lead on `main`.
+Why: One writer means no merge conflicts between parallel agents; Markdown is easy to read anywhere.
+Alternatives: One file per decision; a Claude Doc.
+Reversible: Yes.
+
+### 16 Oct 2026 · Setup · decided by you · risk: medium
+Decided: Host the code on GitHub and use GitHub Actions for CI gates, the merge-gate check and risk labels (added with task 0.5).
+Why: GitHub then enforces the merge rules, rather than us trusting an agent to follow them.
+Alternatives: Local checks only.
+Reversible: Yes.
+Open: private repo with GitHub Pro, or public now; a separate bot account for agent PRs (see the board's decisions).
+
+### 15 Oct 2026 · Setup · decided by you · risk: medium
+Decided: Use ECC's agents and skills as a library: copy only what each phase needs into the repo, instead of installing all of ECC.
+Why: All of ECC adds about 35k tokens to every session, and its generic rules clash with the build plan.
+Alternatives: Full ECC install; ECC plugin scoped to this project.
+Reversible: Yes.
+
+### 15 Oct 2026 · Setup · decided by you · risk: low
+Decided: Use ECC agents instead of a custom role-based team (team lead, PM, designer and so on). Keep 3 Edmate-only agents ECC lacks: safety-reviewer, content-author, eval-author.
+Why: ECC's agents are already tested; Edmate needs only the gaps filled.
+Alternatives: A custom team of about 12 role agents.
+Reversible: Yes.
+
+### 15 Oct 2026 · Setup · decided by you · risk: low
+Decided: Everything lives in `~/edmate` with project-level settings; nothing is installed globally.
+Why: Keeps your other projects untouched, and the setup versioned with the code.
+Alternatives: Global install in `~/.claude`.
+Reversible: Yes.

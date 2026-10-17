@@ -1,0 +1,45 @@
+# --- Secrets and credentials: never commit (the repo is public) ---
+.env
+.env.*
+!.env.example
+!**/env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+.npmrc
+.netrc
+.edmate-bot/
+
+# --- Local Claude Code state ---
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# --- Local data (may hold real student content) ---
+*.sqlite
+*.db
+*.dump
+evals/runs/
+docker/data/
+
+# --- Build output and dependencies ---
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# --- OS and editors ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp

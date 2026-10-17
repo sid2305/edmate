@@ -1,0 +1,4 @@
+#!/bin/bash
+# Blocks commits that contain credentials or personal data (the repo is public).
+# Enabled per clone with: git config core.hooksPath .githooks
+exec python3 "$(git rev-parse --show-toplevel)/.githooks/secret-scan.py" --staged

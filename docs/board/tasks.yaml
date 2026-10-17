@@ -1,0 +1,1259 @@
+# Edmate build board — generated from docs/edmate-harness-build-plan.md v0.3 (95 tasks, country-neutral), 17 Oct 2026.
+# Status: todo | planning | running | review | blocked | done
+# deps: task ids, milestone ids (all tasks in it done) or GATE. Milestone-level deps come from the plan;
+#       intra-milestone deps (e.g. 3.x after 3.1) were inferred when the board was generated — fix freely.
+# needs_decision: keys under `decisions` that must be answered by a human before the task starts.
+# risk: risky = you approve the PR (human-approved label) before the lead merges; expert = named human reviewer for content/eval cases.
+#       No risk field = normal: the team lead merges after the merge gate (.claude/skills/merge-gate).
+# Edit with `python3 .claude/skills/board/board.py` or by hand; keep it valid YAML.
+decisions:
+  licence:
+    status: decided
+    question: Code licence
+    options:
+    - MIT
+    - Apache 2.0
+    - AGPL
+    recommendation: MIT for adoption
+    answer: MIT (code). Content stays CC BY-SA 4.0 per the PRD.
+  repo-host:
+    status: decided
+    question: 'Repo host: private GitHub repo (needs GitHub Pro, ~$4/month, for branch protection) or public now (free)'
+    options:
+    - Private + GitHub Pro
+    - Public now
+    recommendation: Private until the exit gate
+    answer: Public GitHub repo (branch protection and Actions are free)
+  bot-account:
+    status: decided
+    question: Separate GitHub bot account for agent PRs (makes the human-approved label airtight)
+    options:
+    - Bot account
+    - Your account + hook only
+    recommendation: Start with your account + hook; add a bot before the repo goes public
+    answer: Private GitHub App (edmate-bot) for all agent git and PR actions
+  min-age:
+    status: open
+    question: Minimum learner age
+    options:
+    - 18+ only
+    - Also 13–17 with parental consent
+    recommendation: 18+ for the MVP
+    answer: null
+  payment-provider:
+    status: open
+    question: Payment provider for the pilot market
+    options:
+    - 'India: Razorpay / Cashfree / Stripe India'
+    - 'Global: a merchant of record'
+    recommendation: Subscriptions + split payouts to teachers; compare fees
+    answer: null
+  revenue-share:
+    status: open
+    question: Edmate's revenue share and floor price per package
+    options:
+    - '% of each subscription + floor price'
+    recommendation: Decide after cost data from 7.6
+    answer: null
+  sms-provider:
+    status: open
+    question: SMS / OTP provider
+    options:
+    - Indian SMS gateway
+    - Global provider
+    - Firebase Auth
+    recommendation: Any with Indian DLT-compliant delivery
+    answer: null
+  transcription:
+    status: open
+    question: Transcription
+    options:
+    - Provider speech-to-text
+    - Self-hosted Whisper
+    recommendation: Provider API for the MVP
+    answer: null
+  moderation:
+    status: open
+    question: Moderation
+    options:
+    - Classifier only
+    - Self-hosted Llama Guard
+    - Provider moderation
+    recommendation: Provider moderation where available, classifier otherwise
+    answer: null
+  judge-model:
+    status: open
+    question: Judge model for evals
+    options:
+    - Fixed judge on an Edmate key
+    recommendation: One mid-tier model, pinned per release
+    answer: null
+  default-model-mix:
+    status: open
+    question: Default model mix per tier
+    options:
+    - By cost and eval results
+    recommendation: Decide after 7.6
+    answer: null
+  teacher-chat-visibility:
+    status: open
+    question: Do teachers see individual conversations?
+    options:
+    - Aggregated insights only
+    - Students may opt in to share
+    recommendation: Aggregated by default; opt-in sharing
+    answer: null
+  refund-policy:
+    status: open
+    question: Refund policy
+    options:
+    - Pro-rata
+    - First 7 days full
+    - None
+    recommendation: First 7 days full refund
+    answer: null
+  hosting-region:
+    status: open
+    question: Hosting region
+    options:
+    - A cloud region in the pilot market
+    recommendation: Follows the pilot market data rules
+    answer: null
+  pilot-market:
+    status: open
+    question: Pilot market (first locale pack)
+    options:
+    - Where the 20 anchor teachers are, e.g. India or global English
+    recommendation: Decide in the Validate phase
+    answer: null
+  pilot-subjects:
+    status: open
+    question: Pilot subjects and anchor teachers
+    options:
+    - Coding
+    - Exam prep
+    - Languages
+    - Professional skills
+    recommendation: 1–2 subjects with 20 committed teachers
+    answer: null
+gate:
+  id: GATE
+  title: Harness exit gate
+  deps:
+  - M4
+  - M5
+  - M6
+  - M7
+  status: todo
+  risk: risky
+  accept: Demo teacher's agent (Free + paid package) passes every suite live on >= 2 providers (one low-cost), 0 locked-content leaks; recorded CLI demo incl. locked request refused, then answered after
+    upgrade
+tasks:
+- id: '0.1'
+  milestone: M0
+  title: 'Monorepo scaffold: pnpm, Turborepo, strict tsconfig, eslint, prettier, Vitest'
+  accept: '`corepack pnpm build && corepack pnpm test && corepack pnpm lint` green on empty packages.'
+  deps: []
+  status: todo
+  branch: null
+  model: null
+- id: '0.2'
+  milestone: M0
+  title: Docker Compose (postgres+pgvector, redis, minio, caddy, web, worker) and `env.example`
+  accept: '`docker compose up` serves `/api/health` = 200 and a test file round-trips through MinIO.'
+  deps:
+  - '0.1'
+  status: todo
+  branch: null
+  model: null
+- id: '0.3'
+  milestone: M0
+  title: '`packages/contracts`: every type in Core contracts as Zod'
+  accept: sample fixtures round-trip parse/serialize.
+  deps:
+  - '0.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '0.4'
+  milestone: M0
+  title: ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction
+  accept: files merged.
+  deps:
+  - '0.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '0.5'
+  milestone: M0
+  title: 'GitHub Actions: CI, secret scan, merge-gate check (verifies the `human-approved` label came from the owner), risk labeller; PR template'
+  accept: CI blocks a failing test; the merge-gate check fails a risky PR without the owner's label.
+  deps:
+  - '0.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '1.1'
+  milestone: M1
+  title: Drizzle schema for every table in Data model; migrations
+  accept: migrate up/down clean; teacher-owned tables indexed on `teacher_id`.
+  deps:
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '1.2'
+  milestone: M1
+  title: Repositories scoped by teacher and by student
+  accept: cross-teacher and cross-student reads and writes fail closed in tests.
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '1.3'
+  milestone: M1
+  title: Auth.js Google sign-in; roles student, teacher, staff; RBAC middleware
+  accept: role × route matrix tests pass.
+  deps:
+  - '1.1'
+  - '1.2'
+  - M0
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '1.4'
+  milestone: M1
+  title: Phone OTP sign-in via the SMS provider adapter
+  accept: sandbox login works; OTP requests rate-limited per number and IP.
+  deps:
+  - '1.3'
+  - M0
+  status: todo
+  needs_decision:
+  - sms-provider
+  risk: risky
+  branch: null
+  model: null
+- id: '1.5'
+  milestone: M1
+  title: 'Seed: demo teacher with an open-licensed course, two packages, 20 students with mixed subscriptions'
+  accept: '`corepack pnpm seed` idempotent.'
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '1.6'
+  milestone: M1
+  title: Audit log helper
+  accept: config, staff and memory changes write before/after rows.
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '1.7'
+  milestone: M1
+  title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
+  accept: a user who does not confirm 18+ cannot create an account; consent versions stored.
+  deps:
+  - '1.3'
+  - M0
+  status: todo
+  needs_decision:
+  - min-age
+  risk: risky
+  branch: null
+  model: null
+- id: '2.1'
+  milestone: M2
+  title: Provider keys from the environment / secret manager
+  accept: a log-scan test proves no key appears in logs, traces or API responses.
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '2.2'
+  milestone: M2
+  title: 'Adapters: Google, OpenAI, Anthropic, OpenRouter, OpenAI-compatible, with capabilities'
+  accept: shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures.
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '2.3'
+  milestone: M2
+  title: 'Router: tiers, per-agent override, fallback'
+  accept: a simulated 5xx fails over within one retry.
+  deps:
+  - '1.1'
+  - '2.2'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '2.4'
+  milestone: M2
+  title: 'Metering: `usage_ledger` per call with teacher, package and student; `prices.yaml`'
+  accept: one ledger row per call; cost per active student report matches the rows.
+  deps:
+  - '1.1'
+  - '2.2'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '2.5'
+  milestone: M2
+  title: 'Limits: package daily message limit, monthly cost alarm per teacher'
+  accept: the limit returns `limit_reached` with a friendly message; the alarm fires at the threshold.
+  deps:
+  - '1.1'
+  - '2.4'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '2.6'
+  milestone: M2
+  title: Scripted gateway in `harness/testing`
+  accept: replays fixtures deterministically.
+  deps:
+  - '1.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '2.7'
+  milestone: M2
+  title: Transcriber and embedding adapters
+  accept: a 60-minute audio fixture transcribes through the scripted adapter; a live smoke test runs behind `--live`.
+  deps:
+  - '1.1'
+  - '2.2'
+  - M0
+  status: todo
+  needs_decision:
+  - transcription
+  branch: null
+  model: null
+- id: '3.1'
+  milestone: M3
+  title: 'Pipeline runner: eleven ordered steps, timeouts, injected clock and ids, trace capture'
+  accept: tests for each failure policy in the Turn pipeline table.
+  deps:
+  - '2.6'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.2'
+  milestone: M3
+  title: '`admit` and `entitle`: rate limit, server-side entitlement, daily limit'
+  accept: each rejection returns its code; an ended subscription is refused; client-sent package ids are ignored.
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '3.3'
+  milestone: M3
+  title: '`route`: intent classifier including `locked_request`'
+  accept: ≥ 90% accuracy on 200 labelled English, Hindi and Hinglish turns.
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.4'
+  milestone: M3
+  title: '`buildContext`: history trim, summaries, access-filtered retrieval via the port, style card, persona'
+  accept: never exceeds model context; retrieval cannot be called without `allowedModuleIds` (type-checked).
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.5'
+  milestone: M3
+  title: 'Teaching policy: help ladder, skill rules, per-package limits, `locked` and `not_covered` moves'
+  accept: table-driven tests cover every transition.
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.6'
+  milestone: M3
+  title: Prompt-pack loader and composer with semver, style card and sources
+  accept: snapshot tests of composed prompts per skill.
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '3.7'
+  milestone: M3
+  title: 'Orchestrator: streaming, tool calls (max 3 rounds), SSE events incl. `sources`, `locked` and `replace`'
+  accept: an integration test streams a full turn via the scripted gateway.
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.8'
+  milestone: M3
+  title: '`meter` and `commit` via the worker queue'
+  accept: reply latency unaffected when the DB is slow (injected delay).
+  deps:
+  - '2.6'
+  - '3.1'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '3.10'
+  milestone: M3
+  title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
+  accept: '`edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts.'
+  deps:
+  - '2.6'
+  - '3.6'
+  - M0
+  status: todo
+  needs_decision:
+  - pilot-market
+  risk: risky
+  branch: null
+  model: null
+- id: '3.9'
+  milestone: M3
+  title: CLI `edmate chat --agent --package`
+  accept: a full session with the demo teacher runs in a terminal with a real key.
+  deps:
+  - '1.5'
+  - '2.6'
+  - '3.7'
+  - M0
+  status: todo
+  branch: null
+  model: null
+- id: '4.1'
+  milestone: M4
+  title: Guard framework and registry
+  accept: guards run in declared order and fail closed.
+  deps:
+  - '3.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.2'
+  milestone: M4
+  title: '`piiScrub`'
+  accept: 100% on the PII set.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.3'
+  milestone: M4
+  title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'
+  accept: 100% of distress cases escalate; alert delivered < 5 min in an integration test.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.4'
+  milestone: M4
+  title: '`moderationIn`, `jailbreak`, strikes'
+  accept: safety suite meets its gates.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  needs_decision:
+  - moderation
+  risk: risky
+  branch: null
+  model: null
+- id: '4.5'
+  milestone: M4
+  title: '`answerLeak` (incremental + final) and the rewrite loop'
+  accept: leak suite 100% on fixtures.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.6'
+  milestone: M4
+  title: '`lockedLeak` post-guard'
+  accept: locked suite 100% on fixtures.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.7'
+  milestone: M4
+  title: '`grounding` with calculator recompute and the `not_covered` path'
+  accept: accuracy suite gates; ≥ 95% of uncovered questions answered as not covered.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.8'
+  milestone: M4
+  title: '`adviceGuard` for regulated subjects'
+  accept: advice suite gates.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '4.9'
+  milestone: M4
+  title: '`personaBoundary` and `tone`'
+  accept: persona suite gates; no reply claims to be human or the teacher.
+  deps:
+  - '3.1'
+  - '4.1'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '5.1'
+  milestone: M5
+  title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
+  accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
+  deps:
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.2'
+  milestone: M5
+  title: 'Video ingestion: upload → transcription → timestamped chunks'
+  accept: the 60-minute fixture is searchable within the 15-minute budget.
+  deps:
+  - '2.7'
+  - '5.1'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.3'
+  milestone: M5
+  title: Chunking, embeddings, full-text fallback, hybrid ranking; chunks tagged teacher → course → module
+  accept: recall@5 ≥ 0.8 on the demo Q&A set, with and without embeddings.
+  deps:
+  - '5.1'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.4'
+  milestone: M5
+  title: 'Access filter: filtered `RetrievalIndex.search`, entitlement-filtered tool registry, package-versioned caches'
+  accept: property test (random entitlements → results ⊆ allowed modules); no unfiltered search exists anywhere.
+  deps:
+  - '5.3'
+  - M3
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '5.5'
+  milestone: M5
+  title: Tool registry and sandboxed calculator
+  accept: fuzz test shows no access outside declared scope.
+  deps:
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.6'
+  milestone: M5
+  title: 'Practice skill: item selection and generation by topic and level, scoring'
+  accept: items map to the outline's topics; answer keys never reach the client.
+  deps:
+  - '5.5'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.7'
+  milestone: M5
+  title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'
+  accept: ≥ 70% agreement with the demo teacher's scores on 30 samples.
+  deps:
+  - '5.5'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '5.8'
+  milestone: M5
+  title: 'Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief'
+  accept: persona suite on fixtures.
+  deps:
+  - '5.5'
+  - M3
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '5.9'
+  milestone: M5
+  title: Revision and study-plan skills
+  accept: notes cite sources; plans only cover allowed modules.
+  deps:
+  - '5.4'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '6.1'
+  milestone: M6
+  title: Topic map from the course outline, with validation
+  accept: unknown or cyclic references rejected.
+  deps:
+  - '5.6'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '6.2'
+  milestone: M6
+  title: Evidence events, BKT mastery per (student, teacher, topic), rebuild
+  accept: matches hand-computed values to 3 decimals.
+  deps:
+  - '5.6'
+  - '6.1'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '6.3'
+  milestone: M6
+  title: Mistake tagging from the teacher's list, plus proposed tags the teacher approves
+  accept: never emits a tag outside the list.
+  deps:
+  - '5.6'
+  - '6.1'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '6.4'
+  milestone: M6
+  title: Session summary and end-of-topic check
+  accept: summary ≤ 60 words; the next session uses it.
+  deps:
+  - '5.6'
+  - '6.2'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '6.5'
+  milestone: M6
+  title: Student view, reset and export of memory
+  accept: reset clears the profile and writes an audit row.
+  deps:
+  - '5.6'
+  - '6.2'
+  - M3
+  status: todo
+  branch: null
+  model: null
+- id: '7.1'
+  milestone: M7
+  title: 'Eval runner: YAML multi-turn cases, judges, JSON + HTML reports, `--record` / replay'
+  accept: runs offline in CI.
+  deps:
+  - '5.4'
+  - M3
+  - M4
+  status: todo
+  needs_decision:
+  - judge-model
+  branch: null
+  model: null
+- id: '7.2'
+  milestone: M7
+  title: Platform suites to target sizes, each case human-reviewed
+  accept: counts per the Evals table; reviewer recorded per case.
+  deps:
+  - '5.4'
+  - '7.1'
+  - M3
+  - M4
+  status: todo
+  risk: expert
+  branch: null
+  model: null
+- id: '7.3'
+  milestone: M7
+  title: Per-agent suite generator from the question bank, corrections, approved drafts and the agent's packages
+  accept: the demo teacher gets ≥ 50 accuracy cases and ≥ 30 locked cases.
+  deps:
+  - '5.4'
+  - '7.1'
+  - M3
+  - M4
+  status: todo
+  branch: null
+  model: null
+- id: '7.4'
+  milestone: M7
+  title: 'Quality gate: runs on publish and on every agent, package, material or style-card change; blocks publish on failure'
+  accept: a deliberately bad agent cannot publish.
+  deps:
+  - '5.4'
+  - '7.3'
+  - M3
+  - M4
+  status: todo
+  branch: null
+  model: null
+- id: '7.5'
+  milestone: M7
+  title: CI merge gates on fixtures
+  accept: a deliberately leaky prompt pack fails CI.
+  deps:
+  - '5.4'
+  - '7.2'
+  - M3
+  - M4
+  status: todo
+  branch: null
+  model: null
+- id: '7.6'
+  milestone: M7
+  title: Live model runs and per-model pass rates
+  accept: a report per configured model and suite.
+  deps:
+  - '5.4'
+  - '7.1'
+  - M3
+  - M4
+  status: todo
+  branch: null
+  model: null
+- id: '7.7'
+  milestone: M7
+  title: Turn traces and health metrics
+  accept: p50/p95 latency, error and guard rates computed from traces.
+  deps:
+  - '5.4'
+  - M3
+  - M4
+  status: todo
+  branch: null
+  model: null
+- id: '8.1'
+  milestone: M8
+  title: 'Onboarding: profile, subject, bio, photo, identity verification and payout account hand-off'
+  accept: an unverified teacher cannot publish.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  status: todo
+  needs_decision:
+  - payment-provider
+  branch: null
+  model: null
+- id: '8.2'
+  milestone: M8
+  title: Upload centre with live processing status, delete and replace
+  accept: status updates live; a deleted file leaves retrieval within 1 minute.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  branch: null
+  model: null
+- id: '8.3'
+  milestone: M8
+  title: Outline editor with source links; reorder, rename, merge, split
+  accept: outline for 20 files in < 10 minutes; edits versioned.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  branch: null
+  model: null
+- id: '8.4'
+  milestone: M8
+  title: Style interview and style card editor
+  accept: the teacher can preview and edit the card; the agent uses the new version on the next turn.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  branch: null
+  model: null
+- id: '8.5'
+  milestone: M8
+  title: Test chat as a student per package; mark and correct answers
+  accept: a correction changes the next answer and becomes an eval case.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  branch: null
+  model: null
+- id: '8.6'
+  milestone: M8
+  title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
+  accept: two packages in < 15 minutes; estimate shown per package.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  needs_decision:
+  - revenue-share
+  - default-model-mix
+  branch: null
+  model: null
+- id: '8.7'
+  milestone: M8
+  title: Publish flow with quality-gate results and the public profile page
+  accept: failures show which cases failed; a pass publishes in < 1 minute.
+  deps:
+  - GATE
+  - '1.3'
+  - '5.1'
+  - '5.2'
+  - '7.4'
+  - '8.6'
+  status: todo
+  branch: null
+  model: null
+- id: '8.8'
+  milestone: M8
+  title: Insights and earnings views
+  accept: earnings match the ledger; insights show no individual student.
+  deps:
+  - GATE
+  - '1.3'
+  - '10.4'
+  - '5.1'
+  - '5.2'
+  - '8.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.1'
+  milestone: M9
+  title: App shell, mobile-first layouts (360 px up), next-intl, auth
+  accept: Lighthouse accessibility ≥ 95 at 360 px.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  status: todo
+  branch: null
+  model: null
+- id: '9.2'
+  milestone: M9
+  title: Discovery and teacher pages (server-rendered)
+  accept: search < 1 s on a 1,000-teacher seed.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '9.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.3'
+  milestone: M9
+  title: Package compare, free package start, checkout
+  accept: the package unlocks on the next message after payment.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '10.2'
+  - '9.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.4'
+  milestone: M9
+  title: 'Chat: SSE, markdown, maths and code, photo upload, sources, hint button with rung, locked notice'
+  accept: component tests + e2e.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '9.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.5'
+  milestone: M9
+  title: 'Skill screens: practice, feedback submission, mock interview'
+  accept: e2e per skill.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '9.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.6'
+  milestone: M9
+  title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export
+  accept: export is complete JSON plus notes PDF.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '9.1'
+  status: todo
+  branch: null
+  model: null
+- id: '9.7'
+  milestone: M9
+  title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked'
+  accept: green in CI with scripted gateway and payment sandbox.
+  deps:
+  - GATE
+  - '1.3'
+  - '1.7'
+  - '9.3'
+  - '9.4'
+  - '9.5'
+  status: todo
+  branch: null
+  model: null
+- id: '10.1'
+  milestone: M10
+  title: Payment provider adapter for the pilot market behind the `Payments` port (e.g. UPI AutoPay mandates and cards in India), teacher linked accounts
+  accept: provider sandbox flows pass; a second provider can be added without changing callers.
+  deps:
+  - '2.4'
+  - M1
+  status: todo
+  needs_decision:
+  - payment-provider
+  - pilot-market
+  risk: risky
+  branch: null
+  model: null
+- id: '10.2'
+  milestone: M10
+  title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
+  accept: replayed and out-of-order webhooks end in the correct state.
+  deps:
+  - '10.1'
+  - '2.4'
+  - M1
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '10.3'
+  milestone: M10
+  title: 'Subscription state machine: trial, active, past due with grace, paused, ended; prorated upgrades'
+  accept: table-driven state tests.
+  deps:
+  - '10.2'
+  - '2.4'
+  - M1
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '10.4'
+  milestone: M10
+  title: Double-entry ledger, revenue share, daily reconciliation
+  accept: reconciles with sandbox reports; every entry balances.
+  deps:
+  - '10.1'
+  - '2.4'
+  - M1
+  status: todo
+  needs_decision:
+  - revenue-share
+  risk: risky
+  branch: null
+  model: null
+- id: '10.5'
+  milestone: M10
+  title: Teacher payouts and statements
+  accept: payout amounts equal ledger balances.
+  deps:
+  - '10.4'
+  - '2.4'
+  - M1
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '10.6'
+  milestone: M10
+  title: Refunds and tax invoices per market (e.g. GST in India)
+  accept: one invoice per payment; a refund updates the ledger and the entitlement.
+  deps:
+  - '10.4'
+  - '2.4'
+  - M1
+  status: todo
+  needs_decision:
+  - refund-policy
+  risk: risky
+  branch: null
+  model: null
+- id: '11.1'
+  milestone: M11
+  title: Schedule live classes with an external link, attach to packages, invites and reminders (24 h and 1 h)
+  accept: only entitled students receive the link.
+  deps:
+  - '8.1'
+  - '9.1'
+  - M6
+  status: todo
+  branch: null
+  model: null
+- id: '11.2'
+  milestone: M11
+  title: Pre-class question queue, fed by students and by the agent's "ask your teacher" handoffs
+  accept: questions grouped by topic for the teacher.
+  deps:
+  - '11.1'
+  - '8.1'
+  - '9.1'
+  - M6
+  status: todo
+  branch: null
+  model: null
+- id: '11.3'
+  milestone: M11
+  title: 'Weekly insights worker: top questions, sticking topics, unhelpful answers; aggregated with a minimum group size of 5'
+  accept: generated Monday 07:00 IST; no student identifiable.
+  deps:
+  - '8.1'
+  - '9.1'
+  - M6
+  status: todo
+  needs_decision:
+  - teacher-chat-visibility
+  branch: null
+  model: null
+- id: '11.4'
+  milestone: M11
+  title: Live-class recording ingestion into the agent's knowledge (P1)
+  accept: searchable within 15 minutes.
+  deps:
+  - '11.1'
+  - '5.2'
+  - '8.1'
+  - '9.1'
+  - M6
+  status: todo
+  branch: null
+  model: null
+- id: '12.1'
+  milestone: M12
+  title: Staff console with teacher verification queue
+  accept: approve/reject audited; unverified teachers stay unpublished.
+  deps:
+  - '1.6'
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
+- id: '12.2'
+  milestone: M12
+  title: Report button, review queue and takedown of material or agents
+  accept: a report reaches staff < 5 minutes; a takedown removes material from retrieval at once.
+  deps:
+  - '1.6'
+  - '12.1'
+  - '4.3'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '12.3'
+  milestone: M12
+  title: Rights declaration per upload, repeat-infringer handling, grievance contact per market (e.g. IT Rules 2021 in India)
+  accept: a declaration is stored per document; the page is public.
+  deps:
+  - '1.6'
+  - '12.1'
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
+- id: '12.4'
+  milestone: M12
+  title: Regulated-subject review before publish
+  accept: flagged agents cannot publish without staff approval.
+  deps:
+  - '1.6'
+  - '12.1'
+  - '4.3'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '12.5'
+  milestone: M12
+  title: Safety alert inbox with acknowledgement
+  accept: unacknowledged alerts escalate after 15 minutes.
+  deps:
+  - '1.6'
+  - '12.1'
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
+- id: '13.1'
+  milestone: M13
+  title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
+  accept: no serious violations.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  branch: null
+  model: null
+- id: '13.2'
+  milestone: M13
+  title: 'Load test: 500 concurrent students'
+  accept: first token p95 < 2 s with the scripted gateway.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  branch: null
+  model: null
+- id: '13.3'
+  milestone: M13
+  title: 'Security review: teacher and student isolation, entitlement bypass attempts, webhooks, OWASP Top 10, dependency audit'
+  accept: no high findings open.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: '13.4'
+  milestone: M13
+  title: 'DPDP: per-user export and delete, retention jobs'
+  accept: jobs tested; export complete.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  branch: null
+  model: null
+- id: '13.5'
+  milestone: M13
+  title: 'Cost dashboard: AI cost per active student per package against price'
+  accept: numbers match the usage ledger.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  branch: null
+  model: null
+- id: '13.6'
+  milestone: M13
+  title: Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist
+  accept: fresh VM to running demo in < 30 minutes; checklist signed off by a human.
+  deps:
+  - M10
+  - M11
+  - M12
+  - M8
+  - M9
+  status: todo
+  needs_decision:
+  - hosting-region
+  - pilot-market
+  branch: null
+  model: null

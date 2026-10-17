@@ -1,0 +1,32 @@
+# Paths whose changes make a PR "risky": you (the human) approve, then the team lead merges.
+# One glob per line, repo-relative. `**` = any depth. Owned by the architect: update as code lands.
+# Updated for build plan v0.3 (17 Oct 2026).
+
+# Student safety and teaching behaviour (build plan rule 6)
+packages/harness/src/guardrails/**
+content/prompt-packs/**
+content/skills/**
+evals/suites/safety/**
+evals/suites/locked/**
+apps/worker/src/alerts/**
+
+# The access filter: locked packages must never leak (PRD: "locked means locked")
+packages/harness/src/access/**
+
+# Money: payments, subscriptions, ledger, payouts, webhooks
+packages/payments/**
+apps/web/app/api/webhooks/**
+
+# Frozen contracts and architecture decisions (rule 2)
+packages/contracts/**
+docs/adr/**
+
+# Sign-in, keys, keeping each teacher's and student's data apart
+apps/web/src/auth/**
+packages/gateway/src/keys/**
+packages/db/src/repositories/**
+
+# The agent harness and CI themselves
+.claude/**
+.github/**
+content/locales/**
