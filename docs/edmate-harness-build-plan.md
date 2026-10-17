@@ -4,7 +4,7 @@ Oct 17, 2026 · @siddhant lahoti · Replaces the v0.2 plan (school life-skills h
 
 ## How to use this plan
 
-This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI teaching agent, sell packages, and students subscribe and learn with that agent every day. An agent team can execute it end to end: 14 milestones, 95 tasks, each with dependencies and acceptance criteria.
+This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI teaching agent, sell packages, and students subscribe and learn with that agent every day. An agent team can execute it end to end: 14 milestones, 96 tasks, each with dependencies and acceptance criteria.
 
 **For the team lead (main Claude session):**
 
@@ -435,7 +435,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 
 ## Milestones and tasks
 
-95 tasks in 14 milestones. M0–M7 build and prove the agent; the **harness exit gate** must pass before M8 and M9 start. M10 (payments) can start once the data model exists. Task IDs are stable for branches (`m5/5.4-access-filter`) and PRs.
+96 tasks in 14 milestones. M0–M7 build and prove the agent; the **harness exit gate** must pass before M8 and M9 start. M10 (payments) can start once the data model exists. Task IDs are stable for branches (`m5/5.4-access-filter`) and PRs.
 
 ### M0 · Foundations (depends on: none)
 
@@ -443,6 +443,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **0.2** Docker Compose (postgres+pgvector, redis, minio, caddy, web, worker) and `env.example`. *Accept:* `docker compose up` serves `/api/health` = 200 and a test file round-trips through MinIO.
 - **0.3** `packages/contracts`: every type in Core contracts as Zod. *Accept:* sample fixtures round-trip parse/serialize.
 - **0.4** ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction. *Accept:* files merged.
+- **0.6** Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create. *Accept:* the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
 - **0.5** GitHub Actions: CI, secret scan, merge-gate check (verifies the `human-approved` label came from the owner), risk labeller; PR template. *Accept:* CI blocks a failing test; the merge-gate check fails a risky PR without the owner's label.
 
 ### M1 · Data, accounts and auth (depends on: M0)

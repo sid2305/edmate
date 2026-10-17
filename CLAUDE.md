@@ -3,7 +3,7 @@
 Edmate lets a student find the right teacher and learn with that teacher's AI agent every day. Teachers build the agent from their own knowledge and sell **packages** that control what it knows and can do; the teacher teaches live once or twice a month. It is country-neutral (locale packs per market) and open source (MIT).
 
 - Product spec: `docs/edmate-prd.md` (PRD v0.3)
-- Build spec: `docs/edmate-harness-build-plan.md` (v0.3: 14 milestones, 95 tasks, rules, Definition of done)
+- Build spec: `docs/edmate-harness-build-plan.md` (v0.3: 14 milestones, 96 tasks, rules, Definition of done)
 - How the agent team works: `docs/architecture.html`
 - Task board: `docs/board/tasks.yaml` (`python3 .claude/skills/board/board.py next | status | show <id>`)
 - Decision log: `docs/decisions/log.md` (newest first, plain words)

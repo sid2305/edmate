@@ -1,4 +1,4 @@
-# Edmate build board — generated from docs/edmate-harness-build-plan.md v0.3 (95 tasks, country-neutral), 17 Oct 2026.
+# Edmate build board — generated from docs/edmate-harness-build-plan.md v0.3 (96 tasks, country-neutral), 17 Oct 2026.
 # Status: todo | planning | running | review | blocked | done
 # deps: task ids, milestone ids (all tasks in it done) or GATE. Milestone-level deps come from the plan;
 #       intra-milestone deps (e.g. 3.x after 3.1) were inferred when the board was generated — fix freely.
@@ -184,6 +184,15 @@ tasks:
   - '0.1'
   status: todo
   risk: risky
+  branch: null
+  model: null
+- id: '0.6'
+  milestone: M0
+  title: 'Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create'
+  accept: the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
+  deps:
+  - '0.1'
+  status: todo
   branch: null
   model: null
 - id: '0.5'
