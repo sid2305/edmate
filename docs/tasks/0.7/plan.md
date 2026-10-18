@@ -260,3 +260,28 @@ Reversible: Yes.
 - **Q4 (new, fix 5). Bootstrap rule for 0.3.** Confirmed: task-id + board-status waiver as written (lead, 18 Oct 2026; the human delegated contracts decisions to the lead).
 - **Q5 (new, fix 5). ADR scope via self-declared front matter.** Confirmed with the three mitigations; the weakness is documented (lead, 18 Oct 2026).
 - **Builder note (lead).** The live hooks are main's, not the worktree's, so the new deny rules don't bite during the build. But once merged, any command naming `approve.py` is denied, so the plan's own instructions to agents must never require typing it (e.g. stage with `git add .claude/skills/merge-gate/`, not the file name). Tests run approve.py via `python3 -m unittest`, which doesn't name it.
+
+## Scope change (18 Oct 2026, decided by the human) — overrides everything above
+
+The human decided: **no permission prompts from the hooks, and the team lead decides every merge**, risky ones included. The lead already removed every `ask` rule from `.claude/hooks/guard-paths.sh` and `guard-bash.sh` on main, and fixed the `.env` shell pattern (`\s` inside brackets doesn't mean whitespace on macOS grep). Agents cannot edit hooks in auto mode (Claude Code's own self-modification check), so **this task must not touch `.claude/hooks/*` or `.claude/settings.json` at all.**
+
+Dropped:
+- Fix 1 (approve.py, the local human approval record, HUMAN_APPROVE_HINT): no human approval exists any more.
+- Fix 3's hook parts (protected-paths.sh, shell-write asks). Keep only the reviewer-agent line "never create, edit or delete files…".
+- Fix 4's guard-bash allow-list change (commits on main no longer ask).
+- Fix 5's ADR `scope:` front matter and the 0.3 bootstrap waiver: ADRs and contracts are lead-approved like every other risky path.
+
+New fix 1: **lead-approved risky tiers in merge_gate.py** (both `<task-id>` and `--pr` modes; no exit 3 any more, no PR label check):
+A branch touching risky paths passes (0) only when, for every risky group it touches, `review.md`'s `Reviewers:` line names the required reviewers, and the handoff `## Decisions` has at least one `risk: high` entry. Missing anything → exit 1, listing each gap. Groups (keep risk-paths.txt the single source of truth, e.g. a `# reviewers: a, b` line per section that the gate parses):
+- child safety (guardrails, prompt-packs, skills, safety/locked evals, worker alerts) and `content/locales/**` → `safety-reviewer`, plus `safety-review.md` exists (existing check);
+- access filter, payments, webhooks, sign-in (`apps/web/src/auth`), keys, `packages/db/src/repositories` → `security-reviewer`;
+- `packages/contracts/**` (keep it in risk-paths.txt) and `docs/adr/**` → `architect`, `security-reviewer`, `typescript-reviewer`;
+- `.claude/**`, `.github/**` → `security-reviewer`;
+- migrations that drop or delete data → `database-reviewer`.
+The `gh pr merge` hook already denies unless the gate exits 0, so no hook change is needed. The hook rule that blocks agents from adding the old PR label stays as is (out of bounds).
+
+Kept: fix 2 (wontfix entries; board.py done verbatim check), fix 4's planner and board parts (risk-path check in planner.md; the lead commits plan.md on main before the build; board.py next warning), the reviewer "never write files" line, and the architect agent notes fix (it reviews contracts and ADRs; read-only).
+
+Docs to update to "the lead decides merges after the required reviewers; risky merges are logged risk: high": CLAUDE.md (non-negotiables 2 and 6 and the Hooks section), build plan rules 2 and 6, merge-gate SKILL (tiers table, checklist; remove the label and exit-3 steps), team-lead SKILL (§3 steps 3, 6, 7 and §4/§5: no asking the human for risky PRs), risk-paths.txt header, architecture.html (merge policy rows), decision-log legend.
+
+Tests: `python3 -m unittest discover .claude/tests`: gate pass/fail for each group in both modes, wontfix, board.py done, board.py next warning. Drop tests for removed hook rules; hook files are out of bounds.

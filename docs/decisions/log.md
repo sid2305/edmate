@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Merge policy · decided by you · risk: high
+Decided: No permission prompts from the repo's hooks, and the team lead decides every merge, risky ones included. A risky merge needs the right specialist reviewers (safety-reviewer for child safety, security-reviewer for access, payments, sign-in and keys, architect for contracts and ADRs) and is logged as risk: high. Hard blocks stay: no secrets or key files, secret scan before pushes, harness purity, no force-push.
+Why: You don't want to approve merges or edits; the lead holds the context.
+Alternatives: Your approval for risky paths (the old rule).
+Reversible: Yes; restore the ask rules and the merge gate's exit 3.
+
 ### 18 Oct 2026 · Repo and push policy · decided by you · risk: high
 Decided: The code is now on GitHub at github.com/sid2305/edmate (public). Agents push, including straight to main; there is no human push step. Force-push stays blocked, and every push to main runs the secret scan first and is refused if anything is flagged.
 Why: You don't want to run pushes yourself.

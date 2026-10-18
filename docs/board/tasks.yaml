@@ -222,14 +222,8 @@ tasks:
   model: null
 - id: '0.7'
   milestone: M0
-  title: 'Harness fixes from the 0.1 dry run: (1) the merge gate accepts a local human approval (no GitHub yet) that only the human can create and that is tied to the branch head commit; (2) the gate fails
-    a [wontfix] finding with no decision-log entry, and board.py refuses `done` when the handoff''s decisions are not in docs/decisions/log.md; (3) guard-bash asks before shell commands that write into
-    frozen, safety, access or payments paths (Edit/Write hooks already do); reviewer agents are told never to write files; (4) planner must check every planned path against risk-paths.txt; the lead commits
-    plan.md on main before the build (guard-bash allows docs/tasks/<id>/plan.md on main); board.py next warns about a task in planning with no plan.md; (5) packages/contracts moves from human-approved to
-    lead-approved: no edit-time ask, and the gate passes a contracts change without the human only when the branch adds or changes an ADR for it, review.md lists architect, security-reviewer and typescript-reviewer,
-    and the handoff has a risk: high decision; CLAUDE.md, build plan rule 2, risk-paths.txt, merge-gate and team-lead skills updated to match'
-  accept: Python tests for merge_gate.py, board.py and the guard-bash.sh rules pass (`python3 -m unittest discover .claude/tests`); an agent-run approval command is denied by the hook; the gate exits 0
-    for a risky task only with an approval matching the branch head, and 3 again after a new commit; team-lead and merge-gate skills describe the new local approval step.
+  title: 'Harness fixes from the 0.1 dry run, rescoped 18 Oct 2026 (the lead decides every merge, no hook prompts): (1) merge_gate.py passes risky branches only when review.md names the required reviewers per risk group and the handoff has a risk: high decision, with no exit 3 and no PR label; (2) [wontfix] needs a decision entry, board.py done needs handoff decisions verbatim in the log; (3) reviewers never write files; (4) planner checks every path against risk-paths.txt, plan.md committed on main before the build, board.py next warns about planning tasks with no plan; docs updated. No hook edits.'
+  accept: '`python3 -m unittest discover .claude/tests` passes; the gate exits 0 for a risky branch with the required reviewers and a risk: high entry and 1 when either is missing, in task-id and --pr modes; CLAUDE.md, build plan, merge-gate and team-lead skills describe lead-approved merges.'
   deps:
   - '0.1'
   status: running

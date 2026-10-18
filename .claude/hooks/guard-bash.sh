@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse(Bash): git safety for many agents on one repo (rule 1: one task, one branch, one PR).
+# PreToolUse(Bash): hard git and secrets blocks for many agents on one repo. No "ask" rules.
 input=$(cat)
 cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
@@ -15,16 +15,7 @@ if grep -qE "git\s+push\b.*\s(origin\s+)?(main|HEAD:main)(\s|$)" <<<"$cmd"; then
     decide deny "Secret scan flagged files; fix them before pushing main (the repo is public):
 $scan"
 fi
-if grep -qE "git\s+(merge|rebase)\b" <<<"$cmd" && [ "$(git -C "${cwd:-.}" branch --show-current 2>/dev/null)" = main ]; then
-  decide ask "Merging into main locally. PR merges are a human call — confirm."
-fi
-if grep -qE "git\s+commit\b" <<<"$cmd" && [ "$(git -C "${cwd:-.}" branch --show-current 2>/dev/null)" = main ]; then
-  # The team lead's own bookkeeping (board, decision log) may go straight to main; anything else asks.
-  files=$( { git -C "${cwd:-.}" diff --cached --name-only; git -C "${cwd:-.}" diff --name-only; } 2>/dev/null | sort -u)
-  if [ -z "$files" ] || grep -qvE '^docs/(board|decisions)/' <<<"$files"; then
-    decide ask "Committing directly on main. Only docs/board/ and docs/decisions/ updates go straight to main; task work belongs on a task branch."
-  fi
-fi
+# No asks for merges or commits on main: the team lead decides (human decision, 18 Oct 2026).
 
 # Only the human adds `human-approved` (the risky-PR sign-off). Agents may not add or forge it.
 if grep -qE "human-approved" <<<"$cmd" && grep -qE "\bgh\b" <<<"$cmd"; then
@@ -39,7 +30,7 @@ if grep -qE "\bgh\s+pr\s+merge\b" <<<"$cmd"; then
   [ $rc -eq 0 ] || decide deny "Merge gate did not pass (exit $rc):
 $out"
 fi
-if grep -qE "(^|[\s/'\"])\.env(\.[A-Za-z0-9_-]+)?(\s|$|['\"])" <<<"$cmd" && ! grep -q "example" <<<"$cmd"; then
-  decide ask "Command touches a .env file, which may hold real keys."
+if grep -qE "(^|[[:space:]/'\"])\.env(\.[A-Za-z0-9_-]+)?([[:space:]]|$|['\"])" <<<"$cmd" && ! grep -q "example" <<<"$cmd"; then
+  decide deny "Command touches a .env file, which may hold real keys. Use env.example for documented variables."
 fi
 exit 0
