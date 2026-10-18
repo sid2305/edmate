@@ -243,12 +243,19 @@ tasks:
   model: built with 0.5
 - id: '0.9'
   milestone: M0
-  title: 'Hardening from the 0.5 security review: (1) branch protection on main requiring checks node, python-harness and check (owner may push board and log commits; no force-push); (2) CI runs main''s
-    secret scanner and allow list against every commit of a PR, not the PR''s own copy on the final tree; (3) the PR-merge hook in guard-bash.sh runs main''s merge_gate.py (git show main:...) rather than
-    the checked-out copy (hook edit: needs auto mode off)'
-  accept: The required checks block a PR with a failing test; a PR that adds a secret in one commit and removes it later fails CI; the merge hook uses main's gate even when another branch is checked out.
+  title: 'Hardening from the 0.5 security review: (1) branch protection on main requiring checks node, python-harness and check (applied by the lead 18 Oct 2026); (2) CI runs main''s secret scanner and allow list against every commit of a PR, not the PR''s own copy on the final tree'
+  accept: 'The required checks block a PR with a failing test; a PR that adds a secret in one commit and removes it later fails CI.'
   deps:
   - '0.5'
+  status: todo
+  branch: null
+  model: null
+- id: '0.10'
+  milestone: M7
+  title: 'From the 0.5 security review: the PR-merge hook in guard-bash.sh runs main''s merge_gate.py (git show main:...) instead of the checked-out copy. Hook edit: the human switches auto mode off for this step.'
+  accept: 'The merge hook uses main''s gate even when another branch is checked out in the main checkout.'
+  deps:
+  - '0.9'
   status: todo
   branch: null
   model: null
