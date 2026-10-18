@@ -156,3 +156,9 @@ Decided: The console part of the log-scan test writes through `new Console({ std
 Why: Vitest intercepts the global console in workers, so stdout spies would see nothing and the check would pass vacuously. The per-sink positive control proves this sink captures output.
 Alternatives: Spy on `process.stdout.write` (vacuous under Vitest); set Vitest's `disableConsoleIntercept`.
 Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Review · decided by team lead · risk: low
+Decided: Three LOW notes in packages/gateway/src/keys/load.ts stay as they are: error messages may name the caller's provider id (never a key value), and two type casts (`raw as string`, the generic cast in `get()`) are covered by tests. 2.2's adapters must always pass the key so the OpenAI SDK never falls back to OPENAI_API_KEY.
+Why: None can expose a key; the casts are proven by tests.
+Alternatives: Validate the id before use; discriminated results instead of casts.
+Reversible: Yes.
