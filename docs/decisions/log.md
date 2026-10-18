@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Payments come last · decided by you · risk: high
+Decided: Build and test the harness and the platform end to end first, then raise agent quality, and only then build payments (M10). Until M10, a paid package starts as an active subscription with no payment; checkout (new 10.8) and teacher earnings (new 10.7) move into M10, and M13 hardening no longer waits on M10 except the pilot readiness checklist (13.6).
+Why: The product's value is the teacher's agent; money and payouts are not worth the effort until the whole thing works and the agent is good.
+Alternatives: Keep payments in the platform build (9.3 checkout, 8.8 earnings, 9.7 with a payment sandbox).
+Reversible: Yes; entitlements already come from subscriptions, so M10 only adds how a subscription gets paid for. The payment, refund and revenue-share answers above stay on record for M10.
+
 ### 18 Oct 2026 · Turn config loading · decided by team lead (architect's design) · risk: high
 Decided: Add one contracts port, `TurnConfigStore`, recorded in ADR-0004 (task 3.13). `entitle` loads the agent, package version, style card and locale pack in one call and fails closed if any object doesn't belong to the entitled teacher. This moves style card and locale loading from buildContext to entitle, a deviation from the Turn pipeline spec.
 Why: Scrub needs PII patterns and escalate needs helplines before buildContext runs; ADR-0002 keeps adapter-backed ports in contracts.
