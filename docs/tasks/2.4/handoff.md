@@ -1,9 +1,19 @@
 # 2.4 handoff: Metering (usage rows per call; prices.yaml in USD)
 
-Status: DONE
+Status: DONE (fix round 1 applied)
 Branch: `m2/2.4-metering`
 Worktree: `.claude/worktrees/agent-acd71ca6af42e6b47` (under the main checkout)
-Reviewers needed (risky path `packages/db/src/repositories/**`): security-reviewer (gate-required), database-reviewer, typescript-reviewer (lead answers).
+Reviewers needed (risky path `packages/db/src/repositories/**`, plus a migration the gate reads as destructive: `ALTER COLUMN … DROP NOT NULL`): security-reviewer, database-reviewer (both gate-required), typescript-reviewer (lead answers).
+
+## Fix round 1
+
+| Finding | Fix | Test |
+|---|---|---|
+| [CRITICAL, database] unknown/unpriced rows stored `0`/`''` placeholders in NOT NULL columns | `model`, `input_tokens`, `output_tokens`, `cost_micro_usd` are nullable (`0003`: `ALTER COLUMN … DROP NOT NULL`, which loses no data; the table is empty). Unknown rows store NULL tokens and cost; unpriced rows store NULL cost. The repository's null translation is gone: rows are returned as stored. | `usage-ledger.int.test.ts` "unknown usage reads back as null figures…" reads the raw table: cost is NULL on every non-recorded row, and tokens are NULL on unknown rows. `schema.test.ts` checks the four columns are nullable. |
+| [HIGH, database] brittle 3-branch CHECK | Replaced by `usage_ledger_recorded_has_figures` (`status <> 'recorded' or` all four figures are not null). `usage_ledger_counts_non_negative` stays. Status/figure consistency for other statuses is checked on read (`integrity`), not in SQL. | "the database rejects a recorded row with a missing figure, and negative counts": 7 raw inserts fail with `23514`; unknown-all-NULL and unpriced-NULL-cost rows are accepted. The integrity test covers 3 hand-made rows whose figures contradict their status. |
+| [MEDIUM, database] index for `sumForStudent` | `usage_ledger_teacher_id_student_id_created_at_idx` on `(teacher_id, student_id, created_at)`, which also serves 2.5's rolling windows. | `schema.test.ts` index test. |
+| [CRITICAL, silent-failure] a failed-over primary got no row | Metering now wraps each adapter, not the router: `meterRouter(router, sink, ctx, prices)` rebuilds the router with `Router.withAdapters(a => meterAdapter(a, meter))`. Every attempt that reached an adapter writes exactly one row (priced, unpriced or unknown), and unknown rows carry the attempted adapter's model. `createMeteredGateway` is removed so a whole router can't be wrapped by mistake. | `meteredGateway.test.ts`: "a router failover meters both attempts" (primary unknown on `primary-model` plus fallback priced at 33,000; this replaces the old "only the fallback" test). Also: generateObject/embed failovers write 4 rows; a request the router refuses before any provider call writes none; a primary that streamed usage and then failed keeps its priced row with no failover. `router.test.ts`: `withAdapters` maps tiers and fallback, and a shared adapter only once. |
+| `schema.test.ts` create-only guard | `ALTER TABLE "t" ALTER COLUMN "c" DROP NOT NULL;` is stripped before the destructive check (lead clarification: create-only means never lose data). A new test pins the exact list of relaxed columns (the four `usage_ledger` columns in `0003`), so any future relaxation is visible. | `schema.test.ts` "relaxes NOT NULL only where a reviewed task did". |
 
 ## Acceptance evidence
 
@@ -11,92 +21,96 @@ Accept: "one row per call; cost per turn and per active student computed from th
 
 | Item | Evidence |
 |---|---|
-| One row per call | `gateway/test/metering/meteredGateway.test.ts` "records the reported usage once, priced, with the full context; chunks pass unchanged": one `sink.record` with `costMicroUsd: 33_000` (1,000 in x $3/M + 2,000 out x $15/M) and the full ctx; the caller's chunks are `toEqual` the scripted ones. A router 5xx failover inside one call is still one row. db: `usage-ledger.int.test.ts` reads every written row back with the right teacher, package, student, turn, source, model, tier, tokens and cost. |
-| Failed or aborted attempts still metered | "usage then throws (stops early)": the row is recorded before the caller sees the error, and the error is the same object. "throws before any chunk": a flagged `no_usage_reported` row, no `tokens`. "abandons with break": exactly one row either way. Mutation check: moving the meter call out of `finally` fails these 3 tests. |
-| No usage chunk at all | "completes with no usage chunk" leads to `recordUnmetered({ reason: 'no_usage_reported' })`. db: the row reads back with `model`, `inputTokens`, `outputTokens`, `costMicroUsd` all `null` (`status: 'unknown'`). |
-| Unknown model | An unpriced row with real tokens and `reason: 'unpriced_model:mystery-model'`, plus exactly one warning `{ event: 'metering.unpriced_model', model }`. By default it is one JSON line on stderr with no student id and no prompt text. db: reads back with tokens and `costMicroUsd: null`. |
-| Cost arithmetic | `gateway/test/pricing/pricing.test.ts`: exact BigInt math, e.g. 7 in x $0.8/M + 3 out x $4.000001/M = 17.600003, rounded half up to `18`; 1,234,567 + 89 tokens gives `988_010`. A missing model gives `undefined`. A negative, infinite, NaN, string, missing, extra-key or more-than-6-decimals price fails at load, naming the model and field. The bundled `prices.yaml` prices every model in `DEFAULT_MODEL_POLICY`. |
-| Source carried through | Wrapper: `it.each` over `subscription`, `teacher_preview`, `eval`, for both `record` and `recordUnmetered`. db: `it.each` stores and reads back all three. |
-| No student text | Wrapper: the sink receives only the five billing fields (an extra ctx key is dropped), and nothing the sink receives contains the prompt or system text. db: "writes carry only ids, the model, tier, counts and a reason code" spies on `pg.Client.prototype.query`, and every parameter sent by `record` / `recordUnmetered` (both kinds) is in an allowlist or is the row's UUID. |
-| Isolation | 4 new `CASES` entries in `repositories.int.test.ts`: `usageLedger.record cases=28 leaks=0`, `recordUnmetered cases=32 leaks=0`, `listForTurn cases=36 leaks=0`, `sumForStudent cases=24 leaks=0`. Another teacher's package and a ghost student are both `not_found` with the row count unchanged. `usageMeterFor` refuses a ctx naming another pair (`scope`). Bad scopes throw before SQL (`scope.test.ts`, automatic, plus `usageMeterFor` at construction). |
-| Cost per turn / per active student | "cost per turn and per active student are computed from the rows": one turn has a cut-short attempt (330), a retry (33,000), an unknown call and an unpriced call. `listForTurn` returns 4 rows summing to 33,330. The `sumForStudent` delta is `{calls 4, recorded 2, unknown 1, unpriced 1, cost 33,330, in 1,017, out 2,029}`, and its totals equal a raw-SQL aggregate for that pair and for the neighbouring pair. |
-| DB keeps placeholders honest | "the database rejects a placeholder row…": 8 raw inserts violating the status rules (unknown with a model, a cost or no reason; unpriced with a cost or naming another model; recorded with a reason or an empty model; a negative cost) all fail with `23514`. |
-| Coverage | gateway `src/metering/**` and `src/pricing/**` held at 100/100/100/100 (new thresholds). db `src/repositories/**` thresholds met (`usage-ledger.ts` 100 lines/functions/statements, 95.8 branches; repositories 99.23 branches). |
+| One row per provider attempt | `gateway/test/metering/meteredGateway.test.ts` "records the reported usage once, priced, with the full context; chunks pass unchanged": one `sink.record` with `costMicroUsd: 33_000` and the full ctx; the caller's chunks are `toEqual` the scripted ones. A failover writes one row per attempt (see fix round 1). db: every written row reads back with the right teacher, package, student, turn, source, model, tier, tokens and cost. |
+| Failed or aborted attempts still metered | "usage then throws (stops early)": recorded before the caller sees the error, which is the same object. "throws before any chunk": an unknown row on the adapter's model, no `tokens`. "abandons with break": exactly one row either way. |
+| No usage chunk at all | `recordUnmetered({ reason: 'no_usage_reported', model: <adapter model> })`. db: tokens and cost are stored and read back as NULL. |
+| Unknown model | An unpriced row with real tokens, NULL cost and `reason: 'unpriced_model:<model>'`, plus one `metering.unpriced_model` warning (a JSON line on stderr by default, with no student id and no prompt text). |
+| Cost arithmetic | `pricing.test.ts`: exact BigInt micro-USD (e.g. 7 in x $0.8/M + 3 out x $4.000001/M = 17.600003, rounded to 18). A malformed `prices.yaml` fails at load, naming the model and field. The bundled file prices every model in `DEFAULT_MODEL_POLICY`. |
+| Source carried through | Wrapper and db: `it.each` over `subscription`, `teacher_preview`, `eval`. |
+| No student text | The sink receives only the five billing fields. db spies on `pg.Client.prototype.query`: every parameter that `record` / `recordUnmetered` send is in an allowlist (ids, model, tier, counts, reason, null) or is the row's UUID. |
+| Isolation | 4 `CASES` entries (`usageLedger.record cases=28`, `recordUnmetered cases=32`, `listForTurn cases=36`, `sumForStudent cases=24`; all `leaks=0`). Another teacher's package and a ghost student are `not_found`. `usageMeterFor` refuses a ctx naming another pair. Bad scopes throw before SQL. |
+| Cost per turn / per active student | "cost per turn and per active student are computed from the rows": 4 rows on one turn sum to 33,330. The `sumForStudent` delta is `{calls 4, recorded 2, unknown 1, unpriced 1, cost 33,330, in 1,017, out 2,029}`, and totals equal a raw-SQL aggregate for this pair and the neighbouring one. |
+| Coverage | gateway `src/metering/**`, `src/pricing/**`, `src/router/**` 100/100/100/100. db All files 100 / 99.05 / 100 / 100 (`usage-ledger.ts` 96.15 branches; the repositories threshold is 90). |
 
-Commands (Postgres via `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres`, stopped after):
+Commands (Postgres via `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml start postgres`, stopped after):
 
 ```
 corepack pnpm turbo run build typecheck lint test --filter=@edmate/gateway... --filter=@edmate/db...
-→ gateway Tests 258 passed (258); db Tests 262 passed (262); Tasks: 19 successful, 19 total
-   gateway src/metering 100/100/100/100, src/pricing 100/100/100/100; db All files 100 / 99.04 / 100 / 100
+→ gateway Tests 264 passed (264); db Tests 265 passed (265); Tasks: 19 successful, 19 total
 
 corepack pnpm turbo run typecheck lint test        (root, after merging origin/main)
 → Tasks: 35 successful, 35 total
 
 python3 .githooks/secret-scan.py --all
-→ exit 0, no findings
+→ exit 0
 
 corepack pnpm run format:check
 → only .github/workflows/ci.yml flagged; it comes from main, untouched here
 ```
 
-Merged `origin/main` (1.6 audit log, 3.13). Conflicts: `repositories/index.ts` (kept both `audit` and `usageLedger`, and both export blocks) and `repositories.int.test.ts` (main's file plus the four usage cases). 1.6 had taken migration `0002`, so this branch's migration was regenerated as `0003_usage_ledger_metering` on top of main's snapshot. The lockfile merged without conflict (`pnpm install --frozen-lockfile` clean).
+Merged `origin/main` again for fix round 1 (docs only, no conflicts). In round 0, 1.6 had taken migration `0002`, so this branch's migration is `0003_usage_ledger_metering`. It is not on main yet, so it was regenerated in place for round 1.
 
 ## Changes
 
-- `packages/gateway/src/pricing/`: `prices.yaml` (USD per 1M tokens: `claude-haiku-4-5` 1/5, `claude-sonnet-4-5` 3/15), `schema.ts` (Zod), `load.ts` (`parsePriceTable`, `loadBundledPrices`, `PriceTableError`), `cost.ts` (`computeCostMicroUsd`).
-- `packages/gateway/src/metering/`: `types.ts` (`MeterContext`, `MeterSink`, `UnmeteredUsage`, `UnmeteredReason`, `MeteringWarning`) and `meteredGateway.ts` (`createMeteredGateway(gateway, sink, ctx, prices, { warn? })` returns a `MeteredGateway`, which is a `ModelGateway` plus `settled()`).
-- `packages/gateway/src/index.ts`: exports both barrels. `package.json`: `js-yaml` 5.5.0 (the same pin as `@edmate/evals`), and the build copies `prices.yaml` into `dist/pricing/`. `tsconfig.build.json`: `types: ["node"]` (like db and evals). `vitest.config.ts`: 100% thresholds for the two new folders.
-- `packages/db/src/schema/`: enums `entitlement_source` (checked equal to `Entitlement.source`) and `usage_status`. `usage_ledger` gains `turn_id` (not null, not a FK), `source`, `status` (default `recorded`), `reason`, an index on `(teacher_id, turn_id)`, and two CHECK constraints.
-- `packages/db/migrations/0003_usage_ledger_metering.sql` + snapshot + journal (generated; CREATE TYPE / ADD COLUMN / CREATE INDEX / ADD CONSTRAINT only).
-- `packages/db/src/repositories/usage-ledger.ts`: `record`, `recordUnmetered`, `listForTurn`, `sumForStudent`. `ports.ts`: `usageMeterFor(repos, scope)`. `index.ts`: wired in and exported. `README.md`: UsageMeter section.
-- Tests: `gateway/test/pricing/pricing.test.ts`, `gateway/test/metering/meteredGateway.test.ts`, `keys/exports.test.ts` (new exports), `db/test/usage-ledger.int.test.ts` (new, own throwaway database), `repositories.int.test.ts` (4 CASES), `isolation-seed.ts` (one usage row per pair), `schema.test.ts`, `scope.test.ts`.
+- `packages/gateway/src/pricing/`: `prices.yaml`, `schema.ts`, `load.ts` (`parsePriceTable`, `loadBundledPrices`, `PriceTableError`), `cost.ts` (`computeCostMicroUsd`).
+- `packages/gateway/src/metering/`: `types.ts` (`MeterContext`, `MeterSink`, `UnmeteredUsage` (`model` now required), `UnmeteredReason`, `MeteringWarning`). `meteredGateway.ts`: `createMeter(sink, ctx, prices, { warn? })` returns a `Meter` (`attempt`, `settled`); `meterAdapter(adapter, meter)`; `meterRouter(router, sink, ctx, prices, opts?)` returns a `MeteredGateway` (`ModelGateway` + `settled()`).
+- `packages/gateway/src/router/router.ts`: `Router.withAdapters(map)`, which returns the same routing over mapped adapters.
+- `packages/gateway`: `js-yaml` 5.5.0 (the same pin as evals); the build copies `prices.yaml` to `dist/`; the build tsconfig includes node types; 100% thresholds for `metering`/`pricing`.
+- `packages/db/src/schema/`: enums `entitlement_source`, `usage_status`. `usage_ledger`: nullable `model`/`input_tokens`/`output_tokens`/`cost_micro_usd`; new `turn_id`, `source`, `status`, `reason`; indexes `(teacher_id, turn_id)` and `(teacher_id, student_id, created_at)`; CHECKs `counts_non_negative` and `recorded_has_figures`.
+- `packages/db/migrations/0003_usage_ledger_metering.sql` + snapshot + journal (generated).
+- `packages/db/src/repositories/usage-ledger.ts` (`record`, `recordUnmetered`, `listForTurn`, `sumForStudent`), `ports.ts` (`usageMeterFor`), `index.ts`, `README.md`.
+- Tests: `pricing.test.ts`, `meteredGateway.test.ts`, `router.test.ts`, `exports.test.ts`, `usage-ledger.int.test.ts`, `repositories.int.test.ts`, `isolation-seed.ts`, `schema.test.ts`, `scope.test.ts`.
 
 ## Deviations from the plan
 
-- **The token/cost columns stay NOT NULL; unknown figures are placeholders pinned by a CHECK and read back as `null`.** The plan relaxed `NOT NULL`, but `ALTER … DROP NOT NULL` matches the create-only guard (`test/schema.test.ts` and the merge gate's `DESTRUCTIVE_SQL`), and the task prompt says create-only. See decisions.
-- `recordUnmetered` also carries `tier` (and `model` when unpriced), because `usage_ledger.tier` and `model` are NOT NULL. `embed()` has no tier in the port, so it is recorded on `main`, the tier the router uses for it.
-- `generateObject()` / `embed()` always take the `no_usage_reported` path: the port returns only the value, so the wrapper has no usage to read. A "generic in case an adapter adds usage" path would need a port change, so it is not built.
-- The wrapper returns `MeteredGateway` (`ModelGateway` + `settled()`), and sink writes are not awaited by the call. See decisions.
+- Metering wraps adapters (`meterRouter`), not a whole `ModelGateway` (`createMeteredGateway` in the plan), so that every provider attempt is metered (fix round 1).
+- `schema.test.ts`'s create-only guard now allows `ALTER COLUMN … DROP NOT NULL`, with the exact relaxed columns pinned by a test.
+- `recordUnmetered` also carries `tier` and the attempted `model`. `embed()` is recorded on `main`, the tier the router uses for it.
 - Reads are `listForTurn` and `sumForStudent` (per student x teacher). There is no teacher-wide total yet; that is 13.5's.
 
 ## Decisions
 
-### 18 Oct 2026 · 2.4 Unknown usage is a flagged row with placeholder figures, not NULL columns · decided by builder · risk: high
-Decided: `usage_ledger` keeps 1.1's NOT NULL `model`, `input_tokens`, `output_tokens` and `cost_micro_usd`. Each row has a `status` (`recorded` | `unknown` | `unpriced`) and a fixed `reason` (`no_usage_reported` | `unpriced_model:<model>`). An `unknown` row stores `''`/`0`/`0`/`0`, and an `unpriced` row stores real tokens with cost `0`. A CHECK constraint (NULL-safe, `is not distinct from`) pins those placeholders to their status, so a placeholder can never pass as a priced or free call. The repository returns them as `null`, and `sumForStudent` reports `unknown`/`unpriced` counts next to the priced cost.
-Why: the plan's `DROP NOT NULL` is flagged as destructive by both the db package's create-only test and the merge gate's regex, and the task prompt said create-only. Rows still say "unknown", never "free", at both the API and the constraint level.
-Alternatives: relax NOT NULL in a migration the merge gate flags (needs database-reviewer plus an exception in `schema.test.ts`'s create-only check); new nullable columns next to the old ones (duplicated meaning).
-Reversible: yes. A later migration can drop NOT NULL and turn the placeholders into NULL in one statement, gated on the CHECK's status.
-Note for 2.5/13.5: anything that reads the table directly must filter on `status` (or use `sumForStudent`). A raw `sum(cost_micro_usd)` quietly leaves out unknown calls, just as a NULL sum would.
+### 18 Oct 2026 · 2.4 Unknown figures are NULL; usage_ledger's figure columns are relaxed to nullable · decided by team lead · risk: high
+Decided: `model`, `input_tokens`, `output_tokens` and `cost_micro_usd` are nullable (migration `0003`, `ALTER COLUMN … DROP NOT NULL`, which loses no data; the table is empty). Each row has a `status` (`recorded` | `unknown` | `unpriced`) and a fixed `reason` (`no_usage_reported` | `unpriced_model:<model>`). Unknown rows have NULL tokens and cost; unpriced rows have NULL cost. One CHECK requires a recorded row to have all four figures, and another keeps counts non-negative. Status/figure consistency beyond that is validated on read (`integrity`). `schema.test.ts` allows relaxing NOT NULL and pins the relaxed columns.
+Why: a raw query must never read an unknown call as free (database-reviewer, fix round 1). The lead clarified that "create-only" means "never lose data". Round 0's placeholder-plus-3-branch-CHECK design was replaced.
+Alternatives: placeholders pinned by a CHECK (round 0: brittle, and raw readers see 0).
+Reversible: yes (re-adding NOT NULL needs the unknown rows backfilled or removed).
+Note for 2.5/13.5: `sum()` skips NULL, so totals leave out unknown calls. Report the `unknown`/`unpriced` counts (as `sumForStudent` does) next to any cost.
+
+### 18 Oct 2026 · 2.4 One usage row per provider attempt, metered at the adapter · decided by builder · risk: high
+Decided: `meterRouter(router, …)` rebuilds the router with `Router.withAdapters` so that each adapter call is metered. A failed-over primary writes its own row (unknown, on its model) next to the fallback's. A request the router refuses before any adapter call writes nothing. The gateway-level wrapper was removed so a router can't be metered as one opaque call.
+Why: silent-failure-hunter, fix round 1. Tokens a failed primary spent were invisible.
+Alternatives: record inside `Router` itself (couples routing to billing); keep a gateway-level wrapper too (easy to misuse).
+Reversible: yes.
 
 ### 18 Oct 2026 · 2.4 usage_ledger writes are ownership-checked through the package, scoped by student x teacher · decided by builder · risk: high
-Decided: `usageLedger.record` / `recordUnmetered(scope: StudentScope, packageId, entry)` insert with `INSERT … SELECT … FROM packages WHERE id = $pkg AND teacher_id = $scope.teacherId` (0 rows → `not_found`). The student id is the scope's, and a ghost student is a FK violation, which reads as `not_found`. Reads filter on `teacher_id` and `student_id` from the scope. `usageMeterFor(repos, scope)` binds one pair, and a ctx naming another teacher or student is `scope`. Rows hold ids, model id, tier, counts, cost and the reason code only.
-Why: money/metering data per teacher and student follows 1.2's isolation rules exactly. Binding the scope at construction (like `transcriptStoreFor`) means a wrong ctx can't bill another pair.
-Alternatives: trust the ctx's ids per call with no bound scope (simpler, but a bug in the caller could bill another pair).
+Decided: `usageLedger.record` / `recordUnmetered(scope: StudentScope, packageId, entry)` insert with `INSERT … SELECT … FROM packages WHERE id = $pkg AND teacher_id = $scope.teacherId` (0 rows → `not_found`; a ghost student is a FK violation, which reads as `not_found`). Reads filter on the scope's teacher and student. `usageMeterFor(repos, scope)` binds one pair, and a ctx naming another is `scope`. Rows hold ids, model id, tier, counts, cost and the reason code only.
+Why: 1.2's isolation rules. A wrong ctx can't bill another pair.
+Alternatives: trust the ctx's ids per call.
 Reversible: yes.
 
-### 18 Oct 2026 · 2.4 Metering writes are fire-and-track; a failing sink is logged, never thrown · decided by builder · risk: low
-Decided: the wrapper starts the sink write when a call ends (normal end, throw, or early `break`) and doesn't await it. `settled()` waits for outstanding writes. A sink rejection or sync throw becomes one `metering.failed` warning with the error's class name only, so a driver message that quotes parameters is never logged.
-Why: pipeline step 10 says metering never blocks. 3.7 can await `settled()` at the end of a turn or job if it wants durability before it replies.
-Alternatives: await the sink before the stream finishes (adds DB latency to every turn).
+### 18 Oct 2026 · 2.4 Metering writes are fire-and-track; durable retry is deferred to 3.8 · decided by team lead · risk: low
+Decided: a sink write starts when an attempt ends and is not awaited by the call. `settled()` waits for outstanding writes. A failing write becomes one `metering.failed` warning (error class name only) and is not retried. Durable retry or a dead-letter queue for failed meter writes is deferred to task 3.8 (the async `meter` step's queue).
+Why: pipeline step 10 says metering never blocks; 3.8 owns the queue.
+Alternatives: await the write in the call path; retry in memory (lost on restart anyway).
 Reversible: yes.
 
-### 18 Oct 2026 · 2.4 Every usage chunk in a stream is its own row; generateObject/embed are always "unknown" · decided by builder · risk: low
-Decided: a stream that reports more than one usage figure writes one row per figure (in practice there is one; the router never splices). `generateObject`/`embed` record `no_usage_reported` on every call, because the frozen port gives the wrapper no usage for them. Chunks pass through unchanged: the usage chunk still says `costMicroUsd: 0`, and the priced cost is only in the row. 3.7 can call `computeCostMicroUsd` if it needs the cost mid-turn.
-Why: no tokens are dropped and none are invented. The plan asked for byte-identical chunks.
-Alternatives: sum several figures into one row (loses the per-model split); carry usage out of `generateObject` (contracts change, ADR).
+### 18 Oct 2026 · 2.4 generateObject/embed are always recorded as unknown (known limit) · decided by team lead · risk: low
+Decided: the frozen `ModelGateway` port returns only the value from `generateObject`/`embed`, so each attempt is recorded as `no_usage_reported` on the adapter's model. Carrying usage out needs a contracts change (ADR). A stream that reports several usage figures writes one row per figure. Chunks pass through unchanged (the usage chunk still says `costMicroUsd: 0`); `computeCostMicroUsd` is exported if 3.7 needs a cost mid-turn.
+Why: no tokens invented, no call left out.
+Alternatives: a contracts change to return usage.
 Reversible: yes.
 
 ### 18 Oct 2026 · 2.4 Prices are integer micro-USD per 1M tokens, at most 6 decimals, half-up once · decided by builder · risk: low
-Decided: `prices.yaml` prices are plain USD per 1M tokens with at most 6 decimal places, scaled to BigInt micro-USD per 1M tokens at load. Cost = (in x pIn + out x pOut) / 1M, rounded half up once per call; a result past 2^53 throws. `js-yaml` 5.5.0 (the same pin as `@edmate/evals`) parses the file. The build copies `prices.yaml` into `dist/`, and `load.ts` resolves it from `import.meta.url`. The gateway's build tsconfig now includes node types, like db and evals. The prices in the file are list prices at the time of writing and should be checked when 7.6 sets the model mix.
-Why: exact integers with no float drift; one rounding step.
-Alternatives: round each side separately (can differ by 1); floats.
+Decided: `prices.yaml` holds USD per 1M tokens (at most 6 decimals), scaled to BigInt micro-USD at load. Cost = (in x pIn + out x pOut) / 1M, rounded half up once; a result past 2^53 throws. `js-yaml` 5.5.0 (the same pin as evals). The build copies `prices.yaml` to `dist/`. The gateway build tsconfig includes node types. The list prices should be checked when 7.6 sets the model mix.
+Why: exact integers, one rounding step.
+Alternatives: floats; per-side rounding.
 Reversible: yes.
 
 ### 18 Oct 2026 · 2.4 turn_id is a plain column; source is a new enum checked against the contracts · decided by planner · risk: low
-Decided: `usage_ledger.turn_id` is text, not null and not a foreign key (meter and commit are independent async steps). `source` uses a new `entitlement_source` enum that `schema.test.ts` checks equals `Entitlement.source`. Index `(teacher_id, turn_id)` serves `listForTurn`.
-Why: as planned.
-Alternatives: FK to turn traces (would couple metering to the trace write).
+Decided: `turn_id` is text, not null and not a FK (meter and commit are independent). `entitlement_source` is checked equal to `Entitlement.source`. Indexes `(teacher_id, turn_id)` for `listForTurn` and `(teacher_id, student_id, created_at)` for `sumForStudent` and 2.5.
+Why: as planned, plus database-reviewer's index.
+Alternatives: FK to turn traces.
 Reversible: yes.
 
-Ops note: `docker compose … up -d postgres` reported "Recreated" for the shared `edmate-postgres-1` container (compose project shared across worktrees). If another session was running db integration tests at that moment, they may have seen a dropped connection. The container was stopped after.
+Ops note: in round 0, `docker compose … up -d postgres` reported "Recreated" for the shared `edmate-postgres-1` container. Round 1 used `start`/`stop` only.
