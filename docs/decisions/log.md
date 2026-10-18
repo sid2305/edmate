@@ -10,6 +10,24 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.9 Per-commit secret scan runs main's scanner, allow list and driver · decided by tdd-guide · risk: high
+Decided: A new CI job `secrets` (pull_request only) scans every commit in `origin/main..HEAD`. It uses the scanner and allow list from main (`git show origin/main:...` into `$RUNNER_TEMP`) and the driver `.github/scripts/scan-pr-commits.py`, also from main. The PR that adds the driver is the only one that uses its own copy, and it logs a warning when it does. The output shows commit, path, line and finding type only. Errors fail the job.
+Why: A secret deleted in a later commit is still public in the history. Using main's copies stops a PR from weakening the scan of its own commits. It does not cover a PR that edits `ci.yml` itself: that is a `.github/**` risky path, so it needs a security review and a risk: high decision.
+Alternatives: Use the PR's own driver every time (simpler, but the PR could change it). Put the logic inline in the YAML (harder to test). Change the scanner to read stdin (out of bounds for this task).
+Reversible: Yes. Remove the job and the script.
+
+### 18 Oct 2026 · 0.9 Lead adds `secrets` to required checks after merge · decided by tdd-guide · risk: low
+Decided: Branch protection still needs `secrets` added to its required checks, as the plan says. This branch does not change branch protection.
+Why: GitHub can only require a check that has already reported on main's PRs. Adding it before merge would block this PR.
+Alternatives: None.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.9 Review · decided by team lead · risk: medium
+Decided: A PR can still rewrite its own job in .github/workflows/ci.yml (GitHub runs the PR's copy of a workflow on pull_request). Accepted: the lead merges only through the local merge hook, which runs main's gate, and every .github change gets security-reviewer.
+Why: Making a workflow untouchable needs org-level required workflows; CODEOWNERS doesn't help when the lead uses the owner account.
+Alternatives: Org-level required workflows; a separate bot account.
+Reversible: Yes.
+
 ### 18 Oct 2026 · Main model provider · decided by you · risk: medium
 Decided: Anthropic (Claude) gets Edmate's native "main" adapter (task 2.2); the second adapter stays OpenAI-compatible, which also covers OpenRouter. Which model each tier uses is still decided after the cost and eval data (task 7.6).
 Why: Strong instruction-following and refusal behaviour matter for a student-facing tutor and locked content.

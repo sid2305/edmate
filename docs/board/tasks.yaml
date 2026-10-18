@@ -248,13 +248,13 @@ tasks:
   accept: The required checks block a PR with a failing test; a PR that adds a secret in one commit and removes it later fails CI.
   deps:
   - '0.5'
-  status: review
+  status: done
   branch: m0/0.9-ci-hardening
   model: plan:lead build:opus-5.5/medium review:opus(security)
 - id: '0.10'
   milestone: M7
-  title: 'From the 0.5 security review: the PR-merge hook in guard-bash.sh runs main''s merge_gate.py (git show main:...) instead of the checked-out copy. Hook edit: the human switches auto mode off for
-    this step.'
+  title: 'From the 0.5 and 0.9 security reviews: (1) the PR-merge hook in guard-bash.sh runs main''s merge_gate.py (git show main:...) instead of the checked-out copy (hook edit: the human switches auto
+    mode off for this step); (2) the secret scanner no longer skips its own file (.githooks/secret-scan-allow.txt) without a narrower rule'
   accept: The merge hook uses main's gate even when another branch is checked out in the main checkout.
   deps:
   - '0.9'
