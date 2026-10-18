@@ -9,7 +9,7 @@ This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI
 **For the team lead (main Claude session):**
 
 1. Read this whole plan once, then the PRD sections *Packages and access*, *The teacher's agent*, *Functional requirements* and *Trust, safety and privacy*.
-2. Treat **Tech stack** and **Core contracts** as fixed. Changing either needs an ADR in `docs/adr/` approved by a human.
+2. Treat **Tech stack** and **Core contracts** as fixed. Changing either needs an ADR in `docs/adr/`, reviewed by `architect`, `security-reviewer` and `typescript-reviewer`; the team lead approves it and logs it as `risk: high`.
 3. Schedule tasks from **Milestones and tasks** in dependency order (the board, `docs/board/tasks.yaml`, tracks this); tasks with no shared dependency and no shared package can run in parallel on separate branches.
 4. A task is done only when it meets its acceptance criteria, the **Definition of done**, and the merge gate.
 5. Anything under **Open decisions** is a human call: stop and ask, don't guess.
@@ -675,11 +675,11 @@ These rules let many agents work in parallel without breaking each other's work 
 ### Rules
 
 1. **One task, one branch, one PR.** Branch `m<milestone>/<task-id>-<slug>`; PR title starts with the task ID.
-2. **Contracts are frozen.** Never change `packages/contracts`, the Tech stack, or a prompt pack's behaviour without an ADR approved by a human.
+2. **Contracts change only with an ADR.** Never change `packages/contracts`, the Tech stack, or a prompt pack's behaviour without an ADR in `docs/adr/`. `architect`, `security-reviewer` and `typescript-reviewer` review it; the team lead approves and logs it as `risk: high`.
 3. **Harness stays pure.** `packages/harness` must not import Next.js, Drizzle, Redis, payment or provider SDKs; only ports. A hook and a lint rule enforce it.
 4. **No real model or payment calls in unit or CI tests.** Use the scripted gateway, payment sandbox fixtures and recorded responses. Live calls only in `--live` runs with keys from the environment.
 5. **Never log or persist secrets or raw student content** outside `messages`. No student names in prompts. The repo is public: never commit credentials, keys, real student data, teacher uploads or personal details; the secret scan blocks them at edit, commit and CI.
-6. **Risky changes need a human; everything else the team lead merges.** A PR touching a path in `.claude/skills/merge-gate/risk-paths.txt` (guardrails, the access filter, payments and webhooks, prompt packs, persona templates, contracts, ADRs, keys, sign-in, data isolation, harness and CI config), or a migration that drops or deletes data, needs the human's `human-approved` label. All other PRs are merged by the team lead once the merge gate passes (rule 11).
+6. **The team lead merges every PR; risky ones need their required reviewers.** A PR touching a path in `.claude/skills/merge-gate/risk-paths.txt` (guardrails, the access filter, payments and webhooks, prompt packs, persona templates, contracts, ADRs, keys, sign-in, data isolation, harness and CI config), or a migration that drops or deletes data, passes the merge gate only when `review.md` names the reviewers that file lists for each group it touches and the handoff logs a `risk: high` decision, which reaches the human's skim list in the decision log. All other PRs are merged once the merge gate passes (rule 11).
 7. **Platform content and eval cases are reviewed by people.** Agents may draft prompt packs, skill and persona templates, and eval cases; a named human signs off before merge (`reviewed_by`). Teachers own and review their own course material.
 8. **Ask, don't guess.** If a spec is ambiguous or conflicts with another section, the team lead asks the human (or opens a `needs-human` issue) and the agent picks another task.
 9. **Small PRs.** Aim for < 600 changed lines excluding fixtures.
@@ -697,7 +697,7 @@ These rules let many agents work in parallel without breaking each other's work 
 - [ ] Accessibility checked for any UI change (keyboard + axe), at 360 px and laptop width.
 - [ ] Traces and errors emitted per Observability.
 - [ ] Docs/ADR updated if behaviour or structure changed.
-- [ ] Reviewed by the required agents; merge gate passed (rule 11); human approval where rule 6 or 7 applies.
+- [ ] Reviewed by the required agents; merge gate passed (rule 11); risky changes logged `risk: high` (rule 6); human sign-off where rule 7 applies.
 - [ ] Decisions recorded in the handoff (rule 12), or `None`.
 
 ## Open decisions

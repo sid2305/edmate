@@ -5,6 +5,9 @@
   board.py status                    counts + everything not todo/done
   board.py show <id>                 one task (or GATE)
   board.py set <id> <status> [--branch B] [--model M]   M = models used, e.g. "plan:sonnet build:opus review:sonnet"
+                                     `done` needs docs/tasks/<id>/handoff.md (merged) with a
+                                     `## Decisions` section whose every `Decided:` line is in
+                                     docs/decisions/log.md word for word (or the section says None)
   board.py decide <key> "<answer>"   record a human decision
 """
 import re
@@ -16,7 +19,9 @@ try:
 except ImportError:
     sys.exit("board.py needs PyYAML: python3 -m pip install --user pyyaml")
 
-BOARD = Path(__file__).resolve().parents[3] / "docs" / "board" / "tasks.yaml"
+ROOT = Path(__file__).resolve().parents[3]
+BOARD = ROOT / "docs" / "board" / "tasks.yaml"
+LOG = ROOT / "docs" / "decisions" / "log.md"
 STATUSES = {"todo", "planning", "running", "review", "blocked", "done"}
 
 
@@ -55,6 +60,30 @@ def find(board, tid):
     sys.exit(f"no task {tid}")
 
 
+def norm(line):
+    return " ".join(line.split())
+
+
+def done_problems(tid):
+    """Why task `tid` may not be set to done yet (empty list = it may)."""
+    handoff = ROOT / "docs" / "tasks" / tid / "handoff.md"
+    if not handoff.exists():
+        return [f"{handoff.relative_to(ROOT)} is not in the working tree: merge first"]
+    m = re.search(r"^##\s+Decisions\b.*$", handoff.read_text(), re.M)
+    if not m:
+        return ["handoff.md has no '## Decisions' section"]
+    body = handoff.read_text()[m.end():]
+    nxt = re.search(r"^##\s", body, re.M)
+    body = body[: nxt.start()] if nxt else body
+    if norm(body).rstrip(".").lower() == "none":
+        return []
+    decided = [norm(l) for l in body.splitlines() if l.strip().startswith("Decided:")]
+    if not decided:
+        return ["handoff ## Decisions has entries but no 'Decided:' lines (or write None)"]
+    logged = {norm(l) for l in (LOG.read_text() if LOG.exists() else "").splitlines()}
+    return [f"not in docs/decisions/log.md word for word: {d}" for d in decided if d not in logged]
+
+
 def cmd_next(board):
     tasks, gate, decisions = board["tasks"], board["gate"], board["decisions"]
     items = tasks + [dict(gate, milestone="GATE")]
@@ -65,10 +94,13 @@ def cmd_next(board):
         (waiting if open_decisions(t, decisions) else ready).append(t)
     print("READY")
     for t in sorted(ready, key=lambda t: key(t["id"])):
-        flag = {"risky": "  [risky: you approve]", "expert": "  [expert sign-off]"}.get(t.get("risk"), "")
+        flag = {"risky": "  [risky: required reviewers + risk: high]", "expert": "  [expert sign-off]"}.get(t.get("risk"), "")
         print(f"  {t['id']:>5}  {t['milestone']:<4} {t['title']}{flag}")
     if not ready:
         print("  (none)")
+    for t in sorted(tasks, key=lambda t: key(t["id"])):
+        if t["status"] == "planning" and not (ROOT / "docs" / "tasks" / t["id"] / "plan.md").exists():
+            print(f"WARNING  {t['id']} is in planning but docs/tasks/{t['id']}/plan.md does not exist")
     if waiting:
         print("DEPS DONE, WAITING ON A HUMAN DECISION")
         for t in sorted(waiting, key=lambda t: key(t["id"])):
@@ -102,6 +134,13 @@ def main(argv):
         if args[1] not in STATUSES:
             sys.exit(f"status must be one of {sorted(STATUSES)}")
         t = find(board, args[0])
+        if args[1] == "done" and args[0].upper() != "GATE":
+            problems = done_problems(args[0])
+            if problems:
+                print(f"refusing {args[0]} -> done (board unchanged):", file=sys.stderr)
+                for p in problems:
+                    print(f"  {p}", file=sys.stderr)
+                sys.exit(1)
         t["status"] = args[1]
         if "--branch" in args:
             t["branch"] = args[args.index("--branch") + 1]

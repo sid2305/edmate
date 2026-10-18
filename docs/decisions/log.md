@@ -4,7 +4,7 @@ Every decision the spec did not already make, in plain words, newest first. Agen
 
 - **risk: low** · the agent decided and moved on
 - **risk: medium** · the agent or lead decided; worth a skim
-- **risk: high** · you decided (risky or ambiguous)
+- **risk: high** · you decided, or the lead merged a risky change (contracts, ADRs, safety, access, payments, the harness) after its required reviewers; skim these first
 
 Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 

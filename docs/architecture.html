@@ -125,12 +125,12 @@
 
 <!-- ============================================================ -->
 <h2 id="glance">1. At a glance</h2>
-<p>The setup turns the 104 tasks in the build plan (v0.3) into reviewed, merged code, with a human in charge of every risky call.</p>
+<p>The setup turns the 104 tasks in the build plan (v0.3) into reviewed, merged code, with the team lead deciding every merge and risky ones logged for you to skim.</p>
 <div class="cards">
   <div class="card"><b>What it builds</b><p>Edmate v0.3: teachers turn their knowledge into an AI teaching agent and sell packages; students subscribe and learn with it. The agent first, then the teacher studio, student app and payments (<code>docs/edmate-harness-build-plan.md</code>).</p></div>
   <div class="card"><b>Who builds it</b><p>22 agents: 19 copied from ECC, 3 written for Edmate. Only those a phase needs are added.</p></div>
   <div class="card"><b>How work moves</b><p>Board → plan → build → review → gates → merge gate → merge. Agents hand over through files, not chat.</p></div>
-  <div class="card"><b>What keeps it safe</b><p>Hooks and the merge gate enforce the rules. You approve only risky PRs: child safety, contracts, keys, data.</p></div>
+  <div class="card"><b>What keeps it safe</b><p>Hooks hard-block secrets and unsafe git; the merge gate enforces the rest. Risky PRs (child safety, contracts, keys, data) need their specialist reviewers and are logged <code>risk: high</code> for you to skim.</p></div>
   <div class="card"><b>What gets recorded</b><p>Every decision the spec did not make, in plain words, in <code>docs/decisions/log.md</code>.</p></div>
   <div class="card"><b>Where it lives</b><p>Only inside <code>~/edmate</code>. Nothing global, so other projects are untouched.</p></div>
 </div>
@@ -241,8 +241,8 @@
   <!-- row 4 -->
   <rect class="d-band" x="30" y="540" width="900" height="72" rx="8"/>
   <text class="t-name" x="480" y="564" text-anchor="middle">Hooks · enforced by Claude Code on every edit and shell command</text>
-  <text class="t-line" x="480" y="584" text-anchor="middle">ask before editing contracts or safety code · block .env writes · reject impure harness imports and API keys</text>
-  <text class="t-line" x="480" y="600" text-anchor="middle">no force-push or push to main · merges only through the merge gate · only you add human-approved</text>
+  <text class="t-line" x="480" y="584" text-anchor="middle">never ask, only block · block .env and key files · reject impure harness imports and API keys</text>
+  <text class="t-line" x="480" y="600" text-anchor="middle">no force-push · push to main only after a clean secret scan · merges only through the merge gate</text>
 </svg>
 <figcaption>Purple names are the 3 Edmate-made agents; all others come from ECC. The team lead runs in your terminal with <code>claude</code> inside <code>~/edmate</code>.</figcaption>
 </figure>
@@ -411,9 +411,9 @@
   <text class="t-line" x="360" y="654" text-anchor="middle">reviews done, HIGH+ fixed · decisions logged · done</text>
 
   <rect class="d-human" x="600" y="604" width="320" height="72" rx="8"/>
-  <text class="t-name" x="760" y="628" text-anchor="middle">Risky → you approve first</text>
+  <text class="t-name" x="760" y="628" text-anchor="middle">Risky → required reviewers</text>
   <text class="t-line" x="760" y="648" text-anchor="middle">safety, contracts, keys, data, config:</text>
-  <text class="t-line" x="760" y="664" text-anchor="middle">you add the human-approved label</text>
+  <text class="t-line" x="760" y="664" text-anchor="middle">specialists review · logged risk: high</text>
   <path class="conn" d="M542 640H598" marker-start="url(#m3)" marker-end="url(#m3)"/>
   <text class="t-small" x="570" y="632" text-anchor="middle">risky</text>
 
@@ -458,24 +458,24 @@
 
 <!-- ============================================================ -->
 <h2 id="merge">8. Merge policy</h2>
-<p>The team lead merges PRs itself. It holds the full picture (PRD, build plan, board, every handoff), so it checks the gate and decides. You are asked only when a change is risky or the spec is unclear.</p>
+<p>The team lead merges every PR itself, risky ones included (your decision, 18 Oct 2026). It holds the full picture (PRD, build plan, board, every handoff), so it checks the gate and decides. You are asked only when the spec is unclear; risky merges reach you as <code>risk: high</code> entries in the decision log.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Tier</th><th>What falls in it</th><th>Who merges</th></tr></thead>
   <tbody>
     <tr><td><span class="tag good">Normal</span></td><td>Most tasks: pipeline steps, routes, UI, tests, tooling</td><td>Team lead, after the merge gate</td></tr>
-    <tr><td><span class="tag human">Risky</span></td><td>Student safety (guardrails, prompt packs, skill and persona templates, safety and locked evals, alerts) · <b>the access filter</b> · <b>payments, subscriptions and webhooks</b> · frozen contracts and ADRs · keys, sign-in, each teacher's and student's data kept apart · migrations that drop or delete data · <code>.claude/</code> and <code>.github/</code> config</td><td>You add the <code>human-approved</code> label, then the lead merges</td></tr>
+    <tr><td><span class="tag human">Risky</span></td><td>Student safety (guardrails, prompt packs, skill and persona templates, safety and locked evals, alerts) · <b>the access filter</b> · <b>payments, subscriptions and webhooks</b> · contracts and ADRs · keys, sign-in, each teacher's and student's data kept apart · migrations that drop or delete data · <code>.claude/</code> and <code>.github/</code> config</td><td>Team lead, once <code>review.md</code> names each group's required reviewers (<code>safety-reviewer</code>; <code>security-reviewer</code>; <code>architect</code> + <code>security-reviewer</code> + <code>typescript-reviewer</code> for contracts and ADRs; <code>database-reviewer</code> for destructive migrations) and the handoff logs a <code>risk: high</code> decision</td></tr>
     <tr><td><span class="tag human">Ambiguous</span></td><td>Unclear or conflicting spec, or a trade-off that changes how the product behaves</td><td>The lead asks you <b>before building</b>, and logs your answer</td></tr>
     <tr><td><span class="tag">Reviewer</span></td><td>Platform prompt packs, skill templates and eval cases</td><td>A named person signs off in <code>reviewed_by</code>. Teachers own and review their own course material</td></tr>
   </tbody>
 </table></div>
 <h3>The merge gate: all must hold</h3>
 <ol>
-  <li><b>Reviews ran:</b> <code>code-reviewer</code> and <code>typescript-reviewer</code>, plus the specialist for the area, plus <code>safety-reviewer</code> when safety code changes.</li>
+  <li><b>Reviews ran:</b> <code>code-reviewer</code> and <code>typescript-reviewer</code>, plus the specialist for the area, plus every reviewer a risky group requires (listed in <code>risk-paths.txt</code>).</li>
   <li><b>Every CRITICAL and HIGH finding is fixed</b>, and a reviewer re-ran its checks to confirm it. The builder's word is not enough.</li>
-  <li><b>MEDIUM and LOW findings</b> are fixed, deferred to a new board task, or marked won't-fix with a decision-log entry saying why.</li>
+  <li><b>MEDIUM and LOW findings</b> are fixed, deferred to a new board task, or marked won't-fix with a decision entry that names the file.</li>
   <li><b>CI and eval gates are green.</b></li>
-  <li><b>Decisions are written down</b> in the handoff (or "None").</li>
-  <li><b><code>merge_gate.py</code> passes.</b> It reads <code>review.md</code> and <code>handoff.md</code> from the branch and the list of changed files, then answers PASS, FAIL or NEEDS HUMAN.</li>
+  <li><b>Decisions are written down</b> in the handoff (or "None"); a risky change needs a <code>risk: high</code> entry, and the board refuses <code>done</code> until every entry is in the log word for word.</li>
+  <li><b><code>merge_gate.py</code> passes.</b> It reads <code>review.md</code> and <code>handoff.md</code> from the branch and the list of changed files, then answers PASS or FAIL.</li>
 </ol>
 <p>The gate's risky list lives in <code>.claude/skills/merge-gate/risk-paths.txt</code>; the architect updates it as code lands. The gate was tested on 16 Oct 2026 against six cases: a clean pass, an open HIGH finding, changes requested, a missing safety review, risky code, and a migration that drops a column.</p>
 
@@ -510,13 +510,13 @@ Reversible: Yes, one migration.</code></pre>
 
   <rect class="d-human" x="260" y="64" width="400" height="56" rx="8"/>
   <text class="t-name" x="276" y="88">tdd-guide #1 · m4/4.2-pii-scrub</text>
-  <text class="t-line" x="276" y="106">packages/harness/src/guardrails/ · risky: you approve</text>
+  <text class="t-line" x="276" y="106">packages/harness/src/guardrails/ · risky: safety-reviewer</text>
   <rect class="d-box" x="260" y="136" width="400" height="56" rx="8"/>
   <text class="t-name" x="276" y="160">tdd-guide #2 · m5/5.1-doc-ingestion</text>
   <text class="t-line" x="276" y="178">packages/ingest/</text>
   <rect class="d-box" x="260" y="208" width="400" height="56" rx="8"/>
   <text class="t-name" x="276" y="232">tdd-guide #3 · m10/10.3-subscriptions</text>
-  <text class="t-line" x="276" y="250">packages/payments/ · risky: you approve</text>
+  <text class="t-line" x="276" y="250">packages/payments/ · risky: security-reviewer</text>
 
   <rect class="d-acc" x="720" y="116" width="210" height="96" rx="8"/>
   <text class="t-name" x="825" y="142" text-anchor="middle">Team lead integrates</text>
@@ -535,11 +535,11 @@ Reversible: Yes, one migration.</code></pre>
   </g>
   <text class="t-small" x="470" y="270" text-anchor="middle">merged into main</text>
 </svg>
-<figcaption>Example: once M3 and M1 are done, tasks 4.2, 5.1 and 10.3 touch different folders, so they can run side by side. Lanes that touch safety code (orange) run in the foreground, so the "ask" prompts reach you.</figcaption>
+<figcaption>Example: once M3 and M1 are done, tasks 4.2, 5.1 and 10.3 touch different folders, so they can run side by side. Lanes that touch risky code (orange) need their specialist reviewers before the lead merges them.</figcaption>
 </figure>
 <ul>
   <li><b>Different folders per lane.</b> Two tasks that edit the same package wait for each other.</li>
-  <li><b>No lane edits the contracts.</b> <code>packages/contracts</code> is frozen after task 0.3.</li>
+  <li><b>No lane edits the contracts casually.</b> <code>packages/contracts</code> changes only with an ADR, reviewed by <code>architect</code>, <code>security-reviewer</code> and <code>typescript-reviewer</code>.</li>
   <li><b>One integrator.</b> Only the team lead merges, one PR at a time, and re-runs the gate on the next PR after rebasing it.</li>
 </ul>
 
@@ -595,23 +595,23 @@ python3 .claude/skills/board/board.py decide licence "MIT"</code></pre>
 
 <!-- ============================================================ -->
 <h2 id="safety">12. Safety rails</h2>
-<p>Hooks enforce the build plan's rules on every edit and shell command. Only risky or unclear work reaches you.</p>
+<p>Hooks hard-block on every edit and shell command; they never ask. Risky paths are checked when the lead merges. Only unclear work reaches you.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Rail</th><th>Kind</th><th>When it fires</th><th>What happens</th><th>Plan rule</th></tr></thead>
   <tbody>
-    <tr><td>Frozen contracts</td><td><span class="tag">hook</span></td><td>Edit to <code>packages/contracts/</code></td><td>Claude must ask you first; a change needs an ADR</td><td>2</td></tr>
-    <tr><td>Safety code</td><td><span class="tag">hook</span></td><td>Edit to guardrails, prompt packs, skill templates, safety or locked evals</td><td>Ask first; the PR needs <code>safety-reviewer</code> + you</td><td>6</td></tr>
-    <tr><td>Access filter and payments</td><td><span class="tag">hook</span></td><td>Edit to <code>harness/src/access</code>, <code>packages/payments</code> or payment webhooks</td><td>Ask first; the PR needs <code>security-reviewer</code> + you</td><td>6</td></tr>
-    <tr><td>Spec and harness config</td><td><span class="tag">hook</span></td><td>Edit to the PRD, build plan, <code>.claude/settings.json</code> or hooks</td><td>Ask first</td><td>2</td></tr>
-    <tr><td>Secrets files</td><td><span class="tag">hook</span></td><td>Write to <code>.env</code> files; read of <code>.env</code></td><td>Write blocked; read denied; shell use asks</td><td>5</td></tr>
+    <tr><td>Contracts</td><td><span class="tag">gate</span></td><td>A PR changes <code>packages/contracts/</code> or <code>docs/adr/</code></td><td>Needs an ADR, <code>architect</code> + <code>security-reviewer</code> + <code>typescript-reviewer</code>, and a <code>risk: high</code> decision</td><td>2</td></tr>
+    <tr><td>Safety code</td><td><span class="tag">gate</span></td><td>A PR changes guardrails, prompt packs, skill templates, safety or locked evals, alerts or locales</td><td>Needs <code>safety-reviewer</code>, <code>safety-review.md</code> and a <code>risk: high</code> decision</td><td>6</td></tr>
+    <tr><td>Access filter, payments, identity</td><td><span class="tag">gate</span></td><td>A PR changes <code>harness/src/access</code>, <code>packages/payments</code>, webhooks, sign-in, keys or repositories</td><td>Needs <code>security-reviewer</code> and a <code>risk: high</code> decision</td><td>6</td></tr>
+    <tr><td>Harness and CI config</td><td><span class="tag">gate</span></td><td>A PR changes <code>.claude/</code> or <code>.github/</code></td><td>Needs <code>security-reviewer</code> and a <code>risk: high</code> decision</td><td>6</td></tr>
+    <tr><td>Secrets files</td><td><span class="tag">hook</span></td><td>Write to <code>.env</code> files; read of <code>.env</code></td><td>Write blocked; read denied; shell use blocked</td><td>5</td></tr>
     <tr><td>Pure harness</td><td><span class="tag">hook</span></td><td><code>packages/harness</code> imports Next.js, Drizzle, Redis, BullMQ or a provider SDK</td><td>Edit rejected, reason sent back to the agent</td><td>3</td></tr>
     <tr><td>API keys in files</td><td><span class="tag">hook</span></td><td>Any file containing an OpenAI, Anthropic, Gemini or OpenRouter key</td><td>Edit rejected, reason sent back</td><td>5</td></tr>
-    <tr><td>Git safety</td><td><span class="tag">hook</span></td><td>Force-push; push to <code>main</code>; commit or merge on <code>main</code></td><td>First two blocked; the others ask, except the lead's board and decision-log commits</td><td>1</td></tr>
+    <tr><td>Git safety</td><td><span class="tag">hook</span></td><td>Force-push; push to <code>main</code></td><td>Force-push blocked; a push to <code>main</code> runs the secret scan first and is blocked if it flags anything</td><td>1</td></tr>
     <tr><td>Merge gate</td><td><span class="tag">hook</span></td><td><code>gh pr merge &lt;n&gt;</code></td><td>Runs <code>merge_gate.py</code>; the merge is blocked unless it passes</td><td>11</td></tr>
     <tr><td>Secret scan</td><td><span class="tag">hook</span></td><td>Every file an agent edits, and every <code>git commit</code></td><td>Blocks API keys, tokens, private keys, passwords in code, personal emails and home-folder paths</td><td>5</td></tr>
     <tr><td>Key and credential files</td><td><span class="tag">hook</span></td><td>An agent writes a <code>.pem</code>, <code>.key</code>, <code>id_rsa</code> or <code>credentials.json</code></td><td>Blocked; such files also sit in <code>.gitignore</code></td><td>5</td></tr>
-    <tr><td>Approval label</td><td><span class="tag">hook</span></td><td>An agent tries to add <code>human-approved</code></td><td>Blocked: only you add it</td><td>6</td></tr>
-    <tr><td>Risky PRs</td><td><span class="tag human">you</span></td><td>Paths in <code>risk-paths.txt</code>, or a migration that deletes data</td><td>The lead waits for your <code>human-approved</code> label</td><td>6</td></tr>
+    <tr><td>Approval label</td><td><span class="tag">hook</span></td><td>An agent tries to add the old <code>human-approved</code> label</td><td>Blocked (merges no longer use it)</td><td>6</td></tr>
+    <tr><td>Risky PRs</td><td><span class="tag">gate</span></td><td>Paths in <code>risk-paths.txt</code>, or a migration that deletes data</td><td>The gate fails unless <code>review.md</code> names each group's reviewers and the handoff has a <code>risk: high</code> decision; you skim those in the log</td><td>6</td></tr>
     <tr><td>Unclear spec</td><td><span class="tag human">you</span></td><td>A task's <code>needs_decision</code> is open, or the spec conflicts</td><td>The task cannot start; the lead asks you and logs the answer</td><td>8</td></tr>
     <tr><td>Platform content</td><td><span class="tag">reviewer</span></td><td>Prompt packs, skill templates, eval cases</td><td><code>reviewed_by</code> must name a person before merge</td><td>7</td></tr>
   </tbody>

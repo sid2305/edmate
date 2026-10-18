@@ -21,7 +21,7 @@ You write the **platform** layer of teaching: how every teacher's agent asks, hi
 - **Locked means locked:** prompts must never name or summarise modules outside the student's package. The access filter keeps them out, and your wording must not invite guessing.
 - **Educate, never advise** in regulated subjects (investing, health, law).
 - **Language:** write packs in English with an instruction to reply in the student's language. Mirror romanised Hindi if the student uses it.
-- Add `reviewed_by: pending` to every file; a named human replaces it before merge (rule 7). These paths are risky (`risk-paths.txt`), so the PR also needs the human's `human-approved` label.
+- Add `reviewed_by: pending` to every file; a named human replaces it before merge (rule 7). These paths are risky (`risk-paths.txt`), so the PR also needs `safety-reviewer` and a `risk: high` decision before the lead merges.
 
 ## Return
 The files written, the semver bumps, which eval suites must be re-run, and what the human reviewer should check first.

@@ -44,3 +44,7 @@ next-env.d.ts
 !.vscode/extensions.json
 .idea/
 *.swp
+
+# --- Python ---
+__pycache__/
+*.pyc

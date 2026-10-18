@@ -1,32 +1,40 @@
-# Paths whose changes make a PR "risky": you (the human) approve, then the team lead merges.
+# Paths whose changes make a PR "risky". The team lead merges risky work only when review.md's
+# `Reviewers:` line names every reviewer required below for each group the branch touches, and the
+# handoff's `## Decisions` has a `risk: high` entry (so the merge reaches the human's skim list).
 # One glob per line, repo-relative. `**` = any depth. Owned by the architect: update as code lands.
-# Updated for build plan v0.3 (17 Oct 2026).
+# Each `# reviewers: a, b` line sets the required reviewers for the globs below it, up to the next
+# one. merge_gate.py parses these lines; a glob with no reviewers line above it fails the gate.
+# Updated for task 0.7 (18 Oct 2026): the lead decides every merge (human decision).
 
-# Student safety and teaching behaviour (build plan rule 6)
+# Student safety and teaching behaviour (build plan rule 6); also needs safety-review.md
+# reviewers: safety-reviewer
 packages/harness/src/guardrails/**
 content/prompt-packs/**
 content/skills/**
 evals/suites/safety/**
 evals/suites/locked/**
 apps/worker/src/alerts/**
+content/locales/**
 
-# The access filter: locked packages must never leak (PRD: "locked means locked")
+# The access filter (PRD: "locked means locked"); money: payments, subscriptions, ledger, payouts,
+# webhooks; sign-in, keys, keeping each teacher's and student's data apart
+# reviewers: security-reviewer
 packages/harness/src/access/**
-
-# Money: payments, subscriptions, ledger, payouts, webhooks
 packages/payments/**
 apps/web/app/api/webhooks/**
-
-# Frozen contracts and architecture decisions (rule 2)
-packages/contracts/**
-docs/adr/**
-
-# Sign-in, keys, keeping each teacher's and student's data apart
 apps/web/src/auth/**
 packages/gateway/src/keys/**
 packages/db/src/repositories/**
 
+# Contracts and architecture decisions (rule 2): the change comes with an ADR
+# reviewers: architect, security-reviewer, typescript-reviewer
+packages/contracts/**
+docs/adr/**
+
 # The agent harness and CI themselves
+# reviewers: security-reviewer
 .claude/**
 .github/**
-content/locales/**
+
+# Migrations that drop or delete data are risky too (detected in merge_gate.py, not by path):
+# they need database-reviewer.
