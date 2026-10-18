@@ -10,6 +10,72 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Minimum learner age · decided by you · risk: high
+Decided: Learners are 13+. In the US no parental consent is needed (COPPA covers under-13 only); in India 13–17 need verifiable parental consent (DPDP), so the age gate asks country and birth year.
+Why: The product needs nothing that requires 18+; school-age learners widen reach. India's DPDP treats under-18s as children.
+Alternatives: 18+ only; 13+ with no consent anywhere (rejected for the India legal risk).
+Reversible: Yes, but raising the age later means offboarding existing learners. Note for 1.7 and M6: DPDP also bars tracking and behavioural monitoring of children, so learner memory for India under-18s needs a check before it ships.
+
+### 18 Oct 2026 · Pilot market · decided by you · risk: high
+Decided: The pilot runs in the US and India, with locale packs en-US and en-IN (English, Hindi, Hinglish).
+Why: Keep focus on two markets rather than global; the Hindi and Hinglish evals already cover India.
+Alternatives: India only; global English; wait for the Validate phase.
+Reversible: Yes; more locale packs can be added later.
+
+### 18 Oct 2026 · Payment providers · decided by you · risk: high
+Decided: Razorpay in India (UPI AutoPay, Route split payouts) and a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax, both behind the one Payments port.
+Why: Recurring payments in India mostly run on UPI AutoPay, which merchants of record do not support; in the US a merchant of record removes state sales-tax work.
+Alternatives: Razorpay plus Stripe Connect; Stripe in both markets.
+Reversible: Yes; the Payments port keeps providers swappable.
+
+### 18 Oct 2026 · Hosting region · decided by you · risk: high
+Decided: One US cloud region for the pilot; add an India (Mumbai) region later if latency or data rules need it.
+Why: One stack is cheapest; DPDP does not require this data to stay in India.
+Alternatives: US and India regions; India only.
+Reversible: Yes, with a data migration.
+
+### 18 Oct 2026 · Pilot subjects · decided by you · risk: medium
+Decided: The pilot targets specific practical skills, e.g. personal finance, Marketing 101 and starting a side hustle; anchor teachers are signed in the Validate phase.
+Why: Narrow, practical courses suit daily practice with a teacher's agent.
+Alternatives: Coding, exam prep, languages, professional skills.
+Reversible: Yes. Personal finance falls under the regulated-subject advice guardrail and its eval suite.
+
+### 18 Oct 2026 · Teacher view of conversations · decided by you · risk: medium
+Decided: Teachers see aggregated insights by default; a student may opt in to share conversations.
+Why: Protects student privacy while still giving teachers useful signal.
+Alternatives: Aggregated only; full conversations.
+Reversible: Yes.
+
+### 18 Oct 2026 · Refund policy · decided by you · risk: medium
+Decided: Students get a full refund within the first 7 days; none after.
+Why: Simple and fair for trying a teacher; the board's recommendation.
+Alternatives: Pro-rata; no refunds.
+Reversible: Yes, for new subscriptions.
+
+### 18 Oct 2026 · Moderation · decided by you · risk: medium
+Decided: Provider moderation where available, a local classifier otherwise.
+Why: Uses the strongest check each provider offers without running a GPU; the board's recommendation.
+Alternatives: Classifier only; self-hosted Llama Guard.
+Reversible: Yes.
+
+### 18 Oct 2026 · Live classes · decided by you · risk: low
+Decided: Live classes use the teacher's Google Meet or Zoom link; Edmate schedules them and ingests the recording for transcription.
+Why: Far less work and cost than built-in video.
+Alternatives: Built-in video.
+Reversible: Yes.
+
+### 18 Oct 2026 · Product name · decided by you · risk: low
+Decided: Keep the name Edmate.
+Why: Your call.
+Alternatives: Rename before launch.
+Reversible: Yes, before launch.
+
+### 18 Oct 2026 · Deferred: revenue share, default model mix, legal entity · decided by you · risk: low
+Decided: Revenue share and floor price and the default model mix wait for the cost and eval data from 7.6; the legal entity (company, social enterprise or non-profit) is decided before payments go live.
+Why: Each needs data or context that does not exist yet.
+Alternatives: Set them now.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 2.3 Fallback rule collapses to one check · decided by planner · risk: low
 Decided: the router falls back only when the error is a `GatewayError` with `retryable: true`, nothing has been yielded yet for this `stream()` call, and a capable fallback adapter is configured. Everything else re-throws as is.
 Why: `truncated`/`content_filter` are only ever paired with `retryable: false` in `adapters/errors.ts`, so checking `retryable` already covers "never fall back on a cut-off or filtered answer".
