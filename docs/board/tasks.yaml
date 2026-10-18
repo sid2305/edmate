@@ -345,9 +345,9 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: planning
+  status: running
   branch: m1/1.6-audit-log
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '1.7'
   milestone: M1
   title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
@@ -994,7 +994,7 @@ tasks:
   model: null
 - id: '8.1'
   milestone: M8
-  title: 'Onboarding: profile, subject, bio, photo, payout account hand-off; identity checked manually by staff (12.1)'
+  title: 'Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1)'
   accept: an unverified teacher cannot publish.
   deps:
   - GATE
@@ -1002,8 +1002,7 @@ tasks:
   - '5.1'
   - '5.2'
   status: todo
-  needs_decision:
-  - payment-provider
+  needs_decision: null
   branch: null
   model: null
 - id: '8.2'
@@ -1072,7 +1071,6 @@ tasks:
   - '8.1'
   status: todo
   needs_decision:
-  - revenue-share
   - default-model-mix
   branch: null
   model: null
@@ -1093,12 +1091,11 @@ tasks:
   model: null
 - id: '8.8'
   milestone: M8
-  title: Insights and earnings views
-  accept: earnings match the ledger; insights show no individual student.
+  title: Insights view (earnings view moves to 10.7)
+  accept: insights show no individual student.
   deps:
   - GATE
   - '1.3'
-  - '10.4'
   - '5.1'
   - '5.2'
   - '8.1'
@@ -1145,13 +1142,12 @@ tasks:
   model: null
 - id: '9.3'
   milestone: M9
-  title: Package compare, free package start, checkout
-  accept: the package unlocks on the next message after payment.
+  title: Package compare and start; until M10 a paid package starts as an active subscription with no payment (checkout moves to 10.8)
+  accept: The package unlocks on the next message after starting; no payment provider is called.
   deps:
   - GATE
   - '1.3'
   - '1.7'
-  - '10.2'
   - '9.1'
   status: todo
   branch: null
@@ -1182,7 +1178,7 @@ tasks:
   model: null
 - id: '9.6'
   milestone: M9
-  title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export
+  title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export; no payment until M10
   accept: export is complete JSON plus notes PDF.
   deps:
   - GATE
@@ -1195,7 +1191,7 @@ tasks:
 - id: '9.7'
   milestone: M9
   title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer'
-  accept: green in CI with scripted gateway and payment sandbox.
+  accept: green in CI with scripted gateway.
   deps:
   - GATE
   - '1.3'
@@ -1398,7 +1394,6 @@ tasks:
   title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
   accept: no serious violations.
   deps:
-  - M10
   - M11
   - M12
   - M8
@@ -1411,7 +1406,6 @@ tasks:
   title: 'Load test: 50 concurrent students'
   accept: harness overhead p95 < 500 ms with the scripted gateway.
   deps:
-  - M10
   - M11
   - M12
   - M8
@@ -1421,10 +1415,9 @@ tasks:
   model: null
 - id: '13.3'
   milestone: M13
-  title: 'Security review: teacher and student isolation, entitlement bypass attempts, webhooks, OWASP Top 10, dependency audit'
+  title: 'Security review: teacher and student isolation, entitlement bypass attempts, OWASP Top 10, dependency audit'
   accept: no high findings open.
   deps:
-  - M10
   - M11
   - M12
   - M8
@@ -1438,7 +1431,6 @@ tasks:
   title: 'Privacy rights per the locale pack''s `privacyLaw`: per-user export and delete, retention jobs'
   accept: jobs tested; export complete.
   deps:
-  - M10
   - M11
   - M12
   - M8
@@ -1451,7 +1443,6 @@ tasks:
   title: 'Cost dashboard: AI cost per turn and per active student per package against price'
   accept: numbers match the usage rows.
   deps:
-  - M10
   - M11
   - M12
   - M8
@@ -1473,5 +1464,29 @@ tasks:
   needs_decision:
   - hosting-region
   - pilot-market
+  branch: null
+  model: null
+- id: '10.7'
+  milestone: M10
+  title: Earnings view for teachers (moved from 8.8)
+  accept: Earnings match the ledger.
+  deps:
+  - '10.4'
+  - '8.8'
+  status: todo
+  needs_decision:
+  - revenue-share
+  branch: null
+  model: null
+- id: '10.8'
+  milestone: M10
+  title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3)'
+  accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
+  deps:
+  - '10.2'
+  - '10.3'
+  - '9.3'
+  status: todo
+  needs_decision: null
   branch: null
   model: null
