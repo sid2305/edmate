@@ -57,9 +57,7 @@ The human picks your own model (the main session); opus is recommended for the l
 6. **Gate:** `python3 .claude/skills/merge-gate/merge_gate.py <id>` (or `--pr <n>` once on GitHub).
    - exit 1: go back to step 5 (or run the missing reviewer, or add the `risk: high` decision entry);
    - exit 0: you decide the merge, risky or not. There is no human approval step.
-7. **Merge:**
-   - On GitHub: push the branch, `gh pr create`, then `gh pr merge <n> --squash`. The hook re-runs the gate.
-   - Without a PR: `git merge --squash` into `main` locally, only after the gate exits 0.
+7. **Merge (PR only):** push the branch, `gh pr create`, wait for CI and the `Merge gate / check` to go green, then `gh pr merge <n> --squash`. The hook re-runs the gate. Never merge a task branch into `main` locally.
 8. **Close:** append the handoff's decisions to `docs/decisions/log.md` word for word (`board.py set <id> done` refuses otherwise), set the board to `done --model ...`, remove the worktree, and commit the board and log on `main` (allowed without asking). Then `git push origin main`; the hook runs the secret scan first.
 
 ## 4. When to involve the human

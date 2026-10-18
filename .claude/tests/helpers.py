@@ -17,6 +17,7 @@ HOOKS = HARNESS / "hooks"
 REPO = HARNESS.parent
 SCRIPTS = [
     "skills/merge-gate/merge_gate.py",
+    "skills/merge-gate/risk_labels.py",
     "skills/merge-gate/risk-paths.txt",
     "skills/board/board.py",
 ]
@@ -152,7 +153,8 @@ class Repo:
 
     def script(self, name, *args, root=None, env=None):
         root = root or self.root
-        rel = {"gate": "skills/merge-gate/merge_gate.py", "board": "skills/board/board.py"}[name]
+        rel = {"gate": "skills/merge-gate/merge_gate.py", "board": "skills/board/board.py",
+               "labels": "skills/merge-gate/risk_labels.py"}[name]
         return run(["python3", str(root / ".claude" / rel), *args], cwd=root, env=env)
 
 
