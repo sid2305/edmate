@@ -256,6 +256,7 @@ export function testDeps(
       safeReply: () => TEST_SAFE_REPLY,
       distress: () => TEST_DISTRESS_REPLY,
     },
+    distressCheck: () => false,
     ...opts.overrides,
   };
   return {

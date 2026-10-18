@@ -35,6 +35,23 @@ Root gates:
 - `python3 .githooks/secret-scan.py --all` → exit 0, no output.
 - `git merge origin/main` (2.2 adapters, board docs): clean, and the lockfile didn't conflict.
 
+## Fix round 1
+
+These two items came from silent-failure-hunter. Both are on the distress path.
+
+1. **The last-resort caring reply** (HIGH). The escalate step's reply text is used if it is non-empty. Otherwise the runner uses `fallbackReplies.distress(lang, locale)`. If that throws or returns empty text, it sends a constant built into the runner, `LAST_RESORT_DISTRESS_REPLY` in `runner.ts`. This constant is not injected. The `token` text is therefore never empty. The SafetyAlert is still dispatched before the reply, and the message and trace are still saved. The trace marks escalate `failed`, so this is visible apart from an ordinary `fallback`. The failure is also listed in `finished.background`. Exact text, for the safety reviewer:
+
+   > I am really glad you told me, and you matter. You do not have to face this alone. Please talk to a trusted adult near you right now, like a parent, teacher or school counsellor. If you might be in danger, contact your local emergency services now.
+
+   It has no digits, phone numbers or country names; a test asserts there are no digits and that it mentions "trusted adult" and "emergency services". Tests in `policies.test.ts` › `last-resort caring reply`:
+   - the fallback text throws → the built-in reply;
+   - the fallback text returns empty → the built-in reply;
+   - each case checks the alert was raised, the commit was `escalated` with this reply, there is one trace, and escalate is `failed`;
+   - an escalate step that returns empty text gets the locale fallback.
+2. **The distress check when `route.onFailure` fails** (MEDIUM). The plan put the keyword check inside `route.onFailure` (3.3), so it was lost when that function threw. There is now an injected `PipelineDeps.distressCheck(text, lang): boolean`, which runs on the scrubbed text whenever `onFailure` throws or returns invalid data. A hit escalates the turn. If the check also throws, the turn uses `on_task`/`none`, the trace marks route `failed`, and both errors go to `finished.background`. Tests in `policies.test.ts` › `onFailure itself throws or returns junk`: no hit → `on_task`, route `fallback`; a hit → `safety`, an alert, trace intent `distress`; the check throws → `on_task`, route `failed`, two `runner` entries.
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → harness `Tests 176 passed (176)`; `src/pipeline` 98.89% statements, 96.13% branches, 100% functions and lines; `Tasks: 10 successful, 10 total`. The root gates and the secret scan were re-run after merging origin/main (results are in the round 1 commit and the report).
+
 ## Changes
 
 - `src/pipeline/clock.ts`: `Clock { now, sleep(ms, cancel?) }`, `Cancel`, `CancelToken`, `IdSource`, `IdKind`, `isoAt`, `cancelSource()`.
@@ -152,7 +169,7 @@ Alternatives: Only retrieval concurrent.
 Reversible: Yes.
 
 ### 18 Oct 2026 · 3.1 Fallback texts are injected · decided by lead (plan Q3) · risk: low
-Decided: `PipelineDeps.fallbackReplies` supplies `safeReply(lang)` and `distress(lang, locale)`. If one of these throws, the bug is reported in `finished` and an empty text is used. The `safety` event, `done` and alert delivery still happen.
+Decided: `PipelineDeps.fallbackReplies` supplies `safeReply(lang)` and `distress(lang, locale)`. If one of these throws, the bug is reported in `finished`. postGuard then uses an empty text. escalate uses the built-in last-resort reply (fix round 1). The `safety` event, `done` and alert delivery still happen.
 Why: The harness can't use next-intl. The texts come from 3.10/3.11 packs.
 Alternatives: Hard-coded English.
 Reversible: Yes.
@@ -162,3 +179,15 @@ Decided: Background steps get the scrubbed input. If the scrub failed, `CommitRe
 Why: PII the scrub couldn't remove must never be persisted.
 Alternatives: Store the raw input.
 Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Built-in last-resort distress reply · decided by lead (fix round 1, silent-failure-hunter) · risk: medium
+Decided: When the escalate step gives no reply text and `fallbackReplies.distress` throws or returns empty, the runner sends `LAST_RESORT_DISTRESS_REPLY`. This constant is built into the runner, is country-neutral and has no numbers. The trace marks escalate `failed`, and the alert, message and trace are still saved.
+Why: A distressed student must never get an empty reply. A constant can't fail the way an injected text source can.
+Alternatives: An injected text only (the original design); end with an error.
+Reversible: Yes. The text should be reviewed by the safety reviewer and replaced by the 3.10/3.11 pack text paths, never removed.
+
+### 18 Oct 2026 · 3.1 Injected distressCheck when route.onFailure fails · decided by lead (fix round 1, silent-failure-hunter) · risk: medium
+Decided: `PipelineDeps.distressCheck(text, lang): boolean` is a required dependency. The runner calls it on the scrubbed text when `route.onFailure` throws or returns invalid data, and a hit escalates the turn. If the check also throws, the turn uses `on_task`/`none`, route is marked `failed` in the trace, and both errors are listed in `finished.background`.
+Why: "Distress keywords still escalate" must hold even when the route fallback itself breaks.
+Alternatives: Only `ROUTE_DEFAULT` (the original design); a check hard-coded in the harness (keywords belong in locale packs).
+Reversible: Yes. 3.3/4.3 provide the real keyword check, and the caller wires it in.

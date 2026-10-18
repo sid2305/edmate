@@ -54,6 +54,11 @@ export interface PipelineDeps {
   traces: TraceSink;
   alerts: AlertSink;
   fallbackReplies: FallbackReplies;
+  /**
+   * Last-line distress keyword check on the scrubbed text, used only when `route.onFailure`
+   * itself fails ("distress keywords still escalate"). True escalates the turn.
+   */
+  distressCheck(text: string, lang: Lang): boolean;
 }
 
 export interface StepEnv {

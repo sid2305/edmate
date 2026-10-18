@@ -27,7 +27,7 @@ import type { GatewayScript } from '../testing/scriptedGateway.js';
 import type { MemoryAlertSink } from '../testing/memoryPorts.js';
 import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
-import { runTurn } from './runner.js';
+import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
 import { ALERT_ATTEMPT_TIMEOUT_MS, STEP_SPEC, type StepName } from './spec.js';
 import type { StepEnv, TurnRunResult } from './types.js';
 
@@ -258,17 +258,72 @@ describe(`route: ${policy('route')}`, () => {
     expect(ran(steps.log, 'escalate')).toBe(true);
   });
 
-  it('onFailure itself throws or returns junk → on_task / none', async () => {
-    for (const onFailure of [
+  describe('onFailure itself throws or returns junk', () => {
+    const badOnFailures = [
       () => {
         throw new Error('x');
       },
       () => ({ intent: 'nope', attempt: 'none' }) as never,
-    ]) {
-      const { events, result } = await run({ route: { run: boom, onFailure } });
+    ];
+
+    it('the distress check finds nothing → on_task / none; route marked failed', async () => {
+      for (const onFailure of badOnFailures) {
+        const { events, result } = await run({ route: { run: boom, onFailure } });
+        expect(events.at(-1)?.type).toBe('done');
+        expect(result.trace?.intent).toBe('on_task');
+        expect(outcomeOf(result, 'route')).toBe('fallback');
+      }
+    });
+
+    it('the injected distress check still escalates on a hit', async () => {
+      for (const onFailure of badOnFailures) {
+        const seen: string[] = [];
+        const t = testDeps({
+          overrides: {
+            distressCheck: (text) => {
+              seen.push(text);
+              return true;
+            },
+          },
+        });
+        const steps = testSteps({ route: { run: boom, onFailure } });
+        const { events, result } = await driveTurn(
+          runTurn(demoTurnInput, { deps: t.deps, steps }),
+          t.clock,
+        );
+        expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+        expect(seen).toEqual([demoTurnInput.text]);
+        expect(t.alerts.raised).toHaveLength(1);
+        expect(result.trace?.intent).toBe('distress');
+        expect(outcomeOf(result, 'route')).toBe('fallback');
+      }
+    });
+
+    it('the distress check also throws → on_task / none, route marked failed and reported', async () => {
+      const t = testDeps({
+        overrides: {
+          distressCheck: () => {
+            throw new Error('check down');
+          },
+        },
+      });
+      const steps = testSteps({
+        route: {
+          run: boom,
+          onFailure: () => {
+            throw new Error('x');
+          },
+        },
+      });
+      const { events, result } = await driveTurn(
+        runTurn(demoTurnInput, { deps: t.deps, steps }),
+        t.clock,
+      );
       expect(events.at(-1)?.type).toBe('done');
       expect(result.trace?.intent).toBe('on_task');
-    }
+      expect(outcomeOf(result, 'route')).toBe('failed');
+      expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']);
+    });
   });
 });
 
@@ -405,25 +460,60 @@ describe(`escalate: ${policy('escalate')}`, () => {
     expect(ALERT_ATTEMPT_TIMEOUT_MS).toBe(5_000);
   });
 
-  it('a throwing distress fallback text still sends the safety event and done', async () => {
-    const t = testDeps({
-      overrides: {
-        fallbackReplies: {
-          safeReply: () => TEST_SAFE_REPLY,
-          distress: () => {
-            throw new Error('no text');
-          },
+  describe('last-resort caring reply (escalate and its fallback text both fail)', () => {
+    const brokenTexts = (distress: () => string) =>
+      testDeps({
+        overrides: { fallbackReplies: { safeReply: () => TEST_SAFE_REPLY, distress } },
+      });
+
+    it.each([
+      [
+        'throws',
+        () => {
+          throw new Error('no text');
         },
+      ],
+      ['returns empty text', () => ''],
+    ])(
+      'fallback text %s → the built-in reply; alert, commit and trace still happen',
+      async (_l, distress) => {
+        const t = brokenTexts(distress);
+        const steps = testSteps({ ...distressGuard, escalate: boom });
+        const { events, result } = await driveTurn(
+          runTurn(demoTurnInput, { deps: t.deps, steps }),
+          t.clock,
+        );
+        expect(events).toEqual([
+          { type: 'safety', level: 'alert' },
+          { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+          { type: 'done', messageId: 'message_1', usage: [usageSmall] },
+        ]);
+        expect(t.alerts.raised).toEqual([demoSafetyAlert]);
+        expect(steps.commits[0]).toMatchObject({
+          outcome: 'escalated',
+          replyText: LAST_RESORT_DISTRESS_REPLY,
+          alert: demoSafetyAlert,
+        });
+        expect(t.traces.records).toHaveLength(1);
+        expect(outcomeOf(result, 'escalate')).toBe('failed');
+        expect(result.background.some((b) => b.task === 'runner')).toBe(true);
       },
-    });
-    const steps = testSteps({ ...distressGuard, escalate: boom });
-    const { events, result } = await driveTurn(
-      runTurn(demoTurnInput, { deps: t.deps, steps }),
-      t.clock,
     );
-    expect(events.map((e) => e.type)).toEqual(['safety', 'done']);
-    expect(t.alerts.raised).toHaveLength(1);
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
+
+    it('an escalate step that returns empty text also gets the fallback text', async () => {
+      const { events } = await run({
+        ...distressGuard,
+        escalate: () => Promise.resolve({ replyText: '' }),
+      });
+      expect(events[1]).toEqual({ type: 'token', text: TEST_DISTRESS_REPLY });
+    });
+
+    it('the built-in reply is warm, country-neutral and has no phone numbers', () => {
+      expect(LAST_RESORT_DISTRESS_REPLY.trim().length).toBeGreaterThan(40);
+      expect(LAST_RESORT_DISTRESS_REPLY).not.toMatch(/\d/);
+      expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/trusted adult/);
+      expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/emergency services/);
+    });
   });
 });
 

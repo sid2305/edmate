@@ -62,6 +62,16 @@ import type {
   TurnRunResult,
 } from './types.js';
 
+/**
+ * Sent only when the escalate step and `fallbackReplies.distress` both give no text. Built in (not
+ * injected) so a distressed student always gets a caring reply. Country-neutral: no numbers or
+ * country names; the locale pack's helplines come through the normal paths.
+ */
+export const LAST_RESORT_DISTRESS_REPLY =
+  'I am really glad you told me, and you matter. You do not have to face this alone. ' +
+  'Please talk to a trusted adult near you right now, like a parent, teacher or school ' +
+  'counsellor. If you might be in danger, contact your local emergency services now.';
+
 export interface RunTurnOptions {
   deps: PipelineDeps;
   steps: Steps;
@@ -240,8 +250,9 @@ class Turn {
       this.trace.addUsage(rt.value.usage);
       this.trace.step('route', rt.ms, 'ok');
     } else {
-      ({ intent, attempt } = this.routeFallback(scrubbed, e));
-      this.trace.step('route', rt.ms, 'fallback');
+      const fb = this.routeFallback(scrubbed, e);
+      ({ intent, attempt } = fb);
+      this.trace.step('route', rt.ms, fb.outcome);
     }
 
     const bc = check(bcRaw, BuiltContextSchema);
@@ -295,17 +306,32 @@ class Turn {
     return this.finish(e, { ...base, outcome: 'replied', replyText }, intent, decision.move);
   }
 
+  /**
+   * route's fallback. If `route.onFailure` fails, the injected distress keyword check still runs,
+   * so distress keywords escalate. If that fails too, ROUTE_DEFAULT is used and route is `failed`.
+   */
   private routeFallback(
     input: TurnInput,
     e: Entitled,
-  ): { intent: Intent; attempt: TurnContext['attempt'] } {
+  ): { intent: Intent; attempt: TurnContext['attempt']; outcome: 'fallback' | 'failed' } {
     try {
-      const fb = RouteFallbackSchema.safeParse(
+      const fb = RouteFallbackSchema.parse(
         this.steps.route.onFailure(this.env(input, cancelSource().token), e),
       );
-      return fb.success ? fb.data : ROUTE_DEFAULT;
-    } catch {
-      return ROUTE_DEFAULT;
+      return { ...fb, outcome: 'fallback' };
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+    }
+    try {
+      const hit = this.deps.distressCheck(input.text ?? '', input.lang);
+      return {
+        ...ROUTE_DEFAULT,
+        ...(hit ? { intent: 'distress' as const } : {}),
+        outcome: 'fallback',
+      };
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+      return { ...ROUTE_DEFAULT, outcome: 'failed' };
     }
   }
 
@@ -320,24 +346,32 @@ class Turn {
       ),
       EscalateResultSchema,
     );
-    this.trace.step('escalate', es.ms, es.ok ? 'ok' : 'fallback');
     const alert =
       (es.ok ? es.value.alert : undefined) ?? preAlert ?? fallbackAlert(input, e, this.deps);
     // Dispatch the alert before anything else can fail.
     const delivered = this.deliverAlert(alert);
 
-    let replyText = '';
-    if (es.ok) {
-      replyText = es.value.replyText;
-    } else {
+    // The reply is never empty: the step's text, else the locale fallback, else the last resort.
+    let replyText = es.ok ? es.value.replyText : '';
+    let outcome: 'ok' | 'fallback' | 'failed' = replyText !== '' ? 'ok' : 'fallback';
+    if (replyText === '') {
       try {
         replyText = this.deps.fallbackReplies.distress(input.lang, e.locale);
       } catch (error) {
         this.background.push({ task: 'runner', error });
       }
     }
+    if (replyText === '') {
+      this.background.push({
+        task: 'runner',
+        error: new Error('no distress reply text; sent the last-resort reply'),
+      });
+      replyText = LAST_RESORT_DISTRESS_REPLY;
+      outcome = 'failed';
+    }
+    this.trace.step('escalate', es.ms, outcome);
     this.send({ type: 'safety', level: 'alert' });
-    if (replyText !== '') this.send({ type: 'token', text: replyText });
+    this.send({ type: 'token', text: replyText });
     this.done();
     return this.finish(
       e,
