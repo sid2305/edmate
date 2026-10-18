@@ -322,9 +322,9 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m1/1.6-audit-log
+  model: plan:sonnet
 - id: '1.7'
   milestone: M1
   title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
@@ -557,11 +557,11 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: running
+  status: review
   needs_decision:
   - judge-model
   branch: m3/3.12-eval-runner
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(ts,silent)
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
