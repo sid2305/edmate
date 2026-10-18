@@ -86,11 +86,24 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
   return finish(i, skillStep({ ctx, turn, help, skill }));
 }
 
-/** The `ask` fallback: rung clamped to the package ceiling, no tools, state unchanged. */
+/** The `ask` fallback (`redirect` for distress): rung clamped to the package ceiling, no tools, state unchanged. */
 export function fallbackPolicy(
   ctx: TurnContext,
   help: Readonly<HelpState> = INITIAL_HELP_STATE,
 ): PolicyResult {
+  // Distress never gets a teaching question, even on the fallback path.
+  if (ctx.intent === 'distress') {
+    return {
+      move: 'redirect',
+      rung: 0,
+      skill: null,
+      mustNotReveal: [...help.answerKey],
+      tools: [],
+      maxOutputTokens: maxOutputTokensFor('redirect', null),
+      next: { helpRung: ctx.helpRung, help: copyHelp(help) },
+      reason: 'distress',
+    };
+  }
   return {
     move: 'ask',
     rung: Math.min(ctx.helpRung, effectiveCeiling(ctx.pkg)) as Rung,

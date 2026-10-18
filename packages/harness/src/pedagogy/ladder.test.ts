@@ -217,7 +217,7 @@ const rows: Row[] = [
     rung: 0,
     move: 'check',
     reason: 'pending_check',
-    next: { pendingCheck: false, attemptLogged: false, answerKey: [], helpRung: 0 },
+    next: { pendingCheck: false, attemptLogged: false, answerKey: ['x'], helpRung: 0 },
   },
   {
     name: 'pending check beats a hint request',

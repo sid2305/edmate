@@ -113,7 +113,40 @@ describe('skill default moves', () => {
     expect(r.mustNotReveal).toEqual(['7']);
   });
 
-  it('mock_interview without a persona falls back to coach', () => {
+  it('explain then coach mid-problem keeps the answer key (finalAnswers never)', () => {
+    const o = { pkg: { finalAnswers: 'never' as const } };
+    let help = helpWith({ answerKey: ['5/6'], attemptLogged: true });
+    let helpRung: 0 | 1 | 2 | 3 | 4 = 2;
+    // Tap Explain, then keep asking: every reply must still hide the answer.
+    for (const [skill, kind] of [
+      ['explain', 'skill_action'],
+      ['coach', 'hint_request'],
+      ['explain', 'skill_action'],
+      ['coach', 'message'],
+      ['coach', 'hint_request'],
+      ['coach', 'hint_request'],
+    ] as const) {
+      const r = run(skill, { ...o, helpRung, intent: 'answer_seeking' }, kind, help);
+      expect(r.move).not.toBe('solution');
+      expect(r.mustNotReveal).toEqual(['5/6']);
+      expect(r.next.help.answerKey).toEqual(['5/6']);
+      help = r.next.help;
+      helpRung = r.next.helpRung;
+    }
+  });
+
+  it('only a solved problem clears the answer key', () => {
+    const r = run(
+      'coach',
+      { attempt: 'correct' },
+      'check_answer',
+      helpWith({ answerKey: ['5/6'] }),
+    );
+    expect(r.mustNotReveal).toEqual(['5/6']);
+    expect(r.next.help.answerKey).toEqual([]);
+  });
+
+  it('mock_interview without a persona falls back to coach when coach is entitled', () => {
     const r = run('mock_interview');
     expect([r.move, r.skill]).toEqual(['ask', 'coach']);
   });

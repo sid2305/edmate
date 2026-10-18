@@ -82,15 +82,25 @@ describe('tools', () => {
     expect(r.tools).toEqual(['calculator', 'grapher']);
   });
 
-  it('coach tools are not offered when coach itself is not entitled', () => {
-    const r = decidePolicy(
-      base({
-        ctx: ctxWith({ entitlement: { skills: ['mock_interview'] } }),
-        turn: turnOf('skill_action', 'mock_interview'),
-      }),
-    );
-    expect(r.skill).toBe('coach');
-    expect(r.tools).toEqual([]);
+  it('mock_interview as the only skill, no persona → locked, never the coach ladder', () => {
+    for (const helpRung of [0, 3, 4] as const) {
+      const r = decidePolicy(
+        base({
+          ctx: ctxWith({
+            entitlement: { skills: ['mock_interview'] },
+            helpRung,
+            intent: 'answer_seeking',
+            pkg: { finalAnswers: 'allowed' },
+          }),
+          turn: turnOf('hint_request', 'mock_interview'),
+          help: helpWith({ answerKey: ['5/6'], attemptLogged: true }),
+        }),
+      );
+      expect([r.move, r.skill, r.reason]).toEqual(['locked', null, 'no_persona']);
+      expect(r.tools).toEqual([]);
+      expect(r.mustNotReveal).toEqual(['5/6']);
+      expect(r.next.helpRung).toBe(helpRung);
+    }
   });
 
   it.each<[string, CtxOverrides]>([
@@ -182,6 +192,21 @@ describe('purity and determinism', () => {
 });
 
 describe('fallbackPolicy', () => {
+  it('a distress turn falls back to redirect with the distress reason, not ask', () => {
+    const help = helpWith({ answerKey: ['42'] });
+    const r = fallbackPolicy(ctxWith({ intent: 'distress', helpRung: 2 }), help);
+    expect(r).toEqual({
+      move: 'redirect',
+      rung: 0,
+      skill: null,
+      mustNotReveal: ['42'],
+      tools: [],
+      maxOutputTokens: 150,
+      next: { helpRung: 2, help },
+      reason: 'distress',
+    });
+  });
+
   it('asks, clamps the rung to the package ceiling, offers no tools and keeps state', () => {
     const r = fallbackPolicy(
       ctxWith({ helpRung: 4, pkg: { helpCeiling: 4, finalAnswers: 'never' } }),

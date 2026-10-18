@@ -69,7 +69,7 @@ export function nextRung(i: LadderInput): LadderStep {
   const attemptLogged = attemptLoggedAfter(i.help, i.attempt, i.kind);
   const { answerKey } = copyHelp(i.help);
 
-  // After a solution or an explanation, and when the problem is solved: one check, then a fresh problem.
+  // After a solution or an explanation, and when the problem is solved: one check.
   if (i.help.pendingCheck) return reset('pending_check');
   if (i.attempt === 'correct') return reset('solved');
   if (i.attempt === 'partial') {
@@ -118,12 +118,14 @@ export function nextRung(i: LadderInput): LadderStep {
     });
   }
 
-  function reset(reason: LadderReason): LadderStep {
+  // Only a solved problem clears the answer key. A pending check can come from an explain
+  // turn mid-problem, and clearing the key there would empty mustNotReveal (safety review).
+  function reset(reason: 'pending_check' | 'solved'): LadderStep {
     return step('check', 0, reason, {
       stuckTurns: 0,
       attemptLogged: false,
       pendingCheck: false,
-      answerKey: [],
+      answerKey: reason === 'solved' ? [] : answerKey,
     });
   }
 }

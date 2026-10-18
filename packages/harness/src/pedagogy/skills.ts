@@ -17,7 +17,8 @@ export type SkillReason =
   | 'feedback'
   | 'mock_interview'
   | 'revision'
-  | 'skill_not_built';
+  | 'skill_not_built'
+  | 'no_persona';
 
 export interface SkillStep {
   move: Move;
@@ -95,10 +96,12 @@ export function skillStep(i: SkillInput): SkillStep {
       // Point to the rubric line and the fix; never rewrite the work.
       return fixed('hint', 'feedback', 'feedback');
     case 'mock_interview':
-      // 5.8 owns /pause, the end conditions and the debrief. No persona: coach instead.
-      return ctx.persona === undefined
+      // 5.8 owns /pause, the end conditions and the debrief. No persona: coach instead, but
+      // only when the package includes coach (coach can reach a solution); otherwise locked.
+      if (ctx.persona !== undefined) return fixed('ask', 'mock_interview', 'mock_interview');
+      return ctx.entitlement.skills.includes('coach')
         ? ladder('coach')
-        : fixed('ask', 'mock_interview', 'mock_interview');
+        : fixed('locked', null, 'no_persona');
     case 'revision':
       return fixed('explain', 'revision', 'revision');
     case 'study_plan':

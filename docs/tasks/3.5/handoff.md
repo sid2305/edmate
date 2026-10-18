@@ -24,11 +24,11 @@ Commands (trimmed):
 ```
 packages/harness$ pnpm exec vitest run src/pedagogy
  Test Files  5 passed (5)
-      Tests  1589 passed (1589)
+      Tests  1592 passed (1592)
 
 packages/harness$ pnpm exec vitest run --coverage
  Test Files  22 passed (22)
-      Tests  1897 passed (1897)
+      Tests  1900 passed (1900)
 All files | 99.37 | 97.19 | 100 | 100     (src/pedagogy/** at 100%: hidden from the report as full; the 100% threshold passes)
 
 root$ pnpm turbo run typecheck lint test
@@ -41,6 +41,14 @@ root$ git fetch origin; git log HEAD..origin/main
 (empty: already up to date, no lockfile change)
 ```
 
+## Fix round 1 (safety-reviewer)
+
+| Finding | Fix | Test |
+|---|---|---|
+| HIGH: an explain turn sets `pendingCheck`; the next coach turn reset `answerKey` to `[]` mid-problem, so `mustNotReveal` emptied | Only a solved problem (`correct`) clears `answerKey`; a reset caused by a pending check keeps it | `skills.test.ts` "explain then coach mid-problem keeps the answer key (finalAnswers never)" runs explain → coach hint → explain → coach → hint → hint and checks that `mustNotReveal` and `next.answerKey` stay `['5/6']` and there is never a `solution`. Also "only a solved problem clears the answer key", and the ladder row "turn after solution" now keeps the key |
+| MEDIUM: mock_interview without a persona fell back to the coach ladder even when coach was not entitled | Falls back to coach only if coach is entitled; otherwise `locked`, reason `no_persona`, no skill, no tools, state unchanged | `policy.test.ts` "mock_interview as the only skill, no persona → locked" (rungs 0, 3, 4, answer_seeking, `allowed`) |
+| LOW: `fallbackPolicy` returned `ask` for distress | Distress → `redirect`, reason `distress`, redirect budget, no tools | `policy.test.ts` "a distress turn falls back to redirect with the distress reason" |
+
 ## Changes
 
 - New `packages/harness/src/pedagogy/`: `budgets.ts`, `helpState.ts`, `ladder.ts`, `coverage.ts`, `skills.ts`, `policy.ts`, `index.ts`, the test-only `testing.ts` builder, and five test files.
@@ -51,7 +59,7 @@ root$ git fetch origin; git log HEAD..origin/main
 
 ## Deviations
 
-- `fallbackPolicy(ctx, help = INITIAL_HELP_STATE)` takes an optional help state, so the fallback can keep the answer key in `mustNotReveal`. Same call shape as the plan when it is omitted.
+- `fallbackPolicy(ctx, help = INITIAL_HELP_STATE)` takes an optional help state, so the fallback can keep the answer key in `mustNotReveal`. Same call shape as the plan when it is omitted. For distress it returns `redirect` (fix round 1).
 - Skill selection uses `turn.skill` whenever it is set, not only on `skill_action` turns, so a practice `hint_request` stays in practice (the plan's practice rule needs that). A `skill_action` with no skill fails closed to `locked`.
 - Exported `attemptLoggedAfter`, `nextRung`, `coverageGate`, `selectSkill` and the reason types alongside `decidePolicy`.
 - Root `pnpm format:check` flags `.github/workflows/ci.yml`. That file is already like that on main and this task does not touch it.
@@ -89,9 +97,21 @@ Alternatives: report the stored rung on every move.
 Reversible: yes.
 
 ### 18 Oct 2026 · 3.5 mustNotReveal and help state ownership · decided by builder (tdd-guide) on the plan · risk: low
-Decided: `mustNotReveal` is a copy of `help.answerKey` for every move except `solution` (and always under `finalAnswers never`), including locked, ask_teacher, redirect and the fallback. `HelpStateSchema` = `{ stuckTurns 0|1, attemptLogged, pendingCheck, answerKey }` is the shape of `sessions.help_state`. A solved problem or a consumed check resets it, including the answer key. Results never alias the input state.
+Decided: `mustNotReveal` is a copy of `help.answerKey` for every move except `solution` (and always under `finalAnswers never`), including locked, ask_teacher, redirect and the fallback. `HelpStateSchema` = `{ stuckTurns 0|1, attemptLogged, pendingCheck, answerKey }` is the shape of `sessions.help_state`. A solved problem resets it, including the answer key. A consumed check resets it but keeps the key (fix round 1). Results never alias the input state.
 Why: plan § Help state and rule 7. Keeping the key on non-teaching replies costs nothing and blocks a leak.
 Alternatives: an empty `mustNotReveal` on non-teaching moves.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Only a solved problem clears the answer key · decided by builder (tdd-guide) on safety-reviewer finding · risk: medium
+Decided: the ladder's pending-check reset (after `solution` or `explain`) keeps `answerKey`. Only `correct` (problem solved) and a correct practice item clear it. A mock_interview turn without a persona falls back to coach only when coach is entitled; otherwise it is `locked` (reason `no_persona`). `fallbackPolicy` returns `redirect` with reason `distress` for distress turns.
+Why: a student could tap Explain and then keep asking, emptying `mustNotReveal` mid-problem and leaking the answer under `finalAnswers: never`. The other two fixes stop a skill outside the package from reaching `solution`, and keep a teaching question away from a student in distress.
+Alternatives: give explain its own pending flag.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 A higher coverage bar when lockedHit is true is deferred to 5.3 · decided by team lead (safety review) · risk: low
+Decided: the coverage threshold is the same whether or not `lockedHit` is true. A stricter bar for questions that also match a locked module goes to 5.3 (retrieval calibration).
+Why: the score scale is not defined until 5.3.
+Alternatives: a separate locked threshold now.
 Reversible: yes.
 
 ### 18 Oct 2026 · 3.5 Provisional maxOutputTokens table · decided by builder (tdd-guide) on the plan · risk: low
