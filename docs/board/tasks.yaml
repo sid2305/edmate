@@ -428,9 +428,9 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: review
+  status: done
   branch: m3/3.1-pipeline-runner
-  model: plan:opus build:opus-5.5/medium review:sonnet(ts,silent)
+  model: plan:opus build:opus-5.5/medium review:sonnet(ts,silent)+opus(safety)
 - id: '3.2'
   milestone: M3
   title: '`admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit'
