@@ -12,6 +12,7 @@ and can do. Open source (MIT).
 
 - Node 22 (`.nvmrc`; install with nvm)
 - pnpm through corepack (pinned in `package.json#packageManager`). Never install pnpm globally.
+- Or open the repo in the dev container (`.devcontainer/`: Node 22, Python 3 + PyYAML, jq, Docker CLI, Claude Code).
 
 ## Commands
 
