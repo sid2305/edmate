@@ -42,10 +42,13 @@ corepack pnpm turbo run typecheck lint test --filter=@edmate/db     (Postgres up
 corepack pnpm turbo run typecheck lint test --filter=@edmate/worker
   Tests 65 passed · src/alarms 100/100/100/100 (costAlarm.test.ts 38, logSink.test.ts 3)
 
-corepack pnpm turbo run typecheck lint test            (root)
+corepack pnpm turbo run typecheck lint test            (root, after merging origin/main incl. 3.15)
   Tasks: 40 successful, 40 total
+  harness 1913 · db 357 · worker 65 · contracts 322 · gateway 264 · web 132 · evals 103 ·
+  content 93 · cli 46 · config 42 (all passed)
+  Migration stays 0005 (main has no new migration); `pnpm install` leaves the lockfile unchanged.
 
-python3 .githooks/secret-scan.py --all                 → clean (see commit)
+python3 .githooks/secret-scan.py --all                 → no findings (exit 0)
 ```
 
 `corepack pnpm format:check` flags only `.github/workflows/ci.yml`. That file is already
