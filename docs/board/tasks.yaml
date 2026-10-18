@@ -498,9 +498,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.5-teaching-policy
+  model: plan:opus
 - id: '3.6'
   milestone: M3
   title: Prompt-pack loader and composer with `promptPackVersion`, style card, locale pack and sources
