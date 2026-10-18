@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.2 entitle resolves all three sources server-side and fails closed on any ownership mismatch · decided by builder (tdd-guide) on the plan and lead answers · risk: high
+Decided: `entitle` sends only `{ studentId, agentId, source }` to `EntitlementStore.resolve`, with the source set by the composition root, and never reads package, module or skill ids from the input. It refuses `null`, paused and ended, loads the turn's config through `TurnConfigStore`, and ends the turn with `no_access` unless every object belongs to the entitlement (ADR-0004 Decision 5) and the entitlement's allowed modules and skills are within the package's. The db adapter adds the one repository read without a teacher or student scope, `agents.owner({ agentId })`, which returns only the owner's teacher id and only for live agents. Preview and eval packages are bound from trusted server state when the store is built.
+Why: build plan § Access filter 1 and 7, ADR-0003 point 1 and ADR-0004; the subscription path needs the agent's teacher before any student-scoped read, and that link is public on teacher pages.
+Alternatives: a student-only scope joining subscriptions to packages in one statement; trusting a client package id when it matches.
+Reversible: yes (code only; no contract or schema change). Needs security-reviewer sign-off on `agents.owner`.
+
+### 18 Oct 2026 · 3.2 Rate and daily message limits are in-memory sliding windows · decided by team lead (Q1 = A, Q3) · risk: medium
+Decided: admit allows 10 admitted turns per student per trailing 60 s, for every source except eval; refused turns don't count, turns that entitle later refuses do. entitle allows `dailyMessageLimit` messages per student × package per rolling 24 h, for subscriptions only; the take is the last action after every await, so a refused turn never counts and concurrent turns can't both take the last slot. Both are `TurnCounter`s in `PipelineDeps.limits`, built once on the injected clock; a restart or a second instance resets them until task 3.14.
+Why: no contracts port counts turns; the lead chose to defer a durable store.
+Alternatives: a contracts port with ADR-0005 now; per student × agent keys.
+Reversible: yes; 3.14 swaps the counter (the interface allows an async `tryTake`).
+
+### 18 Oct 2026 · 3.2 Teacher preview and eval accept any agent status · decided by builder (tdd-guide) · risk: medium
+Decided: subscriptions need a `live` agent; teacher preview (only the agent's own teacher) and eval accept draft, live and suspended agents.
+Why: plan Q8 allows drafts for preview and eval; a teacher may still preview, and the trust team evaluate, a suspended agent. Students can never reach it.
+Alternatives: refuse suspended agents for preview and eval too.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.2 admit does not authenticate or full-parse TurnInput · decided by builder (tdd-guide), plan Q4 · risk: low
+Decided: the caller authenticates and merges `studentId`; `unauthorized` stays in the web layer. admit checks the limits in code (wrongly typed `text` or `attachments` is `validation`) and ignores fields it does not read; the boundary's strict parse rejects them.
+Why: "client-sent package ids are ignored" and CLI/eval callers may pass unparsed objects.
+Alternatives: parse `TurnInputSchema` in admit and return `validation`.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.2 The style card is the exact row agent.styleCardId names · decided by team lead (Q6 answer) · risk: low
+Decided: style card rows are immutable versions with their own ids, so `turnConfigStoreFor` loads exactly `agent.styleCardId`, keeping the `styleCard.id === agent.styleCardId` check. ADR-0004's "latest version" wording is left for 8.4 to settle by ADR amendment.
+Why: the schema has no style card lineage id, so "latest version of `styleCardId`" and the fail-closed id check cannot both hold.
+Alternatives: load the teacher's newest style card row (breaks the id check).
+Reversible: yes, with 8.4's ADR amendment.
+
+### 18 Oct 2026 · 3.2 An entitlement that cannot be valid throws instead of returning null · decided by builder (tdd-guide) · risk: low
+Decided: when stored rows build an entitlement that fails `EntitlementSchema` (for example a bad market mapping), `entitlementStoreFor` throws `RepositoryError('integrity')`; entitle turns it into `no_access` (retryable).
+Why: corrupt data should be loud, not look like "no subscription".
+Alternatives: return `null`.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.2 Review · decided by team lead · risk: low
+Decided: The `sessionId as string` cast in packages/harness/src/pipeline/steps/entitle.ts stays (it follows a successful parse). The style card is loaded as the exact immutable row `agent.styleCardId` names; task 8.4 settles whether a newer card version should replace it. Round-trip parallelisation moves to 3.14; subscription expiry to 10.3.
+Why: None changes behaviour or safety now.
+Alternatives: Use the parsed value; load the latest card version now.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 2.4 Unknown figures are NULL; usage_ledger's figure columns are relaxed to nullable · decided by team lead · risk: high
 Decided: `model`, `input_tokens`, `output_tokens` and `cost_micro_usd` are nullable (migration `0003`, `ALTER COLUMN … DROP NOT NULL`, which loses no data; the table is empty). Each row has a `status` (`recorded` | `unknown` | `unpriced`) and a fixed `reason` (`no_usage_reported` | `unpriced_model:<model>`). Unknown rows have NULL tokens and cost; unpriced rows have NULL cost. One CHECK requires a recorded row to have all four figures, and another keeps counts non-negative. Status/figure consistency beyond that is validated on read (`integrity`). `schema.test.ts` allows relaxing NOT NULL and pins the relaxed columns.
 Why: a raw query must never read an unknown call as free (database-reviewer, fix round 1). The lead clarified that "create-only" means "never lose data". Round 0's placeholder-plus-3-branch-CHECK design was replaced.
