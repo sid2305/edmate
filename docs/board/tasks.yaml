@@ -369,10 +369,10 @@ tasks:
   deps:
   - '0.3'
   - M0
-  status: planning
+  status: running
   risk: expert
   branch: m1/1.8-demo-teacher
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.1'
   milestone: M2
   title: Provider keys from the environment / secret manager
