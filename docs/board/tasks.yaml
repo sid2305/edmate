@@ -197,10 +197,10 @@ tasks:
   accept: files merged.
   deps:
   - '0.1'
-  status: planning
+  status: running
   risk: risky
   branch: m0/0.4-adrs
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '0.5'
   milestone: M0
   title: 'GitHub Actions: CI, secret scan, merge-gate check (re-runs merge_gate.py --pr on every PR: required reviewers per risk group and a risk: high decision; no human label), risk labeller; PR template'
