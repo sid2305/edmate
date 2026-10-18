@@ -36,11 +36,14 @@ export interface OpenAICompatibleAdapterOptions {
   readonly fetch?: FetchFunction;
 }
 
+// src builds without Node or DOM types (see keys/secret.ts); URL is a runtime global in Node 22.
+declare const URL: new (input: string) => { readonly protocol: string; readonly hostname: string };
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /** The key travels in a header to this URL, so it must be https unless the server is local. */
 function checkBaseURL(value: string): void {
-  let url: URL | undefined;
+  let url: { readonly protocol: string; readonly hostname: string } | undefined;
   try {
     url = new URL(value);
   } catch {

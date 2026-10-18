@@ -24,6 +24,11 @@ import type { ProviderId } from '../keys/providers.js';
 import { GatewayError, mapProviderError, stopFailure } from './errors.js';
 import type { AdapterCapabilities, ModelAdapter } from './types.js';
 
+// src builds without Node or DOM types (see keys/secret.ts); AbortController is a runtime
+// global in Node 22, typed here from what the SDK accepts.
+type AbortSignalLike = NonNullable<Parameters<typeof streamText>[0]['abortSignal']>;
+declare const AbortController: new () => { readonly signal: AbortSignalLike; abort(): void };
+
 export interface SdkAdapterParts {
   readonly id: ProviderId;
   readonly model: string;
