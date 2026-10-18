@@ -59,7 +59,7 @@ One language (TypeScript) end to end, boring dependencies, everything in Docker 
 | Queue / cache | Redis + BullMQ | Ingestion, transcription, insights, evals, payouts reconciliation, retention |
 | Object storage | S3-compatible (MinIO locally; a bucket in the pilot market's region) | Uploads and transcripts; signed URLs only |
 | Model access | Vercel AI SDK provider packages behind our own `gateway` interface | Edmate-held keys; MVP: one main provider + OpenAI-compatible (covers OpenRouter); embeddings platform-wide |
-| Transcription | Provider speech-to-text behind a `Transcriber` port | See Open decisions |
+| Transcription | **Decided: provider speech-to-text API behind the Transcriber port** (18 Oct 2026) | — | 2.7 |
 | Auth | Auth.js: Google sign-in and email magic link (phone OTP later, per market) | Roles: student, teacher, staff |
 | Payments | A provider per market behind one `Payments` port (e.g. UPI AutoPay in India; a merchant of record that handles VAT/sales tax elsewhere); provider subscriptions; manual monthly teacher payouts in the pilot | See Open decisions |
 | Locale packs | `content/locales/<market>.yaml`: languages, currency format, helplines, compliance, payment methods, PII patterns | See `locale-context` skill |
@@ -710,15 +710,17 @@ Agents should not decide these; each blocks the tasks listed until a human answe
 | Grounding | **Decided: teacher's material only; uncovered questions go to the teacher, whose answers teach the agent** (17 Oct 2026) | — | — |
 | Courses per teacher | **Decided: one course and one agent per teacher in the MVP** (17 Oct 2026) | — | — |
 | Repo host | **Decided: public GitHub repo; agents use a private GitHub App** (16 Oct 2026) | — | — |
-| Minimum learner age | 18+ only · also 13–17 with parental consent | 18+ for the MVP | 1.7 |
-| Pilot market | Where the 20 anchor teachers are (e.g. India, or global English) | Decide in the Validate phase | 3.10 (first pack), 10.1, 13.6 |
-| Payment provider (pilot market) | India: Razorpay · Cashfree · Stripe India; global: a merchant of record (handles VAT/sales tax) | Subscriptions + split payouts to teachers; compare fees | 10.1, 8.1 |
+| Minimum learner age | **Decided: 13+; US needs no consent; India 13–17 need verifiable parental consent** (18 Oct 2026) | — | 1.7 |
+| Pilot market | **Decided: US and India (locale packs en-US, en-IN)** (18 Oct 2026) | — | 3.10 (first pack), 10.1, 13.6 |
+| Payment provider (pilot market) | **Decided: Razorpay in India; a merchant of record in the US** (18 Oct 2026) | — | 10.1, 8.1 |
 | Revenue share and floor price | Edmate % of each subscription; minimum package price | Decide after cost data from 7.6 | 10.4, 8.6 |
-| Transcription | Provider speech-to-text (OpenAI, Google) · self-hosted Whisper | Provider API for the MVP | 2.7 |
-| Moderation | Classifier only · self-hosted Llama Guard · provider moderation | Provider moderation where available, classifier otherwise | 4.4 |
-| Judge model | Fixed judge on an Edmate key | One mid-tier model, pinned per release | 7.1 |
+| Transcription | **Decided: provider speech-to-text API behind the Transcriber port** (18 Oct 2026) | — | 2.7 |
+| Moderation | **Decided: provider moderation where available, a local classifier otherwise** (18 Oct 2026) | — | 4.4 |
+| Judge model | **Decided: one mid-tier model, pinned per release** (18 Oct 2026) | — | 7.1 |
 | Default model mix | Per tier, by cost and eval results | Decide after 7.6 | 8.6 |
-| Teacher view of conversations | Aggregated insights only · students may opt in to share | Aggregated by default; opt-in sharing | 11.3 |
-| Refund policy | Pro-rata · first 7 days full · none | First 7 days full refund | 10.6 |
-| Hosting region | A cloud region in the pilot market | Follows the pilot market's data rules | 13.6 |
-| Pilot subjects and anchor teachers | Coding · exam prep · languages · professional skills | Pick 1–2 subjects with 20 committed teachers | GATE (pilot readiness) |
+| Teacher view of conversations | **Decided: aggregated insights; students may opt in to share** (18 Oct 2026) | — | 11.3 |
+| Refund policy | **Decided: full refund in the first 7 days** (18 Oct 2026) | — | 10.6 |
+| Hosting region | **Decided: one US region for the pilot; India region later if needed** (18 Oct 2026) | — | 13.6 |
+| Pilot subjects and anchor teachers | **Decided: specific practical skills (e.g. personal finance, Marketing 101, start a side hustle)**; anchor teachers signed in Validate (18 Oct 2026) | — | GATE (pilot readiness) |
+| Live classes | **Decided: the teacher's Meet or Zoom link** (18 Oct 2026) | — | — |
+| Legal entity | Company · social enterprise · non-profit | Decide before payments go live | M10 |

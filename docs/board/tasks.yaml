@@ -32,21 +32,21 @@ decisions:
     recommendation: Start with your account + hook; add a bot before the repo goes public
     answer: Private GitHub App (edmate-bot) for all agent git and PR actions
   min-age:
-    status: open
+    status: decided
     question: Minimum learner age
     options:
     - 18+ only
     - Also 13–17 with parental consent
     recommendation: 18+ for the MVP
-    answer: null
+    answer: '13+. US: no parental consent needed (COPPA covers under-13 only). India: 13–17 need verifiable parental consent (DPDP); the age gate asks country and birth year'
   payment-provider:
-    status: open
+    status: decided
     question: Payment provider for the pilot market
     options:
     - 'India: Razorpay / Cashfree / Stripe India'
     - 'Global: a merchant of record'
     recommendation: Subscriptions + split payouts to teachers; compare fees
-    answer: null
+    answer: Razorpay in India (UPI AutoPay, Route split payouts); a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax; both behind the one Payments port
   revenue-share:
     status: open
     question: Edmate's revenue share and floor price per package
@@ -63,14 +63,14 @@ decisions:
     recommendation: Provider API for the MVP
     answer: Provider speech-to-text API behind the Transcriber port (MVP)
   moderation:
-    status: open
+    status: decided
     question: Moderation
     options:
     - Classifier only
     - Self-hosted Llama Guard
     - Provider moderation
     recommendation: Provider moderation where available, classifier otherwise
-    answer: null
+    answer: Provider moderation where available, a local classifier otherwise
   judge-model:
     status: decided
     question: Judge model for evals
@@ -86,38 +86,38 @@ decisions:
     recommendation: Decide after 7.6
     answer: null
   teacher-chat-visibility:
-    status: open
+    status: decided
     question: Do teachers see individual conversations?
     options:
     - Aggregated insights only
     - Students may opt in to share
     recommendation: Aggregated by default; opt-in sharing
-    answer: null
+    answer: Aggregated insights by default; a student may opt in to share conversations
   refund-policy:
-    status: open
+    status: decided
     question: Refund policy
     options:
     - Pro-rata
     - First 7 days full
     - None
     recommendation: First 7 days full refund
-    answer: null
+    answer: Full refund within the first 7 days; none after
   hosting-region:
-    status: open
+    status: decided
     question: Hosting region
     options:
     - A cloud region in the pilot market
     recommendation: Follows the pilot market data rules
-    answer: null
+    answer: One US cloud region for the pilot; add an India (Mumbai) region later if latency or data rules need it
   pilot-market:
-    status: open
+    status: decided
     question: Pilot market (first locale pack)
     options:
     - Where the 20 anchor teachers are, e.g. India or global English
     recommendation: Decide in the Validate phase
-    answer: null
+    answer: US and India; locale packs en-US and en-IN (English, Hindi, Hinglish)
   pilot-subjects:
-    status: open
+    status: decided
     question: Pilot subjects and anchor teachers
     options:
     - Coding
@@ -125,6 +125,29 @@ decisions:
     - Languages
     - Professional skills
     recommendation: 1–2 subjects with 20 committed teachers
+    answer: Specific practical skills, e.g. personal finance, Marketing 101, start a side hustle; anchor teachers to be signed in the Validate phase
+  live-classes:
+    status: decided
+    question: Live classes in the MVP
+    options:
+    - Built into Edmate
+    - Meet or Zoom link
+    recommendation: External link for the MVP
+    answer: The teacher's Google Meet or Zoom link; Edmate schedules it and ingests the recording for transcription
+  product-name:
+    status: decided
+    question: Keep the name Edmate?
+    options: []
+    recommendation: null
+    answer: Keep Edmate
+  entity:
+    status: open
+    question: Is Edmate a company, a social enterprise or a non-profit?
+    options:
+    - Company
+    - Social enterprise
+    - Non-profit
+    recommendation: Decide before payments go live (M10)
     answer: null
   grounding:
     status: decided
@@ -277,7 +300,7 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: review
+  status: done
   risk: risky
   branch: m1/1.2-scoped-repositories
   model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(db,ts)
@@ -322,9 +345,9 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m1/1.6-audit-log
+  model: plan:sonnet
 - id: '1.7'
   milestone: M1
   title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
@@ -376,7 +399,7 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: review
+  status: done
   branch: m2/2.3-router
   model: plan:sonnet build:opus-5.5/medium review:sonnet(ts,silent)
 - id: '2.4'
@@ -387,9 +410,9 @@ tasks:
   - '1.1'
   - '2.2'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m2/2.4-metering
+  model: plan:sonnet
 - id: '2.5'
   milestone: M2
   title: 'Limits: rolling 24-hour message limit per package; monthly cost alarm per teacher that alerts staff and the teacher, and pauses free packages only (paid students keep access until a staff decision)'
@@ -428,9 +451,9 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: review
+  status: done
   branch: m3/3.1-pipeline-runner
-  model: plan:opus build:opus-5.5/medium review:sonnet(ts,silent)
+  model: plan:opus build:opus-5.5/medium review:sonnet(ts,silent)+opus(safety)
 - id: '3.2'
   milestone: M3
   title: '`admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit'
@@ -557,11 +580,11 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: running
+  status: review
   needs_decision:
   - judge-model
   branch: m3/3.12-eval-runner
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(ts,silent)
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'

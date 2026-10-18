@@ -1,5 +1,6 @@
 // Data model rows: sessions / messages, turn_traces, usage_ledger, evidence_events /
 // learner_profiles, teacher_questions.
+import type { LearnerProfile, SourceRef, TurnTrace } from '@edmate/contracts';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -63,7 +64,7 @@ export const messages = pgTable(
     role: messageRole('role').notNull(),
     text: text('text').notNull(),
     /** SourceRef[] shown under an agent answer. */
-    sources: jsonb('sources'),
+    sources: jsonb('sources').$type<SourceRef[]>(),
     ...timestamps(),
   },
   (t) => [index('messages_session_id_created_at_idx').on(t.sessionId, t.createdAt)],
@@ -77,7 +78,7 @@ export const turnTraces = pgTable(
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id),
-    steps: jsonb('steps').notNull(),
+    steps: jsonb('steps').$type<TurnTrace['steps']>().notNull(),
     model: text('model').notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
@@ -148,9 +149,11 @@ export const learnerProfiles = pgTable(
     lang: text('lang').notNull(),
     /** Topic id -> { p, n, updatedAt }. */
     mastery: jsonb('mastery')
+      .$type<LearnerProfile['mastery']>()
       .notNull()
       .default(sql`'{}'::jsonb`),
     mistakes: jsonb('mistakes')
+      .$type<LearnerProfile['mistakes']>()
       .notNull()
       .default(sql`'[]'::jsonb`),
     lastSummary: text('last_summary'),

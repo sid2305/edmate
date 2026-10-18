@@ -10,6 +10,323 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Minimum learner age · decided by you · risk: high
+Decided: Learners are 13+. In the US no parental consent is needed (COPPA covers under-13 only); in India 13–17 need verifiable parental consent (DPDP), so the age gate asks country and birth year.
+Why: The product needs nothing that requires 18+; school-age learners widen reach. India's DPDP treats under-18s as children.
+Alternatives: 18+ only; 13+ with no consent anywhere (rejected for the India legal risk).
+Reversible: Yes, but raising the age later means offboarding existing learners. Note for 1.7 and M6: DPDP also bars tracking and behavioural monitoring of children, so learner memory for India under-18s needs a check before it ships.
+
+### 18 Oct 2026 · Pilot market · decided by you · risk: high
+Decided: The pilot runs in the US and India, with locale packs en-US and en-IN (English, Hindi, Hinglish).
+Why: Keep focus on two markets rather than global; the Hindi and Hinglish evals already cover India.
+Alternatives: India only; global English; wait for the Validate phase.
+Reversible: Yes; more locale packs can be added later.
+
+### 18 Oct 2026 · Payment providers · decided by you · risk: high
+Decided: Razorpay in India (UPI AutoPay, Route split payouts) and a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax, both behind the one Payments port.
+Why: Recurring payments in India mostly run on UPI AutoPay, which merchants of record do not support; in the US a merchant of record removes state sales-tax work.
+Alternatives: Razorpay plus Stripe Connect; Stripe in both markets.
+Reversible: Yes; the Payments port keeps providers swappable.
+
+### 18 Oct 2026 · Hosting region · decided by you · risk: high
+Decided: One US cloud region for the pilot; add an India (Mumbai) region later if latency or data rules need it.
+Why: One stack is cheapest; DPDP does not require this data to stay in India.
+Alternatives: US and India regions; India only.
+Reversible: Yes, with a data migration.
+
+### 18 Oct 2026 · Pilot subjects · decided by you · risk: medium
+Decided: The pilot targets specific practical skills, e.g. personal finance, Marketing 101 and starting a side hustle; anchor teachers are signed in the Validate phase.
+Why: Narrow, practical courses suit daily practice with a teacher's agent.
+Alternatives: Coding, exam prep, languages, professional skills.
+Reversible: Yes. Personal finance falls under the regulated-subject advice guardrail and its eval suite.
+
+### 18 Oct 2026 · Teacher view of conversations · decided by you · risk: medium
+Decided: Teachers see aggregated insights by default; a student may opt in to share conversations.
+Why: Protects student privacy while still giving teachers useful signal.
+Alternatives: Aggregated only; full conversations.
+Reversible: Yes.
+
+### 18 Oct 2026 · Refund policy · decided by you · risk: medium
+Decided: Students get a full refund within the first 7 days; none after.
+Why: Simple and fair for trying a teacher; the board's recommendation.
+Alternatives: Pro-rata; no refunds.
+Reversible: Yes, for new subscriptions.
+
+### 18 Oct 2026 · Moderation · decided by you · risk: medium
+Decided: Provider moderation where available, a local classifier otherwise.
+Why: Uses the strongest check each provider offers without running a GPU; the board's recommendation.
+Alternatives: Classifier only; self-hosted Llama Guard.
+Reversible: Yes.
+
+### 18 Oct 2026 · Live classes · decided by you · risk: low
+Decided: Live classes use the teacher's Google Meet or Zoom link; Edmate schedules them and ingests the recording for transcription.
+Why: Far less work and cost than built-in video.
+Alternatives: Built-in video.
+Reversible: Yes.
+
+### 18 Oct 2026 · Product name · decided by you · risk: low
+Decided: Keep the name Edmate.
+Why: Your call.
+Alternatives: Rename before launch.
+Reversible: Yes, before launch.
+
+### 18 Oct 2026 · Deferred: revenue share, default model mix, legal entity · decided by you · risk: low
+Decided: Revenue share and floor price and the default model mix wait for the cost and eval data from 7.6; the legal entity (company, social enterprise or non-profit) is decided before payments go live.
+Why: Each needs data or context that does not exist yet.
+Alternatives: Set them now.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.3 Fallback rule collapses to one check · decided by planner · risk: low
+Decided: the router falls back only when the error is a `GatewayError` with `retryable: true`, nothing has been yielded yet for this `stream()` call, and a capable fallback adapter is configured. Everything else re-throws as is.
+Why: `truncated`/`content_filter` are only ever paired with `retryable: false` in `adapters/errors.ts`, so checking `retryable` already covers "never fall back on a cut-off or filtered answer".
+Alternatives: also check `reason` explicitly.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router takes already-built adapters; a separate factory resolves ModelPolicy · decided by planner · risk: low
+Decided: `Router` only sees `ModelAdapter` instances; `createRouter(policy, factories)` is the only place that turns policy strings into adapters.
+Why: keeps fallback and capability logic testable with plain fakes and free of key or base-URL concerns.
+Alternatives: one class that resolves the policy and routes.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Capability mismatch fails closed, never reroutes to fallback · decided by planner · risk: low
+Decided: if the tier's adapter lacks a capability the request needs, the router throws a `validation` `GatewayError` before any call and does not try the fallback.
+Why: it is a policy configuration bug, not a transient failure; rerouting would hide it.
+Alternatives: try the fallback's capabilities before giving up.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router tests reuse harness/testing via a devDependency · decided by planner · risk: low
+Decided: `@edmate/gateway` gains `@edmate/harness: workspace:*` as a devDependency; router tests wrap `ScriptedGateway` and reuse `scriptedStreamProviderError`.
+Why: the 2.6 fixtures name this task as their consumer; rule 3 limits what harness imports, not who uses its test helpers.
+Alternatives: duplicate a script player in `packages/gateway/test`.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 embed() is served by the main tier's adapter · decided by builder · risk: low
+Decided: `Router.embed` uses `tiers.main` (and the fallback on a retryable error), since the `ModelGateway.embed` port has no tier.
+Why: the plan did not say which tier embeds; main is the agent's primary adapter. Embeddings are platform-wide config, so a deployment that needs them routes `main` to an embedding-capable adapter or uses a separate gateway for indexing. With `DEFAULT_MODEL_POLICY` (Anthropic, no embeddings) `embed` throws `validation` without calling the provider.
+Alternatives: the small tier; a separate embedding adapter in `RouterOptions` (would need a config shape the contract does not have).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Provisional default model ids · decided by builder · risk: low
+Decided: `DEFAULT_MODEL_POLICY` = Anthropic `claude-haiku-4-5` (small) and `claude-sonnet-4-5` (main), no fallback; frozen and headed PROVISIONAL until 7.6.
+Why: lead answer Q3 accepted a provisional Anthropic default; these ids match the ones already used in gateway tests.
+Alternatives: a synthetic `unconfigured` provider that forces every caller to override.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router coverage held at 100% · decided by builder · risk: low
+Decided: `vitest.config.ts` adds a 100% threshold for `src/router/**`, beside keys and adapters.
+Why: the fallback rule decides whether a second model may answer; every branch should stay tested.
+Alternatives: the package's 80% default.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.1 Clock and IdSource are harness types, not contracts ports · decided by planner · risk: low
+Decided: `Clock`, `Cancel` and `IdSource` live in `packages/harness/src/pipeline/clock.ts`. `harness/testing`'s `Clock` is now `Pick<Clock, 'sleep'>`.
+Why: They are parameters of the harness entry point, not adapters that db, gateway or worker implement. Every caller already imports the harness, and contracts stay frozen.
+Alternatives: A contracts port by ADR.
+Reversible: Yes (by ADR later).
+
+### 18 Oct 2026 · 3.1 No production clock or id adapters in the harness · decided by planner · risk: low
+Decided: 3.1 ships no `Date.now`/`setTimeout`/`randomUUID` adapters. The first real caller (3.9) provides them.
+Why: They need real timers and Node or DOM lib types, which the harness tsconfig doesn't have.
+Alternatives: Ship them in the harness behind a lib change.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Stubs fail closed · decided by planner · risk: low
+Decided: Every unbuilt step throws `StepNotImplementedError`, so the runner applies that step's policy. The only stub that returns data is `route.onFailure`, and that data is the spec's own default (`on_task`/`none`). `decide.fallback` throws too, because an `ask` decision needs a composed prompt (3.5/3.6).
+Why: A stub that succeeds (for example `entitle`) would fail open in production.
+Alternatives: Happy-path stubs.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Only generate may emit events · decided by builder · risk: low
+Decided: The concurrent steps and escalate get no `emit`. The runner sends `safety`, the escalate reply, `replace`, `done` and `error` itself. Events from `generate` are checked against `TurnEventSchema`. `done`/`error` from a step are invalid, and events sent after a step's timeout are dropped.
+Why: Event order never depends on scheduling, and a failed step can't leave a stream half-written.
+Alternatives: Give escalate an `emit` (the plan sketch).
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Escalate beats block · decided by planner · risk: medium
+Decided: After the concurrent group, a preGuard `escalate` or a route intent of `distress` (including from `route.onFailure`) escalates. This happens even when preGuard blocked or failed.
+Why: A distressed student must never just be blocked.
+Alternatives: Block first.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Meter still runs after escalate and block · decided by planner · risk: low
+Decided: `meter` runs whenever the turn has usage, including escalated and blocked turns. It is skipped when there is no usage.
+Why: § Model gateway says every call is metered. "Skip to step 11" would lose the small-model usage from steps 3 and 4.
+Alternatives: Skip meter on escalate.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Error codes where the spec names none · decided by planner · risk: low
+Decided:
+- admit throw or timeout → `rate_limited`, retryable.
+- entitle throw or timeout → `no_access`, retryable. An invalid or mismatched entitlement → `no_access`, not retryable.
+- preGuard failure → `guard_blocked`, retryable. A block verdict → `guard_blocked`, not retryable.
+- generate failure, or a runner bug → `provider_error`, retryable.
+- An invalid TurnContext even after the fallback → `no_access`, not retryable.
+Why: There is no `internal` code and contracts are frozen.
+Alternatives: A new error code by ADR.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Runner checks the entitlement against the turn · decided by builder · risk: low
+Decided: Besides the schema check, the runner refuses (`no_access`) an entitlement whose `studentId` or `agentId` differs from the input, or whose status is `paused` or `ended`.
+Why: Defence in depth: a buggy `entitle` (3.2) can't give one student another student's package.
+Alternatives: Trust `entitle` entirely.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Step results are schema-checked · decided by builder · risk: low
+Decided: Every step result is parsed with a zod schema built from the contracts (`results.ts`). A result that fails counts as the step failing. Guard trace entries are strict (`name`, `ok`, `action` only).
+Why: A buggy step hits its failure policy instead of passing bad data along. No step can put guard reason text into a trace (ADR-0003).
+Alternatives: Trust the TypeScript types.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Generate: 15 s per attempt; `replace ''` before a retry after streamed tokens · decided by planner · risk: low
+Decided: Each generate attempt gets its own 15 s. If the first attempt had streamed tokens, `replace { text: '' }` is sent before the retry. A `TurnAbort` is final and is not retried.
+Why: The student never sees two half-replies. A cost-ceiling abort must not spend more.
+Alternatives: One 15 s budget for both attempts.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Alert retry: 250 ms doubling, 30 s cap, no attempt limit, 5 s per attempt · decided by builder · risk: low
+Decided: `AlertSink.raise` is retried on the injected clock with backoff starting at 250 ms, doubling to a 30 s cap, with no attempt limit. Each attempt times out after 5 s. The alert is dispatched before the reply is sent, and `finished` waits for delivery. Each failed attempt is listed in `finished.background`.
+Why: This is the literal reading of "retried until delivered". The 5 s per-attempt timeout (the builder's addition) stops a hanging sink from blocking retries. Durable delivery is 4.3's worker.
+Alternatives: A bounded attempt count.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 An invalid TurnContext is treated as a buildContext failure · decided by planner · risk: medium
+Decided: If `TurnContextSchema` (retrieved ⊆ allowed modules, same teacher, entitlement matches pkg/agent) rejects the assembled context, the runner retries with the step 6 fallback context and marks buildContext `fallback`. If that also fails, the turn ends with `no_access`. `decide` never sees an invalid context.
+Why: An access-filter bug degrades to `ask_teacher` instead of leaking locked material.
+Alternatives: End every such turn with an error.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Traces for turns that end early · decided by lead (plan Q1) · risk: low
+Decided: Turns rejected at admit or entitle get no trace and no commit. Escalated turns are traced with intent `distress`. Escalated, blocked and errored-before-decide turns get move `redirect`. A turn whose scrub failed uses intent `on_task`.
+Why: `TurnTrace.intent`/`move` are required, and a rejected turn never really happened (rate-limit spam would flood traces).
+Alternatives: A trace for every request.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 All of buildContext runs in the concurrent group · decided by lead (plan Q2) · risk: low
+Decided: All of step 6 runs alongside preGuard and route, with one 300 ms budget.
+Why: This is a superset of "the retrieval part of 6", and it avoids a second budget after the group.
+Alternatives: Only retrieval concurrent.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Fallback texts are injected · decided by lead (plan Q3) · risk: low
+Decided: `PipelineDeps.fallbackReplies` supplies `safeReply(lang)` and `distress(lang, locale)`. If one of these throws, the bug is reported in `finished`. postGuard then uses an empty text. escalate uses the built-in last-resort reply (fix round 1). The `safety` event, `done` and alert delivery still happen.
+Why: The harness can't use next-intl. The texts come from 3.10/3.11 packs.
+Alternatives: Hard-coded English.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 meter and commit never see unscrubbed text · decided by builder · risk: medium
+Decided: Background steps get the scrubbed input. If the scrub failed, `CommitRecord.input` is `null` and `env.input` has no `text`.
+Why: PII the scrub couldn't remove must never be persisted.
+Alternatives: Store the raw input.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Built-in last-resort distress reply · decided by lead (fix round 1, silent-failure-hunter) · risk: medium
+Decided: When the escalate step gives no reply text and `fallbackReplies.distress` throws or returns empty, the runner sends `LAST_RESORT_DISTRESS_REPLY`. This constant is built into the runner, is country-neutral and has no numbers. Its wording was set by safety-reviewer in fix round 2: it says "I'm an AI" and points to someone you trust and local emergency services. The trace marks escalate `failed`, and the alert, message and trace are still saved.
+Why: A distressed student must never get an empty reply. A constant can't fail the way an injected text source can.
+Alternatives: An injected text only (the original design); end with an error.
+Reversible: Yes. The text should be reviewed by the safety reviewer and replaced by the 3.10/3.11 pack text paths, never removed.
+
+### 18 Oct 2026 · 3.1 Injected distressCheck when route.onFailure fails · decided by lead (fix round 1, silent-failure-hunter) · risk: medium
+Decided: `PipelineDeps.distressCheck(text, lang): boolean` is a required dependency. The runner calls it on the scrubbed text when `route.onFailure` throws or returns invalid data, and a hit escalates the turn. If the check also throws, the turn uses `on_task`/`none`, route is marked `failed` in the trace, and both errors are listed in `finished.background`.
+Why: "Distress keywords still escalate" must hold even when the route fallback itself breaks.
+Alternatives: Only `ROUTE_DEFAULT` (the original design); a check hard-coded in the harness (keywords belong in locale packs).
+Reversible: Yes. 3.3/4.3 provide the real keyword check, and the caller wires it in.
+
+### 18 Oct 2026 · 3.1 Distress keyword check on the raw text when the scrub fails · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: When the scrub throws or times out, the runner runs `deps.distressCheck` in-process on the raw text. On a hit, it raises a runner-built alert, sends the last-resort reply and saves the commit (with `input: null`) and the trace. No step runs on the raw text. The raw text is never stored, traced or reported, and a check failure is reported as a generic error.
+Why: A failed scrub must not silently block a student in distress. The keyword check is local code with no model call, so the raw text never leaves the process.
+Alternatives: Always block on a scrub failure (the original design); run the escalate step on the raw text.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Distress keyword check whenever preGuard is not ok · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: When preGuard throws, times out or returns an invalid result, and route did not say distress, the runner runs `distressCheck` on the scrubbed text. A hit escalates instead of blocking.
+Why: A classifier timeout must not turn a distress message into a plain block.
+Alternatives: Rely on route alone.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Building the alert never breaks the escalation · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: The runner-built alert is tried twice. Each failure is listed in `finished.background` (`alert`), and the trace marks escalate `failed`. The caring reply, the safety event and `done` are always sent. If both attempts fail, the turn is saved without an alert.
+Why: Previously a throwing id source sent `provider_error` to a distressed student, and no alert was raised.
+Alternatives: End with an error.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Review · decided by team lead · risk: low
+Decided: Two unused cancel sources in packages/harness/src/pipeline/runner.ts (routeFallback, backgroundStep) stay as they are. If building the alert fails twice, the alert worker (4.3) must raise a minimal alert or a critical ops event; failed-attempt usage is metered by the orchestrator (3.7).
+Why: Nothing subscribes to those cancel sources, so they are harmless; alert delivery and metering belong to their own tasks.
+Alternatives: Cancel them for consistency; handle the double alert failure in the runner.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Unexpected database errors are scrubbed into RepositoryError('failed') · decided by tdd-guide (fix round 1) · risk: low
+Decided: Every repository method runs inside `guarded()`, applied to all methods by `createRepositories`. Any error that is not a `RepositoryError` becomes `RepositoryError('failed', method)` with code `provider_error` (the contracts have no database-specific code) and a `ScrubbedDbError` cause holding only the driver's error code (SQLSTATE or Node code) and constraint name; the Drizzle/pg error with its SQL, params and detail is dropped. `messages.append` reports a duplicate message id as `not_found`.
+Why: Security review: Drizzle's "Failed query: … params: …" message quotes student and teacher ids and message text; a duplicate-id `invalid` let ids in other sessions be probed.
+Alternatives: Redact the message text with regexes (fragile); keep the original as a hidden property; generate message ids server-side (the frozen TranscriptStore port passes the caller's id).
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Isolation enforced by required scopes in the repositories · decided by planner · risk: high
+Decided: Every repository method takes a validated `TeacherScope` or `StudentScope` first and puts it in the WHERE clause of the same statement; messages and turn traces are scoped through a join on `sessions`; another scope's row reads as missing (`null`/`[]`) and writes to it throw `not_found`; frozen ports without a scope parameter (`TranscriptStore`) are bound to a scope at construction; the root `@edmate/db` export has no raw database handle or schema (`@edmate/db/internal` is for migrations, seed and tests). A typed case table makes the isolation test fail to compile when a method has no case.
+Why: Data model rule "repositories require the right scope"; no RLS (1.1 decision); ports are frozen (ADR-0002).
+Alternatives: Postgres RLS; changing the ports to take a scope (ADR); scope checks in the web layer only.
+Reversible: Yes, but every caller binds scopes this way from 1.3 on.
+
+### 18 Oct 2026 · 1.2 Pool limits from env, invalid values throw · decided by planner · risk: low
+Decided: `DATABASE_POOL_MAX` (10, 1..100), `DATABASE_IDLE_TIMEOUT_MS` (30 000), `DATABASE_CONNECT_TIMEOUT_MS` (5 000), `DATABASE_STATEMENT_TIMEOUT_MS` (15 000); fixed idle-in-transaction timeout 30 s and `application_name=edmate`; an invalid value throws at startup; the migrator uses one connection and no statement timeout; idle client errors are logged redacted, not thrown.
+Why: 1.1 review deferral (c); a silent default would hide a misconfiguration.
+Alternatives: No limits (pg defaults); clamping bad values.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Typed jsonb columns, parsed on read · decided by planner · risk: low
+Decided: `.$type<>()` ties `agent_versions.config`, `package_versions.config`, `messages.sources`, `turn_traces.steps`, `learner_profiles.mastery`/`mistakes` to contract types (no migration); every row leaving a repository is parsed with its contract schema and a mismatch with its own columns throws `integrity`. `sessions.help_state`, `eval_results.details`, `insights.payload`, `audit_log.before/after` and trust `staff_actions` stay `unknown` until their owners (3.5, 7.x, 11.3, 1.6, 12.x).
+Why: 1.1 review deferral (a); a corrupted or mis-owned row must never be returned.
+Alternatives: Trust stored jsonb.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Contracts and zod become runtime dependencies of @edmate/db · decided by planner · risk: low
+Decided: `@edmate/contracts` (workspace) and `zod` 4.6.7 move from devDependencies to dependencies.
+Why: Repositories parse scopes, inputs and rows at runtime.
+Alternatives: Hand-written validators.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Exhaustive grid instead of a property-testing library · decided by planner · risk: low
+Decided: The isolation test enumerates every actor x target over a two-teacher, two-student seed plus 20 seeded-random ids per read method; no new dependency.
+Why: The seed is small enough to cover every combination exactly.
+Alternatives: fast-check.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Message history ties ordered by id · decided by planner (lead accepted) · risk: low
+Decided: `history` orders by `(created_at desc, id desc)` and returns the page oldest first; no sequence column.
+Why: Lead answer Q4; the pipeline gives student and agent messages different timestamps.
+Alternatives: An additive `bigserial seq` migration.
+Reversible: Yes (3.8 may add a sequence).
+
+### 18 Oct 2026 · 1.2 RepositoryError kinds and codes; constraint violations translated · decided by tdd-guide · risk: low
+Decided: `scope` → `forbidden`, `not_found` → `not_found`, `invalid` → `validation`, `integrity` → `validation`. Writes translate a foreign-key violation to `not_found` (for example a scope id that is not a user) and a unique violation to `invalid` (an existing immutable package version); a duplicate message id is `not_found` and all other driver errors become `failed` (fix round 1, entry above). Messages carry the method and kind only.
+Why: Driver messages quote row values (ids, text); a public repo's logs must not carry them.
+Alternatives: Pass driver errors through; a separate `conflict` kind.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Ownership checks: INSERT … SELECT, or KEY SHARE check plus insert in one transaction · decided by tdd-guide · risk: low
+Decided: Single-owner writes (sessions, messages, turn traces, package versions, teacher questions) are `INSERT … SELECT … FROM <owner> WHERE <scope>` built with `sql` templates and explicit casts. Set checks (package `moduleIds`, evidence `topicId`s, question `similarIds`) select the ids `FOR KEY SHARE` in the same transaction; any id that is missing or another teacher's makes the whole write fail with `scope`.
+Why: Drizzle's `insert().select()` needs every column in table order; the template keeps the scope and the insert in one statement without `sql.raw`.
+Alternatives: Check then insert without a lock.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Repository coverage enforced only when the integration suite runs · decided by planner (lead accepted) · risk: low
+Decided: `vitest.config.ts` probes Postgres (or `CI=true`); when the suite runs, `src/repositories/**` must have 100% lines, functions and statements and 90% branches; otherwise that folder is left out of coverage so local runs without Docker stay green. CI always runs it.
+Why: Lead answer Q3.
+Alternatives: Always enforce (red without Docker); never enforce.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Small API limits not in the spec · decided by tdd-guide · risk: low
+Decided: `teacherQuestions.listForStudent` returns at most the newest 200; `listForTeacher` takes a required `status` and a `limit` of 1..200; `teacherQuestions.open` rejects blank text and text over 8,000 characters; `sessions.get` returns a `SessionRow` with `helpState: unknown`.
+Why: Bounded reads and no empty questions in a teacher's inbox.
+Alternatives: Unbounded lists; accept any string.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Review · decided by team lead · risk: low
+Decided: Scope types in packages/db/src/repositories/scope.ts stay structural (not branded). The composite index for a student's questions waits for the questions inbox (8.9).
+Why: The scope is a required first argument and every method re-validates it at runtime, enforced by a test over all 16 methods; listForStudent is capped at 200.
+Alternatives: Branded scope types; add the index now.
+Reversible: Yes.
+
 ### 18 Oct 2026 · Transcription · decided by you · risk: low
 Decided: Live-class recordings are transcribed by a hosted speech-to-text API behind the Transcriber port for the MVP.
 Why: No GPU to run, fastest to ship; the board's recommendation.

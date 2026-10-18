@@ -346,13 +346,13 @@ The biggest risk is the empty marketplace: students come for good teachers, and 
 
 ### Open questions for you
 
-- [ ] Are the first learners **18+ only** (recommended), or school students too?
-- [ ] Which subjects or kinds of teacher anchor the pilot (coding, exam prep, languages, professional skills)?
+- [x] Are the first learners **18+ only** (recommended), or school students too? **13+; India 13–17 with parental consent (18 Oct 2026).**
+- [x] Which subjects or kinds of teacher anchor the pilot (coding, exam prep, languages, professional skills)? **Specific practical skills, e.g. personal finance, Marketing 101, start a side hustle (18 Oct 2026).**
 - [ ] Business model and Edmate's share; and is Edmate a company, a social enterprise or a non-profit?
-- [ ] Do teachers see individual student conversations, or only aggregated insights unless the student shares?
-- [ ] Live classes: built into Edmate, or a Google Meet or Zoom link in the MVP?
-- [ ] Refund policy for students.
-- [ ] Keep the name "Edmate"?
+- [x] Do teachers see individual student conversations, or only aggregated insights unless the student shares? **Aggregated; students may opt in (18 Oct 2026).**
+- [x] Live classes: built into Edmate, or a Google Meet or Zoom link in the MVP? **Meet or Zoom link (18 Oct 2026).**
+- [x] Refund policy for students. **Full refund in the first 7 days (18 Oct 2026).**
+- [x] Keep the name "Edmate"? **Yes (18 Oct 2026).**
 
 ## What changes from v0.2
 
