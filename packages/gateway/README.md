@@ -20,8 +20,8 @@ manager and are never logged, stored in the DB or returned by any API.
   (`src/adapters`, task 2.2) call it, when they build a client. A test enforces this.
 - **Restart to rotate.** Keys are read once.
 
-| Variable | Provider |
-|---|---|
+| Variable                           | Provider                                           |
+| ---------------------------------- | -------------------------------------------------- |
 | `EDMATE_OPENAI_COMPATIBLE_API_KEY` | Any OpenAI-compatible endpoint (covers OpenRouter) |
 
 The main provider's variable is added by task 2.2. Variables use the `EDMATE_` prefix, not SDK

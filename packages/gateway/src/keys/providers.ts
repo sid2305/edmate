@@ -2,10 +2,14 @@
 // A provider can need several secrets (say a key plus a credentials JSON), so each entry maps
 // fields to variables. Variables use the EDMATE_ prefix, not SDK defaults such as
 // OPENAI_API_KEY, so a key can reach an SDK only through this module.
-// The main provider's entry is added by task 2.2.
+// Anthropic is the main provider (decision log, 18 Oct 2026); openai-compatible covers
+// OpenRouter and self-hosted servers.
 import type { Secret } from './secret.js';
 
 export const PROVIDER_KEYS = {
+  anthropic: {
+    apiKey: { variable: 'EDMATE_ANTHROPIC_API_KEY' },
+  },
   'openai-compatible': {
     apiKey: { variable: 'EDMATE_OPENAI_COMPATIBLE_API_KEY' },
   },
