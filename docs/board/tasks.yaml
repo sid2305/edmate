@@ -376,9 +376,9 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: running
+  status: review
   branch: m2/2.3-router
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(ts,silent)
 - id: '2.4'
   milestone: M2
   title: 'Metering: usage rows per call with teacher, package, student and source; `prices.yaml` in USD'
