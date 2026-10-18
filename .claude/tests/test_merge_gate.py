@@ -316,7 +316,8 @@ class FixRound1(GateCase):
 
     def test_unparseable_findings_fail(self):
         for line in ("- [HIGH] src/a.ts:1 — leak", "- [CRITICAL] [acknowledged] src/a.ts:1 — leak",
-                     "- [low] [maybe] a.ts — x", "* [MEDIUM]: no state"):
+                     "- [low] [maybe] a.ts — x", "* [MEDIUM]: no state",
+                     "[HIGH] src/a.ts:1 — leak", "  [CRITICAL] src/a.ts:1 — leak"):
             with self.subTest(line=line):
                 self.fresh()
                 self.make({"apps/cli.ts": "x\n"}, review=review() + line + "\n")

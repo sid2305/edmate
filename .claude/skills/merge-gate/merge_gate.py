@@ -31,7 +31,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 # Any line that starts with a severity tag is a finding; it must carry a valid state tag.
-SEVERITY_LINE = re.compile(r"^\s*[-*\d.]+\s*\[(CRITICAL|HIGH|MEDIUM|LOW)\](.*)$", re.I | re.M)
+SEVERITY_LINE = re.compile(r"^\s*[-*\d.]*\s*\[(CRITICAL|HIGH|MEDIUM|LOW)\](.*)$", re.I | re.M)
 STATE = re.compile(r"\s*\[(fixed|open|deferred\s+[^\]\s]+|wontfix)\](.*)$", re.I)
 SAFETY = ("packages/harness/src/guardrails/", "content/prompt-packs/", "content/skills/", "evals/suites/safety/", "evals/suites/locked/", "apps/worker/src/alerts/")
 DESTRUCTIVE_SQL = re.compile(
