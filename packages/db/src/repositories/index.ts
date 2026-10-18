@@ -1,6 +1,7 @@
 import type { Db } from '../client.js';
 import { guarded } from './errors.js';
 import { agentVersionsRepo } from './agent-versions.js';
+import { auditRepo } from './audit.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { packageVersionsRepo } from './package-versions.js';
@@ -36,6 +37,7 @@ export function createRepositories(db: Db) {
     learnerProfiles: guardAll('learnerProfiles', learnerProfilesRepo(db)),
     evidenceEvents: guardAll('evidenceEvents', evidenceEventsRepo(db)),
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
+    audit: guardAll('audit', auditRepo(db)),
   };
 }
 
@@ -51,8 +53,10 @@ export type RepositoryMethod = {
 
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
-export type { TeacherQuestionForTeacher } from './map.js';
+export type { AuditRow, TeacherQuestionForTeacher } from './map.js';
+export { AUDIT_JSON_MAX_LENGTH, AUDIT_MAX_LIMIT, type AuditEntryInput } from './audit.js';
 export type { SessionRow } from './sessions.js';
 export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
 export type { LiveSubscription } from './subscriptions.js';
 export { transcriptStoreFor } from './ports.js';
+export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
