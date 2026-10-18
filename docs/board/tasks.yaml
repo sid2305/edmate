@@ -169,7 +169,7 @@ tasks:
     `apps/worker` (BullMQ no-op worker), `apps/cli` (`edmate --version`), all `packages/*` as empty workspaces'
   accept: '`corepack pnpm build && corepack pnpm test && corepack pnpm lint` green; `/api/health` returns 200 in dev; importing `drizzle-orm` from `packages/harness` fails lint.'
   deps: []
-  status: review
+  status: done
   branch: m0/0.1-monorepo-scaffold
   model: plan:sonnet build:opus-5.5/medium review:sonnet+sonnet
 - id: '0.2'

@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by tdd-guide · risk: low
+Decided: Pinned pnpm 12.14.0, Turborepo 2.11.9, ESLint 10.13, Vitest 5.0.5, Next.js 16.4.2, React 19.3.1, BullMQ 6.3.16, Node 22.x. TypeScript 6.0.3, not 7, because the ESLint TypeScript plugin doesn't support 7 yet.
+Why: Newest stable versions that work together on Node 22.
+Alternatives: TypeScript 7 without type-aware linting.
+Reversible: Yes, by bumping versions.
+
+### 17 Oct 2026 · 0.1 Harness purity rule · decided by tdd-guide · risk: medium
+Decided: Two narrow exceptions to the harness import rule: `vitest` in test files only, and tooling config files at the harness root (eslint.config.js, vitest.config.ts). Everything else fails closed, including relative paths that leave the package, unreadable import paths and indirect use of `require`.
+Why: Harness tests need vitest and the lint config needs its preset; neither ships as harness code.
+Alternatives: Vitest globals with no exceptions.
+Reversible: Yes.
+
+### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by you · risk: low
+Decided: `packages/payments` is not created as an empty workspace; the payments milestone (M10) creates it.
+Why: Same rule as the other risky folders: no empty placeholders in risky paths.
+Alternatives: An empty shell like contracts, which would also need your approval.
+Reversible: Yes.
+
+### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by planner · risk: low
+Decided: `edmate --version` runs from the built output; no dev-mode entrypoint. The web app gets no Tailwind, shadcn or next-intl yet, only `/api/health` and the minimal pages Next.js needs.
+Why: Matches the acceptance order (build, then test, lint); UI choices belong to the UI tasks.
+Alternatives: A tsx dev entrypoint; wiring the UI stack now.
+Reversible: Yes.
+
+### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by tdd-guide · risk: low
+Decided: pnpm is a root dev dependency (no global install); install scripts are off by default; BullMQ uses its plain-JS fallback instead of a native add-on. Next.js's auto-generated AGENTS.md is off and next-env.d.ts is git-ignored.
+Why: Repo rules forbid global installs; fewer install scripts means less supply-chain risk; the repo's CLAUDE.md already holds agent rules.
+Alternatives: corepack enable; committing generated files.
+Reversible: Yes.
+
+### 17 Oct 2026 · 0.1 Review · decided by team lead · risk: low
+Decided: Two LOW review findings left as they are: the CLI reads its own package.json with an unchecked type cast, and the worker test passes a fake Redis with a type cast.
+Why: Neither handles outside data.
+Alternatives: Validate with Zod; build a typed fake connection.
+Reversible: Yes.
+
 ### 17 Oct 2026 · Tech stack · decided by Claude (lead), at your request · risk: medium
 Decided: Keep TypeScript end to end; no Rust. Revisit only for a single hot spot at scale, as a Rust service behind an existing port, with its own ADR.
 Why: Turns are dominated by model, database and network waits, not our code; one language lets every app share the Zod contracts; the libraries we need (Next.js, Auth.js, AI SDK, Drizzle, BullMQ, payment SDKs) are TypeScript-first; agents and contributors move faster in TypeScript.
