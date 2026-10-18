@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.6 Fixture format and location · decided by planner · risk: low
+Decided: Scripts are hand-written TypeScript data modules in `packages/harness/src/testing/`, typed against the contracts `ModelChunk`/`ModelRequest`. They are not JSON files and not in `evals/fixtures/`.
+Why: Harness purity rules out loading files at runtime. `evals/fixtures/` is for 3.12's recorded live responses, which have a different lifecycle.
+Alternatives: JSON fixtures loaded by path; one fixtures directory shared with the eval runner.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.6 Clock kept local to harness/testing · decided by lead · risk: low
+Decided: `Clock` (`{ sleep(ms): Promise<void> }`) lives in `packages/harness/src/testing/clock.ts`, not in contracts `ports.ts`.
+Why: Only the test double needs it now. Task 3.1 should define the platform-wide clock/id shape and promote it by ADR if needed.
+Alternatives: Add a `Clock` port to contracts now.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.6 Matching per method, predicate first then order · decided by lead · risk: low
+Decided: Each method has its own queue. A call takes the first unused entry whose `match` returns true (in script order). If none matches, it takes the first unused entry without a predicate. Entries are never reused. The `stream()` entry is picked when `stream()` is called, not when it is first iterated.
+Why: Pipeline steps 3, 4 and retrieval run concurrently, so one global call order would make tests flaky.
+Alternatives: One global counter; matching by order only; picking at first iteration.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.6 How a missing script entry fails · decided by builder · risk: low
+Decided: `stream()` with no matching entry throws `ScriptedGatewayError` on the first iteration, the same way a provider failure would surface. `generateObject`/`embed` reject. The error names the method and the 0-based call index for that method. On a predicate miss it adds a redacted snapshot (`tier`, the first 80 chars of `system`, `messageCount`; for `embed`, `textCount` only).
+Why: Callers such as the 2.3 router only need to handle errors in one place, during iteration. The snapshot never carries message text.
+Alternatives: Throw synchronously from `stream()`; return an empty stream.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.6 generateObject validates with the caller's schema · decided by lead · risk: low
+Decided: `generateObject` returns `schema.parse(value)`, so a bad fixture throws a Zod error.
+Why: A malformed fixture fails where it is defined, not later in a caller's test.
+Alternatives: Pass the value through with a cast.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.6 Scripted provider errors and usage record · decided by builder · risk: low
+Decided: A `{ type: 'error', code, message? }` step throws `ScriptedProviderError` carrying a contracts `ErrorCode`. `generateObject`/`embed` entries take an optional `usage`. The gateway exposes `usage`, a list of `{ method, usage }` in replay order that includes stream `usage` chunks.
+Why: 2.3 needs a provider error it can recognise, and 2.4 needs usage from every call type, not only streams.
+Alternatives: Throw a plain `Error`; leave usage on non-stream calls to later tasks.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 1.1 CI Postgres service container on the node job · decided by tdd-guide · risk: high
 Decided: `.github/workflows/ci.yml`'s `node` job runs a `postgres` service (pgvector/pgvector:0.8.1-pg16, pinned by digest,
 health-checked) with a throwaway password, and sets `TEST_DATABASE_URL`. `turbo.json` passes `TEST_DATABASE_URL` and `CI` to

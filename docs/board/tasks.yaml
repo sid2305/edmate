@@ -406,7 +406,7 @@ tasks:
   accept: replays fixtures deterministically, including tool calls and usage.
   deps:
   - M0
-  status: review
+  status: done
   branch: m2/2.6-scripted-gateway
   model: plan:sonnet build:opus-5.5/medium review:sonnet(ts)
 - id: '2.7'
