@@ -463,10 +463,10 @@ tasks:
   - '3.1'
   - M0
   - '3.13'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m3/3.2-admit-entitle
+  model: plan:opus
 - id: '3.3'
   milestone: M3
   title: '`route`: intent and `attempt`, rules first'
