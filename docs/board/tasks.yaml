@@ -217,9 +217,9 @@ tasks:
   accept: the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
   deps:
   - '0.1'
-  status: running
+  status: review
   branch: m0/0.6-devcontainer
-  model: plan:haiku build:opus-5.5/medium
+  model: plan:haiku build:opus-5.5/medium review:sonnet
 - id: '0.7'
   milestone: M0
   title: 'Harness fixes from the 0.1 dry run, rescoped 18 Oct 2026 (the lead decides every merge, no hook prompts): (1) merge_gate.py passes risky branches only when review.md names the required reviewers
