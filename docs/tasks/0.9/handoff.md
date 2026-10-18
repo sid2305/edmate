@@ -85,3 +85,9 @@ Decided: Branch protection still needs `secrets` added to its required checks, a
 Why: GitHub can only require a check that has already reported on main's PRs. Adding it before merge would block this PR.
 Alternatives: None.
 Reversible: Yes.
+
+### 18 Oct 2026 · 0.9 Review · decided by team lead · risk: medium
+Decided: A PR can still rewrite its own job in .github/workflows/ci.yml (GitHub runs the PR's copy of a workflow on pull_request). Accepted: the lead merges only through the local merge hook, which runs main's gate, and every .github change gets security-reviewer.
+Why: Making a workflow untouchable needs org-level required workflows; CODEOWNERS doesn't help when the lead uses the owner account.
+Alternatives: Org-level required workflows; a separate bot account.
+Reversible: Yes.
