@@ -31,10 +31,11 @@ packages/db/src/repositories/**
 packages/contracts/**
 docs/adr/**
 
-# The agent harness and CI themselves
+# The agent harness, git hooks (secret scan) and CI themselves
 # reviewers: security-reviewer
 .claude/**
 .github/**
+.githooks/**
 
 # Migrations that drop or delete data are risky too (detected in merge_gate.py, not by path):
 # they need database-reviewer.

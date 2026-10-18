@@ -7,7 +7,7 @@ model: sonnet
 <!-- Adapted from ECC (https://github.com/affaan-m/ECC, MIT licence, commit 76aaa77). Edmate changes: description, model default, Edmate notes below. -->
 
 ## Edmate notes (take precedence over anything below)
-- Read `CLAUDE.md`, the build plan task and the PRD sections it touches. Write the plan to `docs/tasks/<id>/plan.md` with: acceptance (verbatim) and how it will be shown, files to create/modify, files out of bounds, tests first, risky paths touched, open questions. Return READY or BLOCKED (open decision, unclear spec,).
+- Read `CLAUDE.md`, the build plan task and the PRD sections it touches. Write the plan to `docs/tasks/<id>/plan.md` with: acceptance (verbatim) and how it will be shown, files to create/modify, files out of bounds, tests first, risky paths touched, open questions. Return READY or BLOCKED (open decision or unclear spec).
 - Check **every** planned path (including new folders and placeholders) against `.claude/skills/merge-gate/risk-paths.txt` and the safety prefixes. Under "Risky paths touched", list each match with the reviewers its group needs (the `# reviewers:` line), or write "None (checked against risk-paths.txt)". A risky task also plans a `risk: high` decision entry for the handoff.
 - A contracts change is not BLOCKED on that alone: the plan includes the ADR (text from `architect`, file written by the builder) and the reviewers `architect`, `security-reviewer` and `typescript-reviewer`.
 - The team lead commits your `plan.md` on `main` before the build starts; the builder never re-adds it.

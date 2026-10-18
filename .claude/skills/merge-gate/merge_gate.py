@@ -2,7 +2,8 @@
 """Edmate merge gate: decides whether the team lead may merge a task's branch.
 
   merge_gate.py <task-id>           check the task's branch from the board
-  merge_gate.py --pr <number>       check a GitHub PR (branch m<ms>/<id>-<slug>)
+  merge_gate.py --pr <number>       check a GitHub PR (branch m<ms>/<id>-<slug>; the local branch
+                                    must be at the PR's head commit)
 
 Exit codes: 0 = PASS (lead may merge) · 1 = FAIL (fix first). The lead decides every merge, risky
 ones included (human decision, 18 Oct 2026), so there is no "needs human" exit and no PR label check.
@@ -10,7 +11,7 @@ ones included (human decision, 18 Oct 2026), so there is no "needs human" exit a
 Checks, in order (both modes run the same checks):
   1. docs/tasks/<id>/handoff.md exists and has a "## Decisions" section (may say "None").
   2. docs/tasks/<id>/review.md exists, verdict APPROVE, lists the reviewers.
-  3. Every CRITICAL/HIGH finding is [fixed]; no MEDIUM/LOW finding is still [open]
+  3. Every line starting with a severity tag has a valid state tag; every CRITICAL/HIGH finding is [fixed]; no MEDIUM/LOW finding is still [open]
      (allowed: [fixed], [deferred <task-id>], [wontfix]). A [wontfix] finding needs a decision entry
      (handoff `## Decisions` or main's docs/decisions/log.md) whose heading has the task id and
      that names the finding's file.
@@ -29,9 +30,16 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-FINDING = re.compile(r"^\s*[-*\d.]+\s*\[(CRITICAL|HIGH|MEDIUM|LOW)\]\s*\[(fixed|open|deferred[^\]]*|wontfix)\](.*)$", re.I | re.M)
+# Any line that starts with a severity tag is a finding; it must carry a valid state tag.
+SEVERITY_LINE = re.compile(r"^\s*[-*\d.]+\s*\[(CRITICAL|HIGH|MEDIUM|LOW)\](.*)$", re.I | re.M)
+STATE = re.compile(r"\s*\[(fixed|open|deferred\s+[^\]\s]+|wontfix)\](.*)$", re.I)
 SAFETY = ("packages/harness/src/guardrails/", "content/prompt-packs/", "content/skills/", "evals/suites/safety/", "evals/suites/locked/", "apps/worker/src/alerts/")
-DESTRUCTIVE_SQL = re.compile(r"\b(DROP\s+(TABLE|COLUMN|SCHEMA|INDEX)|TRUNCATE|DELETE\s+FROM)\b", re.I)
+DESTRUCTIVE_SQL = re.compile(
+    r"\b(DROP\s+(TABLE|COLUMN|SCHEMA|INDEX|VIEW|MATERIALIZED\s+VIEW|TYPE|FUNCTION|DATABASE|SEQUENCE|TRIGGER|CONSTRAINT)"
+    r"|ALTER\s+TABLE\b[^;]*?\bDROP\b|TRUNCATE|DELETE\s+FROM|UPDATE\s+\S+\s+SET)\b", re.I)
+# SQL, or JS/TS migration files (which hold SQL in strings), in any migrations/ folder.
+MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
+REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
 
@@ -59,8 +67,27 @@ def matches(path, glob):
     return fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(path, glob.replace("/**", "/*"))
 
 
-def names_reviewer(reviewers, who):
-    return re.search(rf"(?<![\w-]){re.escape(who)}(?![\w-])", reviewers) is not None
+def reviewer_names(review):
+    """Names on the first `Reviewers:` line outside code fences, or None if there is none.
+    The line is a comma-separated list; each item is a name with an optional `(model)` suffix.
+    Any other item ("security-reviewer skipped", "not architect") does not count."""
+    fenced = False
+    for line in (review or "").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+            continue
+        m = None if fenced else re.match(r"Reviewers?:\s*(\S.*)$", line)
+        if m:
+            items = [i.strip() for i in m.group(1).split(",")]
+            return {mm.group(1) for mm in map(REVIEWER_ITEM.fullmatch, items) if mm}
+    return None
+
+
+def changed_paths(branch):
+    """Every path the branch changes, as plain UTF-8 (no quoting), with both sides of a rename."""
+    r = subprocess.run(["git", "-c", "core.quotePath=false", "diff", "--name-only", "-z", "--no-renames", f"main...{branch}"],
+                       cwd=ROOT, capture_output=True, text=True)
+    return [p for p in r.stdout.split("\0") if p] if r.returncode == 0 else []
 
 
 def board_field(task_id, field):
@@ -111,8 +138,7 @@ def evaluate(task, branch, pr=None):
         code, out = sh("git", "show", f"{ref}:{path}")
         return out if code == 0 else None
 
-    _, diff_names = sh("git", "diff", "--name-only", f"main...{branch}")
-    changed = [p for p in diff_names.splitlines() if p]
+    changed = changed_paths(branch)
     if not changed:
         fails.append(f"branch {branch} has no changes against main (or does not exist)")
 
@@ -124,21 +150,25 @@ def evaluate(task, branch, pr=None):
         fails.append("handoff.md has no '## Decisions' section (write 'None' if there were none)")
 
     review = show(f"docs/tasks/{task}/review.md")
-    reviewers = ""
+    reviewers = set()
     if review is None:
         fails.append(f"docs/tasks/{task}/review.md is missing: run the reviewers first")
     else:
         if not re.search(r"^#.*\bAPPROVE\b", review, re.M) or re.search(r"^#.*CHANGES_REQUESTED", review, re.M):
             fails.append("review.md verdict is not APPROVE")
-        m = re.search(r"^Reviewers?:\s*(\S.*)$", review, re.M)
-        if m:
-            reviewers = m.group(1)
-        else:
+        names = reviewer_names(review)
+        if names is None:
             fails.append("review.md does not say which reviewers ran ('Reviewers: ...')")
-        findings = FINDING.findall(review)
+        reviewers = names or set()
+        findings = SEVERITY_LINE.findall(review)
         decision_entries = None
-        for sev, state, rest in findings:
-            sev, state = sev.upper(), state.lower()
+        for sev, after in findings:
+            sev = sev.upper()
+            st = STATE.match(after)
+            if st is None:
+                fails.append(f"a [{sev}] finding has no valid state tag ([fixed|open|deferred <id>|wontfix]): {after.strip()[:80]}")
+                continue
+            state, rest = st.group(1).lower(), st.group(2)
             if sev in ("CRITICAL", "HIGH") and state != "fixed":
                 fails.append(f"a {sev} finding is [{state}]; CRITICAL and HIGH must be fixed and re-verified")
             elif state == "open":
@@ -170,7 +200,7 @@ def evaluate(task, branch, pr=None):
         for who in reviewers_needed:
             needed.setdefault(who, p)
     for p in changed:
-        if "/migrations/" in p and p.endswith(".sql") and DESTRUCTIVE_SQL.search(show(p) or ""):
+        if MIGRATION_FILE.search(p) and DESTRUCTIVE_SQL.search(show(p) or ""):
             risky.append(f"{p} (drops or deletes data)")
             for who in MIGRATION_REVIEWERS:
                 needed.setdefault(who, p)
@@ -182,9 +212,9 @@ def evaluate(task, branch, pr=None):
 
     if risky:
         for who, p in needed.items():
-            if not names_reviewer(reviewers, who):
+            if who not in reviewers:
                 fails.append(f"risky {p}: review.md Reviewers: is missing {who}")
-        if not any("risk: high" in h for h, _ in entries(decisions)):
+        if not any(re.search(r"risk:\s*high\s*$", h) for h, _ in entries(decisions)):
             fails.append("risky change: handoff ## Decisions needs a '### ... risk: high' entry (it reaches the human's skim list)")
 
     lines.append(f"Merge gate for {task} on {branch}" + (f" (PR #{pr})" if pr else ""))
@@ -207,7 +237,7 @@ def main(argv):
     pr = None
     if argv[:1] == ["--pr"] and len(argv) == 2:
         pr = argv[1]
-        code, out = sh("gh", "pr", "view", pr, "--json", "headRefName")
+        code, out = sh("gh", "pr", "view", pr, "--json", "headRefName,headRefOid")
         if code:
             print(f"FAIL  cannot read PR {pr} with gh: {out}")
             return 1
@@ -218,6 +248,15 @@ def main(argv):
             print(f"FAIL  branch {branch} is not m<milestone>/<task-id>-<slug>")
             return 1
         task = m.group(1)
+        # The PR merges GitHub's head, so the local branch the gate reads must be that exact commit.
+        oid = data.get("headRefOid")
+        _, local = sh("git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}")
+        if not oid:
+            print(f"FAIL  gh did not report PR {pr}'s head commit (headRefOid); cannot check what will merge")
+            return 1
+        if oid != local:
+            print(f"FAIL  PR head {oid[:7]} is not local {branch} ({local[:7] or 'missing'}): git fetch the branch and re-run")
+            return 1
     elif len(argv) == 1:
         task, branch = argv[0], board_branch(argv[0])
         if not branch:

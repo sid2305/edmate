@@ -28,16 +28,22 @@ class GateCase(RepoCase):
         all_files.update(files)
         return self.repo.branch(B, all_files)
 
-    def gh_env(self, labels=(), fail=False):
-        """A stub `gh` on PATH that reports the PR's branch (and labels, which the gate ignores)."""
+    def gh_env(self, labels=(), fail=False, oid="auto"):
+        """A stub `gh` on PATH that reports the PR's branch, head commit (by default the local branch
+        head, read when the stub runs) and labels (which the gate ignores)."""
         bindir = self.repo.root.parent / "bin"
         bindir.mkdir(exist_ok=True)
         gh = bindir / "gh"
         if fail:
             gh.write_text("#!/bin/sh\necho 'not logged in'\nexit 1\n")
         else:
-            data = json.dumps({"headRefName": B, "labels": [{"name": n} for n in labels]})
-            gh.write_text(f"#!/bin/sh\necho '{data}'\n")
+            data = {"headRefName": B, "labels": [{"name": n} for n in labels]}
+            if oid == "auto":
+                data["headRefOid"] = "OID"
+            elif oid is not None:
+                data["headRefOid"] = oid
+            text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {B})"')
+            gh.write_text(f"#!/bin/sh\ncat <<EOF\n{text}\nEOF\n")
         gh.chmod(0o755)
         return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}")
 
@@ -277,6 +283,136 @@ class RiskyGroups(GateCase):
     def test_never_exit_3(self):
         self.make({".claude/x": "x\n", "packages/payments/a.ts": "x\n"})
         self.assertNotEqual(self.gate()[0], 3)
+
+
+class FixRound1(GateCase):
+    """Security-review findings on the first version of the gate."""
+
+    def fresh(self):
+        if git(self.repo.root, "branch", "--list", B):
+            git(self.repo.root, "branch", "-D", B)
+
+    def test_non_ascii_path_is_risky(self):
+        self.make({"content/prompt-packs/caf\u00e9.md": "x\n"}, handoff=HIGH)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("risky content/prompt-packs/caf\u00e9.md", out)
+        self.assertIn("missing safety-reviewer", out)
+
+    def test_rename_out_of_risky_path(self):
+        self.repo.write("packages/contracts/src/x.ts", "export const x = 1;\n")
+        self.repo.commit("contracts on main")
+        git(self.repo.root, "checkout", "-q", "-b", B)
+        (self.repo.root / "src").mkdir()
+        git(self.repo.root, "mv", "packages/contracts/src/x.ts", "src/x.ts")
+        for rel, text in self.repo.task_files("9.9", handoff=HIGH).items():
+            self.repo.write(rel, text)
+        self.repo.commit("move")
+        git(self.repo.root, "checkout", "-q", "main")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("risky packages/contracts/src/x.ts", out)
+        self.assertIn("missing architect", out)
+
+    def test_unparseable_findings_fail(self):
+        for line in ("- [HIGH] src/a.ts:1 — leak", "- [CRITICAL] [acknowledged] src/a.ts:1 — leak",
+                     "- [low] [maybe] a.ts — x", "* [MEDIUM]: no state"):
+            with self.subTest(line=line):
+                self.fresh()
+                self.make({"apps/cli.ts": "x\n"}, review=review() + line + "\n")
+                code, out = self.gate()
+                self.assertEqual(code, 1, out)
+                self.assertIn("no valid state", out)
+
+    def test_pr_head_must_match(self):
+        self.make({"apps/cli.ts": "x\n"})
+        code, out = self.gate("--pr", "5", env=self.gh_env())
+        self.assertEqual(code, 0, out)
+        code, out = self.gate("--pr", "5", env=self.gh_env(oid="0" * 40))
+        self.assertEqual(code, 1, out)
+        self.assertIn("PR head 0000000", out)
+        code, out = self.gate("--pr", "5", env=self.gh_env(oid=None))
+        self.assertEqual(code, 1, out)
+        self.assertIn("head commit", out)
+
+    def test_destructive_migrations(self):
+        cases = {
+            "packages/db/migrations/0002.sql": "ALTER TABLE students DROP COLUMN email;",
+            "packages/db/migrations/0003.sql": "DROP VIEW v;",
+            "packages/db/migrations/0004.sql": "DROP MATERIALIZED VIEW mv;",
+            "packages/db/migrations/0005.sql": "DROP TYPE t;",
+            "packages/db/migrations/0006.sql": "DROP FUNCTION f;",
+            "packages/db/migrations/0007.sql": "UPDATE students SET email = NULL;",
+            "packages/db/migrations/0008.sql": "delete from students;",
+            "packages/db/migrations/0009.ts": "await sql`DROP TABLE students`;",
+            "migrations/0010.js": "knex.raw('TRUNCATE students')",
+            "packages/db/drizzle/migrations/0011.sql": "DROP TABLE x;",
+        }
+        for path, body in cases.items():
+            with self.subTest(path=path):
+                self.fresh()
+                self.make({path: body + "\n"}, handoff=HIGH)
+                code, out = self.gate()
+                self.assertEqual(code, 1, out)
+                self.assertIn("drops or deletes data", out)
+                self.assertIn("missing database-reviewer", out)
+
+    def test_safe_migration_with_cascade(self):
+        self.make({"packages/db/migrations/0002.sql": "CREATE TABLE t (id int REFERENCES s ON DELETE CASCADE);\n"})
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_githooks_need_security_reviewer(self):
+        self.make({".githooks/pre-commit": "x\n"}, handoff=HIGH)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing security-reviewer", out)
+        self.fresh()
+        self.make({".githooks/pre-commit": "x\n"}, review=review("security-reviewer"), handoff=HIGH)
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_reviewers_exact_list(self):
+        bad = [
+            "Reviewers: code-reviewer, security-reviewer skipped",
+            "Reviewers: code-reviewer; security-reviewer",
+            "Reviewers: code-reviewer, not security-reviewer",
+        ]
+        for line in bad:
+            with self.subTest(line=line):
+                self.fresh()
+                self.make({".claude/x": "x\n"}, review=f"# r — APPROVE\n{line}\n", handoff=HIGH)
+                code, out = self.gate()
+                self.assertEqual(code, 1, out)
+                self.assertIn("missing security-reviewer", out)
+
+    def test_reviewers_model_suffix_ok(self):
+        text = "# r — APPROVE\nReviewers: code-reviewer (sonnet), security-reviewer (opus)\n"
+        self.make({".claude/x": "x\n"}, review=text, handoff=HIGH)
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+
+    def test_reviewers_in_code_fence_ignored(self):
+        text = "# r — APPROVE\n```\nReviewers: security-reviewer\n```\nReviewers: code-reviewer\n"
+        self.make({".claude/x": "x\n"}, review=text, handoff=HIGH)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("missing security-reviewer", out)
+
+    def test_only_first_reviewers_line(self):
+        text = "# r — APPROVE\nReviewers: code-reviewer\nReviewers: security-reviewer\n"
+        self.make({".claude/x": "x\n"}, review=text, handoff=HIGH)
+        self.assertEqual(self.gate()[0], 1)
+
+    def test_risk_high_must_end_heading(self):
+        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"
+        self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("risk: high", out)
+
+    def test_risk_high_trailing_space_ok(self):
+        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 x · risk: high  \nDecided: x.\n"
+        self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
+        self.assertEqual(self.gate()[0], 0)
 
 
 class Wontfix(GateCase):
