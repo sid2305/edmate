@@ -24,11 +24,13 @@ interface TurnConfigStore {
 }
 ```
 
-It returns the package at `e.packageVersion` and the agent at the version the session is pinned to. No other contract changes.
+It returns the package at `e.packageVersion`, the agent at the version the session is pinned to, the latest version of the style card `agent.styleCardId` (as task 8.4 expects: a teacher's style card edits apply on the next turn) and the locale pack for `e.market`. No other contract changes.
 
 1. **Built in the composition root.** The adapter is assembled from the db repositories (agents, packages, style cards) plus the locale packs, in the app that wires the harness, as ADR-0002 requires for every port.
 2. **Loaded at `entitle`, not `buildContext`.** Step 2 loads the agent, package, style card and locale pack once; `buildContext` loads nothing new. This is a deviation from the earlier Turn pipeline spec, which the build plan now records.
-3. **Fail closed on any mismatch.** `entitle` checks that every loaded object belongs to the entitlement: `agent.id === e.agentId` and `agent.teacherId === e.teacherId`; `pkg.id === e.packageId`, `pkg.teacherId === e.teacherId`, `pkg.agentId === e.agentId` and `pkg.version === e.packageVersion`; `styleCard.id === agent.styleCardId` and `styleCard.teacherId === e.teacherId`; `locale.market === e.market`. A `null` result or any failed check ends the turn with `no_access`.
+3. **The session is checked, never trusted.** `sessionId` comes from the client's `TurnInput`, so a session id is never trusted on its own. `load` returns `null` unless the session row's `studentId === e.studentId`, `teacherId === e.teacherId` and `agentId === e.agentId`, and the session is open (not ended). `entitle` then fails with `no_access`.
+4. **The agent version comes from the session row.** It is the session's `agent_version`, set on the server when the session is created and never taken from the client. `load` returns the agent at exactly that version. `Entitlement` does not change.
+5. **Fail closed on any mismatch.** `entitle` checks that every loaded object belongs to the entitlement: `agent.id === e.agentId` and `agent.teacherId === e.teacherId`; `pkg.id === e.packageId`, `pkg.teacherId === e.teacherId`, `pkg.agentId === e.agentId` and `pkg.version === e.packageVersion`; `styleCard.id === agent.styleCardId` and `styleCard.teacherId === e.teacherId`; `locale.market === e.market`. A `null` result or any failed check ends the turn with `no_access`.
 
 ## Alternatives
 
@@ -41,6 +43,8 @@ It returns the package at `e.packageVersion` and the agent at the version the se
 - One call within `entitle`'s 50 ms budget gives every later step the config it needs.
 - Cross-teacher config cannot reach a turn: the teacher checks fail closed, so a bad adapter or a corrupt row gives `no_access`, not another teacher's agent or material.
 - The in-memory adapter (for `harness/testing`) and the db adapter come in task 3.2. The real locale loader comes in task 3.10; until then the adapter uses the fixture locale pack.
+- Required tests for task 3.2: (a) a session that belongs to another student, teacher or agent, or that has ended, gives `null` from `load` and `no_access` from `entitle`; (b) the agent is loaded at the session row's `agent_version` exactly, and an agent whose `id` or `teacherId` differs from the entitlement gives `no_access`.
+- Extends ADR-0002's port list; ADR-0002 is unchanged because accepted ADRs aren't rewritten.
 - Changing the port's shape later needs another ADR, like any contract.
 
 ## Reviewers

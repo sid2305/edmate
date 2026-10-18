@@ -31,7 +31,15 @@ No other contract types changed. Nothing in `packages/evals` touched.
 
 ## Deviations
 
-- ADR-0002's Decision lists the ports by name and does not list `TurnConfigStore`. I left ADR-0002 alone (accepted ADRs are not edited); ADR-0004 adds the port. The lead can decide whether ADR-0002 needs a "see ADR-0004" note.
+- ADR-0002's Decision lists the ports by name and does not list `TurnConfigStore`. ADR-0002 is unchanged (accepted ADRs aren't rewritten); ADR-0004's Consequences says it extends that list (fix round 1, architect).
+
+## Fix round 1
+
+- security-reviewer 1 (CRITICAL): session ownership and open-session check stated in the `TurnConfigStore` doc comment, ADR-0004 Decision point 3 and build plan Turn pipeline step 2.
+- security-reviewer 2 (HIGH): agent version is the session row's server-set `agent_version`; stated in the doc comment, ADR-0004 point 4 and step 2; both checks listed as required tests for 3.2 in ADR-0004 Consequences.
+- architect 3 (MEDIUM): ADR-0004 Consequences notes it extends ADR-0002's port list.
+- architect 4 (LOW): ADR-0004 says the latest version of `agent.styleCardId` is loaded.
+- No signature or contract type changed; only the `TurnConfigStore` doc comment in `ports.ts`. The Core contracts type block is unchanged.
 
 ## Decisions
 
@@ -39,4 +47,10 @@ No other contract types changed. Nothing in `packages/evals` touched.
 Decided: Contracts gain one additive port, `TurnConfigStore.load(entitlement, sessionId)`, which returns the agent, package, style card and locale pack for the turn, or null. `entitle` calls it and fails closed with `no_access` unless every loaded object belongs to the entitlement's teacher, agent, package version and market. No other contract changes (ADR-0004).
 Why: pre-guards, escalation and the fallback context need the locale pack and style card before `buildContext`, and no port loaded them.
 Alternatives: widen `EntitlementStore.resolve`; a port defined inside the harness (against ADR-0002); four separate stores.
+Reversible: only by ADR.
+
+### 18 Oct 2026 · 3.13 A session id is checked against the entitlement and pins the agent version · decided by team lead · risk: high
+Decided: `TurnConfigStore.load` returns null unless the session row belongs to the entitlement's student, teacher and agent and is still open; `entitle` then fails with `no_access`. The agent is loaded at exactly the session row's `agent_version`, which the server sets when the session is created and never takes from the client, and must match the entitlement's agent and teacher. `Entitlement` does not change. Task 3.2 must test both checks.
+Why: `sessionId` comes from the client, so on its own it could point at another student's session or pin an agent version the student should not get (security review of 3.13).
+Alternatives: add the agent version to `Entitlement`; trust the session id because the entitlement was already resolved.
 Reversible: only by ADR.

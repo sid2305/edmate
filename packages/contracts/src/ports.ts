@@ -39,8 +39,13 @@ export interface EntitlementStore {
 }
 
 /**
- * The config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version
- * (ADR-0004). `entitle` checks every object belongs to the entitlement's teacher; null fails closed.
+ * The config a turn runs on (ADR-0004): pkg at e.packageVersion, agent at exactly the session row's
+ * `agent_version` (set server-side when the session is created, never from the client), the latest
+ * style card for agent.styleCardId, and the locale pack for e.market.
+ * A session id is never trusted on its own: `load` returns null unless the session row's studentId,
+ * teacherId and agentId equal the entitlement's and the session is open (not ended).
+ * `entitle` also checks every loaded object belongs to the entitlement (agent.id === e.agentId,
+ * agent.teacherId === e.teacherId, and so on); null or any mismatch fails closed with `no_access`.
  */
 export interface TurnConfigStore {
   load(
