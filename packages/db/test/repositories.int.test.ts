@@ -11,8 +11,11 @@ import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
+  type AuditEntryInput,
+  type AuditRow,
   createRepositories,
   openDatabase,
+  REDACTED,
   RepositoryError,
   type RepositoryMethod,
   type StudentScope,
@@ -100,6 +103,53 @@ async function onlyPairSees(
     expect(seen(await read(sScope(p))), `${p} reading ${owner}'s write`).toBe(p === owner);
   }
 }
+
+const otherTeacher = (t: Teacher): Teacher => (t === 'A' ? 'B' : 'A');
+const otherStudent = (p: Pair) => studentId(studentOf(p) === '1' ? '2' : '1');
+
+/** A teacher-only audit entry by the teacher itself, tagged with its owner marker. */
+function teacherEntry(t: Teacher, extra: Partial<AuditEntryInput> = {}): AuditEntryInput {
+  return {
+    actor: teacherId(t),
+    actorRole: 'teacher',
+    action: 'agent.update',
+    target: `agent:${ids.agent(t)}`,
+    reason: `[${t}] appended ${++counter}`,
+    before: { status: 'draft' },
+    after: { status: 'live' },
+    ...extra,
+  };
+}
+
+/** A memory change by the scope's student, tagged with its owner marker. */
+function studentEntry(p: Pair, extra: Partial<AuditEntryInput> = {}): AuditEntryInput {
+  return {
+    actor: studentId(studentOf(p)),
+    actorRole: 'student',
+    action: 'profile.reset',
+    target: `profile:${p.toLowerCase()}`,
+    reason: `[${p}] appended ${++counter}`,
+    before: { lastSummary: `[${p}] old` },
+    after: { lastSummary: null },
+    ...extra,
+  };
+}
+
+/** Owner markers of audit rows: columns, reason, before/after. A teacher row naming a student leaks. */
+function auditOwners(rows: AuditRow[], kind: 'teacher' | 'student'): string[] {
+  return rows.flatMap((a) => [
+    kind === 'student'
+      ? pairOfIds(a.studentId ?? '', a.teacherId)
+      : a.studentId === undefined
+        ? teacherOfId(a.teacherId)
+        : 'LEAK:student-row',
+    ...markers(a.reason ?? ''),
+    ...markers(JSON.stringify([a.before ?? null, a.after ?? null])),
+  ]);
+}
+
+/** Over the 10 000-character cap on a serialised before/after. */
+const BIG = { blob: 'x'.repeat(10_001) };
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   'agentVersions.get': {
@@ -521,6 +571,164 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       r.teacherQuestions.listForStudent({ studentId: rid, teacherId: rid }),
     owners: (rows: { text: string; studentId: string; teacherId: string }[]) =>
       rows.flatMap((q) => [pairOfIds(q.studentId, q.teacherId), ...markers(q.text)]),
+  },
+  'audit.appendForTeacher': {
+    scope: 'teacher',
+    op: 'write',
+    // The entry names no other scope: it always lands in the scope's teacher.
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const e = teacherEntry(actor);
+      await r.audit.appendForTeacher(scope, e);
+      return e.reason;
+    },
+    verify: async (r, actor, reason) => {
+      for (const t of TEACHERS) {
+        const rows = await r.audit.listForTeacher(tScope(t), { limit: 200 });
+        expect(
+          rows.some((a) => a.reason === reason),
+          `${t} sees ${actor}'s audit row`,
+        ).toBe(t === actor);
+      }
+      for (const p of PAIRS) {
+        const rows = await r.audit.listForStudent(sScope(p), { limit: 200 });
+        expect(
+          rows.some((a) => a.reason === reason),
+          `${p} sees ${actor}'s row`,
+        ).toBe(false);
+      }
+    },
+    mismatches: (a) => {
+      const other = otherTeacher(a);
+      return [
+        [
+          'an extra key naming another teacher',
+          (r) =>
+            r.audit.appendForTeacher(tScope(a), {
+              ...teacherEntry(a),
+              teacherId: teacherId(other),
+            } as never),
+          'invalid',
+        ],
+        [
+          'another teacher as the acting teacher',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { actor: teacherId(other) })),
+          'scope',
+        ],
+        [
+          'a student acting on teacher-only data',
+          (r) =>
+            r.audit.appendForTeacher(
+              tScope(a),
+              teacherEntry(a, { actor: studentId('1'), actorRole: 'student' }),
+            ),
+          'scope',
+        ],
+        [
+          'an oversized before',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { before: BIG })),
+          'invalid',
+        ],
+        [
+          'an oversized after',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { after: BIG })),
+          'invalid',
+        ],
+        [
+          'a value JSON cannot hold',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { before: { n: 1n } })),
+          'invalid',
+        ],
+        [
+          'a value JSON drops entirely (a function)',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { after: () => 1 })),
+          'invalid',
+        ],
+        [
+          'an empty action',
+          (r) => r.audit.appendForTeacher(tScope(a), teacherEntry(a, { action: '' })),
+          'invalid',
+        ],
+        [
+          'an unknown role',
+          (r) =>
+            r.audit.appendForTeacher(tScope(a), teacherEntry(a, { actorRole: 'admin' as never })),
+          'invalid',
+        ],
+      ];
+    },
+  },
+  'audit.appendForStudent': {
+    scope: 'student',
+    op: 'write',
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const e = studentEntry(actor);
+      await r.audit.appendForStudent(scope, e);
+      return e.reason;
+    },
+    verify: async (r, actor, reason) => {
+      await onlyPairSees(
+        (sc) => r.audit.listForStudent(sc, { limit: 200 }),
+        actor,
+        (x) => (x as AuditRow[]).some((a) => a.reason === reason),
+      );
+      // A student's memory change is in no teacher's own audit list.
+      for (const t of TEACHERS) {
+        const rows = await r.audit.listForTeacher(tScope(t), { limit: 200 });
+        expect(
+          rows.some((a) => a.reason === reason),
+          `${t} sees ${actor}'s row`,
+        ).toBe(false);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'another student as the acting student',
+        (r) => r.audit.appendForStudent(sScope(a), studentEntry(a, { actor: otherStudent(a) })),
+        'scope',
+      ],
+      [
+        'another teacher as the acting teacher',
+        (r) =>
+          r.audit.appendForStudent(
+            sScope(a),
+            studentEntry(a, { actor: teacherId(otherTeacher(teacherOf(a))), actorRole: 'teacher' }),
+          ),
+        'scope',
+      ],
+      [
+        'an extra key naming another student',
+        (r) =>
+          r.audit.appendForStudent(sScope(a), {
+            ...studentEntry(a),
+            studentId: otherStudent(a),
+          } as never),
+        'invalid',
+      ],
+      [
+        'an oversized after',
+        (r) => r.audit.appendForStudent(sScope(a), studentEntry(a, { after: BIG })),
+        'invalid',
+      ],
+    ],
+  },
+  'audit.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.audit.listForTeacher(scope, { limit: 200 }),
+    random: (r, _scope, rid) => r.audit.listForTeacher({ teacherId: rid }, { limit: 200 }),
+    owners: (rows: AuditRow[]) => auditOwners(rows, 'teacher'),
+  },
+  'audit.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.audit.listForStudent(scope, { limit: 200 }),
+    random: (r, _scope, rid) =>
+      r.audit.listForStudent({ studentId: rid, teacherId: rid }, { limit: 200 }),
+    owners: (rows: AuditRow[]) => auditOwners(rows, 'student'),
   },
   // Task 2.4. Writes: any student of a teacher may be billed on that teacher's package, so the
   // owner is the teacher half of the pair; another teacher's package is not_found.
@@ -1110,6 +1318,203 @@ describe.skipIf(!up)(
         ['not_found'],
         'duplicate message id',
       );
+    });
+
+    it('config, staff and memory changes write before/after rows, personal keys redacted', async () => {
+      // Config: teacher A publishes a package version.
+      await repos.audit.appendForTeacher(tScope('A'), {
+        actor: teacherId('A'),
+        actorRole: 'teacher',
+        action: 'package.publish',
+        target: `package:${ids.pkg('A')}`,
+        before: { liveVersion: 1, name: '[A] Old name', moduleIds: [ids.module('A', 1)] },
+        after: { liveVersion: 2, name: '[A] New name', moduleIds: [ids.module('A', 2)] },
+      });
+      // Staff: a staff member verifies teacher B (the payload carries an email it should not).
+      await repos.audit.appendForTeacher(tScope('B'), {
+        actor: 'stf_1',
+        actorRole: 'staff',
+        action: 'teacher.verify',
+        target: `teacher:${teacherId('B')}`,
+        reason: 'documents checked',
+        before: { verificationStatus: 'pending', contact: { email: 'b@example.test' } },
+        after: { verificationStatus: 'verified' },
+      });
+      // Memory: student 2 resets what teacher A's agent remembers.
+      await repos.audit.appendForStudent(sScope('2A'), {
+        actor: studentId('2'),
+        actorRole: 'student',
+        action: 'profile.reset',
+        target: 'profile:2a',
+        reason: 'student requested reset',
+        before: {
+          mastery: { [ids.topic('A')]: { p: 0.5, n: 2 } },
+          mistakes: [{ tag: 'sign', count: 1 }],
+          displayName: 'Student Two',
+        },
+        after: { mastery: {}, mistakes: [] },
+      });
+
+      const [config] = await repos.audit.listForTeacher(tScope('A'), {
+        target: `package:${ids.pkg('A')}`,
+        limit: 1,
+      });
+      expect(config).toMatchObject({
+        actor: 'tch_a',
+        actorRole: 'teacher',
+        action: 'package.publish',
+        teacherId: 'tch_a',
+        before: { liveVersion: 1, name: REDACTED, moduleIds: ['mod_a1'] },
+        after: { liveVersion: 2, name: REDACTED, moduleIds: ['mod_a2'] },
+      });
+      expect(config && 'studentId' in config).toBe(false);
+      expect(config && 'reason' in config).toBe(false);
+      expect(Number.isNaN(Date.parse(config?.ts ?? ''))).toBe(false);
+
+      const [staff] = await repos.audit.listForTeacher(tScope('B'), {
+        target: `teacher:${teacherId('B')}`,
+        limit: 1,
+      });
+      expect(staff).toMatchObject({
+        actor: 'stf_1',
+        actorRole: 'staff',
+        action: 'teacher.verify',
+        reason: 'documents checked',
+        before: { verificationStatus: 'pending', contact: { email: REDACTED } },
+        after: { verificationStatus: 'verified' },
+      });
+
+      const [memory] = await repos.audit.listForStudent(sScope('2A'), {
+        target: 'profile:2a',
+        limit: 1,
+      });
+      expect(memory).toMatchObject({
+        studentId: 'stu_2',
+        teacherId: 'tch_a',
+        action: 'profile.reset',
+        reason: 'student requested reset',
+        before: {
+          mastery: { top_a: { p: 0.5, n: 2 } },
+          mistakes: [{ tag: 'sign', count: 1 }],
+          displayName: REDACTED,
+        },
+        after: { mastery: {}, mistakes: [] },
+      });
+
+      // The stored jsonb itself is redacted: the raw values never reach the table.
+      const stored = await raw.query<{ before: unknown; after: unknown }>(
+        'select before, after from audit_log',
+      );
+      const all = JSON.stringify(stored.rows);
+      for (const secret of ['b@example.test', 'Student Two', 'Old name', 'New name']) {
+        expect(all).not.toContain(secret);
+      }
+    });
+
+    it('audit lists: newest first, optional target filter, limit 1..200', async () => {
+      const sc = tScope('B');
+      const target = `agent:${ids.agent('B')}:order`;
+      await repos.audit.appendForTeacher(sc, teacherEntry('B', { target, action: 'first' }));
+      await repos.audit.appendForTeacher(sc, teacherEntry('B', { target, action: 'second' }));
+      const rows = await repos.audit.listForTeacher(sc, { target, limit: 200 });
+      expect(rows.map((a) => a.action)).toEqual(['second', 'first']);
+      expect(await repos.audit.listForTeacher(sc, { target, limit: 1 })).toHaveLength(1);
+      expect(await repos.audit.listForTeacher(sc, { target: 'agent:nowhere', limit: 5 })).toEqual(
+        [],
+      );
+      // A row with no before/after/reason reads back without those keys.
+      await repos.audit.appendForStudent(sScope('1B'), {
+        actor: 'stf_2',
+        actorRole: 'staff',
+        action: 'safety.review',
+        target: 'session:ses_1b',
+      });
+      const [bare] = await repos.audit.listForStudent(sScope('1B'), {
+        target: 'session:ses_1b',
+        limit: 1,
+      });
+      expect(bare?.action).toBe('safety.review');
+      expect(bare && ['before', 'after', 'reason'].some((k) => k in bare)).toBe(false);
+      for (const bad of [
+        { limit: 0 },
+        { limit: 201 },
+        { limit: 1.5 },
+        {},
+        { limit: 5, target: '' },
+        { limit: 5, target: 'x'.repeat(201) },
+        { limit: 5, extra: 1 },
+      ]) {
+        await expect(repos.audit.listForTeacher(sc, bad as never)).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'audit.listForTeacher',
+        });
+        await expect(repos.audit.listForStudent(sScope('1B'), bad as never)).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'audit.listForStudent',
+        });
+      }
+    });
+
+    it('class instances and toJSON values are redacted as the JSON they become', async () => {
+      class Teacher {
+        name = 'Private Person';
+        status = 'pending';
+      }
+      const at = new Date('2026-10-17T00:00:00Z');
+      await repos.audit.appendForTeacher(tScope('A'), {
+        actor: 'stf_3',
+        actorRole: 'staff',
+        action: 'teacher.reject',
+        target: 'teacher:tch_a:json',
+        before: new Teacher(),
+        after: { at, contact: { toJSON: () => ({ phone: '000', ok: true }) } },
+      });
+      const [row] = await repos.audit.listForTeacher(tScope('A'), {
+        target: 'teacher:tch_a:json',
+        limit: 1,
+      });
+      expect(row?.before).toEqual({ name: REDACTED, status: 'pending' });
+      expect(row?.after).toEqual({ at: at.toISOString(), contact: { phone: REDACTED, ok: true } });
+    });
+
+    it('audit is append-only: no update or delete method exists', () => {
+      expect(Object.keys(repos.audit).sort()).toEqual([
+        'appendForStudent',
+        'appendForTeacher',
+        'listForStudent',
+        'listForTeacher',
+      ]);
+    });
+
+    it('an audit append by a scope whose ids are not users fails closed', async () => {
+      await expectFailsClosed(
+        () =>
+          repos.audit.appendForTeacher(
+            { teacherId: 'tch_ghost' },
+            { actor: 'stf_1', actorRole: 'staff', action: 'x', target: 'teacher:tch_ghost' },
+          ),
+        ['not_found'],
+        'ghost teacher audit',
+      );
+      await expectFailsClosed(
+        () =>
+          repos.audit.appendForStudent(
+            { studentId: 'stu_ghost', teacherId: 'tch_a' },
+            { actor: 'stf_1', actorRole: 'staff', action: 'x', target: 'profile:ghost' },
+          ),
+        ['not_found'],
+        'ghost student audit',
+      );
+    });
+
+    it('a stored audit row that fails its shape throws integrity', async () => {
+      await raw.query(
+        `insert into audit_log (id, actor, actor_role, action, target, teacher_id)
+         values ('al_corrupt', '', 'teacher', 'x', 'integrity:check', 'tch_b')`,
+      );
+      await expect(
+        repos.audit.listForTeacher(tScope('B'), { target: 'integrity:check', limit: 5 }),
+      ).rejects.toMatchObject({ kind: 'integrity', method: 'audit.listForTeacher' });
     });
 
     it('ended subscriptions are not live', async () => {

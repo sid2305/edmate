@@ -10,6 +10,66 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 1.6 Audit rows are teacher-scoped (optionally also student-scoped); staff-wide reads are 12.1's addition · decided by planner · risk: high
+Decided: every `audit_log` row has a not-null `teacher_id`, and the write/read methods take the same `TeacherScope`/`StudentScope` that 1.2 enforces, with no exception to "scope first, always required." `before`/`after` are redacted against a denylist before they are stored, on top of callers' own care. There is no update or delete method; append-only is enforced in the app layer only (no trigger, no REVOKE). Staff's cross-teacher trust-console view is not built here.
+Why: keeps the one isolation rule 1.2 set (and that security-reviewer checks) true for every repository method; every use the build plan has today (config, staff, memory) is about one teacher.
+Alternatives: an unscoped `append`/`list` pair guarded only by role checks at the call site (it would be the first exception to "scope first"; 12.1 should review that when it needs it); a Postgres trigger or RLS for append-only (no precedent here, bigger than this task).
+Reversible: yes. 12.1 can add a staff-wide read path with an additive migration without touching this one.
+
+### 18 Oct 2026 · 1.6 A teacher's audit list leaves out student rows · decided by builder · risk: high
+Decided: `listForTeacher` returns only rows with no `student_id`. A student's memory changes (and staff actions on one student) are readable only in that student's scope.
+Why: the plan didn't say. A student's memory is theirs (PRD 6.5), and 1.2 already hides which student asked a question from the teacher; listing student rows to the teacher would show which student did what, plus their before/after.
+Alternatives: include student rows in the teacher's list (simpler, but leaks per-student activity); include them with `studentId` and before/after removed.
+Reversible: yes; it is one WHERE clause.
+
+### 18 Oct 2026 · 1.6 The actor must match the scope · decided by builder · risk: low
+Decided: a `teacher` actor must be the scope's teacher, and a `student` actor must be the scope's student (so a student can't act on teacher-only rows); otherwise `scope`. `staff` may act in any scope, and the caller's role check covers whether they are allowed to.
+Why: stops a row claiming that someone outside the scope made the change.
+Alternatives: record any actor as given.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.6 Before/after go through JSON, then redaction, then a size cap; deep structure is redacted · decided by builder · risk: low
+Decided: each value is `JSON.stringify`d and parsed back before redaction, so class instances, `toJSON` and dates are plain data first. Values JSON can't hold (bigint, cycles, a bare function) and anything over 10 000 characters after redaction are `invalid`, never truncated. Objects and arrays deeper than 8 levels become `[redacted]` instead of being kept as they are.
+Why: redacting before the round trip would miss personal keys on class instances and `toJSON` output. Keeping deep structure unredacted would let personal data through the defense-in-depth layer.
+Alternatives: the plan's "keep deeper structure as is"; redact without the round trip.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.6 Redaction matches compound keys and email/phone values (fix round 1) · decided by builder · risk: high
+Decided: after NFKC, removing zero-width and other format characters, lower-casing and removing `_ - . space`, a key is redacted if it **contains** `email`, `phone`, `name`, `address` or `photo` (so `studentEmail`, `parentName`, `guardianPhone`, `fullName` and `profilePhotoUrl` are caught). The short terms `ip` and `bio` only match as a whole word of the key (camelCase or separators: `clientIp`, `IPAddress`, `ip_v4`, `teacherBio`), because as substrings they hit real keys in contracts and schema (`subscriptionId`, `description`, `piiPatterns`) and words like `biology`. Inside any string value, whatever its key, email-shaped text and phone-shaped runs (7 or more digits, with spaces, dots, dashes or brackets between them) are replaced by `[redacted]`; ISO dates and plain decimals are left alone. The allowlist is empty. Harmless keys that contain a term (`packageName`, `namespace`) are redacted on purpose, and an allowlist should only be added when a real false positive gets in the way. A code comment records that cross-script homoglyph keys (a Cyrillic `е`) get past the NFKC fold: this is defense in depth, not a guarantee.
+Why: security-reviewer HIGH. The exact-key match stored raw personal data under compound keys.
+Alternatives: plain substring matching for every term (redacts `subscriptionId` and `description`); exact keys only (the reviewer's finding); dropping whole strings instead of the matched parts (loses the non-personal context).
+Reversible: yes. It is one file and needs no migration; rows already written keep the redaction they were stored with.
+
+### 18 Oct 2026 · 1.6 Schema details · decided by planner · risk: low
+Decided: `actor_role` reuses the `user_role` enum; `student_id` is nullable (teacher-only events have none); `reason` is optional; `target`'s `<kind>:<id>` form is advisory and not a foreign key; `AuditRow` and `AuditEntryInput` are db-local types, not contracts.
+Why: plan and lead answers Q3/Q4; there is no audit contract, and adding one would need an ADR.
+Alternatives: a new enum; a contract type.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.6 Review · decided by team lead · risk: low
+Decided: packages/db/migrations/0002_audit_log_scope.sql adds NOT NULL columns without a backfill, and packages/db/src/schema/operations.ts has no ts-leading index on audit_log.
+Why: The audit table is empty until this ships, so no backfill is needed; retention runs per teacher, which the (teacher_id, ts) index covers.
+Alternatives: A backfill step; a plain ts index now.
+Reversible: Yes, one additive migration.
+
+### 18 Oct 2026 · 3.2 Message counters · decided by team lead · risk: medium
+Decided: The per-student rate limit and the rolling daily message limit start as in-memory windows in the harness, behind an injected interface. A restart resets them. Task 3.14 makes them durable and shared before the pilot.
+Why: Keeps 3.2 moving without a second contracts change; harmless while building.
+Alternatives: A new contracts port with ADR-0005 now.
+Reversible: Yes, the interface is swappable.
+
+### 18 Oct 2026 · 3.13 TurnConfigStore port loads a turn's config at entitle · decided by team lead · risk: high
+Decided: Contracts gain one additive port, `TurnConfigStore.load(entitlement, sessionId)`, which returns the agent, package, style card and locale pack for the turn, or null. `entitle` calls it and fails closed with `no_access` unless every loaded object belongs to the entitlement's teacher, agent, package version and market. No other contract changes (ADR-0004).
+Why: pre-guards, escalation and the fallback context need the locale pack and style card before `buildContext`, and no port loaded them.
+Alternatives: widen `EntitlementStore.resolve`; a port defined inside the harness (against ADR-0002); four separate stores.
+Reversible: only by ADR.
+
+### 18 Oct 2026 · 3.13 A session id is checked against the entitlement and pins the agent version · decided by team lead · risk: high
+Decided: `TurnConfigStore.load` returns null unless the session row belongs to the entitlement's student, teacher and agent and is still open; `entitle` then fails with `no_access`. The agent is loaded at exactly the session row's `agent_version`, which the server sets when the session is created and never takes from the client, and must match the entitlement's agent and teacher. `Entitlement` does not change. Task 3.2 must test both checks.
+Why: `sessionId` comes from the client, so on its own it could point at another student's session or pin an agent version the student should not get (security review of 3.13).
+Alternatives: add the agent version to `Entitlement`; trust the session id because the entitlement was already resolved.
+Reversible: only by ADR.
+
 ### 18 Oct 2026 · 3.12 `EvalCase` lives in `packages/evals`, not `packages/contracts` · decided by planner · risk: low
 Decided: the case/check shape is a Zod schema owned by `packages/evals`.
 Why: it is not in the Core contracts list and nothing outside the eval runner reads it; adding it to contracts would need an ADR.

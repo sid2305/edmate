@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1792356185534,
-      "tag": "0002_usage_ledger_metering",
+      "when": 1792355386794,
+      "tag": "0002_audit_log_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792356316320,
+      "tag": "0003_usage_ledger_metering",
       "breakpoints": true
     }
   ]
