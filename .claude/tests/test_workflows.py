@@ -104,7 +104,7 @@ class Workflows(unittest.TestCase):
 
     def test_job_names_match_branch_protection(self):
         self.assertEqual(load("ci.yml")[1]["name"], "CI")
-        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"node", "python-harness"})
+        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"node", "python-harness", "secrets"})
         self.assertEqual(load("merge-gate.yml")[1]["name"], "Merge gate")
         self.assertEqual(set(load("merge-gate.yml")[1]["jobs"]), {"check"})
 
@@ -120,6 +120,31 @@ class Workflows(unittest.TestCase):
         self.assertIn("python3 .githooks/secret-scan.py --all", py)
         self.assertIn("python3 docs/adr/check-headings.py", py)
         self.assertIn("-s docs/adr -p 'test_*.py'", py)
+
+    def test_secrets_job_scans_every_pr_commit_with_mains_scanner(self):
+        text, data = load("ci.yml")
+        job = data["jobs"]["secrets"]
+        self.assertEqual(job.get("if"), "github.event_name == 'pull_request'")
+        self.assertNotIn("permissions", job)  # inherits contents: read
+        self.assertIn("timeout-minutes", job)
+        co = [s for s in job["steps"] if s.get("uses", "").startswith("actions/checkout@")]
+        self.assertEqual(len(co), 1)
+        self.assertEqual(co[0]["with"].get("fetch-depth"), 0)
+        self.assertIs(co[0]["with"].get("persist-credentials"), False)
+        body = "\n".join(s.get("run", "") for s in job["steps"])
+        # Scanner and allow list come from main, into $RUNNER_TEMP, never the PR's copy.
+        self.assertIn('git show origin/main:.githooks/secret-scan.py > "$RUNNER_TEMP/main-scanner/.githooks/secret-scan.py"', body)
+        self.assertIn('git show origin/main:.githooks/secret-scan-allow.txt > "$RUNNER_TEMP/main-scanner/.githooks/secret-scan-allow.txt"', body)
+        self.assertIn('--scanner "$RUNNER_TEMP/main-scanner/.githooks/secret-scan.py"', body)
+        self.assertIn("--base origin/main", body)
+        self.assertNotRegex(body, r"python3 \.githooks/secret-scan\.py")
+        # The driver is main's once it exists there; the PR's copy only bootstraps the first PR.
+        self.assertIn("git show origin/main:.github/scripts/scan-pr-commits.py", body)
+        self.assertIn("set -euo pipefail", body)
+
+    def test_existing_tree_scan_kept(self):
+        py = "\n".join(s.get("run", "") for s in load("ci.yml")[1]["jobs"]["python-harness"]["steps"])
+        self.assertIn("python3 .githooks/secret-scan.py --all", py)
 
     def test_labeller_uses_the_labeller_vocabulary(self):
         text, data = load("risk-label.yml")

@@ -1,4 +1,4 @@
-# CI: every gate on every PR and on every push to main (task 0.5).
+# CI: every gate on every PR and on every push to main (task 0.5); every PR commit's secret scan (0.9).
 # Reads no secrets. Actions are pinned by full commit SHA; bump them deliberately.
 name: CI
 
@@ -53,3 +53,36 @@ jobs:
           python3 docs/adr/check-headings.py
       - name: Secret scan
         run: python3 .githooks/secret-scan.py --all
+
+  # Every PR commit, not just the final tree: a secret added in one commit and deleted in a later one is
+  # still public in the history (task 0.9). Main's scanner, allow list and driver are used, never the PR's.
+  secrets:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - name: Take the scanner and allow list from main
+        run: |
+          set -euo pipefail
+          git rev-parse --verify origin/main
+          mkdir -p "$RUNNER_TEMP/main-scanner/.githooks"
+          git show origin/main:.githooks/secret-scan.py > "$RUNNER_TEMP/main-scanner/.githooks/secret-scan.py"
+          git show origin/main:.githooks/secret-scan-allow.txt > "$RUNNER_TEMP/main-scanner/.githooks/secret-scan-allow.txt"
+          # Bootstrap: until the driver is on main (only the PR that adds it), use the PR's copy.
+          if git cat-file -e origin/main:.github/scripts/scan-pr-commits.py 2>/dev/null; then
+            git show origin/main:.github/scripts/scan-pr-commits.py > "$RUNNER_TEMP/scan-pr-commits.py"
+          else
+            echo "::warning::scan-pr-commits.py is not on main yet; using this PR's copy"
+            cp .github/scripts/scan-pr-commits.py "$RUNNER_TEMP/scan-pr-commits.py"
+          fi
+      - name: Scan every commit in origin/main..HEAD
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/scan-pr-commits.py" --scanner "$RUNNER_TEMP/main-scanner/.githooks/secret-scan.py" --base origin/main
