@@ -19,6 +19,9 @@ export default defineConfig({
         'src/adapters/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
         // Task 2.3: the fallback rule decides whether a second model may answer, so all of it is tested.
         'src/router/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Task 2.4: metering decides what a call costs and that no call goes unrecorded.
+        'src/metering/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/pricing/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
       },
     },
   },
