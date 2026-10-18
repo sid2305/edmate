@@ -345,9 +345,9 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: running
+  status: review
   branch: m1/1.6-audit-log
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db)
 - id: '1.7'
   milestone: M1
   title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
@@ -463,10 +463,10 @@ tasks:
   - '3.1'
   - M0
   - '3.13'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m3/3.2-admit-entitle
+  model: plan:opus
 - id: '3.3'
   milestone: M3
   title: '`route`: intent and `attempt`, rules first'
@@ -592,7 +592,7 @@ tasks:
   accept: ADR-0004 merged; `TurnConfigStore` exported from @edmate/contracts; type-level test and the spec-types drift test pass with the updated build-plan block; no other contract changes.
   deps:
   - '3.1'
-  status: review
+  status: done
   branch: m3/3.13-turn-config-store
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
 - id: '4.0'

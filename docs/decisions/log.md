@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.13 TurnConfigStore port loads a turn's config at entitle · decided by team lead · risk: high
+Decided: Contracts gain one additive port, `TurnConfigStore.load(entitlement, sessionId)`, which returns the agent, package, style card and locale pack for the turn, or null. `entitle` calls it and fails closed with `no_access` unless every loaded object belongs to the entitlement's teacher, agent, package version and market. No other contract changes (ADR-0004).
+Why: pre-guards, escalation and the fallback context need the locale pack and style card before `buildContext`, and no port loaded them.
+Alternatives: widen `EntitlementStore.resolve`; a port defined inside the harness (against ADR-0002); four separate stores.
+Reversible: only by ADR.
+
+### 18 Oct 2026 · 3.13 A session id is checked against the entitlement and pins the agent version · decided by team lead · risk: high
+Decided: `TurnConfigStore.load` returns null unless the session row belongs to the entitlement's student, teacher and agent and is still open; `entitle` then fails with `no_access`. The agent is loaded at exactly the session row's `agent_version`, which the server sets when the session is created and never takes from the client, and must match the entitlement's agent and teacher. `Entitlement` does not change. Task 3.2 must test both checks.
+Why: `sessionId` comes from the client, so on its own it could point at another student's session or pin an agent version the student should not get (security review of 3.13).
+Alternatives: add the agent version to `Entitlement`; trust the session id because the entitlement was already resolved.
+Reversible: only by ADR.
+
 ### 18 Oct 2026 · 3.12 `EvalCase` lives in `packages/evals`, not `packages/contracts` · decided by planner · risk: low
 Decided: the case/check shape is a Zod schema owned by `packages/evals`.
 Why: it is not in the Core contracts list and nothing outside the eval runner reads it; adding it to contracts would need an ADR.

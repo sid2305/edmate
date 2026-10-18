@@ -2,10 +2,12 @@
 // gateway, ingest and worker packages implement them by importing contracts; the harness uses them.
 import type { ZodType } from 'zod';
 import type { Entitlement } from './access.js';
+import type { LocalePack } from './locale.js';
 import type { EvidenceEvent, LearnerProfile } from './memory.js';
 import type { ModelChunk, ModelRequest } from './model.js';
 import type { GuardResult, SafetyAlert } from './safety.js';
 import type { Skill, ToolName, Usage } from './shared.js';
+import type { AgentConfig, PackageConfig, StyleCard } from './teacher.js';
 import type { TurnTrace } from './trace.js';
 import type { Chunk, Message, TeacherQuestion, TurnContext, TurnInput } from './turn.js';
 
@@ -34,6 +36,27 @@ export interface EntitlementStore {
     x: { studentId: string; agentId: string; source: Entitlement['source'] },
     at: string,
   ): Promise<Entitlement | null>;
+}
+
+/**
+ * The config a turn runs on (ADR-0004): pkg at e.packageVersion, agent at exactly the session row's
+ * `agent_version` (set server-side when the session is created, never from the client), the latest
+ * style card for agent.styleCardId, and the locale pack for e.market.
+ * A session id is never trusted on its own: `load` returns null unless the session row's studentId,
+ * teacherId and agentId equal the entitlement's and the session is open (not ended).
+ * `entitle` also checks every loaded object belongs to the entitlement (agent.id === e.agentId,
+ * agent.teacherId === e.teacherId, and so on); null or any mismatch fails closed with `no_access`.
+ */
+export interface TurnConfigStore {
+  load(
+    e: Entitlement,
+    sessionId: string,
+  ): Promise<{
+    agent: AgentConfig;
+    pkg: PackageConfig;
+    styleCard: StyleCard;
+    locale: LocalePack;
+  } | null>;
 }
 
 export interface ProfileStore {
