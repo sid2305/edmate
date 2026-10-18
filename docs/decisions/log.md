@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.3 Fallback rule collapses to one check · decided by planner · risk: low
+Decided: the router falls back only when the error is a `GatewayError` with `retryable: true`, nothing has been yielded yet for this `stream()` call, and a capable fallback adapter is configured. Everything else re-throws as is.
+Why: `truncated`/`content_filter` are only ever paired with `retryable: false` in `adapters/errors.ts`, so checking `retryable` already covers "never fall back on a cut-off or filtered answer".
+Alternatives: also check `reason` explicitly.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router takes already-built adapters; a separate factory resolves ModelPolicy · decided by planner · risk: low
+Decided: `Router` only sees `ModelAdapter` instances; `createRouter(policy, factories)` is the only place that turns policy strings into adapters.
+Why: keeps fallback and capability logic testable with plain fakes and free of key or base-URL concerns.
+Alternatives: one class that resolves the policy and routes.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Capability mismatch fails closed, never reroutes to fallback · decided by planner · risk: low
+Decided: if the tier's adapter lacks a capability the request needs, the router throws a `validation` `GatewayError` before any call and does not try the fallback.
+Why: it is a policy configuration bug, not a transient failure; rerouting would hide it.
+Alternatives: try the fallback's capabilities before giving up.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router tests reuse harness/testing via a devDependency · decided by planner · risk: low
+Decided: `@edmate/gateway` gains `@edmate/harness: workspace:*` as a devDependency; router tests wrap `ScriptedGateway` and reuse `scriptedStreamProviderError`.
+Why: the 2.6 fixtures name this task as their consumer; rule 3 limits what harness imports, not who uses its test helpers.
+Alternatives: duplicate a script player in `packages/gateway/test`.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 embed() is served by the main tier's adapter · decided by builder · risk: low
+Decided: `Router.embed` uses `tiers.main` (and the fallback on a retryable error), since the `ModelGateway.embed` port has no tier.
+Why: the plan did not say which tier embeds; main is the agent's primary adapter. Embeddings are platform-wide config, so a deployment that needs them routes `main` to an embedding-capable adapter or uses a separate gateway for indexing. With `DEFAULT_MODEL_POLICY` (Anthropic, no embeddings) `embed` throws `validation` without calling the provider.
+Alternatives: the small tier; a separate embedding adapter in `RouterOptions` (would need a config shape the contract does not have).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Provisional default model ids · decided by builder · risk: low
+Decided: `DEFAULT_MODEL_POLICY` = Anthropic `claude-haiku-4-5` (small) and `claude-sonnet-4-5` (main), no fallback; frozen and headed PROVISIONAL until 7.6.
+Why: lead answer Q3 accepted a provisional Anthropic default; these ids match the ones already used in gateway tests.
+Alternatives: a synthetic `unconfigured` provider that forces every caller to override.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.3 Router coverage held at 100% · decided by builder · risk: low
+Decided: `vitest.config.ts` adds a 100% threshold for `src/router/**`, beside keys and adapters.
+Why: the fallback rule decides whether a second model may answer; every branch should stay tested.
+Alternatives: the package's 80% default.
+Reversible: yes.
+
 ### 18 Oct 2026 · 3.1 Clock and IdSource are harness types, not contracts ports · decided by planner · risk: low
 Decided: `Clock`, `Cancel` and `IdSource` live in `packages/harness/src/pipeline/clock.ts`. `harness/testing`'s `Clock` is now `Pick<Clock, 'sleep'>`.
 Why: They are parameters of the harness entry point, not adapters that db, gateway or worker implement. Every caller already imports the harness, and contracts stay frozen.
