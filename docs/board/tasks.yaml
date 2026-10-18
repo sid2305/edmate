@@ -489,9 +489,9 @@ tasks:
   - '3.1'
   - M0
   - '3.15'
-  status: planning
+  status: running
   branch: m3/3.4-build-context
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '3.5'
   milestone: M3
   title: 'Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move'
@@ -612,9 +612,9 @@ tasks:
   accept: ADR-0005 merged; the new port/type exported from @edmate/contracts with type tests; spec-types drift test passes; no other contract changes.
   deps:
   - '3.13'
-  status: running
+  status: done
   branch: m3/3.15-adr-0005
-  model: plan:architect(opus)+lead build:opus-5.5/medium
+  model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'

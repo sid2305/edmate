@@ -188,7 +188,8 @@ export function turnConfigStoreFor(
       ]);
       const locale = opts.locales(e.market);
       if (pkg === null || styleCard === null || locale === null) return null;
-      return { agent, pkg, styleCard, locale };
+      // ADR-0005: the raw help_state, unvalidated; the harness parses it (task 3.4).
+      return { agent, pkg, styleCard, locale, helpState: session.helpState };
     },
   };
 }

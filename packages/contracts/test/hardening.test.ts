@@ -44,6 +44,10 @@ describe('LIMITS for fix round 1', () => {
       piiPatternMaxLength: 500,
     });
   });
+
+  it('caps a saved help state at 8 KB of JSON (ADR-0005)', () => {
+    expect(LIMITS.helpStateMaxJsonLength).toBe(8 * 1024);
+  });
 });
 
 describe('ids', () => {

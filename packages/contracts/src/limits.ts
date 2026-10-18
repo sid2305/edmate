@@ -22,6 +22,8 @@ export const LIMITS = {
   attachmentMaxBytes: 20 * 1024 * 1024,
   /** TurnInput.skillPayload: at most 16 KB of JSON (UTF-16 units of JSON.stringify). */
   skillPayloadMaxJsonLength: 16 * 1024,
+  /** SessionStateStore.saveHelpState: at most 8 KB of JSON (UTF-16 units of JSON.stringify; ADR-0005). */
+  helpStateMaxJsonLength: 8 * 1024,
   /** TurnInput.text: a cheap UTF-16 length cap checked before the code-point count. */
   turnTextMaxLength: 8000,
   /** GuardResult reason: at most 500 characters. */
