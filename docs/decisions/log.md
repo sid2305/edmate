@@ -10,6 +10,78 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.3 Contracts created · decided by team lead · risk: high
+Decided: The shared contracts now exist as Zod schemas, exactly matching the build plan's Core contracts. Tests fail if the code and the spec drift apart. Unknown fields are rejected, and the limits in the spec comments are enforced. From now on, changing a contract needs an ADR.
+Why: Every package builds on these shapes; the tests prove they match the spec.
+Alternatives: Hand-written TypeScript types without runtime checks.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Ports live in contracts · decided by team lead · risk: medium
+Decided: The ports (Guard, Tool, RetrievalIndex, the stores, UsageMeter, ModelGateway, TraceSink, AlertSink) are type-only interfaces in packages/contracts/src/ports.ts, with no Zod schemas and no fixtures. The db, gateway and ingest adapters implement them by importing contracts, although the spec's repo layout says the harness defines them.
+Why: Adapters can implement them without depending on the harness; functions can't be Zod data.
+Alternatives: Define them in packages/harness.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Spec shapes kept as written · decided by team lead · risk: low
+Decided: TurnEvent hint_rung keeps rung as a number and TurnTrace guards keep action as a plain string, as the spec says; at runtime hint_rung must be a whole number from 0 to 4.
+Why: No type change to the spec, but bad rungs are still caught.
+Alternatives: Change the types to the rung union and the guard action enum (needs an ADR).
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Conditional rules enforced · decided by team lead · risk: medium
+Decided: Four rules from the spec comments are checked at runtime: an entitlement has a subscriptionId exactly when its source is subscription; no module is both allowed and locked (fail closed); a message turn needs text; a skill_action turn needs a skill. Each has a valid and an invalid fixture. TeacherQuestion.answeredAt has no rule.
+Why: The spec states them in comments; checking them stops bad data at the boundary.
+Alternatives: Leave them to the code that uses the data.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Field formats · decided by team lead · risk: medium
+Decided: Timestamps are ISO 8601 with Z or an offset. Languages are a lowercase 2–3 letter primary tag. Currency is three capital letters. Market is a two-capital-letter ISO 3166 code or the word "global" (no invented codes; the pilot market stays your decision). Ids are any non-empty string. Counts, token numbers, versions, minor-unit amounts and cost are whole numbers from 0 up. Mastery p is between 0 and 1. Characters are counted as Unicode code points and words as runs of non-space. Attachment mime must start with image/.
+Why: The spec gives these fields as plain strings and numbers; these are the narrowest formats it implies.
+Alternatives: No format checks.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 No default message limit in the contract · decided by team lead · risk: low
+Decided: PackageConfig.dailyMessageLimit is required in the contract; the studio and the seed fill in 20.
+Why: A Zod default would make the field optional in the input type and break the exact match with the spec.
+Alternatives: A Zod default of 20.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Zod version and strict objects · decided by tdd-guide · risk: low
+Decided: Contracts pin zod 4.6.7 exactly (the newest stable 4.x on npm today). Every object schema is strict, so unknown keys are errors, not silently dropped; a client-sent packageId on a turn is rejected. Optional fields use Zod's exactOptional, so the types match the spec exactly and an explicit undefined is rejected.
+Why: Zod 4 has the features the plan needs; strict objects catch typos and client-sent access fields.
+Alternatives: zod 3; stripping unknown keys.
+Reversible: Yes for the version; strictness only by ADR.
+
+### 18 Oct 2026 · 0.3 Prompt-pack version is semver · decided by tdd-guide · risk: low
+Decided: AgentConfig.promptPackVersion must be a semantic version such as 1.0.0 or 2.1.0-rc.1, because the spec comment says one semver pins the prompt-pack set.
+Why: Catches values like "latest" that would break pinning.
+Alternatives: Any string.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Size caps and safe formats · decided by tdd-guide · risk: medium
+Decided: After review, the contracts cap sizes and narrow formats the spec left open. Ids are 1–128 letters, digits, _ or -. An attachment storage key is a relative path of at most 200 safe characters with no ".." part; an attachment is a PNG, JPEG, WebP or HEIC image of 1 byte to 20 MB. A skill payload is at most 16 KB of JSON. Turn text is also capped at 8,000 UTF-16 units before the 4,000-character count. Guard reasons are at most 500 characters; rewrite text and alert excerpts at most 8,000. Each locale PII pattern is at most 500 characters and must be a valid regular expression. The numbers live in LIMITS.
+Why: Untrusted or model-made data reaches storage, prompts and alerts; small fixed caps stop abuse and runaway output at the boundary.
+Alternatives: No caps; caps enforced only in the API layer.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Turn context must be consistent · decided by tdd-guide · risk: medium
+Decided: A turn context is rejected if a retrieved chunk comes from a module the entitlement doesn't allow or from another teacher, or if the entitlement's package id, package version or agent id don't match the package and agent in the context.
+Why: Fails closed if a bug ever mixes another package's or teacher's material into a turn.
+Alternatives: Leave the checks to the pipeline code.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 One shared zod copy · decided by tdd-guide · risk: low
+Decided: Contracts lists zod 4.6.7 as a peer dependency (and a dev dependency for its own tests), and each consumer installs zod itself; the harness now lists zod 4.6.7 because it uses the contracts at runtime.
+Why: Every package then shares one zod, so schemas and their types stay compatible.
+Alternatives: zod as a normal dependency of contracts.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.3 Review · decided by team lead · risk: low
+Decided: The type cast in packages/harness/src/testing/fixtures.test.ts stays for now; the ports-in-contracts note goes into ADR-0002 (task 0.4). MEDIUM review findings were fixed in this PR, not deferred, because contracts freeze on merge.
+Why: The cast is test-only and narrow; fixing contracts later would need an ADR and three reviewers.
+Alternatives: Defer the MEDIUMs to a follow-up task.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.2 MinIO image from a community build · decided by tdd-guide · risk: medium
 Decided: The local S3 server is `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, a maintained community build of the MinIO server with dated release tags, because the official MinIO images are no longer published.
 Why: The amendment asks for MinIO pinned to a dated release tag; this is the only source found that still has one. It is dev-only, and the app talks plain S3, so it can be swapped without code changes.
