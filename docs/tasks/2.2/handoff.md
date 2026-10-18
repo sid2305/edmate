@@ -133,3 +133,9 @@ Decided: tool names are sent with characters outside `[A-Za-z0-9_-]` replaced by
 Why: Edmate tool names such as `practice.next_item` contain dots, which Anthropic and OpenAI-style APIs reject.
 Alternatives: forbid dots in tool names (a contracts change); encode names reversibly (longer, less readable to the model).
 Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Review · decided by team lead · risk: low
+Decided: The `result.output as T` cast in packages/gateway/src/adapters/sdk-adapter.ts stays; tool-argument validation belongs to the tool registry (task 5.5), not the adapter.
+Why: The cast narrows a ZodType<T> the caller already passed and is typecheck-clean; validating tool input where tools run keeps one place for it.
+Alternatives: Drop the cast; validate tool args in the adapter.
+Reversible: Yes.
