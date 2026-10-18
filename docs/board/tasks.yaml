@@ -387,9 +387,9 @@ tasks:
   - '1.1'
   - '2.2'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m2/2.4-metering
+  model: plan:sonnet
 - id: '2.5'
   milestone: M2
   title: 'Limits: rolling 24-hour message limit per package; monthly cost alarm per teacher that alerts staff and the teacher, and pauses free packages only (paid students keep access until a staff decision)'
