@@ -124,3 +124,9 @@ Decided: `FallbackReplies.limitReached?(lang)`. `entitle` uses it when it return
 Why: lead answer 1. Making it optional keeps `harness/src/testing` (3.15's area) untouched, and a broken locale still gives the student a reason.
 Alternatives: required field (would change `testDeps`).
 Reversible: yes (make it required once every composition root injects it).
+
+### 18 Oct 2026 · 2.5 Review · decided by team lead · risk: low
+Decided: packages/db/src/repositories/subscriptions.ts keeps treating a free package with a missing or malformed stored price as not free (never paused), and packages/db/migrations/0005_cost_alarm.sql builds its index without CONCURRENTLY, like every earlier migration.
+Why: Failing closed protects paid students; content validation (1.8) and package publishing guarantee a price. The usage table is small before the pilot.
+Alternatives: Alert on a missing price; CONCURRENTLY indexes.
+Reversible: Yes.
