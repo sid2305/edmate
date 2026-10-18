@@ -581,7 +581,7 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: review
+  status: done
   needs_decision:
   - judge-model
   branch: m3/3.12-eval-runner
