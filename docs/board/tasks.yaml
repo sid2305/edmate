@@ -369,10 +369,10 @@ tasks:
   deps:
   - '0.3'
   - M0
-  status: running
+  status: review
   risk: expert
   branch: m1/1.8-demo-teacher
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium content:pedagogy-author(opus) review:sonnet(ts,code)
 - id: '2.1'
   milestone: M2
   title: Provider keys from the environment / secret manager
@@ -498,9 +498,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: planning
+  status: running
   branch: m3/3.5-teaching-policy
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '3.6'
   milestone: M3
   title: Prompt-pack loader and composer with `promptPackVersion`, style card, locale pack and sources
