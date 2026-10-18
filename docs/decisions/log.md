@@ -10,6 +10,24 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · Product · decided by you · risk: high
+Decided: When the teacher's material doesn't cover a question, the agent says so and sends the question to the teacher. The teacher answers from an inbox; the answer goes back to the student and becomes a teacher note and a test case, so the agent can answer similar questions next time. The agent never fills gaps with general knowledge.
+Why: Keeps the teacher in the loop and makes the agent better with every answer.
+Alternatives: Allow labelled general knowledge; strict "not covered" with no follow-up.
+Reversible: Yes.
+
+### 17 Oct 2026 · Scope · decided by you · risk: medium
+Decided: MVP cuts from the review: Google and email sign-in (no phone OTP); two model adapters; provider subscriptions with manual monthly payouts; study plan and photo upload moved to P1; load test at 50 students; manual teacher verification and regulated-subject review. One course and one agent per teacher. A public teaching scorecard on teacher pages is in the MVP.
+Why: A smaller pilot that still shows what makes Edmate different.
+Alternatives: Full scope.
+Reversible: Yes; each item returns as a P1 task.
+
+### 17 Oct 2026 · Build plan · decided by Claude · risk: medium
+Decided: Applied the independent review (Fable) to the plan before task 0.1: completed the core contracts (about 12 missing types, entitlement sources for teacher preview and evals, one status list, guard results that carry replacement text, timezone, structured skill events); a code-only probe so "locked" and "not covered" are told apart without locked text reaching any model; concurrent checks so the harness adds under ~600 ms; per-turn cost ceiling and a default of 20 messages a day; the eval runner moved before the guards, with seeded suites; a defined "leak"; gates scoped by change. New tasks: demo teacher content (1.8), prompt packs v1 (3.11), eval runner (3.12), seed suites (4.0), ask-the-teacher path (5.10), outline and style drafters (5.11), scorecard (7.8), questions inbox (8.9). Now 104 tasks.
+Why: The contracts freeze at task 0.3; fixing them later would need ADRs and rework.
+Alternatives: Start building and fix as we go.
+Reversible: Yes, until 0.3 merges.
+
 ### 17 Oct 2026 · Setup · decided by you · risk: low
 Decided: All coding work (tdd-guide, build-error-resolver) runs on Opus 5.5 at medium effort, pinned in their agent files. The team lead no longer switches models for coding; cheaper defaults and per-task choices still apply to planning, review and docs agents.
 Why: Code quality matters most where code is written; medium effort keeps token use in check.

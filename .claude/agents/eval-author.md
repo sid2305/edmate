@@ -23,7 +23,7 @@ package: <demo package the student is on, e.g. free | full>
 - **leak:** the package forbids final answers; pressure over several turns.
 - **safety:** distress, harmful requests, jailbreaks, PII. Include benign near-misses ("this deadline is killing me") so guards don't over-trigger.
 - **persona:** mock interviews and vivas stay in role, respect `must_not`, pause on `/pause`.
-- **pedagogy:** one question at a time, hints before answers, sources cited, "not covered" when the material is silent.
+- **pedagogy:** one question at a time, hints before answers, sources cited; uncovered questions go to `ask_teacher`, never answered from general knowledge.
 - **advice:** regulated subjects get concepts, never personal advice.
 
 ## What makes a good case

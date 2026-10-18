@@ -1,6 +1,6 @@
 # Edmate PRD v0.3
 
-Oct 17, 2026 (country-neutral update) · @siddhant lahoti · Repo copy of the Claude Doc "Edmate PRD v0.3" (the doc has the diagrams and comments; this file is what agents read). v0.2 is in `docs/archive/`.
+Oct 17, 2026 (revised after review: ask-the-teacher, MVP cuts, scorecard) · @siddhant lahoti · Repo copy of the Claude Doc "Edmate PRD v0.3" (the doc has the diagrams and comments; this file is what agents read). v0.2 is in `docs/archive/`.
 
 ## TL;DR and vision
 
@@ -9,7 +9,7 @@ Edmate helps a student find the right teacher and learn with that teacher's AI a
 - **For teachers:** anyone who knows a subject uploads what they know (notes, videos, slides, links, their way of explaining). Edmate builds their teaching agent from it.
 - **Packages:** the teacher sells packages. Each package decides what the agent knows and what it can do for the student.
 - **For students:** a student subscribes to a teacher, picks a package, and gets that teacher's agent for as long as they stay subscribed.
-- **A partner, not a chatbot:** the agent teaches only from the teacher's material, makes the student think instead of handing out answers, remembers each student's progress, and tells the teacher where students are stuck before each live class.
+- **A partner, not a chatbot:** the agent teaches only from the teacher's material, sends anything it can't answer to the teacher (whose answer then teaches the agent), makes the student think instead of handing out answers, remembers each student's progress, and tells the teacher where students are stuck before each live class.
 - **Not a school product:** no classrooms and no institutions. It is one student choosing one teacher for their own learning journey.
 
 **Vision:** every student can learn from the teacher who suits them, with that teacher's guidance there every day, not only in class.
@@ -46,7 +46,7 @@ Students learn best with a teacher who fits them, but good teachers can only be 
 | Product | What it does | AI agent for students | Gap Edmate can fill |
 | --- | --- | --- | --- |
 | [Graphy](https://graphy.com/) (India) | Courses, memberships, communities, live sessions and coaching for creators; says 200,000+ creators | Yes: an [AI Avatar](https://graphy.com/ai-avatar) offering "personal tutoring, 24x7" from the creator's notes, lessons and FAQs | Its pages do not describe per-plan limits on what the Avatar knows, or teaching methods such as hints before answers and progress tracking |
-| [Kajabi](https://www.kajabi.com/) (global) | Course, membership and coaching business platform | Yes: "Expert Agents", described as "AI teammates trained on your content" | A general creator business tool; not built for India, Indian pricing or Hindi |
+| [Kajabi](https://www.kajabi.com/) (global) | Course, membership and coaching business platform | Yes: "Expert Agents", described as "AI teammates trained on your content" | A general creator business tool; its pages don't describe locked tiers or teaching methods |
 | [Classplus](https://classplusapp.com/) (India) | Branded apps for coaching institutes and tutors ("Aapki Coaching Aapki App"): live classes, recorded lectures, tests | No AI tutor described on its home page | Built for coaching institutes, with doubts answered by people, not an always-on agent |
 | [Delphi](https://venturebeat.com/ai/you-can-now-make-an-ai-clone-of-yourself-or-anyone-else-living-or-dead-with-delphi) (US) | AI "clones" of experts built from their writing, videos and audio (VentureBeat, Sep 2023) | A conversational clone, not a course | No packages, practice, feedback or progress |
 | ChatGPT Study Mode, Gemini Guided Learning (cited in v0.2) | General study modes | Yes, but not from a chosen teacher | No teacher, no teacher's material, no live classes |
@@ -95,6 +95,7 @@ A teacher goes from "I know this subject" to a live, paid agent in six steps, an
 
 **After launch, every month:**
 
+- Answer the questions the agent couldn't, from the questions inbox. Similar questions are grouped, so each needs one answer, and every answer teaches the agent.
 - Read the weekly insights: what subscribers asked most, where they got stuck, which answers they marked unhelpful.
 - Run one or two live classes, planned around those insights; recordings can go back into the agent's knowledge.
 - Update material, add modules, change packages; existing subscribers are told what changed.
@@ -111,7 +112,8 @@ A student finds a teacher, subscribes, picks the package that fits, and then lea
    - ask doubts and get them explained in the teacher's way;
    - get questioned until they truly understand, with hints before answers;
    - practise with questions at the right level, and get feedback on their work;
-   - use the package's special skills, such as a mock interview or a project review.
+   - use the package's special skills, such as a mock interview or a project review;
+   - when the material doesn't cover a question, it goes to the teacher and their answer appears in the chat.
 5. **Join live classes.** Once or twice a month, the teacher teaches live; the student can send questions in advance.
 6. **See progress.** Topics covered, skills mastered, what to do next.
 7. **Change plan.** Upgrade to unlock more right away, downgrade, pause, or cancel. On cancelling, access to the agent ends at the end of the paid period, and the student can download their notes and progress.
@@ -129,7 +131,7 @@ A package is what a student buys: a set of the teacher's knowledge plus a set of
 | Knowledge | Which modules, notes, videos and question banks the agent may use | Modules 1–3 only |
 | Skills | What the agent can do for the student | Explain, practice quizzes, code feedback |
 | Help limits | How far hints go, and whether the agent may ever give a full solution | Hints up to a worked example; never the final answer to graded work |
-| Usage limit | Messages per day, to keep AI cost predictable | 50 messages a day |
+| Usage limit | Messages per day, to keep AI cost predictable | 20 messages a day |
 | Live classes | Which live classes are included | One a month |
 | Price and period | Monthly price; optional free trial | Monthly, 7-day trial |
 
@@ -143,7 +145,7 @@ A package is what a student buys: a set of the teacher's knowledge plus a set of
 
 ### Skills a teacher can switch on (MVP)
 
-Explain and clear doubts · question-led coaching (asks, does not tell) · practice quizzes at the right level · feedback on submitted work (answers, essays, code) · mock interview or viva role-play · revision notes and flashcards · study plan with weekly goals. Simulations, a code runner and voice follow in P1.
+Explain and clear doubts · question-led coaching (asks, does not tell) · practice quizzes at the right level · feedback on submitted work (answers, essays, code) · mock interview or viva role-play · revision notes and flashcards. A study plan with weekly goals, simulations, a code runner and voice follow in P1.
 
 ### Locked means locked
 
@@ -173,7 +175,8 @@ The agent's job is to teach like this teacher, from this teacher's material, and
 
 ### How it stays true to the teacher
 
-- **Answers from the teacher's material first,** and shows where an answer came from ("from Lesson 4 notes"). If the material does not cover it, the agent says so instead of guessing, and can add the question to the teacher's list for the next live class.
+- **Answers only from the teacher's material and the teacher's own answers,** and shows where an answer came from ("from Lesson 4 notes"). It never fills gaps with general knowledge.
+- **Asks the teacher when it can't answer.** The agent tells the student it has sent the question to the teacher. The teacher answers from an inbox; the answer appears in the student's chat and is saved as a teacher note, so the agent can answer similar questions next time. Unanswered questions also feed the next live class.
 - **Sounds like the teacher:** their examples, level of strictness and common warnings come from the style interview and sample explanations.
 - **Teacher corrections stick.** When a teacher fixes an answer, that fix becomes part of the agent and a permanent test case.
 - **Never pretends to be the teacher.** It is clearly labelled as an AI built from their material.
@@ -205,7 +208,7 @@ P0 ships in the MVP, P1 at public launch, P2 later. Each requirement names the t
 
 | ID | Requirement | Acceptance test | Priority |
 | --- | --- | --- | --- |
-| T1 | Sign up, identity check and payout account | No agent can be published before the teacher is verified | P0 |
+| T1 | Sign up, identity check (manual by Edmate staff in the pilot) and payout account | No agent can be published before the teacher is verified | P0 |
 | T2 | Upload notes, PDFs, Docs, slides, links, owned YouTube videos and video files; videos are transcribed | A 60-minute lecture is searchable within 15 minutes of upload | P0 |
 | T3 | Draft course outline from uploads; teacher edits it | Outline for 20 files in under 10 minutes; every topic links to its source files | P0 |
 | T4 | Style interview and sample explanations shape the agent's voice | Teachers rate "sounds like me" 4/5 or higher in testing | P0 |
@@ -218,31 +221,33 @@ P0 ships in the MVP, P1 at public launch, P2 later. Each requirement names the t
 | T11 | Update material and packages; subscribers are told what changed | Changes reach the agent within 15 minutes | P1 |
 | T12 | Add live-class recordings to the agent's knowledge | Recording searchable within 15 minutes | P1 |
 | T13 | Coupons, bundles of teachers, cohort batches | — | P2 |
+| T14 | Questions inbox: answer the questions the agent couldn't, choosing the module each answer belongs to | An answer reaches every student who asked a similar question, and the next similar question is answered from it | P0 |
 
 ### Student
 
 | ID | Requirement | Acceptance test | Priority |
 | --- | --- | --- | --- |
-| S1 | Sign up with Google or phone number | Under 1 minute | P0 |
+| S1 | Sign up with Google or email (phone sign-in later, per market) | Under 1 minute | P0 |
 | S2 | Find teachers by subject, goal and language; teacher pages | Search returns results in under 1 second | P0 |
 | S3 | Try a free package without paying | No payment details asked | P0 |
-| S4 | Subscribe, compare packages side by side, pick one, pay by UPI or card | Paid in under 2 minutes; package unlocked on the next message | P0 |
-| S5 | Chat with the agent: text, maths, code, photos of written work; sources shown | First words of a reply in under 2 seconds (p95) | P0 |
+| S4 | Subscribe, compare packages side by side, pick one, pay with the market's usual methods | Paid in under 2 minutes; package unlocked on the next message | P0 |
+| S5 | Chat with the agent: text, maths, code; sources shown; teacher answers appear in the chat (photos of written work in P1) | First words of a reply in under 2 seconds (p95) | P0 |
 | S6 | Package skills: practice, feedback on work, mock interviews and others | Each skill passes its eval suite before release | P0 |
 | S7 | Progress page: topics covered, skills mastered, next steps | Updates after every check | P0 |
 | S8 | Upgrade, downgrade, pause, cancel; download notes and progress | Upgrade applies at once; cancellation at period end; export is complete | P0 |
 | S9 | Join live classes and send questions in advance | Reminder 24 hours and 1 hour before | P0 |
 | S10 | Works on phones and laptops (responsive website) | All student flows usable at 360 px width | P0 |
-| S11 | Hindi and English; voice input and read-aloud | Teacher picks the languages per package | P1 |
+| S11 | More languages per market; voice input and read-aloud | Teacher picks the languages per package | P1 |
 | S12 | Ratings and reviews of teachers | Only paying subscribers can review | P1 |
 | S13 | Native mobile app; WhatsApp reminders | — | P2 |
+| S14 | Teacher pages show a public teaching scorecard (hints before answers, locked content, accuracy) from the agent's latest quality gate | Scorecard matches the latest gate run | P0 |
 
 ### Platform
 
 | ID | Requirement | Acceptance test | Priority |
 | --- | --- | --- | --- |
 | P1 | Access filter: search and skills limited to the student's active packages | Zero leaks on the locked-content test suite, for every published agent | P0 |
-| P2 | Subscriptions, renewals, refunds, teacher payouts, GST invoices | Ledger reconciles daily; payouts on schedule | P0 |
+| P2 | Subscriptions, renewals, refunds, teacher payouts (manual monthly in the pilot), tax invoices per market | Payout export matches the provider's report | P0 |
 | P3 | Agent quality gate: accuracy, answer-leak, locked-content and safety tests before publish and after every change | Agents that fail cannot be published | P0 |
 | P4 | Model gateway with Edmate-held keys, cost metering per teacher, package and student, usage caps | Every model call metered; caps stop gracefully | P0 |
 | P5 | Safety: distress detection with helplines, report button, takedown | A report reaches the trust team within 5 minutes | P0 |
@@ -265,7 +270,7 @@ Students pay for a teacher they trust, so Edmate must make sure the agent is acc
 | Wellbeing | A student shares distress with the agent | Distress detection on every message; a caring reply with helplines from the student's market (for example Tele-MANAS 14416 in India); no companion behaviour; the agent never claims to be human | MVP |
 | Regulated subjects | Investing, health or legal teachers' agents seen as giving personal advice | The agent teaches concepts, never personal advice; topic-specific disclaimers; Edmate reviews teachers in these subjects before publishing | MVP |
 | Model providers | Student data used to train someone else's model | Edmate-held keys only on provider tiers that do not train on inputs | MVP |
-| Payments and tax | Refunds, chargebacks, GST and tax on teacher payouts | A payment provider per market (for example UPI AutoPay in India, or a merchant of record that handles VAT/sales tax globally); clear refund policy; tax confirmed with an accountant in each market | MVP |
+| Payments and tax | Refunds, chargebacks, sales tax (e.g. GST or VAT) and tax on teacher payouts | A payment provider per market (for example UPI AutoPay in India, or a merchant of record that handles VAT/sales tax globally); clear refund policy; tax confirmed with an accountant in each market | MVP |
 
 ## Business model
 
@@ -279,6 +284,8 @@ Students pay teachers through Edmate; Edmate takes a share that covers AI cost, 
 | D. All-access student plan | Students pay Edmate one fee for many teachers; teachers paid by usage | Simple for students | Hard to price; teachers lose control of pricing |
 
 **AI cost is now Edmate's.** In v0.2, schools brought their own model keys. Here, Edmate holds the keys, so cost per active student is a core business number. Every package therefore has a usage limit, the package builder shows the teacher an estimated AI cost per subscriber, and cheaper models are used wherever the quality gate shows they are good enough.
+
+**Cost check:** a heavy student on 50 messages a day is about 1,500 turns a month; at several model calls per turn that can reach $15–30 a month, which would need prices of $60+ to keep AI under 25%. Hence the default of 20 messages a day, rules-first checks, and measuring real cost per turn early (build task 7.6) before packages are priced.
 
 **Open:** whether Edmate is a company, a social enterprise or stays non-profit (v0.2 said non-profit and free).
 
@@ -310,11 +317,11 @@ Validate first, then build a narrow MVP, prove it with about 20 teachers and 500
 | 1 · Validate | Try Graphy and Kajabi; talk to 20 teachers and 30 students; sign anchor teachers | 10+ teachers commit; open questions answered |
 | 2 · Build the MVP | Agent + access filter, teacher studio, student web app, payments, trust console | Quality and locked-content tests pass |
 | 3 · Pilot | About 20 teachers, about 500 paying students, 18+; measure 3-month use | North-star and cost targets met |
-| 4 · Launch and grow | Open teacher sign-up, reviews, Hindi voice; later under-18s with consent, mobile app | — |
+| 4 · Launch and grow | Open teacher sign-up, reviews, more languages and voice; later under-18s with consent, mobile app | — |
 
-**MVP in:** teacher sign-up and verification, uploads with video transcription, course outline, agent testing and corrections, package builder with the access filter, teacher profile pages, student sign-up, discovery, free package, subscription and payment by UPI or card, the agent chat with the MVP skills, progress, live classes by external link, weekly teacher insights, the quality gate, safety and the trust console. Phone and laptop web, English first.
+**MVP in:** teacher sign-up and verification, uploads with video transcription, course outline, agent testing and corrections, package builder with the access filter, teacher profile pages with the teaching scorecard, student sign-up, discovery, free package, subscription and payment with the market's usual methods, the agent chat with the MVP skills, the ask-the-teacher inbox, progress, live classes by external link, weekly teacher insights, the quality gate, safety and the trust console. One course and one agent per teacher. Phone and laptop web, English first.
 
-**MVP out (deliberately):** under-18 learners, native mobile apps, built-in video classes, Hindi voice, reviews, coupons and bundles, WhatsApp, teacher API, simulations and code runner.
+**MVP out (deliberately):** under-18 learners, several courses per teacher, phone sign-in, automated payouts, the study plan skill, photo upload of written work, native mobile apps, built-in video classes, voice, reviews, coupons and bundles, WhatsApp, teacher API, simulations and code runner.
 
 ## Risks and open questions
 
@@ -333,6 +340,7 @@ The biggest risk is the empty marketplace: students come for good teachers, and 
 
 ### Assumptions in this draft (correct me)
 
+- A teacher has **one course and one agent** in the MVP.
 - A student subscribes to a teacher and holds **one package per teacher** at a time, switching by upgrade or downgrade; they can follow several teachers.
 - **Country-neutral:** any subject, any market. Currency, language, helplines, payments, tax and privacy rules come from a locale pack per market. The pilot launches in one market, chosen by where the anchor teachers are. English in the MVP; more languages per market.
 

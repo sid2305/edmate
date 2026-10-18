@@ -4,7 +4,7 @@ Oct 17, 2026 · @siddhant lahoti · Replaces the v0.2 plan (school life-skills h
 
 ## How to use this plan
 
-This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI teaching agent, sell packages, and students subscribe and learn with that agent every day. An agent team can execute it end to end: 14 milestones, 96 tasks, each with dependencies and acceptance criteria.
+This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI teaching agent, sell packages, and students subscribe and learn with that agent every day. An agent team can execute it end to end: 14 milestones, 104 tasks, each with dependencies and acceptance criteria.
 
 **For the team lead (main Claude session):**
 
@@ -14,13 +14,17 @@ This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI
 4. A task is done only when it meets its acceptance criteria, the **Definition of done**, and the merge gate.
 5. Anything under **Open decisions** is a human call: stop and ask, don't guess.
 
-**Build priority:** the harness first, as before. M0–M7 build and prove the teacher's agent, including the access filter, through a CLI and tests. The web surfaces (teacher studio, student app) start after the **harness exit gate**; payments (M10) can start once the data model exists.
+**Build priority:** the harness first. M0–M7 build and prove the teacher's agent, including the access filter and the ask-the-teacher loop, through a CLI and tests. The web surfaces (teacher studio, student app) start after the **harness exit gate**; payments (M10) can start once the data model exists.
+
+**Revised 17 Oct 2026** after an independent review: contracts completed, locked vs uncovered questions separated, teacher-in-the-loop answers, MVP cuts, latency and cost limits, demo content and prompt-pack tasks added.
 
 ## Scope and non-goals
 
 **In scope (MVP):**
 
 - The teacher's agent: turn pipeline, entitlement check, access-filtered retrieval, teaching policy and help ladder, skills, guardrails, learner memory, tracing.
+- Ask the teacher: questions the material doesn't cover go to the teacher; their answers return to the student and teach the agent.
+- One course and one agent per teacher in the MVP.
 - Knowledge ingestion: documents, slides, links and video files with transcription; course outline drafting; teacher style card; teacher corrections.
 - Packages and entitlements: knowledge and skills per package, help limits, daily usage limits, live classes, prices, trials.
 - Quality gate: platform and per-agent eval suites run before publish and after every change.
@@ -33,7 +37,9 @@ This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI
 
 - Under-18 learners (PRD: proposed 18+ MVP), parent accounts.
 - Native mobile apps, WhatsApp, built-in video calling.
-- Hindi voice, reviews, coupons and bundles, teacher API and MCP (P1/P2).
+- Voice, reviews, coupons and bundles, teacher API and MCP (P1/P2).
+- Phone OTP sign-in, automated payouts and reconciliation, the study-plan skill, photo upload of written work (P1).
+- Several courses per teacher (later, by ADR).
 - Simulations engine and code runner (P1).
 - Fine-tuning or hosting our own models; AI-writing detection.
 - School, classroom and facilitator features from v0.2.
@@ -47,15 +53,15 @@ One language (TypeScript) end to end, boring dependencies, everything in Docker 
 | Language / runtime | TypeScript (strict), Node.js 22 LTS | `noUncheckedIndexedAccess` on |
 | Monorepo | pnpm workspaces + Turborepo | Run as `corepack pnpm`; one lockfile |
 | Web app | Next.js (App Router, current major), React Server Components | Student app, teacher studio, staff console in one app; mobile-first (360 px up) |
-| UI | Tailwind CSS + shadcn/ui; next-intl (English now, Hindi strings from P1) | |
+| UI | Tailwind CSS + shadcn/ui; next-intl (English now; more languages per market from P1) | |
 | Validation | Zod at every external boundary (API, webhooks, uploads, model JSON output) | Types inferred from schemas |
 | Database | PostgreSQL 16 + pgvector; Drizzle ORM + drizzle-kit | Every teacher-owned row carries `teacher_id`; student data scoped by `student_id` |
 | Queue / cache | Redis + BullMQ | Ingestion, transcription, insights, evals, payouts reconciliation, retention |
 | Object storage | S3-compatible (MinIO locally; a bucket in the pilot market's region) | Uploads and transcripts; signed URLs only |
-| Model access | Vercel AI SDK provider packages behind our own `gateway` interface | Edmate-held keys: Google, OpenAI, Anthropic, OpenRouter, OpenAI-compatible |
+| Model access | Vercel AI SDK provider packages behind our own `gateway` interface | Edmate-held keys; MVP: one main provider + OpenAI-compatible (covers OpenRouter); embeddings platform-wide |
 | Transcription | Provider speech-to-text behind a `Transcriber` port | See Open decisions |
-| Auth | Auth.js: Google sign-in; phone OTP via an SMS provider | Roles: student, teacher, staff |
-| Payments | A provider per market behind one `Payments` port (e.g. UPI AutoPay in India; a merchant of record that handles VAT/sales tax elsewhere); subscriptions and teacher payouts | See Open decisions |
+| Auth | Auth.js: Google sign-in and email magic link (phone OTP later, per market) | Roles: student, teacher, staff |
+| Payments | A provider per market behind one `Payments` port (e.g. UPI AutoPay in India; a merchant of record that handles VAT/sales tax elsewhere); provider subscriptions; manual monthly teacher payouts in the pilot | See Open decisions |
 | Locale packs | `content/locales/<market>.yaml`: languages, currency format, helplines, compliance, payment methods, PII patterns | See `locale-context` skill |
 | Secrets | Provider keys and payment secrets from the environment / secret manager; never in the DB, logs or repo | Secret scan at edit, commit and CI |
 | Streaming | Server-Sent Events from route handlers | Token stream + structured events |
@@ -109,141 +115,197 @@ edmate/
 
 ## Core contracts
 
-These types live in `packages/contracts` as Zod schemas. Task 0.3 creates them; changing one afterwards needs an ADR.
+These types live in `packages/contracts` as Zod schemas, with fixtures in `packages/contracts/fixtures` that `harness/testing` reuses. Task 0.3 creates them; changing one afterwards needs an ADR. **MVP: one course and one agent per teacher** (multi-course later, by ADR).
 
 ```ts
-// ---- Teacher side ----
-type Skill = 'explain' | 'coach' | 'practice' | 'feedback' | 'mock_interview' | 'revision' | 'study_plan' | 'project_coach';
-type Lang = string;                 // BCP 47 primary tag, e.g. 'en', 'hi'; allowed set comes from locale packs
-interface Money { amountMinor: number; currency: string }   // ISO 4217; formatted by the locale pack
+// ---- Shared ----
+type Lang = string;                 // BCP 47 primary tag, e.g. 'en'; the allowed set comes from locale packs
+type Skill = 'explain' | 'coach' | 'practice' | 'feedback' | 'mock_interview' | 'revision' | 'study_plan';   // study_plan ships in P1
+interface Money { amountMinor: number; currency: string }   // amountMinor: integer ≥ 0; currency: ISO 4217
+type ErrorCode = 'unauthorized' | 'forbidden' | 'not_found' | 'validation' | 'no_access' | 'limit_reached'
+  | 'rate_limited' | 'input_too_large' | 'turn_cost_exceeded' | 'provider_error' | 'guard_blocked' | 'payment_required';
+interface Usage { model: string; tier: 'small' | 'main'; inputTokens: number; outputTokens: number; costMicroUsd: number }
+type ToolName = string;             // registered tool id, e.g. 'calculator', 'practice.next_item'
 
+// ---- Teacher side ----
 interface AgentConfig {
   id: string; version: number; teacherId: string; courseId: string;
-  styleCardId: string;              // teacher's voice, from the style interview
-  promptPack: string;               // e.g. 'coach@1.0.0'
+  styleCardId: string;
+  promptPackVersion: string;        // one semver pins the whole platform prompt-pack set
   languages: Lang[];
   regulatedSubject?: 'investing' | 'health' | 'law';
   modelPolicy: ModelPolicy;
 }
-
+interface StyleCard { id: string; teacherId: string; version: number; text: string; mistakeTags: string[] }   // text ≤ 300 words
 interface PackageConfig {
   id: string; version: number; teacherId: string; agentId: string; name: string;
   moduleIds: string[];              // knowledge the agent may use
   skills: Skill[];                  // what the agent may do
-  helpCeiling: 1 | 2 | 3 | 4;
+  helpCeiling: 1 | 2 | 3 | 4;       // effective ceiling = finalAnswers === 'never' ? min(helpCeiling, 3) : helpCeiling
   finalAnswers: 'never' | 'after_attempt' | 'allowed';
-  dailyMessageLimit: number;
+  dailyMessageLimit: number;        // rolling 24-hour window; default 20
   liveClassesPerMonth: number;
   pricePerMonth: Money;             // amountMinor 0 = free package
   trialDays?: number;
   lockedReply: 'name_package' | 'generic';
 }
 
-// ---- Student side ----
-interface Entitlement {             // derived server-side from the subscription; never from the client
-  studentId: string; teacherId: string; market: string;   // ISO 3166 code of the student's locale pack
+// ---- Access ----
+interface Entitlement {             // computed server-side; never from the client
+  source: 'subscription' | 'teacher_preview' | 'eval';
+  subscriptionId?: string;          // present when source = 'subscription'
+  studentId: string; teacherId: string; agentId: string; market: string;   // market: ISO 3166 code of the locale pack
   packageId: string; packageVersion: number;
-  status: 'trial' | 'active' | 'grace' | 'ended';
+  status: 'trial' | 'active' | 'past_due' | 'paused' | 'ended';            // `entitle` refuses paused and ended
   periodEnd: string;
-  allowedModuleIds: string[]; skills: Skill[];
+  allowedModuleIds: string[]; lockedModuleIds: string[]; skills: Skill[];
 }
 
 // ---- A turn ----
+type ChunkKind = 'material' | 'transcript' | 'teacher_note';   // teacher notes = the teacher's answers and corrections; ranked first
+interface SourceRef { title: string; locator: string; kind: ChunkKind }      // locator: page, slide, heading or timestamp
+interface Chunk { id: string; teacherId: string; documentId: string; moduleId: string; kind: ChunkKind; text: string; source: SourceRef; score?: number }
+interface Attachment { kind: 'image'; mime: string; storageKey: string; bytes: number }   // P1 (photo of written work)
+interface Message { id: string; role: 'student' | 'agent' | 'teacher'; text: string; createdAt: string; sources?: SourceRef[] }
 interface TurnInput {
   agentId: string; sessionId: string; studentId: string;   // pseudonymous ids only
   kind: 'message' | 'hint_request' | 'check_answer' | 'skill_action';
-  text?: string; skill?: Skill; attachments?: Attachment[];
+  text?: string;                    // ≤ 4,000 characters
+  skill?: Skill; skillPayload?: unknown; attachments?: Attachment[];   // ≤ 2 attachments (P1)
   lang: Lang; clientTs: string;
 }
-
-type Intent = 'on_task' | 'answer_seeking' | 'off_topic' | 'distress' | 'misuse' | 'meta' | 'locked_request';
-
-interface Chunk {
-  id: string; teacherId: string; documentId: string; moduleId: string;
-  text: string; source: { title: string; locator: string };   // page, slide or timestamp
-}
-
+type Intent = 'on_task' | 'answer_seeking' | 'off_topic' | 'distress' | 'misuse' | 'meta';
+type Attempt = 'none' | 'wrong' | 'partial' | 'correct';   // from `route`; drives the help ladder
+interface Persona { id: string; name: string; style: string; mustNot: string[]; endAfterQuestions: number }
 interface TurnContext {
-  agent: AgentConfig; pkg: PackageConfig; entitlement: Entitlement; profile: LearnerProfile; locale: LocalePack;
-  history: Message[]; retrieved: Chunk[]; persona?: Persona;
-  helpRung: 0 | 1 | 2 | 3 | 4; intent: Intent;
+  agent: AgentConfig; pkg: PackageConfig; entitlement: Entitlement; profile: LearnerProfile;
+  locale: LocalePack; styleCard: StyleCard;
+  history: Message[]; retrieved: Chunk[];
+  lockedHit: boolean;               // the question matches a locked module (code-only probe; locked text never enters a prompt)
+  persona?: Persona; helpRung: 0 | 1 | 2 | 3 | 4; intent: Intent; attempt: Attempt;
 }
-
 interface PedagogyDecision {
-  move: 'ask' | 'hint' | 'worked_example' | 'explain' | 'solution' | 'redirect' | 'check' | 'locked' | 'not_covered';
+  move: 'ask' | 'hint' | 'worked_example' | 'explain' | 'solution' | 'redirect' | 'check' | 'locked' | 'ask_teacher';
   rung: 0 | 1 | 2 | 3 | 4;
   mustNotReveal: string[];
-  systemPrompt: string; tools: ToolName[];
+  systemPrompt: string; tools: ToolName[]; maxOutputTokens: number;
 }
-
+interface TeacherQuestion {         // created by the `ask_teacher` move
+  id: string; teacherId: string; agentId: string; studentId: string;   // student identity hidden from the teacher by default
+  text: string; moduleHint?: string; similarIds: string[];
+  status: 'open' | 'answered' | 'dismissed'; createdAt: string; answeredAt?: string;
+}
 type TurnEvent =
   | { type: 'token'; text: string }
-  | { type: 'sources'; items: { title: string; locator: string }[] }
+  | { type: 'sources'; items: SourceRef[] }
   | { type: 'hint_rung'; rung: number }
   | { type: 'locked'; packageName?: string }
+  | { type: 'teacher_question'; questionId: string }
+  | { type: 'skill'; skill: Skill; payload: unknown }     // practice items, interview state: structured, not tokens
   | { type: 'safety'; level: 'info' | 'alert' }
   | { type: 'replace'; text: string }
-  | { type: 'done'; messageId: string; usage: Usage }
+  | { type: 'done'; messageId: string; usage: Usage[] }
   | { type: 'error'; code: ErrorCode; retryable: boolean };
 
-// ---- Ports ----
+// ---- Model access ----
+interface ModelPolicy {
+  tiers: Record<'small' | 'main', { provider: string; model: string }>;
+  fallback?: { provider: string; model: string };
+}
+// Embeddings are platform-wide config (provider, model, dims), never per agent: changing them re-indexes every teacher.
+interface ModelRequest {
+  tier: 'small' | 'main'; system: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  tools?: { name: ToolName; description: string; inputSchema: unknown }[];
+  maxOutputTokens: number; temperature?: number; cacheKey?: string;
+}
+type ModelChunk =
+  | { type: 'text'; text: string }
+  | { type: 'tool_call'; id: string; name: ToolName; args: unknown }
+  | { type: 'usage'; usage: Usage };
+
+// ---- Safety, memory, tracing, locale ----
+interface SafetyAlert {
+  id: string; level: 'info' | 'alert' | 'critical'; kind: 'distress' | 'abuse' | 'misuse' | 'other';
+  studentId: string; teacherId: string; sessionId: string; excerptRedacted: string; createdAt: string;
+}
+type GuardResult =
+  | { ok: true }
+  | { ok: false; action: 'block'; reason: string }
+  | { ok: false; action: 'rewrite'; text: string; reason: string }   // text = the replacement input or reply
+  | { ok: false; action: 'escalate'; alert: SafetyAlert };
+interface Guard { name: string; stage: 'pre' | 'post'; check(x: { input?: TurnInput; draft?: string; ctx: TurnContext }): Promise<GuardResult> }
+interface LearnerProfile {          // one per (student, teacher)
+  studentId: string; teacherId: string; lang: Lang;
+  mastery: Record<string, { p: number; n: number; updatedAt: string }>;   // topic id -> P(known)
+  mistakes: { tag: string; count: number; lastSeen: string }[];
+  lastSummary?: string;             // ≤ 60 words, from the previous session
+}
+interface TurnTrace {
+  turnId: string; sessionId: string; agentVersion: number; packageVersion: number;
+  steps: { name: string; ms: number; outcome: 'ok' | 'fallback' | 'failed' }[];
+  intent: Intent; move: PedagogyDecision['move']; guards: { name: string; ok: boolean; action?: string }[]; usage: Usage[];
+}
+interface LocalePack {
+  market: string; languages: Lang[]; timezone: string;            // IANA, e.g. 'Asia/Kolkata'
+  currency: { code: string; format: string };
+  payments: { methods: string[]; provider: string };
+  helplines: { name: string; number: string; kind: string }[];
+  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
+  regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
+}
+
+// ---- Ports (the harness defines them; db, gateway, ingest and worker implement them) ----
 interface RetrievalIndex {
   // The filter is required: there is no way to search a teacher's material without it.
   search(q: string, scope: { teacherId: string; allowedModuleIds: string[] }, k: number): Promise<Chunk[]>;
+  // Code-only: says whether locked modules match, never returns their text.
+  probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
 }
-interface EntitlementStore { resolve(studentId: string, teacherId: string, at: string): Promise<Entitlement | null> }
+interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
+interface ProfileStore { get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile> }
+interface TranscriptStore { history(sessionId: string, limit: number): Promise<Message[]>; append(sessionId: string, m: Message): Promise<void> }
+interface CorrectionStore {         // teacher answers and corrections become teacher notes + eval cases
+  addTeacherNote(n: { teacherId: string; moduleId: string; question: string; answer: string; origin: 'correction' | 'teacher_answer' }): Promise<{ chunkId: string; evalCaseId: string }>;
+}
+interface TeacherQuestionStore { open(q: Omit<TeacherQuestion, 'id' | 'status' | 'createdAt'>): Promise<TeacherQuestion>; findSimilar(teacherId: string, text: string): Promise<TeacherQuestion[]> }
+interface UsageMeter { record(u: Usage, ctx: { teacherId: string; packageId: string; studentId: string; turnId: string; source: Entitlement['source'] }): Promise<void> }
 interface ModelGateway {
   stream(req: ModelRequest): AsyncIterable<ModelChunk>;
   generateObject<T>(req: ModelRequest, schema: ZodType<T>): Promise<T>;
   embed(texts: string[]): Promise<number[][]>;
 }
-interface ModelPolicy { tiers: Record<'small' | 'main', { provider: string; model: string }> }
 interface Tool<I, O> {
   name: ToolName; skill: Skill;      // the registry only offers tools whose skill is in the entitlement
   description: string; input: ZodType<I>; output: ZodType<O>;
   run(input: I, ctx: TurnContext): Promise<O>;
 }
-interface Guard {
-  name: string; stage: 'pre' | 'post';
-  check(x: { input?: TurnInput; draft?: string; ctx: TurnContext }): Promise<GuardResult>;
-}
-type GuardResult = { ok: true } | { ok: false; action: 'block' | 'rewrite' | 'escalate'; reason: string };
-interface LearnerProfile {          // one per (student, teacher)
-  studentId: string; teacherId: string; lang: Lang;
-  mastery: Record<string, { p: number; n: number; updatedAt: string }>;   // topic id -> P(known)
-  mistakes: { tag: string; count: number; lastSeen: string }[];
-}
-interface LocalePack {
-  market: string; languages: Lang[]; currency: { code: string; format: string };
-  helplines: { name: string; number: string; kind: string }[];
-  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
-  regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
-}
+interface EvidenceEvent { studentId: string; teacherId: string; topicId: string; correct: boolean; source: 'check' | 'practice' | 'rubric'; weight: number; ts: string }
 interface TraceSink { record(t: TurnTrace): Promise<void> }
 interface AlertSink { raise(a: SafetyAlert): Promise<void> }
 ```
 
 ## Turn pipeline spec
 
-Every student turn runs eleven steps in order inside `harness/pipeline`; each step is a pure function of `(input, ctx) → ctx` plus side effects through ports, with its own timeout. Total budget 20 s; first token within 2 s p95.
+Every student turn runs eleven steps inside `harness/pipeline`; each step is a pure function of `(input, ctx) → ctx` plus side effects through ports, with its own timeout. **Steps 3, 4 and the retrieval part of 6 run concurrently** after a regex-only PII scrub, so the harness adds at most ~600 ms before generation. Targets: harness overhead p95 < 500 ms with the scripted gateway (13.2); first token < 2 s p95 live (measured in 7.7).
 
 | # | Step | Does | Model tier | Timeout | On failure |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `admit` | Auth, rate limit (10 turns/min/student) | — | 50 ms | `error` event; no model call |
-| 2 | `entitle` | Resolve the entitlement server-side; refuse if none or ended; check the package's daily message limit | — | 50 ms | Fail closed: `error: no_access` or `limit_reached` |
-| 3 | `preGuard` | PII scrub, moderation, jailbreak patterns | small | 1.5 s | Fail closed: safe message |
-| 4 | `route` | Intent, including `locked_request` | small | 1.5 s | Default `on_task`; distress keywords still escalate |
-| 5 | `escalate` | If distress: caring reply + helplines, `SafetyAlert` to the trust team, end turn | — | 200 ms | Alert retried until delivered |
-| 6 | `buildContext` | Profile, trimmed history, **access-filtered retrieval**, style card, persona | — | 800 ms | Proceed without retrieval → `not_covered` path |
-| 7 | `decide` | Teaching policy picks move, rung, `mustNotReveal`, prompt, and tools allowed by the entitlement | — (rules) | 50 ms | Fall back to `ask` |
-| 8 | `generate` | Stream from main model, tool calls (max 3 rounds), cite sources | main | 15 s | One retry on fallback model; then apologetic error |
+| 1 | `admit` | Auth, rate limit (10 turns/min/student), input limits (≤ 4,000 chars, ≤ 2 attachments) | — | 50 ms | `error` event; no model call |
+| 2 | `entitle` | Resolve the entitlement server-side (subscription, teacher preview or eval); refuse none, paused or ended; rolling 24-hour message limit | — | 50 ms | Fail closed: `no_access` or `limit_reached` |
+| 3 | `preGuard` | PII scrub (regex, first), moderation, jailbreak; rules first, small model only if inconclusive | small | 400 ms | Fail closed: safe message |
+| 4 | `route` | Intent and `attempt` (none, wrong, partial, correct); rules first, small model only if inconclusive | small | 400 ms | Default `on_task` / `none`; distress keywords still escalate |
+| 5 | `escalate` | If distress: caring reply + helplines from the locale pack, `SafetyAlert` to the trust team, then skip to step 11 (message and trace still saved) | — | 200 ms | Alert retried until delivered |
+| 6 | `buildContext` | Profile and last summary, trimmed history, **access-filtered retrieval** (teacher notes ranked first), `probe` of locked modules → `lockedHit`, style card, persona | — | 300 ms | Proceed without retrieval → `ask_teacher` path |
+| 7 | `decide` | Teaching policy picks move, rung, `mustNotReveal`, prompt, tools allowed by the entitlement, `maxOutputTokens` | — (rules) | 50 ms | Fall back to `ask` |
+| 8 | `generate` | Stream from main model, tool calls (max 3 rounds), cite sources; abort if `MAX_TURN_COST_MICRO_USD` is exceeded | main | 15 s | One retry on the fallback model; then apologetic error |
 | 9 | `postGuard` | Answer leak, locked leak, grounding, advice, persona boundary, tone | small | 2 s | `rewrite` once; else safe reply |
-| 10 | `meter` | Usage ledger row with teacher, package, student, tokens, cost (USD micro-units) | — | async | Queue; never blocks |
-| 11 | `commit` | Persist message, update learner memory, write `TurnTrace` | — | async | Queue; never blocks |
+| 10 | `meter` | Usage rows (cost in USD micro-units; teacher preview billed to the teacher, evals to Edmate) | — | async | Queue; never blocks |
+| 11 | `commit` | Persist messages, open a `TeacherQuestion` for `ask_teacher`, update learner memory, write `TurnTrace` | — | async | Queue; never blocks |
 
-**Streaming with post-guards:** sentence-sized chunks pass a cheap incremental leak check (answer and locked n-grams) before sending; the final post-guard runs on the whole reply before `done`; a failure sends `replace`.
+**Streaming with post-guards:** sentence-sized chunks pass a cheap incremental check (answer and locked n-grams) before sending; the final post-guard runs on the whole reply before `done`; a failure sends `replace`.
 
-**Cost controls:** small tier for steps 3, 4 and 9; prompt caching on system prompts and style cards; history summarised after 20 turns; daily message limit per package; monthly cost alarm per teacher.
+**Cost controls:** small tier only when rules are inconclusive (steps 3, 4) and for post-guards; `maxOutputTokens` per move; a per-turn cost ceiling; prompt caching on system prompts and style cards; history summarised after 20 turns; rolling 24-hour message limit per package; monthly cost alarm per teacher (2.5).
 
 **Determinism:** every step accepts an injected clock, id generator and gateway; `harness/testing` ships a scripted gateway that replays fixtures.
 
@@ -251,14 +313,15 @@ Every student turn runs eleven steps in order inside `harness/pipeline`; each st
 
 Locked material must never reach the model; this is built in, not instructed. ADR-0003 records it.
 
-1. **Entitlements are computed server-side** from the subscription (status, package version, period end). A package id sent by the client is never trusted.
+1. **Entitlements are computed server-side** (`source`: subscription, teacher preview or eval). A package id sent by the client is never trusted.
 2. **Retrieval is filtered in the query.** `RetrievalIndex.search` requires `allowedModuleIds`; the SQL applies `teacher_id = $1 AND module_id = ANY($2)` before ranking. There is no unfiltered search function in any package.
-3. **Skills are filtered in the registry.** The orchestrator only receives tools whose `skill` is in the entitlement; the prompt lists only those skills.
-4. **Caches are keyed by package version.** A cached context or prompt for one package is never reused for another.
-5. **Locked requests get the teacher's chosen reply** (`lockedReply`), via the `locked` move and event.
-6. **Defence in depth:** the `lockedLeak` post-guard checks the reply for n-gram overlap with the teacher's locked modules.
+3. **Locked vs not covered.** `probe` checks the locked modules in code and returns only `{ hit, score }`. `decide` picks `locked` when `lockedHit` is true and allowed retrieval found nothing above threshold; otherwise an uncovered question goes to `ask_teacher`.
+4. **What may reach a model:** module and package *titles* are public (they are on the teacher page). Chunk text from locked modules never reaches any model, including guards: `lockedLeak` is code (n-gram overlap), not a model call.
+5. **Skills are filtered in the registry.** The orchestrator only receives tools whose `skill` is in the entitlement; the prompt lists only those skills.
+6. **Caches are keyed by package version.**
 7. **Changes take effect on the next turn:** payment webhooks update the subscription; `entitle` reads it fresh each turn.
-8. **Tests:** a property test (random entitlements → retrieved chunks ⊆ allowed modules); a locked-content eval suite of at least 200 adversarial cases with a target of zero leaks; per-agent locked cases generated at publish.
+8. **Definition of a leak:** any span of 8 or more tokens from a locked chunk, or any fact present only in locked chunks (judge-scored), in a reply.
+9. **Tests:** a property test (random entitlements → retrieved chunks ⊆ allowed modules); a `locked` eval suite of at least 200 adversarial cases with zero leaks; per-agent locked cases generated at publish.
 
 ## Teaching engine
 
@@ -266,33 +329,46 @@ Teaching behaviour is decided by code and content, not left to the model: `decid
 
 ### Help ladder (per package ceiling)
 
+The effective ceiling is `min(helpCeiling, 3)` when `finalAnswers` is `never`. `route` supplies `attempt`; "an attempt is logged" means `attempt` is not `none`, or a `check_answer` turn.
+
 | From rung | Trigger | To rung | Move |
 | --- | --- | --- | --- |
 | 0 | New problem | 0 | `ask` |
-| n | `hint_request`, intent `answer_seeking`, or 2 turns with no progress | min(n+1, helpCeiling) | 1 nudge · 2 conceptual hint · 3 worked example of a similar problem · 4 solution |
-| any | Student shows a correct step | same | `ask` next step, specific praise |
+| n | `hint_request`, intent `answer_seeking`, or 2 turns with `attempt` none or wrong | min(n+1, effective ceiling) | 1 nudge · 2 conceptual hint · 3 worked example of a similar problem · 4 solution |
+| any | `attempt` correct or partial on a step | same | `ask` next step, specific praise |
 | 3 → 4 | Only if `finalAnswers` is `allowed`, or `after_attempt` and an attempt is logged | 4 | `solution`, then a `check` |
 | any | Problem solved | 0 | `check` (one transfer question) |
 
-### Skills and modes
+### Skills
 
 | Skill | Default move | Rules |
 | --- | --- | --- |
 | `explain` | `explain` then `check` | ≤ 150 words unless asked; cites sources; ends with one comprehension question |
 | `coach` | `ask` | One question per reply; never states the answer below rung 4 |
-| `practice` | `check` | Items from the teacher's bank, or generated to the topic and level; answer keys stay server-side |
+| `practice` | `check` | Items from the teacher's bank, or generated to the topic and level; answer keys stay server-side; items travel as `skill` events |
 | `feedback` | rubric feedback | Never rewrites the student's work for them; points to the rubric line |
 | `mock_interview` | in-persona | Persona template + teacher's notes; `/pause` steps out for coaching; ends after N questions with a debrief |
 | `revision` | summary | Notes and flashcards only from allowed modules, with sources |
-| `study_plan` | plan | Weekly goals over allowed modules; adjusts to progress |
-| `project_coach` | `ask` for evidence | Never produces the deliverable |
+| `study_plan` (P1) | plan | Weekly goals over allowed modules; adjusts to progress |
 
 ### Staying true to the teacher
 
-- **Style card:** a ≤ 300-word summary of the teacher's examples, strictness, common warnings and phrasing, built from the style interview and sample explanations; the teacher can edit it.
-- **Not covered:** if retrieval returns nothing above threshold, the move is `not_covered`: say so, offer to add the question to the next live class.
-- **Corrections:** a teacher's correction is stored as a high-priority "teacher note" chunk in its module and as a permanent eval case.
-- **Prompt packs:** composition order = safety preamble → mode/skill pack → style card → locale pack (language, formats, helplines) → decision block (`move`, `rung`, "do not say" list) → retrieved material with sources → learner summary. Any pack change bumps its semver and must pass the pedagogy, leak and locked suites.
+- **Teacher's material only.** The agent teaches from the teacher's material and the teacher's own notes and answers. It does not fill gaps with general knowledge.
+- **Ask the teacher.** When nothing in the allowed material answers a question, the move is `ask_teacher` (next section).
+- **Style card:** a ≤ 300-word summary of the teacher's examples, strictness, common warnings and phrasing, plus their list of common mistakes; the teacher can edit it.
+- **Corrections:** a teacher's correction becomes a `teacher_note` chunk in its module (ranked first) and a permanent eval case.
+- **Prompt packs:** composition order = safety preamble → skill pack → style card → locale pack → decision block (`move`, `rung`, "do not say" list) → retrieved material with sources → learner summary. Packs are versioned together (`promptPackVersion`); any change bumps the version and must pass the pedagogy, leak and locked suites.
+
+## Ask the teacher (teacher in the loop)
+
+When the agent can't answer from the teacher's material, the teacher answers, and the agent learns from it.
+
+1. **The agent says so plainly:** "That isn't covered in <teacher>'s material yet. I've sent your question to them; their answer will appear here." It does not guess. It can still help with the parts that are covered.
+2. **A `TeacherQuestion` is opened.** Similar open questions are grouped, so the teacher answers once. The student's identity is hidden from the teacher by default.
+3. **The teacher answers in the studio inbox,** choosing the module the answer belongs to (which decides which packages can use it).
+4. **The answer goes back to the student** in the same thread (a `teacher` message) and as a notification, and to every student in the grouped questions.
+5. **The agent learns:** the answer becomes a `teacher_note` chunk in that module and a permanent eval case, so similar questions are answered from it next time.
+6. **Unanswered questions** feed the pre-class question queue and the weekly insights.
 
 ## Knowledge ingestion and teacher studio pipeline
 
@@ -308,18 +384,19 @@ Document states: `uploaded → parsed → transcribed → chunked → embedded �
 
 ## Payments and subscriptions
 
-- **Subscription states:** `trial → active → past_due (grace 3 days) → ended`, plus `paused`. One active package per (student, teacher); several teachers allowed.
+- **Subscription states:** `trial → active → past_due (grace 3 days) → ended`, plus `paused` (the same enum as `Entitlement.status`). One active package per (student, teacher); several teachers allowed.
 - **Plan changes:** upgrade applies now (prorated); downgrade and cancel at period end; pause stops renewal and access.
 - **Webhooks:** signature-verified, idempotent (event id stored), order-independent; they update subscriptions, and entitlements follow.
-- **Ledger:** double-entry; every payment, refund, Edmate share and payout is a balanced entry; daily reconciliation against the provider.
-- **Payouts:** on a schedule to the teacher's verified account; statements per period.
+- **Pilot:** the provider's subscriptions plus a simple ledger (payments, refunds, Edmate share) and a monthly payout export; payouts are made manually.
+- **Later (P1):** automated payouts, statements and daily reconciliation.
 - **Providers per market:** each launch market picks a provider behind the `Payments` port (e.g. UPI AutoPay in India; a merchant of record that collects VAT/sales tax for global sales).
 - **Invoices and tax:** per market (e.g. GST invoices in India); payout tax confirmed with an accountant in each market before launch.
 
 ## Model gateway
 
 - **Keys:** Edmate-held provider keys from the environment / secret manager, only on provider tiers that do not train on inputs. Never logged, stored in the DB, or returned by any API.
-- **Adapters:** Google, OpenAI, Anthropic, OpenRouter, OpenAI-compatible; each declares capabilities (`tools`, `json`, `embeddings`, `vision`, `maxContext`).
+- **Adapters:** MVP ships two (one main provider and OpenAI-compatible); more can be added without changing callers. Each declares capabilities (`tools`, `json`, `embeddings`, `vision`, `maxContext`).
+- **Embeddings:** one platform-wide model (provider, model, dimensions in config); changing it re-indexes every teacher.
 - **Routing:** `small` and `main` tiers; per-agent override; fallback model on 5xx, timeout or rate limit; models that fail the safety, leak or locked suites cannot be selected.
 - **Metering:** every call writes a `usage_ledger` row (`teacher_id, package_id, student_id, model, tier, tokens, cost_micro_usd, turn_id`); `prices.yaml` holds USD per 1M tokens; dashboards convert to the package's currency to show cost per active student against price.
 
@@ -330,12 +407,12 @@ Guards are small, independent `Guard` objects: cheap rules first, then a small-m
 | Guard | Stage | Method | Action on fail |
 | --- | --- | --- | --- |
 | `piiScrub` | pre | Generic patterns (phone, email, card, OTP-like numbers) plus the locale pack's patterns (e.g. Aadhaar-like, PAN); the student's own name | `rewrite` input before any model call |
-| `distressDetect` | pre | Keywords per supported language (incl. romanised Hindi), then a classifier | `escalate`: caring template + helplines from the student's locale pack + alert to the trust team |
+| `distressDetect` | pre | Keywords per supported language (from the locale pack, incl. romanised scripts), then a classifier | `escalate`: caring template + helplines from the student's locale pack + alert to the trust team |
 | `moderationIn` | pre | Provider moderation where available; else classifier with a fixed taxonomy | `block` with redirect; log `safety_event` |
 | `jailbreak` | pre | Patterns + classifier for prompt injection, including "pretend I'm on another package" | `block`; strikes per student |
 | `answerLeak` | post | Numbers and words vs `mustNotReveal`; fuzzy match; judge for paraphrase | `rewrite` once, then safe hint |
-| `lockedLeak` | post | n-gram overlap with the teacher's locked modules for this student | `rewrite` without it |
-| `grounding` | post | Claims checked against retrieved material; numbers recomputed | `rewrite` with corrections or `not_covered` |
+| `lockedLeak` | post | Code only: n-gram overlap with the teacher's locked modules (leak = 8+ token span) | `rewrite` without it |
+| `grounding` | post | Claims must be supported by retrieved material or teacher notes; numbers recomputed | `rewrite` with corrections, or switch to `ask_teacher` |
 | `adviceGuard` | post | Regulated subjects: personal investment, medical or legal advice | `rewrite` to concept-level teaching + disclaimer |
 | `personaBoundary` | post | Persona `must_not` list for interview and viva skills | `rewrite` in persona |
 | `tone` | post | No companion behaviour; never claims to be human or the teacher | `rewrite` |
@@ -360,18 +437,19 @@ Postgres with Drizzle. Teacher-owned rows carry `teacher_id`; student rows carry
 | `teacher_profiles` | user_id, slug, subject, bio, photo, languages, verification_status, payout_account_ref | Public profile |
 | `consents` | user_id, kind, version, ts | Privacy notice, age, rights declarations |
 | `courses` / `modules` / `topics` | teacher_id, ids, titles, order, outline_version | From the outline |
-| `documents` / `chunks` | teacher_id, module_id, source, locator, text, embedding, tsvector, rights_declared_at | pgvector + full text |
+| `documents` / `chunks` | teacher_id, module_id, kind (material/transcript/teacher_note), source, locator, text, embedding, tsvector, rights_declared_at | pgvector + full text |
 | `style_cards` | teacher_id, version, text | Teacher's voice |
 | `agents` / `agent_versions` | teacher_id, config JSON (AgentConfig), status (draft/live/suspended) | Immutable versions |
 | `packages` / `package_versions` | teacher_id, config JSON (PackageConfig) | Immutable versions |
-| `subscriptions` | student_id, teacher_id, package_version_id, status, period_end, provider_ref | One active per student × teacher |
+| `subscriptions` | student_id, teacher_id, package_version_id, status (trial/active/past_due/paused/ended), period_end, provider_ref | One active per student × teacher |
 | `payments` / `ledger_entries` / `payouts` / `invoices` | amount_minor + currency, provider refs, market | Double-entry ledger, one currency per entry |
 | `webhook_events` | provider_event_id (unique), payload hash, processed_at | Idempotency |
 | `sessions` / `messages` | student_id, teacher_id, agent_version, help_state, summary; message content | Retention job applies |
 | `turn_traces` | session_id, steps JSON, model, tokens, cost_micro_usd | No keys, no names |
 | `usage_ledger` | teacher_id, package_id, student_id, model, tier, tokens, cost_micro_usd | Caps and dashboards |
 | `evidence_events` / `learner_profiles` | student_id, teacher_id, topic, correct, source | Mastery |
-| `corrections` | teacher_id, question, bad_answer, corrected_answer, module_id | Also eval cases |
+| `corrections` | teacher_id, question, bad_answer, corrected_answer, module_id | Also teacher-note chunks and eval cases |
+| `teacher_questions` | teacher_id, agent_id, student_id (hidden from teacher), text, module_hint, group_id, status, answer, answered_at | Ask the teacher |
 | `eval_runs` / `eval_results` | agent_version, suite, model, pass_rate | Quality gate |
 | `live_classes` / `class_questions` | teacher_id, package ids, starts_at, link; questions | |
 | `insights` | teacher_id, week, payload JSON | Aggregated, anonymised |
@@ -395,6 +473,7 @@ Zod-validated route handlers under `apps/web/app/api`, plus SSE endpoints for tu
 | `POST /api/studio/publish` | teacher | Runs the quality gate, then publishes |
 | `GET /api/studio/insights` · `GET /api/studio/earnings` | teacher | Weekly insights, earnings |
 | `GET/POST /api/studio/live-classes` | teacher | Schedule live classes |
+| `GET /api/studio/questions` · `POST /api/studio/questions/:id/answer` | teacher | Questions inbox: answer with a module choice, or dismiss |
 | `POST /api/webhooks/payments` | provider | Signed payment webhooks |
 | `GET/POST /api/staff/verifications` · `/reports` · `/takedowns` · `/alerts` | staff | Trust console |
 
@@ -408,19 +487,23 @@ Evals gate merges in CI on recorded fixtures, and gate every agent before it is 
 
 | Suite | Size at M7 | Checks | Merge gate (fixtures) | Publish / live gate |
 | --- | --- | --- | --- | --- |
-| `leak` | 150 | Answers withheld under pressure, role claims, Hinglish | 100% | ≥ 98% |
+| `leak` | 150 | Answers withheld under pressure, role claims, mixed languages | 100% | ≥ 98% |
 | `locked` | 200 | Extracting other packages' material and skills | 100% | **0 leaks** |
 | `safety` | 300 | Distress, harmful requests, jailbreaks, PII | 100% | 100% distress; ≥ 99% rest |
-| `accuracy` | per agent ≥ 50 | Answers vs the teacher's material and question bank | 100% on platform cases | ≥ 99% |
+| `accuracy` | per agent ≥ 50 | Answers vs the teacher's material, notes and question bank; uncovered questions go to `ask_teacher` | 100% on platform cases | ≥ 99% |
 | `persona` | 100 | Mock interview and viva stay in role, respect `must_not` | 100% | ≥ 97% |
 | `pedagogy` | 150 | One question at a time, hints before answers, sources cited | ≥ 95% | mean ≥ 4/5 |
 | `advice` | 100 | No personal investment, medical or legal advice | 100% | ≥ 99% |
+
+**Gate scope:** first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case pedagogy and persona sample.
+
+**Scorecard:** each published agent version carries a public teaching scorecard (hints before answers, locked content, accuracy) from its latest gate run.
 
 **Per-agent suites:** generated at publish from the teacher's question bank, every correction, and auto-drafted questions the teacher approves, plus locked cases built from the agent's own packages.
 
 **Judges:** a fixed judge model on an Edmate key scores rubric cases; 10% are double-checked by humans each release; judge-human agreement ≥ 85%.
 
-**Fixtures:** `edmate eval --record` captures live responses; CI replays them, so PRs need no provider keys.
+**Fixtures:** `edmate eval --record` captures live responses **and judge outputs**; CI replays them, so PRs need no provider keys.
 
 ## Web surfaces (minimal)
 
@@ -428,153 +511,161 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 
 | Surface | Screens | Must have |
 | --- | --- | --- |
-| Student app | Sign-up · Discover · Teacher page · Package compare + checkout · Chat · Practice · Feedback · Mock interview · Progress · Plan · Live classes | Streaming chat with markdown, maths and code; sources; hint button with rung; locked notice; photo upload of written work |
-| Teacher studio | Onboarding · Uploads · Outline · Style card · Test chat + corrections · Package builder · Publish + gate results · Profile · Insights · Earnings · Live classes | Live processing status; preview as a student per package; AI cost estimate per package |
+| Student app | Sign-up · Discover · Teacher page (with scorecard) · Package compare + checkout · Chat · Practice · Feedback · Mock interview · Progress · Plan · Live classes | Streaming chat with markdown, maths and code; sources; hint button with rung; locked notice; teacher answers in the thread |
+| Teacher studio | Onboarding · Uploads · Outline · Style card · Test chat + corrections · Package builder · Publish + gate results · Profile · **Questions inbox** · Insights · Earnings · Live classes | Live processing status; preview as a student per package; AI cost estimate per package |
 | Staff console | Verifications · Reports · Takedowns · Regulated-subject review · Safety alerts · Audit | Every action audited |
 | Public | Landing · Teacher pages · Privacy notice · Grievance officer · Terms | Server-rendered teacher pages for search |
 
 ## Milestones and tasks
 
-96 tasks in 14 milestones. M0–M7 build and prove the agent; the **harness exit gate** must pass before M8 and M9 start. M10 (payments) can start once the data model exists. Task IDs are stable for branches (`m5/5.4-access-filter`) and PRs.
+104 tasks in 14 milestones. M0–M7 build and prove the agent; the **harness exit gate** must pass before M8 and M9 start. M2 starts right after M0. M10 (payments) and M12 (trust console) run alongside. Task IDs are stable for branches (`m5/5.4-access-filter`) and PRs. Tasks marked (P1) are not needed for the pilot.
 
 ### M0 · Foundations (depends on: none)
 
-- **0.1** Monorepo scaffold: pnpm, Turborepo, strict tsconfig, eslint, prettier, Vitest. *Accept:* `corepack pnpm build && corepack pnpm test && corepack pnpm lint` green on empty packages.
+- **0.1** Monorepo scaffold: pnpm, Turborepo, strict tsconfig, eslint (with the harness purity rule from rule 3), prettier, Vitest; every directory in Repo layout: `apps/web` (Next.js with `/api/health`), `apps/worker` (BullMQ no-op worker), `apps/cli` (`edmate --version`), all `packages/*` as empty workspaces. *Accept:* `corepack pnpm build && corepack pnpm test && corepack pnpm lint` green; `/api/health` returns 200 in dev; importing `drizzle-orm` from `packages/harness` fails lint.
 - **0.2** Docker Compose (postgres+pgvector, redis, minio, caddy, web, worker) and `env.example`. *Accept:* `docker compose up` serves `/api/health` = 200 and a test file round-trips through MinIO.
-- **0.3** `packages/contracts`: every type in Core contracts as Zod. *Accept:* sample fixtures round-trip parse/serialize.
-- **0.4** ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction. *Accept:* files merged.
-- **0.6** Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create. *Accept:* the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
+- **0.3** `packages/contracts`: every type in Core contracts as Zod, with fixtures in `packages/contracts/fixtures`. *Accept:* fixtures round-trip parse/serialize; exported `z.infer` types match Core contracts; `harness/testing` can import the fixtures.
+- **0.4** ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction (incl. the probe, public titles and the leak definition). *Accept:* files merged.
 - **0.5** GitHub Actions: CI, secret scan, merge-gate check (verifies the `human-approved` label came from the owner), risk labeller; PR template. *Accept:* CI blocks a failing test; the merge-gate check fails a risky PR without the owner's label.
+- **0.6** Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create. *Accept:* the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
 
 ### M1 · Data, accounts and auth (depends on: M0)
 
 - **1.1** Drizzle schema for every table in Data model; migrations. *Accept:* migrate up/down clean; teacher-owned tables indexed on `teacher_id`.
 - **1.2** Repositories scoped by teacher and by student. *Accept:* cross-teacher and cross-student reads and writes fail closed in tests.
 - **1.3** Auth.js Google sign-in; roles student, teacher, staff; RBAC middleware. *Accept:* role × route matrix tests pass.
-- **1.4** Phone OTP sign-in via the SMS provider adapter. *Accept:* sandbox login works; OTP requests rate-limited per number and IP.
-- **1.5** Seed: demo teacher with an open-licensed course, two packages, 20 students with mixed subscriptions. *Accept:* `corepack pnpm seed` idempotent.
+- **1.4** Email magic-link sign-in (phone OTP later, per market). *Accept:* link sign-in works in the sandbox; requests rate-limited per address and IP.
+- **1.5** Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions. *Accept:* `corepack pnpm seed` idempotent.
 - **1.6** Audit log helper. *Accept:* config, staff and memory changes write before/after rows.
 - **1.7** Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records. *Accept:* a user who does not confirm 18+ cannot create an account; consent versions stored.
+- **1.8** Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list, a Q&A recall set and two packages. *Accept:* `edmate content validate` passes; licence recorded per file; a named human reviewer signs off.
 
-### M2 · Model gateway (depends on: M0, 1.1)
+### M2 · Model gateway (depends on: M0)
 
 - **2.1** Provider keys from the environment / secret manager. *Accept:* a log-scan test proves no key appears in logs, traces or API responses.
-- **2.2** Adapters: Google, OpenAI, Anthropic, OpenRouter, OpenAI-compatible, with capabilities. *Accept:* shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures.
+- **2.2** Two adapters for the MVP: one main provider and OpenAI-compatible (which covers OpenRouter and self-hosted), with capability declarations. *Accept:* shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures; a third adapter needs no caller changes.
 - **2.3** Router: tiers, per-agent override, fallback. *Accept:* a simulated 5xx fails over within one retry.
-- **2.4** Metering: `usage_ledger` per call with teacher, package and student; `prices.yaml`. *Accept:* one ledger row per call; cost per active student report matches the rows.
-- **2.5** Limits: package daily message limit, monthly cost alarm per teacher. *Accept:* the limit returns `limit_reached` with a friendly message; the alarm fires at the threshold.
-- **2.6** Scripted gateway in `harness/testing`. *Accept:* replays fixtures deterministically.
-- **2.7** Transcriber and embedding adapters. *Accept:* a 60-minute audio fixture transcribes through the scripted adapter; a live smoke test runs behind `--live`.
+- **2.4** Metering: usage rows per call with teacher, package, student and source; `prices.yaml` in USD. *Accept:* one row per call; cost per turn and per active student computed from the rows.
+- **2.5** Limits: rolling 24-hour message limit per package; monthly cost alarm per teacher that alerts staff and the teacher, and pauses free packages only (paid students keep access until a staff decision). *Accept:* the limit returns `limit_reached` with a friendly message; the alarm fires at the threshold with the stated effects.
+- **2.6** Scripted gateway in `harness/testing`. *Accept:* replays fixtures deterministically, including tool calls and usage.
+- **2.7** Transcriber and embedding adapters (embedding model is platform-wide config). *Accept:* a 60-minute audio fixture transcribes through the scripted adapter; a live smoke test runs behind `--live`.
 
 ### M3 · Harness core (depends on: M0, 2.6)
 
-- **3.1** Pipeline runner: eleven ordered steps, timeouts, injected clock and ids, trace capture. *Accept:* tests for each failure policy in the Turn pipeline table.
-- **3.2** `admit` and `entitle`: rate limit, server-side entitlement, daily limit. *Accept:* each rejection returns its code; an ended subscription is refused; client-sent package ids are ignored.
-- **3.3** `route`: intent classifier including `locked_request`. *Accept:* ≥ 90% accuracy on 200 labelled English, Hindi and Hinglish turns.
-- **3.4** `buildContext`: history trim, summaries, access-filtered retrieval via the port, style card, persona. *Accept:* never exceeds model context; retrieval cannot be called without `allowedModuleIds` (type-checked).
-- **3.5** Teaching policy: help ladder, skill rules, per-package limits, `locked` and `not_covered` moves. *Accept:* table-driven tests cover every transition.
-- **3.6** Prompt-pack loader and composer with semver, style card and sources. *Accept:* snapshot tests of composed prompts per skill.
-- **3.7** Orchestrator: streaming, tool calls (max 3 rounds), SSE events incl. `sources`, `locked` and `replace`. *Accept:* an integration test streams a full turn via the scripted gateway.
+- **3.1** Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture. *Accept:* tests for each failure policy; steps 3, 4 and retrieval run concurrently.
+- **3.2** `admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit. *Accept:* each rejection returns its code; paused and ended are refused; client-sent package ids are ignored; teacher preview and eval entitlements never need a subscription.
+- **3.3** `route`: intent and `attempt`, rules first. *Accept:* ≥ 90% accuracy on 200 labelled turns in English plus the pilot pack's languages, reviewed by a named human.
+- **3.4** `buildContext`: history trim, last summary, access-filtered retrieval, locked `probe`, style card, persona. *Accept:* never exceeds model context; retrieval cannot be called without `allowedModuleIds` (type-checked); probe results contain no text.
+- **3.5** Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move. *Accept:* table-driven tests cover every transition, including `helpCeiling 4` with `finalAnswers never`.
+- **3.6** Prompt-pack loader and composer with `promptPackVersion`, style card, locale pack and sources. *Accept:* snapshot tests of composed prompts per skill.
+- **3.7** Orchestrator: streaming, tool calls (max 3 rounds), per-turn cost ceiling, SSE events incl. `sources`, `locked`, `teacher_question`, `skill` and `replace`. *Accept:* an integration test streams a full turn via the scripted gateway; an over-budget turn aborts with `turn_cost_exceeded`.
 - **3.8** `meter` and `commit` via the worker queue. *Accept:* reply latency unaffected when the DB is slow (injected delay).
+- **3.9** CLI `edmate chat --agent --package` (teacher-preview or eval entitlement). *Accept:* a full session with the demo teacher runs in a terminal with a real key.
 - **3.10** Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance. *Accept:* `edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts.
-- **3.9** CLI `edmate chat --agent --package`. *Accept:* a full session with the demo teacher runs in a terminal with a real key.
+- **3.11** Prompt packs v1.0.0: safety preamble, one pack per MVP skill, mock-interview and viva persona templates. *Accept:* packs validate; a named human reviewer signs off; snapshot tests from 3.6 updated.
+- **3.12** Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs. *Accept:* runs fully offline in CI on fixtures.
 
-### M4 · Guardrails and safety (depends on: 3.1)
+### M4 · Guardrails and safety (depends on: 3.1, 3.12)
 
-- **4.1** Guard framework and registry. *Accept:* guards run in declared order and fail closed.
-- **4.2** `piiScrub`. *Accept:* 100% on the PII set.
-- **4.3** `distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation. *Accept:* 100% of distress cases escalate; alert delivered < 5 min in an integration test.
-- **4.4** `moderationIn`, `jailbreak`, strikes. *Accept:* safety suite meets its gates.
-- **4.5** `answerLeak` (incremental + final) and the rewrite loop. *Accept:* leak suite 100% on fixtures.
-- **4.6** `lockedLeak` post-guard. *Accept:* locked suite 100% on fixtures.
-- **4.7** `grounding` with calculator recompute and the `not_covered` path. *Accept:* accuracy suite gates; ≥ 95% of uncovered questions answered as not covered.
-- **4.8** `adviceGuard` for regulated subjects. *Accept:* advice suite gates.
-- **4.9** `personaBoundary` and `tone`. *Accept:* persona suite gates; no reply claims to be human or the teacher.
+- **4.0** Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona). *Accept:* cases validate; reviewer recorded per case.
+- **4.1** Guard framework and registry. *Accept:* guards run in declared order and fail closed; `rewrite` returns replacement text.
+- **4.2** `piiScrub` (generic + locale-pack patterns). *Accept:* 100% on the seeded PII cases.
+- **4.3** `distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation. *Accept:* 100% of distress cases escalate; alert delivered < 5 min in an integration test; the turn is still saved.
+- **4.4** `moderationIn`, `jailbreak`, strikes. *Accept:* seeded safety cases meet the gates.
+- **4.5** `answerLeak` (incremental + final) and the rewrite loop. *Accept:* seeded leak cases 100% on fixtures.
+- **4.6** `lockedLeak` post-guard (code only). *Accept:* seeded locked cases 100% on fixtures; the guard makes no model call.
+- **4.7** `grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`. *Accept:* seeded grounding cases pass; ≥ 95% of uncovered questions go to `ask_teacher`, none answered from general knowledge.
+- **4.8** `adviceGuard` for regulated subjects. *Accept:* seeded advice cases pass.
+- **4.9** `personaBoundary` and `tone`. *Accept:* seeded persona cases pass; no reply claims to be human or the teacher.
 
 ### M5 · Knowledge, access filter and skills (depends on: M3)
 
 - **5.1** Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators. *Accept:* a 20-file fixture set parses; every chunk keeps its page, slide or heading.
 - **5.2** Video ingestion: upload → transcription → timestamped chunks. *Accept:* the 60-minute fixture is searchable within the 15-minute budget.
-- **5.3** Chunking, embeddings, full-text fallback, hybrid ranking; chunks tagged teacher → course → module. *Accept:* recall@5 ≥ 0.8 on the demo Q&A set, with and without embeddings.
-- **5.4** Access filter: filtered `RetrievalIndex.search`, entitlement-filtered tool registry, package-versioned caches. *Accept:* property test (random entitlements → results ⊆ allowed modules); no unfiltered search exists anywhere.
+- **5.3** Chunking, embeddings, full-text fallback, hybrid ranking with teacher notes first; chunks tagged teacher → course → module. *Accept:* recall@5 ≥ 0.8 on the demo Q&A set, with and without embeddings.
+- **5.4** Access filter: filtered `search`, code-only `probe`, entitlement-filtered tool registry, package-versioned caches. *Accept:* property test (random entitlements → results ⊆ allowed modules); `probe` never returns text; no unfiltered search exists anywhere.
 - **5.5** Tool registry and sandboxed calculator. *Accept:* fuzz test shows no access outside declared scope.
-- **5.6** Practice skill: item selection and generation by topic and level, scoring. *Accept:* items map to the outline's topics; answer keys never reach the client.
-- **5.7** Feedback skill: rubric feedback on answers, essays and code (no execution). *Accept:* ≥ 70% agreement with the demo teacher's scores on 30 samples.
-- **5.8** Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief. *Accept:* persona suite on fixtures.
-- **5.9** Revision and study-plan skills. *Accept:* notes cite sources; plans only cover allowed modules.
+- **5.6** Practice skill: item selection and generation by topic and level, scoring, `skill` events. *Accept:* items map to the outline's topics; answer keys never reach the client.
+- **5.7** Feedback skill: rubric feedback on answers, essays and code (no execution). *Accept:* ≥ 70% agreement with the demo teacher's rubric scores on its 30 samples.
+- **5.8** Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief. *Accept:* seeded persona cases on fixtures.
+- **5.9** Revision skill. *Accept:* notes and flashcards cite sources and cover only allowed modules.
+- **5.10** Ask-the-teacher path: open and group `TeacherQuestion`s; teacher answer → student thread + notification; `CorrectionStore` turns answers and corrections into teacher notes and eval cases. *Accept:* in an integration test, an uncovered question is answered by the teacher and the next similar question is answered from the new note, citing it.
+- **5.11** Outline drafter and style-card drafter (`packages/ingest`). *Accept:* a demo outline links every topic to source chunks; the style card is ≤ 300 words and includes the mistakes list.
 
 ### M6 · Learner memory and progress (depends on: M3, 5.6)
 
 - **6.1** Topic map from the course outline, with validation. *Accept:* unknown or cyclic references rejected.
 - **6.2** Evidence events, BKT mastery per (student, teacher, topic), rebuild. *Accept:* matches hand-computed values to 3 decimals.
 - **6.3** Mistake tagging from the teacher's list, plus proposed tags the teacher approves. *Accept:* never emits a tag outside the list.
-- **6.4** Session summary and end-of-topic check. *Accept:* summary ≤ 60 words; the next session uses it.
+- **6.4** Session summary and end-of-topic check. *Accept:* summary ≤ 60 words, stored as `lastSummary`; the next session uses it.
 - **6.5** Student view, reset and export of memory. *Accept:* reset clears the profile and writes an audit row.
 
 ### M7 · Evals and the quality gate (depends on: M3, M4, 5.4)
 
-- **7.1** Eval runner: YAML multi-turn cases, judges, JSON + HTML reports, `--record` / replay. *Accept:* runs offline in CI.
-- **7.2** Platform suites to target sizes, each case human-reviewed. *Accept:* counts per the Evals table; reviewer recorded per case.
-- **7.3** Per-agent suite generator from the question bank, corrections, approved drafts and the agent's packages. *Accept:* the demo teacher gets ≥ 50 accuracy cases and ≥ 30 locked cases.
-- **7.4** Quality gate: runs on publish and on every agent, package, material or style-card change; blocks publish on failure. *Accept:* a deliberately bad agent cannot publish.
+- **7.1** Eval reports and judge calibration: JSON + HTML reports per suite and model; 10% human double-check with agreement tracking. *Accept:* reports generated in CI; agreement recorded.
+- **7.2** Grow platform suites to target sizes, each case human-reviewed. *Accept:* counts per the Evals table; reviewer recorded per case.
+- **7.3** Per-agent suite generator from the question bank, teacher notes, approved drafts and the agent's packages. *Accept:* the demo teacher gets ≥ 50 accuracy cases and ≥ 30 locked cases.
+- **7.4** Quality gate, scoped by change: first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case pedagogy and persona sample. Blocks publish on failure. *Accept:* a deliberately bad agent cannot publish; a material change finishes in < 15 minutes.
 - **7.5** CI merge gates on fixtures. *Accept:* a deliberately leaky prompt pack fails CI.
-- **7.6** Live model runs and per-model pass rates. *Accept:* a report per configured model and suite.
-- **7.7** Turn traces and health metrics. *Accept:* p50/p95 latency, error and guard rates computed from traces.
+- **7.6** Live model runs, per-model pass rates and cost per turn by tier. *Accept:* a report per configured model and suite, with cost per turn.
+- **7.7** Turn traces and health metrics. *Accept:* p50/p95 latency (incl. live first token), error and guard rates computed from traces.
+- **7.8** Teaching scorecard: per-agent pass rates for hints-before-answers, locked content and accuracy, published with each agent version. *Accept:* the demo agent's scorecard is generated from its latest gate run.
 
-**Harness exit gate:** the demo teacher's agent, with a Free and a paid package, passes every suite live on at least two providers (one low-cost), with zero locked-content leaks; a recorded CLI demo shows explain → practice → feedback → mock interview → a locked request refused → upgrade → the same request answered.
+**Harness exit gate:** the demo teacher's agent, with a Free and a paid package, passes every suite live on at least two providers (one low-cost), with zero locked-content leaks; a recorded CLI demo shows explain → practice → feedback → mock interview → a locked request refused → upgrade → the same request answered → an uncovered question sent to the teacher, answered, and reused.
 
 ### M8 · Teacher studio (depends on: GATE, 1.3, 5.1, 5.2)
 
-- **8.1** Onboarding: profile, subject, bio, photo, identity verification and payout account hand-off. *Accept:* an unverified teacher cannot publish.
+- **8.1** Onboarding: profile, subject, bio, photo, payout account hand-off; identity checked manually by staff (12.1). *Accept:* an unverified teacher cannot publish.
 - **8.2** Upload centre with live processing status, delete and replace. *Accept:* status updates live; a deleted file leaves retrieval within 1 minute.
 - **8.3** Outline editor with source links; reorder, rename, merge, split. *Accept:* outline for 20 files in < 10 minutes; edits versioned.
-- **8.4** Style interview and style card editor. *Accept:* the teacher can preview and edit the card; the agent uses the new version on the next turn.
+- **8.4** Style interview (incl. common mistakes) and style card editor. *Accept:* the teacher can preview and edit the card; the agent uses the new version on the next turn.
 - **8.5** Test chat as a student per package; mark and correct answers. *Accept:* a correction changes the next answer and becomes an eval case.
 - **8.6** Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate. *Accept:* two packages in < 15 minutes; estimate shown per package.
-- **8.7** Publish flow with quality-gate results and the public profile page. *Accept:* failures show which cases failed; a pass publishes in < 1 minute.
+- **8.7** Publish flow with quality-gate results, the teaching scorecard and the public profile page. *Accept:* failures show which cases failed; a pass publishes in < 1 minute.
 - **8.8** Insights and earnings views. *Accept:* earnings match the ledger; insights show no individual student.
+- **8.9** Questions inbox: grouped open questions, answer with a module choice, dismiss. *Accept:* an answer reaches every grouped student and becomes a teacher note and eval case.
 
 ### M9 · Student app (depends on: GATE, 1.3, 1.7)
 
 - **9.1** App shell, mobile-first layouts (360 px up), next-intl, auth. *Accept:* Lighthouse accessibility ≥ 95 at 360 px.
-- **9.2** Discovery and teacher pages (server-rendered). *Accept:* search < 1 s on a 1,000-teacher seed.
+- **9.2** Discovery and teacher pages (server-rendered) with packages and the teaching scorecard. *Accept:* search < 1 s on a 200-teacher seed.
 - **9.3** Package compare, free package start, checkout. *Accept:* the package unlocks on the next message after payment.
-- **9.4** Chat: SSE, markdown, maths and code, photo upload, sources, hint button with rung, locked notice. *Accept:* component tests + e2e.
-- **9.5** Skill screens: practice, feedback submission, mock interview. *Accept:* e2e per skill.
+- **9.4** Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread. *Accept:* component tests + e2e.
+- **9.5** Skill screens: practice, feedback submission, mock interview (from `skill` events). *Accept:* e2e per skill.
 - **9.6** Progress, plan changes (upgrade, downgrade, pause, cancel) and export. *Accept:* export is complete JSON plus notes PDF.
-- **9.7** E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked. *Accept:* green in CI with scripted gateway and payment sandbox.
+- **9.7** E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer. *Accept:* green in CI with scripted gateway and payment sandbox.
 
 ### M10 · Payments and payouts (depends on: M1, 2.4)
 
-- **10.1** Payment provider adapter for the pilot market behind the `Payments` port (e.g. UPI AutoPay mandates and cards in India), teacher linked accounts. *Accept:* provider sandbox flows pass; a second provider can be added without changing callers.
+- **10.1** Payment provider adapter for the pilot market behind the `Payments` port, using the provider's subscriptions. *Accept:* provider sandbox flows pass; a second provider can be added without changing callers.
 - **10.2** Signed, idempotent, order-independent webhooks → subscriptions → entitlements. *Accept:* replayed and out-of-order webhooks end in the correct state.
-- **10.3** Subscription state machine: trial, active, past due with grace, paused, ended; prorated upgrades. *Accept:* table-driven state tests.
-- **10.4** Double-entry ledger, revenue share, daily reconciliation. *Accept:* reconciles with sandbox reports; every entry balances.
-- **10.5** Teacher payouts and statements. *Accept:* payout amounts equal ledger balances.
-- **10.6** Refunds and tax invoices per market (e.g. GST in India). *Accept:* one invoice per payment; a refund updates the ledger and the entitlement.
+- **10.3** Subscription state machine: trial, active, past due (3-day grace), paused, ended; prorated upgrades. *Accept:* table-driven state tests.
+- **10.4** Simple ledger (payments, refunds, Edmate share) and a monthly payout export for manual payouts in the pilot. *Accept:* the export matches the provider's report for the month.
+- **10.5** Automated payouts, statements and daily reconciliation (P1). *Accept:* payout amounts equal ledger balances.
+- **10.6** Refunds and tax invoices per market. *Accept:* one invoice per payment; a refund updates the ledger and the entitlement.
 
 ### M11 · Live classes and insights (depends on: 9.1, 8.1, M6)
 
 - **11.1** Schedule live classes with an external link, attach to packages, invites and reminders (24 h and 1 h). *Accept:* only entitled students receive the link.
-- **11.2** Pre-class question queue, fed by students and by the agent's "ask your teacher" handoffs. *Accept:* questions grouped by topic for the teacher.
-- **11.3** Weekly insights worker: top questions, sticking topics, unhelpful answers; aggregated with a minimum group size of 5. *Accept:* generated Monday 07:00 IST; no student identifiable.
+- **11.2** Pre-class question queue grouped by topic, fed by students and by unanswered ask-the-teacher questions. *Accept:* the teacher sees questions grouped by topic.
+- **11.3** Weekly insights worker: top questions, sticking topics, unhelpful answers, open teacher questions; aggregated with a minimum group size of 5. *Accept:* generated Monday 07:00 in the locale pack's timezone; no student identifiable.
 - **11.4** Live-class recording ingestion into the agent's knowledge (P1). *Accept:* searchable within 15 minutes.
 
 ### M12 · Trust and safety console (depends on: 1.6, 4.3)
 
-- **12.1** Staff console with teacher verification queue. *Accept:* approve/reject audited; unverified teachers stay unpublished.
+- **12.1** Staff console with manual teacher verification. *Accept:* approve/reject audited; unverified teachers stay unpublished.
 - **12.2** Report button, review queue and takedown of material or agents. *Accept:* a report reaches staff < 5 minutes; a takedown removes material from retrieval at once.
-- **12.3** Rights declaration per upload, repeat-infringer handling, grievance contact per market (e.g. IT Rules 2021 in India). *Accept:* a declaration is stored per document; the page is public.
-- **12.4** Regulated-subject review before publish. *Accept:* flagged agents cannot publish without staff approval.
+- **12.3** Rights declaration per upload, repeat-infringer handling, grievance contact per market. *Accept:* a declaration is stored per document; the page is public.
+- **12.4** Regulated-subject flag set manually by staff before publish. *Accept:* flagged agents cannot publish without staff approval.
 - **12.5** Safety alert inbox with acknowledgement. *Accept:* unacknowledged alerts escalate after 15 minutes.
 
 ### M13 · Hardening and pilot (depends on: M8, M9, M10, M11, M12)
 
 - **13.1** Accessibility: axe in CI and a manual WCAG 2.2 AA pass. *Accept:* no serious violations.
-- **13.2** Load test: 500 concurrent students. *Accept:* first token p95 < 2 s with the scripted gateway.
+- **13.2** Load test: 50 concurrent students. *Accept:* harness overhead p95 < 500 ms with the scripted gateway.
 - **13.3** Security review: teacher and student isolation, entitlement bypass attempts, webhooks, OWASP Top 10, dependency audit. *Accept:* no high findings open.
-- **13.4** DPDP: per-user export and delete, retention jobs. *Accept:* jobs tested; export complete.
-- **13.5** Cost dashboard: AI cost per active student per package against price. *Accept:* numbers match the usage ledger.
+- **13.4** Privacy rights per the locale pack's `privacyLaw`: per-user export and delete, retention jobs. *Accept:* jobs tested; export complete.
+- **13.5** Cost dashboard: AI cost per turn and per active student per package against price. *Accept:* numbers match the usage rows.
 - **13.6** Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist. *Accept:* fresh VM to running demo in < 30 minutes; checklist signed off by a human.
 
 ## Agent operating rules and definition of done
@@ -616,12 +707,13 @@ Agents should not decide these; each blocks the tasks listed until a human answe
 | Decision | Options | Recommendation | Blocks |
 | --- | --- | --- | --- |
 | Code licence | **Decided: MIT** (16 Oct 2026) | — | — |
+| Grounding | **Decided: teacher's material only; uncovered questions go to the teacher, whose answers teach the agent** (17 Oct 2026) | — | — |
+| Courses per teacher | **Decided: one course and one agent per teacher in the MVP** (17 Oct 2026) | — | — |
 | Repo host | **Decided: public GitHub repo; agents use a private GitHub App** (16 Oct 2026) | — | — |
 | Minimum learner age | 18+ only · also 13–17 with parental consent | 18+ for the MVP | 1.7 |
 | Pilot market | Where the 20 anchor teachers are (e.g. India, or global English) | Decide in the Validate phase | 3.10 (first pack), 10.1, 13.6 |
 | Payment provider (pilot market) | India: Razorpay · Cashfree · Stripe India; global: a merchant of record (handles VAT/sales tax) | Subscriptions + split payouts to teachers; compare fees | 10.1, 8.1 |
 | Revenue share and floor price | Edmate % of each subscription; minimum package price | Decide after cost data from 7.6 | 10.4, 8.6 |
-| SMS / OTP provider | Indian SMS gateway · global provider · Firebase Auth | Any with Indian DLT-compliant delivery | 1.4 |
 | Transcription | Provider speech-to-text (OpenAI, Google) · self-hosted Whisper | Provider API for the MVP | 2.7 |
 | Moderation | Classifier only · self-hosted Llama Guard · provider moderation | Provider moderation where available, classifier otherwise | 4.4 |
 | Judge model | Fixed judge on an Edmate key | One mid-tier model, pinned per release | 7.1 |

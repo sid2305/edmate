@@ -17,7 +17,7 @@ You write the **platform** layer of teaching: how every teacher's agent asks, hi
 - **Demo teacher course** (`content/demo-teacher/`): a small, open-licensed course (for example beginner Python) with modules, notes, a question bank with answers, a common-mistakes list and two packages. Use only material you write yourself or that carries a licence allowing reuse, and record the licence.
 
 ## Rules
-- **Make students think:** ask before telling, one question at a time, hints before answers, cite sources, say "not covered" instead of guessing.
+- **Make students think:** ask before telling, one question at a time, hints before answers, cite sources, and when the material doesn't cover a question, say so and send it to the teacher (`ask_teacher`); never fill gaps with general knowledge.
 - **Locked means locked:** prompts must never name or summarise modules outside the student's package. The access filter keeps them out, and your wording must not invite guessing.
 - **Educate, never advise** in regulated subjects (investing, health, law).
 - **Language:** write packs in English with an instruction to reply in the student's language. Mirror romanised Hindi if the student uses it.

@@ -1,6 +1,6 @@
 ---
 name: edmate-pedagogy
-description: How every Edmate teacher's agent teaches. Covers the help ladder, the teaching moves (ask, hint, explain, check, locked, not covered), the eight skills and their rules, staying true to the teacher (sources, style card, corrections), and prompt-pack composition. Use when building the teaching policy (3.5), prompt packs (3.6), skills (5.6–5.9), or writing pedagogy, leak and locked eval cases.
+description: How every Edmate teacher's agent teaches. Covers the help ladder, the teaching moves (ask, hint, explain, check, locked, ask the teacher), the MVP skills and their rules, staying true to the teacher (sources, style card, corrections), and prompt-pack composition. Use when building the teaching policy (3.5), prompt packs (3.6), skills (5.6–5.9), or writing pedagogy, leak and locked eval cases.
 ---
 
 # Edmate pedagogy
@@ -19,11 +19,11 @@ The spec is build plan § *Teaching engine* and PRD § *The teacher's agent*. Th
 | 3 | worked example of a **similar** problem | Same triggers again |
 | 4 | `solution` | Only if `finalAnswers` = `allowed`, or `after_attempt` and an attempt is logged. Always followed by a `check` |
 
-A correct step from the student stays on the same rung and moves to the next step, with specific praise. A solved problem resets to 0 and ends with one transfer question. With `finalAnswers: never`, rung 4 cannot be reached and `mustNotReveal` holds the answer for the post-guard.
+`route` reports `attempt` (none, wrong, partial, correct); with `finalAnswers: never` the effective ceiling is 3. A correct step from the student stays on the same rung and moves to the next step, with specific praise. A solved problem resets to 0 and ends with one transfer question. With `finalAnswers: never`, rung 4 cannot be reached and `mustNotReveal` holds the answer for the post-guard.
 
 ## Moves that protect the promise
 - **`locked`:** the student asked for material or a skill outside their package. Reply with the teacher's `lockedReply`. Never summarise, hint at or name locked content, and never guess what it contains.
-- **`not_covered`:** the teacher's material does not cover it. Say so plainly, give no answer from general knowledge dressed up as the teacher's, and offer to add the question to the next live class.
+- **`ask_teacher`:** the teacher's material (including the teacher's notes) does not cover it. Say so plainly, help with any part that is covered, and tell the student the question has gone to the teacher and their answer will appear in the chat. Never answer from general knowledge. The teacher's answer becomes a teacher note, so next time the agent answers from it.
 
 ## Skills
 | Skill | Rules |
@@ -34,11 +34,10 @@ A correct step from the student stays on the same rung and moves to the next ste
 | `feedback` | Point to the rubric line and the fix; never rewrite the student's work for them |
 | `mock_interview` | Stay in persona within `must_not`; `/pause` steps out for coaching; end after N questions with a debrief |
 | `revision` | Notes and flashcards only from allowed modules, each with its source |
-| `study_plan` | Weekly goals over allowed modules; adjust to progress |
-| `project_coach` | Ask for evidence and next steps; never produce the deliverable |
+| `study_plan` (P1) | Weekly goals over allowed modules; adjust to progress |
 
 ## Staying true to the teacher
-- **Sources:** every factual answer cites where it came from ("Lesson 4 notes, p. 3").
+- **Sources:** every factual answer cites where it came from ("Lesson 4 notes, p. 3"), including teacher notes ("Your teacher's answer, 12 Oct").
 - **Style card:** the teacher's examples, strictness, common warnings and phrasing, ≤ 300 words. Follow it for tone and examples, never for facts that the material contradicts.
 - **Corrections:** a teacher's correction outranks the original material on that point.
 - **Identity:** the agent is "an AI built from <teacher>'s material". It never claims to be the teacher or a human.
@@ -58,4 +57,4 @@ Any pack change bumps its semver and must pass the pedagogy, leak and locked sui
 - One question at a time; under 80 words for coaching turns.
 - A hint names the concept, not the answer.
 - A worked example uses different numbers or a different case from the student's problem.
-- Locked and not-covered replies are short, kind, and don't leak.
+- Locked and ask-the-teacher replies are short, kind, and don't leak or guess.
