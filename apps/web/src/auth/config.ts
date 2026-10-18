@@ -7,6 +7,14 @@ import { toAuthAdapter, type EdmateAdapterUser } from './adapter';
 import type { AuthEnv } from './env';
 import type { CookieReader, Principal } from './guard';
 
+// The browser-visible session (`/api/auth/session`, and `auth()` if it is ever used) carries only
+// the user's id and role.
+declare module 'next-auth' {
+  interface Session {
+    user: { id: string; role: Role };
+  }
+}
+
 export const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
 export const SESSION_UPDATE_AGE_S = 24 * 60 * 60;
 
@@ -17,11 +25,19 @@ export interface AuthConfigDeps {
   providerFetch?: typeof fetch;
   /** Where Auth.js errors go, as name and code only (default: console.error). */
   log?: (line: string) => void;
+  /**
+   * The request being handled (NextAuth's per-request config). The signIn callback reads its
+   * session cookie; without one, sign-in is refused (fail closed).
+   */
+  request?: { cookies: CookieReader };
 }
 
-/** The session cookie's name: `__Secure-` prefixed iff the app is served over https. */
+/**
+ * The session cookie's name: `__Host-` prefixed iff the app is served over https, which makes the
+ * browser require Secure, Path=/ and no Domain (so no subdomain can set or read it).
+ */
 export function sessionCookieName(secure: boolean): string {
-  return `${secure ? '__Secure-' : ''}authjs.session-token`;
+  return `${secure ? '__Host-' : ''}authjs.session-token`;
 }
 
 /** Session tokens Auth.js issues are UUIDs; anything far outside that is not looked up. */
@@ -48,6 +64,7 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
   const { env, identity } = deps;
   const log = deps.log ?? ((line: string) => console.error(line));
   const secure = env.secureCookies;
+  const currentPrincipal = principalFromIdentity(identity, sessionCookieName(secure));
   return {
     secret: env.secret,
     trustHost: env.trustHost,
@@ -84,17 +101,24 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
       }),
     ],
     callbacks: {
-      // Google must vouch for the address; nothing else signs in yet.
-      signIn({ account, profile }) {
+      // Google must vouch for the address; nothing else signs in yet. While a session is live,
+      // only that user's own Google account may sign in: Auth.js would otherwise link a new
+      // Google account to the signed-in user (a sibling on a shared device opening A's account).
+      async signIn({ account, profile }) {
         if (account?.provider !== 'google') return false;
         const p = profile as Partial<GoogleProfile> | undefined;
-        return p?.email_verified === true && typeof p.email === 'string' && p.email.length > 0;
+        const verified =
+          p?.email_verified === true && typeof p.email === 'string' && p.email.length > 0;
+        if (!verified || !deps.request) return false;
+        const current = await currentPrincipal(deps.request.cookies);
+        if (!current) return true;
+        const owner = await identity.getUserByAccount(account.provider, account.providerAccountId);
+        return owner?.id === current.userId;
       },
       // `/api/auth/session` is readable by the browser: id and role only, no email or name.
-      session({ session, user }) {
-        const u = user as unknown as EdmateAdapterUser;
-        const role: Role = u.role;
-        return { user: { id: u.id, role }, expires: session.expires } as unknown as Session;
+      session({ session, user }): Session {
+        const u = user as EdmateAdapterUser;
+        return { user: { id: u.id, role: u.role }, expires: session.expires };
       },
     },
     logger: {

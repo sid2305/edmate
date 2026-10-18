@@ -46,6 +46,7 @@ export const DATA_MODEL_TABLES = [
   // Sign-in tables (task 1.3), behind the identity store rather than a repository.
   'auth_accounts',
   'auth_sessions',
+  'platform_audit_log',
 ] as const;
 
 /** Drizzle's view of every table the schema exports. */

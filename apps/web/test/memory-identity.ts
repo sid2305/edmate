@@ -72,6 +72,12 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
       linked.push(input);
       const key = `${input.provider}:${input.providerAccountId}`;
       if (accounts.has(key)) throw new Error('identity.linkAccount: invalid');
+      // One account per provider per user, like the unique (user_id, provider) index.
+      for (const [k, userId] of accounts) {
+        if (userId === input.userId && k.startsWith(`${input.provider}:`)) {
+          throw new Error('identity.linkAccount: invalid');
+        }
+      }
       accounts.set(key, input.userId);
     },
     async createSession(token, userId, expires) {

@@ -53,14 +53,15 @@ describe('createAuthConfig', () => {
     });
   });
 
-  it('over https: Secure with the __Secure- prefix (follows AUTH_URL, not NODE_ENV)', () => {
+  it('over https: Secure with the __Host- prefix, path / and no Domain (follows AUTH_URL, not NODE_ENV)', () => {
     const c = createAuthConfig({ identity, env: envFor('https://edmate.example') });
     expect(c.useSecureCookies).toBe(true);
     expect(c.cookies?.sessionToken).toEqual({
-      name: '__Secure-authjs.session-token',
+      name: '__Host-authjs.session-token',
       options: { httpOnly: true, sameSite: 'lax', path: '/', secure: true },
     });
-    expect(sessionCookieName(true)).toBe('__Secure-authjs.session-token');
+    expect(sessionCookieName(true)).toBe('__Host-authjs.session-token');
+    expect(c.cookies?.sessionToken?.options).not.toHaveProperty('domain');
   });
 
   it('configures Google only, with no dangerous email linking and state + nonce + PKCE', () => {
@@ -95,7 +96,12 @@ describe('createAuthConfig', () => {
   });
 
   describe('signIn callback', () => {
-    const c = createAuthConfig({ identity, env: envFor('http://localhost:8080') });
+    const noCookies = { cookies: { get: () => undefined } };
+    const c = createAuthConfig({
+      identity,
+      env: envFor('http://localhost:8080'),
+      request: noCookies,
+    });
     const signIn = (account: Partial<Account> | null, profile?: Partial<Profile>) =>
       c.callbacks!.signIn!({
         user: {} as User,
@@ -127,6 +133,80 @@ describe('createAuthConfig', () => {
       ['no account', null, { email: 'a@example.test', email_verified: true }],
     ])('refuses %s', async (_label, account, profile) => {
       expect(await signIn(account, profile)).toBe(false);
+    });
+
+    it('fails closed with no request to read the current session from', async () => {
+      const bare = createAuthConfig({ identity, env: envFor('http://localhost:8080') });
+      expect(
+        await bare.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(false);
+    });
+  });
+
+  describe('signIn callback while already signed in (shared device)', () => {
+    async function world() {
+      const id = memoryIdentity();
+      const a = await id.createStudent({
+        email: 'a@example.test',
+        emailVerifiedAt: null,
+        name: 'A',
+      });
+      await id.linkAccount({
+        userId: a.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: 'g-a',
+      });
+      const b = await id.createStudent({
+        email: 'b@example.test',
+        emailVerifiedAt: null,
+        name: 'B',
+      });
+      await id.linkAccount({
+        userId: b.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: 'g-b',
+      });
+      const token = randomUUID();
+      await id.createSession(token, a.id, new Date(Date.now() + 60_000));
+      const signedInAsA = {
+        cookies: {
+          get: (n: string) => (n === 'authjs.session-token' ? { value: token } : undefined),
+        },
+      };
+      const config = createAuthConfig({
+        identity: id,
+        env: envFor('http://localhost:8080'),
+        request: signedInAsA,
+      });
+      const signIn = (providerAccountId: string, email: string) =>
+        config.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId } as Account,
+          profile: { email, email_verified: true } as Profile,
+        });
+      return { id, signIn };
+    }
+
+    it("refuses a new Google account: it would be linked to the signed-in user's account", async () => {
+      const { signIn, id } = await world();
+      expect(await signIn('g-new', 'sibling@example.test')).toBe(false);
+      expect(id.linked).toHaveLength(2);
+    });
+
+    it("refuses another user's Google account", async () => {
+      const { signIn } = await world();
+      expect(await signIn('g-b', 'b@example.test')).toBe(false);
+    });
+
+    it('allows signing in again with the same Google account', async () => {
+      const { signIn } = await world();
+      expect(await signIn('g-a', 'a@example.test')).toBe(true);
     });
   });
 

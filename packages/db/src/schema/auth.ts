@@ -1,12 +1,14 @@
-// Sign-in tables (task 1.3): linked OAuth accounts and database sessions. Prefixed `auth_` because
-// the learning `sessions` table already exists. Verification tokens (email magic link) are 1.4's.
-import { index, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+// Sign-in tables (task 1.3): linked OAuth accounts, database sessions and the platform audit log.
+// Prefixed `auth_` because the learning `sessions` table already exists. Verification tokens
+// (email magic link) are 1.4's.
+import { index, jsonb, pgEnum, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { id, timestamps, tstz } from './_shared.js';
 import { users } from './users.js';
 
 /**
  * A sign-in provider account linked to a user (for example Google's `sub`). No OAuth tokens are
- * stored: Edmate never calls the provider's APIs (1.3 decision Q6).
+ * stored: Edmate never calls the provider's APIs (1.3 decision Q6). A user has at most one account
+ * per provider, so a second Google account can never be attached to someone else's user.
  */
 export const authAccounts = pgTable(
   'auth_accounts',
@@ -26,7 +28,8 @@ export const authAccounts = pgTable(
       t.provider,
       t.providerAccountId,
     ),
-    index('auth_accounts_user_id_idx').on(t.userId),
+    // Led by user_id, so it also serves a user's account lookups.
+    uniqueIndex('auth_accounts_user_id_provider_key').on(t.userId, t.provider),
   ],
 );
 
@@ -48,5 +51,42 @@ export const authSessions = pgTable(
   (t) => [
     uniqueIndex('auth_sessions_session_token_hash_key').on(t.sessionTokenHash),
     index('auth_sessions_user_id_idx').on(t.userId),
+    // For sweeping expired sessions (retention, 13.4).
+    index('auth_sessions_expires_at_idx').on(t.expiresAt),
+  ],
+);
+
+/** Who acted at platform level: a staff user, or the operator CLI (no user). */
+export const platformActorRole = pgEnum('platform_actor_role', ['staff', 'operator']);
+
+/**
+ * Platform-level audit (task 1.3): staff and operator actions that belong to no teacher, starting
+ * with role grants. 1.6's `audit_log` keeps its rule that every row belongs to one teacher, and its
+ * scoped reads are unchanged. Append-only: the identity store only inserts here. Reading it is the
+ * trust console's job (12.1).
+ */
+export const platformAuditLog = pgTable(
+  'platform_audit_log',
+  {
+    id: id(),
+    /** A staff user id, or `operator`. Not a foreign key: the operator is no user. */
+    actor: text('actor').notNull(),
+    actorRole: platformActorRole('actor_role').notNull(),
+    /** For example `role.grant`. */
+    action: text('action').notNull(),
+    /** `<kind>:<id>`, for example `user:…`. */
+    target: text('target').notNull(),
+    /** The user the action is about, when it is about one. */
+    subjectUserId: text('subject_user_id').references(() => users.id),
+    reason: text('reason'),
+    before: jsonb('before'),
+    after: jsonb('after'),
+    ts: tstz('ts').notNull().defaultNow(),
+    ...timestamps(),
+  },
+  (t) => [
+    index('platform_audit_log_target_ts_idx').on(t.target, t.ts),
+    index('platform_audit_log_actor_ts_idx').on(t.actor, t.ts),
+    index('platform_audit_log_subject_user_id_ts_idx').on(t.subjectUserId, t.ts),
   ],
 );

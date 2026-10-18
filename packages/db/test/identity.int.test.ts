@@ -168,6 +168,31 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       ).toBe('not_found');
     });
 
+    it('a user has at most one account per provider: a second Google account is invalid', async () => {
+      const a = await identity.createStudent({
+        email: email('one'),
+        emailVerifiedAt: null,
+        name: 'One',
+      });
+      await identity.linkAccount({
+        userId: a.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: `sub-first-${a.id}`,
+      });
+      expect(
+        await kindOf(() =>
+          identity.linkAccount({
+            userId: a.id,
+            type: 'oidc',
+            provider: 'google',
+            providerAccountId: `sub-second-${a.id}`,
+          }),
+        ),
+      ).toBe('invalid');
+      expect(await identity.getUserByAccount('google', `sub-second-${a.id}`)).toBeNull();
+    });
+
     it('stores no OAuth tokens: extra fields are refused and the table has no token columns', async () => {
       const u = await identity.createStudent({
         email: email('t'),
@@ -318,12 +343,22 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
   });
 
   describe('grantRole', () => {
-    it('writes the role and a role.grant audit row in one transaction', async () => {
-      const u = await identity.createStudent({
-        email: email('g'),
-        emailVerifiedAt: null,
-        name: 'G',
-      });
+    const student = (label: string) =>
+      identity.createStudent({ email: email(label), emailVerifiedAt: null, name: label });
+    const platformRows = async (target: string) =>
+      (
+        await raw.query(
+          `select actor, actor_role, action, target, subject_user_id, reason, before, after
+             from platform_audit_log where target = $1`,
+          [target],
+        )
+      ).rows;
+    const count = async (table: 'audit_log' | 'platform_audit_log') =>
+      (await raw.query(`select count(*)::int as n from ${table}`)).rows[0].n as number;
+
+    it('by the operator: writes the role and a platform audit row (actor role operator), not a teacher-scoped one', async () => {
+      const u = await student('g');
+      const teacherRows = await count('audit_log');
       const out = await identity.grantRole({
         userId: u.id,
         role: 'staff',
@@ -331,35 +366,58 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         reason: 'first staff account',
       });
       expect(out).toEqual({ ...u, role: 'staff' });
-      const { rows } = await raw.query(
-        `select actor, actor_role, action, target, teacher_id, student_id, reason, before, after
-           from audit_log where target = $1`,
-        [`user:${u.id}`],
-      );
-      expect(rows).toEqual([
+      expect(await platformRows(`user:${u.id}`)).toEqual([
         {
           actor: 'operator',
-          actor_role: 'staff',
+          actor_role: 'operator',
           action: 'role.grant',
           target: `user:${u.id}`,
-          teacher_id: u.id,
-          student_id: null,
+          subject_user_id: u.id,
           reason: 'first staff account',
           before: { role: 'student' },
           after: { role: 'staff' },
         },
       ]);
+      // 1.6's audit_log keeps "every row belongs to one teacher": grants don't go there.
+      expect(await count('audit_log')).toBe(teacherRows);
+    });
+
+    it('by a staff user: records the staff id and actor role staff', async () => {
+      const staff = await student('s');
+      await identity.grantRole({ userId: staff.id, role: 'staff', by: 'operator' });
+      const u = await student('t');
+      await identity.grantRole({ userId: u.id, role: 'teacher', by: staff.id });
+      expect(await platformRows(`user:${u.id}`)).toEqual([
+        expect.objectContaining({ actor: staff.id, actor_role: 'staff', reason: null }),
+      ]);
+      expect((await identity.getUser(u.id))?.role).toBe('teacher');
+    });
+
+    it('refuses an actor that is not staff (a student, a teacher, an unknown id) as scope; nothing is written', async () => {
+      const target = await student('x');
+      const notStaff = await student('y');
+      const teacher = await student('z');
+      await identity.grantRole({ userId: teacher.id, role: 'teacher', by: 'operator' });
+      const before = await count('platform_audit_log');
+      for (const by of [notStaff.id, teacher.id, 'usr_ghost', 'Operator']) {
+        expect(
+          await kindOf(() => identity.grantRole({ userId: target.id, role: 'staff', by })),
+          by,
+        ).toBe('scope');
+      }
+      // A user can't grant themselves staff either.
+      expect(
+        await kindOf(() =>
+          identity.grantRole({ userId: notStaff.id, role: 'staff', by: notStaff.id }),
+        ),
+      ).toBe('scope');
+      expect(await count('platform_audit_log')).toBe(before);
+      expect((await identity.getUser(target.id))?.role).toBe('student');
     });
 
     it('a bad role, actor or extra field is invalid; an unknown user is not_found; nothing is written', async () => {
-      const u = await identity.createStudent({
-        email: email('b'),
-        emailVerifiedAt: null,
-        name: 'B',
-      });
-      const count = async () =>
-        (await raw.query(`select count(*)::int as n from audit_log`)).rows[0].n as number;
-      const before = await count();
+      const u = await student('b');
+      const before = await count('platform_audit_log');
       for (const bad of [
         { userId: u.id, role: 'admin', by: 'operator' },
         { userId: u.id, role: 'staff', by: 'not an id!' },
@@ -373,21 +431,17 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
           identity.grantRole({ userId: 'usr_ghost', role: 'staff', by: 'operator' }),
         ),
       ).toBe('not_found');
-      expect(await count()).toBe(before);
+      expect(await count('platform_audit_log')).toBe(before);
       expect((await identity.getUser(u.id))?.role).toBe('student');
     });
 
     it('rolls the role back when the audit write fails', async () => {
-      const u = await identity.createStudent({
-        email: email('f'),
-        emailVerifiedAt: null,
-        name: 'F',
-      });
+      const u = await student('f');
       // Make the audit insert fail with a trigger: the role update must not survive it.
       await raw.query(`create or replace function edmate_test_fail() returns trigger as $$
         begin raise exception 'audit down'; end $$ language plpgsql`);
       await raw.query(
-        `create trigger edmate_test_fail before insert on audit_log for each row execute function edmate_test_fail()`,
+        `create trigger edmate_test_fail before insert on platform_audit_log for each row execute function edmate_test_fail()`,
       );
       try {
         const err = await identity
@@ -396,9 +450,18 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         expectScrubbed(err, 'identity.grantRole', [u.id, 'audit down']);
         expect((await identity.getUser(u.id))?.role).toBe('student');
       } finally {
-        await raw.query(`drop trigger edmate_test_fail on audit_log`);
+        await raw.query(`drop trigger edmate_test_fail on platform_audit_log`);
       }
     });
+  });
+
+  it('indexes auth_sessions.expires_at and allows one account per provider per user', async () => {
+    const { rows } = await raw.query<{ indexname: string; indexdef: string }>(
+      `select indexname, indexdef from pg_indexes where tablename in ('auth_sessions', 'auth_accounts')`,
+    );
+    const defs = Object.fromEntries(rows.map((r) => [r.indexname, r.indexdef]));
+    expect(defs.auth_sessions_expires_at_idx).toMatch(/\(expires_at\)/);
+    expect(defs.auth_accounts_user_id_provider_key).toMatch(/UNIQUE.*\(user_id, provider\)/);
   });
 
   it('scrubs driver errors: no email, token or SQL leaves', async () => {

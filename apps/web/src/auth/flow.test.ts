@@ -116,12 +116,14 @@ function setup() {
     calls: string[];
   };
   const logs: string[] = [];
-  const { handlers } = NextAuth(
+  // Per-request config, as src/auth/index.ts builds it: the signIn callback reads the request.
+  const { handlers } = NextAuth((req) =>
     createAuthConfig({
       identity,
       env,
       providerFetch: fakeGoogle(google),
       log: (l) => logs.push(l),
+      ...(req ? { request: req } : {}),
     }),
   );
   const jar = new Jar();
@@ -332,6 +334,44 @@ describe('Google sign-in through Auth.js', () => {
     expect(res.headers.get('location')).toContain('/api/auth/error');
     expect(t.identity.sessions.size).toBe(0);
     expect(t.logs.some((l) => l.startsWith('[auth] error '))).toBe(true);
+  });
+
+  it("shared device: a sibling's Google sign-in while A is signed in is refused and never opens A's account", async () => {
+    await t.signIn();
+    const aCookie = t.jar.values.get(SESSION_COOKIE);
+    expect(await principalOf(t.identity, t.jar)).toEqual({ userId: 'usr_1', role: 'student' });
+
+    // Sibling B uses the same browser (A's cookie still set) with their own Google account.
+    t.google.user = verifiedUser({
+      sub: 'google-sub-sibling',
+      email: 'sibling@example.test',
+      name: 'Sibling',
+    });
+    const { callback } = await t.signIn();
+    expect(callback.headers.get('location')).toContain('/api/auth/error?error=AccessDenied');
+    // Nothing was linked to A, no user was made for B, and A's session is untouched.
+    expect(t.identity.linked).toEqual([
+      { userId: 'usr_1', type: 'oidc', provider: 'google', providerAccountId: 'google-sub-123' },
+    ]);
+    expect(t.identity.users.size).toBe(1);
+    expect(await t.identity.getUserByAccount('google', 'google-sub-sibling')).toBeNull();
+    expect(t.jar.values.get(SESSION_COOKIE)).toBe(aCookie);
+    expect(t.identity.sessions.size).toBe(1);
+
+    // After A signs out, B can sign in and gets their own account.
+    await t.call('POST', '/api/auth/signout', {
+      csrfToken: await t.csrf(),
+      callbackUrl: `${ORIGIN}/`,
+    });
+    await t.signIn();
+    expect(await principalOf(t.identity, t.jar)).toEqual({ userId: 'usr_2', role: 'student' });
+  });
+
+  it('signing in again with the same Google account while signed in is allowed', async () => {
+    await t.signIn();
+    const { callback } = await t.signIn();
+    expect(callback.headers.get('location')).toBe(`${ORIGIN}/`);
+    expect(t.identity.users.size).toBe(1);
   });
 
   it('sign-out deletes the session', async () => {

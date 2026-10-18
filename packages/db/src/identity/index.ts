@@ -1,5 +1,6 @@
 export {
   createIdentityStore,
+  OPERATOR,
   ROLES,
   type GrantRoleInput,
   type IdentitySession,

@@ -10,7 +10,7 @@ export interface AuthEnv {
   googleSecret: string;
   /** Trust the forwarded host (Caddy in front). */
   trustHost: boolean;
-  /** True iff `AUTH_URL` is https: `Secure` cookies with the `__Secure-` prefix. */
+  /** True iff `AUTH_URL` is https: a `Secure` session cookie with the `__Host-` prefix. */
   secureCookies: boolean;
 }
 

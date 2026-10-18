@@ -3,13 +3,15 @@
 import { and, eq, gt } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { authAccounts, authSessions, users } from '../schema/index.js';
-import { auditRepo } from '../repositories/audit.js';
+import { authAccounts, authSessions, platformAuditLog, users } from '../schema/index.js';
 import { guarded, RepositoryError, translateWrite } from '../repositories/errors.js';
 import { IdSchema, parseArg } from '../repositories/scope.js';
 import { hashSessionToken } from './token-hash.js';
 
 export const ROLES = ['student', 'teacher', 'staff'] as const;
+
+/** The `by` of a grant made from the operator CLI, with no staff user behind it. */
+export const OPERATOR = 'operator';
 export type Role = (typeof ROLES)[number];
 
 /** Identity fields only: never teacher or student data. */
@@ -61,7 +63,10 @@ export interface IdentityStore {
   /** Moves a live session's expiry; an expired or unknown token is `null`. */
   updateSession(token: string, expires: Date): Promise<IdentitySession | null>;
   deleteSession(token: string): Promise<void>;
-  /** The only way a role changes. Writes a `role.grant` audit row in the same transaction. */
+  /**
+   * The only way a role changes. `by` must be exactly `operator` or a current staff user (else
+   * `scope`). Writes a `role.grant` row to `platform_audit_log` in the same transaction.
+   */
   grantRole(input: GrantRoleInput): Promise<IdentityUser>;
 }
 
@@ -221,6 +226,18 @@ function storeMethods(db: Db, now: () => Date) {
       const method = 'identity.grantRole';
       const g = parseArg(Grant, input, method);
       return db.transaction(async (tx) => {
+        // The actor is the operator CLI (exactly `operator`) or a user who is staff now; the row
+        // is share-locked so a concurrent demotion can't slip between the check and the grant.
+        let actorRole: 'operator' | 'staff' = 'operator';
+        if (g.by !== OPERATOR) {
+          const [actor] = await tx
+            .select({ role: users.role })
+            .from(users)
+            .where(eq(users.id, g.by))
+            .for('share');
+          if (actor?.role !== 'staff') throw new RepositoryError('scope', method);
+          actorRole = 'staff';
+        }
         const [current] = await tx
           .select({ role: users.role })
           .from(users)
@@ -235,19 +252,17 @@ function storeMethods(db: Db, now: () => Date) {
             .where(eq(users.id, g.userId))
             .returning(userColumns),
         );
-        // The audit repository takes the database type; a transaction has the same query API.
-        await auditRepo(tx as unknown as Db).appendForTeacher(
-          { teacherId: g.userId },
-          {
-            actor: g.by,
-            actorRole: 'staff',
-            action: 'role.grant',
-            target: `user:${g.userId}`,
-            ...(g.reason === undefined ? {} : { reason: g.reason }),
-            before: { role: current.role },
-            after: { role: g.role },
-          },
-        );
+        // Platform-level audit: a grant belongs to no teacher, so it stays out of audit_log.
+        await tx.insert(platformAuditLog).values({
+          actor: g.by,
+          actorRole,
+          action: 'role.grant',
+          target: `user:${g.userId}`,
+          subjectUserId: g.userId,
+          reason: g.reason ?? null,
+          before: { role: current.role },
+          after: { role: g.role },
+        });
         return row;
       });
     },

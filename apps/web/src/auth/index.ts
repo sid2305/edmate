@@ -26,7 +26,10 @@ function getRuntime(): Runtime {
   runtime = {
     env,
     identity,
-    nextAuth: NextAuth(createAuthConfig({ identity, env })),
+    // Per-request config: the signIn callback needs the request's session cookie.
+    nextAuth: NextAuth((req) =>
+      createAuthConfig({ identity, env, ...(req ? { request: req } : {}) }),
+    ),
     guard: {
       getPrincipal: principalFromIdentity(identity, sessionCookieName(env.secureCookies)),
       allowedOrigin: env.url.origin,
