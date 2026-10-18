@@ -420,9 +420,9 @@ tasks:
   deps:
   - '2.4'
   - M0
-  status: running
+  status: done
   branch: m2/2.5-limits
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.6'
   milestone: M2
   title: Scripted gateway in `harness/testing`
@@ -440,11 +440,11 @@ tasks:
   - '2.2'
   - M0
   - '3.15'
-  status: planning
+  status: running
   needs_decision:
   - transcription
   branch: m2/2.7-transcriber-embeddings
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '3.1'
   milestone: M3
   title: 'Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture'
@@ -489,9 +489,9 @@ tasks:
   - '3.1'
   - M0
   - '3.15'
-  status: planning
+  status: running
   branch: m3/3.4-build-context
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '3.5'
   milestone: M3
   title: 'Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move'
@@ -511,10 +511,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m3/3.6-prompt-composer
+  model: plan:opus
 - id: '3.7'
   milestone: M3
   title: 'Orchestrator: streaming, tool calls (max 3 rounds), per-turn cost ceiling, SSE events incl. `sources`, `locked`, `teacher_question`, `skill` and `replace`'

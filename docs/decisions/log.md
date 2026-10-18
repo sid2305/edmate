@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.5 Cost alarm pauses free subscriptions in one audited, teacher-scoped transaction · decided by builder · risk: high
+Decided: `subscriptions.pauseFreeForTeacher(scope, { monthStart, reason })` runs a `SELECT … FOR UPDATE OF subscriptions`, then an `UPDATE`, then one audit insert per row, all in one transaction. The select finds the scope's teacher's trial / active / past_due subscriptions joined to their package version (same teacher) where `config->'pricePerMonth'->'amountMinor' = 0`, with no `subscription.pause_cost_alarm` audit row since `monthStart`. Each audit row is a student x teacher row: actor `system_cost_alarm`, role `system`, before/after status. The result has no student ids. `usageLedger.sumForTeacherSince(scope, since)` is a teacher-scoped read across students that leaves out `eval` rows. Both are in the isolation CASES grid.
+Why: paid students keep access until staff decide, so a paid subscription is never touched. The audit row commits with the pause, and it is also the marker that keeps a staff unpause from being re-paused that month (lead answer 4: "store the override"), so no new table is needed. FOR UPDATE makes concurrent runs pause each row once (tested).
+Alternatives: audit from the worker after the update (a pause could commit without its audit row); a separate override table.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.5 Audit `system` role is its own enum; system actor ids start with `system_` · decided by builder · risk: high
+Decided: new Postgres enum `audit_actor_role` (`student, teacher, staff, system`). Migration 0005 moves `audit_log.actor_role` to it with `USING actor_role::text::audit_actor_role`, which maps every stored value to itself. `user_role` is unchanged. `checkActor` requires `actor` to start with `system_` exactly when the role is `system`, so a system row can't name a user and a user role can't use a system id.
+Why: lead answer 5 (add `system`). Adding `system` to `user_role` would let a user row hold it.
+Alternatives: `ALTER TYPE user_role ADD VALUE 'system'`; a fixed staff sentinel id.
+Reversible: yes (convert the column back once no `system` rows remain).
+
+### 18 Oct 2026 · 2.5 Unknown cost below the threshold warns staff (`cost_incomplete`), never pauses · decided by builder · risk: low
+Decided: when the month's known cost is below the threshold but there are unknown or unpriced calls, the alarm sends a `cost_incomplete` event to staff only. Nothing is paused. At or over the threshold the event (`threshold_reached`) goes to staff and the teacher, and it reports `unknownCalls` / `unpricedCalls` next to the cost.
+Why: lead answer 3 says NULL cost is never treated as zero. A silent "below threshold" while costs are missing would do exactly that. Pausing on unknown cost would be guessing.
+Alternatives: report the counts only on threshold events; treat any unknown as over the threshold.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.5 The alarm re-alerts on every run over the threshold; a failed pause still alerts · decided by builder · risk: low
+Decided: each run at or over the threshold sends an alert listing only the subscriptions that run paused. If the pause fails, the alert still goes out (`pauseFailed: true`) and then the error is rethrown so the job retries. If the alert fails after a pause, the run throws: the pause stands, and the retry alerts again. `checkTeachersCost` checks many teachers, keeps going past one teacher's failure and reports it. The 50 USD default is `COST_ALARM_THRESHOLD_MICRO_USD`, and `thresholdMicroUsd` overrides it (it must be a positive safe integer).
+Why: lead answer 4 ("it can alert again"). Staff must know when a pause did not happen. How often alerts repeat depends on the job's schedule (infra).
+Alternatives: alert once a month (would need its own marker).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.5 `limitReached` is an optional fallback text with a built-in English default · decided by builder · risk: low
+Decided: `FallbackReplies.limitReached?(lang)`. `entitle` uses it when it returns non-blank text, and `DEFAULT_LIMIT_REACHED_REPLY` otherwise (also when it throws). The text travels on `TurnRejection.message`; the wire event is unchanged.
+Why: lead answer 1. Making it optional keeps `harness/src/testing` (3.15's area) untouched, and a broken locale still gives the student a reason.
+Alternatives: required field (would change `testDeps`).
+Reversible: yes (make it required once every composition root injects it).
+
+### 18 Oct 2026 · 2.5 Review · decided by team lead · risk: low
+Decided: packages/db/src/repositories/subscriptions.ts keeps treating a free package with a missing or malformed stored price as not free (never paused), and packages/db/migrations/0005_cost_alarm.sql builds its index without CONCURRENTLY, like every earlier migration.
+Why: Failing closed protects paid students; content validation (1.8) and package publishing guarantee a price. The usage table is small before the pilot.
+Alternatives: Alert on a missing price; CONCURRENTLY indexes.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 3.15 ADR-0005: TurnConfigStore returns raw helpState; new SessionStateStore and Transcriber ports and media schemas · decided by team lead (architect's design, human's contracts delegation) · risk: high
 Decided: `TurnConfigStore.load` also returns `helpState: unknown` (the session row's `help_state`, unvalidated); new `SessionStateStore.saveHelpState(sessionId, helpState)` and `Transcriber.transcribe(TranscribeInput): Promise<Transcript>` ports; new `TranscribeInputSchema` (https URL, audio/video MIME, optional language hint), `TranscriptSegmentSchema` and `TranscriptSchema` (non-empty, segments in start order, ends within the duration). Help state stays `unknown` in contracts and the harness parses it (3.4).
 Why: 3.4 and 3.8 need to read and write the session's help state and no port did; ADR-0001 named a Transcriber that was never defined (vendor OpenAI Whisper, human decision 18 Oct 2026).

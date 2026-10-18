@@ -12,7 +12,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { id, timestamps, tstz, userRole } from './_shared.js';
+import { auditActorRole, id, timestamps, tstz } from './_shared.js';
 import { agentVersions } from './agents.js';
 import { teacherId, users } from './users.js';
 
@@ -147,7 +147,7 @@ export const auditLog = pgTable(
   {
     id: id(),
     actor: text('actor').notNull(),
-    actorRole: userRole('actor_role').notNull(),
+    actorRole: auditActorRole('actor_role').notNull(),
     action: text('action').notNull(),
     /** `<kind>:<id>`, for example `package:…` or `profile:…` (advisory, not a foreign key). */
     target: text('target').notNull(),

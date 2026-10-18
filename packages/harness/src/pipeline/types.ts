@@ -41,6 +41,12 @@ export interface FallbackReplies {
   safeReply(lang: Lang): string;
   /** escalate's caring reply when the step fails; should list the locale pack's helplines. */
   distress(lang: Lang, locale: LocalePack): string;
+  /**
+   * entitle's friendly text for `limit_reached` (task 2.5), carried on the TurnRejection's
+   * `message` (the frozen wire event has no message field). Optional: when absent, empty or
+   * failing, entitle uses the built-in English `DEFAULT_LIMIT_REACHED_REPLY`.
+   */
+  limitReached?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */

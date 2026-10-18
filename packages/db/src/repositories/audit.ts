@@ -23,10 +23,16 @@ export const AUDIT_MAX_LIMIT = 200;
 /** Largest serialised before or after, in characters, after redaction. Larger is `invalid`. */
 export const AUDIT_JSON_MAX_LENGTH = 10_000;
 
-/** What a caller records. `actor` is the user who acted, in the role they acted in. */
+/** Prefix every `system` actor id carries, so an automated actor never looks like a user id. */
+export const SYSTEM_ACTOR_PREFIX = 'system_';
+
+/**
+ * What a caller records. `actor` is the user who acted, in the role they acted in, or an
+ * automated actor (`system`, task 2.5) whose id starts with `system_`.
+ */
 export interface AuditEntryInput {
   actor: string;
-  actorRole: 'student' | 'teacher' | 'staff';
+  actorRole: 'student' | 'teacher' | 'staff' | 'system';
   /** For example `package.publish`, `teacher.verify`, `profile.reset`. */
   action: string;
   /** `<kind>:<id>`, for example `package:pkg_1` (advisory, not checked against a table). */
@@ -39,7 +45,7 @@ export interface AuditEntryInput {
 
 const Entry = z.strictObject({
   actor: IdSchema,
-  actorRole: z.enum(['student', 'teacher', 'staff']),
+  actorRole: z.enum(['student', 'teacher', 'staff', 'system']),
   action: z.string().min(1).max(100),
   target: z.string().min(1).max(200),
   reason: z.string().min(1).max(500).optional(),
@@ -77,10 +83,14 @@ function storable(value: unknown, method: string): SQL | null {
 /**
  * The actor must be who the scope says: a teacher actor is the scope's teacher, a student actor is
  * the scope's student (teacher-only rows have no student, so a student can't act on them). Staff
- * act on anyone's rows; their authority is checked by the caller's role check.
+ * act on anyone's rows; their authority is checked by the caller's role check. A system actor's
+ * id must start with `system_` (and no other role's may), so the two never pass for each other.
  */
 function checkActor(e: ParsedEntry, teacherId: string, studentId: string | null, method: string) {
+  const system = e.actor.startsWith(SYSTEM_ACTOR_PREFIX);
+  if (system !== (e.actorRole === 'system')) throw new RepositoryError('scope', method);
   const ok =
+    e.actorRole === 'system' ||
     e.actorRole === 'staff' ||
     (e.actorRole === 'teacher' && e.actor === teacherId) ||
     (e.actorRole === 'student' && studentId !== null && e.actor === studentId);
@@ -101,32 +111,47 @@ const columns = {
   ts: auditLog.ts,
 };
 
+/** Anything that can insert: the database or an open transaction. */
+type Inserter = Pick<Db, 'insert'>;
+
+/**
+ * The one write path: actor check, redaction and size cap live here. Other repositories call it
+ * with their own transaction when an audit row must commit with the change it records (2.5).
+ * Scopes are the caller's job: `teacherId` / `studentId` must already be validated.
+ */
+export async function insertAuditEntry(
+  db: Inserter,
+  method: string,
+  teacherId: string,
+  studentId: string | null,
+  input: unknown,
+): Promise<void> {
+  const e = parseArg(Entry, input, method);
+  checkActor(e, teacherId, studentId, method);
+  const before = storable(e.before, method);
+  const after = storable(e.after, method);
+  await translateWrite(method, () =>
+    db.insert(auditLog).values({
+      actor: e.actor,
+      actorRole: e.actorRole,
+      action: e.action,
+      target: e.target,
+      teacherId,
+      studentId,
+      reason: e.reason ?? null,
+      before,
+      after,
+    }),
+  );
+}
+
 export function auditRepo(db: Db) {
-  /** The one write path: actor check, redaction and size cap live here. */
-  async function insertEntry(
+  const insertEntry = (
     method: string,
     teacherId: string,
     studentId: string | null,
     input: unknown,
-  ): Promise<void> {
-    const e = parseArg(Entry, input, method);
-    checkActor(e, teacherId, studentId, method);
-    const before = storable(e.before, method);
-    const after = storable(e.after, method);
-    await translateWrite(method, () =>
-      db.insert(auditLog).values({
-        actor: e.actor,
-        actorRole: e.actorRole,
-        action: e.action,
-        target: e.target,
-        teacherId,
-        studentId,
-        reason: e.reason ?? null,
-        before,
-        after,
-      }),
-    );
-  }
+  ) => insertAuditEntry(db, method, teacherId, studentId, input);
 
   async function list(method: string, where: SQL | undefined, options: unknown) {
     const { target, limit } = parseArg(ListOptions, options, method);
