@@ -1,6 +1,9 @@
 # Merge gate: re-runs merge_gate.py --pr on every PR (task 0.5). A required check.
-# It runs main's copy of merge_gate.py, never the PR's: the PR's commit is only fetched into a local
-# branch and read with git show/diff, so a PR cannot weaken its own gate. It reads no PR labels.
+# It runs main's copy of merge_gate.py: the PR's commit is only fetched into a local branch and read
+# with git show/diff. But with the pull_request trigger GitHub runs the PR's own copy of THIS file, so
+# a PR that edits this workflow can turn the check green. The real control is the local `gh pr merge`
+# hook, which runs main's gate before every merge; review any change to .github/** with that in mind.
+# It reads no PR labels.
 # Expect it red until the PR has docs/tasks/<id>/review.md and handoff.md.
 name: Merge gate
 
