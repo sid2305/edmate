@@ -43,6 +43,30 @@ describe('PROVIDER_KEYS', () => {
   it('names the openai-compatible key variable with the EDMATE_ prefix', () => {
     expect(VAR).toBe('EDMATE_OPENAI_COMPATIBLE_API_KEY');
   });
+
+  it('names the anthropic (main provider) key variable with the EDMATE_ prefix', () => {
+    expect(PROVIDER_KEYS.anthropic.apiKey.variable).toBe('EDMATE_ANTHROPIC_API_KEY');
+  });
+
+  it('loads both providers through the same door', async () => {
+    const anthropic = fakeKey();
+    const compatible = fakeKey();
+    const keys = await loadProviderKeys({
+      source: envKeySource({
+        [PROVIDER_KEYS.anthropic.apiKey.variable]: anthropic,
+        [VAR]: compatible,
+      }),
+      required: ['anthropic'],
+    });
+    expect([...keys.providers()].sort()).toEqual(['anthropic', 'openai-compatible']);
+    expect(keys.get('anthropic').apiKey.reveal() === anthropic).toBe(true);
+    expect(keys.get('openai-compatible').apiKey.reveal() === compatible).toBe(true);
+  });
+
+  it('names the anthropic variable when it is required but missing', async () => {
+    const err = await failure(envKeySource({}), ['anthropic']);
+    expect(err.problems).toEqual([{ variable: 'EDMATE_ANTHROPIC_API_KEY', problem: 'missing' }]);
+  });
 });
 
 describe('loadProviderKeys: happy path', () => {
