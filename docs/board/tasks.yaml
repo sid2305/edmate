@@ -487,9 +487,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.4-build-context
+  model: plan:sonnet
 - id: '3.5'
   milestone: M3
   title: 'Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move'
