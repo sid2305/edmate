@@ -42,6 +42,12 @@ export const valid = {
     transcribeInputMinimal,
     transcribeInputFull,
     { ...transcribeInputMinimal, mimeType: 'audio/mpeg' } satisfies TranscribeInput,
+    // A path and query may contain '@'; only userinfo before the host is refused.
+    {
+      url: 'https://storage.example.com:8443/rec/a@b.webm?sig=test&x=1#t',
+      mimeType: 'audio/x-ms-wma',
+    } satisfies TranscribeInput,
+    { url: 'https://storage.example.com', mimeType: 'video/vnd.dlna.mpeg-tts' },
   ],
   TranscriptSegment: [
     transcriptSegmentFirst,

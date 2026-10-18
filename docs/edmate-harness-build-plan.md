@@ -256,9 +256,9 @@ interface LocalePack {
 }
 
 // ---- Media (ADR-0005) ----
-interface TranscribeInput { url: string; mimeType: string; languageHint?: Lang }   // url: https signed URL from allowlisted storage, never logged; mimeType: audio/* or video/*
+interface TranscribeInput { url: string; mimeType: string; languageHint?: Lang }   // url: https signed URL, no userinfo; the adapter allows only its configured allowedHosts (ADR-0005); never logged; mimeType: audio/<subtype> or video/<subtype>
 interface TranscriptSegment { startMs: number; endMs: number; text: string }      // integers ≥ 0, endMs ≥ startMs; text non-empty
-interface Transcript { text: string; language?: Lang; durationMs: number; segments: TranscriptSegment[] }   // ≥ 1 segment; starts never go backwards; last endMs ≤ durationMs
+interface Transcript { text: string; language?: Lang; durationMs: number; segments: TranscriptSegment[] }   // ≥ 1 segment; starts never go backwards; every endMs ≤ durationMs
 
 // ---- Ports (the harness defines them; db, gateway, ingest and worker implement them) ----
 interface RetrievalIndex {
@@ -273,7 +273,7 @@ interface TurnConfigStore {          // the config a turn runs on: pkg at e.pack
 }   // helpState: sessions.help_state as stored, unvalidated; the harness owns its shape (ADR-0005)
 interface ProfileStore { get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile> }
 interface TranscriptStore { history(sessionId: string, limit: number): Promise<Message[]>; append(sessionId: string, m: Message): Promise<void> }
-interface SessionStateStore { saveHelpState(sessionId: string, helpState: unknown): Promise<void> }   // bound to student x teacher; own open session only, else not_found (ADR-0005)
+interface SessionStateStore { saveHelpState(sessionId: string, helpState: unknown): Promise<void> }   // bound to student x teacher; own open session only, else not_found; ≤ LIMITS.helpStateMaxJsonLength of JSON (ADR-0005)
 interface Transcriber { transcribe(i: TranscribeInput): Promise<Transcript> }   // throws on failure; never returns an empty transcript (ADR-0005)
 interface CorrectionStore {         // teacher answers and corrections become teacher notes + eval cases
   addTeacherNote(n: { teacherId: string; moduleId: string; question: string; answer: string; origin: 'correction' | 'teacher_answer' }): Promise<{ chunkId: string; evalCaseId: string }>;

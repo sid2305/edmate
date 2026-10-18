@@ -4,12 +4,27 @@ import { count } from './formats.js';
 import { LangSchema } from './shared.js';
 
 /**
- * A recording to transcribe: an https signed URL from allowlisted storage (the adapter checks the
- * host; the URL is a bearer credential and never appears in logs or errors).
+ * `https://host[:port]` then an optional path, query or fragment: lower-case scheme, no userinfo,
+ * no whitespace or backslash in the authority, nothing around the URL (fix round 1).
+ */
+const HTTPS_URL = /^https:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
+/** A top-level type, `/` and a non-empty RFC 6838 subtype, without parameters. */
+const MEDIA_MIME = /^(?:audio|video)\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
+
+/**
+ * A recording to transcribe: an https signed URL to Edmate's own storage. The URL is a bearer
+ * credential: it never appears in logs, traces or errors (redact to scheme://host/path). The host
+ * allowlist is not a contract: the Transcriber adapter takes `allowedHosts: readonly string[]`
+ * from the composition root's config, matches the parsed URL's host exactly, follows no redirect to
+ * another host, and refuses everything when the list is empty (ADR-0005).
  */
 export const TranscribeInputSchema = z.strictObject({
-  url: z.url({ protocol: /^https$/ }),
-  mimeType: z.string().regex(/^(audio|video)\//, 'audio/* or video/*'),
+  // The shape check runs first: `z.url` trims its input, so on its own it would accept " https://…".
+  url: z
+    .string()
+    .regex(HTTPS_URL, 'https://host/path, no userinfo')
+    .pipe(z.url({ protocol: /^https$/ })),
+  mimeType: z.string().regex(MEDIA_MIME, 'audio/<subtype> or video/<subtype>'),
   languageHint: LangSchema.exactOptional(),
 });
 export type TranscribeInput = z.infer<typeof TranscribeInputSchema>;
@@ -21,7 +36,7 @@ export const TranscriptSegmentSchema = z.strictObject({
 });
 export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
 
-/** Never empty: at least one segment, in order, inside the recording's duration. */
+/** Never empty: at least one segment, starts in order, every segment inside the duration. */
 export const TranscriptSchema = z
   .strictObject({
     text: z.string().min(1),
@@ -46,15 +61,14 @@ export const TranscriptSchema = z
           message: 'segment starts must not go backwards',
         });
       }
+      // Every end, not only the last: overlapping segments can end after a later one.
+      if (s.endMs > t.durationMs) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['segments', i, 'endMs'],
+          message: 'segments must end within durationMs',
+        });
+      }
     });
-    const last = t.segments.length - 1;
-    const lastSegment = t.segments[last];
-    if (lastSegment !== undefined && lastSegment.endMs > t.durationMs) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['segments', last, 'endMs'],
-        message: 'last segment must end within durationMs',
-      });
-    }
   });
 export type Transcript = z.infer<typeof TranscriptSchema>;

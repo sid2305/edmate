@@ -30,9 +30,10 @@ interface Transcript { text: string; language?: Lang; durationMs: number; segmen
 ```
 
 1. **`TurnConfigStore.load` returns the raw `helpState`** from the session row it already reads, after ADR-0004's ownership check (own student, teacher and agent, session open). No extra query.
-2. **New `SessionStateStore.saveHelpState`**, used by `commit` (task 3.8). It is bound to one student x teacher when it is built. The db adapter runs one UPDATE scoped to that student's own open session (`ended_at IS NULL`) and caps the size of the stored value; anything else is `not_found`. Last write wins.
+2. **New `SessionStateStore.saveHelpState`**, used by `commit` (task 3.8). It is bound to one student x teacher when it is built. The db adapter runs one UPDATE scoped to that student's own open session (`ended_at IS NULL`); another student's, another teacher's or an ended session is `not_found`. The stored value is capped at `LIMITS.helpStateMaxJsonLength` (8,192 UTF-16 units of `JSON.stringify`, in `packages/contracts/src/limits.ts`); a larger or unserialisable value is refused before the write. Last write wins.
 3. **Help state stays `unknown` in contracts.** The harness owns its shape: its `SessionHelpSchema` (`{ v: 1, rung, ...HelpState }`) parses the value, and anything that does not parse falls back to rung 0 and `INITIAL_HELP_STATE` (task 3.4).
-4. **`Transcriber`** with the media schemas in `packages/contracts/src/media.ts`: `TranscribeInputSchema` takes an `https` URL and an `audio/*` or `video/*` MIME type; `TranscriptSchema` has non-empty text, a duration and at least one segment, each segment with `endMs >= startMs`, segment starts never going backwards and the last segment ending within `durationMs`. The transcriber throws on failure and never returns an empty transcript. Adapters validate their own output against `TranscriptSchema`.
+4. **`Transcriber`** with the media schemas in `packages/contracts/src/media.ts`: `TranscribeInputSchema` takes an `https://host/path` URL (lower-case scheme, no userinfo, no surrounding whitespace, no scheme-only forms such as `https:host`) and an `audio/<subtype>` or `video/<subtype>` MIME type without parameters; `TranscriptSchema` has non-empty text, a duration and at least one segment, each segment with `endMs >= startMs`, segment starts never going backwards and every segment ending within `durationMs` (segments may overlap, so the largest end is checked, not only the last). The transcriber throws on failure and never returns an empty transcript. Adapters validate their own output against `TranscriptSchema`.
+5. **The host allowlist is an adapter option, not a contract.** The Transcriber adapter (task 2.7) takes `allowedHosts: readonly string[]` as a constructor option, supplied by the composition root from config. It parses the URL and requires an exact match of the parsed host against the list (no suffix or wildcard match), follows no redirect to another host, and refuses every URL when the list is empty.
 
 ## Alternatives
 
@@ -44,7 +45,8 @@ interface Transcript { text: string; language?: Lang; durationMs: number; segmen
 ## Consequences
 
 - The session row holds `answerKey` (inside the help state), so the help state must never reach a client: no route returns it and it is not part of any `TurnEvent`.
-- The transcriber fetches only from allowlisted storage hosts (SSRF), and signed URLs are bearer credentials: they never appear in logs, traces or error messages.
+- The transcriber fetches only from `allowedHosts` (SSRF; Decision 5), and signed URLs are bearer credentials: they never appear in logs, traces or error messages. Where a URL has to be mentioned it is redacted to `scheme://host/path`, dropping the query string and fragment. Task 2.7 must test that thrown errors, log lines and traces never contain the signed URL's query string, and that an empty `allowedHosts`, a host not on the list and a redirect to another host are all refused.
+- Task 3.8 must test that `saveHelpState` refuses a value over `LIMITS.helpStateMaxJsonLength` and writes nothing.
 - `durationMs` makes per-minute metering of transcription possible later.
 - Extends ADR-0002's port list; ADR-0002 is unchanged because accepted ADRs aren't rewritten.
 - Owners: 3.15 (ports, schemas, this ADR, the build plan's contracts block), 2.7 (the Whisper adapter), 3.4 (parsing on load), 3.8 (the write in `commit`). Existing `TurnConfigStore` implementers (the in-memory store in `harness/testing` and the db adapter) pass the stored value through unchanged in 3.15.

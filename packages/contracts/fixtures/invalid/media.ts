@@ -22,6 +22,66 @@ export const invalid: InvalidCase[] = [
   },
   {
     schema: 'TranscribeInput',
+    name: 'url with userinfo',
+    value: { ...transcribeInputFull, url: 'https://user:pw@storage.example.com/rec/a.m4a' }, // secret-scan: allow fake userinfo, reserved domain
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'url with only a user name',
+    value: { ...transcribeInputFull, url: 'https://user@storage.example.com/rec/a.m4a' }, // secret-scan: allow fake userinfo, reserved domain
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'url with leading whitespace',
+    value: { ...transcribeInputFull, url: ' https://storage.example.com/rec/a.m4a' },
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'url with trailing whitespace',
+    value: { ...transcribeInputFull, url: 'https://storage.example.com/rec/a.m4a\n' },
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'scheme-only url without //',
+    value: { ...transcribeInputFull, url: 'https:storage.example.com/rec/a.m4a' },
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'url with one slash',
+    value: { ...transcribeInputFull, url: 'https:/storage.example.com/rec/a.m4a' },
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'upper-case scheme',
+    value: { ...transcribeInputFull, url: 'HTTPS://storage.example.com/rec/a.m4a' },
+    path: ['url'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'mime type without a subtype',
+    value: { ...transcribeInputFull, mimeType: 'audio/' },
+    path: ['mimeType'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'mime type with a trailing slash part only',
+    value: { ...transcribeInputFull, mimeType: 'video' },
+    path: ['mimeType'],
+  },
+  {
+    schema: 'TranscribeInput',
+    name: 'mime type with whitespace',
+    value: { ...transcribeInputFull, mimeType: 'audio/mp4 ' },
+    path: ['mimeType'],
+  },
+  {
+    schema: 'TranscribeInput',
     name: 'mime type is not audio or video',
     value: { ...transcribeInputFull, mimeType: 'application/pdf' },
     path: ['mimeType'],
@@ -91,6 +151,19 @@ export const invalid: InvalidCase[] = [
     name: 'last segment ends after the duration',
     value: { ...demoTranscript, durationMs: 8999 },
     path: ['segments', 1, 'endMs'],
+  },
+  {
+    schema: 'Transcript',
+    name: 'an earlier overlapping segment ends after the duration',
+    value: {
+      ...demoTranscript,
+      durationMs: 3000,
+      segments: [
+        { startMs: 0, endMs: 3500, text: 'One.' },
+        { startMs: 1000, endMs: 2000, text: 'Two.' },
+      ],
+    },
+    path: ['segments', 0, 'endMs'],
   },
   {
     schema: 'Transcript',
