@@ -1,0 +1,8 @@
+- id: loops-q1
+  moduleId: loops
+  question: Fixture question one about loops?
+  answer: Fixture answer one.
+- id: loops-q2
+  moduleId: loops
+  question: Fixture question two about loops?
+  answer: Fixture answer two.

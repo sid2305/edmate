@@ -1,0 +1,28 @@
+reviewed_by: fixture-reviewer
+entries:
+  - path: course.yaml
+    licence: CC-BY-NC-4.0
+  - path: modules/loops/notes.md
+    licence: CC-BY-SA-4.0
+    source_url: https://example.org/fixture-source
+    attribution: Fixture Author
+  - path: modules/variables/notes.md
+    licence: CC-BY-SA-4.0
+    source_url: https://example.org/fixture-source
+    attribution: Fixture Author
+  - path: packages/free.yaml
+    licence: CC0-1.0
+  - path: packages/paid.yaml
+    licence: CC0-1.0
+  - path: qa-recall.yaml
+    licence: CC0-1.0
+  - path: question-bank/loops.yaml
+    licence: CC0-1.0
+  - path: question-bank/variables.yaml
+    licence: CC0-1.0
+  - path: rubric-answers/loops.yaml
+    licence: CC0-1.0
+  - path: rubric-answers/variables.yaml
+    licence: CC0-1.0
+  - path: style-card.yaml
+    licence: CC0-1.0

@@ -1,0 +1,8 @@
+- id: variables-q1
+  moduleId: variables
+  question: Fixture question one about variables?
+  answer: Fixture answer one.
+- id: variables-q2
+  moduleId: variables
+  question: Fixture question two about variables?
+  answer: Fixture answer two.

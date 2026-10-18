@@ -1,0 +1,8 @@
+- id: recall-1
+  moduleId: variables
+  question: What is a variable?
+  expectedModuleId: variables
+- id: recall-2
+  moduleId: loops
+  question: How does a for loop work?
+  expectedModuleId: loops
