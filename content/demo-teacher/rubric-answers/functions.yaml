@@ -1,0 +1,66 @@
+# Scale for every answer: maxScore 4. Each question scores 2 + 2 as named in rubricNotes.
+- id: ra-fn-01
+  moduleId: functions
+  questionId: fn-q1
+  studentAnswer: |
+    def square(n):
+        return n * n
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Definition: def line with parameter n and a colon (2/2). Body: returns n * n (2/2).
+- id: ra-fn-02
+  moduleId: functions
+  questionId: fn-q1
+  studentAnswer: |
+    def square(n):
+        print(n * n)
+  score: 2
+  maxScore: 4
+  rubricNotes: >-
+    Definition: correct def line (2/2). Body: prints instead of returning, so square(4)
+    gives back None (0/2). Mistake: print-vs-return.
+- id: ra-fn-03
+  moduleId: functions
+  questionId: fn-q2
+  studentAnswer: |
+    It prints 5 and then None, because add only prints and doesn't give anything back.
+    It should say return a + b.
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Output: 5 then None (2/2). Reason: no return, so the function gives back None (2/2).
+- id: ra-fn-04
+  moduleId: functions
+  questionId: fn-q2
+  studentAnswer: |
+    It prints 5 two times.
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Output: the second line is None, not 5 (0/2). Reason: none given (0/2).
+    Mistake: print-vs-return. Fix: ask what add gives back when it has no return.
+- id: ra-fn-05
+  moduleId: functions
+  questionId: fn-q5
+  studentAnswer: |
+    total only exists inside the function.
+  score: 2
+  maxScore: 4
+  rubricNotes: >-
+    Reason: total is local to the function (2/2). Fix: none given (0/2). Mistake: local-scope.
+    Fix: return total and store the result outside.
+- id: ra-fn-06
+  moduleId: functions
+  questionId: fn-q6
+  studentAnswer: |
+    def is_even(n):
+        if n % 2 == 0:
+            return True
+        else:
+            return False
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Test: n % 2 == 0 (2/2). Return: True or False in both cases (2/2). Correct; the one-line
+    return n % 2 == 0 is shorter but not required.

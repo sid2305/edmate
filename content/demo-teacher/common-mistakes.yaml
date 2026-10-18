@@ -1,0 +1,55 @@
+- tag: string-number-mix
+  description: >-
+    Adding or joining a string and a number, often because input() returns a string.
+    Python raises TypeError: can only concatenate str (not "int") to str. Convert with int(),
+    float() or str(), or use an f-string.
+- tag: integer-division
+  description: >-
+    Mixing up / and //. / always gives a float (7 / 2 is 3.5); // divides and rounds down
+    (7 // 2 is 3).
+- tag: assign-vs-equals
+  description: >-
+    Using = (store a value) where == (compare) is needed, as in if score = 10:, which is a
+    SyntaxError.
+- tag: missing-colon-indent
+  description: >-
+    Forgetting the colon at the end of an if, elif, else, for, while or def line, or indenting
+    the body inconsistently. Gives SyntaxError or IndentationError. Use 4 spaces.
+- tag: elif-order
+  description: >-
+    Putting a broad condition before a stricter one in an if/elif chain, so the stricter
+    branch is never reached. Only the first true branch runs.
+- tag: case-sensitive-compare
+  description: >-
+    Expecting "Yes" == "yes" to be True. String comparison is case-sensitive; use .lower()
+    first.
+- tag: off-by-one-range
+  description: >-
+    Expecting range(1, 5) to include 5. The stop number is never included; use range(1, 6).
+- tag: infinite-while
+  description: >-
+    A while loop whose body never changes the condition, so it runs forever. Something inside
+    the loop must move towards the condition becoming False.
+- tag: accumulator-reset
+  description: >-
+    Setting a running total to 0 inside the loop, so it resets on every pass. Start it before
+    the loop.
+- tag: print-vs-return
+  description: >-
+    Printing a result inside a function instead of returning it, so the caller gets None.
+- tag: local-scope
+  description: >-
+    Using a variable outside the function that created it, which gives NameError. Return the
+    value and store it instead.
+- tag: index-from-one
+  description: >-
+    Counting list positions from 1 instead of 0, so the wrong item is picked or an IndexError
+    appears.
+- tag: dict-by-position
+  description: >-
+    Using a number position such as stock[0] with a dictionary. Dictionaries are looked up by
+    key, such as stock["apples"].
+- tag: missing-key
+  description: >-
+    Looking up a dictionary key that is not there, which raises KeyError. Check with in first,
+    or use .get() with a default.

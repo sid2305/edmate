@@ -1,0 +1,32 @@
+{
+  "name": "@edmate/content",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Teacher content schemas, loader and content rules behind `edmate content validate`.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@edmate/contracts": "workspace:*",
+    "js-yaml": "5.5.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@edmate/config": "workspace:*",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "10.13.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

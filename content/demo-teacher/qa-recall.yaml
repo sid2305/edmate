@@ -1,0 +1,76 @@
+# moduleId: the module the student is studying when they ask.
+# expectedModuleId: the module whose notes answer the question.
+# The last four are asked from a free module but are answered only in paid-package modules
+# (loops, functions, lists-dicts), so a free student should get the locked reply.
+- id: qr-01
+  moduleId: values-variables
+  question: Why does input() give me a string even when I type a number?
+  expectedModuleId: values-variables
+- id: qr-02
+  moduleId: values-variables
+  question: What's the difference between / and // when dividing?
+  expectedModuleId: values-variables
+- id: qr-03
+  moduleId: values-variables
+  question: How do I put a variable inside a sentence when I print it?
+  expectedModuleId: values-variables
+- id: qr-04
+  moduleId: values-variables
+  question: Can a variable name have a dash in it, like my-name?
+  expectedModuleId: values-variables
+- id: qr-05
+  moduleId: conditions
+  question: When should I use elif instead of another if?
+  expectedModuleId: conditions
+- id: qr-06
+  moduleId: conditions
+  question: Why do I get a SyntaxError when I write if x = 5?
+  expectedModuleId: conditions
+- id: qr-07
+  moduleId: conditions
+  question: How do I check two things at once in an if statement?
+  expectedModuleId: conditions
+- id: qr-08
+  moduleId: conditions
+  question: How do I make a yes or no answer work even if they type YES in capitals?
+  expectedModuleId: conditions
+- id: qr-09
+  moduleId: loops
+  question: Why does range(1, 5) stop at 4?
+  expectedModuleId: loops
+- id: qr-10
+  moduleId: loops
+  question: How do I stop a loop early?
+  expectedModuleId: loops
+- id: qr-11
+  moduleId: functions
+  question: What does return actually do?
+  expectedModuleId: functions
+- id: qr-12
+  moduleId: functions
+  question: Why does my function give back None?
+  expectedModuleId: functions
+- id: qr-13
+  moduleId: lists-dicts
+  question: How do I get the last item of a list?
+  expectedModuleId: lists-dicts
+- id: qr-14
+  moduleId: lists-dicts
+  question: How do I avoid a KeyError when a key might not be there?
+  expectedModuleId: lists-dicts
+- id: qr-15
+  moduleId: conditions
+  question: How do I keep asking the user for input until they type quit?
+  expectedModuleId: loops
+- id: qr-16
+  moduleId: conditions
+  question: How can I add up all the numbers from 1 to 100 without typing them all?
+  expectedModuleId: loops
+- id: qr-17
+  moduleId: values-variables
+  question: How do I make my own command, like print, that I can use again and again?
+  expectedModuleId: functions
+- id: qr-18
+  moduleId: values-variables
+  question: How do I store a whole shopping list in one variable?
+  expectedModuleId: lists-dicts

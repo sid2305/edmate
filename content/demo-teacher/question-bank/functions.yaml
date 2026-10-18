@@ -1,0 +1,75 @@
+- id: fn-q1
+  moduleId: functions
+  question: |
+    Write a function `square(n)` that returns `n` multiplied by itself.
+  answer: |
+    ```python
+    def square(n):
+        return n * n
+    ```
+- id: fn-q2
+  moduleId: functions
+  question: |
+    What does this print, and why?
+
+    ```python
+    def add(a, b):
+        print(a + b)
+
+    result = add(2, 3)
+    print(result)
+    ```
+  answer: |
+    It prints 5 and then None. `add` prints the sum but has no `return`, so it gives back
+    None, and `result` is None. Using `return a + b` instead would make `result` 5.
+- id: fn-q3
+  moduleId: functions
+  question: |
+    What is the difference between a parameter and an argument? Use `def greet(name):` and
+    `greet("Sam")` in your answer.
+  answer: |
+    A parameter is the name in the `def` line: `name`. An argument is the value passed in
+    when the function is called: `"Sam"`.
+- id: fn-q4
+  moduleId: functions
+  question: |
+    What does `greet()` print?
+
+    ```python
+    def greet(name="friend"):
+        print(f"Hello, {name}!")
+    ```
+  answer: |
+    Hello, friend! No argument is given, so the default value "friend" is used.
+- id: fn-q5
+  moduleId: functions
+  question: |
+    Why does this give a NameError, and how would you fix it?
+
+    ```python
+    def make_total():
+        total = 10
+
+    make_total()
+    print(total)
+    ```
+  answer: |
+    `total` is created inside the function, so it is local: it does not exist outside the
+    function. Fix: add `return total` at the end of the function and store the result,
+    `total = make_total()`, before printing.
+- id: fn-q6
+  moduleId: functions
+  question: |
+    Write a function `is_even(n)` that returns True if `n` is even and False otherwise.
+  answer: |
+    ```python
+    def is_even(n):
+        return n % 2 == 0
+    ```
+    An `if`/`else` version that returns True or False is also correct.
+- id: fn-q7
+  moduleId: functions
+  question: |
+    What happens to lines that come after a `return` inside the same function?
+  answer: |
+    They do not run. `return` ends the function straight away and sends the value back.

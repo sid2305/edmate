@@ -1,0 +1,105 @@
+- id: variables-r01
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 1.
+  score: 1
+  maxScore: 10
+  rubricNotes: Fixture rubric note 1.
+- id: variables-r02
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 2.
+  score: 2
+  maxScore: 10
+  rubricNotes: Fixture rubric note 2.
+- id: variables-r03
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 3.
+  score: 3
+  maxScore: 10
+  rubricNotes: Fixture rubric note 3.
+- id: variables-r04
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 4.
+  score: 4
+  maxScore: 10
+  rubricNotes: Fixture rubric note 4.
+- id: variables-r05
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 5.
+  score: 5
+  maxScore: 10
+  rubricNotes: Fixture rubric note 5.
+- id: variables-r06
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 6.
+  score: 6
+  maxScore: 10
+  rubricNotes: Fixture rubric note 6.
+- id: variables-r07
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 7.
+  score: 7
+  maxScore: 10
+  rubricNotes: Fixture rubric note 7.
+- id: variables-r08
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 8.
+  score: 8
+  maxScore: 10
+  rubricNotes: Fixture rubric note 8.
+- id: variables-r09
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 9.
+  score: 9
+  maxScore: 10
+  rubricNotes: Fixture rubric note 9.
+- id: variables-r10
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 10.
+  score: 10
+  maxScore: 10
+  rubricNotes: Fixture rubric note 10.
+- id: variables-r11
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 11.
+  score: 0
+  maxScore: 10
+  rubricNotes: Fixture rubric note 11.
+- id: variables-r12
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 12.
+  score: 1
+  maxScore: 10
+  rubricNotes: Fixture rubric note 12.
+- id: variables-r13
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 13.
+  score: 2
+  maxScore: 10
+  rubricNotes: Fixture rubric note 13.
+- id: variables-r14
+  moduleId: variables
+  questionId: variables-q2
+  studentAnswer: Fixture student answer 14.
+  score: 3
+  maxScore: 10
+  rubricNotes: Fixture rubric note 14.
+- id: variables-r15
+  moduleId: variables
+  questionId: variables-q1
+  studentAnswer: Fixture student answer 15.
+  score: 4
+  maxScore: 10
+  rubricNotes: Fixture rubric note 15.

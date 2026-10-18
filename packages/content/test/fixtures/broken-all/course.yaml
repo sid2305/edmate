@@ -1,0 +1,8 @@
+id: fixture-course
+title: Fixture course
+description: A tiny two-module course used by the content validator tests.
+modules:
+  - id: variables
+    title: Variables
+  - id: loops
+    title: Loops

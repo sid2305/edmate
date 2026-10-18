@@ -1,0 +1,65 @@
+- id: ld-q1
+  moduleId: lists-dicts
+  question: |
+    Given `colours = ["red", "green", "blue"]`, what are `colours[0]`, `colours[2]` and
+    `colours[-1]`?
+  answer: |
+    `colours[0]` is "red", `colours[2]` is "blue", and `colours[-1]` is "blue"
+    (negative indexes count from the end, so -1 is the last item).
+- id: ld-q2
+  moduleId: lists-dicts
+  question: |
+    With the same `colours` list, why does `colours[3]` cause an error?
+  answer: |
+    Indexes start at 0, so a list of 3 items has indexes 0, 1 and 2. There is no index 3,
+    so Python raises `IndexError: list index out of range`.
+- id: ld-q3
+  moduleId: lists-dicts
+  question: |
+    How do you add "yellow" to the end of the `colours` list?
+  answer: |
+    `colours.append("yellow")`
+- id: ld-q4
+  moduleId: lists-dicts
+  question: |
+    Given `stock = {"apples": 3, "pears": 5}`, how do you get the number of pears, and how
+    do you change the number of apples to 10?
+  answer: |
+    `stock["pears"]` gives 5. `stock["apples"] = 10` changes the apples to 10.
+    Dictionaries are looked up by key, not by position.
+- id: ld-q5
+  moduleId: lists-dicts
+  question: |
+    With the same `stock`, `stock["kiwis"]` crashes. Why? Give two safe ways to look up a key
+    that might be missing.
+  answer: |
+    "kiwis" is not a key in the dictionary, so Python raises `KeyError: 'kiwis'`.
+    Safe ways: check first with `if "kiwis" in stock:`, or use `stock.get("kiwis", 0)`,
+    which gives 0 instead of an error.
+- id: ld-q6
+  moduleId: lists-dicts
+  question: |
+    Write a loop that prints each fruit and its count from `stock`, like `apples: 3`.
+  answer: |
+    ```python
+    for fruit, count in stock.items():
+        print(f"{fruit}: {count}")
+    ```
+- id: ld-q7
+  moduleId: lists-dicts
+  question: |
+    When would you use a list, and when a dictionary?
+  answer: |
+    A list for things in order that you reach by position, such as a row of scores.
+    A dictionary when you look things up by a key or name, such as stock by fruit.
+- id: ld-q8
+  moduleId: lists-dicts
+  question: |
+    What does this print?
+
+    ```python
+    nums = [4, 8, 15]
+    print(len(nums), sum(nums))
+    ```
+  answer: |
+    3 27. There are 3 items, and 4 + 8 + 15 = 27.

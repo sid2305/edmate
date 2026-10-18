@@ -312,10 +312,10 @@ tasks:
   - '1.1'
   - '1.2'
   - M0
-  status: running
+  status: review
   risk: risky
   branch: m1/1.3-auth
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(db,ts)
 - id: '1.4'
   milestone: M1
   title: Email magic-link sign-in (phone OTP later, per market)
@@ -369,7 +369,7 @@ tasks:
   deps:
   - '0.3'
   - M0
-  status: review
+  status: done
   risk: expert
   branch: m1/1.8-demo-teacher
   model: plan:sonnet build:opus-5.5/medium content:pedagogy-author(opus) review:sonnet(ts,code)
@@ -439,11 +439,11 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: todo
+  status: planning
   needs_decision:
   - transcription
-  branch: null
-  model: null
+  branch: m2/2.7-transcriber-embeddings
+  model: plan:sonnet
 - id: '3.1'
   milestone: M3
   title: 'Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture'
@@ -498,9 +498,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: running
+  status: review
   branch: m3/3.5-teaching-policy
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:opus(safety)+sonnet(ts)
 - id: '3.6'
   milestone: M3
   title: Prompt-pack loader and composer with `promptPackVersion`, style card, locale pack and sources

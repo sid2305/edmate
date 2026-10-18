@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Demo course sign-off · decided by you · risk: low
+Decided: You approved the demo teacher course (Python basics, PR #20) as its named reviewer; `reviewed_by: sid2305`.
+Why: Rule 7 needs a named human for teaching content.
+Alternatives: Request changes; review later.
+Reversible: Yes; a real teacher can re-review before launch.
+
+### 18 Oct 2026 · 1.8 Demo course subject and licence · decided by team lead · risk: low
+Decided: The demo teacher teaches Python basics for beginners (5 modules), written from scratch and released as CC0-1.0. Third-party material would need CC BY, CC BY-SA, CC0 or public domain with a source and attribution.
+Why: Easy for the human reviewer to judge, open licensing keeps the public repo clean, and it doesn't pre-empt the pilot-subjects decision.
+Alternatives: Adapt an existing open course; another subject.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.8 Content validator rules · decided by tdd-guide · risk: low
+Decided: Besides the plan's 8 rules, `edmate content validate` fails a non-CC0 file without a source_url, any file outside the documented layout, and a reviewed_by that is an email address.
+Why: Keeps licences traceable, stops stray files, and keeps personal emails out of a public repo.
+Alternatives: Warnings instead of failures.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.8 Rubric scale · decided by pedagogy-author · risk: low
+Decided: Sample student answers are scored out of 4, with the criteria written in rubricNotes.
+Why: A small scale keeps scoring consistent for the feedback skill's agreement test (5.7).
+Alternatives: Out of 10; pass/fail.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 3.2 entitle resolves all three sources server-side and fails closed on any ownership mismatch · decided by builder (tdd-guide) on the plan and lead answers · risk: high
 Decided: `entitle` sends only `{ studentId, agentId, source }` to `EntitlementStore.resolve`, with the source set by the composition root, and never reads package, module or skill ids from the input. It refuses `null`, paused and ended, loads the turn's config through `TurnConfigStore`, and ends the turn with `no_access` unless every object belongs to the entitlement (ADR-0004 Decision 5) and the entitlement's allowed modules and skills are within the package's. The db adapter adds the one repository read without a teacher or student scope, `agents.owner({ agentId })`, which returns only the owner's teacher id and only for live agents. Preview and eval packages are bound from trusted server state when the store is built.
 Why: build plan § Access filter 1 and 7, ADR-0003 point 1 and ADR-0004; the subscription path needs the agent's teacher before any student-scoped read, and that link is public on teacher pages.
