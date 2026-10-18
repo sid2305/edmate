@@ -366,9 +366,9 @@ tasks:
   accept: shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures; a third adapter needs no caller changes.
   deps:
   - M0
-  status: planning
+  status: running
   branch: m2/2.2-provider-adapters
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.3'
   milestone: M2
   title: 'Router: tiers, per-agent override, fallback'
@@ -406,9 +406,9 @@ tasks:
   accept: replays fixtures deterministically, including tool calls and usage.
   deps:
   - M0
-  status: running
+  status: done
   branch: m2/2.6-scripted-gateway
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(ts)
 - id: '2.7'
   milestone: M2
   title: Transcriber and embedding adapters (embedding model is platform-wide config)
@@ -428,9 +428,9 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.1-pipeline-runner
+  model: plan:opus
 - id: '3.2'
   milestone: M3
   title: '`admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit'
