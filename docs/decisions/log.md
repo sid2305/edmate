@@ -10,6 +10,42 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.4 Context budget in characters: 32,000 total, 16,000 for history · decided by builder (tdd-guide), lead answer Q3 · risk: low
+Decided: history text plus retrieved chunk text stays within 32,000 UTF-16 units; history gets up to 16,000 and retrieval the rest; 40 messages fetched; chunks that don't fit are skipped in rank order.
+Why: harness purity rules out a tokenizer; about 8k tokens leaves room for the system prompt, style card and reply.
+Alternatives: a token estimate (chars / 4); a fixed chunk count with no size check.
+Reversible: yes (constants in `buildContext.ts`; recalibrate at 7.6).
+
+### 18 Oct 2026 · 3.4 A newest message over the history budget is cut, not dropped · decided by builder (tdd-guide) · risk: low
+Decided: if the latest message alone exceeds the history budget it is kept, cut to its last `HISTORY_MAX_CHARS` units (never splitting a surrogate pair).
+Why: the plan wants the latest message always kept and the acceptance says the context never exceeds the limit; cutting satisfies both.
+Alternatives: keep it whole (can break the limit); drop it.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.4 A chunk outside the scope fails the step instead of being filtered out · decided by builder (tdd-guide) · risk: medium
+Decided: `buildContext` re-checks every chunk from `search`; one from another teacher or a non-allowed module throws `RetrievalScopeError` (ids only), so the runner uses the ask_teacher fallback context and the trace shows `fallback`.
+Why: a widening index is a bug that must be visible (ADR-0003); dropping chunks silently would hide it. Matches the runner's own TurnContext refine behaviour.
+Alternatives: drop the stray chunks and keep the rest.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.4 Retrieval query: the input text plus the latest agent message, each capped at 1,000 chars · decided by builder (tdd-guide), per 3.5 plan Q2 · risk: low
+Decided: the query is the input text (head, 1,000 chars) and the latest `agent` message (tail, 1,000 chars) joined by a newline; teacher messages are ignored; an empty query skips both search and probe.
+Why: a bare answer like "42" needs the active problem to retrieve; caps keep one long message from bloating the query.
+Alternatives: the last N messages; only the input.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.4 The raw help state travels on `Entitled`, set by entitle from the same load · decided by builder (tdd-guide) · risk: medium
+Decided: `entitle` copies `helpState` from the `TurnConfigStore.load` result it already ownership-checked onto `Entitled.helpState` (optional, unvalidated); `buildContext` parses it; the runner's `assemble()` deletes it before building TurnContext. `checkTurnConfig` (`access/**`) is unchanged.
+Why: ADR-0005 says no extra query; keeping `access/**` out of this task avoids a risky-path change for a pass-through. Deleting the key before the strict TurnContext parse keeps the answer key out of the model context, events and traces.
+Alternatives: pass it through `checkTurnConfig`'s `TurnConfig` (touches `access/**`); call `load` again in buildContext (an extra query).
+Reversible: yes (harness-internal types).
+
+### 18 Oct 2026 · 3.4 `serializeSessionHelp` refuses an invalid or oversized state · decided by builder (tdd-guide) · risk: low
+Decided: `serializeSessionHelp` validates with `SessionHelpSchema` and throws when `JSON.stringify` is over `LIMITS.helpStateMaxJsonLength`.
+Why: 3.8 then never builds a value the store would refuse; the store still enforces the cap itself (ADR-0005).
+Alternatives: leave all checks to `SessionStateStore`.
+Reversible: yes.
+
 ### 18 Oct 2026 · 2.5 Cost alarm pauses free subscriptions in one audited, teacher-scoped transaction · decided by builder · risk: high
 Decided: `subscriptions.pauseFreeForTeacher(scope, { monthStart, reason })` runs a `SELECT … FOR UPDATE OF subscriptions`, then an `UPDATE`, then one audit insert per row, all in one transaction. The select finds the scope's teacher's trial / active / past_due subscriptions joined to their package version (same teacher) where `config->'pricePerMonth'->'amountMinor' = 0`, with no `subscription.pause_cost_alarm` audit row since `monthStart`. Each audit row is a student x teacher row: actor `system_cost_alarm`, role `system`, before/after status. The result has no student ids. `usageLedger.sumForTeacherSince(scope, since)` is a teacher-scoped read across students that leaves out `eval` rows. Both are in the isolation CASES grid.
 Why: paid students keep access until staff decide, so a paid subscription is never touched. The audit row commits with the pause, and it is also the marker that keeps a staff unpause from being re-paused that month (lead answer 4: "store the override"), so no new table is needed. FOR UPDATE makes concurrent runs pause each row once (tested).

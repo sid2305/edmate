@@ -489,7 +489,7 @@ tasks:
   - '3.1'
   - M0
   - '3.15'
-  status: review
+  status: done
   branch: m3/3.4-build-context
   model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(ts)
 - id: '3.5'
@@ -511,10 +511,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: planning
+  status: running
   risk: risky
   branch: m3/3.6-prompt-composer
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '3.7'
   milestone: M3
   title: 'Orchestrator: streaming, tool calls (max 3 rounds), per-turn cost ceiling, SSE events incl. `sources`, `locked`, `teacher_question`, `skill` and `replace`'
@@ -617,8 +617,9 @@ tasks:
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
 - id: '3.16'
   milestone: M3
-  title: 'Sessions follow the package: when the entitled package or its version changes, end the open session (or start a fresh one) so earlier history, sources and summary from a lapsed package never reach the model'
-  accept: 'A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.'
+  title: 'Sessions follow the package: when the entitled package or its version changes, end the open session (or start a fresh one) so earlier history, sources and summary from a lapsed package never reach
+    the model'
+  accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
   status: todo
