@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { run } from './cli.js';
 
@@ -17,31 +19,31 @@ function capture() {
 }
 
 describe('edmate cli', () => {
-  it.each([['--version'], ['-v']])('prints the package version for %s', (flag) => {
+  it.each([['--version'], ['-v']])('prints the package version for %s', async (flag) => {
     const { io, out, err } = capture();
-    expect(run([flag], io)).toBe(0);
+    expect(await run([flag], io)).toBe(0);
     expect(out.join('')).toBe(`${pkg.version}\n`);
     expect(err).toEqual([]);
   });
 
-  it.each([['--help'], ['-h']])('prints usage for %s', (flag) => {
+  it.each([['--help'], ['-h']])('prints usage for %s', async (flag) => {
     const { io, out } = capture();
-    expect(run([flag], io)).toBe(0);
+    expect(await run([flag], io)).toBe(0);
     expect(out.join('')).toContain('Usage: edmate');
   });
 
-  it('prints usage and fails with no arguments', () => {
+  it('prints usage and fails with no arguments', async () => {
     const { io, err } = capture();
-    expect(run([], io)).toBe(1);
+    expect(await run([], io)).toBe(1);
     expect(err.join('')).toContain('Usage: edmate');
   });
 
-  it('writes to the real stdout and stderr by default', () => {
+  it('writes to the real stdout and stderr by default', async () => {
     const out = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const err = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
-      expect(run(['--version'])).toBe(0);
-      expect(run([])).toBe(1);
+      expect(await run(['--version'])).toBe(0);
+      expect(await run([])).toBe(1);
       expect(out).toHaveBeenCalledWith(`${pkg.version}\n`);
       expect(err).toHaveBeenCalledWith(expect.stringContaining('Usage: edmate'));
     } finally {
@@ -50,9 +52,36 @@ describe('edmate cli', () => {
     }
   });
 
-  it('rejects an unknown command', () => {
+  it('rejects an unknown command', async () => {
     const { io, err } = capture();
-    expect(run(['chat'], io)).toBe(1);
+    expect(await run(['chat'], io)).toBe(1);
     expect(err.join('')).toContain("unknown command 'chat'");
+  });
+
+  it('lists the eval command in the usage text', async () => {
+    const { io, out } = capture();
+    await run(['--help'], io);
+    expect(out.join('')).toContain('eval <dir>');
+  });
+
+  it('routes eval to the eval command', async () => {
+    const { io, out } = capture();
+    expect(await run(['eval', '--help'], io)).toBe(0);
+    expect(out.join('')).toContain('Usage: edmate eval <dir>');
+  });
+
+  it('eval with the unwired agent fails loudly when a fixture is missing', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-eval-'));
+    try {
+      writeFileSync(
+        join(dir, 'c.yaml'),
+        'id: c-001\nsuite: t\npackage: free\nreviewed_by: pending\nsource: s\nturns:\n  - student: hi\n',
+      );
+      const { io, err } = capture();
+      expect(await run(['eval', dir, '--fixtures', join(dir, 'fx')], io)).toBe(1);
+      expect(err.join('')).toContain('run with --record first');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
