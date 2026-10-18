@@ -439,6 +439,7 @@ tasks:
   deps:
   - '2.2'
   - M0
+  - '3.15'
   status: planning
   needs_decision:
   - transcription
@@ -487,6 +488,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
+  - '3.15'
   status: planning
   branch: m3/3.4-build-context
   model: plan:sonnet
@@ -601,6 +603,15 @@ tasks:
   accept: Daily message limits survive a restart and hold across web processes; tests prove it against real Postgres or Redis.
   deps:
   - '3.2'
+  status: todo
+  branch: null
+  model: null
+- id: '3.15'
+  milestone: M3
+  title: 'Contracts: ADR-0005 — add the Transcriber port (2.7) and a way for a turn to load the session help-ladder state (3.4); update the Core contracts block in the build plan'
+  accept: 'ADR-0005 merged; the new port/type exported from @edmate/contracts with type tests; spec-types drift test passes; no other contract changes.'
+  deps:
+  - '3.13'
   status: todo
   branch: null
   model: null

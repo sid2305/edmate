@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Speech-to-text and embedding vendor · decided by you · risk: medium
+Decided: OpenAI for both: Whisper for transcription (the adapter splits recordings over 25 MB) and text-embedding-3-small (1536 dimensions) for embeddings, through the OpenAI-compatible path. One extra vendor and key.
+Why: Anthropic offers neither; one vendor keeps keys and bills simple.
+Alternatives: Deepgram for transcription plus OpenAI embeddings; decide later.
+Reversible: Yes; both sit behind ports.
+
 ### 18 Oct 2026 · 3.5 Coverage threshold 0.5 and an unscored chunk counts as not covered · decided by team lead (plan Q2) · risk: medium
 Decided: a turn is covered when some retrieved chunk has `score ≥ coverageThreshold`. The threshold is injected through `PolicyOptions`, with a provisional default of 0.5 on a 0–1 scale. A chunk with no score, or a NaN threshold, counts as not covered. Not covered goes to `locked` if `lockedHit`, otherwise to `ask_teacher`.
 Why: the retrieval score scale is not defined until 5.3, and failing toward `ask_teacher` keeps the agent from answering from general knowledge.
