@@ -3,6 +3,7 @@
 import type { ZodType } from 'zod';
 import type { Entitlement } from './access.js';
 import type { LocalePack } from './locale.js';
+import type { TranscribeInput, Transcript } from './media.js';
 import type { EvidenceEvent, LearnerProfile } from './memory.js';
 import type { ModelChunk, ModelRequest } from './model.js';
 import type { GuardResult, SafetyAlert } from './safety.js';
@@ -56,7 +57,22 @@ export interface TurnConfigStore {
     pkg: PackageConfig;
     styleCard: StyleCard;
     locale: LocalePack;
+    /** sessions.help_state as stored, unvalidated; the harness owns its shape (ADR-0005). */
+    helpState: unknown;
   } | null>;
+}
+
+/**
+ * Saves the help state of a session (ADR-0005). Bound to one student x teacher at construction;
+ * writes only that student's own open session, else rejects with `not_found`. Last write wins.
+ */
+export interface SessionStateStore {
+  saveHelpState(sessionId: string, helpState: unknown): Promise<void>;
+}
+
+/** Speech to text for recordings (ADR-0005). Throws on failure; never returns an empty transcript. */
+export interface Transcriber {
+  transcribe(i: TranscribeInput): Promise<Transcript>;
 }
 
 export interface ProfileStore {

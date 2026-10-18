@@ -38,6 +38,9 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.TurnTrace>().toEqualTypeOf<Spec.TurnTrace>();
     expectTypeOf<C.LocalePack>().toEqualTypeOf<Spec.LocalePack>();
     expectTypeOf<C.EvidenceEvent>().toEqualTypeOf<Spec.EvidenceEvent>();
+    expectTypeOf<C.TranscribeInput>().toEqualTypeOf<Spec.TranscribeInput>();
+    expectTypeOf<C.TranscriptSegment>().toEqualTypeOf<Spec.TranscriptSegment>();
+    expectTypeOf<C.Transcript>().toEqualTypeOf<Spec.Transcript>();
   });
 
   it('ports (type-only)', () => {
@@ -47,6 +50,8 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.TurnConfigStore>().toEqualTypeOf<Spec.TurnConfigStore>();
     expectTypeOf<C.ProfileStore>().toEqualTypeOf<Spec.ProfileStore>();
     expectTypeOf<C.TranscriptStore>().toEqualTypeOf<Spec.TranscriptStore>();
+    expectTypeOf<C.SessionStateStore>().toEqualTypeOf<Spec.SessionStateStore>();
+    expectTypeOf<C.Transcriber>().toEqualTypeOf<Spec.Transcriber>();
     expectTypeOf<C.CorrectionStore>().toEqualTypeOf<Spec.CorrectionStore>();
     expectTypeOf<C.TeacherQuestionStore>().toEqualTypeOf<Spec.TeacherQuestionStore>();
     expectTypeOf<C.UsageMeter>().toEqualTypeOf<Spec.UsageMeter>();

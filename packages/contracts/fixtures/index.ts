@@ -5,6 +5,7 @@ import * as C from '../src/index.js';
 import type { InvalidCase } from './invalid/case.js';
 import { invalid as accessInvalid } from './invalid/access.js';
 import { invalid as localeInvalid } from './invalid/locale.js';
+import { invalid as mediaInvalid } from './invalid/media.js';
 import { invalid as memoryInvalid } from './invalid/memory.js';
 import { invalid as modelInvalid } from './invalid/model.js';
 import { invalid as safetyInvalid } from './invalid/safety.js';
@@ -14,6 +15,7 @@ import { invalid as traceInvalid } from './invalid/trace.js';
 import { invalid as turnInvalid } from './invalid/turn.js';
 import { valid as accessValid } from './valid/access.js';
 import { valid as localeValid } from './valid/locale.js';
+import { valid as mediaValid } from './valid/media.js';
 import { valid as memoryValid } from './valid/memory.js';
 import { valid as modelValid } from './valid/model.js';
 import { valid as safetyValid } from './valid/safety.js';
@@ -58,6 +60,9 @@ export const schemas = {
   SafetyAlert: C.SafetyAlertSchema,
   GuardResult: C.GuardResultSchema,
   TurnTrace: C.TurnTraceSchema,
+  TranscribeInput: C.TranscribeInputSchema,
+  TranscriptSegment: C.TranscriptSegmentSchema,
+  Transcript: C.TranscriptSchema,
 } as const;
 
 export type SchemaName = keyof typeof schemas;
@@ -75,6 +80,7 @@ export const validFixtures: {
   ...turnValid,
   ...safetyValid,
   ...traceValid,
+  ...mediaValid,
 };
 
 const allInvalid: readonly InvalidCase[] = [
@@ -87,6 +93,7 @@ const allInvalid: readonly InvalidCase[] = [
   ...turnInvalid,
   ...safetyInvalid,
   ...traceInvalid,
+  ...mediaInvalid,
 ];
 
 /** Values each schema must reject, by schema name. */
@@ -106,6 +113,14 @@ export {
   demoEntitlementSubscription,
 } from './valid/access.js';
 export { demoLocalePack, localePackMinimal } from './valid/locale.js';
+export {
+  demoTranscript,
+  transcribeInputFull,
+  transcribeInputMinimal,
+  transcriptMinimal,
+  transcriptSegmentFirst,
+  transcriptSegmentSecond,
+} from './valid/media.js';
 export { demoLearnerProfile, evidenceCheck, learnerProfileNew } from './valid/memory.js';
 export {
   modelChunkText,

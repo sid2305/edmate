@@ -243,6 +243,18 @@ describe('memoryTurnConfigStore (ADR-0004)', () => {
     expect((await store.load(e, 'ses_1a'))?.agent.version).toBe(2);
   });
 
+  it('returns the session help state as stored, unvalidated (ADR-0005)', async () => {
+    const world = twoTeacherWorld();
+    const e = await mustResolve({ studentId: S.one, agentId: 'agt_a', source: 'subscription' });
+    const store = memoryTurnConfigStore(world);
+    const cfg = await store.load(e, 'ses_1a');
+    expect(cfg).not.toBeNull();
+    expect(cfg?.helpState).toBeUndefined();
+    const stored = { v: 1, rung: 2, anything: 'kept as is' };
+    world.sessions.find((s) => s.id === 'ses_1a')!.helpState = stored;
+    expect((await store.load(e, 'ses_1a'))?.helpState).toBe(stored);
+  });
+
   it.each([
     ['another student', 'ses_2a'],
     ['another teacher', 'ses_1b'],

@@ -16,8 +16,8 @@ describe('fixture registry', () => {
     }
   });
 
-  it('covers all 32 data types of Core contracts', () => {
-    expect(exportedSchemaNames).toHaveLength(32);
+  it('covers all 35 data types of Core contracts (32 + 3 media types from ADR-0005)', () => {
+    expect(exportedSchemaNames).toHaveLength(35);
   });
 
   it.each(exportedSchemaNames)('%s has at least one valid and one invalid fixture', (name) => {

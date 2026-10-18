@@ -24,7 +24,8 @@ describe('harness/testing re-exports the contracts fixtures', () => {
   const names = Object.keys(schemas) as (keyof typeof schemas)[];
 
   it('covers every schema', () => {
-    expect(names).toHaveLength(32);
+    // 32 Core contracts types + 3 media types (ADR-0005).
+    expect(names).toHaveLength(35);
   });
 
   it.each(names)('%s: the first fixture parses', (name) => {

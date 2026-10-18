@@ -111,7 +111,7 @@ edmate/
   docker/                compose.yaml, Caddyfile, env.example
 ```
 
-**Ports and adapters:** `harness` defines ports (`EntitlementStore`, `TurnConfigStore`, `ProfileStore`, `TranscriptStore`, `RetrievalIndex`, `CorrectionStore`, `UsageMeter`, `TraceSink`, `AlertSink`, `ModelGateway`); `db`, `gateway`, `ingest` and `worker` provide adapters. Tests use in-memory adapters from `harness/testing`.
+**Ports and adapters:** `harness` defines ports (`EntitlementStore`, `TurnConfigStore`, `SessionStateStore`, `ProfileStore`, `TranscriptStore`, `Transcriber`, `RetrievalIndex`, `CorrectionStore`, `UsageMeter`, `TraceSink`, `AlertSink`, `ModelGateway`); `db`, `gateway`, `ingest` and `worker` provide adapters. Tests use in-memory adapters from `harness/testing`.
 
 ## Core contracts
 
@@ -255,6 +255,11 @@ interface LocalePack {
   regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
 }
 
+// ---- Media (ADR-0005) ----
+interface TranscribeInput { url: string; mimeType: string; languageHint?: Lang }   // url: https signed URL from allowlisted storage, never logged; mimeType: audio/* or video/*
+interface TranscriptSegment { startMs: number; endMs: number; text: string }      // integers ≥ 0, endMs ≥ startMs; text non-empty
+interface Transcript { text: string; language?: Lang; durationMs: number; segments: TranscriptSegment[] }   // ≥ 1 segment; starts never go backwards; last endMs ≤ durationMs
+
 // ---- Ports (the harness defines them; db, gateway, ingest and worker implement them) ----
 interface RetrievalIndex {
   // The filter is required: there is no way to search a teacher's material without it.
@@ -264,10 +269,12 @@ interface RetrievalIndex {
 }
 interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
 interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)
-  load(e: Entitlement, sessionId: string): Promise<{ agent: AgentConfig; pkg: PackageConfig; styleCard: StyleCard; locale: LocalePack } | null>;
-}
+  load(e: Entitlement, sessionId: string): Promise<{ agent: AgentConfig; pkg: PackageConfig; styleCard: StyleCard; locale: LocalePack; helpState: unknown } | null>;
+}   // helpState: sessions.help_state as stored, unvalidated; the harness owns its shape (ADR-0005)
 interface ProfileStore { get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile> }
 interface TranscriptStore { history(sessionId: string, limit: number): Promise<Message[]>; append(sessionId: string, m: Message): Promise<void> }
+interface SessionStateStore { saveHelpState(sessionId: string, helpState: unknown): Promise<void> }   // bound to student x teacher; own open session only, else not_found (ADR-0005)
+interface Transcriber { transcribe(i: TranscribeInput): Promise<Transcript> }   // throws on failure; never returns an empty transcript (ADR-0005)
 interface CorrectionStore {         // teacher answers and corrections become teacher notes + eval cases
   addTeacherNote(n: { teacherId: string; moduleId: string; question: string; answer: string; origin: 'correction' | 'teacher_answer' }): Promise<{ chunkId: string; evalCaseId: string }>;
 }

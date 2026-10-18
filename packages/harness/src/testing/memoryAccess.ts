@@ -44,6 +44,8 @@ export interface MemorySession {
   /** Set server-side when the session was created. */
   agentVersion: number;
   endedAt: string | null;
+  /** sessions.help_state as stored (ADR-0005); unset reads as `undefined`. Never validated here. */
+  helpState?: unknown;
 }
 
 export interface AccessWorld {
@@ -234,7 +236,9 @@ export function memoryTurnConfigStore(world: AccessWorld): MemoryTurnConfigStore
         : undefined;
       const locale = world.locales.find((l) => l.market === e.market);
       return Promise.resolve(
-        agent && pkg && styleCard && locale ? { agent, pkg, styleCard, locale } : null,
+        session && agent && pkg && styleCard && locale
+          ? { agent, pkg, styleCard, locale, helpState: session.helpState }
+          : null,
       );
     },
   };
