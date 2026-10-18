@@ -54,4 +54,4 @@ interface Transcript { text: string; language?: Lang; durationMs: number; segmen
 
 ## Reviewers
 
-architect, security-reviewer, typescript-reviewer
+architect (opus), security-reviewer (sonnet), typescript-reviewer (opus), 18 Oct 2026 (PR #23). Approved by the team lead (contracts decisions delegated by the human).
