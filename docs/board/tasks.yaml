@@ -498,7 +498,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: review
+  status: done
   branch: m3/3.5-teaching-policy
   model: plan:opus build:opus-5.5/medium review:opus(safety)+sonnet(ts)
 - id: '3.6'
