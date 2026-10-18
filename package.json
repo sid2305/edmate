@@ -11,6 +11,7 @@
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "seed": "pnpm --filter \"@edmate/db...\" run build && pnpm --filter @edmate/db run db:seed",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
