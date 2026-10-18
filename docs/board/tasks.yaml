@@ -55,13 +55,13 @@ decisions:
     recommendation: Decide after cost data from 7.6
     answer: null
   transcription:
-    status: open
+    status: decided
     question: Transcription
     options:
     - Provider speech-to-text
     - Self-hosted Whisper
     recommendation: Provider API for the MVP
-    answer: null
+    answer: Provider speech-to-text API behind the Transcriber port (MVP)
   moderation:
     status: open
     question: Moderation
@@ -277,10 +277,10 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: running
+  status: review
   risk: risky
   branch: m1/1.2-scoped-repositories
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(db,ts)
 - id: '1.3'
   milestone: M1
   title: Auth.js Google sign-in; roles student, teacher, staff; RBAC middleware
@@ -376,9 +376,9 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: planning
+  status: running
   branch: m2/2.3-router
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.4'
   milestone: M2
   title: 'Metering: usage rows per call with teacher, package, student and source; `prices.yaml` in USD'
@@ -428,9 +428,9 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: running
+  status: review
   branch: m3/3.1-pipeline-runner
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:sonnet(ts,silent)
 - id: '3.2'
   milestone: M3
   title: '`admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit'
@@ -557,11 +557,11 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: planning
+  status: running
   needs_decision:
   - judge-model
   branch: m3/3.12-eval-runner
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'

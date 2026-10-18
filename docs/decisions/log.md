@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Transcription · decided by you · risk: low
+Decided: Live-class recordings are transcribed by a hosted speech-to-text API behind the Transcriber port for the MVP.
+Why: No GPU to run, fastest to ship; the board's recommendation.
+Alternatives: Self-hosted Whisper.
+Reversible: Yes; the Transcriber port keeps it swappable.
+
 ### 18 Oct 2026 · 2.2 Anthropic provider-key entry · decided by planner · risk: high
 Decided: add `anthropic: { apiKey: { variable: 'EDMATE_ANTHROPIC_API_KEY' } }` to `PROVIDER_KEYS`, same shape as `openai-compatible`.
 Why: Anthropic is the main provider (decision log, 18 Oct 2026); its key enters through the same one door as every other provider.
