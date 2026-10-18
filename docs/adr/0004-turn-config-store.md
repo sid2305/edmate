@@ -49,4 +49,4 @@ It returns the package at `e.packageVersion`, the agent at the version the sessi
 
 ## Reviewers
 
-architect, security-reviewer, typescript-reviewer
+architect (opus), security-reviewer (sonnet), typescript-reviewer (opus), 18 Oct 2026 (PR #16). Approved by the team lead (contracts decisions delegated by the human).
