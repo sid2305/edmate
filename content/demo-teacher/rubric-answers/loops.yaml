@@ -1,0 +1,70 @@
+# Scale for every answer: maxScore 4. Two-part questions score 2 + 2 and code-writing questions
+# 1 per step, as named in rubricNotes; single-value questions score 4 for the right value and 0 otherwise.
+- id: ra-lo-01
+  moduleId: loops
+  questionId: lo-q1
+  studentAnswer: |
+    1 2 3 4
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Single value: 1 to 4 is right (4/4).
+- id: ra-lo-02
+  moduleId: loops
+  questionId: lo-q1
+  studentAnswer: |
+    1 2 3 4 5
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Single value: wrong, includes 5 (0/4). Mistake: off-by-one-range. Fix: range() never
+    includes the stop number (Module 3, section 3.2).
+- id: ra-lo-03
+  moduleId: loops
+  questionId: lo-q2
+  studentAnswer: |
+    total = 0
+    for n in range(1, 11):
+        total = total + n
+    print(total)
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Steps, 1 each: total starts at 0 before the loop (1/1); range covers 1 to 10 (1/1);
+    adds each n (1/1); prints once after the loop (1/1).
+- id: ra-lo-04
+  moduleId: loops
+  questionId: lo-q2
+  studentAnswer: |
+    for n in range(1, 10):
+        total = 0
+        total += n
+    print(total)
+  score: 2
+  maxScore: 4
+  rubricNotes: >-
+    Steps, 1 each: total = 0 is inside the loop, so it resets every pass (0/1); range(1, 10)
+    stops at 9 (0/1); adds each n (1/1); prints after the loop (1/1). It prints 9.
+    Mistakes: accumulator-reset, off-by-one-range.
+- id: ra-lo-05
+  moduleId: loops
+  questionId: lo-q3
+  studentAnswer: |
+    count never goes up, so count < 5 is always true. Put count += 1 inside the loop under
+    the print.
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Reason: nothing changes count, so the condition stays True (2/2).
+    Fix: count += 1 inside the loop (2/2).
+- id: ra-lo-06
+  moduleId: loops
+  questionId: lo-q3
+  studentAnswer: |
+    Because 5 is too big. Use while count < 1 instead.
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Reason: the size of 5 is not the problem (0/2). Fix: 0 < 1 is still always True, so it
+    still never stops (0/2). Mistake: infinite-while. Fix: find what inside the loop should
+    change count.

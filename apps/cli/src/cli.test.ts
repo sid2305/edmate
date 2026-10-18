@@ -64,6 +64,29 @@ describe('edmate cli', () => {
     expect(out.join('')).toContain('eval <dir>');
   });
 
+  it('lists content validate in the usage text', async () => {
+    const { io, out } = capture();
+    await run(['--help'], io);
+    expect(out.join('')).toContain('content validate [dir]');
+  });
+
+  it('routes content to the content command', async () => {
+    const { io, out } = capture();
+    expect(await run(['content', '--help'], io)).toBe(0);
+    expect(out.join('')).toContain('Usage: edmate content validate [dir]');
+  });
+
+  it('content validate fails for a directory that is not a content tree', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-content-'));
+    try {
+      const { io, err } = capture();
+      expect(await run(['content', 'validate', dir], io)).toBe(1);
+      expect(err.join('')).toContain('course.yaml: missing; not a recognised content directory');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('routes eval to the eval command', async () => {
     const { io, out } = capture();
     expect(await run(['eval', '--help'], io)).toBe(0);

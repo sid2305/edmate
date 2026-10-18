@@ -1,0 +1,66 @@
+# Scale for every answer: maxScore 4, split into the parts named in rubricNotes.
+- id: ra-ld-01
+  moduleId: lists-dicts
+  questionId: ld-q1
+  studentAnswer: |
+    red, blue, blue
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Parts: colours[0] is red (1/1); colours[2] is blue (1/1); colours[-1] is blue, the
+    negative index (2/2).
+- id: ra-ld-02
+  moduleId: lists-dicts
+  questionId: ld-q1
+  studentAnswer: |
+    colours[0] is red, colours[2] is green, and colours[-1] is an error because there is
+    no negative position.
+  score: 1
+  maxScore: 4
+  rubricNotes: >-
+    Parts: colours[0] is red (1/1); colours[2] is blue, not green (0/1); -1 is the last
+    item, blue (0/2). Mistake: index-from-one. Fix: number the items 0, 1, 2 under the list.
+- id: ra-ld-03
+  moduleId: lists-dicts
+  questionId: ld-q5
+  studentAnswer: |
+    kiwis isn't a key so you get a KeyError. You can check with if "kiwis" in stock first,
+    or use stock.get("kiwis", 0).
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Reason: kiwis is not a key, so KeyError (2/2). Safe ways: in check (1/1) and
+    .get() with a default (1/1).
+- id: ra-ld-04
+  moduleId: lists-dicts
+  questionId: ld-q5
+  studentAnswer: |
+    Because kiwis isn't in the dictionary. Use try.
+  score: 2
+  maxScore: 4
+  rubricNotes: >-
+    Reason: the key is missing (2/2). Safe ways: "use try" is not a complete way and names
+    neither in nor .get() (0/2). Mistake: missing-key. Fix: see Module 5, section 5.5.
+- id: ra-ld-05
+  moduleId: lists-dicts
+  questionId: ld-q6
+  studentAnswer: |
+    for fruit in stock:
+        print(fruit + ": " + stock[fruit])
+  score: 3
+  maxScore: 4
+  rubricNotes: >-
+    Loop: goes through every key and looks up its value (2/2). Output: right format, but
+    stock[fruit] is an int, so joining it to a string is a TypeError (1/2).
+    Mistake: string-number-mix. Fix: use an f-string.
+- id: ra-ld-06
+  moduleId: lists-dicts
+  questionId: ld-q4
+  studentAnswer: |
+    stock[1] gives the pears and stock[0] = 10 changes the apples.
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Get: stock[1] is a KeyError, because dictionaries are looked up by key (0/2).
+    Change: stock[0] = 10 adds a new key 0 and leaves apples at 3 (0/2).
+    Mistake: dict-by-position. Fix: use the key, stock["pears"].
