@@ -12,6 +12,7 @@ import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
+import { usageLedgerRepo } from './usage-ledger.js';
 
 type Methods = Record<string, (...args: never[]) => Promise<unknown>>;
 
@@ -45,6 +46,7 @@ export function createRepositories(db: Db) {
     evidenceEvents: guardAll('evidenceEvents', evidenceEventsRepo(db)),
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
     audit: guardAll('audit', auditRepo(db)),
+    usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
   };
 }
 
@@ -66,11 +68,24 @@ export type { SessionRow } from './sessions.js';
 export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
 export type { LiveSubscription } from './subscriptions.js';
 export type { AgentRow, PublicAgentScope } from './agents.js';
+export type {
+  UnmeteredEntry,
+  UnmeteredReason,
+  UsageEntry,
+  UsageRow,
+  UsageSource,
+  UsageStatus,
+  UsageTotals,
+} from './usage-ledger.js';
 export {
   type EntitlementStoreOptions,
   entitlementStoreFor,
   transcriptStoreFor,
   turnConfigStoreFor,
   type TurnConfigStoreOptions,
+  usageMeterFor,
+  type ScopedUsageMeter,
+  type UnmeteredUsageInput,
+  type UsageMeterContext,
 } from './ports.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';

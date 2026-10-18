@@ -427,6 +427,9 @@ importers:
       ai:
         specifier: 7.0.143
         version: 7.0.143(zod@4.6.7)
+      js-yaml:
+        specifier: 5.5.0
+        version: 5.5.0
       zod:
         specifier: 4.6.7
         version: 4.6.7

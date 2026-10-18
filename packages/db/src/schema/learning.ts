@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -14,6 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import {
+  entitlementSource,
   evidenceSource,
   id,
   messageRole,
@@ -21,6 +23,7 @@ import {
   teacherQuestionStatus,
   timestamps,
   tstz,
+  usageStatus,
 } from './_shared.js';
 import { agents, packages } from './agents.js';
 import { topics } from './content.js';
@@ -88,7 +91,12 @@ export const turnTraces = pgTable(
   (t) => [index('turn_traces_session_id_idx').on(t.sessionId)],
 );
 
-/** Model spend per teacher, package and student: caps and dashboards. */
+/**
+ * Model spend per teacher, package and student: caps and dashboards. One row per provider attempt
+ * (task 2.4). `status` says whether the figures are known: `unknown` (the provider reported no
+ * usage: tokens and cost are NULL) or `unpriced` (tokens known, no price: cost is NULL). NULL,
+ * never 0, so a raw query can't read an unknown call as free. A `recorded` row has every figure.
+ */
 export const usageLedger = pgTable(
   'usage_ledger',
   {
@@ -98,11 +106,21 @@ export const usageLedger = pgTable(
       .notNull()
       .references(() => packages.id),
     studentId: studentId(),
-    model: text('model').notNull(),
+    /** The model the attempt was sent to, or the one the provider reported. */
+    model: text('model'),
     tier: modelTier('tier').notNull(),
-    inputTokens: integer('input_tokens').notNull(),
-    outputTokens: integer('output_tokens').notNull(),
-    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }),
+    /**
+     * The turn the call served. Not a foreign key: meter and commit are independent async steps,
+     * so a usage row never waits for (or depends on) a trace.
+     */
+    turnId: text('turn_id').notNull(),
+    source: entitlementSource('source').notNull(),
+    status: usageStatus('status').notNull().default('recorded'),
+    /** null when recorded; `no_usage_reported` or `unpriced_model:<model>` otherwise. */
+    reason: text('reason'),
     ...timestamps(),
   },
   (t) => [
@@ -113,6 +131,22 @@ export const usageLedger = pgTable(
     ),
     index('usage_ledger_student_id_idx').on(t.studentId),
     index('usage_ledger_package_id_idx').on(t.packageId),
+    index('usage_ledger_teacher_id_turn_id_idx').on(t.teacherId, t.turnId),
+    check(
+      'usage_ledger_counts_non_negative',
+      sql`${t.inputTokens} >= 0 and ${t.outputTokens} >= 0 and ${t.costMicroUsd} >= 0`,
+    ),
+    // sumForStudent, and 2.5's rolling windows per student x teacher.
+    index('usage_ledger_teacher_id_student_id_created_at_idx').on(
+      t.teacherId,
+      t.studentId,
+      t.createdAt,
+    ),
+    check(
+      'usage_ledger_recorded_has_figures',
+      sql`${t.status} <> 'recorded' or (${t.model} is not null and ${t.inputTokens} is not null
+        and ${t.outputTokens} is not null and ${t.costMicroUsd} is not null)`,
+    ),
   ],
 );
 

@@ -2,12 +2,14 @@
 export {
   agentStatus,
   chunkKind,
+  entitlementSource,
   evidenceSource,
   ledgerDirection,
   messageRole,
   modelTier,
   subscriptionStatus,
   teacherQuestionStatus,
+  usageStatus,
   userRole,
 } from './_shared.js';
 export { consents, teacherProfiles, users } from './users.js';

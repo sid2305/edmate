@@ -43,6 +43,17 @@ export const teacherQuestionStatus = pgEnum('teacher_question_status', [
 export const evidenceSource = pgEnum('evidence_source', ['check', 'practice', 'rubric']);
 export const modelTier = pgEnum('model_tier', ['small', 'main']);
 export const ledgerDirection = pgEnum('ledger_direction', ['debit', 'credit']);
+/** Who a call is billed to: Entitlement.source (a teacher preview to the teacher, evals to Edmate). */
+export const entitlementSource = pgEnum('entitlement_source', [
+  'subscription',
+  'teacher_preview',
+  'eval',
+]);
+/**
+ * A usage_ledger row: `recorded` (priced), `unknown` (the provider reported no usage) or
+ * `unpriced` (tokens known, model missing from prices.yaml). Task 2.4.
+ */
+export const usageStatus = pgEnum('usage_status', ['recorded', 'unknown', 'unpriced']);
 
 /** Text form pgvector accepts: `[1,2.5,-3]`. Rejects empty or non-finite vectors. */
 export function vectorToDriver(value: number[]): string {

@@ -82,6 +82,28 @@ export class Router implements ModelGateway {
   constructor(private readonly opts: RouterOptions) {}
 
   /**
+   * The same routing over mapped adapters (an adapter shared by several slots is mapped once).
+   * Metering (task 2.4) uses it to wrap each provider attempt, so a primary that fails over is
+   * metered as well as the fallback that answers.
+   */
+  withAdapters(map: (adapter: ModelAdapter) => ModelAdapter): Router {
+    const done = new Map<ModelAdapter, ModelAdapter>();
+    const once = (a: ModelAdapter): ModelAdapter => {
+      let m = done.get(a);
+      if (m === undefined) {
+        m = map(a);
+        done.set(a, m);
+      }
+      return m;
+    };
+    const { tiers, fallback } = this.opts;
+    const mapped = { small: once(tiers.small), main: once(tiers.main) };
+    return new Router(
+      fallback === undefined ? { tiers: mapped } : { tiers: mapped, fallback: once(fallback) },
+    );
+  }
+
+  /**
    * The adapter to try once after `err`, or undefined when `err` must propagate as is. Only a
    * retryable GatewayError qualifies; truncated and content_filter are always non-retryable.
    */
