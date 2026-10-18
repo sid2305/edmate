@@ -67,11 +67,24 @@ describe('fileRecorder', () => {
     );
   });
 
-  it('record overwrites an older fixture', async () => {
-    const rec = fileRecorder(dir, 'record');
-    await rec.run('k', () => Promise.resolve(1));
-    await rec.run('k', () => Promise.resolve(2));
+  it('record overwrites an older fixture and reports the overwritten key', async () => {
+    const first = fileRecorder(dir, 'record');
+    await first.run('k', () => Promise.resolve(1));
+    await first.run('new/one', () => Promise.resolve(1));
+    expect(first.overwritten()).toEqual([]);
+    const second = fileRecorder(dir, 'record');
+    await second.run('new/one', () => Promise.resolve(2));
+    await second.run('k', () => Promise.resolve(2));
+    await second.run('fresh', () => Promise.resolve(2));
+    expect(second.overwritten()).toEqual(['new/one', 'k']);
     await expect(fileRecorder(dir, 'replay').run('k', never)).resolves.toBe(2);
+  });
+
+  it('replay reports nothing overwritten', async () => {
+    await fileRecorder(dir, 'record').run('k', () => Promise.resolve(1));
+    const rec = fileRecorder(dir, 'replay');
+    await rec.run('k', never);
+    expect(rec.overwritten()).toEqual([]);
   });
 
   it('record does not write a file when fn throws', async () => {
@@ -112,6 +125,14 @@ describe('memoryRecorder', () => {
     await rec.run('k', () => Promise.resolve(value));
     value.list.push(2);
     expect(rec.snapshot()).toEqual({ k: { list: [1] } });
+  });
+
+  it('reports a seeded key that record overwrites', async () => {
+    const rec = memoryRecorder('record', { k: 1 });
+    await rec.run('k', () => Promise.resolve(2));
+    await rec.run('other', () => Promise.resolve(2));
+    expect(rec.overwritten()).toEqual(['k']);
+    expect(rec.snapshot()).toEqual({ k: 2, other: 2 });
   });
 
   it('replay with no seed entry throws MissingFixtureError', async () => {

@@ -26,12 +26,22 @@ export function toJsonReport(
   };
 }
 
-/** `<passed>/<total> passed`, then one line per failing case with its first failing check. */
-export function toSummary(results: readonly CaseResult[]): string {
+/**
+ * `<passed>/<total> passed`, then one line per failing case (its error, or its first failing
+ * check), then every fixture a --record run overwrote.
+ */
+export function toSummary(
+  results: readonly CaseResult[],
+  opts: { overwritten?: readonly string[] } = {},
+): string {
   const passed = results.filter((r) => r.pass).length;
   const lines = [`${passed}/${results.length} passed`];
   for (const r of results) {
     if (r.pass) continue;
+    if (r.error !== undefined) {
+      lines.push(`FAIL ${r.id} error: ${r.error}`);
+      continue;
+    }
     const turn = r.turns.find((t) => !t.pass);
     const check = turn?.checks.find((c) => !c.pass);
     const what =
@@ -39,6 +49,12 @@ export function toSummary(results: readonly CaseResult[]): string {
         ? ''
         : ` ${check.name}${check.detail === undefined ? '' : `: ${check.detail}`}`;
     lines.push(`FAIL ${r.id}${turn === undefined ? '' : ` turn ${turn.turnIndex}`}${what}`);
+  }
+  const overwritten = opts.overwritten ?? [];
+  if (overwritten.length > 0) {
+    const noun = overwritten.length === 1 ? 'fixture' : 'fixtures';
+    lines.push(`overwrote ${overwritten.length} recorded ${noun}:`);
+    for (const key of overwritten) lines.push(`  ${key}`);
   }
   return lines.join('\n') + '\n';
 }

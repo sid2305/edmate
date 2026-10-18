@@ -41,13 +41,24 @@ export const TurnSchema = z.strictObject({
 });
 export type EvalTurn = z.infer<typeof TurnSchema>;
 
-export const EvalCaseSchema = z.strictObject({
-  /** Also the fixture and report key, so it is kept path-safe. */
-  id: z.string().regex(/^[a-z0-9-]+$/, 'lowercase letters, digits, -'),
-  suite: z.string().min(1),
-  package: z.string().min(1),
-  reviewed_by: z.string().min(1),
-  source: z.string().min(1),
-  turns: z.array(TurnSchema).min(1),
-});
+export const EvalCaseSchema = z
+  .strictObject({
+    /** Also the fixture and report key, so it is kept path-safe. */
+    id: z.string().regex(/^[a-z0-9-]+$/, 'lowercase letters, digits, -'),
+    suite: z.string().min(1),
+    package: z.string().min(1),
+    reviewed_by: z.string().min(1),
+    source: z.string().min(1),
+    turns: z.array(TurnSchema).min(1),
+  })
+  // A case with no checks at all would pass vacuously.
+  .superRefine((c, ctx) => {
+    if (!c.turns.some((t) => t.expect !== undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['turns'],
+        message: `case "${c.id}" has no turn with an expect block, so it checks nothing`,
+      });
+    }
+  });
 export type EvalCase = z.infer<typeof EvalCaseSchema>;

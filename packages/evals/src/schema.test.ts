@@ -61,6 +61,18 @@ describe('EvalCaseSchema', () => {
     expect(issuePaths({ ...minimal, id: '../escape' })).toContain('id');
   });
 
+  it('rejects a case where no turn has an expect block, naming the case id', () => {
+    const r = EvalCaseSchema.safeParse({
+      ...minimal,
+      turns: [{ student: 'one' }, { student: 'two' }],
+    });
+    expect(r.success).toBe(false);
+    const issue = r.success ? undefined : r.error.issues[0];
+    expect(issue?.path).toEqual(['turns']);
+    expect(issue?.message).toContain('test-explain-001');
+    expect(issue?.message).toContain('no turn with an expect block');
+  });
+
   it('rejects an empty turns list and an empty student message', () => {
     expect(issuePaths({ ...minimal, turns: [] })).toContain('turns');
     expect(issuePaths({ ...minimal, turns: [{ student: '' }] })).toContain('turns.0.student');

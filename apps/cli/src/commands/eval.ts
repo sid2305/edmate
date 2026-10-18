@@ -95,13 +95,14 @@ export async function runEvalCommand(
       judgeModel = resolveJudgeModel(deps.env);
       judgeGateway = await (deps.makeJudgeGateway ?? createJudgeGateway)(judgeModel, deps.env);
     }
+    const recorder = fileRecorder(fixturesDir, values.record ? 'record' : 'replay');
     const { results, failed } = await runSuite(cases, {
       agent: deps.agent,
       judgeGateway,
       ...(judgeModel === undefined ? {} : { judgeModel }),
-      recorder: fileRecorder(fixturesDir, values.record ? 'record' : 'replay'),
+      recorder,
     });
-    io.stdout(toSummary(results));
+    io.stdout(toSummary(results, { overwritten: recorder.overwritten() }));
     if (values.report !== undefined) {
       const reportPath = resolve(deps.cwd, values.report);
       const generatedAt = (deps.now ?? (() => new Date()))().toISOString();

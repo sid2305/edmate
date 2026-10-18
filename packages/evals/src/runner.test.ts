@@ -284,7 +284,27 @@ describe('runCase scoring', () => {
     expect(lastJudge && judgeOf(lastJudge)).toContain('I understand, but I still cannot.');
   });
 
-  it('a turn with no expect block passes with no checks', async () => {
+  it('a turn with no expect block passes on its own with no checks', async () => {
+    const c: EvalCase = {
+      ...oneTurnCase({ max_words: 5 }),
+      turns: [{ student: 'Hello?' }, { student: 'Again?', expect: { max_words: 5 } }],
+    };
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'a b c' }, 'Again?': { text: 'd' } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.pass).toBe(true);
+    expect(result.turns[0]).toEqual({
+      turnIndex: 0,
+      student: 'Hello?',
+      reply: 'a b c',
+      checks: [],
+      pass: true,
+    });
+  });
+
+  it('a case where no check ran fails (no vacuous pass), even if it bypassed the schema', async () => {
     const c: EvalCase = { ...oneTurnCase({ max_words: 1 }), turns: [{ student: 'Hello?' }] };
     const result = await runCase(c, {
       agent: scriptedAgent({ 'Hello?': { text: 'a b c' } }),
@@ -294,9 +314,58 @@ describe('runCase scoring', () => {
     expect(result).toEqual({
       id: 'test-one-001',
       suite: 'test',
-      pass: true,
+      pass: false,
+      error: 'no checks ran',
       turns: [{ turnIndex: 0, student: 'Hello?', reply: 'a b c', checks: [], pass: true }],
     });
+  });
+
+  it('runSuite records an erroring case as failed with its error and keeps going', async () => {
+    const twoTurn: EvalCase = {
+      ...oneTurnCase({ must_contain: ['ok'] }),
+      id: 'a-errors',
+      turns: [
+        { student: 'Hello?', expect: { must_contain: ['ok'] } },
+        { student: 'Unscripted', expect: { max_words: 5 } },
+      ],
+    };
+    const after = { ...oneTurnCase({ must_contain: ['ok'] }), id: 'b-after' };
+    const out = await runSuite([twoTurn, after], {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok' } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(out.passed).toBe(1);
+    expect(out.failed).toBe(1);
+    expect(out.results.map((r) => r.id)).toEqual(['a-errors', 'b-after']);
+    const errored = out.results[0];
+    expect(errored?.pass).toBe(false);
+    expect(errored?.error).toBe('no scripted reply for Unscripted');
+    // The turns that finished before the error are kept.
+    expect(errored?.turns.map((t) => t.turnIndex)).toEqual([0]);
+    expect(out.results[1]?.pass).toBe(true);
+  });
+
+  it('runSuite records a missing replay fixture per case, not as a thrown run', async () => {
+    const c = oneTurnCase({ max_words: 5 });
+    const out = await runSuite([c], {
+      agent: throwingAgent,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('replay'),
+    });
+    expect(out.failed).toBe(1);
+    expect(out.results[0]?.error).toMatch(/run with --record first/);
+    expect(out.results[0]?.turns).toEqual([]);
+  });
+
+  it('runSuite turns a non-Error throw into a string error', async () => {
+    const odd = { reply: () => Promise.reject('plain string') as Promise<EvalAgentReply> };
+    const out = await runSuite([oneTurnCase({ max_words: 5 })], {
+      agent: odd,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(out.results[0]?.error).toBe('plain string');
   });
 
   it('a live judge call with no pinned judge model throws instead of guessing one', async () => {

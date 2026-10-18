@@ -1,7 +1,7 @@
 // Record / replay (task 3.12). One mechanism for every non-deterministic call the runner makes,
 // the agent's reply and each judge verdict alike. Replay never calls `fn`: a missing fixture
 // throws, it never falls through to a live call.
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export type RecordMode = 'record' | 'replay';
@@ -9,6 +9,8 @@ export type RecordMode = 'record' | 'replay';
 export interface Recorder {
   readonly mode: RecordMode;
   run<T>(key: string, fn: () => Promise<T>): Promise<T>;
+  /** Keys whose existing fixture this recorder replaced, in the order it replaced them. */
+  overwritten(): readonly string[];
 }
 
 export class MissingFixtureError extends Error {
@@ -53,8 +55,10 @@ function serialise(value: unknown): string {
 
 /** One JSON file per key, at `<dir>/<key>.json`. */
 export function fileRecorder(dir: string, mode: RecordMode): Recorder {
+  const replaced: string[] = [];
   return {
     mode,
+    overwritten: () => [...replaced],
     async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
       checkKey(key);
       const path = join(dir, `${key}.json`);
@@ -74,6 +78,7 @@ export function fileRecorder(dir: string, mode: RecordMode): Recorder {
         }
       }
       const value = await fn();
+      if (existsSync(path)) replaced.push(key);
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, serialise(value));
       return value;
@@ -92,8 +97,10 @@ export function memoryRecorder(
   seed: Readonly<Record<string, unknown>> = {},
 ): MemoryRecorder {
   const store = new Map<string, string>(Object.entries(seed).map(([k, v]) => [k, serialise(v)]));
+  const replaced: string[] = [];
   return {
     mode,
+    overwritten: () => [...replaced],
     async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
       checkKey(key);
       if (mode === 'replay') {
@@ -102,6 +109,7 @@ export function memoryRecorder(
         return JSON.parse(text) as T;
       }
       const value = await fn();
+      if (store.has(key)) replaced.push(key);
       store.set(key, serialise(value));
       return value;
     },

@@ -43,6 +43,8 @@ export interface CaseResult {
   id: string;
   suite: string;
   pass: boolean;
+  /** Why the case failed outside its checks: it threw (turns holds those finished), or no check ran. */
+  error?: string;
   turns: TurnResult[];
 }
 
@@ -82,9 +84,9 @@ function staticChecks(expect: Checks, reply: EvalAgentReply): CheckResult[] {
   return out;
 }
 
-export async function runCase(evalCase: EvalCase, opts: RunOptions): Promise<CaseResult> {
+/** Throws on any error; finished turns are pushed onto `turns` as they complete. */
+async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[]): Promise<void> {
   const priorTurns: PriorTurn[] = [];
-  const turns: TurnResult[] = [];
   for (const [turnIndex, turn] of evalCase.turns.entries()) {
     const base = `${evalCase.id}/turn-${turnIndex}`;
     const agentKey = `${base}/agent`;
@@ -130,13 +132,44 @@ export async function runCase(evalCase: EvalCase, opts: RunOptions): Promise<Cas
     });
     priorTurns.push({ student: turn.student, reply: reply.text });
   }
-  return { id: evalCase.id, suite: evalCase.suite, pass: turns.every((t) => t.pass), turns };
 }
 
-/** Runs cases in the order given; the loader (or a gate's own filter) decides that order. */
+/** Scores finished turns. A case where no check ran fails rather than passing vacuously. */
+function score(evalCase: EvalCase, turns: TurnResult[]): CaseResult {
+  const { id, suite } = evalCase;
+  // Belt and braces with the schema's "at least one turn with expect" rule.
+  if (turns.every((t) => t.checks.length === 0)) {
+    return { id, suite, pass: false, error: 'no checks ran', turns };
+  }
+  return { id, suite, pass: turns.every((t) => t.pass), turns };
+}
+
+/** Runs one case; throws if a call or a fixture fails. */
+export async function runCase(evalCase: EvalCase, opts: RunOptions): Promise<CaseResult> {
+  const turns: TurnResult[] = [];
+  await runTurns(evalCase, opts, turns);
+  return score(evalCase, turns);
+}
+
+/** Like runCase, but an error fails just this case, keeping the turns that finished. */
+async function runCaseSafely(evalCase: EvalCase, opts: RunOptions): Promise<CaseResult> {
+  const turns: TurnResult[] = [];
+  try {
+    await runTurns(evalCase, opts, turns);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    return { id: evalCase.id, suite: evalCase.suite, pass: false, error, turns };
+  }
+  return score(evalCase, turns);
+}
+
+/**
+ * Runs cases in the order given; the loader (or a gate's own filter) decides that order. A case
+ * that throws is recorded as failed with its error, and the run goes on to the next case.
+ */
 export async function runSuite(cases: readonly EvalCase[], opts: RunOptions): Promise<SuiteResult> {
   const results: CaseResult[] = [];
-  for (const evalCase of cases) results.push(await runCase(evalCase, opts));
+  for (const evalCase of cases) results.push(await runCaseSafely(evalCase, opts));
   const passed = results.filter((r) => r.pass).length;
   return { results, passed, failed: results.length - passed };
 }

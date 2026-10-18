@@ -145,7 +145,7 @@ describe('edmate eval', () => {
   });
 
   it('replay with no fixtures fails loudly (exit 1) instead of calling live', async () => {
-    const { io, err } = capture();
+    const { io, out } = capture();
     expect(
       await runEvalCommand(['.', '--fixtures', 'fx'], io, {
         agent: unwiredAgent,
@@ -153,7 +153,47 @@ describe('edmate eval', () => {
         cwd: dir,
       }),
     ).toBe(1);
-    expect(err.join('')).toContain('run with --record first');
+    expect(out.join('')).toContain('FAIL cli-case-001 error:');
+    expect(out.join('')).toContain('run with --record first');
+  });
+
+  it('a second --record lists every fixture it overwrote', async () => {
+    const deps = {
+      agent,
+      env: ENV,
+      cwd: dir,
+      makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+    };
+    const first = capture();
+    await runEvalCommand(['.', '--record', '--fixtures', 'fx'], first.io, deps);
+    expect(first.out.join('')).not.toContain('overwrote');
+    const second = capture();
+    expect(await runEvalCommand(['.', '--record', '--fixtures', 'fx'], second.io, deps)).toBe(0);
+    expect(second.out.join('')).toBe(
+      '1/1 passed\noverwrote 2 recorded fixtures:\n' +
+        '  cli-case-001/turn-0/agent\n  cli-case-001/turn-0/judge-0\n',
+    );
+  });
+
+  it('one erroring case does not hide the others (exit 1)', async () => {
+    writeFileSync(join(dir, 'z-second.yaml'), CASE.replace('cli-case-001', 'cli-case-002'));
+    let calls = 0;
+    const flaky: EvalAgent = {
+      reply: () =>
+        ++calls === 1
+          ? Promise.reject(new Error('agent crashed'))
+          : Promise.resolve({ text: 'A fraction is part of a whole.' }),
+    };
+    const { io, out } = capture();
+    expect(
+      await runEvalCommand(['.', '--record', '--fixtures', 'fx'], io, {
+        agent: flaky,
+        env: ENV,
+        cwd: dir,
+        makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+      }),
+    ).toBe(1);
+    expect(out.join('')).toBe('1/2 passed\nFAIL cli-case-001 error: agent crashed\n');
   });
 
   it('reports a bad case file with its path', async () => {

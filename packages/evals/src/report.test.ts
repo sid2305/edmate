@@ -152,6 +152,34 @@ describe('toSummary', () => {
     expect(toSummary([noDetail])).toBe('0/1 passed\nFAIL c turn 0 x\n');
   });
 
+  it('prints the error of a case that errored', () => {
+    const errored: CaseResult = {
+      id: 'e',
+      suite: 's',
+      pass: false,
+      error: 'no recorded fixture for "e/turn-0/agent"; run with --record first',
+      turns: [],
+    };
+    expect(toSummary([errored])).toBe(
+      '0/1 passed\nFAIL e error: no recorded fixture for "e/turn-0/agent"; run with --record first\n',
+    );
+  });
+
+  it('lists each overwritten fixture key with a count', () => {
+    expect(toSummary([results[0]!], { overwritten: ['a/turn-0/agent', 'a/turn-0/judge-0'] })).toBe(
+      '1/1 passed\noverwrote 2 recorded fixtures:\n  a/turn-0/agent\n  a/turn-0/judge-0\n',
+    );
+    expect(toSummary([results[0]!], { overwritten: ['a/turn-0/agent'] })).toBe(
+      '1/1 passed\noverwrote 1 recorded fixture:\n  a/turn-0/agent\n',
+    );
+    expect(toSummary([results[0]!], { overwritten: [] })).toBe('1/1 passed\n');
+  });
+
+  it('keeps an error in the JSON report', () => {
+    const errored: CaseResult = { id: 'e', suite: 's', pass: false, error: 'boom', turns: [] };
+    expect(toJsonReport([errored]).cases[0]).toEqual(errored);
+  });
+
   it('handles an empty result set', () => {
     expect(toSummary([])).toBe('0/0 passed\n');
   });

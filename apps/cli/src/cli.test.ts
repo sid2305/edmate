@@ -75,11 +75,11 @@ describe('edmate cli', () => {
     try {
       writeFileSync(
         join(dir, 'c.yaml'),
-        'id: c-001\nsuite: t\npackage: free\nreviewed_by: pending\nsource: s\nturns:\n  - student: hi\n',
+        'id: c-001\nsuite: t\npackage: free\nreviewed_by: pending\nsource: s\nturns:\n  - student: hi\n    expect:\n      max_words: 5\n',
       );
-      const { io, err } = capture();
+      const { io, out } = capture();
       expect(await run(['eval', dir, '--fixtures', join(dir, 'fx')], io)).toBe(1);
-      expect(err.join('')).toContain('run with --record first');
+      expect(out.join('')).toContain('run with --record first');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
