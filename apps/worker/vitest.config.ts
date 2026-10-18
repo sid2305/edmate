@@ -5,8 +5,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      // index.ts is the process entrypoint (opens the real Redis connection); not unit-tested.
-      exclude: ['src/**/*.test.ts', 'src/index.ts'],
+      // Process entrypoints open real connections (Redis, S3); their logic lives in tested modules.
+      exclude: ['src/**/*.test.ts', 'src/index.ts', 'src/scripts/**'],
       thresholds: { lines: 80, branches: 80, functions: 80, statements: 80 },
     },
   },

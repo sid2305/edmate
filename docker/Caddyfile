@@ -1,0 +1,11 @@
+# Single public entry point for the local stack (task 0.2). Caddy listens on :80 inside the
+# container; compose publishes it on EDMATE_HTTP_PORT (default 8080). Static config: no reload.
+{
+	# Plain HTTP for local dev; TLS arrives with the deploy task.
+	auto_https off
+}
+
+:80 {
+	encode gzip
+	reverse_proxy web:3000
+}
