@@ -224,3 +224,9 @@ Decided: The runner-built alert is tried twice. Each failure is listed in `finis
 Why: Previously a throwing id source sent `provider_error` to a distressed student, and no alert was raised.
 Alternatives: End with an error.
 Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Review · decided by team lead · risk: low
+Decided: Two unused cancel sources in packages/harness/src/pipeline/runner.ts (routeFallback, backgroundStep) stay as they are. If building the alert fails twice, the alert worker (4.3) must raise a minimal alert or a critical ops event; failed-attempt usage is metered by the orchestrator (3.7).
+Why: Nothing subscribes to those cancel sources, so they are harmless; alert delivery and metering belong to their own tasks.
+Alternatives: Cancel them for consistency; handle the double alert failure in the runner.
+Reversible: Yes.
