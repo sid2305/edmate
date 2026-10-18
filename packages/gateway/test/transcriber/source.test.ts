@@ -212,6 +212,68 @@ describe('download', () => {
     expect((await download(new URL(SIGNED), exact.o)).byteLength).toBe(1_000);
   });
 
+  // Fix round 1: a stream that stops early must never pass as the whole recording.
+  function streamed(
+    parts: readonly Uint8Array[],
+    headers: Record<string, string>,
+    end: 'close' | 'error' = 'close',
+  ) {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const p of parts) controller.enqueue(p);
+        if (end === 'close') controller.close();
+        else controller.error(new TypeError(`terminated ${SIGNED}`));
+      },
+    });
+    return () => Promise.resolve(new Response(body, { status: 200, headers }));
+  }
+
+  it('a stream that ends before its content-length is a retryable truncated download', async () => {
+    const fetch = streamed([new Uint8Array(40), new Uint8Array(20)], { 'content-length': '100' });
+    const err = await failure(download(new URL(SIGNED), { ...opts([]).o, fetch }));
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(true);
+    expect(err.reason).toBe('truncated');
+    expect(err.message).toBe('transcriber: the recording download ended early (60 of 100 bytes)');
+  });
+
+  it('a stream longer than its content-length is refused too', async () => {
+    const fetch = streamed([new Uint8Array(60), new Uint8Array(60)], { 'content-length': '100' });
+    const err = await failure(download(new URL(SIGNED), { ...opts([]).o, fetch }));
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(true);
+    expect(err.message).toBe('transcriber: the recording download did not match its declared size');
+  });
+
+  it('a stream that matches its content-length is read whole, into one buffer', async () => {
+    const parts = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
+    const fetch = streamed(parts, { 'content-length': '5' });
+    const got = await download(new URL(SIGNED), { ...opts([]).o, fetch });
+    expect([...got]).toEqual([1, 2, 3, 4, 5]);
+    expect(got.buffer.byteLength).toBe(5);
+  });
+
+  it('a dropped connection mid-stream is a retryable failure with no URL', async () => {
+    const fetch = streamed([new Uint8Array(10)], { 'content-length': '100' }, 'error');
+    const err = await failure(download(new URL(SIGNED), { ...opts([]).o, fetch }));
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(true);
+  });
+
+  it('a compressed response is not held to its (compressed) content-length', async () => {
+    const fetch = streamed([new Uint8Array(30)], {
+      'content-length': '10',
+      'content-encoding': 'gzip',
+    });
+    expect((await download(new URL(SIGNED), { ...opts([]).o, fetch })).byteLength).toBe(30);
+    const identity = streamed([new Uint8Array(5)], {
+      'content-length': '10',
+      'content-encoding': 'identity',
+    });
+    const err = await failure(download(new URL(SIGNED), { ...opts([]).o, fetch: identity }));
+    expect(err.reason).toBe('truncated');
+  });
+
   it('a timeout is retryable and names no URL', async () => {
     const { o } = opts([{ body: 'x', hold: true, contentType: 'audio/mpeg' }], { timeoutMs: 20 });
     const err = await failure(download(new URL(SIGNED), o));

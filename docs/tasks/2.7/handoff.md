@@ -1,9 +1,30 @@
 # 2.7 handoff: Transcriber and embedding adapters (embedding model is platform-wide config)
 
-Status: DONE
+Status: DONE (fix round 1 applied)
 Branch: `m2/2.7-transcriber-embeddings`
 Worktree: `.claude/worktrees/agent-a3d8597f09b4bc7df` (under the main checkout)
 Reviewers needed: security-reviewer (gate-required: `packages/gateway/src/keys/providers.ts`; it should also cover `src/transcriber/**`, which fetches signed URLs, and `src/adapters/openai.ts`, which reveals the key), database-reviewer (migration `0006` changes a column type; the gate does not flag it as destructive), silent-failure-hunter (empty or cut-off transcripts), typescript-reviewer, code-reviewer. `packages/contracts` is untouched: the `Transcriber` port and media schemas are used exactly as merged in ADR-0005 (3.15).
+
+## Fix round 1
+
+| Finding | Fix | Test |
+|---|---|---|
+| [HIGH, silent-failure] `readCapped` returned a short buffer when the stream ended before its `content-length` | With a usable `content-length` (no `content-encoding`, or `identity`) the body must deliver exactly that many bytes. Fewer bytes is a retryable `provider_error` with `reason: 'truncated'` ("ended early (60 of 100 bytes)"). More bytes is a retryable size mismatch. A compressed response is not held to its compressed length. | `source.test.ts`: a stream closed after 60 of 100 bytes, a stream longer than declared, a matching stream read into one buffer, a connection dropped mid-stream (retryable, no URL), gzip vs identity. |
+| [MEDIUM, silent-failure] an empty piece of a split recording was skipped as silence, leaving an unflagged gap | In a split recording, a piece with no speech (blank text and no kept segments) now fails the call (`provider_error`, "piece 2 of 3 came back empty"). The one exception is the final piece when its known length (the provider's duration or the chunker's) is under 1 s. That piece is skipped, and its trace line carries `anomaly: 'empty_final_piece'`. A piece with blank text but spoken segments takes its text from the segments. A single empty upload is still the `validation` "empty transcript" error. | `whisper.test.ts`: an empty middle piece fails, and the third piece is never sent. An empty final piece of 1 s, or of unknown length, fails. A 400 ms empty tail is skipped with the anomaly in the trace. Blank text with segments; a lone empty upload. The old "silent piece in the middle is fine" test is replaced. |
+| [LOW, security] 1 GiB default download cap, about 3x peak memory | `DEFAULT_MAX_DOWNLOAD_BYTES` is 600,000,000. With a content-length the body is written straight into one buffer of that size (no list of parts and second copy). MP3 pieces are `subarray` views, not copies. Peak memory is about 1x the recording for MP3 and 2x for WAV (each WAV piece carries its own header). | `whisper.test.ts` "the default download cap is 600 MB"; `source.test.ts` checks the single buffer's size. |
+
+Gates after fix round 1 (merged `origin/main`, docs only):
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/gateway...
+→ gateway Tests 405 passed (405); coverage 100/100/100/100
+
+corepack pnpm turbo run typecheck lint test --concurrency=2   (root)
+→ Tasks: 40 successful, 40 total (gateway 405, db 360 from turbo's cache of the Postgres run, since db is unchanged this round)
+
+python3 .githooks/secret-scan.py --all
+→ exit 0
+```
 
 ## Acceptance evidence
 
@@ -13,7 +34,7 @@ Accept: "a 60-minute audio fixture transcribes through the scripted adapter; a l
 |---|---|
 | Transcriber port used as merged | `createWhisperTranscriber` returns `Transcriber` from `@edmate/contracts` (plus `model` for metering). It parses the input with `TranscribeInputSchema` and every result with `TranscriptSchema`. `createScriptedTranscriber` parses both too. |
 | 60-minute fixture, scripted adapter | `test/transcriber/scripted.test.ts` "transcribes the 60-minute fixture with no network call": 720 segments, `durationMs` 3,600,000, a recording size over 25 MB, `TranscriptSchema` round-trip, and `fetch` is never called. A fixture the real adapter could never return (empty text, no segments, a segment past the duration) is rejected with `ScriptedTranscriberError`, never returned. |
-| 60-minute recording, real adapter (mocked fetch) | `test/transcriber/whisper.test.ts` "a 60-minute recording over 25 MB": a synthetic 28.7 MB MP3 (137,813 frames) is split into 2 pieces under 24 MiB, uploaded in order, each piece's segments shifted by its offset (3,160,496 ms for piece 2), stitched, and `durationMs` is within 100 ms of 60 minutes. A WAV over the limit is split too, and a silent piece in the middle is fine. |
+| 60-minute recording, real adapter (mocked fetch) | `test/transcriber/whisper.test.ts` "a 60-minute recording over 25 MB": a synthetic 28.7 MB MP3 (137,813 frames) is split into 2 pieces under 24 MiB, uploaded in order, each piece's segments shifted by its offset (3,160,496 ms for piece 2), stitched, and `durationMs` is within 100 ms of 60 minutes. A WAV over the limit is split too, and an empty middle piece fails the call (fix round 1). |
 | Never silent | Empty transcript → `validation` "empty transcript". Text without segment timings → `provider_error`. A 200 cut off mid-JSON → `provider_error`, `reason: 'truncated'`. A piece the provider heard as more than 2 s shorter than its known length → `truncated`. Segments going backwards → `validation`. A later piece failing fails the whole call (no partial transcript). 429 → `rate_limited` (retryable), 503 → retryable `provider_error`, 413 → `input_too_large`, and a hang past the piece timeout → retryable. |
 | ADR-0005 host allowlist | `allowedHosts` is a constructor option. An empty list, another host, a suffix or subdomain of an allowed host, the same host on another port and http are all `forbidden` with no request sent. A redirect to another host (or to http, or a subdomain) is refused after one request, and nothing reaches the provider. Same-host https redirects are followed, at most 3. A mistyped entry (`https://…`, a path, userinfo, a port of 443) fails at construction. |
 | Signed URL never leaks | Every thrown error in `whisper.test.ts` and `source.test.ts` is checked: its message, stack, `JSON.stringify` and `cause` (always undefined), every `console.*` line (spied) and every trace line hold neither the query string nor the signature, nor any 8-character fragment of the key. Traces name only `https://storage.edmate.invalid/recordings/class-7.mp3`. The provider upload holds the bytes, not the URL. |
@@ -81,7 +102,7 @@ Alternatives: a plain HTTP client; `ai`'s `transcribe()`.
 Reversible: yes.
 
 ### 18 Oct 2026 · 2.7 Storage download rules for signed URLs · decided by builder · risk: medium
-Decided: `allowedHosts` entries must be bare hosts (an optional non-default port is allowed; they are lower-cased). A wrong entry fails at construction. The URL's parsed `host` (including the port) must match exactly. Redirects are followed by hand, only to the same host over https, at most 3. Downloads are capped at 1 GiB (refused from `content-length` before reading, or while streaming) with a 10-minute timeout. 401/403 → `forbidden`, 404/410 → `not_found`, 429 → `rate_limited`, 5xx → retryable `provider_error`, an empty body → `validation`. Errors never carry a `cause`. Traces name `scheme://host/path` only.
+Decided: `allowedHosts` entries must be bare hosts (an optional non-default port is allowed; they are lower-cased). A wrong entry fails at construction. The URL's parsed `host` (including the port) must match exactly. Redirects are followed by hand, only to the same host over https, at most 3. Downloads are capped at 600 MB (refused from `content-length` before reading, or while streaming) with a 10-minute timeout. With a content-length the body must arrive whole (fix round 1). 401/403 → `forbidden`, 404/410 → `not_found`, 429 → `rate_limited`, 5xx → retryable `provider_error`, an empty body → `validation`. Errors never carry a `cause`. Traces name `scheme://host/path` only.
 Why: ADR-0005 Decision 5 and its Consequences (SSRF, the signed URL is a bearer credential).
 Alternatives: refuse every redirect (some storage gateways redirect within the host); match `hostname` without the port.
 Reversible: yes.
@@ -93,7 +114,7 @@ Alternatives: add ffmpeg to the gateway; cut raw bytes (it breaks most container
 Reversible: yes. 5.1/5.2 should transcode uploads to MP3 or WAV, or inject a chunker.
 
 ### 18 Oct 2026 · 2.7 How pieces are stitched, and what counts as cut off · decided by builder · risk: medium
-Decided: pieces are transcribed one after another, in order. Segment text is trimmed and blank segments are dropped. Times are `piece offset + round(seconds x 1000)`. The text is the non-empty piece texts joined by a space. `durationMs` is the larger of the last piece's `offset + reported duration` (or the chunker's duration) and the latest segment end. The language is the first piece's valid ISO code (the SDK maps Whisper's names), otherwise omitted. A piece with text but no segment timings fails. So does a piece heard more than 2 s shorter than the chunker says it is (`truncated`). A silent piece is fine. Any piece failing fails the whole call.
+Decided: pieces are transcribed one after another, in order. Segment text is trimmed and blank segments are dropped. Times are `piece offset + round(seconds x 1000)`. The text is the non-empty piece texts joined by a space. `durationMs` is the larger of the last piece's `offset + reported duration` (or the chunker's duration) and the latest segment end. The language is the first piece's valid ISO code (the SDK maps Whisper's names), otherwise omitted. A piece with text but no segment timings fails. So does a piece heard more than 2 s shorter than the chunker says it is (`truncated`). In a split recording an empty piece fails the call, unless it is the final piece and under 1 s, which is skipped and flagged `anomaly: 'empty_final_piece'` in its trace line (fix round 1). Any piece failing fails the whole call.
 Why: ADR-0005: the transcriber throws and never returns an empty or partial transcript. The tolerance absorbs rounding but catches a real cut.
 Alternatives: transcribe pieces in parallel (rate limits; order is easy either way); keep a partial transcript (forbidden by the port).
 Reversible: yes.
@@ -121,3 +142,9 @@ Decided: `corepack pnpm --filter @edmate/gateway test:live` runs `vitest.live.co
 Why: rule 4 ("live calls only in `--live` runs"); vitest has no `--live` flag.
 Alternatives: keep them in the default run, skipped (the default setup's fetch stub would block them anyway).
 Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Fix round 1: a download must arrive whole, and an empty piece is a gap · decided by builder · risk: medium
+Decided: (1) A download with a usable content-length must deliver exactly that many bytes, or it fails as a retryable `provider_error` (`truncated` when short). Compressed responses are exempt. (2) An empty piece in a split recording fails the call, except a final piece under 1 s, which is skipped and traced as `anomaly: 'empty_final_piece'`. (3) The default download cap is 600 MB, read into one buffer when the length is known.
+Why: silent-failure-hunter and security-reviewer, fix round 1. A short body or an empty piece would otherwise become a transcript with a hole in it.
+Alternatives: keep skipping empty pieces and only trace them (the gap would still reach ingestion unflagged); a separate anomaly in metering (the meter has no notes field; the trace is where it shows).
+Reversible: yes. A class with a long genuine silence (more than one 24 MiB piece) now fails. If that happens in practice, 5.2 can lower the piece size or treat a near-silent piece by its audio level.

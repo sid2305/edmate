@@ -29,8 +29,13 @@ type Fetch = typeof globalThis.fetch;
 export const WHISPER_MODEL = 'whisper-1';
 /** Whisper's upload limit is 25 MB; pieces stay under it with room for the multipart envelope. */
 export const WHISPER_MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
-/** Five hours of 16 kHz mono WAV is about 576 MB; anything bigger is refused before it is read. */
-export const DEFAULT_MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024;
+/**
+ * Five hours of 16 kHz mono WAV is about 576 MB; anything bigger is refused before it is read.
+ * Peak memory is about twice this for WAV (the pieces carry their own headers) and once for MP3.
+ */
+export const DEFAULT_MAX_DOWNLOAD_BYTES = 600_000_000;
+/** An empty last piece shorter than this is a quiet tail, not a gap in the class. */
+const SHORT_TAIL_MS = 1_000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_CHUNK_TIMEOUT_MS = 10 * 60_000;
 /** A piece the provider heard as this much shorter than it is was cut off on the way. */
@@ -51,6 +56,8 @@ export type TranscriberTrace =
       readonly offsetMs: number;
       readonly bytes: number;
       readonly segments: number;
+      /** Set when a piece was skipped: an empty final piece under 1 s. */
+      readonly anomaly?: 'empty_final_piece';
     };
 
 export interface WhisperTranscriberOptions {
@@ -204,16 +211,19 @@ export function createWhisperTranscriber(
         );
       }
       let kept = 0;
+      const keptTexts: string[] = [];
       for (const s of result.segments) {
         const text = s.text.trim();
         if (text === '') continue;
         const startMs = chunk.offsetMs + ms(s.startSecond);
         const endMs = chunk.offsetMs + ms(s.endSecond);
         segments.push({ startMs, endMs, text });
+        keptTexts.push(text);
         durationMs = Math.max(durationMs, endMs);
         kept += 1;
       }
-      const text = result.text.trim();
+      // Segments are the evidence of speech; the piece text falls back to them when it is blank.
+      const text = result.text.trim() !== '' ? result.text.trim() : keptTexts.join(' ');
       if (text !== '' && kept === 0) {
         throw new TranscriberError(
           'provider_error',
@@ -221,8 +231,23 @@ export function createWhisperTranscriber(
           `piece ${String(index + 1)} of ${String(chunks.length)} came back without segment timings`,
         );
       }
-      if (text !== '') texts.push(text);
       const pieceMs = heardMs ?? chunk.durationMs ?? 0;
+      let anomaly: 'empty_final_piece' | undefined;
+      if (text === '' && chunks.length > 1) {
+        // A piece with no speech is a gap in the class, unless it is a short tail at the end.
+        const lengthMs = heardMs ?? chunk.durationMs;
+        const shortTail =
+          index === chunks.length - 1 && lengthMs !== undefined && lengthMs < SHORT_TAIL_MS;
+        if (!shortTail) {
+          throw new TranscriberError(
+            'provider_error',
+            false,
+            `piece ${String(index + 1)} of ${String(chunks.length)} came back empty`,
+          );
+        }
+        anomaly = 'empty_final_piece';
+      }
+      if (text !== '') texts.push(text);
       durationMs = Math.max(durationMs, chunk.offsetMs + pieceMs);
       if (
         language === undefined &&
@@ -238,6 +263,7 @@ export function createWhisperTranscriber(
         offsetMs: chunk.offsetMs,
         bytes: chunk.bytes.byteLength,
         segments: kept,
+        ...(anomaly === undefined ? {} : { anomaly }),
       });
     }
 

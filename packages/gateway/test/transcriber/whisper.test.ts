@@ -10,6 +10,7 @@ import {
   createWhisperTranscriber,
   type TranscriberTrace,
   type WhisperTranscriberOptions,
+  DEFAULT_MAX_DOWNLOAD_BYTES,
   WHISPER_MAX_UPLOAD_BYTES,
 } from '../../src/transcriber/whisper.js';
 import {
@@ -280,30 +281,94 @@ describe('createWhisperTranscriber: a 60-minute recording over 25 MB', () => {
     // 28 MB through a multipart upload twice: well under a second alone, slower on a busy runner.
   }, 30_000);
 
-  it('a silent piece in the middle is fine; the transcript still has every spoken piece', async () => {
-    const chunker: AudioChunker = (audio) => [
+  // Fix round 1: an empty piece is a gap in the class, not silence, unless it is a short tail.
+  const threePieces =
+    (lastMs: number | undefined): AudioChunker =>
+    (audio) => [
       { bytes: audio.subarray(0, 10), mimeType: 'audio/mpeg', offsetMs: 0, durationMs: 1_000 },
       { bytes: audio.subarray(10, 20), mimeType: 'audio/mpeg', offsetMs: 1_000, durationMs: 1_000 },
-      { bytes: audio.subarray(20, 30), mimeType: 'audio/mpeg', offsetMs: 2_000 },
+      {
+        bytes: audio.subarray(20, 30),
+        mimeType: 'audio/mpeg',
+        offsetMs: 2_000,
+        ...(lastMs === undefined ? {} : { durationMs: lastMs }),
+      },
     ];
-    const { t } = build(
-      [
-        { body: new Uint8Array(30).fill(7) },
-        verboseJson({ duration: 1, segments: [{ start: 0, end: 1, text: ' One.' }] }),
-        verboseJson({ text: '', duration: 1, segments: [] }),
-        verboseJson({ duration: null, segments: [{ start: 0, end: 0.5, text: ' Three.' }] }),
-      ],
-      { chunker, maxUploadBytes: 10 },
+  const one = verboseJson({ duration: 1, segments: [{ start: 0, end: 1, text: ' One.' }] });
+  const two = verboseJson({ duration: 1, segments: [{ start: 0, end: 1, text: ' Two.' }] });
+  const empty = (duration: number | null) => verboseJson({ text: '', duration, segments: [] });
+
+  it('an empty piece in the middle fails the call instead of leaving a silent gap', async () => {
+    const { t, key, traces, mock } = build(
+      [{ body: new Uint8Array(30).fill(7) }, one, empty(1), two],
+      { chunker: threePieces(1_000), maxUploadBytes: 10 },
     );
+    const err = await failure(t.transcribe(input), key, traces);
+    expect(err.code).toBe('provider_error');
+    expect(err.retryable).toBe(false);
+    expect(err.message).toBe('transcriber: piece 2 of 3 came back empty');
+    expect(mock.requests).toHaveLength(3); // the third piece is never sent
+  });
+
+  it.each([
+    ['1 s or longer', 1_000, 1],
+    ['of unknown length', undefined, null],
+  ] as const)('an empty final piece %s fails too', async (_n, lastMs, heard) => {
+    const { t, key } = build([{ body: new Uint8Array(30).fill(7) }, one, two, empty(heard)], {
+      chunker: threePieces(lastMs),
+      maxUploadBytes: 10,
+    });
+    const err = await failure(t.transcribe(input), key);
+    expect(err.message).toBe('transcriber: piece 3 of 3 came back empty');
+  });
+
+  it('an empty final piece under 1 s is a short tail: skipped, and flagged in the trace', async () => {
+    const { t, traces } = build([{ body: new Uint8Array(30).fill(7) }, one, two, empty(0.4)], {
+      chunker: threePieces(400),
+      maxUploadBytes: 10,
+    });
     expect(await t.transcribe(input)).toEqual({
-      text: 'One. Three.',
+      text: 'One. Two.',
       language: 'en',
-      durationMs: 2_500,
+      durationMs: 2_400,
       segments: [
         { startMs: 0, endMs: 1_000, text: 'One.' },
-        { startMs: 2_000, endMs: 2_500, text: 'Three.' },
+        { startMs: 1_000, endMs: 2_000, text: 'Two.' },
       ],
     });
+    const chunks = traces.filter((x) => x.event === 'transcriber.chunk');
+    expect(chunks.map((x) => ('anomaly' in x ? x.anomaly : undefined))).toEqual([
+      undefined,
+      undefined,
+      'empty_final_piece',
+    ]);
+    expect(chunks[2]).toMatchObject({ index: 2, of: 3, offsetMs: 2_000, segments: 0 });
+  });
+
+  it('a piece with blank text but spoken segments is not empty: its text comes from the segments', async () => {
+    const { t } = build([
+      { body: mp3(2) },
+      verboseJson({
+        text: ' ',
+        duration: 2,
+        segments: [
+          { start: 0, end: 1, text: ' Hi.' },
+          { start: 1, end: 2, text: ' There.' },
+        ],
+      }),
+    ]);
+    expect((await t.transcribe(input)).text).toBe('Hi. There.');
+  });
+
+  it('a lone empty upload is still the empty-transcript validation error', async () => {
+    const { t, key } = build([{ body: mp3(2) }, empty(0.05)]);
+    const err = await failure(t.transcribe(input), key);
+    expect(err.code).toBe('validation');
+    expect(err.message).toBe('transcriber: empty transcript: the provider returned no speech');
+  });
+
+  it('the default download cap is 600 MB', () => {
+    expect(DEFAULT_MAX_DOWNLOAD_BYTES).toBe(600_000_000);
   });
 
   it('splits a WAV over the limit with the built-in chunker', async () => {

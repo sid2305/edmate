@@ -152,7 +152,7 @@ export function splitMp3(audio: Uint8Array, mimeType: string, maxBytes: number):
   const close = (end: number): void => {
     const durationMs = Math.round((pieceSamples * 1000) / pieceRate);
     pieces.push({
-      bytes: audio.slice(pieceStart, end),
+      bytes: audio.subarray(pieceStart, end),
       mimeType,
       offsetMs: Math.round(elapsedMs),
       durationMs,

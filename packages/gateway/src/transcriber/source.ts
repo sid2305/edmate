@@ -97,27 +97,67 @@ function tooLarge(maxBytes: number): TranscriberError {
   );
 }
 
-/** Reads the body, stopping as soon as it passes `maxBytes`. */
+/** The declared length, when it is the length of the bytes we will read (not compressed). */
+function declaredLength(res: Response): number | undefined {
+  const encoding = res.headers.get('content-encoding');
+  if (encoding !== null && encoding.trim().toLowerCase() !== 'identity') return undefined;
+  const raw = res.headers.get('content-length');
+  const n = raw === null ? Number.NaN : Number(raw);
+  return Number.isSafeInteger(n) && n >= 0 ? n : undefined;
+}
+
+function sizeMismatch(): TranscriberError {
+  return new TranscriberError(
+    'provider_error',
+    true,
+    'the recording download did not match its declared size',
+  );
+}
+
+/**
+ * Reads the body, stopping as soon as it passes `maxBytes`. With a content-length it fills one
+ * buffer of that size (no second copy) and fails unless exactly that many bytes arrive: a stream
+ * that ends early is a truncated download, never a shorter recording.
+ */
 async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> {
-  const declared = Number(res.headers.get('content-length') ?? Number.NaN);
-  if (Number.isFinite(declared) && declared > maxBytes) {
+  const declared = declaredLength(res);
+  if (declared !== undefined && declared > maxBytes) {
     await res.body?.cancel();
     throw tooLarge(maxBytes);
   }
+  if (res.body === null) return new Uint8Array(0);
+  const reader = res.body.getReader();
+  const fixed = declared === undefined ? undefined : new Uint8Array(declared);
   const parts: Uint8Array[] = [];
   let size = 0;
-  if (res.body !== null) {
-    const reader = res.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > maxBytes) {
-        await reader.cancel();
-        throw tooLarge(maxBytes);
-      }
-      parts.push(value);
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (size + value.byteLength > maxBytes) {
+      await reader.cancel();
+      throw tooLarge(maxBytes);
     }
+    if (fixed === undefined) {
+      parts.push(value);
+    } else {
+      if (size + value.byteLength > fixed.byteLength) {
+        await reader.cancel();
+        throw sizeMismatch();
+      }
+      fixed.set(value, size);
+    }
+    size += value.byteLength;
+  }
+  if (fixed !== undefined) {
+    if (size !== fixed.byteLength) {
+      throw new TranscriberError(
+        'provider_error',
+        true,
+        `the recording download ended early (${String(size)} of ${String(fixed.byteLength)} bytes)`,
+        'truncated',
+      );
+    }
+    return fixed;
   }
   const out = new Uint8Array(size);
   let at = 0;
