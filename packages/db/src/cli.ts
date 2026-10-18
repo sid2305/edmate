@@ -1,9 +1,5 @@
 import { migrateDatabase } from './migrate.js';
-
-/** Removes any connection string from an error message, so a password can't reach the logs. */
-function redact(message: string): string {
-  return message.replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://<redacted>');
-}
+import { redact } from './redact.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
 export async function runMigrateCli(
