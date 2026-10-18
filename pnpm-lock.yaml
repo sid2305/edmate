@@ -396,6 +396,9 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

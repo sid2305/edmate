@@ -17,6 +17,8 @@ export default defineConfig({
         'src/keys/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
         // Task 2.2: adapters reveal keys and build auth headers, so they are held to the same bar.
         'src/adapters/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Task 2.3: the fallback rule decides whether a second model may answer, so all of it is tested.
+        'src/router/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
       },
     },
   },
