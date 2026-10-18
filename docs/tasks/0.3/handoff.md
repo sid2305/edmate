@@ -135,3 +135,9 @@ Decided: Contracts lists zod 4.6.7 as a peer dependency (and a dev dependency fo
 Why: Every package then shares one zod, so schemas and their types stay compatible.
 Alternatives: zod as a normal dependency of contracts.
 Reversible: Yes.
+
+### 18 Oct 2026 · 0.3 Review · decided by team lead · risk: low
+Decided: The type cast in packages/harness/src/testing/fixtures.test.ts stays for now; the ports-in-contracts note goes into ADR-0002 (task 0.4). MEDIUM review findings were fixed in this PR, not deferred, because contracts freeze on merge.
+Why: The cast is test-only and narrow; fixing contracts later would need an ADR and three reviewers.
+Alternatives: Defer the MEDIUMs to a follow-up task.
+Reversible: Yes.
