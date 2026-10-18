@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Merge policy · decided by you · risk: high
+Decided: Changes to packages/contracts no longer need your approval. The team lead decides, provided an ADR (written by architect) explains the change, security-reviewer and an Opus typescript-reviewer have reviewed it, and the lead logs it as risk: high. ADRs about the tech stack or prompt-pack behaviour, and all other risky paths, still need you.
+Why: You don't want to be the bottleneck for contract changes.
+Alternatives: Keep your approval for every contract change.
+Reversible: Yes; put packages/contracts back on the human list.
+
 ### 17 Oct 2026 · Board · decided by you · risk: low
 Decided: Added task 0.7, harness fixes found in the 0.1 dry run: a local human approval for the merge gate, decision-log checks, shell-write guards for protected paths, and planner and plan-file fixes.
 Why: Without them, risky tasks can't pass the gate before GitHub exists, and some rules are only enforced for the Edit and Write tools.
