@@ -1,0 +1,57 @@
+// Each exported type must be exactly the Core contracts type (spec-types.ts is the verbatim copy).
+// `toEqualTypeOf` is checked by tsc (the typecheck script includes test/), in both directions.
+import { describe, expectTypeOf, it } from 'vitest';
+import type * as C from '../src/index.js';
+import type * as Spec from './spec-types.js';
+
+describe('z.infer types equal the Core contracts', () => {
+  it('data types', () => {
+    expectTypeOf<C.Lang>().toEqualTypeOf<Spec.Lang>();
+    expectTypeOf<C.Skill>().toEqualTypeOf<Spec.Skill>();
+    expectTypeOf<C.Money>().toEqualTypeOf<Spec.Money>();
+    expectTypeOf<C.ErrorCode>().toEqualTypeOf<Spec.ErrorCode>();
+    expectTypeOf<C.Usage>().toEqualTypeOf<Spec.Usage>();
+    expectTypeOf<C.ToolName>().toEqualTypeOf<Spec.ToolName>();
+    expectTypeOf<C.AgentConfig>().toEqualTypeOf<Spec.AgentConfig>();
+    expectTypeOf<C.StyleCard>().toEqualTypeOf<Spec.StyleCard>();
+    expectTypeOf<C.PackageConfig>().toEqualTypeOf<Spec.PackageConfig>();
+    expectTypeOf<C.Entitlement>().toEqualTypeOf<Spec.Entitlement>();
+    expectTypeOf<C.ChunkKind>().toEqualTypeOf<Spec.ChunkKind>();
+    expectTypeOf<C.SourceRef>().toEqualTypeOf<Spec.SourceRef>();
+    expectTypeOf<C.Chunk>().toEqualTypeOf<Spec.Chunk>();
+    expectTypeOf<C.Attachment>().toEqualTypeOf<Spec.Attachment>();
+    expectTypeOf<C.Message>().toEqualTypeOf<Spec.Message>();
+    expectTypeOf<C.TurnInput>().toEqualTypeOf<Spec.TurnInput>();
+    expectTypeOf<C.Intent>().toEqualTypeOf<Spec.Intent>();
+    expectTypeOf<C.Attempt>().toEqualTypeOf<Spec.Attempt>();
+    expectTypeOf<C.Persona>().toEqualTypeOf<Spec.Persona>();
+    expectTypeOf<C.TurnContext>().toEqualTypeOf<Spec.TurnContext>();
+    expectTypeOf<C.PedagogyDecision>().toEqualTypeOf<Spec.PedagogyDecision>();
+    expectTypeOf<C.TeacherQuestion>().toEqualTypeOf<Spec.TeacherQuestion>();
+    expectTypeOf<C.TurnEvent>().toEqualTypeOf<Spec.TurnEvent>();
+    expectTypeOf<C.ModelPolicy>().toEqualTypeOf<Spec.ModelPolicy>();
+    expectTypeOf<C.ModelRequest>().toEqualTypeOf<Spec.ModelRequest>();
+    expectTypeOf<C.ModelChunk>().toEqualTypeOf<Spec.ModelChunk>();
+    expectTypeOf<C.SafetyAlert>().toEqualTypeOf<Spec.SafetyAlert>();
+    expectTypeOf<C.GuardResult>().toEqualTypeOf<Spec.GuardResult>();
+    expectTypeOf<C.LearnerProfile>().toEqualTypeOf<Spec.LearnerProfile>();
+    expectTypeOf<C.TurnTrace>().toEqualTypeOf<Spec.TurnTrace>();
+    expectTypeOf<C.LocalePack>().toEqualTypeOf<Spec.LocalePack>();
+    expectTypeOf<C.EvidenceEvent>().toEqualTypeOf<Spec.EvidenceEvent>();
+  });
+
+  it('ports (type-only)', () => {
+    expectTypeOf<C.Guard>().toEqualTypeOf<Spec.Guard>();
+    expectTypeOf<C.RetrievalIndex>().toEqualTypeOf<Spec.RetrievalIndex>();
+    expectTypeOf<C.EntitlementStore>().toEqualTypeOf<Spec.EntitlementStore>();
+    expectTypeOf<C.ProfileStore>().toEqualTypeOf<Spec.ProfileStore>();
+    expectTypeOf<C.TranscriptStore>().toEqualTypeOf<Spec.TranscriptStore>();
+    expectTypeOf<C.CorrectionStore>().toEqualTypeOf<Spec.CorrectionStore>();
+    expectTypeOf<C.TeacherQuestionStore>().toEqualTypeOf<Spec.TeacherQuestionStore>();
+    expectTypeOf<C.UsageMeter>().toEqualTypeOf<Spec.UsageMeter>();
+    expectTypeOf<C.ModelGateway>().toEqualTypeOf<Spec.ModelGateway>();
+    expectTypeOf<C.TraceSink>().toEqualTypeOf<Spec.TraceSink>();
+    expectTypeOf<C.AlertSink>().toEqualTypeOf<Spec.AlertSink>();
+    expectTypeOf<C.Tool<{ a: number }, string>>().toEqualTypeOf<Spec.Tool<{ a: number }, string>>();
+  });
+});

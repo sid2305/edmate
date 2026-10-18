@@ -50,7 +50,7 @@ apps/
   cli/                 `edmate` CLI (`edmate --version`)
 packages/
   config/              shared tsconfig, ESLint (incl. harness purity) and Prettier presets
-  contracts/           Zod schemas + types (empty shell; filled by task 0.3)
+  contracts/           Core contracts as Zod schemas + types; fixtures at @edmate/contracts/fixtures
   harness/             turn pipeline and teaching engine
     src/pipeline/ src/pedagogy/ src/skills/ src/roleplay/ src/tools/ src/memory/
     src/access/        (later, M3: the access filter)

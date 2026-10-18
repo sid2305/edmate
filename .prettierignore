@@ -8,3 +8,5 @@ docs
 *.md
 .claude
 .githooks
+# Verbatim spec copy; spec-drift.test.ts compares it to the build plan.
+packages/contracts/test/spec-types.ts

@@ -1,0 +1,10 @@
+{
+  "extends": "@edmate/config/tsconfig/base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "noEmit": false,
+    "types": []
+  },
+  "include": ["src", "fixtures"]
+}
