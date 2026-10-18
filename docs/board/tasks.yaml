@@ -345,7 +345,7 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: review
+  status: done
   branch: m1/1.6-audit-log
   model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db)
 - id: '1.7'
