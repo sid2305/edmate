@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.15 ADR-0005: TurnConfigStore returns raw helpState; new SessionStateStore and Transcriber ports and media schemas · decided by team lead (architect's design, human's contracts delegation) · risk: high
+Decided: `TurnConfigStore.load` also returns `helpState: unknown` (the session row's `help_state`, unvalidated); new `SessionStateStore.saveHelpState(sessionId, helpState)` and `Transcriber.transcribe(TranscribeInput): Promise<Transcript>` ports; new `TranscribeInputSchema` (https URL, audio/video MIME, optional language hint), `TranscriptSegmentSchema` and `TranscriptSchema` (non-empty, segments in start order, ends within the duration). Help state stays `unknown` in contracts and the harness parses it (3.4).
+Why: 3.4 and 3.8 need to read and write the session's help state and no port did; ADR-0001 named a Transcriber that was never defined (vendor OpenAI Whisper, human decision 18 Oct 2026).
+Alternatives: help state on TranscriptStore; a full SessionStore; a help-state schema in contracts; a storage key instead of a URL.
+Reversible: only by another ADR (contracts change). Needs architect, security-reviewer and typescript-reviewer sign-off.
+
+### 18 Oct 2026 · 3.15 The in-memory TurnConfigStore returns `undefined` help state when a session has none · decided by builder (tdd-guide) · risk: low
+Decided: `MemorySession.helpState` is optional; an unset value loads as `undefined` (the db column defaults to `{}`). Neither adapter validates the value.
+Why: the plan asks for no behaviour change; 3.4's parser falls back to rung 0 for any invalid value, `undefined` included.
+Alternatives: default the in-memory value to `{}` to mirror the db default.
+Reversible: yes (test helper only).
+
+### 18 Oct 2026 · 3.15 Overlapping transcript segments are allowed · decided by builder (tdd-guide), following the plan's rule · risk: low
+Decided: `TranscriptSchema` only requires each segment's `endMs >= startMs`, starts never going backwards and the last segment's `endMs <= durationMs`; a segment may start before the previous one ends.
+Why: the plan's refinement lists exactly these rules; chunked Whisper output can overlap at chunk edges.
+Alternatives: require non-overlapping segments.
+Reversible: only by ADR (contracts).
+
+### 18 Oct 2026 · 3.15 Saved help state is capped at 8 KB of JSON (LIMITS.helpStateMaxJsonLength) · decided by team lead on security-reviewer's fix round 1 · risk: medium
+Decided: `LIMITS.helpStateMaxJsonLength = 8 * 1024` (UTF-16 units of `JSON.stringify`, like `skillPayloadMaxJsonLength`); `SessionStateStore.saveHelpState` refuses a larger or unserialisable value before writing (adapter in 3.8).
+Why: help state is a client-influenced jsonb blob on every turn; an unbounded write would let one session grow the row without limit. 8 KB is far above the ladder state's size.
+Alternatives: 16 KB like the skill payload; a cap only in the db adapter, not in contracts.
+Reversible: only by ADR (contracts LIMITS).
+
+### 18 Oct 2026 · 3.15 Transcribe URLs and MIME types are checked strictly in the schema · decided by builder (tdd-guide) on typescript-reviewer's fix round 1 · risk: low
+Decided: `url` must match `https://host[:port]` plus an optional path, query or fragment: lower-case scheme, no userinfo, no whitespace anywhere, no backslash in the authority. `mimeType` must be `audio/` or `video/` plus an RFC 6838 subtype, with no parameters (`audio/webm;codecs=opus` is refused; the caller strips parameters).
+Why: the URL goes straight to a fetch, so every form the WHATWG parser rewrites silently is refused at the boundary; refusing parameters keeps the check simple.
+Alternatives: accept MIME parameters; rely on `z.url` alone (it trims and would accept surrounding whitespace).
+Reversible: only by ADR (contracts).
+
 ### 18 Oct 2026 · 2.5 Cost alarm threshold · decided by team lead · risk: medium
 Decided: The monthly cost alarm fires at a provisional 50 USD per teacher per calendar month (UTC), configurable. It alerts staff and the teacher and pauses free packages only; once staff unpause, the same month doesn't re-pause. Calls with unknown cost are counted and reported, never treated as free.
 Why: The spec sets no number; this is a placeholder until the cost data in 7.6.
