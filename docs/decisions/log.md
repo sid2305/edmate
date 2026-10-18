@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.6 Exact pins for every dev container input · decided by tdd-guide · risk: low
+Decided: Base image `mcr.microsoft.com/devcontainers/base:3.0.10-noble` by digest `sha256:21e9e327...86c3e6`; node feature `2.1.1` with Node `22.22.3` and nvm `0.40.8`; docker-outside-of-docker feature `1.10.1` with Docker CLI `29.5.3` and buildx `0.38.0`; Claude Code `2.1.302`; PyYAML `6.0.1-2build2` (apt); devcontainers CLI `0.89.0` for verification. Node 22.22.3 is the 22.x on the build machine, since `.nvmrc` and `engines` only say 22.
+Why: Lead answer 1: pin everything so builds are repeatable; each version was current and checked to build.
+Alternatives: Track `latest` or major tags (`:2`, `@latest`), which drift silently.
+Reversible: Yes; bump the numbers in one PR.
+
+### 18 Oct 2026 · 0.6 Not pinned where the tool has no option · decided by tdd-guide · risk: low
+Decided: `python3` (3.12.3) and the `docker compose` plugin (moby-compose 5.6.0) are not pinned to an exact package version; jq (1.7.1) is fixed only by the base image digest.
+Why: The docker feature has no compose-plugin version option, and pinning `python3` to an apt build in `noble-updates` would break once Ubuntu replaces it; the base digest already fixes jq.
+Alternatives: Pin apt versions of python3/jq exactly and accept builds breaking on security updates.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.6 Node via the official node feature · decided by team lead · risk: low
+Decided: Node comes from `ghcr.io/devcontainers/features/node` (pinned), not an nvm curl-install in postCreateCommand; pnpm only through corepack (`pnpmVersion: none`).
+Why: Lead answer 2; the feature is pinned and cached in the image, and avoids piping an unpinned install script.
+Alternatives: nvm install script in postCreateCommand, as the original plan step 2 said.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.6 Forward only port 3000; mount the repo at its host path · decided by tdd-guide · risk: low
+Decided: The dev container forwards 3000 only, and mounts the workspace at the same path as on the host.
+Why: Docker runs on the host (docker-outside-of-docker), so Compose already publishes 8080/9000/9001 on the host and forwarding them would clash; same-path mounting makes Compose's relative bind mounts work from inside the container.
+Alternatives: Forward 8080/9000/9001 as the plan said; mount at `/workspaces/edmate` and pass `LOCAL_WORKSPACE_FOLDER` into Compose.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.5 CI reads scripts from main, not the PR · decided by planner · risk: high
 Decided: `merge-gate.yml` and `risk-label.yml` check out `main` and only `git fetch` the PR's head commit into a same-named branch; they run main's `merge_gate.py`/`risk_labels.py`, never code from the PR.
 Why: Running the PR's own copy of the gate would let a careless or malicious PR switch off its own check.
