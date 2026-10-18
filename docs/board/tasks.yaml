@@ -366,7 +366,7 @@ tasks:
   accept: shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures; a third adapter needs no caller changes.
   deps:
   - M0
-  status: review
+  status: done
   branch: m2/2.2-provider-adapters
   model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(ts,silent)
 - id: '2.3'
@@ -376,9 +376,9 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m2/2.3-router
+  model: plan:sonnet
 - id: '2.4'
   milestone: M2
   title: 'Metering: usage rows per call with teacher, package, student and source; `prices.yaml` in USD'
@@ -557,11 +557,11 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: todo
+  status: planning
   needs_decision:
   - judge-model
-  branch: null
-  model: null
+  branch: m3/3.12-eval-runner
+  model: plan:sonnet
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
