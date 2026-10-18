@@ -420,9 +420,9 @@ tasks:
   deps:
   - '2.4'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m2/2.5-limits
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.6'
   milestone: M2
   title: Scripted gateway in `harness/testing`
