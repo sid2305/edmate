@@ -216,3 +216,9 @@ Decided: `teacherQuestions.listForStudent` returns at most the newest 200; `list
 Why: Bounded reads and no empty questions in a teacher's inbox.
 Alternatives: Unbounded lists; accept any string.
 Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Review · decided by team lead · risk: low
+Decided: Scope types in packages/db/src/repositories/scope.ts stay structural (not branded). The composite index for a student's questions waits for the questions inbox (8.9).
+Why: The scope is a required first argument and every method re-validates it at runtime, enforced by a test over all 16 methods; listForStudent is capped at 200.
+Alternatives: Branded scope types; add the index now.
+Reversible: Yes.
