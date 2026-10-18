@@ -232,6 +232,15 @@ tasks:
   status: review
   branch: m0/0.7-harness-fixes
   model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(code)
+- id: '0.8'
+  milestone: M0
+  title: 'Follow-up from 0.7 review: remove the local `git merge --squash` path from the merge-gate and team-lead skills (merges go through a PR and the gate); small doc fixes found in later reviews'
+  accept: 'Neither skill describes a local squash merge; the team-lead merge step is PR-only.'
+  deps:
+  - '0.7'
+  status: todo
+  branch: null
+  model: null
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
