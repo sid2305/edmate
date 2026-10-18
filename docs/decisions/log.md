@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.2 Message counters · decided by team lead · risk: medium
+Decided: The per-student rate limit and the rolling daily message limit start as in-memory windows in the harness, behind an injected interface. A restart resets them. Task 3.14 makes them durable and shared before the pilot.
+Why: Keeps 3.2 moving without a second contracts change; harmless while building.
+Alternatives: A new contracts port with ADR-0005 now.
+Reversible: Yes, the interface is swappable.
+
 ### 18 Oct 2026 · 3.13 TurnConfigStore port loads a turn's config at entitle · decided by team lead · risk: high
 Decided: Contracts gain one additive port, `TurnConfigStore.load(entitlement, sessionId)`, which returns the agent, package, style card and locale pack for the turn, or null. `entitle` calls it and fails closed with `no_access` unless every loaded object belongs to the entitlement's teacher, agent, package version and market. No other contract changes (ADR-0004).
 Why: pre-guards, escalation and the fallback context need the locale pack and style card before `buildContext`, and no port loaded them.

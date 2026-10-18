@@ -595,6 +595,15 @@ tasks:
   status: done
   branch: m3/3.13-turn-config-store
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
+- id: '3.14'
+  milestone: M7
+  title: 'Durable, shared message and rate counters for admit (replace the in-memory windows from 3.2) before the pilot; a contracts port with ADR-0005 if needed'
+  accept: 'Daily message limits survive a restart and hold across web processes; tests prove it against real Postgres or Redis.'
+  deps:
+  - '3.2'
+  status: todo
+  branch: null
+  model: null
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
