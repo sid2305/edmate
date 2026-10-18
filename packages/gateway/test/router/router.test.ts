@@ -172,6 +172,66 @@ describe('Router.stream: fallback', () => {
     expect(fallback.calls.stream).toBe(1);
   });
 
+  it('when the fallback also fails, both errors are visible: the primary is its cause', async () => {
+    const first = http5xx();
+    const second = new GatewayError('rate_limited', true, 'openai-compatible', 'backup: 429');
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(first) },
+      fallback: failingAdapter(second, { id: 'openai-compatible' }),
+    });
+
+    const { err } = await collectUntilError(router.stream(req()));
+    expect(err).toBe(second);
+    expect((err as Error).cause).toBe(first);
+    // Both are scrubbed GatewayErrors; toJSON still carries only the fallback's own fields.
+    expect(JSON.stringify(err)).not.toContain('cause');
+  });
+
+  it('a fallback error that already has a cause keeps it', async () => {
+    const own = new Error('inner');
+    const second = new Error('backup broke', { cause: own });
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(http5xx()) },
+      fallback: failingAdapter(second),
+    });
+    const { err } = await collectUntilError(router.stream(req()));
+    expect(err).toBe(second);
+    expect((err as Error).cause).toBe(own);
+  });
+
+  it('a fallback that throws a non-Error value propagates it as is', async () => {
+    const fallback = fakeAdapter();
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(http5xx()) },
+      fallback: {
+        ...fallback,
+        stream: () => ({
+          [Symbol.asyncIterator]: () => ({ next: () => Promise.reject('plain string') }),
+        }),
+      },
+    });
+    expect((await collectUntilError(router.stream(req()))).err).toBe('plain string');
+  });
+
+  it('the same error object from both adapters never becomes its own cause', async () => {
+    const shared = http5xx();
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(shared) },
+      fallback: failingAdapter(shared),
+    });
+    const { err } = await collectUntilError(router.stream(req()));
+    expect(err).toBe(shared);
+    expect((err as Error).cause).toBeUndefined();
+  });
+
+  it('a lone primary failure gets no cause added', async () => {
+    const failure = http5xx();
+    const router = new Router({ tiers: { small: fakeAdapter(), main: failingAdapter(failure) } });
+    const { err } = await collectUntilError(router.stream(req()));
+    expect(err).toBe(failure);
+    expect((err as Error).cause).toBeUndefined();
+  });
+
   it('skips a fallback that lacks a needed capability and rethrows the primary error', async () => {
     const failure = http5xx();
     const fallback = fakeAdapter({ capabilities: { tools: false } });
@@ -185,17 +245,16 @@ describe('Router.stream: fallback', () => {
 });
 
 describe('Router: capability pre-check', () => {
-  it('tools: throws validation without calling an adapter that cannot use tools', () => {
+  it('tools: throws validation on iteration without calling an adapter that cannot use tools', async () => {
     const main = fakeAdapter({ model: 'no-tools', capabilities: { tools: false } });
     const fallback = backupStream();
     const router = new Router({ tiers: { small: fakeAdapter(), main }, fallback });
 
-    let err: unknown;
-    try {
-      router.stream(req({ tools: [tool] }));
-    } catch (e) {
-      err = e;
-    }
+    // Same convention as every adapter: stream() never throws at call time.
+    const iterable = router.stream(req({ tools: [tool] }));
+    expect(main.calls.stream).toBe(0);
+    const { seen, err } = await collectUntilError(iterable);
+    expect(seen).toEqual([]);
     expect(err).toBeInstanceOf(GatewayError);
     expect((err as GatewayError).code).toBe('validation');
     expect((err as GatewayError).retryable).toBe(false);
@@ -297,6 +356,18 @@ describe('Router.generateObject: fallback', () => {
     expect(fallback.calls.generateObject).toBe(1);
   });
 
+  it('when the fallback also fails, the primary error is kept as its cause', async () => {
+    const first = http5xx();
+    const second = http5xx();
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(first) },
+      fallback: failingAdapter(second),
+    });
+    const err = await router.generateObject(req(), intentSchema).catch((e: unknown) => e);
+    expect(err).toBe(second);
+    expect((err as Error).cause).toBe(first);
+  });
+
   it('skips a fallback without json support', async () => {
     const failure = http5xx();
     const fallback = fakeAdapter({ capabilities: { json: false } });
@@ -342,6 +413,18 @@ describe('Router.embed: fallback', () => {
     const failure = http5xx();
     const router = new Router({ tiers: { small: fakeAdapter(), main: failingAdapter(failure) } });
     await expect(router.embed(['a'])).rejects.toBe(failure);
+  });
+
+  it('when the fallback also fails, the primary error is kept as its cause', async () => {
+    const first = http5xx();
+    const second = http5xx();
+    const router = new Router({
+      tiers: { small: fakeAdapter(), main: failingAdapter(first) },
+      fallback: failingAdapter(second),
+    });
+    const err = await router.embed(['a']).catch((e: unknown) => e);
+    expect(err).toBe(second);
+    expect((err as Error).cause).toBe(first);
   });
 
   it('skips a fallback without embeddings', async () => {

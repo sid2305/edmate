@@ -53,6 +53,27 @@ function assertCapable(adapter: ModelAdapter, needs: CapabilityNeeds): void {
   }
 }
 
+/**
+ * When the fallback fails too, keep the primary failure visible as the fallback error's `cause`
+ * (both are scrubbed GatewayErrors; toJSON still omits cause). An existing cause is kept, and a
+ * non-Error value is returned as is.
+ */
+function withPrimaryCause(fallbackErr: unknown, primaryErr: unknown): unknown {
+  if (
+    fallbackErr instanceof Error &&
+    fallbackErr !== primaryErr &&
+    fallbackErr.cause === undefined
+  ) {
+    Object.defineProperty(fallbackErr, 'cause', {
+      value: primaryErr,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+  return fallbackErr;
+}
+
 function requestNeeds(req: ModelRequest, json: boolean): CapabilityNeeds {
   return { ...NEEDS_NOTHING, tools: (req.tools?.length ?? 0) > 0, json };
 }
@@ -72,21 +93,17 @@ export class Router implements ModelGateway {
     return missingCapability(fallback, needs) === undefined ? fallback : undefined;
   }
 
-  /** Throws a validation GatewayError synchronously when the tier adapter lacks a capability. */
-  stream(req: ModelRequest): AsyncIterable<ModelChunk> {
+  /**
+   * Like every adapter, never throws at call time: a capability mismatch rejects on the first
+   * `next()`, still before any provider call.
+   */
+  async *stream(req: ModelRequest): AsyncGenerator<ModelChunk> {
     const primary = this.opts.tiers[req.tier];
     const needs = requestNeeds(req, false);
     assertCapable(primary, needs);
-    return this.streamWithFallback(primary, req, needs);
-  }
-
-  private async *streamWithFallback(
-    primary: ModelAdapter,
-    req: ModelRequest,
-    needs: CapabilityNeeds,
-  ): AsyncGenerator<ModelChunk> {
     let yieldedAny = false;
     let fallback: ModelAdapter | undefined;
+    let primaryErr: unknown;
     try {
       for await (const chunk of primary.stream(req)) {
         yieldedAny = true;
@@ -97,9 +114,14 @@ export class Router implements ModelGateway {
       // Once output reached the caller, a second model's text must never be spliced onto it.
       fallback = yieldedAny ? undefined : this.fallbackFor(err, needs);
       if (fallback === undefined) throw err;
+      primaryErr = err;
     }
     // One retry on the fallback model; whatever it throws propagates (pipeline step 8).
-    yield* fallback.stream(req);
+    try {
+      yield* fallback.stream(req);
+    } catch (err) {
+      throw withPrimaryCause(err, primaryErr);
+    }
   }
 
   generateObject<T>(req: ModelRequest, schema: ZodType<T>): Promise<T> {
@@ -125,7 +147,11 @@ export class Router implements ModelGateway {
     } catch (err) {
       const fallback = this.fallbackFor(err, needs);
       if (fallback === undefined) throw err;
-      return call(fallback);
+      try {
+        return await call(fallback);
+      } catch (fallbackErr) {
+        throw withPrimaryCause(fallbackErr, err);
+      }
     }
   }
 }

@@ -19,7 +19,7 @@ Acceptance: "a simulated 5xx fails over within one retry."
 | Capability pre-check | `tools` (non-empty) on an adapter without tools: `stream` throws `validation` synchronously, message `anthropic/no-tools: no tools support for this request`, adapter and fallback counters 0; `tools: undefined` and `[]` unaffected. `generateObject` without `json` and `embed` without `embeddings` reject with `validation` without calling the adapter. A fallback that lacks the capability is skipped and the primary error re-thrown. Vision: `missingCapability` reports it; every call site passes `vision: false` (lead answer Q1). |
 | Per-agent override via policy | `factory.test.ts` "per-agent override: same factories, different policies, different adapters": `createRouter(policyA, factories)` and `createRouter(policyB, factories)` serve the `main` tier from `anthropic:a` and `openai-compatible:b`. Also `router.test.ts` with two `Router`s. |
 | Default policy is config, not code | `grep -rn "claude-\|gpt-" packages/gateway/src/router/router.ts packages/gateway/src/router/factory.ts` → no output (exit 1). `grep -rln` over `src/router` → only `default-policy.ts`, which is headed PROVISIONAL until 7.6. |
-| Coverage | `corepack pnpm turbo run typecheck lint test --filter=@edmate/gateway...` → `Tasks: 14 successful, 14 total`; gateway `Tests 215 passed (215)` (44 new in `test/router/`); coverage All files 100/100/100/100. New threshold `src/router/**` = 100%. |
+| Coverage | `corepack pnpm turbo run typecheck lint test --filter=@edmate/gateway...` → `Tasks: 14 successful, 14 total`; gateway `Tests 222 passed (222)` (51 in `test/router/`, after fix round 1); coverage All files 100/100/100/100. New threshold `src/router/**` = 100%. |
 
 Root gates:
 - `corepack pnpm turbo run typecheck lint test` → `Tasks: 32 successful, 32 total`.
@@ -36,10 +36,15 @@ Root gates:
 - `package.json`: `@edmate/harness: workspace:*` devDependency; `pnpm-lock.yaml`.
 - `vitest.config.ts`: `src/router/**` 100% threshold.
 
+## Fix round 1
+
+Test-first (red run: 4 failing, then green). Gateway now `Tests 222 passed (222)`, coverage 100%.
+1. **stream() never throws at call time** (typescript-reviewer, MEDIUM). `Router.stream` is an async generator, so a capability mismatch rejects on the first `next()`, as with every 2.2 adapter; still no adapter call. The tools pre-check test now asserts the call returns, the adapter count stays 0, then iteration rejects with the `validation` error.
+2. **Primary error kept when the fallback fails too** (silent-failure-hunter, MEDIUM). The fallback's error is re-thrown with the primary error as its `cause` (non-enumerable; `GatewayError.toJSON` still omits it). Tests for `stream`, `generateObject` and `embed` check both are visible. An existing `cause` is kept, a non-Error value propagates unchanged, the same object is never its own cause, and a lone primary failure gets no cause.
+
 ## Deviations
 
 - `missingCapability` is exported from `router.ts` (not from the package) so the vision branch, which no call site uses yet, can be tested directly.
-- `stream()` runs the capability check synchronously, so a mismatch throws from the `stream()` call itself rather than on first iteration. Both reject before any provider call.
 - Fake adapters wrap `ScriptedGateway`; the "throws before any chunk" cases use a tiny `failingAdapter` that rejects `next()` directly, since a scripted `[error]` step does the same thing through more code.
 
 ## Decisions
