@@ -312,10 +312,10 @@ tasks:
   - '1.1'
   - '1.2'
   - M0
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m1/1.3-auth
+  model: plan:opus
 - id: '1.4'
   milestone: M1
   title: Email magic-link sign-in (phone OTP later, per market)
