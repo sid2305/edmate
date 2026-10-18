@@ -89,3 +89,9 @@ Decided: `actor_role` reuses the `user_role` enum; `student_id` is nullable (tea
 Why: plan and lead answers Q3/Q4; there is no audit contract, and adding one would need an ADR.
 Alternatives: a new enum; a contract type.
 Reversible: yes.
+
+### 18 Oct 2026 · 1.6 Review · decided by team lead · risk: low
+Decided: packages/db/migrations/0002_audit_log_scope.sql adds NOT NULL columns without a backfill, and packages/db/src/schema/operations.ts has no ts-leading index on audit_log.
+Why: The audit table is empty until this ships, so no backfill is needed; retention runs per teacher, which the (teacher_id, ts) index covers.
+Alternatives: A backfill step; a plain ts index now.
+Reversible: Yes, one additive migration.
