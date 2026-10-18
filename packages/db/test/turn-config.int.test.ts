@@ -106,6 +106,18 @@ describe.skipIf(!up)(`turnConfigStoreFor on Postgres${up ? '' : ` (${SKIP_REASON
     await raw.query(`update sessions set agent_version = 1 where id = 'ses_1a'`);
   });
 
+  it('returns the session row help_state as stored, unvalidated (ADR-0005)', async () => {
+    const e = await entitlementFor();
+    const store = turnConfigStoreFor(repos, { locales });
+    expect((await store.load(e, 'ses_1a'))?.helpState).toEqual({});
+    const stored = { v: 1, rung: 2, anything: ['kept', 'as', 'is'] };
+    await raw.query(`update sessions set help_state = $1 where id = 'ses_1a'`, [
+      JSON.stringify(stored),
+    ]);
+    expect((await store.load(e, 'ses_1a'))?.helpState).toEqual(stored);
+    await raw.query(`update sessions set help_state = '{}'::jsonb where id = 'ses_1a'`);
+  });
+
   it.each([
     ['another student', 'ses_2a'],
     ['another teacher', 'ses_1b'],

@@ -9,4 +9,5 @@ export * from './memory.js';
 export * from './turn.js';
 export * from './safety.js';
 export * from './trace.js';
+export * from './media.js';
 export type * from './ports.js';
