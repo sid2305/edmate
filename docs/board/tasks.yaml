@@ -178,9 +178,9 @@ tasks:
   accept: '`docker compose up` serves `/api/health` = 200 and a test file round-trips through MinIO.'
   deps:
   - '0.1'
-  status: planning
+  status: running
   branch: m0/0.2-docker-compose
-  model: plan:haiku
+  model: plan:haiku build:opus-5.5/medium
 - id: '0.3'
   milestone: M0
   title: '`packages/contracts`: every type in Core contracts as Zod, with fixtures in `packages/contracts/fixtures`'
