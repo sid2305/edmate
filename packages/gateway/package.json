@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/pricing/prices.yaml', 'dist/pricing/prices.yaml')\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run --coverage"
@@ -21,6 +21,7 @@
     "@ai-sdk/openai-compatible": "3.0.71",
     "@edmate/contracts": "workspace:*",
     "ai": "7.0.143",
+    "js-yaml": "5.5.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
