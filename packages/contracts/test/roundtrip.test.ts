@@ -10,7 +10,7 @@ const validCases = names.flatMap((name) =>
   validFixtures[name].map((value, i) => ({ name, i, value, schema: schemas[name] as z.ZodType })),
 );
 const invalidCases = names.flatMap((name) =>
-  invalidFixtures[name].map((c) => ({ ...c, schema: schemas[name] as z.ZodType })),
+  invalidFixtures[name].map((c) => ({ ...c, parser: schemas[name] as z.ZodType })),
 );
 
 describe('valid fixtures round-trip', () => {
@@ -22,8 +22,8 @@ describe('valid fixtures round-trip', () => {
 });
 
 describe('invalid fixtures are rejected at the expected path', () => {
-  it.each(invalidCases)('$schema: $name', ({ schema, value, path }) => {
-    const result = schema.safeParse(value);
+  it.each(invalidCases)('$schema: $name', ({ parser, value, path }) => {
+    const result = parser.safeParse(value);
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((i) => i.path)).toContainEqual(path);
   });

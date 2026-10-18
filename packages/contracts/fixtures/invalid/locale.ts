@@ -20,4 +20,16 @@ export const invalid: InvalidCase[] = [
     value: { ...demoLocalePack, compliance: { ...demoLocalePack.compliance, minAge: -1 } },
     path: ['compliance', 'minAge'],
   },
+  {
+    schema: 'LocalePack',
+    name: 'piiPattern that does not compile',
+    value: { ...demoLocalePack, piiPatterns: ['(unclosed'] },
+    path: ['piiPatterns', 0],
+  },
+  {
+    schema: 'LocalePack',
+    name: 'piiPattern over 500 characters',
+    value: { ...demoLocalePack, piiPatterns: ['a'.repeat(501)] },
+    path: ['piiPatterns', 0],
+  },
 ];

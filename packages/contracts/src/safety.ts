@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { id, timestamp } from './formats.js';
+import { LIMITS } from './limits.js';
+
+// Model-produced strings are capped so a runaway output can't bloat alerts, traces or the UI.
+const reason = () => z.string().max(LIMITS.guardReasonMaxLength);
+const modelText = () => z.string().max(LIMITS.modelTextMaxLength);
 
 export const SafetyAlertSchema = z.strictObject({
   id: id(),
@@ -8,7 +13,7 @@ export const SafetyAlertSchema = z.strictObject({
   studentId: id(),
   teacherId: id(),
   sessionId: id(),
-  excerptRedacted: z.string(),
+  excerptRedacted: modelText(),
   createdAt: timestamp(),
 });
 export type SafetyAlert = z.infer<typeof SafetyAlertSchema>;
@@ -16,13 +21,13 @@ export type SafetyAlert = z.infer<typeof SafetyAlertSchema>;
 // A plain union: the three `ok: false` variants share `ok`, so `ok` can't discriminate them.
 export const GuardResultSchema = z.union([
   z.strictObject({ ok: z.literal(true) }),
-  z.strictObject({ ok: z.literal(false), action: z.literal('block'), reason: z.string() }),
+  z.strictObject({ ok: z.literal(false), action: z.literal('block'), reason: reason() }),
   /** text = the replacement input or reply. */
   z.strictObject({
     ok: z.literal(false),
     action: z.literal('rewrite'),
-    text: z.string(),
-    reason: z.string(),
+    text: modelText(),
+    reason: reason(),
   }),
   z.strictObject({ ok: z.literal(false), action: z.literal('escalate'), alert: SafetyAlertSchema }),
 ]);

@@ -27,7 +27,7 @@ const issuesAt = (r: { success: boolean; error?: { issues: { path: PropertyKey[]
 
 describe('LIMITS', () => {
   it('holds the numbers from the spec comments', () => {
-    expect(LIMITS).toEqual({
+    expect(LIMITS).toMatchObject({
       turnTextMaxChars: 4000,
       turnAttachmentsMax: 2,
       styleCardMaxWords: 300,

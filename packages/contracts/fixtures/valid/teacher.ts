@@ -2,6 +2,9 @@ import type { AgentConfig, PackageConfig, StyleCard } from '../../src/index.js';
 import { modelPolicyFull, modelPolicyMinimal } from './model.js';
 import { moneyFree, moneyPaid } from './shared.js';
 
+/** Every module the demo teacher has; packages pick from these. */
+export const teacherModuleIds = ['mod_test_01', 'mod_test_02', 'mod_test_03', 'mod_test_04'];
+
 export const demoAgentConfig = {
   id: 'agt_test_01',
   version: 3,

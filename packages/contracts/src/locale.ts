@@ -1,5 +1,16 @@
 import { z } from 'zod';
 import { count, currencyCode, market } from './formats.js';
+import { LIMITS } from './limits.js';
+
+/** True when `source` is a valid JavaScript regular expression. */
+function compiles(source: string): boolean {
+  try {
+    new RegExp(source);
+    return true;
+  } catch {
+    return false;
+  }
+}
 import { LangSchema } from './shared.js';
 
 export const LocalePackSchema = z.strictObject({
@@ -17,6 +28,11 @@ export const LocalePackSchema = z.strictObject({
     grievance: z.string(),
   }),
   regulatedDisclaimers: z.partialRecord(z.enum(['investing', 'health', 'law']), z.string()),
-  piiPatterns: z.array(z.string()),
+  piiPatterns: z.array(
+    z
+      .string()
+      .max(LIMITS.piiPatternMaxLength)
+      .refine(compiles, 'must be a valid regular expression'),
+  ),
 });
 export type LocalePack = z.infer<typeof LocalePackSchema>;

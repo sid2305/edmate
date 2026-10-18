@@ -31,6 +31,22 @@ The drift test also has a case proving a changed field (`amountMinor: string`) i
 
 `python3 .githooks/secret-scan.py --all` on the staged tree: exit 0.
 
+## Fix round 1 (security-reviewer, architect, typescript-reviewer)
+
+Test-first: `test/hardening.test.ts` plus new invalid fixtures (32 new failing tests seen red, then green). After the fixes: contracts **282 tests**, coverage 100% (193/193 statements, 30/30 branches); harness 34. The turbo run on both filters: 11/11 successful. Root build, test, lint, typecheck and format:check are green. Secret scan clean.
+
+1. Attachment: storageKey is at most 200 characters of `A-Za-z0-9/_.-`, with no leading `/` and no `..` segment. mime is image/png, jpeg, webp or heic; it's a regex rather than an enum because the spec types mime as `string`, and the type test caught the enum. bytes runs from 1 to 20 MB. There is no pdf kind in the spec, so no pdf.
+2. `id()`: 1–128 characters of `A-Za-z0-9_-`. Fixture topic ids changed from `topic.x` to `topic_x`.
+3. skillPayload: at most 16,384 UTF-16 units of `JSON.stringify`. Anything that can't be serialised (circular, BigInt) is rejected.
+4. TurnInput.text: `.max(8000)` runs before the code-point refine.
+5. GuardResult reason ≤ 500, rewrite text ≤ 8,000, SafetyAlert.excerptRedacted ≤ 8,000.
+6. Each piiPattern is ≤ 500 characters and must compile as a RegExp.
+7. Entitlement fixtures now mirror their package. allowed = `pkg.moduleIds`, locked = the teacher's other modules (`teacherModuleIds`, mod_test_01..04), skills = `pkg.skills`. A test asserts this for all three.
+8. TurnContext superRefine checks four things: every retrieved chunk's moduleId is in allowedModuleIds, every chunk's teacherId matches the entitlement, packageId/packageVersion match `pkg`, and agentId matches `agent.id`. Each has an invalid fixture, and one test checks all five paths at once.
+9. zod is now a peer dependency (4.6.7) plus a dev dependency of contracts. The harness lists zod 4.6.7 as a dependency because it now consumes contracts at runtime; rule 3 allows zod.
+10. Comment on TurnInput: web merges the session studentId before parsing.
+11. `omit.ts`: a comment says why the cast is safe.
+
 ## exactOptionalPropertyTypes cases
 None needed a workaround. zod 4.6.7 has `.exactOptional()`, which infers `key?: T` (no `| undefined`), so every optional key is exactly equal to the spec type, both directions. All optional fields use `.exactOptional()`: `AgentConfig.regulatedSubject`, `PackageConfig.trialDays`, `Entitlement.subscriptionId`, `Chunk.score`, `Message.sources`, `TurnInput.text/skill/skillPayload/attachments`, `TurnContext.persona`, `TeacherQuestion.moduleHint/answeredAt`, `TurnEvent.locked.packageName`, `ModelPolicy.fallback`, `ModelRequest.tools/temperature/cacheKey`, `LearnerProfile.lastSummary`, `TurnTrace.guards[].action`. `z.partialRecord` gives exactly `Partial<Record<…, string>>`. Required `unknown` keys (`TurnEvent.skill.payload`, `ModelChunk.tool_call.args`, `tools[].inputSchema`) infer as required `unknown`. At runtime an explicit `undefined` on an optional key is rejected (invalid fixture "explicit undefined for an optional key"). No mutual-assignability helper was needed.
 
@@ -38,8 +54,8 @@ None needed a workaround. zod 4.6.7 has `.exactOptional()`, which infers `key?: 
 - `packages/contracts/src/`: `limits.ts` (`LIMITS`, `countChars`, `countWords`), `formats.ts` (field-format helpers, not exported from the index), `shared.ts`, `model.ts`, `teacher.ts`, `access.ts`, `locale.ts`, `memory.ts` (incl. `EvidenceEvent`), `turn.ts`, `safety.ts`, `trace.ts`, `ports.ts` (type-only), `index.ts`.
 - `packages/contracts/fixtures/`: `valid/*.ts` (typed with `satisfies`), `invalid/*.ts` (`{ schema, name, value, path }`), `invalid/case.ts`, `omit.ts`, `index.ts` (`schemas`, `validFixtures`, `invalidFixtures` keyed by type name, named demo constants).
 - `packages/contracts/test/`: `spec-types.ts`, `spec-drift.test.ts`, `types.test.ts`, `registry.test.ts`, `roundtrip.test.ts`, `refinements.test.ts`.
-- `packages/contracts`: `package.json` (zod 4.6.7 exact, `.` and `./fixtures` exports to `dist/src` and `dist/fixtures`, `test` script, vitest/coverage/@types/node dev deps, description), `tsconfig.json` (noEmit; src, fixtures, test), `tsconfig.build.json`, `vitest.config.ts` (80% thresholds; actual 100%).
-- `packages/harness`: `package.json` (`./testing` export, `test` script, vitest dev deps; no zod), `tsconfig.build.json` (excludes `*.test.ts` from dist), `vitest.config.ts`, `src/testing/index.ts`, `src/testing/fixtures.test.ts`.
+- `packages/contracts`: `package.json` (zod 4.6.7 exact, a peer + dev dependency since fix round 1; `.` and `./fixtures` exports to `dist/src` and `dist/fixtures`, `test` script, vitest/coverage/@types/node dev deps, description), `tsconfig.json` (noEmit; src, fixtures, test), `tsconfig.build.json`, `vitest.config.ts` (80% thresholds; actual 100%).
+- `packages/harness`: `package.json` (`./testing` export, `test` script, vitest dev deps; zod 4.6.7 since fix round 1), `tsconfig.build.json` (excludes `*.test.ts` from dist), `vitest.config.ts`, `src/testing/index.ts`, `src/testing/fixtures.test.ts`.
 - `pnpm-lock.yaml`, `README.md` (contracts line), `.prettierignore` (spec copy).
 
 ## Deviations
@@ -49,7 +65,7 @@ None needed a workaround. zod 4.6.7 has `.exactOptional()`, which infers `key?: 
 - Harness `build` now uses a new `tsconfig.build.json` (same as `tsconfig.json` minus test files), so tests don't ship in `dist`.
 - `invalidFixtures` is keyed by schema name and each case also carries `schema` (the plan showed both shapes).
 - PR size: about 650 lines of schemas and 420 of tests, plus about 170 lines of spec copy and the fixtures, so it is over 600 lines excluding fixtures; most of the growth is Prettier wrapping at the repo's print width.
-- The harness test uses a minimal `{ safeParse }` type instead of importing zod, since the plan keeps zod out of the harness for now.
+- The harness test uses a minimal `{ safeParse }` type instead of importing zod. Fix round 1 added zod to the harness after all (see item 9), which the plan had kept out.
 - Not written: `docs/tasks/0.3/review.md` (the lead writes it from the three reviewers).
 
 ## Decisions
@@ -101,3 +117,21 @@ Decided: AgentConfig.promptPackVersion must be a semantic version such as 1.0.0 
 Why: Catches values like "latest" that would break pinning.
 Alternatives: Any string.
 Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Size caps and safe formats · decided by tdd-guide · risk: medium
+Decided: After review, the contracts cap sizes and narrow formats the spec left open. Ids are 1–128 letters, digits, _ or -. An attachment storage key is a relative path of at most 200 safe characters with no ".." part; an attachment is a PNG, JPEG, WebP or HEIC image of 1 byte to 20 MB. A skill payload is at most 16 KB of JSON. Turn text is also capped at 8,000 UTF-16 units before the 4,000-character count. Guard reasons are at most 500 characters; rewrite text and alert excerpts at most 8,000. Each locale PII pattern is at most 500 characters and must be a valid regular expression. The numbers live in LIMITS.
+Why: Untrusted or model-made data reaches storage, prompts and alerts; small fixed caps stop abuse and runaway output at the boundary.
+Alternatives: No caps; caps enforced only in the API layer.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 Turn context must be consistent · decided by tdd-guide · risk: medium
+Decided: A turn context is rejected if a retrieved chunk comes from a module the entitlement doesn't allow or from another teacher, or if the entitlement's package id, package version or agent id don't match the package and agent in the context.
+Why: Fails closed if a bug ever mixes another package's or teacher's material into a turn.
+Alternatives: Leave the checks to the pipeline code.
+Reversible: Only by ADR.
+
+### 18 Oct 2026 · 0.3 One shared zod copy · decided by tdd-guide · risk: low
+Decided: Contracts lists zod 4.6.7 as a peer dependency (and a dev dependency for its own tests), and each consumer installs zod itself; the harness now lists zod 4.6.7 because it uses the contracts at runtime.
+Why: Every package then shares one zod, so schemas and their types stay compatible.
+Alternatives: zod as a normal dependency of contracts.
+Reversible: Yes.

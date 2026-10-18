@@ -16,9 +16,9 @@ export const invalid: InvalidCase[] = [
     name: 'mastery p above 1',
     value: {
       ...demoLearnerProfile,
-      mastery: { 'topic.x': { p: 1.2, n: 1, updatedAt: '2026-10-17T10:00:00Z' } },
+      mastery: { topic_x: { p: 1.2, n: 1, updatedAt: '2026-10-17T10:00:00Z' } },
     },
-    path: ['mastery', 'topic.x', 'p'],
+    path: ['mastery', 'topic_x', 'p'],
   },
   {
     schema: 'LearnerProfile',

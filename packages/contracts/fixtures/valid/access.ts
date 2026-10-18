@@ -11,9 +11,10 @@ export const demoEntitlementSubscription = {
   packageVersion: 2,
   status: 'active',
   periodEnd: '2026-11-18T00:00:00Z',
-  allowedModuleIds: ['mod_test_01', 'mod_test_02'],
-  lockedModuleIds: ['mod_test_03'],
-  skills: ['explain', 'coach', 'practice'],
+  // = demoPackagePaid: its modules and skills; locked = the teacher's other modules.
+  allowedModuleIds: ['mod_test_01', 'mod_test_02', 'mod_test_03'],
+  lockedModuleIds: ['mod_test_04'],
+  skills: ['explain', 'coach', 'practice', 'feedback', 'revision'],
 } satisfies Entitlement;
 
 export const demoEntitlementPreview = {
@@ -26,9 +27,10 @@ export const demoEntitlementPreview = {
   packageVersion: 1,
   status: 'trial',
   periodEnd: '2026-10-25T09:30:00+05:30',
+  // = demoPackageFree: its modules and skills; locked = the teacher's other modules.
   allowedModuleIds: ['mod_test_01'],
-  lockedModuleIds: [],
-  skills: ['explain'],
+  lockedModuleIds: ['mod_test_02', 'mod_test_03', 'mod_test_04'],
+  skills: ['explain', 'coach'],
 } satisfies Entitlement;
 
 export const demoEntitlementEval = {
@@ -41,9 +43,10 @@ export const demoEntitlementEval = {
   packageVersion: 1,
   status: 'past_due',
   periodEnd: '2026-10-01T00:00:00.000Z',
-  allowedModuleIds: [],
-  lockedModuleIds: [],
-  skills: [],
+  // = demoPackageFree, like the preview.
+  allowedModuleIds: ['mod_test_01'],
+  lockedModuleIds: ['mod_test_02', 'mod_test_03', 'mod_test_04'],
+  skills: ['explain', 'coach'],
 } satisfies Entitlement;
 
 export const valid = {

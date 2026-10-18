@@ -171,4 +171,110 @@ export const invalid: InvalidCase[] = [
     value: { type: 'safety', level: 'critical' },
     path: ['level'],
   },
+  // ---- Fix round 1: hardening ----
+  {
+    schema: 'Attachment',
+    name: 'storageKey with a .. segment',
+    value: { ...demoAttachment, storageKey: 'test/../secrets/att.png' },
+    path: ['storageKey'],
+  },
+  {
+    schema: 'Attachment',
+    name: 'storageKey with a leading slash',
+    value: { ...demoAttachment, storageKey: '/etc/att.png' },
+    path: ['storageKey'],
+  },
+  {
+    schema: 'Attachment',
+    name: 'storageKey with unsafe characters',
+    value: { ...demoAttachment, storageKey: 'test/uploads/a b?.png' },
+    path: ['storageKey'],
+  },
+  {
+    schema: 'Attachment',
+    name: 'storageKey over 200 characters',
+    value: { ...demoAttachment, storageKey: 'a'.repeat(201) },
+    path: ['storageKey'],
+  },
+  {
+    schema: 'Attachment',
+    name: 'image/svg+xml is not an allowed image type',
+    value: { ...demoAttachment, mime: 'image/svg+xml' },
+    path: ['mime'],
+  },
+  {
+    schema: 'Attachment',
+    name: '0 bytes',
+    value: { ...demoAttachment, bytes: 0 },
+    path: ['bytes'],
+  },
+  {
+    schema: 'Attachment',
+    name: 'over 20 MB',
+    value: { ...demoAttachment, bytes: 20 * 1024 * 1024 + 1 },
+    path: ['bytes'],
+  },
+  {
+    schema: 'TurnInput',
+    name: 'skillPayload over 16 KB of JSON',
+    value: { ...turnInputSkillAction, skillPayload: { blob: 'x'.repeat(16384) } },
+    path: ['skillPayload'],
+  },
+  {
+    schema: 'TurnInput',
+    name: 'text over 8,000 UTF-16 units',
+    value: { ...demoTurnInput, text: 'a'.repeat(8001) },
+    path: ['text'],
+  },
+  {
+    schema: 'TurnInput',
+    name: 'id with unsafe characters',
+    value: { ...demoTurnInput, sessionId: 'ses test;drop' },
+    path: ['sessionId'],
+  },
+  {
+    schema: 'TurnInput',
+    name: 'id over 128 characters',
+    value: { ...demoTurnInput, agentId: 'a'.repeat(129) },
+    path: ['agentId'],
+  },
+  {
+    schema: 'TurnContext',
+    name: 'retrieved chunk from a module outside the entitlement',
+    value: { ...demoTurnContext, retrieved: [{ ...demoChunk, moduleId: 'mod_test_04' }] },
+    path: ['retrieved', 0, 'moduleId'],
+  },
+  {
+    schema: 'TurnContext',
+    name: 'retrieved chunk from another teacher',
+    value: { ...demoTurnContext, retrieved: [{ ...demoChunk, teacherId: 'tch_test_02' }] },
+    path: ['retrieved', 0, 'teacherId'],
+  },
+  {
+    schema: 'TurnContext',
+    name: 'entitlement for another package',
+    value: {
+      ...demoTurnContext,
+      entitlement: { ...demoTurnContext.entitlement, packageId: 'pkg_test_paid' },
+    },
+    path: ['entitlement', 'packageId'],
+  },
+  {
+    schema: 'TurnContext',
+    name: 'entitlement for another package version',
+    value: {
+      ...demoTurnContext,
+      entitlement: { ...demoTurnContext.entitlement, packageVersion: 9 },
+    },
+    path: ['entitlement', 'packageVersion'],
+  },
+  {
+    schema: 'TurnContext',
+    name: 'entitlement for another agent',
+    value: {
+      ...demoTurnContext,
+      entitlement: { ...demoTurnContext.entitlement, agentId: 'agt_test_02' },
+    },
+    path: ['entitlement', 'agentId'],
+  },
 ];

@@ -33,4 +33,23 @@ export const invalid: InvalidCase[] = [
     value: { ok: false, action: 'ignore', reason: 'x' },
     path: [],
   },
+  {
+    schema: 'SafetyAlert',
+    name: 'excerpt over 8,000 characters',
+    value: { ...demoSafetyAlert, excerptRedacted: 'x'.repeat(8001) },
+    path: ['excerptRedacted'],
+  },
+  {
+    schema: 'GuardResult',
+    name: 'block reason over 500 characters',
+    value: { ok: false, action: 'block', reason: 'x'.repeat(501) },
+    // Only one variant matches ok + action, so Zod reports that variant's own path.
+    path: ['reason'],
+  },
+  {
+    schema: 'GuardResult',
+    name: 'rewrite text over 8,000 characters',
+    value: { ok: false, action: 'rewrite', text: 'x'.repeat(8001), reason: 'x' },
+    path: ['text'],
+  },
 ];

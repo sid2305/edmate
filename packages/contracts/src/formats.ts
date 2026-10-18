@@ -1,8 +1,14 @@
 // Field formats (lead answers Q4), shared by the schema modules. Not part of the public API.
 import { z } from 'zod';
+import { LIMITS } from './limits.js';
 
-/** Ids are pseudonymous: any non-empty string, no format. */
-export const id = () => z.string().min(1);
+/** Ids are pseudonymous: 1 to 128 letters, digits, `_` or `-` (fix round 1). */
+export const id = () =>
+  z
+    .string()
+    .min(1)
+    .max(LIMITS.idMaxLength)
+    .regex(/^[A-Za-z0-9_-]+$/, 'letters, digits, _ or -');
 /** Counts, token numbers, versions, money in minor units: non-negative safe integers. */
 export const count = () => z.int().min(0);
 /** Timestamps: ISO 8601 with a `Z` or a numeric offset. */

@@ -21,7 +21,8 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
-    "@edmate/contracts": "workspace:*"
+    "@edmate/contracts": "workspace:*",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
