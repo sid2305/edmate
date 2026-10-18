@@ -369,7 +369,7 @@ tasks:
   deps:
   - '0.3'
   - M0
-  status: review
+  status: done
   risk: expert
   branch: m1/1.8-demo-teacher
   model: plan:sonnet build:opus-5.5/medium content:pedagogy-author(opus) review:sonnet(ts,code)
