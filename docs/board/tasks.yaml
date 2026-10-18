@@ -187,10 +187,10 @@ tasks:
   accept: fixtures round-trip parse/serialize; exported `z.infer` types match Core contracts; `harness/testing` can import the fixtures.
   deps:
   - '0.1'
-  status: planning
+  status: running
   risk: risky
   branch: m0/0.3-contracts
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '0.4'
   milestone: M0
   title: ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction (incl. the probe, public titles and the leak definition)
