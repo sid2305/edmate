@@ -410,9 +410,9 @@ tasks:
   - '1.1'
   - '2.2'
   - M0
-  status: planning
+  status: running
   branch: m2/2.4-metering
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.5'
   milestone: M2
   title: 'Limits: rolling 24-hour message limit per package; monthly cost alarm per teacher that alerts staff and the teacher, and pauses free packages only (paid students keep access until a staff decision)'
@@ -592,9 +592,9 @@ tasks:
   accept: ADR-0004 merged; `TurnConfigStore` exported from @edmate/contracts; type-level test and the spec-types drift test pass with the updated build-plan block; no other contract changes.
   deps:
   - '3.1'
-  status: running
+  status: review
   branch: m3/3.13-turn-config-store
-  model: plan:architect(opus)+lead build:opus-5.5/medium
+  model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
