@@ -615,6 +615,15 @@ tasks:
   status: done
   branch: m3/3.15-adr-0005
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
+- id: '3.16'
+  milestone: M3
+  title: 'Sessions follow the package: when the entitled package or its version changes, end the open session (or start a fresh one) so earlier history, sources and summary from a lapsed package never reach the model'
+  accept: 'A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.'
+  deps:
+  - '3.4'
+  status: todo
+  branch: null
+  model: null
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
