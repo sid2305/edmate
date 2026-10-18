@@ -148,3 +148,9 @@ Decided: (1) A download with a usable content-length must deliver exactly that m
 Why: silent-failure-hunter and security-reviewer, fix round 1. A short body or an empty piece would otherwise become a transcript with a hole in it.
 Alternatives: keep skipping empty pieces and only trace them (the gap would still reach ingestion unflagged); a separate anomaly in metering (the meter has no notes field; the trace is where it shows).
 Reversible: yes. A class with a long genuine silence (more than one 24 MiB piece) now fails. If that happens in practice, 5.2 can lower the piece size or treat a near-silent piece by its audio level.
+
+### 18 Oct 2026 · 2.7 Review · decided by team lead · risk: low
+Decided: The HNSW index in packages/db/migrations/0006_chunk_embedding_dimension.sql keeps pgvector's default tuning (m 16, ef_construction 64). A genuinely silent stretch in the middle of a recording now fails the whole transcription rather than leaving a gap.
+Why: Defaults are right at pilot scale; failing loudly lets an operator retry or check a recording instead of storing a transcript with a hidden hole.
+Alternatives: Tune the index now; skip silent chunks.
+Reversible: Yes.
