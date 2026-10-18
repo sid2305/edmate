@@ -3,7 +3,8 @@
 // fields to variables. Variables use the EDMATE_ prefix, not SDK defaults such as
 // OPENAI_API_KEY, so a key can reach an SDK only through this module.
 // Anthropic is the main provider (decision log, 18 Oct 2026); openai-compatible covers
-// OpenRouter and self-hosted servers.
+// OpenRouter and self-hosted servers; openai is OpenAI itself, for Whisper transcription and the
+// platform embedding model (task 2.7).
 import type { Secret } from './secret.js';
 
 export const PROVIDER_KEYS = {
@@ -12,6 +13,9 @@ export const PROVIDER_KEYS = {
   },
   'openai-compatible': {
     apiKey: { variable: 'EDMATE_OPENAI_COMPATIBLE_API_KEY' },
+  },
+  openai: {
+    apiKey: { variable: 'EDMATE_OPENAI_API_KEY' },
   },
 } as const satisfies Readonly<
   Record<string, Readonly<Record<string, { readonly variable: string }>>>

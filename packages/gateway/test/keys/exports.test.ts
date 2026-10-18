@@ -26,11 +26,24 @@ describe('package exports', () => {
         'loadBundledPrices',
         'parsePriceTable',
         'PriceTableError',
+        // Task 2.7: transcription and the platform embedding model.
+        'createWhisperTranscriber',
+        'DEFAULT_MAX_DOWNLOAD_BYTES',
+        'WHISPER_MAX_UPLOAD_BYTES',
+        'WHISPER_MODEL',
+        'defaultChunker',
+        'TranscriberError',
+        'redactUrl',
+        'meterTranscriber',
+        'createEmbeddingAdapter',
+        'EMBEDDING_CONFIG',
       ].sort(),
     );
     expect('keyValueSchema' in gateway).toBe(false);
     expect('createSdkAdapter' in gateway).toBe(false);
     expect('missingCapability' in gateway).toBe(false);
     expect('ModelPriceSchema' in gateway).toBe(false);
+    expect('createOpenAITranscriptionModel' in gateway).toBe(false);
+    expect('createScriptedTranscriber' in gateway).toBe(false);
   });
 });

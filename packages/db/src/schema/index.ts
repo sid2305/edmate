@@ -3,6 +3,7 @@ export {
   agentStatus,
   auditActorRole,
   chunkKind,
+  EMBEDDING_DIMENSIONS,
   entitlementSource,
   evidenceSource,
   ledgerDirection,
