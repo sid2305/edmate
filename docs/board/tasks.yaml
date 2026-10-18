@@ -439,11 +439,11 @@ tasks:
   deps:
   - '2.2'
   - M0
-  status: todo
+  status: planning
   needs_decision:
   - transcription
-  branch: null
-  model: null
+  branch: m2/2.7-transcriber-embeddings
+  model: plan:sonnet
 - id: '3.1'
   milestone: M3
   title: 'Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture'
