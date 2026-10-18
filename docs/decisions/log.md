@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by you · risk: low
+Decided: The scaffold does not create empty placeholder folders in risky or safety paths (harness access and guardrails, prompt packs, skills, locales, safety and locked evals, ADRs). The task that fills each folder creates it; the README lists the full layout.
+Why: Empty files there would trigger safety review and approval for nothing.
+Alternatives: Create every folder now.
+Reversible: Yes.
+
+### 17 Oct 2026 · 0.1 Harness purity rule · decided by you · risk: low
+Decided: The harness may import only contracts, zod, mathjs and its own files. Node built-ins (like node:crypto or fs) are blocked too.
+Why: Rule 3 taken literally keeps the harness free of hidden I/O; a later need gets an explicit allow-list entry and a log entry.
+Alternatives: Allow all node: built-ins.
+Reversible: Yes, a one-line lint change.
+
 ### 17 Oct 2026 · Product · decided by you · risk: high
 Decided: When the teacher's material doesn't cover a question, the agent says so and sends the question to the teacher. The teacher answers from an inbox; the answer goes back to the student and becomes a teacher note and a test case, so the agent can answer similar questions next time. The agent never fills gaps with general knowledge.
 Why: Keeps the teacher in the loop and makes the agent better with every answer.
