@@ -95,3 +95,9 @@ Decided: when stored rows build an entitlement that fails `EntitlementSchema` (f
 Why: corrupt data should be loud, not look like "no subscription".
 Alternatives: return `null`.
 Reversible: yes.
+
+### 18 Oct 2026 · 3.2 Review · decided by team lead · risk: low
+Decided: The `sessionId as string` cast in packages/harness/src/pipeline/steps/entitle.ts stays (it follows a successful parse). The style card is loaded as the exact immutable row `agent.styleCardId` names; task 8.4 settles whether a newer card version should replace it. Round-trip parallelisation moves to 3.14; subscription expiry to 10.3.
+Why: None changes behaviour or safety now.
+Alternatives: Use the parsed value; load the latest card version now.
+Reversible: Yes.
