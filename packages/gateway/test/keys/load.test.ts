@@ -48,6 +48,18 @@ describe('PROVIDER_KEYS', () => {
     expect(PROVIDER_KEYS.anthropic.apiKey.variable).toBe('EDMATE_ANTHROPIC_API_KEY');
   });
 
+  it('names the openai key (Whisper and embeddings, task 2.7) with the EDMATE_ prefix', async () => {
+    expect(PROVIDER_KEYS.openai.apiKey.variable).toBe('EDMATE_OPENAI_API_KEY');
+    expect(Object.keys(PROVIDER_KEYS).sort()).toEqual(['anthropic', 'openai', 'openai-compatible']);
+    const value = fakeKey();
+    const keys = await loadProviderKeys({
+      source: envKeySource({ EDMATE_OPENAI_API_KEY: value, OPENAI_API_KEY: fakeKey() }),
+      required: ['openai'],
+    });
+    expect(keys.providers()).toEqual(['openai']);
+    expect(keys.get('openai').apiKey.reveal() === value).toBe(true);
+  });
+
   it('loads both providers through the same door', async () => {
     const anthropic = fakeKey();
     const compatible = fakeKey();

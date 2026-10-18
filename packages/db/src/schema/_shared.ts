@@ -69,11 +69,23 @@ export function vectorFromDriver(value: string): number[] {
 }
 
 /**
- * pgvector `vector` with no fixed dimension. The embedding model (and so its dimension and the
- * HNSW index) is chosen in tasks 2.7/5.3, which add both in a later, additive migration.
+ * Dimension of every stored embedding: text-embedding-3-small (task 2.7, provisional until 7.6).
+ * It must equal `EMBEDDING_CONFIG.dimension` in @edmate/gateway; changing the model means a new
+ * migration that changes the column type and rebuilds the HNSW index.
  */
-export const vector = customType<{ data: number[]; driverData: string }>({
-  dataType: () => 'vector',
+export const EMBEDDING_DIMENSIONS = 1536;
+
+/**
+ * pgvector `vector`, optionally with a fixed dimension (`vector(1536)`), which Postgres then
+ * enforces on every insert. Without `dimensions` the column takes any length.
+ */
+export const vector = customType<{
+  data: number[];
+  driverData: string;
+  config: { dimensions?: number };
+}>({
+  dataType: (config) =>
+    config?.dimensions === undefined ? 'vector' : `vector(${String(config.dimensions)})`,
   toDriver: vectorToDriver,
   fromDriver: vectorFromDriver,
 });

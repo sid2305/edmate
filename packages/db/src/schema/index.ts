@@ -2,6 +2,7 @@
 export {
   agentStatus,
   chunkKind,
+  EMBEDDING_DIMENSIONS,
   entitlementSource,
   evidenceSource,
   ledgerDirection,

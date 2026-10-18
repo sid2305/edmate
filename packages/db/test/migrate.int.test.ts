@@ -14,7 +14,7 @@ import { createDb } from '../src/client.js';
 import { runMigrateCli } from '../src/cli.js';
 import { migrateDatabase } from '../src/migrate.js';
 import * as s from '../src/schema/index.js';
-import { DATA_MODEL_TABLES, latestSnapshot } from './helpers.js';
+import { DATA_MODEL_TABLES, latestSnapshot, migrationSql } from './helpers.js';
 import {
   admin,
   createDatabase,
@@ -28,6 +28,9 @@ import {
 const up = await postgresUp('migration integration tests');
 const dbName = throwawayName();
 const TEST_URL = urlFor(dbName);
+
+/** A text-embedding-3-small shaped vector (task 2.7): 1536 small, distinct values. */
+const embedding1536 = Array.from({ length: 1536 }, (_, i) => ((i % 7) - 3) / 4);
 
 /** Tables, columns, indexes and extensions as Postgres reports them. */
 async function inspect() {
@@ -141,10 +144,23 @@ describe.skipIf(!up)(
           text: 'Compound interest grows exponentially',
           sourceTitle: 'Notes',
           locator: 'p. 1',
-          embedding: [0.5, -1, 2],
+          embedding: embedding1536,
         });
         const [chunk] = await db.select().from(s.chunks).where(eq(s.chunks.teacherId, teacher.id));
-        expect(chunk?.embedding).toEqual([0.5, -1, 2]);
+        expect(chunk?.embedding).toEqual(embedding1536);
+        // vector(1536): Postgres refuses any other length (task 2.7).
+        await expect(
+          db.insert(s.chunks).values({
+            teacherId: teacher.id,
+            documentId: doc!.id,
+            moduleId: mod!.id,
+            kind: 'material',
+            text: 'wrong size',
+            sourceTitle: 'Notes',
+            locator: 'p. 2',
+            embedding: [0.5, -1, 2],
+          }),
+        ).rejects.toThrow();
         expect(chunk?.search).toContain('compound');
 
         const noEmbedding = await db
@@ -230,6 +246,37 @@ describe.skipIf(!up)(
       } finally {
         await close();
       }
+    });
+
+    it('0005 stops, and keeps the data, when an embedding has another dimension (task 2.7)', async () => {
+      const sql = migrationSql().find((f) => f.file === '0005_chunk_embedding_dimension.sql')!.sql;
+      const [guard] = sql.split('--> statement-breakpoint');
+      await admin(async (c) => {
+        await c.query('BEGIN');
+        try {
+          // Back to the pre-0005 column, holding one 3-dimensional vector.
+          await c.query('DROP INDEX "chunks_embedding_hnsw_idx"');
+          await c.query('ALTER TABLE "chunks" ALTER COLUMN "embedding" TYPE vector');
+          const doc = await c.query<{ id: string; teacher_id: string; module_id: string }>(
+            'select id, teacher_id, module_id from documents limit 1',
+          );
+          const d = doc.rows[0]!;
+          await c.query(
+            `insert into chunks (id, teacher_id, document_id, module_id, kind, text, source_title, locator, embedding)
+             values ('chk_guard', $1, $2, $3, 'material', 'x', 'Notes', 'p. 9', '[1,2,3]')`,
+            [d.teacher_id, d.id, d.module_id],
+          );
+          await expect(c.query(guard!)).rejects.toThrow(/not 1536-dimensional/);
+        } finally {
+          await c.query('ROLLBACK');
+        }
+        // The guard passes on the migrated database (every stored vector is 1536-dimensional).
+        await c.query(guard!);
+        const kept = await c.query<{ n: string }>(
+          'select count(*)::text as n from chunks where embedding is not null',
+        );
+        expect(kept.rows[0]?.n).toBe('1');
+      }, TEST_URL);
     });
 
     it('tear down (drop the test schemas) and apply again from scratch', async () => {

@@ -9,7 +9,7 @@ import {
 } from '@edmate/contracts';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import * as schema from '../src/schema/index.js';
-import { vectorFromDriver, vectorToDriver } from '../src/schema/_shared.js';
+import { EMBEDDING_DIMENSIONS, vectorFromDriver, vectorToDriver } from '../src/schema/_shared.js';
 import {
   DATA_MODEL_TABLES,
   DESTRUCTIVE_SQL,
@@ -195,9 +195,22 @@ describe('constraints the Data model states', () => {
     }
   });
 
-  it('chunks carry a nullable vector embedding and a generated tsvector with a GIN index', () => {
+  it('chunks carry a nullable vector(1536) embedding with a cosine HNSW index (task 2.7)', () => {
     const chunks = table('chunks');
-    expect(chunks.columns.embedding?.type).toBe('vector');
+    expect(EMBEDDING_DIMENSIONS).toBe(1536);
+    expect(chunks.columns.embedding?.type).toBe('vector(1536)');
+    expect(chunks.columns.embedding?.notNull).toBe(false);
+    const hnsw = Object.values(chunks.indexes).filter((i) => i.method === 'hnsw');
+    expect(hnsw.map((i) => i.name)).toEqual(['chunks_embedding_hnsw_idx']);
+    expect(hnsw[0]?.columns.map((c) => [c.expression, c.opclass])).toEqual([
+      ['embedding', 'vector_cosine_ops'],
+    ]);
+    const col = getTableConfig(schema.chunks).columns.find((c) => c.name === 'embedding');
+    expect(col?.getSQLType()).toBe('vector(1536)');
+  });
+
+  it('chunks carry a generated tsvector with a GIN index', () => {
+    const chunks = table('chunks');
     expect(chunks.columns.embedding?.notNull).toBe(false);
     expect(chunks.columns.search?.type).toBe('tsvector');
     const gin = Object.values(chunks.indexes).find((i) => i.method === 'gin');
@@ -317,6 +330,18 @@ describe('migrations are create-only', () => {
       '0003_usage_ledger_metering.sql: usage_ledger.output_tokens',
       '0003_usage_ledger_metering.sql: usage_ledger.cost_micro_usd',
     ]);
+  });
+
+  it('fixes the embedding dimension without discarding any stored vector (task 2.7)', () => {
+    const m = migrationSql().find((f) => f.file === '0005_chunk_embedding_dimension.sql');
+    expect(m, '0005 exists').toBeDefined();
+    const sql = m!.sql;
+    // The guard runs first and stops the migration instead of dropping a wrong-sized vector.
+    const guard = sql.indexOf('RAISE EXCEPTION');
+    const alter = sql.indexOf('SET DATA TYPE vector(1536)');
+    expect(guard > 0 && alter > guard).toBe(true);
+    expect(sql).toMatch(/vector_dims\("embedding"\) <> 1536/);
+    expect(sql).not.toMatch(/SET\s+"embedding"\s*=|USING\s+(?:NULL|CASE)/i);
   });
 
   it('enables pgvector before any table uses it', () => {

@@ -37,12 +37,15 @@ export interface MeterSink {
   recordUnmetered(u: UnmeteredUsage): Promise<void>;
 }
 
+/** The calls metering wraps: the ModelGateway methods, plus Transcriber.transcribe (task 2.7). */
+export type MeteredMethod = 'stream' | 'generateObject' | 'embed' | 'transcribe';
+
 /** A loud, structured log line. Names a model or a method, never student data. */
 export type MeteringWarning =
   | { readonly event: 'metering.unpriced_model'; readonly model: string }
   | {
       readonly event: 'metering.failed';
-      readonly method: 'stream' | 'generateObject' | 'embed';
+      readonly method: MeteredMethod;
       /** The error's class name only; its message could quote a driver's parameters. */
       readonly error: string;
     };

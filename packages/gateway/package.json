@@ -8,16 +8,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/pricing/prices.yaml', 'dist/pricing/prices.yaml')\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "test:live": "EDMATE_LIVE_TESTS=1 vitest run -c vitest.live.config.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.82",
+    "@ai-sdk/openai": "4.0.96",
     "@ai-sdk/openai-compatible": "3.0.71",
     "@edmate/contracts": "workspace:*",
     "ai": "7.0.143",
