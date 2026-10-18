@@ -8,6 +8,7 @@ import { sessionsRepo } from './sessions.js';
 import { subscriptionsRepo } from './subscriptions.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
+import { usageLedgerRepo } from './usage-ledger.js';
 
 type Methods = Record<string, (...args: never[]) => Promise<unknown>>;
 
@@ -36,6 +37,7 @@ export function createRepositories(db: Db) {
     learnerProfiles: guardAll('learnerProfiles', learnerProfilesRepo(db)),
     evidenceEvents: guardAll('evidenceEvents', evidenceEventsRepo(db)),
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
+    usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
   };
 }
 
@@ -55,4 +57,19 @@ export type { TeacherQuestionForTeacher } from './map.js';
 export type { SessionRow } from './sessions.js';
 export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
 export type { LiveSubscription } from './subscriptions.js';
-export { transcriptStoreFor } from './ports.js';
+export type {
+  UnmeteredEntry,
+  UnmeteredReason,
+  UsageEntry,
+  UsageRow,
+  UsageSource,
+  UsageStatus,
+  UsageTotals,
+} from './usage-ledger.js';
+export {
+  transcriptStoreFor,
+  usageMeterFor,
+  type ScopedUsageMeter,
+  type UnmeteredUsageInput,
+  type UsageMeterContext,
+} from './ports.js';

@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -14,6 +15,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import {
+  entitlementSource,
   evidenceSource,
   id,
   messageRole,
@@ -21,6 +23,7 @@ import {
   teacherQuestionStatus,
   timestamps,
   tstz,
+  usageStatus,
 } from './_shared.js';
 import { agents, packages } from './agents.js';
 import { topics } from './content.js';
@@ -88,7 +91,13 @@ export const turnTraces = pgTable(
   (t) => [index('turn_traces_session_id_idx').on(t.sessionId)],
 );
 
-/** Model spend per teacher, package and student: caps and dashboards. */
+/**
+ * Model spend per teacher, package and student: caps and dashboards. One row per model call
+ * (task 2.4). `status` says whether the figures are real: an `unknown` row (the provider reported
+ * no usage) or an `unpriced` row (no price for the model) is never a free call, even though the
+ * NOT NULL columns from 1.1 hold 0 or '' for it; the checks below pin those placeholders, and the
+ * repository reads them back as null.
+ */
 export const usageLedger = pgTable(
   'usage_ledger',
   {
@@ -103,6 +112,15 @@ export const usageLedger = pgTable(
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
     costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    /**
+     * The turn the call served. Not a foreign key: meter and commit are independent async steps,
+     * so a usage row never waits for (or depends on) a trace.
+     */
+    turnId: text('turn_id').notNull(),
+    source: entitlementSource('source').notNull(),
+    status: usageStatus('status').notNull().default('recorded'),
+    /** null when recorded; `no_usage_reported` or `unpriced_model:<model>` otherwise. */
+    reason: text('reason'),
     ...timestamps(),
   },
   (t) => [
@@ -113,6 +131,20 @@ export const usageLedger = pgTable(
     ),
     index('usage_ledger_student_id_idx').on(t.studentId),
     index('usage_ledger_package_id_idx').on(t.packageId),
+    index('usage_ledger_teacher_id_turn_id_idx').on(t.teacherId, t.turnId),
+    check(
+      'usage_ledger_counts_non_negative',
+      sql`${t.inputTokens} >= 0 and ${t.outputTokens} >= 0 and ${t.costMicroUsd} >= 0`,
+    ),
+    check(
+      'usage_ledger_reason_matches_status',
+      sql`(${t.status} = 'recorded' and ${t.reason} is null and ${t.model} <> '')
+        or (${t.status} = 'unknown' and ${t.reason} is not distinct from 'no_usage_reported'
+          and ${t.model} = '' and ${t.inputTokens} = 0 and ${t.outputTokens} = 0
+          and ${t.costMicroUsd} = 0)
+        or (${t.status} = 'unpriced' and ${t.reason} is not distinct from ('unpriced_model:' || ${t.model})
+          and ${t.model} <> '' and ${t.costMicroUsd} = 0)`,
+    ),
   ],
 );
 

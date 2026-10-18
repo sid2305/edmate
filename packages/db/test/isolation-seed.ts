@@ -32,6 +32,7 @@ export const ids = {
   session: (p: Pair) => `ses_${lc(p)}`,
   question: (p: Pair) => `tq_${lc(p)}`,
   subscription: (p: Pair) => `sub_${lc(p)}`,
+  turn: (p: Pair) => `turn_${lc(p)}`,
 };
 
 export function agentConfig(t: Teacher): AgentConfig {
@@ -189,6 +190,19 @@ export async function seed(db: Db): Promise<void> {
       packageVersionId: ids.packageVersion(t),
       status: 'active',
       periodEnd: new Date('2026-12-01T00:00:00Z'),
+    });
+    await db.insert(s.usageLedger).values({
+      id: `ul_${lc(p)}`,
+      teacherId: tid,
+      packageId: ids.pkg(t),
+      studentId: sid,
+      turnId: ids.turn(p),
+      source: 'subscription',
+      model: 'scripted',
+      tier: 'main',
+      inputTokens: 10,
+      outputTokens: 5,
+      costMicroUsd: 100,
     });
     await db.insert(s.teacherQuestions).values({
       id: ids.question(p),

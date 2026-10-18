@@ -49,8 +49,19 @@ runtime with `CASES`, and `test/scope.test.ts` calls every method with bad scope
 Frozen ports without a scope parameter are bound to a scope at construction:
 `transcriptStoreFor(repos, scope)` returns a `TranscriptStore` for one student x teacher, built
 per turn by the caller. Other port adapters (EntitlementStore 3.2, ProfileStore 6.2,
-TeacherQuestionStore / CorrectionStore 5.10, UsageMeter 2.4, TraceSink 3.8 / 7.7, RetrievalIndex
-5.3 / 5.4) belong to their tasks and must add their isolation cases here.
+TeacherQuestionStore / CorrectionStore 5.10, TraceSink 3.8 / 7.7, RetrievalIndex 5.3 / 5.4)
+belong to their tasks and must add their isolation cases here.
+
+**UsageMeter (task 2.4, done).** `usageMeterFor(repos, scope)` binds one student x teacher and
+returns the frozen `UsageMeter` plus `recordUnmetered`: the sink `@edmate/gateway`'s
+`createMeteredGateway` writes to. A context naming another pair is `scope`. The `usageLedger`
+repository's four methods have their cases in `CASES`; writes take the package from the scope's
+teacher (`INSERT … SELECT … FROM packages WHERE id = $p AND teacher_id = $t`, else `not_found`).
+A call with unknown usage, or an unpriced model, is a row with `status` `unknown` / `unpriced`
+and a fixed `reason`; the NOT NULL columns from 1.1 hold `''` / `0` placeholders that the table's
+check constraint pins, and reads return them as `null`. Rows hold ids, the model id, tier, counts,
+cost and the reason code only; never request text (`test/usage-ledger.int.test.ts` checks the
+parameters every write sends).
 
 ## Package surface
 

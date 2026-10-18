@@ -212,6 +212,38 @@ describe('constraints the Data model states', () => {
   });
 });
 
+describe('usage_ledger: one row per model call (task 2.4)', () => {
+  const t = table('usage_ledger') as SnapshotTable & {
+    checkConstraints: Record<string, { name: string; value: string }>;
+  };
+
+  it('carries the turn and who pays, with a status and reason', () => {
+    expect(t.columns.turn_id?.notNull).toBe(true);
+    expect(t.columns.source?.notNull).toBe(true);
+    expect(t.columns.status?.notNull).toBe(true);
+    expect(t.columns.reason?.notNull).toBe(false);
+    // turn_id is not a foreign key: a usage row never depends on a trace row.
+    expect(Object.values(t.foreignKeys).some((f) => f.columnsFrom.includes('turn_id'))).toBe(false);
+  });
+
+  it('is indexed on (teacher_id, turn_id) for cost per turn', () => {
+    const idx = Object.values(t.indexes).find(
+      (i) => i.name === 'usage_ledger_teacher_id_turn_id_idx',
+    );
+    expect(idx?.columns.map((c) => c.expression)).toEqual(['teacher_id', 'turn_id']);
+  });
+
+  it('checks that unknown and unpriced rows can never look like a priced call', () => {
+    expect(Object.keys(t.checkConstraints).sort()).toEqual([
+      'usage_ledger_counts_non_negative',
+      'usage_ledger_reason_matches_status',
+    ]);
+    const rule = t.checkConstraints.usage_ledger_reason_matches_status?.value ?? '';
+    expect(rule).toMatch(/'unknown'.*'no_usage_reported'/s);
+    expect(rule).toMatch(/'unpriced'.*'unpriced_model:'/s);
+  });
+});
+
 describe('enums match the contracts', () => {
   const values = (name: string) => snapshot.enums[`public.${name}`]?.values;
 
@@ -232,6 +264,12 @@ describe('enums match the contracts', () => {
   });
   it('model_tier = Usage.tier', () => {
     expect(values('model_tier')).toEqual(UsageSchema.shape.tier.options);
+  });
+  it('entitlement_source = Entitlement.source', () => {
+    expect(values('entitlement_source')).toEqual(EntitlementSchema.shape.source.options);
+  });
+  it('usage_status is recorded, unknown or unpriced (task 2.4)', () => {
+    expect(values('usage_status')).toEqual(['recorded', 'unknown', 'unpriced']);
   });
   it('user_role and agent_status follow the Data model', () => {
     expect(values('user_role')).toEqual(['student', 'teacher', 'staff']);

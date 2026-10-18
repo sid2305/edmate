@@ -522,7 +522,146 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (rows: { text: string; studentId: string; teacherId: string }[]) =>
       rows.flatMap((q) => [pairOfIds(q.studentId, q.teacherId), ...markers(q.text)]),
   },
+  // Task 2.4. Writes: any student of a teacher may be billed on that teacher's package, so the
+  // owner is the teacher half of the pair; another teacher's package is not_found.
+  'usageLedger.record': {
+    scope: 'student',
+    op: 'write',
+    owns: (a, t) => teacherOf(a) === teacherOf(t),
+    attempt: async (r, scope, _actor, target) => {
+      const turnId = uid('turn_rec');
+      await r.usageLedger.record(scope, ids.pkg(teacherOf(target)), {
+        turnId,
+        source: 'subscription',
+        usage: { model: 'priced', tier: 'main', inputTokens: 3, outputTokens: 4, costMicroUsd: 9 },
+      });
+      return turnId;
+    },
+    verify: (r, actor, turnId) => onlyPairSeesTurn(r, actor, turnId as string),
+    mismatches: (a) => [
+      [
+        'negative tokens',
+        (r) =>
+          r.usageLedger.record(sScope(a), ids.pkg(teacherOf(a)), {
+            turnId: uid('turn_bad'),
+            source: 'subscription',
+            usage: { model: 'm', tier: 'main', inputTokens: -1, outputTokens: 0, costMicroUsd: 0 },
+          }),
+        'invalid',
+      ],
+      [
+        'an empty model',
+        (r) =>
+          r.usageLedger.record(sScope(a), ids.pkg(teacherOf(a)), {
+            turnId: uid('turn_bad'),
+            source: 'subscription',
+            usage: { model: '', tier: 'main', inputTokens: 1, outputTokens: 1, costMicroUsd: 1 },
+          }),
+        'invalid',
+      ],
+      [
+        'an unknown source',
+        (r) =>
+          r.usageLedger.record(sScope(a), ids.pkg(teacherOf(a)), {
+            turnId: uid('turn_bad'),
+            source: 'free' as never,
+            usage: { model: 'm', tier: 'main', inputTokens: 1, outputTokens: 1, costMicroUsd: 1 },
+          }),
+        'invalid',
+      ],
+      [
+        'a package id that is not an id',
+        (r) =>
+          r.usageLedger.record(sScope(a), "pkg' or 1=1", {
+            turnId: uid('turn_bad'),
+            source: 'subscription',
+            usage: { model: 'm', tier: 'main', inputTokens: 1, outputTokens: 1, costMicroUsd: 1 },
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'usageLedger.recordUnmetered': {
+    scope: 'student',
+    op: 'write',
+    owns: (a, t) => teacherOf(a) === teacherOf(t),
+    attempt: async (r, scope, _actor, target) => {
+      const turnId = uid('turn_unk');
+      await r.usageLedger.recordUnmetered(scope, ids.pkg(teacherOf(target)), {
+        turnId,
+        source: 'eval',
+        tier: 'small',
+        reason: 'no_usage_reported',
+      });
+      return turnId;
+    },
+    verify: (r, actor, turnId) => onlyPairSeesTurn(r, actor, turnId as string),
+    mismatches: (a) => {
+      const base = { turnId: 'turn_bad', source: 'subscription', tier: 'main' } as const;
+      const write = (entry: unknown) => (r: Repos) =>
+        r.usageLedger.recordUnmetered(sScope(a), ids.pkg(teacherOf(a)), entry as never);
+      return [
+        [
+          'unknown usage with tokens',
+          write({
+            ...base,
+            reason: 'no_usage_reported',
+            tokens: { inputTokens: 1, outputTokens: 1 },
+          }),
+          'invalid',
+        ],
+        [
+          'unknown usage with a model',
+          write({ ...base, reason: 'no_usage_reported', model: 'm' }),
+          'invalid',
+        ],
+        [
+          'unpriced without tokens',
+          write({ ...base, reason: 'unpriced_model:m', model: 'm' }),
+          'invalid',
+        ],
+        [
+          'unpriced naming another model',
+          write({
+            ...base,
+            reason: 'unpriced_model:x',
+            model: 'm',
+            tokens: { inputTokens: 1, outputTokens: 1 },
+          }),
+          'invalid',
+        ],
+        ['a free-text reason', write({ ...base, reason: 'student said hello' }), 'invalid'],
+      ];
+    },
+  },
+  'usageLedger.listForTurn': {
+    scope: 'student',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, p) => r.usageLedger.listForTurn(scope, ids.turn(p)),
+    random: (r, scope, rid) => r.usageLedger.listForTurn(scope, rid),
+    owners: (rows: { studentId: string; teacherId: string }[]) =>
+      rows.map((u) => pairOfIds(u.studentId, u.teacherId)),
+  },
+  'usageLedger.sumForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.usageLedger.sumForStudent(scope),
+    random: (r, _scope, rid) => r.usageLedger.sumForStudent({ studentId: rid, teacherId: rid }),
+    // Exact sums per pair are checked against raw SQL in "cost per turn and per student" below.
+    owners: (x: { studentId: string; teacherId: string; calls: number }) =>
+      x.calls > 0 ? [pairOfIds(x.studentId, x.teacherId)] : [],
+  },
 };
+
+/** After a usage write by `actor` on turn `turnId`: only the actor's scope sees that turn. */
+async function onlyPairSeesTurn(r: Repos, actor: Pair, turnId: string) {
+  for (const p of PAIRS) {
+    const rows = await r.usageLedger.listForTurn(sScope(p), turnId);
+    expect(rows.length, `${p} sees ${actor}'s usage row`).toBe(p === actor ? 1 : 0);
+  }
+}
 
 /** Seeded PRNG (mulberry32), so random ids are reproducible. */
 function prng(seedValue: number) {
