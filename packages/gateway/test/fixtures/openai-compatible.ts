@@ -55,13 +55,13 @@ function toolStream(name: string, args: string): string {
   ]);
 }
 
-function completion(content: string): string {
+function completion(content: string, finishReason = 'stop'): string {
   return JSON.stringify({
     id: 'chatcmpl-fixture',
     object: 'chat.completion',
     created: 0,
     model: MODEL,
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
     usage: {
       prompt_tokens: EXPECTED.inputTokens,
       completion_tokens: EXPECTED.outputTokens,
@@ -73,16 +73,20 @@ function completion(content: string): string {
 const errorBody = (code: string, message: string) =>
   JSON.stringify({ error: { message, type: 'invalid_request_error', code } });
 
+function textStream(finishReason: string): string {
+  return sse([
+    chunk({ role: 'assistant', content: EXPECTED.textDeltas[0] }),
+    chunk({ content: EXPECTED.textDeltas[1] }),
+    chunk({}, finishReason),
+    usageChunk,
+    done,
+  ]);
+}
+
 export const openAICompatibleFixtures: ContractFixtures = {
-  textStream: {
-    body: sse([
-      chunk({ role: 'assistant', content: EXPECTED.textDeltas[0] }),
-      chunk({ content: EXPECTED.textDeltas[1] }),
-      chunk({}, 'stop'),
-      usageChunk,
-      done,
-    ]),
-  },
+  textStream: { body: textStream('stop') },
+  truncatedStream: { body: textStream('length') },
+  filteredStream: { body: textStream('content_filter') },
   toolCallStream: {
     body: toolStream(EXPECTED.toolCall.wireName, JSON.stringify(EXPECTED.toolCall.args)),
   },
@@ -96,6 +100,9 @@ export const openAICompatibleFixtures: ContractFixtures = {
   },
   object: { body: completion(JSON.stringify(EXPECTED.object)) },
   badObject: { body: completion(JSON.stringify({ answer: 'forty-two' })) },
+  truncatedObject: { body: completion('{"answ', 'length') },
+  truncatedValidObject: { body: completion(JSON.stringify(EXPECTED.object), 'length') },
+  filteredObject: { body: completion('', 'content_filter') },
   embeddings: {
     body: JSON.stringify({
       object: 'list',

@@ -58,14 +58,14 @@ function toolStream(name: string, partialJson: string): string {
   ]);
 }
 
-function message(text: string): string {
+function message(text: string, stopReason = 'end_turn'): string {
   return JSON.stringify({
     id: 'msg_fixture',
     type: 'message',
     role: 'assistant',
     model: MODEL,
     content: [{ type: 'text', text }],
-    stop_reason: 'end_turn',
+    stop_reason: stopReason,
     stop_sequence: null,
     usage: { input_tokens: EXPECTED.inputTokens, output_tokens: EXPECTED.outputTokens },
   });
@@ -74,25 +74,29 @@ function message(text: string): string {
 const errorBody = (type: string, msg: string) =>
   JSON.stringify({ type: 'error', error: { type, message: msg } });
 
+function textStream(stopReason: string): string {
+  return sse([
+    messageStart,
+    [
+      'content_block_start',
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    ],
+    ...EXPECTED.textDeltas.map(
+      (text) =>
+        [
+          'content_block_delta',
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+        ] as const,
+    ),
+    ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+    ...messageEnd(stopReason),
+  ]);
+}
+
 export const anthropicFixtures: ContractFixtures = {
-  textStream: {
-    body: sse([
-      messageStart,
-      [
-        'content_block_start',
-        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
-      ],
-      ...EXPECTED.textDeltas.map(
-        (text) =>
-          [
-            'content_block_delta',
-            { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
-          ] as const,
-      ),
-      ['content_block_stop', { type: 'content_block_stop', index: 0 }],
-      ...messageEnd('end_turn'),
-    ]),
-  },
+  textStream: { body: textStream('end_turn') },
+  truncatedStream: { body: textStream('max_tokens') },
+  filteredStream: { body: textStream('refusal') },
   toolCallStream: {
     body: toolStream(EXPECTED.toolCall.wireName, JSON.stringify(EXPECTED.toolCall.args)),
   },
@@ -114,6 +118,9 @@ export const anthropicFixtures: ContractFixtures = {
   },
   object: { body: message(JSON.stringify(EXPECTED.object)) },
   badObject: { body: message(JSON.stringify({ answer: 'forty-two' })) },
+  truncatedObject: { body: message('{"answ', 'max_tokens') },
+  truncatedValidObject: { body: message(JSON.stringify(EXPECTED.object), 'max_tokens') },
+  filteredObject: { body: message('I cannot help with that.', 'refusal') },
   rateLimited: { status: 429, body: errorBody('rate_limit_error', 'Number of requests exceeded') },
   contextTooLong: {
     status: 400,

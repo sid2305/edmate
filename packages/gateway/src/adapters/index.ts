@@ -1,6 +1,11 @@
 // Provider adapters behind the ModelGateway port (task 2.2).
 export type { AdapterCapabilities, ModelAdapter } from './types.js';
-export { GatewayError, mapProviderError, type GatewayErrorCode } from './errors.js';
+export {
+  GatewayError,
+  mapProviderError,
+  type GatewayErrorCode,
+  type GatewayStopReason,
+} from './errors.js';
 export {
   ANTHROPIC_CAPABILITIES,
   createAnthropicAdapter,

@@ -6,7 +6,7 @@ import {
 } from '../../src/adapters/openai-compatible.js';
 import { Secret } from '../../src/keys/secret.js';
 import { openAICompatibleFixtures } from '../fixtures/openai-compatible.js';
-import { fakeKey } from '../helpers/fake-key.js';
+import { fakeKey, leaks } from '../helpers/fake-key.js';
 import { fetchMock } from '../helpers/fetch-mock.js';
 import { baseRequest, collect, runContractSuite } from './contract-suite.js';
 
@@ -97,6 +97,46 @@ describe('openai-compatible: provider specifics', () => {
       bodies.push(JSON.parse(mock.requests[0]!.body).response_format.type);
     }
     expect(bodies).toEqual(['json_object', 'json_schema']);
+  });
+
+  it('requires an https base URL, except for a server on this machine', () => {
+    const keys = { apiKey: Secret.of(fakeKey()) };
+    const build = (baseURL: string) => () =>
+      createOpenAICompatibleAdapter(keys, { model: MODEL, baseURL });
+    for (const bad of [
+      'http://compatible.example.invalid/v1',
+      'ftp://compatible.example.invalid/v1',
+      'http://localhost.example.invalid/v1',
+      'not a url',
+      '',
+    ]) {
+      expect(build(bad)).toThrow(
+        'openai-compatible: baseURL must be an https URL (http is allowed only for localhost, 127.0.0.1 or ::1)',
+      );
+    }
+    for (const ok of [
+      BASE_URL,
+      'http://localhost:11434/v1',
+      'http://127.0.0.1:8000/v1',
+      'http://[::1]:8000/v1',
+    ]) {
+      expect(build(ok)).not.toThrow();
+    }
+  });
+
+  it('the base URL error never echoes the value', () => {
+    const secretish = `https${fakeKey()}`;
+    try {
+      createOpenAICompatibleAdapter(
+        { apiKey: Secret.of(fakeKey()) },
+        { model: MODEL, baseURL: `http://${secretish}.example.invalid` },
+      );
+      throw new Error('expected a throw');
+    } catch (err) {
+      expect(leaks(String((err as Error).message) + String((err as Error).stack), secretish)).toBe(
+        false,
+      );
+    }
   });
 
   it('cannot declare embeddings without an embedding model', () => {

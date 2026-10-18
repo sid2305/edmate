@@ -93,7 +93,7 @@ describe('tool names', () => {
 });
 
 describe('stream details', () => {
-  it('reports zero tokens when the provider sends no usage, and no empty text chunks', async () => {
+  it('emits no usage chunk when the provider sends no usage, and no empty text chunks', async () => {
     const { system, messages, maxOutputTokens } = baseRequest;
     const { adapter, mock } = adapterWith(
       sse([
@@ -106,15 +106,50 @@ describe('stream details', () => {
     const chunks = await collect(
       adapter.stream({ tier: 'small', system, messages, maxOutputTokens }),
     );
-    expect(chunks).toEqual([
-      { type: 'text', text: 'hi' },
-      {
-        type: 'usage',
-        usage: { model: 'm', tier: 'small', inputTokens: 0, outputTokens: 0, costMicroUsd: 0 },
-      },
-    ]);
+    // Unknown usage is not reported as zero: metering (2.4) sees no chunk, not a free turn.
+    expect(chunks).toEqual([{ type: 'text', text: 'hi' }]);
     // No temperature in the request means none is sent.
     expect('temperature' in JSON.parse(mock.requests[0]!.body)).toBe(false);
+  });
+
+  const usageOf = (prompt: unknown, completion: unknown) =>
+    [
+      undefined,
+      {
+        id: 'c',
+        object: 'chat.completion.chunk',
+        created: 0,
+        model: 'm',
+        choices: [],
+        usage: { prompt_tokens: prompt, completion_tokens: completion },
+      },
+    ] as const;
+
+  it('keeps real zero counts as zeros', async () => {
+    const { adapter } = adapterWith(sse([chunk({}, 'stop'), usageOf(0, 0), [undefined, '[DONE]']]));
+    expect(await collect(adapter.stream(baseRequest))).toEqual([
+      {
+        type: 'usage',
+        usage: { model: 'm', tier: 'main', inputTokens: 0, outputTokens: 0, costMicroUsd: 0 },
+      },
+    ]);
+  });
+
+  it('emits no usage chunk when a count is not a valid token count', async () => {
+    for (const [input, output] of [
+      [-1, 5],
+      [12, 1.5],
+    ] as const) {
+      const { adapter } = adapterWith(
+        sse([
+          chunk({ content: 'hi' }),
+          chunk({}, 'stop'),
+          usageOf(input, output),
+          [undefined, '[DONE]'],
+        ]),
+      );
+      expect(await collect(adapter.stream(baseRequest))).toEqual([{ type: 'text', text: 'hi' }]);
+    }
   });
 
   it('a body that is not an event stream is a provider error', async () => {

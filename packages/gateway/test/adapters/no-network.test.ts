@@ -33,7 +33,13 @@ describe('no real network in gateway tests', () => {
   it('URLs handed to adapters use reserved .invalid hosts or are only asserted on', () => {
     // Real provider hosts may appear only in assertions about where requests would go.
     const realHost = /https?:\/\/(?![^/'"`\s]*\.invalid\b)[^/'"`\s]+/g;
-    const allowed = new Set(['https://api.anthropic.com']);
+    // Loopback hosts appear only in base-URL validation tests; nothing is sent to them.
+    const allowed = new Set([
+      'https://api.anthropic.com',
+      'http://localhost:11434',
+      'http://127.0.0.1:8000',
+      'http://[::1]:8000',
+    ]);
     const offenders = files
       .flatMap((f) => (f.text.match(realHost) ?? []).map((url) => `${f.path}: ${url}`))
       .filter((hit) => !allowed.has(hit.slice(hit.indexOf(': ') + 2)));

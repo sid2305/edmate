@@ -9,7 +9,7 @@ import {
   TypeValidationError,
 } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { GatewayError, mapProviderError } from '../../src/adapters/errors.js';
+import { GatewayError, mapProviderError, stopFailure } from '../../src/adapters/errors.js';
 import { fakeKey, leaks } from '../helpers/fake-key.js';
 
 function apiError(statusCode: number | undefined, responseBody: string, key: string): APICallError {
@@ -236,6 +236,23 @@ describe('mapProviderError: other errors', () => {
       expect(mapped.message).toBe('anthropic: unexpected provider failure');
       for (const text of errorTexts(mapped)) expect(leaks(text, key)).toBe(false);
     }
+  });
+
+  it('stopFailure: length -> truncated, content-filter -> content_filter, others -> none', () => {
+    expect(stopFailure('length', 'anthropic')?.reason).toBe('truncated');
+    expect(stopFailure('content-filter', 'anthropic')?.reason).toBe('content_filter');
+    for (const r of ['stop', 'tool-calls', 'other', 'error', undefined]) {
+      expect(stopFailure(r, 'anthropic')).toBeUndefined();
+    }
+    const err = stopFailure('length', 'openai-compatible')!;
+    expect(JSON.parse(JSON.stringify(err))).toEqual({
+      name: 'GatewayError',
+      code: 'provider_error',
+      retryable: false,
+      provider: 'openai-compatible',
+      message: 'openai-compatible: output was cut off at the token limit',
+      reason: 'truncated',
+    });
   });
 
   it('GatewayError serialises to its safe fields only', () => {

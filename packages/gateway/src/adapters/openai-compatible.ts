@@ -36,10 +36,32 @@ export interface OpenAICompatibleAdapterOptions {
   readonly fetch?: FetchFunction;
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** The key travels in a header to this URL, so it must be https unless the server is local. */
+function checkBaseURL(value: string): void {
+  let url: URL | undefined;
+  try {
+    url = new URL(value);
+  } catch {
+    url = undefined;
+  }
+  const ok =
+    url !== undefined &&
+    (url.protocol === 'https:' || (url.protocol === 'http:' && LOCAL_HOSTS.has(url.hostname)));
+  // The value is not echoed: a mistyped URL can hold credentials.
+  if (!ok) {
+    throw new Error(
+      'openai-compatible: baseURL must be an https URL (http is allowed only for localhost, 127.0.0.1 or ::1)',
+    );
+  }
+}
+
 export function createOpenAICompatibleAdapter(
   keys: KeysFor<'openai-compatible'>,
   opts: OpenAICompatibleAdapterOptions,
 ): ModelAdapter {
+  checkBaseURL(opts.baseURL);
   const provider = createOpenAICompatible({
     name: 'openai-compatible',
     baseURL: opts.baseURL,

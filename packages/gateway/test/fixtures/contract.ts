@@ -25,6 +25,10 @@ export interface ContractFixtures {
   readonly textStream: FakeResponse;
   /** Streams one call of EXPECTED.toolCall under its wire name. */
   readonly toolCallStream: FakeResponse;
+  /** Streams EXPECTED.textDeltas, then stops because the output cap was hit (with usage). */
+  readonly truncatedStream: FakeResponse;
+  /** Streams EXPECTED.textDeltas, then stops on the provider's content filter / refusal (with usage). */
+  readonly filteredStream: FakeResponse;
   /** Streams a call of a tool that was never offered. */
   readonly unknownToolStream: FakeResponse;
   /** Streams a call of an offered tool whose arguments are not JSON. */
@@ -35,6 +39,12 @@ export interface ContractFixtures {
   readonly object: FakeResponse;
   /** A non-streamed reply whose JSON does not fit the schema. */
   readonly badObject: FakeResponse;
+  /** A non-streamed reply cut off by the output cap mid-JSON. */
+  readonly truncatedObject: FakeResponse;
+  /** A non-streamed reply whose JSON parses but which the provider says was cut off. */
+  readonly truncatedValidObject: FakeResponse;
+  /** A non-streamed reply stopped by the content filter / a refusal. */
+  readonly filteredObject: FakeResponse;
   /** EXPECTED.embeddings; only for adapters that declare embeddings. */
   readonly embeddings?: FakeResponse;
   readonly rateLimited: FakeResponse;

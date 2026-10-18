@@ -167,6 +167,84 @@ export function runContractSuite(target: ContractTarget): void {
       }
     });
 
+    it('stream(): output cut off by the token cap fails as truncated, after text and usage', async () => {
+      const { adapter } = setup([target.fixtures.truncatedStream]);
+      const seen: ModelChunk[] = [];
+      const err = await caught(
+        (async () => {
+          for await (const c of adapter.stream(baseRequest)) seen.push(c);
+        })(),
+      );
+      expect([err.code, err.retryable, err.reason]).toEqual(['provider_error', false, 'truncated']);
+      expect(seen.filter((c) => c.type === 'text').map((c) => c.text)).toEqual([
+        ...EXPECTED.textDeltas,
+      ]);
+      // The tokens were spent, so metering still sees them.
+      expect(seen.at(-1)).toMatchObject({
+        type: 'usage',
+        usage: { inputTokens: EXPECTED.inputTokens, outputTokens: EXPECTED.outputTokens },
+      });
+    });
+
+    it('stream(): output stopped by the content filter fails as content_filter', async () => {
+      const { adapter } = setup([target.fixtures.filteredStream]);
+      const err = await caught(collect(adapter.stream(baseRequest)));
+      expect([err.code, err.retryable, err.reason]).toEqual([
+        'provider_error',
+        false,
+        'content_filter',
+      ]);
+    });
+
+    it('stream(): a normal finish has no reason on any error path', async () => {
+      const { adapter } = setup([target.fixtures.rateLimited]);
+      const err = await caught(collect(adapter.stream(baseRequest)));
+      expect(err.reason).toBeUndefined();
+      expect('reason' in JSON.parse(JSON.stringify(err))).toBe(false);
+    });
+
+    it('stream(): stopping early aborts the provider request', async () => {
+      const { adapter, mock } = setup([{ ...target.fixtures.textStream, hold: true }]);
+      for await (const c of adapter.stream(baseRequest)) {
+        expect(c.type).toBe('text');
+        break;
+      }
+      const req = mock.requests[0]!;
+      expect(req.signal?.aborted).toBe(true);
+    });
+
+    it('stream(): passes an abort signal with every request', async () => {
+      const { adapter, mock } = setup([target.fixtures.textStream]);
+      await collect(adapter.stream(baseRequest));
+      expect(mock.requests[0]!.signal).toBeDefined();
+    });
+
+    it('generateObject(): output cut off by the token cap fails as truncated', async () => {
+      for (const fixture of [
+        target.fixtures.truncatedObject,
+        target.fixtures.truncatedValidObject,
+      ]) {
+        const { adapter } = setup([fixture]);
+        const err = await caught(adapter.generateObject(baseRequest, AnswerSchema));
+        expect([err.code, err.retryable, err.reason]).toEqual([
+          'provider_error',
+          false,
+          'truncated',
+        ]);
+      }
+    });
+
+    it('generateObject(): output stopped by the content filter fails as content_filter', async () => {
+      const { adapter, mock } = setup([target.fixtures.filteredObject]);
+      const err = await caught(adapter.generateObject(baseRequest, AnswerSchema));
+      expect([err.code, err.retryable, err.reason]).toEqual([
+        'provider_error',
+        false,
+        'content_filter',
+      ]);
+      expect(mock.requests[0]!.signal).toBeDefined();
+    });
+
     it('generateObject(): returns the schema-checked object', async () => {
       const { adapter, mock, key } = setup([target.fixtures.object]);
       const value = await adapter.generateObject(baseRequest, AnswerSchema);

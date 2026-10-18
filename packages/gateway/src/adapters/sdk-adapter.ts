@@ -21,7 +21,7 @@ import {
 } from 'ai';
 import type { ZodType } from 'zod';
 import type { ProviderId } from '../keys/providers.js';
-import { GatewayError, mapProviderError } from './errors.js';
+import { GatewayError, mapProviderError, stopFailure } from './errors.js';
 import type { AdapterCapabilities, ModelAdapter } from './types.js';
 
 export interface SdkAdapterParts {
@@ -78,8 +78,8 @@ function callSettings(req: ModelRequest) {
   };
 }
 
-function tokens(n: number | undefined): number {
-  return n !== undefined && Number.isSafeInteger(n) && n >= 0 ? n : 0;
+function isCount(n: number | undefined): n is number {
+  return n !== undefined && Number.isSafeInteger(n) && n >= 0;
 }
 
 export function createSdkAdapter(parts: SdkAdapterParts): ModelAdapter {
@@ -89,12 +89,16 @@ export function createSdkAdapter(parts: SdkAdapterParts): ModelAdapter {
 
   async function* stream(req: ModelRequest): AsyncIterable<ModelChunk> {
     const tools = toTools(req.tools);
+    // Aborted in `finally`: a caller that stops reading early also stops the provider request.
+    const abort = new AbortController();
     let usage: LanguageModelUsage | undefined;
+    let finishReason: string | undefined;
     try {
       const result = streamText({
         model: languageModel,
         ...callSettings(req),
         ...(tools.set === undefined ? {} : { tools: tools.set }),
+        abortSignal: abort.signal,
         onError: () => {},
       });
       for await (const part of result.fullStream) {
@@ -116,42 +120,60 @@ export function createSdkAdapter(parts: SdkAdapterParts): ModelAdapter {
           }
           case 'finish':
             usage = part.totalUsage;
+            finishReason = part.finishReason;
             break;
           case 'error':
             throw part.error;
-          // No abort signal or SDK timeout is passed, so there is no 'abort' part; the
-          // rest (step and block markers, reasoning) carry nothing the port has.
+          // An 'abort' part only follows our own abort, after the caller stopped reading;
+          // the rest (step and block markers, reasoning) carry nothing the port has.
           default:
             break;
         }
       }
     } catch (err) {
       throw mapProviderError(err, id);
+    } finally {
+      abort.abort();
     }
-    yield {
-      type: 'usage',
-      usage: {
-        model,
-        tier: req.tier,
-        inputTokens: tokens(usage?.inputTokens),
-        outputTokens: tokens(usage?.outputTokens),
-        // Priced by metering (task 2.4), not here.
-        costMicroUsd: 0,
-      },
-    };
+    // Usage is reported only when the provider gave both counts: an unknown count is not a
+    // zero, and metering (task 2.4) must not record a turn as free.
+    if (isCount(usage?.inputTokens) && isCount(usage?.outputTokens)) {
+      yield {
+        type: 'usage',
+        usage: {
+          model,
+          tier: req.tier,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          // Priced by metering (task 2.4), not here.
+          costMicroUsd: 0,
+        },
+      };
+    }
+    // Spent tokens are reported first; then the partial answer is failed so it is discarded.
+    const stopped = stopFailure(finishReason, id);
+    if (stopped !== undefined) throw stopped;
   }
 
   async function generateObject<T>(req: ModelRequest, schema: ZodType<T>): Promise<T> {
+    const abort = new AbortController();
+    let result;
     try {
-      const result = await generateText({
+      result = await generateText({
         model: languageModel,
         ...callSettings(req),
         output: Output.object({ schema }),
+        abortSignal: abort.signal,
       });
-      return result.output as T;
     } catch (err) {
       throw mapProviderError(err, id);
+    } finally {
+      abort.abort();
     }
+    // JSON that parses can still be cut short (a list missing items): fail it the same way.
+    const stopped = stopFailure(result.finishReason, id);
+    if (stopped !== undefined) throw stopped;
+    return result.output as T;
   }
 
   async function embed(texts: string[]): Promise<number[][]> {
