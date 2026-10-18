@@ -1,0 +1,17 @@
+id: python-basics-demo
+title: Python basics for beginners
+description: >-
+  A short, open-licensed beginner course in Python 3 for self-learners aged 13 and up,
+  written for the Edmate demo by a fictional teacher. Five modules take you from values
+  and variables to lists and dictionaries, with small examples you can type in and run.
+modules:
+  - id: values-variables
+    title: Values, types and variables
+  - id: conditions
+    title: Making decisions with if
+  - id: loops
+    title: Repeating with for and while
+  - id: functions
+    title: Writing functions
+  - id: lists-dicts
+    title: Lists and dictionaries

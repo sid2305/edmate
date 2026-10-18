@@ -1,0 +1,21 @@
+name: Full course
+moduleIds:
+  - values-variables
+  - conditions
+  - loops
+  - functions
+  - lists-dicts
+skills:
+  - explain
+  - coach
+  - practice
+  - feedback
+  - revision
+helpCeiling: 4
+finalAnswers: after_attempt
+dailyMessageLimit: 100
+liveClassesPerMonth: 2
+pricePerMonth:
+  amountMinor: 999
+  currency: USD
+lockedReply: name_package

@@ -1,0 +1,16 @@
+name: Free starter
+moduleIds:
+  - values-variables
+  - conditions
+skills:
+  - explain
+  - coach
+  - practice
+helpCeiling: 3
+finalAnswers: never
+dailyMessageLimit: 20
+liveClassesPerMonth: 0
+pricePerMonth:
+  amountMinor: 0
+  currency: USD
+lockedReply: name_package

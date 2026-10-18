@@ -1,0 +1,66 @@
+- id: vv-q1
+  moduleId: values-variables
+  question: |
+    What does `print(7 // 2)` show, and why is it different from `print(7 / 2)`?
+  answer: |
+    It shows 3. `//` is floor division: it divides and rounds down to a whole number,
+    dropping the remainder. `/` is ordinary division and always gives a float, so
+    `7 / 2` shows 3.5.
+- id: vv-q2
+  moduleId: values-variables
+  question: |
+    What is the type of each value: `42`, `4.2`, `"42"`, `True`?
+  answer: |
+    `42` is an int, `4.2` is a float, `"42"` is a str (it has quotes, so it is text),
+    and `True` is a bool.
+- id: vv-q3
+  moduleId: values-variables
+  question: |
+    This code crashes when you type 14. Why, and how do you fix it?
+
+    ```python
+    age = input("Age? ")
+    print(age + 1)
+    ```
+  answer: |
+    `input()` always returns a string, so `age` is the text "14". Python cannot add a
+    string and an int, so it raises `TypeError: can only concatenate str (not "int") to str`.
+    Fix: convert the input to a number, `age = int(input("Age? "))`. Then it prints 15.
+- id: vv-q4
+  moduleId: values-variables
+  question: |
+    Which of these are valid variable names: `score`, `2nd_place`, `my-name`, `_total`, `Total`?
+    Give a reason for each invalid one.
+  answer: |
+    Valid: `score`, `_total` and `Total` (and `Total` is a different variable from `total`).
+    Invalid: `2nd_place` starts with a digit; `my-name` contains `-`, which Python reads as minus.
+- id: vv-q5
+  moduleId: values-variables
+  question: |
+    What is the value of `x` after these lines run?
+
+    ```python
+    x = 5
+    x = x + 3
+    x = x * 2
+    ```
+  answer: |
+    16. The second line makes x 8, and the third line uses that newest value: 8 * 2 = 16.
+- id: vv-q6
+  moduleId: values-variables
+  question: |
+    What does `print("ha" * 3)` show?
+  answer: |
+    hahaha. Multiplying a string by a whole number repeats it.
+- id: vv-q7
+  moduleId: values-variables
+  question: |
+    What does `print(17 % 5)` show?
+  answer: |
+    2. `%` gives the remainder: 17 divided by 5 is 3 with 2 left over.
+- id: vv-q8
+  moduleId: values-variables
+  question: |
+    Given `total = 12`, write one line that prints `Total: 12` using an f-string.
+  answer: |
+    `print(f"Total: {total}")`
