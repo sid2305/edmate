@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.2 MinIO image from a community build · decided by tdd-guide · risk: medium
+Decided: The local S3 server is `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, a maintained community build of the MinIO server with dated release tags, because the official MinIO images are no longer published.
+Why: The amendment asks for MinIO pinned to a dated release tag; this is the only source found that still has one. It is dev-only, and the app talks plain S3, so it can be swapped without code changes.
+Alternatives: `bitnamilegacy/minio` (frozen at 2025.7, no updates); Chainguard's MinIO (free tier is `latest` only); a different S3 server such as SeaweedFS or RustFS; building MinIO from source in our own image.
+Reversible: Yes, one image line in docker/compose.yaml.
+
+### 18 Oct 2026 · 0.2 Other image pins · decided by tdd-guide · risk: low
+Decided: `pgvector/pgvector:0.8.1-pg16`, `redis:7.4.6-alpine`, `caddy:2.10.2-alpine`, and `node:22.22.3-alpine3.22` for both app images (the same Node as `.nvmrc` 22 in dev).
+Why: Exact tags as amendment 2 asks; pgvector's image is Postgres 16 with the extension built in.
+Alternatives: Floating tags such as `pg16`, `7-alpine`, `2-alpine`, `22-alpine`.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.2 S3 client · decided by lead · risk: low
+Decided: The storage round-trip uses the AWS SDK v3 S3 client (`@aws-sdk/client-s3` 3.1152.0, exact), with path-style addressing on by default for MinIO.
+Why: Production is any S3-compatible bucket, not necessarily MinIO (amendment 7).
+Alternatives: The MinIO JS SDK.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.2 Ports and defaults · decided by tdd-guide · risk: low
+Decided: Only Caddy publishes a port, on 127.0.0.1:8080 (`EDMATE_HTTP_PORT`), plus MinIO's API and console on 127.0.0.1:9000/9001; web, worker, Postgres and Redis stay on the compose network. Compose runs with no env file: every setting has a dev default (`edmate` / `edmate-dev` / `edmate-dev-storage`) documented in docker/env.example.
+Why: Port 3000 is taken on this machine (amendment 4); binding to 127.0.0.1 keeps the dev passwords off the local network; agents cannot create env files (amendment 3).
+Alternatives: Publish on all interfaces; require an env file.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.2 Standalone web image · decided by lead · risk: low
+Decided: The web image runs Next.js standalone output (`output: 'standalone'` in apps/web/next.config.ts) as the `node` user; the worker image uses `pnpm deploy --prod` and runs as `node`.
+Why: Small runtime images (about 200 MB) with no dev dependencies or root process.
+Alternatives: `pnpm --filter web start` on a full install.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.2 Worker healthcheck · decided by tdd-guide · risk: low
+Decided: The worker counts as healthy when its container can open a connection to Redis, its queue.
+Why: The worker has no HTTP port yet and app code was out of scope; this shows the process is up and its one dependency is reachable.
+Alternatives: A heartbeat file or HTTP endpoint written by the worker (needs a change to apps/worker/src/index.ts); no healthcheck.
+Reversible: Yes, when real queues land.
+
+### 18 Oct 2026 · 0.2 Review · decided by team lead · risk: low
+Decided: Three LOW review notes stay as they are: the MinIO healthcheck in docker/compose.yaml uses the image's own `mc`; apps/web/Dockerfile has no `outputFileTracingRoot`; roundtrip.ts picks a random object key by default. The MinIO community image is pinned by digest.
+Why: Each is shown working in the evidence; none affects production.
+Alternatives: Add a custom healthcheck, set outputFileTracingRoot, pass an explicit key.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.7 Lead-approved risky merges · decided by tdd-guide · risk: high
 Decided: The merge gate passes a risky branch only when review.md names every reviewer its risk groups need (listed in risk-paths.txt) and the handoff has a risk: high entry; otherwise it fails. It no longer reads the PR label and never says "needs human". A risky path with no reviewers line fails the gate.
 Why: Your decision that the lead merges everything; this keeps the specialists and puts every risky merge on your skim list.
