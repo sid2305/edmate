@@ -1,0 +1,40 @@
+{
+  // Edmate dev container: Node 22 (pnpm through corepack), Python 3 + PyYAML, jq, Docker CLI
+  // talking to the host's Docker, and Claude Code. Every version is pinned. No secrets live here:
+  // keys and logins stay outside the repo (see docs/setup/devbox.md).
+  "name": "edmate",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:2.1.1": {
+      "version": "22.22.3",
+      "nvmVersion": "0.40.8",
+      "pnpmVersion": "none",
+      "npmVersion": "none",
+      "nodeGypDependencies": false
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.1": {
+      "version": "29.5.3",
+      "mobyBuildxVersion": "0.38.0",
+      // The `docker compose` plugin (moby-compose) has no version option in this feature;
+      // the v1 `docker-compose` binary is not installed.
+      "dockerDashComposeVersion": "none"
+    }
+  },
+  // Mount the repo at the same path as on the host so `docker compose` bind mounts
+  // (docker/data/...) resolve on the host daemon.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "containerEnv": {
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"
+  },
+  // Compose services publish 8080/9000/9001 on the host directly (Docker runs on the host),
+  // so only the web dev server, which runs inside this container, is forwarded.
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "web dev (Next.js)" }
+  },
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code@2.1.302 && git config core.hooksPath .githooks && corepack pnpm install --frozen-lockfile",
+  "remoteUser": "vscode"
+}
