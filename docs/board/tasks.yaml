@@ -366,7 +366,7 @@ tasks:
   accept: shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures; a third adapter needs no caller changes.
   deps:
   - M0
-  status: review
+  status: done
   branch: m2/2.2-provider-adapters
   model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(ts,silent)
 - id: '2.3'

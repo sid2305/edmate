@@ -10,6 +10,72 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.2 Anthropic provider-key entry · decided by planner · risk: high
+Decided: add `anthropic: { apiKey: { variable: 'EDMATE_ANTHROPIC_API_KEY' } }` to `PROVIDER_KEYS`, same shape as `openai-compatible`.
+Why: Anthropic is the main provider (decision log, 18 Oct 2026); its key enters through the same one door as every other provider.
+Alternatives: None; the module's whole point is one place for every provider's keys.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Anthropic base URL is always passed · decided by builder · risk: high
+Decided: the Anthropic adapter always passes `baseURL: https://api.anthropic.com/v1` (and always the key), so the SDK never reads `ANTHROPIC_BASE_URL` or `ANTHROPIC_API_KEY`. No base-URL override is offered for Anthropic.
+Why: `@ai-sdk/anthropic` reads `ANTHROPIC_BASE_URL` when no base URL is given; a stray variable in the environment would send Edmate's key to another host. `env-fallback.test.ts` proves neither variable is read.
+Alternatives: Let the SDK default apply; offer a configurable base URL (a proxy can be added later as an explicit option).
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 `@ai-sdk/openai-compatible` over `@ai-sdk/openai` + baseURL · decided by planner · risk: low
+Decided: the second adapter uses `createOpenAICompatible` from `@ai-sdk/openai-compatible`.
+Why: it is the AI SDK's own client for OpenAI-shaped backends that are not OpenAI (OpenRouter, self-hosted); it never reads `OPENAI_API_KEY`.
+Alternatives: `@ai-sdk/openai` with a custom `baseURL`.
+Reversible: Yes, swapping the package behind the same `ModelAdapter` shape.
+
+### 18 Oct 2026 · 2.2 Capabilities live beside the port, not inside it · decided by planner · risk: low
+Decided: `AdapterCapabilities` and `ModelAdapter` are gateway-only types; `ModelGateway` in contracts is untouched. Anthropic's capabilities are fixed; OpenAI-compatible's are overridable per deployment with conservative defaults (vision off, 8 192 tokens) and `embeddings` follows whether an embedding model is configured.
+Why: capabilities are routing data for 2.3, not part of the call contract; no contract change means no ADR.
+Alternatives: a `capabilities()` method on the port.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Mocked fetch, not MSW · decided by planner · risk: low
+Decided: tests inject a fake `fetch` through the AI SDK provider settings; a vitest setup file makes the global fetch always reject.
+Why: AI SDK providers accept a `fetch` override; this keeps rule 4 with no new dependency, and an adapter that ignored the override would fail loudly.
+Alternatives: `msw`.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 AI SDK pins · decided by builder · risk: low
+Decided: `ai` 7.0.143, `@ai-sdk/anthropic` 4.0.82, `@ai-sdk/openai-compatible` 3.0.71, pinned exactly.
+Why: current stable on 18 Oct 2026; all three share the same `@ai-sdk/provider`/`provider-utils` versions.
+Alternatives: caret ranges.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 No SDK retries; errors mapped to fixed codes · decided by builder · risk: low
+Decided: adapters call the SDK with `maxRetries: 0` and replace its console `onError`. Provider errors become `GatewayError` with a contracts `ErrorCode` (`rate_limited`, `input_too_large`, `validation`, `provider_error`), a `retryable` flag and a message written by the mapper; nothing from the provider error (body, url, request, headers, cause) is kept. A wrong or revoked provider key is `provider_error`, not `unauthorized`/`forbidden` (those are for Edmate's own auth). A failed connection is retryable.
+Why: retry and fallback are the router's job (2.3), and one retry layer is easier to reason about and to meter; provider errors can carry request content.
+Alternatives: keep the SDK's default 2 retries; pass the provider message through.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Output that stops early is a failure · decided by lead (fix round 1) · risk: low
+Decided: when the model stops because of the token cap (`truncated`) or the provider's content filter / a refusal (`content_filter`), `stream()` first yields what it streamed and the usage, then throws `GatewayError('provider_error', retryable false)` with a gateway-local `reason`. `generateObject()` throws the same, even when the cut-off JSON happens to parse.
+Why: a cut-off or filtered answer must not reach a student as if complete; the pipeline discards the partial answer, and the spent tokens still reach metering. `reason` lives in the gateway because contracts are frozen.
+Alternatives: return the partial output with a flag; a new contracts error code (needs an ADR).
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 No usage chunk when usage is unknown · decided by lead (fix round 1) · risk: low
+Decided: `stream()` emits a usage chunk only when the provider reports both token counts as non-negative integers; real zeros stay zeros. For 2.4 (metering): a turn can end with no usage chunk; treat that as "usage unknown" (flag it, don't record it as free). Known gap: `@ai-sdk/openai-compatible` turns a partly missing usage object into zeros before the adapter sees it.
+Why: a made-up zero makes a paid turn look free and hides a provider that stopped reporting usage.
+Alternatives: report zeros (the first version); estimate tokens from text.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Tool names are made provider-safe · decided by builder · risk: low
+Decided: tool names are sent with characters outside `[A-Za-z0-9_-]` replaced by `_`, cut to 64 characters, `_2`/`_3` added on collision, and mapped back to the Edmate name on the way out. A call of a tool never offered or with unparseable arguments is a non-retryable `provider_error`.
+Why: Edmate tool names such as `practice.next_item` contain dots, which Anthropic and OpenAI-style APIs reject.
+Alternatives: forbid dots in tool names (a contracts change); encode names reversibly (longer, less readable to the model).
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.2 Review · decided by team lead · risk: low
+Decided: The `result.output as T` cast in packages/gateway/src/adapters/sdk-adapter.ts stays; tool-argument validation belongs to the tool registry (task 5.5), not the adapter.
+Why: The cast narrows a ZodType<T> the caller already passed and is typecheck-clean; validating tool input where tools run keeps one place for it.
+Alternatives: Drop the cast; validate tool args in the adapter.
+Reversible: Yes.
+
 ### 18 Oct 2026 · Judge model for evals · decided by you · risk: medium
 Decided: The eval runner scores answers with one mid-tier model (e.g. Claude Sonnet via the Anthropic adapter), pinned per release so scores stay comparable across runs.
 Why: Cheapest consistent option; the board's recommendation.
