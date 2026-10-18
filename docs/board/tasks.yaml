@@ -312,10 +312,10 @@ tasks:
   - '1.1'
   - '1.2'
   - M0
-  status: planning
+  status: running
   risk: risky
   branch: m1/1.3-auth
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '1.4'
   milestone: M1
   title: Email magic-link sign-in (phone OTP later, per market)
@@ -369,10 +369,10 @@ tasks:
   deps:
   - '0.3'
   - M0
-  status: planning
+  status: running
   risk: expert
   branch: m1/1.8-demo-teacher
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '2.1'
   milestone: M2
   title: Provider keys from the environment / secret manager
@@ -410,7 +410,7 @@ tasks:
   - '1.1'
   - '2.2'
   - M0
-  status: review
+  status: done
   branch: m2/2.4-metering
   model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.5'
@@ -463,10 +463,10 @@ tasks:
   - '3.1'
   - M0
   - '3.13'
-  status: running
+  status: done
   risk: risky
   branch: m3/3.2-admit-entitle
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(db,ts)
 - id: '3.3'
   milestone: M3
   title: '`route`: intent and `attempt`, rules first'

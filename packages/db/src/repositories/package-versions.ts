@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { modules, packages, packageVersions } from '../schema/index.js';
@@ -36,6 +36,46 @@ export function packageVersionsRepo(db: Db) {
             eq(packageVersions.version, version),
           ),
         )
+        .limit(1);
+      return row ? toPackageConfig(row, method) : null;
+    },
+
+    /**
+     * The package version a subscription points at (`subscriptions.package_version_id`), of the
+     * scope's teacher; null if missing or another teacher's.
+     */
+    async getById(scope: TeacherScope, packageVersionId: string): Promise<PackageConfig | null> {
+      const method = 'packageVersions.getById';
+      const { teacherId } = teacherScope(scope, method);
+      const id = parseArg(IdSchema, packageVersionId, method);
+      const [row] = await db
+        .select({
+          teacherId: packageVersions.teacherId,
+          packageId: packageVersions.packageId,
+          version: packageVersions.version,
+          config: packageVersions.config,
+        })
+        .from(packageVersions)
+        .where(and(eq(packageVersions.id, id), eq(packageVersions.teacherId, teacherId)))
+        .limit(1);
+      return row ? toPackageConfig(row, method) : null;
+    },
+
+    /** The newest version of one of the scope's teacher's packages (teacher preview); or null. */
+    async latest(scope: TeacherScope, packageId: string): Promise<PackageConfig | null> {
+      const method = 'packageVersions.latest';
+      const { teacherId } = teacherScope(scope, method);
+      const id = parseArg(IdSchema, packageId, method);
+      const [row] = await db
+        .select({
+          teacherId: packageVersions.teacherId,
+          packageId: packageVersions.packageId,
+          version: packageVersions.version,
+          config: packageVersions.config,
+        })
+        .from(packageVersions)
+        .where(and(eq(packageVersions.packageId, id), eq(packageVersions.teacherId, teacherId)))
+        .orderBy(desc(packageVersions.version))
         .limit(1);
       return row ? toPackageConfig(row, method) : null;
     },

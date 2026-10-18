@@ -463,3 +463,30 @@ describe('package entry', () => {
     expect(entry.DEFAULT_MODEL_POLICY.tiers.main?.provider).toBe('anthropic');
   });
 });
+
+describe('Router.withAdapters (task 2.4: metering wraps each provider attempt)', () => {
+  it('returns a new router over mapped adapters, mapping a shared adapter once', async () => {
+    const shared = fakeAdapter({ model: 'shared', script: { stream: [{ steps: [text('a')] }] } });
+    const backup = backupStream();
+    const router = new Router({ tiers: { small: shared, main: shared }, fallback: backup });
+    const seen: string[] = [];
+    const mapped = router.withAdapters((a) => {
+      seen.push(a.model);
+      return a;
+    });
+    expect(mapped).not.toBe(router);
+    expect(seen).toEqual(['shared', 'backup']);
+    expect(await collect(mapped.stream(req()))).toEqual([text('a')]);
+  });
+
+  it('works without a fallback', () => {
+    const seen: string[] = [];
+    const small = fakeAdapter();
+    const main = fakeAdapter({ model: 'other' });
+    new Router({ tiers: { small, main } }).withAdapters((x) => {
+      seen.push(x.model);
+      return x;
+    });
+    expect(seen).toEqual(['fake-model', 'other']);
+  });
+});

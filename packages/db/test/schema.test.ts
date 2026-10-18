@@ -212,6 +212,54 @@ describe('constraints the Data model states', () => {
   });
 });
 
+describe('usage_ledger: one row per model call (task 2.4)', () => {
+  const t = table('usage_ledger') as SnapshotTable & {
+    checkConstraints: Record<string, { name: string; value: string }>;
+  };
+
+  it('carries the turn and who pays, with a status and reason', () => {
+    expect(t.columns.turn_id?.notNull).toBe(true);
+    expect(t.columns.source?.notNull).toBe(true);
+    expect(t.columns.status?.notNull).toBe(true);
+    expect(t.columns.reason?.notNull).toBe(false);
+    // turn_id is not a foreign key: a usage row never depends on a trace row.
+    expect(Object.values(t.foreignKeys).some((f) => f.columnsFrom.includes('turn_id'))).toBe(false);
+  });
+
+  it('is indexed on (teacher_id, turn_id) for cost per turn', () => {
+    const idx = Object.values(t.indexes).find(
+      (i) => i.name === 'usage_ledger_teacher_id_turn_id_idx',
+    );
+    expect(idx?.columns.map((c) => c.expression)).toEqual(['teacher_id', 'turn_id']);
+  });
+
+  it('figures are nullable, so an unknown call is NULL, never a free 0', () => {
+    for (const c of ['model', 'input_tokens', 'output_tokens', 'cost_micro_usd']) {
+      expect(t.columns[c]?.notNull, c).toBe(false);
+    }
+  });
+
+  it('is indexed on (teacher_id, student_id, created_at) for per-student sums and windows', () => {
+    const idx = Object.values(t.indexes).find(
+      (i) => i.name === 'usage_ledger_teacher_id_student_id_created_at_idx',
+    );
+    expect(idx?.columns.map((c) => c.expression)).toEqual([
+      'teacher_id',
+      'student_id',
+      'created_at',
+    ]);
+  });
+
+  it('checks that a recorded row has every figure, and no count is negative', () => {
+    expect(Object.keys(t.checkConstraints).sort()).toEqual([
+      'usage_ledger_counts_non_negative',
+      'usage_ledger_recorded_has_figures',
+    ]);
+    const rule = t.checkConstraints.usage_ledger_recorded_has_figures?.value ?? '';
+    expect(rule).toMatch(/'recorded'.*cost_micro_usd" is not null/s);
+  });
+});
+
 describe('enums match the contracts', () => {
   const values = (name: string) => snapshot.enums[`public.${name}`]?.values;
 
@@ -233,19 +281,42 @@ describe('enums match the contracts', () => {
   it('model_tier = Usage.tier', () => {
     expect(values('model_tier')).toEqual(UsageSchema.shape.tier.options);
   });
+  it('entitlement_source = Entitlement.source', () => {
+    expect(values('entitlement_source')).toEqual(EntitlementSchema.shape.source.options);
+  });
+  it('usage_status is recorded, unknown or unpriced (task 2.4)', () => {
+    expect(values('usage_status')).toEqual(['recorded', 'unknown', 'unpriced']);
+  });
   it('user_role and agent_status follow the Data model', () => {
     expect(values('user_role')).toEqual(['student', 'teacher', 'staff']);
     expect(values('agent_status')).toEqual(['draft', 'live', 'suspended']);
   });
 });
 
+/** `ALTER TABLE "t" ALTER COLUMN "c" DROP NOT NULL;`: one statement, nothing else in it. */
+const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/g;
+
 describe('migrations are create-only', () => {
   it('has at least one migration and none drop, truncate, delete or update data', () => {
     const files = migrationSql();
     expect(files.length).toBeGreaterThan(0);
     for (const { file, sql } of files) {
-      expect(DESTRUCTIVE_SQL.test(sql), `${file} is destructive`).toBe(false);
+      // Relaxing NOT NULL loses no data (lead, task 2.4 fix round 1); everything else is checked.
+      const rest = sql.replace(RELAX_NOT_NULL, '');
+      expect(DESTRUCTIVE_SQL.test(rest), `${file} is destructive`).toBe(false);
     }
+  });
+
+  it('relaxes NOT NULL only where a reviewed task did', () => {
+    const relaxed = migrationSql().flatMap(({ file, sql }) =>
+      [...sql.matchAll(RELAX_NOT_NULL)].map((m) => `${file}: ${m[1]}.${m[2]}`),
+    );
+    expect(relaxed).toEqual([
+      '0003_usage_ledger_metering.sql: usage_ledger.model',
+      '0003_usage_ledger_metering.sql: usage_ledger.input_tokens',
+      '0003_usage_ledger_metering.sql: usage_ledger.output_tokens',
+      '0003_usage_ledger_metering.sql: usage_ledger.cost_micro_usd',
+    ]);
   });
 
   it('enables pgvector before any table uses it', () => {
