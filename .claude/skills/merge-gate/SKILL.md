@@ -5,7 +5,7 @@ description: The team lead's checklist for merging an Edmate task PR — reviews
 
 # Merge gate
 
-The team lead merges every task PR itself, risky ones included (the human's decision, 18 Oct 2026). The lead holds the end-to-end context (PRD, build plan, board, every task's handoff), so it owns this call. Risky work is not waved through: it needs the right specialist reviewers and a `risk: high` decision entry, which reaches the human's skim list in `docs/decisions/log.md`. `merge_gate.py` checks the mechanical parts, and GitHub Actions re-checks them on the PR once task 0.5 lands.
+The team lead merges every task PR itself, risky ones included (the human's decision, 18 Oct 2026). The lead holds the end-to-end context (PRD, build plan, board, every task's handoff), so it owns this call. Risky work is not waved through: it needs the right specialist reviewers and a `risk: high` decision entry, which reaches the human's skim list in `docs/decisions/log.md`. `merge_gate.py` checks the mechanical parts, and GitHub Actions re-checks them on every PR (the required `Merge gate / check`). Every merge goes through a PR.
 
 ## Risk tiers
 
@@ -31,7 +31,7 @@ Curriculum content (`content/tracks/**`) also needs a named subject expert in `r
 4. **Gates are green:** typecheck, lint, tests, and the eval fixtures for anything touching the harness, prompts, guards or content.
 5. **Decisions are recorded** in the handoff's `## Decisions` section. `None` is allowed, except on a risky branch: then at least one entry is `risk: high` and says, in plain words, what risky thing changed and why it is safe.
 6. Run `python3 .claude/skills/merge-gate/merge_gate.py <task-id>` (or `--pr <n>`):
-   - exit 0 → merge (`gh pr merge <n> --squash`; the bash hook re-runs the gate), or before GitHub, `git merge --squash` on `main`;
+   - exit 0 → merge (`gh pr merge <n> --squash`; the bash hook re-runs the gate, and CI's `Merge gate / check` must be green);
    - exit 1 → fix it (or run the missing reviewer), update `review.md`, run again.
    There is no "needs human" exit any more and the gate reads no PR label.
 7. After merging: append the task's decisions to `docs/decisions/log.md` **word for word** (`board.py set <id> done` refuses until every handoff `Decided:` line is in the log), set the board to `done`, commit both on `main`.
@@ -64,7 +64,7 @@ Log anything the spec did not dictate: a library choice, a data shape, a trade-o
 
 ## Limits
 - The gate checks that reviewer names appear in `review.md`, not that the reviews were good. The lead writes `review.md` only from the reviewers' real outputs.
-- Until CI (0.5) re-runs the gate on GitHub, nothing outside this session checks it.
+- CI (`.github/workflows/merge-gate.yml`) re-runs main's copy of the gate on every PR, so a PR cannot weaken its own check. It checks the same mechanical shape, nothing more. The `needs:<reviewer>` PR labels (`risk_labels.py`) are for skimming only; no gate reads them.
 
 ## Never
 - Add the old `human-approved` label, or ask an agent to (a hook blocks it).

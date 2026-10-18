@@ -526,7 +526,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **0.2** Docker Compose (postgres+pgvector, redis, minio, caddy, web, worker) and `env.example`. *Accept:* `docker compose up` serves `/api/health` = 200 and a test file round-trips through MinIO.
 - **0.3** `packages/contracts`: every type in Core contracts as Zod, with fixtures in `packages/contracts/fixtures`. *Accept:* fixtures round-trip parse/serialize; exported `z.infer` types match Core contracts; `harness/testing` can import the fixtures.
 - **0.4** ADR template; ADR-0001 stack, ADR-0002 ports and adapters, ADR-0003 access filter by construction (incl. the probe, public titles and the leak definition). *Accept:* files merged.
-- **0.5** GitHub Actions: CI, secret scan, merge-gate check (verifies the `human-approved` label came from the owner), risk labeller; PR template. *Accept:* CI blocks a failing test; the merge-gate check fails a risky PR without the owner's label.
+- **0.5** GitHub Actions: CI, secret scan, merge-gate check (re-runs `merge_gate.py --pr` on every PR: required reviewers per risk group and a `risk: high` decision; no human label), risk labeller; PR template. *Accept:* CI blocks a failing test; the merge-gate check fails a risky PR whose review.md lacks the required reviewers or whose handoff lacks a `risk: high` decision.
 - **0.6** Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create. *Accept:* the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
 
 ### M1 · Data, accounts and auth (depends on: M0)

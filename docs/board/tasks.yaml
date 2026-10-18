@@ -207,19 +207,19 @@ tasks:
   accept: 'CI blocks a failing test; the merge-gate check fails a risky PR whose review.md lacks the required reviewers or whose handoff lacks a risk: high decision.'
   deps:
   - '0.1'
-  status: running
+  status: done
   risk: risky
   branch: m0/0.5-ci
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(code)
 - id: '0.6'
   milestone: M0
   title: 'Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create'
   accept: the container builds; `corepack pnpm test` and `python3 .githooks/secret-scan.py --all` pass inside it; the same setup works on the devbox (`docs/setup/devbox.md`).
   deps:
   - '0.1'
-  status: planning
+  status: review
   branch: m0/0.6-devcontainer
-  model: plan:haiku
+  model: plan:haiku build:opus-5.5/medium review:sonnet
 - id: '0.7'
   milestone: M0
   title: 'Harness fixes from the 0.1 dry run, rescoped 18 Oct 2026 (the lead decides every merge, no hook prompts): (1) merge_gate.py passes risky branches only when review.md names the required reviewers
@@ -238,9 +238,20 @@ tasks:
   accept: Neither skill describes a local squash merge; the team-lead merge step is PR-only.
   deps:
   - '0.7'
-  status: running
+  status: done
   branch: m0/0.5-ci
-  model: folded into 0.5
+  model: built with 0.5
+- id: '0.9'
+  milestone: M0
+  title: 'Hardening from the 0.5 security review: (1) branch protection on main requiring checks node, python-harness and check (owner may push board and log commits; no force-push); (2) CI runs main''s
+    secret scanner and allow list against every commit of a PR, not the PR''s own copy on the final tree; (3) the PR-merge hook in guard-bash.sh runs main''s merge_gate.py (git show main:...) rather than
+    the checked-out copy (hook edit: needs auto mode off)'
+  accept: The required checks block a PR with a failing test; a PR that adds a secret in one commit and removes it later fails CI; the merge hook uses main's gate even when another branch is checked out.
+  deps:
+  - '0.5'
+  status: todo
+  branch: null
+  model: null
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations

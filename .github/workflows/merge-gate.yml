@@ -1,0 +1,41 @@
+# Merge gate: re-runs merge_gate.py --pr on every PR (task 0.5). A required check.
+# It runs main's copy of merge_gate.py: the PR's commit is only fetched into a local branch and read
+# with git show/diff. But with the pull_request trigger GitHub runs the PR's own copy of THIS file, so
+# a PR that edits this workflow can turn the check green. The real control is the local `gh pr merge`
+# hook, which runs main's gate before every merge; review any change to .github/** with that in mind.
+# It reads no PR labels.
+# Expect it red until the PR has docs/tasks/<id>/review.md and handoff.md.
+name: Merge gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the PR's head into its branch name (not checked out)
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: git fetch --no-tags origin "+refs/pull/${{ github.event.pull_request.number }}/head:refs/heads/${HEAD_REF}"
+      - name: Run main's merge gate against the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: python3 .claude/skills/merge-gate/merge_gate.py --pr "$PR"

@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.5 CI reads scripts from main, not the PR · decided by planner · risk: high
+Decided: `merge-gate.yml` and `risk-label.yml` check out `main` and only `git fetch` the PR's head commit into a same-named branch; they run main's `merge_gate.py`/`risk_labels.py`, never code from the PR.
+Why: Running the PR's own copy of the gate would let a careless or malicious PR switch off its own check.
+Alternatives: Check out the PR head (simpler, but that hole); `pull_request_target` (more ceremony and a riskier token, no gain).
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.5 Risk labels are informational only · decided by planner · risk: high
+Decided: The labeller adds `needs:<reviewer>` and `risk:touched` labels for visibility; no gate reads PR labels, and no `human-approved` label is created or checked anywhere.
+Why: The lead decides every merge (human decision, 18 Oct 2026); a label gate would bring back the removed human-approval step.
+Alternatives: Gate on a label, as 0.5 was first written; already rejected by the human.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.5 Workflow hardening choices · decided by tdd-guide · risk: medium
+Decided: Actions pinned by full commit SHA with a version comment, minimal top-level permissions, `persist-credentials: false`, PR branch names passed through `env:` rather than inlined in shell, and the labeller skipped on fork PRs. A test file enforces all of these.
+Why: Stops tag-swap supply-chain attacks, script injection through a crafted branch name, and token reuse by later steps.
+Alternatives: Tag pins like `@v7` (drift silently); `actions/labeler` with its own glob list (would duplicate risk-paths.txt).
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.5 No pnpm cache in CI for now · decided by tdd-guide · risk: low
+Decided: `setup-node` runs without its pnpm cache; pnpm comes from corepack at install time.
+Why: The cache step needs pnpm on PATH before corepack provides it; getting the order wrong breaks the job, and installs take only seconds.
+Alternatives: `cache: pnpm` after a separate corepack step; `actions/cache` on the pnpm store.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.4 ADRs recorded · decided by team lead · risk: high
 Decided: Three architecture decisions already made in the build plan and the decision log are now written down as ADRs: the tech stack (TypeScript throughout, no Rust), where port interfaces live (`packages/contracts/src/ports.ts`, type-only, differing from the Repo-layout prose that says harness defines them), and the access filter being built by construction (filtered search, the code-only probe, public titles, the 8-token leak definition). A template (`docs/adr/0000-template.md`) fixes the shape every future ADR must use.
 Why: Rule 2 requires an ADR before contracts, stack or prompt-pack behaviour can change again; writing these three down now gives that rule something to point at, and the ports note resolves a reader-visible conflict between two parts of the spec. No code or contract changed; the ADRs only record what the spec and log already say, each with its source.

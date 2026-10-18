@@ -1,0 +1,60 @@
+# Risk labeller (task 0.5): labels a PR needs:<reviewer> for every reviewer its risky paths require
+# (risk-paths.txt, through main's risk_labels.py), plus risk:touched. Informational only: the merge
+# gate never reads labels, and no label here means a human approved anything.
+# Like the merge gate, it runs main's scripts and only reads the PR's commit with git.
+name: Risk labels
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: risk-label-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    # Fork PRs get a read-only token, so labelling them would only fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the PR's head into its branch name (not checked out)
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: git fetch --no-tags origin "+refs/pull/${{ github.event.pull_request.number }}/head:refs/heads/${HEAD_REF}"
+      - name: Sync labels
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          vocab=$(python3 .claude/skills/merge-gate/risk_labels.py --vocabulary)
+          want=$(python3 .claude/skills/merge-gate/risk_labels.py "$HEAD_REF")
+          echo "labels for $HEAD_REF: ${want:-none}"
+          existing=$(gh api --paginate "repos/$REPO/labels?per_page=100" --jq '.[].name')
+          have=$(gh api --paginate "repos/$REPO/issues/$PR/labels?per_page=100" --jq '.[].name')
+          for l in $vocab; do
+            if ! grep -qxF -- "$l" <<<"$existing"; then
+              gh api --method POST "repos/$REPO/labels" -f name="$l" -f color=d93f0b \
+                -f description="Risky path: see risk-paths.txt (informational; the merge gate ignores labels)" >/dev/null
+            fi
+            if grep -qxF -- "$l" <<<"$want"; then
+              grep -qxF -- "$l" <<<"$have" || gh api --method POST "repos/$REPO/issues/$PR/labels" -f "labels[]=$l" >/dev/null
+            elif grep -qxF -- "$l" <<<"$have"; then
+              gh api --method DELETE "repos/$REPO/issues/$PR/labels/$l" >/dev/null
+            fi
+          done
