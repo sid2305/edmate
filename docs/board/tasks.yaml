@@ -277,7 +277,7 @@ tasks:
   deps:
   - '1.1'
   - M0
-  status: review
+  status: done
   risk: risky
   branch: m1/1.2-scoped-repositories
   model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(db,ts)

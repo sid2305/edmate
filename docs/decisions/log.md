@@ -10,6 +10,78 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 1.2 Unexpected database errors are scrubbed into RepositoryError('failed') · decided by tdd-guide (fix round 1) · risk: low
+Decided: Every repository method runs inside `guarded()`, applied to all methods by `createRepositories`. Any error that is not a `RepositoryError` becomes `RepositoryError('failed', method)` with code `provider_error` (the contracts have no database-specific code) and a `ScrubbedDbError` cause holding only the driver's error code (SQLSTATE or Node code) and constraint name; the Drizzle/pg error with its SQL, params and detail is dropped. `messages.append` reports a duplicate message id as `not_found`.
+Why: Security review: Drizzle's "Failed query: … params: …" message quotes student and teacher ids and message text; a duplicate-id `invalid` let ids in other sessions be probed.
+Alternatives: Redact the message text with regexes (fragile); keep the original as a hidden property; generate message ids server-side (the frozen TranscriptStore port passes the caller's id).
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Isolation enforced by required scopes in the repositories · decided by planner · risk: high
+Decided: Every repository method takes a validated `TeacherScope` or `StudentScope` first and puts it in the WHERE clause of the same statement; messages and turn traces are scoped through a join on `sessions`; another scope's row reads as missing (`null`/`[]`) and writes to it throw `not_found`; frozen ports without a scope parameter (`TranscriptStore`) are bound to a scope at construction; the root `@edmate/db` export has no raw database handle or schema (`@edmate/db/internal` is for migrations, seed and tests). A typed case table makes the isolation test fail to compile when a method has no case.
+Why: Data model rule "repositories require the right scope"; no RLS (1.1 decision); ports are frozen (ADR-0002).
+Alternatives: Postgres RLS; changing the ports to take a scope (ADR); scope checks in the web layer only.
+Reversible: Yes, but every caller binds scopes this way from 1.3 on.
+
+### 18 Oct 2026 · 1.2 Pool limits from env, invalid values throw · decided by planner · risk: low
+Decided: `DATABASE_POOL_MAX` (10, 1..100), `DATABASE_IDLE_TIMEOUT_MS` (30 000), `DATABASE_CONNECT_TIMEOUT_MS` (5 000), `DATABASE_STATEMENT_TIMEOUT_MS` (15 000); fixed idle-in-transaction timeout 30 s and `application_name=edmate`; an invalid value throws at startup; the migrator uses one connection and no statement timeout; idle client errors are logged redacted, not thrown.
+Why: 1.1 review deferral (c); a silent default would hide a misconfiguration.
+Alternatives: No limits (pg defaults); clamping bad values.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Typed jsonb columns, parsed on read · decided by planner · risk: low
+Decided: `.$type<>()` ties `agent_versions.config`, `package_versions.config`, `messages.sources`, `turn_traces.steps`, `learner_profiles.mastery`/`mistakes` to contract types (no migration); every row leaving a repository is parsed with its contract schema and a mismatch with its own columns throws `integrity`. `sessions.help_state`, `eval_results.details`, `insights.payload`, `audit_log.before/after` and trust `staff_actions` stay `unknown` until their owners (3.5, 7.x, 11.3, 1.6, 12.x).
+Why: 1.1 review deferral (a); a corrupted or mis-owned row must never be returned.
+Alternatives: Trust stored jsonb.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Contracts and zod become runtime dependencies of @edmate/db · decided by planner · risk: low
+Decided: `@edmate/contracts` (workspace) and `zod` 4.6.7 move from devDependencies to dependencies.
+Why: Repositories parse scopes, inputs and rows at runtime.
+Alternatives: Hand-written validators.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Exhaustive grid instead of a property-testing library · decided by planner · risk: low
+Decided: The isolation test enumerates every actor x target over a two-teacher, two-student seed plus 20 seeded-random ids per read method; no new dependency.
+Why: The seed is small enough to cover every combination exactly.
+Alternatives: fast-check.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Message history ties ordered by id · decided by planner (lead accepted) · risk: low
+Decided: `history` orders by `(created_at desc, id desc)` and returns the page oldest first; no sequence column.
+Why: Lead answer Q4; the pipeline gives student and agent messages different timestamps.
+Alternatives: An additive `bigserial seq` migration.
+Reversible: Yes (3.8 may add a sequence).
+
+### 18 Oct 2026 · 1.2 RepositoryError kinds and codes; constraint violations translated · decided by tdd-guide · risk: low
+Decided: `scope` → `forbidden`, `not_found` → `not_found`, `invalid` → `validation`, `integrity` → `validation`. Writes translate a foreign-key violation to `not_found` (for example a scope id that is not a user) and a unique violation to `invalid` (an existing immutable package version); a duplicate message id is `not_found` and all other driver errors become `failed` (fix round 1, entry above). Messages carry the method and kind only.
+Why: Driver messages quote row values (ids, text); a public repo's logs must not carry them.
+Alternatives: Pass driver errors through; a separate `conflict` kind.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Ownership checks: INSERT … SELECT, or KEY SHARE check plus insert in one transaction · decided by tdd-guide · risk: low
+Decided: Single-owner writes (sessions, messages, turn traces, package versions, teacher questions) are `INSERT … SELECT … FROM <owner> WHERE <scope>` built with `sql` templates and explicit casts. Set checks (package `moduleIds`, evidence `topicId`s, question `similarIds`) select the ids `FOR KEY SHARE` in the same transaction; any id that is missing or another teacher's makes the whole write fail with `scope`.
+Why: Drizzle's `insert().select()` needs every column in table order; the template keeps the scope and the insert in one statement without `sql.raw`.
+Alternatives: Check then insert without a lock.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Repository coverage enforced only when the integration suite runs · decided by planner (lead accepted) · risk: low
+Decided: `vitest.config.ts` probes Postgres (or `CI=true`); when the suite runs, `src/repositories/**` must have 100% lines, functions and statements and 90% branches; otherwise that folder is left out of coverage so local runs without Docker stay green. CI always runs it.
+Why: Lead answer Q3.
+Alternatives: Always enforce (red without Docker); never enforce.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Small API limits not in the spec · decided by tdd-guide · risk: low
+Decided: `teacherQuestions.listForStudent` returns at most the newest 200; `listForTeacher` takes a required `status` and a `limit` of 1..200; `teacherQuestions.open` rejects blank text and text over 8,000 characters; `sessions.get` returns a `SessionRow` with `helpState: unknown`.
+Why: Bounded reads and no empty questions in a teacher's inbox.
+Alternatives: Unbounded lists; accept any string.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.2 Review · decided by team lead · risk: low
+Decided: Scope types in packages/db/src/repositories/scope.ts stay structural (not branded). The composite index for a student's questions waits for the questions inbox (8.9).
+Why: The scope is a required first argument and every method re-validates it at runtime, enforced by a test over all 16 methods; listForStudent is capped at 200.
+Alternatives: Branded scope types; add the index now.
+Reversible: Yes.
+
 ### 18 Oct 2026 · Transcription · decided by you · risk: low
 Decided: Live-class recordings are transcribed by a hosted speech-to-text API behind the Transcriber port for the MVP.
 Why: No GPU to run, fastest to ship; the board's recommendation.
