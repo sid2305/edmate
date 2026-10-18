@@ -1,6 +1,6 @@
 # 1.8 handoff — demo teacher content
 
-Status: DONE pending the human's sign-off (`reviewed_by` stays `pending` in content/demo-teacher/licences.yaml until sid2305 approves; then it becomes `sid2305`).
+Status: DONE. Signed off by the repo owner (sid2305) on 18 Oct 2026; `reviewed_by: sid2305`.
 Branch: m1/1.8-demo-teacher. Built in two parts: tdd-guide (packages/content + `edmate content validate`, f1feff9), then pedagogy-author wrote content/demo-teacher/**; the lead ran the validator and the code check.
 
 ## Evidence

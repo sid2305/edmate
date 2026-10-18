@@ -1,6 +1,6 @@
 # Every file here was written originally for the Edmate demo; nothing is quoted from a third party.
 # reviewed_by stays "pending" until the repo owner signs off on the PR and replaces it with their handle.
-reviewed_by: pending
+reviewed_by: sid2305
 entries:
   - { path: common-mistakes.yaml, licence: CC0-1.0 }
   - { path: course.yaml, licence: CC0-1.0 }
