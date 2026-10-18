@@ -42,6 +42,19 @@ Isolation between teachers and between students is enforced here, not by Postgre
     draft, suspended or missing one, because which teacher owns a live agent is public on teacher
     pages. Its argument is parsed like a scope (`scope` error before any SQL).
 
+## Audit log (task 1.6)
+
+`audit` is append-only: `appendForTeacher` / `appendForStudent` and two scoped lists, no update or
+delete. Every row carries `teacher_id`; student x teacher rows (memory changes) also carry
+`student_id`, and only the student scope reads them (`listForTeacher` returns teacher-only rows).
+A teacher or student actor must be the scope's own; staff may act in any scope. `before` / `after`
+go through JSON, then `redactPersonalData()` (`redact-json.ts`), then a 10 000-character cap
+(larger is `invalid`, never truncated). The redaction is defense in depth: callers still keep
+personal text out of these payloads.
+
+Staff's cross-teacher view (the trust console, 12.1) is a different access pattern that rule 1
+does not allow; 12.1 adds and reviews its own read path. Nothing here reads across teachers.
+
 ## Adding a method
 
 Add it to a repository returned by `createRepositories`, then add its case to `CASES` in

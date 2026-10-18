@@ -12,7 +12,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { id, timestamps, tstz } from './_shared.js';
+import { id, timestamps, tstz, userRole } from './_shared.js';
 import { agentVersions } from './agents.js';
 import { teacherId, users } from './users.js';
 
@@ -137,14 +137,24 @@ export const safetyEvents = pgTable('safety_events', trustColumns(), (t) => [
   index('safety_events_status_idx').on(t.status),
 ]);
 
-/** Config, staff and memory changes. Append-only by convention (enforced in 1.6). */
+/**
+ * Config, staff and memory changes. Append-only: the audit repository (1.6) has no update or
+ * delete. Every row is about one teacher; memory and student-specific rows also carry the student.
+ * `before`/`after` are redacted of personal keys before they are stored.
+ */
 export const auditLog = pgTable(
   'audit_log',
   {
     id: id(),
     actor: text('actor').notNull(),
+    actorRole: userRole('actor_role').notNull(),
     action: text('action').notNull(),
+    /** `<kind>:<id>`, for example `package:…` or `profile:…` (advisory, not a foreign key). */
     target: text('target').notNull(),
+    teacherId: teacherId(),
+    /** Set for student x teacher events (memory changes); null for teacher-only ones. */
+    studentId: text('student_id').references(() => users.id),
+    reason: text('reason'),
     before: jsonb('before'),
     after: jsonb('after'),
     ts: tstz('ts').notNull().defaultNow(),
@@ -153,5 +163,9 @@ export const auditLog = pgTable(
   (t) => [
     index('audit_log_target_ts_idx').on(t.target, t.ts),
     index('audit_log_actor_ts_idx').on(t.actor, t.ts),
+    index('audit_log_teacher_id_ts_idx').on(t.teacherId, t.ts),
+    // Led by student_id (every student_id column is; see test/schema.test.ts), so it also serves
+    // a student's rows across teachers (export, retention).
+    index('audit_log_student_id_teacher_id_ts_idx').on(t.studentId, t.teacherId, t.ts),
   ],
 );
