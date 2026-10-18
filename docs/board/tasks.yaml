@@ -410,9 +410,9 @@ tasks:
   - '1.1'
   - '2.2'
   - M0
-  status: running
+  status: review
   branch: m2/2.4-metering
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.5'
   milestone: M2
   title: 'Limits: rolling 24-hour message limit per package; monthly cost alarm per teacher that alerts staff and the teacher, and pauses free packages only (paid students keep access until a staff decision)'
