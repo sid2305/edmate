@@ -183,3 +183,4 @@ Reversible: Yes; 5.1–5.3 (or a dedicated later task) can add real pricing with
 - Q4: 2.7 fixes the pgvector dimension now (vector(1536) + HNSW index; table empty, no data lost).
 - Q5: ingestion-time billing shape is deferred to 5.1–5.3.
 - The Transcriber port is NOT added here: task 3.15 adds it (ADR-0005, combined with 3.4's help-state change). 2.7 builds after 3.15 merges and implements the port as merged.
+- From ADR-0005 (3.15): don't edit contracts; no Deepgram; parse every result (including the scripted fixture) with `TranscriptSchema`; when stitching chunks, shift segment times by each chunk's offset; fetch only from allowlisted storage hosts; signed URLs never in logs or errors.

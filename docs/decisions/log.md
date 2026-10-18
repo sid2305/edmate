@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Session help state and Transcriber ports · decided by team lead (architect's design) · risk: high
+Decided: ADR-0005 (task 3.15) adds two contracts ports and one small extension: TurnConfigStore.load also returns the session's raw help state; a new SessionStateStore.saveHelpState writes it back to the student's own open session; a new Transcriber port with strict transcript schemas. The help state stays untyped in contracts and is parsed by the harness.
+Why: Turns need the help ladder's state across messages, and transcription needs a port; one combined ADR avoids two parallel contracts changes.
+Alternatives: Help state on TranscriptStore; a full SessionStore; a help-state schema in contracts.
+Reversible: Yes, with another ADR.
+
 ### 18 Oct 2026 · 1.3 Google sign-in with database sessions; roles change only by a server-side grant; deny-by-default route guard · decided by planner, accepted by team lead · risk: high
 Decided:
 - **Sign-in.** Auth.js (next-auth pinned at 5.0.0-beta.32) with Google only. The provider checks state, nonce and PKCE, and `allowDangerousEmailAccountLinking` is false.

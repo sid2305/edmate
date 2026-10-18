@@ -121,3 +121,4 @@ Recommended reviewers overall: typescript-reviewer and code-reviewer for the har
 - Q1: the contracts change moves to task 3.15 (ADR-0005, combined with 2.7's Transcriber port; architect designs the help-state shape). 3.4 builds after 3.15 merges and uses what it adds.
 - Q2: threading helpState into decide/commit is 3.6/3.8's job; note it in the handoff.
 - Q3: provisional character budget, revisit at 7.6. Q4: persona stays undefined. Q5: k=5; skip the probe when lockedModuleIds is empty. All logged.
+- From ADR-0005 (3.15): don't edit contracts or the ADR; add `SessionHelpSchema` with `parse` (invalid → rung 0 / INITIAL_HELP_STATE) and `serialize` (for 3.8) to `pedagogy/helpState.ts`; read `helpState` from `TurnConfigStore.load`'s result. The help state (incl. answerKey) must never reach a client.
