@@ -86,6 +86,21 @@ adapter, so a primary that fails over has its own row. Rows hold ids, the model 
 cost and the reason code only; never request text (`test/usage-ledger.int.test.ts` checks the
 parameters every write sends).
 
+**Cost alarm (task 2.5).** Two teacher-scoped methods for `apps/worker/src/alarms`:
+`usageLedger.sumForTeacherSince(scope, since)` sums one teacher's rows since an ISO timestamp
+(inclusive) across every student, leaving out `eval` rows (billed to Edmate), with the same
+`recorded` / `unknown` / `unpriced` split as `sumForStudent` (index
+`usage_ledger_teacher_id_created_at_idx`). `subscriptions.pauseFreeForTeacher(scope, { monthStart,
+reason })` pauses, in one transaction, every trial / active / past_due subscription of the scope's
+teacher whose package version is free (`pricePerMonth.amountMinor` = 0), and writes one audit row
+per pause (actor `system_cost_alarm`, role `system`, student x teacher row, before/after status).
+Paid, ended and already paused subscriptions are never touched. A subscription with a
+`subscription.pause_cost_alarm` audit row since `monthStart` is skipped, so a staff unpause holds
+for the rest of the month. Both have cases in `CASES`; `test/cost-alarm.int.test.ts` checks the
+sums against raw SQL, the free/paid split, the audit rows, the once-a-month rule and concurrency.
+The audit `system` role (enum `audit_actor_role`, separate from `user_role` so no user can hold
+it) requires an actor id starting `system_`, and no other role may use that prefix.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

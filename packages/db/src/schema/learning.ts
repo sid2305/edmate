@@ -142,6 +142,9 @@ export const usageLedger = pgTable(
       t.studentId,
       t.createdAt,
     ),
+    // The monthly cost alarm (2.5): one teacher's rows since a date, across every student. Not
+    // partial: unknown and unpriced rows are counted next to the cost, never skipped.
+    index('usage_ledger_teacher_id_created_at_idx').on(t.teacherId, t.createdAt),
     check(
       'usage_ledger_recorded_has_figures',
       sql`${t.status} <> 'recorded' or (${t.model} is not null and ${t.inputTokens} is not null

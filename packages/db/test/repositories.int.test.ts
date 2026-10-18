@@ -579,6 +579,58 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (x: { id: string; packageVersionId: string } | null) =>
       x ? [x.id.slice(4).toUpperCase()] : [],
   },
+  'subscriptions.pauseFreeForTeacher': {
+    scope: 'teacher',
+    op: 'write',
+    // No target ids: the pause always lands in the scope's own teacher.
+    owns: () => true,
+    attempt: (r, scope) =>
+      r.subscriptions.pauseFreeForTeacher(scope, {
+        monthStart: new Date().toISOString(),
+        reason: 'isolation grid',
+      }),
+    verify: async (_r, actor, res) => {
+      const paused = res as { subscriptionId: string }[];
+      // Every seeded pair is on a free package, so the actor's two subscriptions are paused.
+      expect(paused.map((p) => p.subscriptionId).sort()).toEqual(
+        [`1${actor}`, `2${actor}`].map((p) => ids.subscription(p as Pair)),
+      );
+      const rows = await raw.query<{ id: string; status: string }>(
+        `select id, status from subscriptions order by id`,
+      );
+      for (const row of rows.rows) {
+        const owner = row.id.slice(-1).toUpperCase();
+        expect(row.status, `${actor}'s pause on ${row.id}`).toBe(
+          owner === actor ? 'paused' : 'active',
+        );
+      }
+      // Put the seed back for the rest of the suite.
+      await raw.query(`update subscriptions set status = 'active' where teacher_id = $1`, [
+        teacherId(actor),
+      ]);
+    },
+    mismatches: (a) => [
+      [
+        'a bad month start',
+        (r) =>
+          r.subscriptions.pauseFreeForTeacher(tScope(a), {
+            monthStart: 'this month',
+            reason: 'x',
+          }),
+        'invalid',
+      ],
+      [
+        'a teacher id smuggled in the options',
+        (r) =>
+          r.subscriptions.pauseFreeForTeacher(tScope(a), {
+            monthStart: new Date().toISOString(),
+            reason: 'x',
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+    ],
+  },
   'teacherQuestions.open': {
     scope: 'student',
     op: 'write',
@@ -735,6 +787,24 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           (r) =>
             r.audit.appendForTeacher(tScope(a), teacherEntry(a, { actorRole: 'admin' as never })),
           'invalid',
+        ],
+        [
+          'a system role on a user id',
+          (r) =>
+            r.audit.appendForTeacher(
+              tScope(a),
+              teacherEntry(a, { actor: teacherId(a), actorRole: 'system' }),
+            ),
+          'scope',
+        ],
+        [
+          'a staff role on a system actor id',
+          (r) =>
+            r.audit.appendForTeacher(
+              tScope(a),
+              teacherEntry(a, { actor: 'system_cost_alarm', actorRole: 'staff' }),
+            ),
+          'scope',
         ],
       ];
     },
@@ -941,6 +1011,17 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     // Exact sums per pair are checked against raw SQL in "cost per turn and per student" below.
     owners: (x: { studentId: string; teacherId: string; calls: number }) =>
       x.calls > 0 ? [pairOfIds(x.studentId, x.teacherId)] : [],
+  },
+  'usageLedger.sumForTeacherSince': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.usageLedger.sumForTeacherSince(scope, '2000-01-01T00:00:00Z'),
+    random: (r, _scope, rid) =>
+      r.usageLedger.sumForTeacherSince({ teacherId: rid }, '2000-01-01T00:00:00Z'),
+    // Exact sums, eval exclusion and the date bound are checked in cost-alarm.int.test.ts.
+    owners: (x: { teacherId: string; calls: number }) =>
+      x.calls > 0 ? [teacherOfId(x.teacherId)] : [],
   },
 };
 
