@@ -366,9 +366,9 @@ tasks:
   accept: shared adapter contract tests (stream, tool call, JSON, embed) pass on fixtures; a third adapter needs no caller changes.
   deps:
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m2/2.2-provider-adapters
+  model: plan:sonnet
 - id: '2.3'
   milestone: M2
   title: 'Router: tiers, per-agent override, fallback'
