@@ -335,9 +335,9 @@ tasks:
   - '1.1'
   - '1.8'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m1/1.5-seed
+  model: plan:sonnet
 - id: '1.6'
   milestone: M1
   title: Audit log helper
