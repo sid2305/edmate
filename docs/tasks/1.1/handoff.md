@@ -201,3 +201,9 @@ Decided: drizzle-orm 0.45.4, drizzle-kit 0.31.11, pg 8.23.1, @types/pg 8.23.1 (n
 Why: Exact pins (rule); pnpm refuses unlisted install scripts.
 Alternatives: drizzle 1.0.0-rc; allow esbuild's install script.
 Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Review · decided by team lead · risk: low
+Decided: Money and cost columns in packages/db/src/schema/billing.ts stay `bigint` in number mode, which is exact up to 2^53 (about 9 quadrillion minor units); contracts use JS numbers too. Typed jsonb columns, session joins for message isolation, and pool limits are follow-ups in task 1.2.
+Why: The ceiling is far above any realistic amount, and 1.2 is where rows are mapped to contract shapes.
+Alternatives: bigint as strings or BigInt everywhere.
+Reversible: Yes, one migration.
