@@ -7,6 +7,7 @@ import {
   SafetyAlertSchema,
   type TurnInput,
 } from '@edmate/contracts';
+import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { type Clock, type IdSource, isoAt } from './clock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
 import type { TimedResult } from './timeout.js';
@@ -89,6 +90,7 @@ export function fallbackContext(input: TurnInput, e: Entitled): BuiltContext {
     retrieved: [],
     lockedHit: false,
     helpRung: 0,
+    helpState: copyHelp(INITIAL_HELP_STATE),
   };
 }
 

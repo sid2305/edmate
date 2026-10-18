@@ -19,6 +19,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import { z } from 'zod';
+import { HelpStateSchema } from '../pedagogy/helpState.js';
 import type {
   BuiltContext,
   Entitled,
@@ -39,6 +40,7 @@ export const EntitledSchema: z.ZodType<Entitled> = z.strictObject({
   pkg: PackageConfigSchema,
   locale: LocalePackSchema,
   styleCard: StyleCardSchema,
+  helpState: z.unknown().optional(),
 });
 
 export const ScrubbedSchema: z.ZodType<Scrubbed> = z.strictObject({
@@ -66,6 +68,7 @@ export const BuiltContextSchema: z.ZodType<BuiltContext> = z.strictObject({
   lockedHit: z.boolean(),
   persona: PersonaSchema.exactOptional(),
   helpRung: TurnContextSchema.shape.helpRung,
+  helpState: HelpStateSchema,
 });
 
 export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({

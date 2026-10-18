@@ -48,7 +48,8 @@ export const entitle: Steps['entitle'] = async ({ input, deps }) => {
   const e = ent.value;
 
   // A session id is never trusted on its own: `load` checks its owner; we check every object.
-  const cfg = checkTurnConfig(e, await deps.turnConfig.load(e, sessionId as string));
+  const loaded = await deps.turnConfig.load(e, sessionId as string);
+  const cfg = checkTurnConfig(e, loaded);
   if (!cfg.ok) throw noAccess();
 
   // Rolling 24-hour message limit, subscriptions only (lead answer Q3). The take is the last
@@ -64,5 +65,7 @@ export const entitle: Steps['entitle'] = async ({ input, deps }) => {
       );
     }
   }
-  return { entitlement: e, ...cfg.value };
+  // The session's raw help state, from the same ownership-checked load (ADR-0005); buildContext
+  // parses it. Never validated here: any shape is safe because a bad one restarts the ladder.
+  return { entitlement: e, ...cfg.value, helpState: loaded?.helpState };
 };
