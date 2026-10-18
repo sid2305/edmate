@@ -32,6 +32,21 @@ Commands (after merging origin/main at `5393345`; clean merge, no lockfile confl
 - `corepack pnpm format:check`: only `.github/workflows/ci.yml` is flagged (unformatted on main already, out of bounds).
 - `packages/contracts/**`, `packages/harness/**`, `packages/gateway/**`, `evals/suites/**`, `evals/fixtures/**` untouched.
 
+## Fix round 1
+
+| Finding | Fix | Evidence |
+|---|---|---|
+| [CRITICAL] a case with no `expect` on any turn passes vacuously | `EvalCaseSchema` superRefine: at least one turn must have `expect`; the issue is on `turns` and names the case id. The runner also fails any case where no check ran (`error: 'no checks ran'`). | `schema.test.ts` "rejects a case where no turn has an expect block, naming the case id"; `runner.test.ts` "a case where no check ran fails (no vacuous pass), even if it bypassed the schema". |
+| [MEDIUM] `--record` overwrites fixtures silently | `Recorder.overwritten()` lists keys whose fixture existed before the write (file and memory recorders); `toSummary(results, { overwritten })` prints `overwrote N recorded fixture(s):` and one key per line; the CLI passes it. | `recorder.test.ts` (file, replay, memory seed), `report.test.ts` (count, singular, empty), `commands/eval.test.ts` "a second --record lists every fixture it overwrote". |
+| [LOW] one case's error aborts the run | `runSuite` catches per case: the case fails with `error` (message), keeps the turns that finished, and the run goes on; `toSummary` prints `FAIL <id> error: <message>`; the CLI exits 1. `runCase` still throws for direct callers. | `runner.test.ts` (error mid-case keeps turn 0 and runs the next case; missing replay fixture recorded per case; non-Error throw), `commands/eval.test.ts` "one erroring case does not hide the others (exit 1)". |
+
+After fix round 1 and merging origin/main at `2628792` (clean merge, no lockfile conflict):
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals... --filter=@edmate/cli...` → `Tasks: 22 successful, 22 total`; evals `Tests 103 passed (103)` (coverage 100% statements/lines/functions, 97.82% branches), cli `Tests 29 passed (29)` (98.52% statements, 100% lines).
+- `corepack pnpm install --frozen-lockfile` → up to date; `corepack pnpm turbo run build typecheck lint test --force` → `Tasks: 41 successful, 41 total`.
+- `python3 -m unittest discover -s .claude/tests` → OK; `python3 .githooks/secret-scan.py --all` → exit 0.
+- `format:check`: only `.github/workflows/ci.yml` (unformatted on main, out of bounds).
+
 ## Changes
 
 - `packages/evals`: `schema.ts`, `loader.ts`, `checks/{string,structure,judge,result}.ts`, `judgeModel.ts`, `recorder.ts` (`fileRecorder`, `memoryRecorder`), `agent.ts`, `runner.ts`, `report.ts`, barrel `index.ts`; tests beside each; `test/fixtures/suite/*` (synthetic); `test/setup/no-network.ts`; `vitest.config.ts`, `tsconfig.build.json`, `eslint.config.js`; `package.json` adds `js-yaml@5.5.0` (ships its own types), `zod`, `@edmate/contracts`, test devDeps and `@edmate/harness` (devDependency, tests only).
@@ -90,6 +105,12 @@ Reversible: Yes.
 Decided: `packages/evals` and `apps/cli` list `@edmate/harness` as a devDependency and import only `@edmate/harness/testing` in tests; no `src` file imports the harness.
 Why: the lead asked for the scripted gateway in tests (rule 4); the runtime graph stays one-way (harness does not know evals, evals' shipped code does not need the harness).
 Alternatives: a hand-written fake `ModelGateway` in evals.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 No vacuous passes; per-case errors; overwrite report · decided by reviewers (fix round 1) · risk: low
+Decided: a case must have at least one turn with `expect` (schema), and a case where no check ran fails (runner). `runSuite` records a throwing case as failed with its error and keeps going; `runCase` still throws. `--record` lists every overwritten fixture key with a count in the summary.
+Why: a check-free case would report a pass that proves nothing; one bad case shouldn't hide the rest of a run; re-recording should be visible in review.
+Alternatives: allow check-free cases; abort the whole run on the first error; overwrite silently.
 Reversible: Yes.
 
 ### 18 Oct 2026 · 3.12 Strict checks and loud failures · decided by builder · risk: low
