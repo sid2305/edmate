@@ -6,7 +6,26 @@ import { EntitlementSchema } from '@edmate/contracts';
 import { checkEntitlement, checkTurnConfig } from '../../access/entitlement.js';
 import { isoAt } from '../clock.js';
 import { TurnRejection } from '../errors.js';
-import type { Steps } from '../types.js';
+import type { FallbackReplies, Steps } from '../types.js';
+
+/**
+ * The built-in `limit_reached` text (task 2.5), used when no localised one is injected. English
+ * and country-neutral; it names no ids and no limit, since the limit is the teacher's choice.
+ */
+export const DEFAULT_LIMIT_REACHED_REPLY =
+  "You've used all of today's messages for this package. Messages free up on a rolling " +
+  '24 hours, so you can pick up where you left off a little later. See you soon!';
+
+/** The injected localised text, else the built-in one: a failing locale never hides the reason. */
+function limitReachedText(replies: FallbackReplies, lang: string): string {
+  try {
+    const text: unknown = replies.limitReached?.(lang);
+    if (typeof text === 'string' && text.trim() !== '') return text;
+  } catch {
+    // Fall through to the built-in text.
+  }
+  return DEFAULT_LIMIT_REACHED_REPLY;
+}
 
 const noAccess = () => new TurnRejection('no_access', false);
 const IdSchema = EntitlementSchema.shape.agentId;
@@ -29,7 +48,8 @@ export const entitle: Steps['entitle'] = async ({ input, deps }) => {
   const e = ent.value;
 
   // A session id is never trusted on its own: `load` checks its owner; we check every object.
-  const cfg = checkTurnConfig(e, await deps.turnConfig.load(e, sessionId as string));
+  const loaded = await deps.turnConfig.load(e, sessionId as string);
+  const cfg = checkTurnConfig(e, loaded);
   if (!cfg.ok) throw noAccess();
 
   // Rolling 24-hour message limit, subscriptions only (lead answer Q3). The take is the last
@@ -38,8 +58,14 @@ export const entitle: Steps['entitle'] = async ({ input, deps }) => {
   if (source === 'subscription') {
     const key = `${e.studentId}:${e.packageId}`;
     if (!(await deps.limits.messages.tryTake(key, cfg.value.pkg.dailyMessageLimit))) {
-      throw new TurnRejection('limit_reached', false);
+      throw new TurnRejection(
+        'limit_reached',
+        false,
+        limitReachedText(deps.fallbackReplies, input.lang),
+      );
     }
   }
-  return { entitlement: e, ...cfg.value };
+  // The session's raw help state, from the same ownership-checked load (ADR-0005); buildContext
+  // parses it. Never validated here: any shape is safe because a bad one restarts the ladder.
+  return { entitlement: e, ...cfg.value, helpState: loaded?.helpState };
 };

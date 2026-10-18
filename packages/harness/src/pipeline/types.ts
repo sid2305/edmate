@@ -31,6 +31,7 @@ import type {
   Usage,
   UsageMeter,
 } from '@edmate/contracts';
+import type { HelpState } from '../pedagogy/helpState.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { TurnLimits } from './limits.js';
 
@@ -40,6 +41,12 @@ export interface FallbackReplies {
   safeReply(lang: Lang): string;
   /** escalate's caring reply when the step fails; should list the locale pack's helplines. */
   distress(lang: Lang, locale: LocalePack): string;
+  /**
+   * entitle's friendly text for `limit_reached` (task 2.5), carried on the TurnRejection's
+   * `message` (the frozen wire event has no message field). Optional: when absent, empty or
+   * failing, entitle uses the built-in English `DEFAULT_LIMIT_REACHED_REPLY`.
+   */
+  limitReached?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -93,6 +100,11 @@ export interface Entitled {
   pkg: PackageConfig;
   locale: LocalePack;
   styleCard: StyleCard;
+  /**
+   * The session's stored help state, raw and unvalidated (ADR-0005); buildContext parses it.
+   * Server-side only: it holds `answerKey`, so it never goes into TurnContext, events or traces.
+   */
+  helpState?: unknown;
 }
 
 export interface Scrubbed {
@@ -118,6 +130,11 @@ export interface BuiltContext {
   lockedHit: boolean;
   persona?: Persona;
   helpRung: TurnContext['helpRung'];
+  /**
+   * The rest of the parsed help state (ADR-0005). Kept out of TurnContext (it holds `answerKey`);
+   * 3.6/3.8 thread it into decide and commit.
+   */
+  helpState: HelpState;
 }
 
 export interface EscalateResult {

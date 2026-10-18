@@ -6,14 +6,21 @@
 // takes or stores request text (system prompt, messages) or anything else a student wrote.
 import { randomUUID } from 'node:crypto';
 import { EntitlementSchema, UsageSchema, type Entitlement, type Usage } from '@edmate/contracts';
-import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, ne, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { packages, usageLedger } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { checked, iso } from './map.js';
-import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
+import {
+  IdSchema,
+  parseArg,
+  studentScope,
+  teacherScope,
+  type StudentScope,
+  type TeacherScope,
+} from './scope.js';
 
 export type UsageSource = Entitlement['source'];
 export type UsageStatus = 'recorded' | 'unknown' | 'unpriced';
@@ -73,6 +80,19 @@ export interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
 }
+
+/**
+ * A teacher's totals since a date (task 2.5, the monthly cost alarm), over every student and
+ * excluding `eval` rows (evals are billed to Edmate). Same split as UsageTotals: unknown and
+ * unpriced calls are counted, never folded into `costMicroUsd` as zero.
+ */
+export interface TeacherUsageTotals extends Omit<UsageTotals, 'studentId'> {
+  /** The start of the window, inclusive, as a UTC ISO timestamp. */
+  since: string;
+}
+
+/** An ISO 8601 timestamp with a time (a bare date is ambiguous across time zones). */
+const Since = z.iso.datetime({ offset: true });
 
 const Model = UsageSchema.shape.model.min(1).max(200);
 const Source = EntitlementSchema.shape.source;
@@ -195,6 +215,27 @@ export function usageLedgerRepo(db: Db) {
     if (written(result) !== 1) throw new RepositoryError('not_found', method);
   }
 
+  /** Counts and sums over the rows `where` selects (shared by the per-student and teacher reads). */
+  async function totals(method: string, where: SQL | undefined) {
+    // sum() skips NULL, so unknown figures are left out, and counted in `unknown` / `unpriced`.
+    const [row] = await db
+      .select({
+        calls: count(),
+        recorded: count(sql`${usageLedger.status} = 'recorded'`),
+        unknown: count(sql`${usageLedger.status} = 'unknown'`),
+        unpriced: count(sql`${usageLedger.status} = 'unpriced'`),
+        costMicroUsd: sum(sql`${usageLedger.costMicroUsd}`),
+        inputTokens: sum(sql`${usageLedger.inputTokens}::bigint`),
+        outputTokens: sum(sql`${usageLedger.outputTokens}::bigint`),
+      })
+      .from(usageLedger)
+      .where(where);
+    const parsed = Object.fromEntries(
+      Object.entries(row ?? {}).map(([k, v]) => [k, exact(String(v), method)]),
+    );
+    return checked(TotalsRow, parsed, method);
+  }
+
   return {
     /** A priced call. The package must be the scope's teacher's, else `not_found`. */
     async record(scope: StudentScope, packageId: string, entry: UsageEntry): Promise<void> {
@@ -277,28 +318,28 @@ export function usageLedgerRepo(db: Db) {
     async sumForStudent(scope: StudentScope): Promise<UsageTotals> {
       const method = 'usageLedger.sumForStudent';
       const sc = studentScope(scope, method);
-      const recorded = sql`${usageLedger.status} = 'recorded'`;
-      const unknown = sql`${usageLedger.status} = 'unknown'`;
-      const unpriced = sql`${usageLedger.status} = 'unpriced'`;
-      // sum() skips NULL, so unknown figures are left out, and counted in `unknown` / `unpriced`.
-      const [row] = await db
-        .select({
-          calls: count(),
-          recorded: count(recorded),
-          unknown: count(unknown),
-          unpriced: count(unpriced),
-          costMicroUsd: sum(sql`${usageLedger.costMicroUsd}`),
-          inputTokens: sum(sql`${usageLedger.inputTokens}::bigint`),
-          outputTokens: sum(sql`${usageLedger.outputTokens}::bigint`),
-        })
-        .from(usageLedger)
-        .where(
-          and(eq(usageLedger.teacherId, sc.teacherId), eq(usageLedger.studentId, sc.studentId)),
-        );
-      const parsed = Object.fromEntries(
-        Object.entries(row ?? {}).map(([k, v]) => [k, exact(String(v), method)]),
+      const where = and(
+        eq(usageLedger.teacherId, sc.teacherId),
+        eq(usageLedger.studentId, sc.studentId),
       );
-      return { ...sc, ...checked(TotalsRow, parsed, method) };
+      return { ...sc, ...(await totals(method, where)) };
+    },
+
+    /**
+     * The scope's teacher's totals over every student since `since` (inclusive), leaving out
+     * `eval` rows: the monthly cost alarm's read (task 2.5). Uses the (teacher_id, created_at)
+     * index. Unknown and unpriced calls are reported in their own counts.
+     */
+    async sumForTeacherSince(scope: TeacherScope, since: string): Promise<TeacherUsageTotals> {
+      const method = 'usageLedger.sumForTeacherSince';
+      const sc = teacherScope(scope, method);
+      const from = new Date(parseArg(Since, since, method));
+      const where = and(
+        eq(usageLedger.teacherId, sc.teacherId),
+        gte(usageLedger.createdAt, from),
+        ne(usageLedger.source, 'eval'),
+      );
+      return { ...sc, since: from.toISOString(), ...(await totals(method, where)) };
     },
   };
 }

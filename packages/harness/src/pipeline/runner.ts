@@ -630,6 +630,10 @@ function assemble(
   intent: Intent,
   attempt: TurnContext['attempt'],
 ): TurnContext | null {
-  const parsed = TurnContextSchema.safeParse({ ...e, ...b, intent, attempt });
+  // The help state (raw on Entitled, parsed on BuiltContext) holds `answerKey`: it never enters
+  // TurnContext, which goes to the model, events and traces (ADR-0005). 3.6 passes it to decide.
+  const raw: Record<string, unknown> = { ...e, ...b, intent, attempt };
+  delete raw.helpState;
+  const parsed = TurnContextSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

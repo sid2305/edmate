@@ -26,6 +26,13 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`) and returns a 
 - **Limits** are in-memory sliding windows on the injected clock (`createTurnLimits(clock)`, built once by the composition root). A restart resets them; task 3.14 makes the daily count durable behind the same `TurnCounter` interface.
 - **Testing:** `twoTeacherWorld()`, `memoryEntitlementStore(world, opts)` and `memoryTurnConfigStore(world)` mirror the db adapters (`entitlementStoreFor`, `turnConfigStoreFor`); `accessTurns()` runs turns through `runTurn` with the real admit and entitle.
 
+## buildContext (task 3.4)
+
+- Loads the learner profile (with `lastSummary`) and the last 40 messages concurrently, trims history oldest first to 16,000 UTF-16 units (the newest message is always kept, cut if it alone is longer), and builds one retrieval query from the latest message plus the latest agent message.
+- Retrieval only through `RetrievalIndex.search(q, { teacherId, allowedModuleIds }, 5)`; every chunk returned is checked again and one outside the scope fails the step (`RetrievalScopeError`, the runner's `ask_teacher` fallback). `probe` runs over `lockedModuleIds` only (skipped when there are none) and only its `hit` is read. History plus chunk text stays within `MAX_CONTEXT_CHARS` (32,000; no tokenizer in the harness).
+- Parses the session's raw help state (on `Entitled`, from `TurnConfigStore.load`, ADR-0005) with `parseSessionHelp`; anything invalid is rung 0 and `INITIAL_HELP_STATE`. The parsed `helpState` (with `answerKey`) stays out of `TurnContext`, events and traces; 3.6/3.8 thread it into decide and commit (`serializeSessionHelp`).
+- **Testing:** `memoryRetrieval({ chunks, probe? })` and `retrievalWorld()` (allowed, locked and other-teacher chunks; out-of-scope text carries `OUT_OF_SCOPE_TEXT`).
+
 ## Replacing a stub
 
 Every step lives in its own file under `src/pipeline/steps/`. Until its task lands, a step throws `StepNotImplementedError`, so the runner applies its failure policy (admit, entitle and preGuard fail closed). To build a step, replace the body in its file and keep the `Steps['<name>']` type; `defaultSteps` picks it up.

@@ -25,6 +25,11 @@ export const tstz = (name: string) => timestamp(name, { withTimezone: true });
 
 // Enums. Where the contracts define the same set, test/schema.test.ts checks they stay equal.
 export const userRole = pgEnum('user_role', ['student', 'teacher', 'staff']);
+/**
+ * Who an audit row says acted: a user's role, or `system` for an automated actor such as the
+ * monthly cost alarm (task 2.5). Separate from user_role, so no user can hold `system`.
+ */
+export const auditActorRole = pgEnum('audit_actor_role', ['student', 'teacher', 'staff', 'system']);
 export const subscriptionStatus = pgEnum('subscription_status', [
   'trial',
   'active',

@@ -63,10 +63,21 @@ export type RepositoryMethod = {
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
 export type { AuditRow, TeacherQuestionForTeacher } from './map.js';
-export { AUDIT_JSON_MAX_LENGTH, AUDIT_MAX_LIMIT, type AuditEntryInput } from './audit.js';
+export {
+  AUDIT_JSON_MAX_LENGTH,
+  AUDIT_MAX_LIMIT,
+  type AuditEntryInput,
+  SYSTEM_ACTOR_PREFIX,
+} from './audit.js';
 export type { SessionRow } from './sessions.js';
 export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
-export type { LiveSubscription } from './subscriptions.js';
+export {
+  COST_ALARM_ACTOR,
+  COST_ALARM_PAUSE_ACTION,
+  type LiveSubscription,
+  type PausedSubscription,
+  type PauseFreeOptions,
+} from './subscriptions.js';
 export type { AgentRow, PublicAgentScope } from './agents.js';
 export type {
   UnmeteredEntry,
@@ -76,6 +87,7 @@ export type {
   UsageSource,
   UsageStatus,
   UsageTotals,
+  TeacherUsageTotals,
 } from './usage-ledger.js';
 export {
   type EntitlementStoreOptions,

@@ -11,6 +11,7 @@ import {
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
 import type { ModelGateway, PedagogyDecision, Usage } from '@edmate/contracts';
+import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
 import type { CommitRecord, PipelineDeps, StepEnv, Steps } from '../pipeline/types.js';
 import { sequentialIds, type SequentialIds } from './ids.js';
@@ -97,6 +98,7 @@ function happySteps(commits: CommitRecord[]): Steps {
         retrieved: [demoChunk],
         lockedHit: false,
         helpRung: 0,
+        helpState: copyHelp(INITIAL_HELP_STATE),
       }),
     escalate: () => Promise.resolve({ replyText: TEST_CARING_REPLY }),
     decide: {

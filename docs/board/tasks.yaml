@@ -335,9 +335,9 @@ tasks:
   - '1.1'
   - '1.8'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m1/1.5-seed
+  model: plan:sonnet
 - id: '1.6'
   milestone: M1
   title: Audit log helper
@@ -420,7 +420,7 @@ tasks:
   deps:
   - '2.4'
   - M0
-  status: review
+  status: done
   branch: m2/2.5-limits
   model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.6'
@@ -489,9 +489,9 @@ tasks:
   - '3.1'
   - M0
   - '3.15'
-  status: running
+  status: done
   branch: m3/3.4-build-context
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(ts)
 - id: '3.5'
   milestone: M3
   title: 'Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move'
@@ -511,10 +511,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m3/3.6-prompt-composer
+  model: plan:opus build:opus-5.5/medium
 - id: '3.7'
   milestone: M3
   title: 'Orchestrator: streaming, tool calls (max 3 rounds), per-turn cost ceiling, SSE events incl. `sources`, `locked`, `teacher_question`, `skill` and `replace`'
@@ -615,6 +615,16 @@ tasks:
   status: done
   branch: m3/3.15-adr-0005
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
+- id: '3.16'
+  milestone: M3
+  title: 'Sessions follow the package: when the entitled package or its version changes, end the open session (or start a fresh one) so earlier history, sources and summary from a lapsed package never reach
+    the model'
+  accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
+  deps:
+  - '3.4'
+  status: todo
+  branch: null
+  model: null
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'

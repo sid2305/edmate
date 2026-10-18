@@ -263,6 +263,13 @@ describe('usage_ledger: one row per model call (task 2.4)', () => {
     ]);
   });
 
+  it('is indexed on (teacher_id, created_at) for the monthly per-teacher cost alarm (task 2.5)', () => {
+    const idx = Object.values(t.indexes).find(
+      (i) => i.name === 'usage_ledger_teacher_id_created_at_idx',
+    );
+    expect(idx?.columns.map((c) => c.expression)).toEqual(['teacher_id', 'created_at']);
+  });
+
   it('checks that a recorded row has every figure, and no count is negative', () => {
     expect(Object.keys(t.checkConstraints).sort()).toEqual([
       'usage_ledger_counts_non_negative',
@@ -303,6 +310,20 @@ describe('enums match the contracts', () => {
   it('user_role and agent_status follow the Data model', () => {
     expect(values('user_role')).toEqual(['student', 'teacher', 'staff']);
     expect(values('agent_status')).toEqual(['draft', 'live', 'suspended']);
+  });
+  it('audit_actor_role adds `system` for automated actors, without widening user_role (task 2.5)', () => {
+    expect(values('audit_actor_role')).toEqual(['student', 'teacher', 'staff', 'system']);
+    expect(table('audit_log').columns.actor_role?.type).toBe('audit_actor_role');
+    expect(table('users').columns.role?.type).toBe('user_role');
+  });
+});
+
+describe('cost alarm migration (task 2.5): existing audit rows keep their role', () => {
+  it('converts the column through text, so every stored role maps to the same value', () => {
+    const m = migrationSql().find((f) => f.file.endsWith('_cost_alarm.sql'));
+    expect(m?.sql).toMatch(
+      /ALTER TABLE "audit_log" ALTER COLUMN "actor_role" SET DATA TYPE "public"\."audit_actor_role" USING "actor_role"::text::"public"\."audit_actor_role";/,
+    );
   });
 });
 

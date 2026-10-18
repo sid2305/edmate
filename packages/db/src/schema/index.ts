@@ -1,6 +1,7 @@
 // Every table in the build plan's Data model (task 1.1). drizzle-kit reads this file.
 export {
   agentStatus,
+  auditActorRole,
   chunkKind,
   EMBEDDING_DIMENSIONS,
   entitlementSource,
