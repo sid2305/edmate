@@ -86,9 +86,17 @@ interface WriteCase<K extends string, S> {
   mismatches?: (actor: K) => [label: string, run: (r: Repos) => Promise<unknown>, kind: string][];
 }
 
+/** A method with no teacher or student scope (only `agents.owner`): its own checks, case count. */
+interface PublicCase {
+  scope: 'public';
+  op: 'read';
+  check: (r: Repos) => Promise<number>;
+}
+
 type IsolationCase =
   | ({ scope: 'teacher' } & (ReadCase<Teacher, TeacherScope> | WriteCase<Teacher, TeacherScope>))
-  | ({ scope: 'student' } & (ReadCase<Pair, StudentScope> | WriteCase<Pair, StudentScope>));
+  | ({ scope: 'student' } & (ReadCase<Pair, StudentScope> | WriteCase<Pair, StudentScope>))
+  | PublicCase;
 
 let counter = 0;
 const uid = (prefix: string) => `${prefix}_${++counter}`;
@@ -152,6 +160,79 @@ function auditOwners(rows: AuditRow[], kind: 'teacher' | 'student'): string[] {
 const BIG = { blob: 'x'.repeat(10_001) };
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
+  'agents.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.agents.get(scope, ids.agent(t)),
+    random: (r, scope, rid) => r.agents.get(scope, rid),
+    owners: (x: { teacherId: string } | null) => (x ? [teacherOfId(x.teacherId)] : []),
+  },
+  'agents.owner': {
+    scope: 'public',
+    op: 'read',
+    // Public by design (agent -> teacher is shown on teacher pages): it returns the owner id of a
+    // live agent and nothing else, and nothing for draft, suspended or unknown agents.
+    check: async (r) => {
+      let n = 0;
+      for (const t of TEACHERS) {
+        const got = await r.agents.owner({ agentId: ids.agent(t) });
+        expect(got).toEqual({ teacherId: teacherId(t) });
+        expect(Object.keys(got ?? {})).toEqual(['teacherId']);
+        n += 1;
+      }
+      await raw.query(
+        `insert into agents (id, teacher_id, status) values
+           ('agt_owner_draft', 'tch_a', 'draft'), ('agt_owner_susp', 'tch_b', 'suspended')`,
+      );
+      for (const agentId of ['agt_owner_draft', 'agt_owner_susp']) {
+        expect(await r.agents.owner({ agentId }), agentId).toBeNull();
+        n += 1;
+      }
+      const rand = prng(4242);
+      for (let i = 0; i < 20; i += 1) {
+        expect(await r.agents.owner({ agentId: randomId(rand) })).toBeNull();
+        n += 1;
+      }
+      return n;
+    },
+  },
+  'modules.ids': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.modules.ids(scope),
+    random: (r, _scope, rid) => r.modules.ids({ teacherId: rid }),
+    // mod_a1 -> A
+    owners: (xs: string[]) => xs.map((m) => m.slice(4, 5).toUpperCase()),
+  },
+  'styleCards.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.styleCards.get(scope, ids.styleCard(t)),
+    random: (r, scope, rid) => r.styleCards.get(scope, rid),
+    owners: (c: { text: string; teacherId: string } | null) =>
+      c ? [...markers(c.text), teacherOfId(c.teacherId)] : [],
+  },
+  'packageVersions.getById': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.packageVersions.getById(scope, ids.packageVersion(t)),
+    random: (r, scope, rid) => r.packageVersions.getById(scope, rid),
+    owners: (c: { name: string; teacherId: string } | null) =>
+      c ? [...markers(c.name), teacherOfId(c.teacherId)] : [],
+  },
+  'packageVersions.latest': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.packageVersions.latest(scope, ids.pkg(t)),
+    random: (r, scope, rid) => r.packageVersions.latest(scope, rid),
+    owners: (c: { name: string; teacherId: string } | null) =>
+      c ? [...markers(c.name), teacherOfId(c.teacherId)] : [],
+  },
   'agentVersions.get': {
     scope: 'teacher',
     op: 'read',
@@ -957,6 +1038,11 @@ describe.skipIf(!up)(
       it(`${method}: ${c.scope} scope, ${c.op}s fail closed across scopes`, async () => {
         let cases = 0;
         let leaks = 0;
+        if (c.scope === 'public') {
+          cases += await c.check(repos);
+          summary.push(`${method.padEnd(34)} public  read  cases=${cases} leaks=0`);
+          return;
+        }
         if (c.scope === 'teacher') {
           const actors = [...TEACHERS];
           cases += await runGrid(c, actors, tScope, (a, t) => a === t);
