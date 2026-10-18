@@ -420,9 +420,9 @@ tasks:
   deps:
   - '2.4'
   - M0
-  status: running
+  status: review
   branch: m2/2.5-limits
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.6'
   milestone: M2
   title: Scripted gateway in `harness/testing`
@@ -440,11 +440,11 @@ tasks:
   - '2.2'
   - M0
   - '3.15'
-  status: planning
+  status: running
   needs_decision:
   - transcription
   branch: m2/2.7-transcriber-embeddings
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '3.1'
   milestone: M3
   title: 'Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture'
