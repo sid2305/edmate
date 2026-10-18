@@ -183,10 +183,23 @@ importers:
         version: 6.0.3
 
   apps/cli:
+    dependencies:
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@edmate/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
+      '@edmate/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
     devDependencies:
       '@edmate/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
@@ -364,16 +377,38 @@ importers:
         version: 5.0.5(@types/node@22.20.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))
 
   packages/evals:
+    dependencies:
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      js-yaml:
+        specifier: 5.5.0
+        version: 5.5.0
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      '@vitest/coverage-v8':
+        specifier: 5.0.5
+        version: 5.0.5(vitest@5.0.5)
       eslint:
         specifier: 10.13.0
         version: 10.13.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@22.20.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))
 
   packages/gateway:
     dependencies:
@@ -1769,6 +1804,9 @@ packages:
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
+  argparse@3.0.3:
+    resolution: {integrity: sha512-Sn98ftV3KfsO8xfLPHG6oT8y+b0yvbrLgZjgPDXsharNY15tTAjqIsIju4S32nl6/iEUNNE4v+yL2Zhm8ooP3w==}
+
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
     engines: {node: '>=12'}
@@ -2125,6 +2163,10 @@ packages:
 
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
+
+  js-yaml@5.5.0:
+    resolution: {integrity: sha512-paNr4LFIFPjeeSmwNYdrb8FafLLG/Cr2Af3GjbsHJ5CxIjH4r0c2emlmRdAtpPAieP1gRVzk6buBbVP5gBMGAg==}
+    hasBin: true
 
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
@@ -3684,6 +3726,8 @@ snapshots:
       json-schema-traverse: 0.4.1
       uri-js: 4.4.1
 
+  argparse@3.0.3: {}
+
   assertion-error@2.0.1: {}
 
   ast-v8-to-istanbul@1.0.7:
@@ -4000,6 +4044,10 @@ snapshots:
   isexe@2.0.0: {}
 
   js-tokens@10.0.0: {}
+
+  js-yaml@5.5.0:
+    dependencies:
+      argparse: 3.0.3
 
   json-schema-traverse@0.4.1: {}
 

@@ -10,6 +10,66 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.12 `EvalCase` lives in `packages/evals`, not `packages/contracts` · decided by planner · risk: low
+Decided: the case/check shape is a Zod schema owned by `packages/evals`.
+Why: it is not in the Core contracts list and nothing outside the eval runner reads it; adding it to contracts would need an ADR.
+Alternatives: add it to contracts for symmetry.
+Reversible: Yes, by ADR if a second package needs the type.
+
+### 18 Oct 2026 · 3.12 One generic `Recorder` for agent replies and judge outputs · decided by planner · risk: low
+Decided: every agent reply and judge verdict goes through one record/replay mechanism, one JSON file per (case, turn, call) at `<fixtures>/<case>/turn-<n>/{agent,judge-<i>}.json`; replay never calls the live function and a missing fixture throws "run with --record first".
+Why: "record/replay including recorded judge outputs" becomes one mechanism, and CI replay has no live call path.
+Alternatives: a judge-only recorder plus ad hoc agent caching.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 No default judge model; `EDMATE_JUDGE_MODEL` required to record · decided by lead (human decision on pinning) · risk: low
+Decided: `resolveJudgeModel()` reads `EDMATE_JUDGE_MODEL="<provider>:<model>"` and throws if unset; each recorded judge fixture stores the model that produced it. An `openai-compatible` judge also needs `EDMATE_JUDGE_BASE_URL`.
+Why: the model mix is open until 7.6 and the judge is pinned per release by a human; a guessed id could be baked into fixtures.
+Alternatives: hard-code a default id.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 Agent under test is an injected `EvalAgent`; the CLI's agent stays unwired · decided by planner, accepted by lead (Q1) · risk: low
+Decided: the runner takes a minimal `EvalAgent` (`reply({caseId, turnIndex, student, priorTurns}) → {text, sources?}`); `edmate eval` passes an agent that refuses every call until a pipeline exists. Replay still works with recorded agent fixtures.
+Why: 3.1 is not built; a one-shot stand-in model would look like real coverage without guards, retrieval or persona.
+Alternatives: wire a direct-to-model stand-in now.
+Reversible: Yes; a later task passes a real agent.
+
+### 18 Oct 2026 · 3.12 `edmate eval` lives in `apps/cli` · decided by planner · risk: low
+Decided: `edmate eval <dir> [--fixtures <dir>] [--record] [--report <file>]`; fixtures default to `evals/fixtures`; exit 1 on any failing case or error. `run()` became async.
+Why: the build plan's CLI-parity table names `edmate eval` under `apps/cli`.
+Alternatives: a bin in `packages/evals`.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 Case id charset only; `must_cite_source: false` means "no sources" · decided by planner, accepted by lead (Q2, Q3) · risk: low
+Decided: ids must match `^[a-z0-9-]+$` (the `<suite>-<skill>-<nnn>` shape stays an authoring convention); `must_cite_source: false` asserts no sources, omitting it means don't care.
+Why: skill names and numbering may change; an explicit "no sources" is useful for off-topic redirects.
+Alternatives: enforce the full id shape; treat `false` as don't care.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 Eval tests use the 2.6 scripted gateway via a devDependency on `@edmate/harness` · decided by builder · risk: low
+Decided: `packages/evals` and `apps/cli` list `@edmate/harness` as a devDependency and import only `@edmate/harness/testing` in tests; no `src` file imports the harness.
+Why: the lead asked for the scripted gateway in tests (rule 4); the runtime graph stays one-way (harness does not know evals, evals' shipped code does not need the harness).
+Alternatives: a hand-written fake `ModelGateway` in evals.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 No vacuous passes; per-case errors; overwrite report · decided by reviewers (fix round 1) · risk: low
+Decided: a case must have at least one turn with `expect` (schema), and a case where no check ran fails (runner). `runSuite` records a throwing case as failed with its error and keeps going; `runCase` still throws. `--record` lists every overwritten fixture key with a count in the summary.
+Why: a check-free case would report a pass that proves nothing; one bad case shouldn't hide the rest of a run; re-recording should be visible in review.
+Alternatives: allow check-free cases; abort the whole run on the first error; overwrite silently.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.12 Strict checks and loud failures · decided by builder · risk: low
+Decided: string checks are case-insensitive substrings; `matches` regexes compile with `i` at load time; checks run in a fixed order (`must_contain`, `must_not_contain`, `matches`, `max_words`, `max_chars`, `must_cite_source`, `judge[i]`); an empty suite dir, a malformed recorded fixture or a malformed agent reply throws rather than scoring; fixture keys are restricted to lowercase `/`-joined segments.
+Why: deterministic reports and no silent skips.
+Alternatives: return `[]` for an empty dir; score malformed data as a fail.
+Reversible: Yes.
+
+### 18 Oct 2026 · Payments come last · decided by you · risk: high
+Decided: Build and test the harness and the platform end to end first, then raise agent quality, and only then build payments (M10). Until M10, a paid package starts as an active subscription with no payment; checkout (new 10.8) and teacher earnings (new 10.7) move into M10, and M13 hardening no longer waits on M10 except the pilot readiness checklist (13.6).
+Why: The product's value is the teacher's agent; money and payouts are not worth the effort until the whole thing works and the agent is good.
+Alternatives: Keep payments in the platform build (9.3 checkout, 8.8 earnings, 9.7 with a payment sandbox).
+Reversible: Yes; entitlements already come from subscriptions, so M10 only adds how a subscription gets paid for. The payment, refund and revenue-share answers above stay on record for M10.
+
 ### 18 Oct 2026 · Turn config loading · decided by team lead (architect's design) · risk: high
 Decided: Add one contracts port, `TurnConfigStore`, recorded in ADR-0004 (task 3.13). `entitle` loads the agent, package version, style card and locale pack in one call and fails closed if any object doesn't belong to the entitled teacher. This moves style card and locale loading from buildContext to entitle, a deviation from the Turn pipeline spec.
 Why: Scrub needs PII patterns and escalate needs helplines before buildContext runs; ADR-0002 keeps adapter-backed ports in contracts.

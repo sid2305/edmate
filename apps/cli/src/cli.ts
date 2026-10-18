@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { runEvalCommand, unwiredAgent } from './commands/eval.js';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -6,6 +7,9 @@ export interface CliIo {
 }
 
 const USAGE = `Usage: edmate <command>
+
+Commands:
+  eval <dir>     run eval cases offline from recorded fixtures (see edmate eval --help)
 
 Options:
   -v, --version  print the edmate version
@@ -25,9 +29,9 @@ function version(): string {
   return pkg.version;
 }
 
-/** Runs the CLI for the given arguments and returns the process exit code. */
-export function run(argv: readonly string[], io: CliIo = defaultIo): number {
-  const [first] = argv;
+/** Runs the CLI for the given arguments and resolves to the process exit code. */
+export async function run(argv: readonly string[], io: CliIo = defaultIo): Promise<number> {
+  const [first, ...rest] = argv;
   switch (first) {
     case '-v':
     case '--version':
@@ -37,6 +41,12 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
     case '--help':
       io.stdout(USAGE);
       return 0;
+    case 'eval':
+      return runEvalCommand(rest, io, {
+        agent: unwiredAgent,
+        env: process.env,
+        cwd: process.cwd(),
+      });
     case undefined:
       io.stderr(USAGE);
       return 1;

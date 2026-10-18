@@ -1,0 +1,18 @@
+# Synthetic case using every check type, for the eval runner's own tests (task 3.12).
+id: test-all-checks-003
+suite: test
+package: free
+reviewed_by: pending
+source: 'synthetic fixture for packages/evals tests'
+turns:
+  - student: 'Where does the formula for area come from?'
+    expect:
+      must_contain: ['length']
+      must_not_contain: ["I don't know"]
+      matches: ["\\bwidth\\b"]
+      max_words: 30
+      max_chars: 200
+      must_cite_source: true
+      judge:
+        - 'The reply explains area as length times width.'
+        - 'The reply points the student to a source.'

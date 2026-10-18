@@ -615,27 +615,27 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 
 ### M8 · Teacher studio (depends on: GATE, 1.3, 5.1, 5.2)
 
-- **8.1** Onboarding: profile, subject, bio, photo, payout account hand-off; identity checked manually by staff (12.1). *Accept:* an unverified teacher cannot publish.
+- **8.1** Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1). *Accept:* an unverified teacher cannot publish.
 - **8.2** Upload centre with live processing status, delete and replace. *Accept:* status updates live; a deleted file leaves retrieval within 1 minute.
 - **8.3** Outline editor with source links; reorder, rename, merge, split. *Accept:* outline for 20 files in < 10 minutes; edits versioned.
 - **8.4** Style interview (incl. common mistakes) and style card editor. *Accept:* the teacher can preview and edit the card; the agent uses the new version on the next turn.
 - **8.5** Test chat as a student per package; mark and correct answers. *Accept:* a correction changes the next answer and becomes an eval case.
 - **8.6** Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate. *Accept:* two packages in < 15 minutes; estimate shown per package.
 - **8.7** Publish flow with quality-gate results, the teaching scorecard and the public profile page. *Accept:* failures show which cases failed; a pass publishes in < 1 minute.
-- **8.8** Insights and earnings views. *Accept:* earnings match the ledger; insights show no individual student.
+- **8.8** Insights view (earnings move to 10.7). *Accept:* insights show no individual student.
 - **8.9** Questions inbox: grouped open questions, answer with a module choice, dismiss. *Accept:* an answer reaches every grouped student and becomes a teacher note and eval case.
 
 ### M9 · Student app (depends on: GATE, 1.3, 1.7)
 
 - **9.1** App shell, mobile-first layouts (360 px up), next-intl, auth. *Accept:* Lighthouse accessibility ≥ 95 at 360 px.
 - **9.2** Discovery and teacher pages (server-rendered) with packages and the teaching scorecard. *Accept:* search < 1 s on a 200-teacher seed.
-- **9.3** Package compare, free package start, checkout. *Accept:* the package unlocks on the next message after payment.
+- **9.3** Package compare and start; until M10 a paid package starts as an active subscription with no payment (checkout is 10.8). *Accept:* the package unlocks on the next message after starting; no payment provider is called.
 - **9.4** Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread. *Accept:* component tests + e2e.
 - **9.5** Skill screens: practice, feedback submission, mock interview (from `skill` events). *Accept:* e2e per skill.
-- **9.6** Progress, plan changes (upgrade, downgrade, pause, cancel) and export. *Accept:* export is complete JSON plus notes PDF.
-- **9.7** E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer. *Accept:* green in CI with scripted gateway and payment sandbox.
+- **9.6** Progress, plan changes (upgrade, downgrade, pause, cancel) and export; no payment until M10. *Accept:* export is complete JSON plus notes PDF.
+- **9.7** E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer. *Accept:* green in CI with scripted gateway.
 
-### M10 · Payments and payouts (depends on: M1, 2.4)
+### M10 · Payments and payouts (depends on: M1, 2.4; built last, after the platform is tested end to end and agent quality is up)
 
 - **10.1** Payment provider adapter for the pilot market behind the `Payments` port, using the provider's subscriptions. *Accept:* provider sandbox flows pass; a second provider can be added without changing callers.
 - **10.2** Signed, idempotent, order-independent webhooks → subscriptions → entitlements. *Accept:* replayed and out-of-order webhooks end in the correct state.
@@ -643,6 +643,8 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **10.4** Simple ledger (payments, refunds, Edmate share) and a monthly payout export for manual payouts in the pilot. *Accept:* the export matches the provider's report for the month.
 - **10.5** Automated payouts, statements and daily reconciliation (P1). *Accept:* payout amounts equal ledger balances.
 - **10.6** Refunds and tax invoices per market. *Accept:* one invoice per payment; a refund updates the ledger and the entitlement.
+- **10.7** Earnings view for teachers (moved from 8.8). *Accept:* earnings match the ledger.
+- **10.8** Checkout: paid packages go through the `Payments` port, replacing the no-payment start from 9.3; payments security review incl. webhooks (moved from 13.3). *Accept:* the package unlocks on the next message after payment; no high findings open on webhooks or checkout.
 
 ### M11 · Live classes and insights (depends on: 9.1, 8.1, M6)
 
@@ -659,11 +661,11 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **12.4** Regulated-subject flag set manually by staff before publish. *Accept:* flagged agents cannot publish without staff approval.
 - **12.5** Safety alert inbox with acknowledgement. *Accept:* unacknowledged alerts escalate after 15 minutes.
 
-### M13 · Hardening and pilot (depends on: M8, M9, M10, M11, M12)
+### M13 · Hardening and pilot (depends on: M8, M9, M11, M12; 13.6 also needs M10)
 
 - **13.1** Accessibility: axe in CI and a manual WCAG 2.2 AA pass. *Accept:* no serious violations.
 - **13.2** Load test: 50 concurrent students. *Accept:* harness overhead p95 < 500 ms with the scripted gateway.
-- **13.3** Security review: teacher and student isolation, entitlement bypass attempts, webhooks, OWASP Top 10, dependency audit. *Accept:* no high findings open.
+- **13.3** Security review: teacher and student isolation, entitlement bypass attempts, OWASP Top 10, dependency audit. *Accept:* no high findings open.
 - **13.4** Privacy rights per the locale pack's `privacyLaw`: per-user export and delete, retention jobs. *Accept:* jobs tested; export complete.
 - **13.5** Cost dashboard: AI cost per turn and per active student per package against price. *Accept:* numbers match the usage rows.
 - **13.6** Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist. *Accept:* fresh VM to running demo in < 30 minutes; checklist signed off by a human.
