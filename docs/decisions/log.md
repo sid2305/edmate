@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.7 Lead-approved risky merges · decided by tdd-guide · risk: high
+Decided: The merge gate passes a risky branch only when review.md names every reviewer its risk groups need (listed in risk-paths.txt) and the handoff has a risk: high entry; otherwise it fails. It no longer reads the PR label and never says "needs human". A risky path with no reviewers line fails the gate.
+Why: Your decision that the lead merges everything; this keeps the specialists and puts every risky merge on your skim list.
+Alternatives: Keep a human step for some groups.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.7 Decision checks · decided by lead · risk: low
+Decided: A [wontfix] finding passes only if a decision entry for the task names its file. `board.py done` needs each handoff `Decided:` line word for word in the log.
+Why: Simple, mechanical, hard to satisfy by accident.
+Alternatives: Count entries; fuzzy matching.
+Reversible: Yes.
+
+### 18 Oct 2026 · 0.7 Locale packs count as safety · decided by tdd-guide · risk: medium
+Decided: Changes to content/locales need safety-reviewer and a safety-review.md, like the other child-safety paths.
+Why: The scope change put locales in the safety group, and the safety review file goes with that group.
+Alternatives: safety-reviewer only, no safety-review.md.
+Reversible: Yes, one line in the gate.
+
+### 18 Oct 2026 · 0.7 Wontfix file match · decided by tdd-guide · risk: low
+Decided: The file a [wontfix] finding covers is its first word that looks like a path (has a slash or a file extension). An entry passes if it names that path or just the file name.
+Why: Matches the review.md format; file names are how people write decisions.
+Alternatives: Require the full path.
+Reversible: Yes.
+
+` ignored, safety-review.md for safety paths and locales, destructive migration needs `database-reviewer`, a glob with no `# reviewers:` line fails closed, never exit 3. `Wontfix` (6 cases).
+- `test_board.py` (11): `done` refused with no handoff / no `## Decisions` / a `Decided:` line not in the log word for word / a condensed line (board file unchanged each time); `None` and whitespace-only differences pass; `next` warns for a planning task with no plan.md and not once it exists; other statuses unchanged.
+- `test_hooks.py` (9): runs main's hooks unchanged (no edits): force-push denied, push to main allowed when the secret scan is clean and denied when it flags (a tracked `.npmrc`), label deny, `gh pr merge` needs a number, `.env` deny, no asks; guard-paths denies secrets/key files, allows contracts and harness files.
+
+Gate demo in a temp repo (`contracts` change, `risk: high` entry present):
+```
+$ merge_gate.py 9.9   (reviewers missing) -> exit 1
+  risky packages/contracts/src/x.ts
+  FAIL  risky packages/contracts/src/x.ts: review.md Reviewers: is missing architect
+  FAIL  risky packages/contracts/src/x.ts: review.md Reviewers: is missing security-reviewer
+RESULT: FAIL — fix the items above, re-run the reviewers, then run the gate again.
+$ merge_gate.py 9.9   (all three named) -> exit 0
+  risky packages/contracts/src/x.ts
+RESULT: PASS — risky, lead-approved: the required reviewers ran and a risk: high decision is logged. ...
+```
+
+`python3 .githooks/secret-scan.py --all`: clean (see final commit).
+
 ### 18 Oct 2026 · Merge policy · decided by you · risk: high
 Decided: No permission prompts from the repo's hooks, and the team lead decides every merge, risky ones included. A risky merge needs the right specialist reviewers (safety-reviewer for child safety, security-reviewer for access, payments, sign-in and keys, architect for contracts and ADRs) and is logged as risk: high. Hard blocks stay: no secrets or key files, secret scan before pushes, harness purity, no force-push.
 Why: You don't want to approve merges or edits; the lead holds the context.

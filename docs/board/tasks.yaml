@@ -229,13 +229,13 @@ tasks:
     CLAUDE.md, build plan, merge-gate and team-lead skills describe lead-approved merges.'
   deps:
   - '0.1'
-  status: review
+  status: done
   branch: m0/0.7-harness-fixes
   model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(code)
 - id: '0.8'
   milestone: M0
   title: 'Follow-up from 0.7 review: remove the local `git merge --squash` path from the merge-gate and team-lead skills (merges go through a PR and the gate); small doc fixes found in later reviews'
-  accept: 'Neither skill describes a local squash merge; the team-lead merge step is PR-only.'
+  accept: Neither skill describes a local squash merge; the team-lead merge step is PR-only.
   deps:
   - '0.7'
   status: todo
