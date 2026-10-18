@@ -198,5 +198,31 @@ export async function seed(db: Db): Promise<void> {
       text: `[${p}] why?`,
       createdAt: new Date('2026-10-17T10:05:00Z'),
     });
+    await db.insert(s.auditLog).values({
+      actor: sid,
+      actorRole: 'student',
+      action: 'profile.reset',
+      target: `profile:${lc(p)}`,
+      teacherId: tid,
+      studentId: sid,
+      reason: `[${p}] seeded`,
+      before: { lastSummary: `[${p}] before` },
+      after: { lastSummary: null },
+      ts: new Date('2026-10-17T10:06:00Z'),
+    });
+  }
+
+  for (const t of TEACHERS) {
+    await db.insert(s.auditLog).values({
+      actor: teacherId(t),
+      actorRole: 'teacher',
+      action: 'package.publish',
+      target: `package:${ids.pkg(t)}`,
+      teacherId: teacherId(t),
+      reason: `[${t}] seeded`,
+      before: { liveVersion: 0 },
+      after: { liveVersion: 1 },
+      ts: new Date('2026-10-17T10:07:00Z'),
+    });
   }
 }

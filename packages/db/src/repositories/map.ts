@@ -13,7 +13,7 @@ import {
   type PackageConfig,
   type TeacherQuestion,
 } from '@edmate/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { RepositoryError } from './errors.js';
 
 /** A teacher's view of a question: the asking student is never shown (build plan § Ask the teacher). */
@@ -135,4 +135,58 @@ export function toTeacherQuestionForTeacher(
   method: string,
 ): TeacherQuestionForTeacher {
   return checked(TeacherQuestionForTeacherSchema, questionFields(row), method);
+}
+
+const AuditRowSchema = z.strictObject({
+  id: z.string().min(1),
+  actor: z.string().min(1),
+  actorRole: z.enum(['student', 'teacher', 'staff']),
+  action: z.string().min(1),
+  target: z.string().min(1),
+  teacherId: z.string().min(1),
+  /** Present on student x teacher rows (memory changes) only. */
+  studentId: z.string().min(1).optional(),
+  reason: z.string().optional(),
+  /** Already redacted of personal keys when it was written. */
+  before: z.unknown().optional(),
+  after: z.unknown().optional(),
+  ts: z.iso.datetime(),
+});
+
+/** An audit_log row as read. No contract type exists for it (same precedent as SessionRow). */
+export type AuditRow = z.infer<typeof AuditRowSchema>;
+
+export function toAuditRow(
+  row: {
+    id: string;
+    actor: string;
+    actorRole: string;
+    action: string;
+    target: string;
+    teacherId: string;
+    studentId: string | null;
+    reason: string | null;
+    before: unknown;
+    after: unknown;
+    ts: Date;
+  },
+  method: string,
+): AuditRow {
+  return checked(
+    AuditRowSchema,
+    {
+      id: row.id,
+      actor: row.actor,
+      actorRole: row.actorRole,
+      action: row.action,
+      target: row.target,
+      teacherId: row.teacherId,
+      ...(row.studentId === null ? {} : { studentId: row.studentId }),
+      ...(row.reason === null ? {} : { reason: row.reason }),
+      ...(row.before === null ? {} : { before: row.before }),
+      ...(row.after === null ? {} : { after: row.after }),
+      ts: iso(row.ts),
+    },
+    method,
+  );
 }
