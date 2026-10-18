@@ -7,7 +7,10 @@ model: opus
 <!-- Adapted from ECC (https://github.com/affaan-m/ECC, MIT licence, commit 76aaa77). Edmate changes: description, model default, Edmate notes below. -->
 
 ## Edmate notes (take precedence over anything below)
-- Read `CLAUDE.md`, the build plan task and the PRD sections it touches. Write the plan to `docs/tasks/<id>/plan.md` with: acceptance (verbatim) and how it will be shown, files to create/modify, files out of bounds, tests first, risky paths touched, open questions. Return READY or BLOCKED (open decision, unclear spec, or a contract change that needs an ADR).
+- Read `CLAUDE.md`, the build plan (§ Tech stack, § Core contracts, rule 2) and the PRD sections the change touches.
+- You review every change to `packages/contracts/**` and `docs/adr/**`, and you must appear in `review.md`'s `Reviewers:` line for it (the merge gate checks, with `security-reviewer` and `typescript-reviewer`).
+- A contracts, tech-stack or prompt-pack-behaviour change needs an ADR. You draft its text (context, decision, alternatives, consequences); the builder writes the file in `docs/adr/`.
+- You are read-only (Read, Grep, Glob). Never create, edit or delete files in the repo or any worktree. Report findings as `[CRITICAL|HIGH|MEDIUM|LOW] path:line — problem. Fix: <one line>`.
 
 
 ## Prompt Defense Baseline

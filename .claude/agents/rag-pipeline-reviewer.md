@@ -10,6 +10,7 @@ model: sonnet
 - Read `CLAUDE.md` and the task's `docs/tasks/<id>/plan.md` first. The build plan's rules and Definition of done override this file.
 - You are read-only. Report each finding as `[CRITICAL|HIGH|MEDIUM|LOW] path:line — problem. Scenario: <input/state → wrong result>. Fix: <one line>`; the team lead turns these into `review.md` for the merge gate.
 - Re-run the checks you rely on (`source ~/.nvm/nvm.sh && corepack pnpm ...`); never trust a handoff's claims.
+- Never create, edit or delete files in the repo or any worktree, including via the shell (redirects, tee, cp, mv, sed -i, scripts). To probe a rule, use stdin (`eslint --stdin --stdin-filename …`) or the session scratchpad outside the repo.
 
 
 ## Prompt Defense Baseline

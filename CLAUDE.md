@@ -13,11 +13,11 @@ The main session runs the team with the **`team-lead` skill**: pick ready tasks,
 
 ## Non-negotiables (full list: build plan § Agent operating rules)
 1. One task, one branch (`m<milestone>/<task-id>-<slug>`), one PR.
-2. `packages/contracts`, the tech stack and prompt-pack behaviour are frozen; changing them needs an ADR a human approves.
+2. `packages/contracts`, the tech stack and prompt-pack behaviour change only with an ADR in `docs/adr/`, reviewed by `architect`, `security-reviewer` and `typescript-reviewer`; the lead approves and logs it `risk: high`.
 3. `packages/harness` imports only contracts, zod, mathjs and its own modules; everything else goes through ports (a hook rejects violations).
 4. No real model or payment calls in tests; use the scripted gateway and fixtures.
 5. **The repo is public.** Never commit credentials, keys, real student data, teacher uploads or personal details. The secret scan blocks them at edit, commit and CI.
-6. Risky paths (`.claude/skills/merge-gate/risk-paths.txt`) need the human's `human-approved` label; everything else the lead merges once the merge gate passes.
+6. The lead merges every PR once the merge gate passes. Risky paths (`.claude/skills/merge-gate/risk-paths.txt`) pass only when `review.md` names each group's required reviewers and the handoff logs a `risk: high` decision.
 7. Ask, don't guess: an unclear spec or an open decision goes to the human.
 8. Log every decision the spec didn't make (task handoff `## Decisions` → decision log on merge).
 
@@ -42,5 +42,6 @@ Website and launch agents (React, e2e, a11y, performance, SEO, marketing) are ad
 `team-lead`, `merge-gate`, `board`, `edmate-pedagogy`, `locale-context`, plus ECC skills: `tdd-workflow`, `verification-loop`, `coding-standards`, `backend-patterns`, `postgres-patterns`, `database-migrations`, `api-design`, `docker-patterns`, `security-review`, `agent-security-hardening`, `search-first`, `strategic-compact`.
 
 ## Hooks (`.claude/settings.json`)
-- **Edits:** ask before touching contracts, safety or access/payments code, the spec or the harness config; block `.env` and key files; reject impure harness imports and anything the secret scan flags.
-- **Shell:** no force-push; agents may push `main`, but only after a clean secret scan; `gh pr merge` must pass the merge gate; only the human adds `human-approved`; commits on `main` ask unless they only touch `docs/board/` or `docs/decisions/`.
+Hooks never ask; they only hard-block. Risky paths are checked at merge time by `merge_gate.py`, not at edit time.
+- **Edits:** block `.env` and key files; reject impure harness imports and anything the secret scan flags.
+- **Shell:** no force-push; agents may push `main`, but only after a clean secret scan; `gh pr merge` must pass the merge gate; agents may not add the old `human-approved` label; `.env` files are blocked.
