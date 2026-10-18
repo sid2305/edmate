@@ -489,9 +489,9 @@ tasks:
   - '3.1'
   - M0
   - '3.15'
-  status: running
+  status: review
   branch: m3/3.4-build-context
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(ts)
 - id: '3.5'
   milestone: M3
   title: 'Teaching policy: help ladder with effective ceiling and `attempt`, skill rules, `locked` and `ask_teacher` moves, `maxOutputTokens` per move'
