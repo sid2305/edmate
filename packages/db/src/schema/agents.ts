@@ -1,4 +1,5 @@
 // Data model rows: agents / agent_versions, packages / package_versions.
+import type { AgentConfig, PackageConfig } from '@edmate/contracts';
 import { index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { agentStatus, id, timestamps } from './_shared.js';
 import { teacherId } from './users.js';
@@ -27,7 +28,7 @@ export const agentVersions = pgTable(
       .notNull()
       .references(() => agents.id),
     version: integer('version').notNull(),
-    config: jsonb('config').notNull(),
+    config: jsonb('config').$type<AgentConfig>().notNull(),
     ...timestamps(),
   },
   (t) => [
@@ -66,7 +67,7 @@ export const packageVersions = pgTable(
       .notNull()
       .references(() => packages.id),
     version: integer('version').notNull(),
-    config: jsonb('config').notNull(),
+    config: jsonb('config').$type<PackageConfig>().notNull(),
     ...timestamps(),
   },
   (t) => [

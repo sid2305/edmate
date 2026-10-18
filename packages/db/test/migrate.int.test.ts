@@ -7,58 +7,27 @@
 //
 // Each run creates its own throwaway database and drops it afterwards; it never touches the
 // database named in the URL beyond CREATE/DROP DATABASE.
-import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
-import pg from 'pg';
+import { demoPackageFree } from '@edmate/contracts/fixtures';
 import { createDb } from '../src/client.js';
 import { runMigrateCli } from '../src/cli.js';
 import { migrateDatabase } from '../src/migrate.js';
 import * as s from '../src/schema/index.js';
 import { DATA_MODEL_TABLES, latestSnapshot } from './helpers.js';
+import {
+  admin,
+  createDatabase,
+  dropDatabase,
+  postgresUp,
+  SKIP_REASON,
+  throwawayName,
+  urlFor,
+} from './pg.js';
 
-const ADMIN_URL =
-  process.env.TEST_DATABASE_URL ?? 'postgres://edmate:edmate-dev@127.0.0.1:55432/edmate';
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    await client.query('select 1');
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-const up = await reachable(ADMIN_URL);
-if (!up && process.env.CI === 'true') {
-  throw new Error('CI=true but no Postgres is reachable at TEST_DATABASE_URL; the db job needs it');
-}
-const SKIP_REASON =
-  'SKIPPED: no Postgres at TEST_DATABASE_URL (default 127.0.0.1:55432). Start one with: ' +
-  'docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres';
-if (!up) process.stderr.write(`[@edmate/db] migration integration tests ${SKIP_REASON}\n`);
-
-const dbName = `edmate_test_${randomBytes(6).toString('hex')}`;
-function urlFor(name: string): string {
-  const u = new URL(ADMIN_URL);
-  u.pathname = `/${name}`;
-  return u.toString();
-}
+const up = await postgresUp('migration integration tests');
+const dbName = throwawayName();
 const TEST_URL = urlFor(dbName);
-
-async function admin<T>(fn: (c: pg.Client) => Promise<T>, url = ADMIN_URL): Promise<T> {
-  const c = new pg.Client({ connectionString: url });
-  await c.connect();
-  try {
-    return await fn(c);
-  } finally {
-    await c.end();
-  }
-}
 
 /** Tables, columns, indexes and extensions as Postgres reports them. */
 async function inspect() {
@@ -110,11 +79,11 @@ describe.skipIf(!up)(
   `migrations against Postgres 16 + pgvector${up ? '' : ` (${SKIP_REASON})`}`,
   () => {
     beforeAll(async () => {
-      await admin((c) => c.query(`create database "${dbName}"`));
+      await createDatabase(dbName);
     });
 
     afterAll(async () => {
-      await admin((c) => c.query(`drop database if exists "${dbName}" with (force)`));
+      await dropDatabase(dbName);
     });
 
     it('apply cleanly to an empty database', async () => {
@@ -207,12 +176,20 @@ describe.skipIf(!up)(
           .returning();
         const [pv] = await db
           .insert(s.packageVersions)
-          .values({ teacherId: teacher.id, packageId: pkg!.id, version: 1, config: { a: 1 } })
+          .values({
+            teacherId: teacher.id,
+            packageId: pkg!.id,
+            version: 1,
+            config: { ...demoPackageFree, teacherId: teacher.id, id: pkg!.id },
+          })
           .returning();
         await expect(
-          db
-            .insert(s.packageVersions)
-            .values({ teacherId: teacher.id, packageId: pkg!.id, version: 1, config: {} }),
+          db.insert(s.packageVersions).values({
+            teacherId: teacher.id,
+            packageId: pkg!.id,
+            version: 1,
+            config: { ...demoPackageFree, teacherId: teacher.id, id: pkg!.id },
+          }),
         ).rejects.toThrow();
 
         // One live subscription per student x teacher; ended ones don't count.
