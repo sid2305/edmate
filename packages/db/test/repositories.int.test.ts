@@ -20,6 +20,7 @@ import {
   transcriptStoreFor,
 } from '../src/index.js';
 import { DATA_MODEL_TABLES } from './helpers.js';
+import { expectScrubbed } from './scrub.js';
 import {
   agentConfig,
   ids,
@@ -923,6 +924,53 @@ describe.skipIf(!up)(
       await expect(
         repos.agentVersions.get(tScope('B'), { agentId: 'agt_b', version: 901 }),
       ).rejects.toMatchObject({ kind: 'integrity', method: 'agentVersions.get' });
+    });
+
+    it('a statement timeout surfaces scrubbed: no ids, no message text, no SQL params', async () => {
+      // A short statement timeout and a lock held by another connection force a real pg error.
+      const slow = createDb({ DATABASE_URL: TEST_URL, DATABASE_STATEMENT_TIMEOUT_MS: '200' });
+      const slowRepos = createRepositories(slow.db);
+      const locker = new pg.Client({ connectionString: TEST_URL });
+      await locker.connect();
+      try {
+        await locker.query('begin');
+        await locker.query('lock table messages in access exclusive mode');
+        const secrets = ['stu_1', 'tch_a', 'ses_1a', 'msg_timeout_1', 'very private homework'];
+        const h = await slowRepos.messages
+          .history(sScope('1A'), ids.session('1A'), 10)
+          .catch((e: unknown) => e);
+        expectScrubbed(h, 'messages.history', secrets);
+        expect((h as RepositoryError).cause).toMatchObject({ code: '57014' });
+        const a = await slowRepos.messages
+          .append(sScope('1A'), ids.session('1A'), {
+            id: 'msg_timeout_1',
+            role: 'student',
+            text: 'very private homework',
+            createdAt: '2026-10-17T14:00:00Z',
+          })
+          .catch((e: unknown) => e);
+        expectScrubbed(a, 'messages.append', secrets);
+      } finally {
+        await locker.query('rollback');
+        await locker.end();
+        await slow.close();
+      }
+    });
+
+    it("a message id already used in another student's session reads as not_found", async () => {
+      // msg_1b_1 exists in student 1's session with teacher B. Reusing it from 2A must look exactly
+      // like appending to a session that isn't yours, so ids can't be probed.
+      await expectFailsClosed(
+        () =>
+          repos.messages.append(sScope('2A'), ids.session('2A'), {
+            id: 'msg_1b_1',
+            role: 'student',
+            text: '[2A] probe',
+            createdAt: '2026-10-17T14:00:00Z',
+          }),
+        ['not_found'],
+        'duplicate message id',
+      );
     });
 
     it('ended subscriptions are not live', async () => {

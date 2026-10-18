@@ -11,10 +11,10 @@ Isolation between teachers and between students is enforced here, not by Postgre
    `RepositoryError('scope')`. This matters because Drizzle's `and()` drops `undefined` conditions,
    so an unchecked `undefined` id would widen a query.
 3. **The scope is in the WHERE clause of the same statement** that reads or writes. Ownership
-   checks for writes are atomic: `INSERT … SELECT … FROM <owner table> WHERE id = $x AND
-   teacher_id = $t …` (zero rows inserted → `not_found`), or a `FOR KEY SHARE` check plus the
-   insert in one transaction when a set of ids (modules, topics, similar questions) must all be the
-   teacher's.
+   checks for writes are atomic:
+   `INSERT … SELECT … FROM <owner table> WHERE id = $x AND teacher_id = $t …` (zero rows inserted
+   → `not_found`), or a `FOR KEY SHARE` check plus the insert in one transaction when a set of ids
+   (modules, topics, similar questions) must all be the teacher's.
 4. **Messages and turn traces are scoped through `sessions`** (`ownSession()` in `sessions.ts`):
    a join for reads, `INSERT … SELECT … FROM sessions WHERE <scope>` for writes.
 5. **Fail closed without an existence oracle.** Another scope's row and a missing row look the
@@ -29,6 +29,13 @@ Isolation between teachers and between students is enforced here, not by Postgre
 9. **No personal details.** No method selects from the user table, so display names, emails and
    phone numbers never leave through a repository. `teacherQuestions.listForTeacher` never selects
    `student_id`.
+
+10. **Driver errors are scrubbed.** `createRepositories` wraps every method in `guarded()`: any
+    error that is not a `RepositoryError` becomes `RepositoryError('failed')` whose cause keeps
+    only the driver's error code and constraint name. Drizzle's own message
+    ("Failed query: … params: …") quotes ids and student text, so it never leaves.
+    `messages.append` reports a duplicate (caller-chosen, globally unique) message id as
+    `not_found`, so ids in other sessions can't be probed.
 
 ## Adding a method
 

@@ -40,32 +40,40 @@ export function messagesRepo(db: Db) {
       return rows.reverse().map((r) => toMessage(r, method));
     },
 
-    /** Appends a message to the scope's session; another scope's session is `not_found`. */
+    /**
+     * Appends a message to the scope's session; another scope's session is `not_found`. The id is
+     * the caller's (the TranscriptStore port passes a whole Message) and ids are unique across all
+     * sessions, so a duplicate id is also `not_found`: it can't tell anyone that the id exists in
+     * someone else's session.
+     */
     async append(scope: StudentScope, sessionId: string, m: Message): Promise<void> {
       const method = 'messages.append';
       const sc = studentScope(scope, method);
       const id = parseArg(IdSchema, sessionId, method);
       const msg = parseArg(MessageSchema, m, method);
-      const result = await translateWrite(method, () =>
-        db.execute(
-          insertSelect(
-            messages,
-            [
-              [messages.id, sql`${msg.id}::text`],
-              [messages.sessionId, sql`${sessions.id}`],
-              [messages.role, sql`${msg.role}::message_role`],
-              [messages.text, sql`${msg.text}::text`],
+      const result = await translateWrite(
+        method,
+        () =>
+          db.execute(
+            insertSelect(
+              messages,
               [
-                messages.sources,
-                msg.sources === undefined
-                  ? sql`null::jsonb`
-                  : sql`${JSON.stringify(msg.sources)}::jsonb`,
+                [messages.id, sql`${msg.id}::text`],
+                [messages.sessionId, sql`${sessions.id}`],
+                [messages.role, sql`${msg.role}::message_role`],
+                [messages.text, sql`${msg.text}::text`],
+                [
+                  messages.sources,
+                  msg.sources === undefined
+                    ? sql`null::jsonb`
+                    : sql`${JSON.stringify(msg.sources)}::jsonb`,
+                ],
+                [messages.createdAt, sql`${msg.createdAt}::timestamptz`],
               ],
-              [messages.createdAt, sql`${msg.createdAt}::timestamptz`],
-            ],
-            sql`from ${sessions} where ${ownSession(id, sc)}`,
+              sql`from ${sessions} where ${ownSession(id, sc)}`,
+            ),
           ),
-        ),
+        'not_found',
       );
       if (written(result) !== 1) throw new RepositoryError('not_found', method);
     },

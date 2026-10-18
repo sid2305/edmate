@@ -1,6 +1,12 @@
 // Unit: RepositoryError and the translation of driver errors (no database).
 import { describe, expect, it } from 'vitest';
-import { RepositoryError, translateWrite } from '../src/repositories/errors.js';
+import {
+  guarded,
+  RepositoryError,
+  ScrubbedDbError,
+  translateWrite,
+} from '../src/repositories/errors.js';
+import { everything } from './scrub.js';
 import { written } from '../src/repositories/insert.js';
 
 const pgError = (code: string, detail: string) =>
@@ -12,6 +18,7 @@ describe('RepositoryError', () => {
     ['not_found', 'not_found'],
     ['invalid', 'validation'],
     ['integrity', 'validation'],
+    ['failed', 'provider_error'],
   ] as const)('%s maps to the contracts error code %s', (kind, code) => {
     const e = new RepositoryError(kind, 'sessions.get');
     expect(e.code).toBe(code);
@@ -73,6 +80,70 @@ describe('translateWrite', () => {
         throw deep;
       }),
     ).rejects.toBe(deep);
+  });
+});
+
+describe('translateWrite onDuplicate', () => {
+  it('can report a duplicate key as not_found (caller-chosen global ids)', async () => {
+    await expect(
+      translateWrite(
+        'messages.append',
+        async () => {
+          throw pgError('23505', 'Key (id)=(msg_x) already exists');
+        },
+        'not_found',
+      ),
+    ).rejects.toMatchObject({ kind: 'not_found' });
+  });
+});
+
+describe('guarded', () => {
+  it('returns the result and passes a RepositoryError through', async () => {
+    expect(await guarded('m', async () => 'ok')).toBe('ok');
+    const inner = new RepositoryError('scope', 'm');
+    await expect(
+      guarded('m', async () => {
+        throw inner;
+      }),
+    ).rejects.toBe(inner);
+  });
+
+  it('keeps only the code and constraint of a driver error', async () => {
+    const driver = Object.assign(new Error('duplicate key value violates "x" stu_secret'), {
+      code: '23514',
+      constraint: 'payments_amount_minor_check',
+      detail: 'Failing row contains (stu_secret, private text)',
+    });
+    const drizzle = new Error('Failed query: insert ... params: stu_secret,private text', {
+      cause: driver,
+    });
+    const err = await guarded('sessions.create', async () => {
+      throw drizzle;
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({
+      kind: 'failed',
+      code: 'provider_error',
+      method: 'sessions.create',
+    });
+    const cause = (err as RepositoryError).cause as ScrubbedDbError;
+    expect(cause).toBeInstanceOf(ScrubbedDbError);
+    expect(cause).toMatchObject({ code: '23514', constraint: 'payments_amount_minor_check' });
+    expect(cause.message).toBe('database error 23514 (payments_amount_minor_check)');
+    expect(cause.cause).toBeUndefined();
+    const all = everything(err);
+    expect(all).not.toContain('stu_secret');
+    expect(all).not.toContain('private text');
+  });
+
+  it('scrubs errors with no code and non-errors', async () => {
+    for (const thrown of [new Error('params: stu_secret'), 'stu_secret', null]) {
+      const err = await guarded('m', async () => {
+        throw thrown;
+      }).catch((e: unknown) => e);
+      expect((err as RepositoryError).cause).toMatchObject({ code: undefined });
+      expect(((err as RepositoryError).cause as Error).message).toBe('database error');
+      expect(everything(err)).not.toContain('stu_secret');
+    }
   });
 });
 

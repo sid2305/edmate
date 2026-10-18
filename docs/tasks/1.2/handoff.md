@@ -74,6 +74,31 @@ a function`, `poolOptions is not a function`); then errors → scope → map →
 index/internal → client. Two int failures on the first green run were fixed (a `text[]` parameter
 binding bug in `teacherQuestions.open`, and a test that counted evidence too broadly).
 
+## Fix round 1 (security-reviewer)
+
+1. [MEDIUM] Driver errors leaked ids and text (`Failed query: … params: …`). `createRepositories`
+   now wraps every method in `guarded()` (`errors.ts`): any non-`RepositoryError` becomes
+   `RepositoryError('failed')` (code `provider_error`) whose cause is a `ScrubbedDbError` holding
+   only the driver code and constraint name; the original error is dropped.
+2. [LOW] Duplicate message id probe. `messages.append` maps a unique violation to `not_found`
+   (`translateWrite(…, 'not_found')`), the same result as appending to another scope's session.
+   Server-side ids aren't possible: the frozen `TranscriptStore.append` passes a whole `Message`.
+
+Tests first (ran red: 5 failed): `test/leak.test.ts` (unreachable pool: `messages.history`,
+`messages.append` and five more methods; the error, its cause chain and `util.inspect` contain no
+id, no message text, no `params:` / SQL); int test "a statement timeout surfaces scrubbed" (200 ms
+statement timeout while another connection holds `ACCESS EXCLUSIVE` on `messages`: history and
+append fail `failed`, cause code `57014`, nothing leaked); int test "a message id already used in
+another student's session reads as not_found" (and writes nothing); `errors.test.ts` covers
+`guarded` (code + constraint kept, detail/message dropped, non-Error throws). Helpers in
+`test/scrub.ts`.
+
+```
+@edmate/db:test:       Tests  150 passed (150)
+@edmate/db:test:  src/repositories  |     100 |      100 |     100 |     100 |
+ Tasks:    11 successful, 11 total
+```
+
 ## Changes
 
 - `packages/db/src/repositories/` (new): `errors.ts` (`RepositoryError` kind/code/method,
@@ -126,6 +151,12 @@ binding bug in `teacherQuestions.open`, and a test that counted evidence too bro
 
 ## Decisions
 
+### 18 Oct 2026 · 1.2 Unexpected database errors are scrubbed into RepositoryError('failed') · decided by tdd-guide (fix round 1) · risk: low
+Decided: Every repository method runs inside `guarded()`, applied to all methods by `createRepositories`. Any error that is not a `RepositoryError` becomes `RepositoryError('failed', method)` with code `provider_error` (the contracts have no database-specific code) and a `ScrubbedDbError` cause holding only the driver's error code (SQLSTATE or Node code) and constraint name; the Drizzle/pg error with its SQL, params and detail is dropped. `messages.append` reports a duplicate message id as `not_found`.
+Why: Security review: Drizzle's "Failed query: … params: …" message quotes student and teacher ids and message text; a duplicate-id `invalid` let ids in other sessions be probed.
+Alternatives: Redact the message text with regexes (fragile); keep the original as a hidden property; generate message ids server-side (the frozen TranscriptStore port passes the caller's id).
+Reversible: Yes.
+
 ### 18 Oct 2026 · 1.2 Isolation enforced by required scopes in the repositories · decided by planner · risk: high
 Decided: Every repository method takes a validated `TeacherScope` or `StudentScope` first and puts it in the WHERE clause of the same statement; messages and turn traces are scoped through a join on `sessions`; another scope's row reads as missing (`null`/`[]`) and writes to it throw `not_found`; frozen ports without a scope parameter (`TranscriptStore`) are bound to a scope at construction; the root `@edmate/db` export has no raw database handle or schema (`@edmate/db/internal` is for migrations, seed and tests). A typed case table makes the isolation test fail to compile when a method has no case.
 Why: Data model rule "repositories require the right scope"; no RLS (1.1 decision); ports are frozen (ADR-0002).
@@ -163,7 +194,7 @@ Alternatives: An additive `bigserial seq` migration.
 Reversible: Yes (3.8 may add a sequence).
 
 ### 18 Oct 2026 · 1.2 RepositoryError kinds and codes; constraint violations translated · decided by tdd-guide · risk: low
-Decided: `scope` → `forbidden`, `not_found` → `not_found`, `invalid` → `validation`, `integrity` → `validation`. Writes translate a foreign-key violation to `not_found` (for example a scope id that is not a user) and a unique violation to `invalid` (an existing immutable version or message id); all other driver errors propagate. Messages carry the method and kind only.
+Decided: `scope` → `forbidden`, `not_found` → `not_found`, `invalid` → `validation`, `integrity` → `validation`. Writes translate a foreign-key violation to `not_found` (for example a scope id that is not a user) and a unique violation to `invalid` (an existing immutable package version); a duplicate message id is `not_found` and all other driver errors become `failed` (fix round 1, entry above). Messages carry the method and kind only.
 Why: Driver messages quote row values (ids, text); a public repo's logs must not carry them.
 Alternatives: Pass driver errors through; a separate `conflict` kind.
 Reversible: Yes.
