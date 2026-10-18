@@ -11,7 +11,7 @@ Reviewers needed (risky path `packages/db/src/repositories/**`): security-review
 |---|---|
 | Config, staff and memory changes write before/after rows | `test/repositories.int.test.ts` "config, staff and memory changes write before/after rows, personal keys redacted" (real Postgres 16): `package.publish` (teacher), `teacher.verify` (staff on teacher B), `profile.reset` (student 2 x teacher A); each read back with non-personal fields intact and `name` / `email` / `displayName` as `[redacted]`. |
 | Append-only | `audit.ts` exports no update/delete; int test "audit is append-only" asserts the four method names exactly; `test/scope.test.ts`'s static scan (unchanged) covers `audit.ts` and `redact-json.ts`. |
-| Redaction of personal data | `test/redact-json.test.ts` (20 unit tests: nested, any case, separators, NFKC full-width, zero-width chars, `__proto__`, depth cap, 10k-key object, non-mutation). Int test: a raw `select before, after from audit_log` contains none of the raw values. Class instances and `toJSON` are redacted as the JSON they become. |
+| Redaction of personal data | `test/redact-json.test.ts` (73 unit tests, table-driven: compound keys such as `studentEmail`/`parentName`/`guardianPhone`/`fullName`, whole-word `ip`/`bio`, keys that must be kept such as `subscriptionId`/`description`/`biology`, compound keys nested in objects and arrays in any case, email/phone values whatever the key, dates/decimals/uuids kept, NFKC full-width, zero-width chars, `__proto__`, depth cap, 10k-key object, non-mutation). Int test: a raw `select before, after from audit_log` contains none of the raw values. Class instances and `toJSON` are redacted as the JSON they become. |
 | Scoped reads | `audit.appendForTeacher/appendForStudent/listForTeacher/listForStudent` added to `CASES`; isolation summary: `appendForTeacher cases=20 leaks=0`, `appendForStudent cases=20 leaks=0`, `listForTeacher cases=22 leaks=0`, `listForStudent cases=24 leaks=0`. Bad scopes throw `scope` before SQL (`test/scope.test.ts`, automatic). |
 | Migrate up/down clean | `migrations/0002_audit_log_scope.sql` (drizzle-kit generate; ADD COLUMN / ADD CONSTRAINT / CREATE INDEX only, no DROP). `test/migrate.int.test.ts` unmodified and green. |
 
@@ -19,8 +19,8 @@ Commands (Postgres up via `docker compose -f docker/compose.yaml -f packages/db/
 
 ```
 corepack pnpm turbo run build typecheck lint test --filter=@edmate/db...
-→ @edmate/db: Tests 184 passed (184); Tasks: 11 successful, 11 total
-coverage (json-summary): audit.ts 100/100/100/100, redact-json.ts 100/100/100/100, map.ts 100/100/100/100; total lines 100, branches 99.41
+→ @edmate/db: Tests 237 passed (237); Tasks: 11 successful, 11 total (fix round 1; coverage thresholds met)
+coverage (json-summary, round 0): audit.ts 100/100/100/100, redact-json.ts 100/100/100/100, map.ts 100/100/100/100; total lines 100, branches 99.41
 
 corepack pnpm turbo run build typecheck lint test     (root, after merging origin/main)
 → Tasks: 41 successful, 41 total
@@ -78,11 +78,11 @@ Why: redacting before the round trip would miss personal keys on class instances
 Alternatives: the plan's "keep deeper structure as is"; redact without the round trip.
 Reversible: yes.
 
-### 18 Oct 2026 · 1.6 Redaction denylist and key matching · decided by planner · risk: low
-Decided: keys `email, phone, name, displayName, firstName, lastName, address, bio, photo, ip, ipAddress` are redacted. Keys are matched after NFKC, lower-casing, and stripping zero-width/format characters and `_ - . space` (so `first_name`, full-width `ＥＭＡＩＬ` and `email` with a zero-width space inside all match). Free text inside values is not scanned.
-Why: lead answer Q2. Ship the list and let security-reviewer refine it; adding a key is a one-line change with no migration.
-Alternatives: scanning values for email or phone patterns (deferred to review).
-Reversible: yes.
+### 18 Oct 2026 · 1.6 Redaction matches compound keys and email/phone values (fix round 1) · decided by builder · risk: high
+Decided: after NFKC, removing zero-width and other format characters, lower-casing and removing `_ - . space`, a key is redacted if it **contains** `email`, `phone`, `name`, `address` or `photo` (so `studentEmail`, `parentName`, `guardianPhone`, `fullName` and `profilePhotoUrl` are caught). The short terms `ip` and `bio` only match as a whole word of the key (camelCase or separators: `clientIp`, `IPAddress`, `ip_v4`, `teacherBio`), because as substrings they hit real keys in contracts and schema (`subscriptionId`, `description`, `piiPatterns`) and words like `biology`. Inside any string value, whatever its key, email-shaped text and phone-shaped runs (7 or more digits, with spaces, dots, dashes or brackets between them) are replaced by `[redacted]`; ISO dates and plain decimals are left alone. The allowlist is empty. Harmless keys that contain a term (`packageName`, `namespace`) are redacted on purpose, and an allowlist should only be added when a real false positive gets in the way. A code comment records that cross-script homoglyph keys (a Cyrillic `е`) get past the NFKC fold: this is defense in depth, not a guarantee.
+Why: security-reviewer HIGH. The exact-key match stored raw personal data under compound keys.
+Alternatives: plain substring matching for every term (redacts `subscriptionId` and `description`); exact keys only (the reviewer's finding); dropping whole strings instead of the matched parts (loses the non-personal context).
+Reversible: yes. It is one file and needs no migration; rows already written keep the redaction they were stored with.
 
 ### 18 Oct 2026 · 1.6 Schema details · decided by planner · risk: low
 Decided: `actor_role` reuses the `user_role` enum; `student_id` is nullable (teacher-only events have none); `reason` is optional; `target`'s `<kind>:<id>` form is advisory and not a foreign key; `AuditRow` and `AuditEntryInput` are db-local types, not contracts.

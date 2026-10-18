@@ -72,12 +72,104 @@ describe('redactPersonalData', () => {
     expect(input).toEqual(copy);
   });
 
-  it('keeps non-denylisted keys that merely contain a denylisted word', () => {
-    expect(redactPersonalData({ packageName: 'p', ipsum: 1, nameless: true })).toEqual({
-      packageName: 'p',
-      ipsum: 1,
-      nameless: true,
+  // Compound keys: any key whose normalised form contains a long term (email, phone, name,
+  // address, photo) is redacted; the short terms (ip, bio) match as a whole word of the key.
+  it.each([
+    'studentEmail',
+    'parentName',
+    'guardianPhone',
+    'fullName',
+    'full_name',
+    'STUDENT-EMAIL',
+    'student email',
+    'emailAddress',
+    'homeAddress',
+    'profilePhotoUrl',
+    'phoneNumber',
+    'mobilePhone',
+    'nickname',
+    'username',
+    'packageName',
+    'clientIp',
+    'client_ip',
+    'IPAddress',
+    'remoteIP',
+    'ip_v4',
+    'teacherBio',
+    'bio_text',
+    'ＳｔｕｄｅｎｔＥｍａｉｌ',
+    'parent​Name',
+  ])('redacts the compound key %s', (key) => {
+    expect(redactPersonalData({ [key]: 'x', keep: 1 })).toEqual({ [key]: REDACTED, keep: 1 });
+  });
+
+  it.each([
+    'subscriptionId',
+    'description',
+    'piiPatterns',
+    'ipsum',
+    'zip',
+    'biology',
+    'symbiotic',
+    'status',
+    'moduleIds',
+    'liveVersion',
+    'membership',
+  ])('keeps %s (a short term inside another word is not a match)', (key) => {
+    expect(redactPersonalData({ [key]: 'v' })).toEqual({ [key]: 'v' });
+  });
+
+  it('redacts compound keys nested in objects and arrays, any case', () => {
+    expect(
+      redactPersonalData({
+        students: [
+          { studentEmail: 'a', topicId: 'top_a' },
+          { PARENT_NAME: 'b', guardian: { guardianPhone: 'c', Relation: 'mother' } },
+        ],
+        audit: { changes: [[{ FullName: 'd', ok: true }]] },
+      }),
+    ).toEqual({
+      students: [
+        { studentEmail: REDACTED, topicId: 'top_a' },
+        { PARENT_NAME: REDACTED, guardian: { guardianPhone: REDACTED, Relation: 'mother' } },
+      ],
+      audit: { changes: [[{ FullName: REDACTED, ok: true }]] },
     });
+  });
+
+  // Values: an email or phone number in any string is replaced, whatever its key.
+  it.each([
+    ['a bare email', 'someone@example.com', REDACTED],
+    [
+      'an email in text',
+      'write to someone.else+tag@example.com today',
+      `write to ${REDACTED} today`,
+    ],
+    ['an uppercase email', 'SOMEONE@EXAMPLE.ORG', REDACTED],
+    ['an international phone', '+44 20 7946 0000', REDACTED],
+    ['a dashed phone', 'call 555-010-0199 now', `call ${REDACTED} now`],
+    ['a dotted phone', '555.010.0199', REDACTED],
+    ['a bracketed phone', '(555) 010-0199', REDACTED],
+    ['a run of ten digits', '5550100199', REDACTED],
+    ['two emails', 'a@example.com, b@example.org', `${REDACTED}, ${REDACTED}`],
+  ])('redacts %s in a value', (_label, value, expected) => {
+    expect(redactPersonalData({ note: value })).toEqual({ note: expected });
+    expect(redactPersonalData([value])).toEqual([expected]);
+    expect(redactPersonalData(value)).toBe(expected);
+  });
+
+  it.each([
+    ['an ISO timestamp', '2026-10-17T10:00:00.000Z'],
+    ['a date', '2026-10-17'],
+    ['a decimal', '0.123456789'],
+    ['a short number', '12345'],
+    ['an id', 'stu_test_01'],
+    ['a uuid', '3f2a9c1e-5b7d-4e8a-9c0d-1a2b3c4d5e6f'],
+    ['a version list', '1.2.3'],
+    ['an at-sign without a domain', '@mention and a@b'],
+    ['plain text', 'the student reset their progress'],
+  ])('keeps %s', (_label, value) => {
+    expect(redactPersonalData({ note: value })).toEqual({ note: value });
   });
 
   it.each([
