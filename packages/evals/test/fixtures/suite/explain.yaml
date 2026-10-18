@@ -1,0 +1,11 @@
+# Synthetic test fixture for the eval runner's own tests (task 3.12). Not a real suite case.
+id: test-explain-001
+suite: test
+package: free
+reviewed_by: pending
+source: 'synthetic fixture for packages/evals tests'
+turns:
+  - student: 'What is a fraction?'
+    expect:
+      must_contain: ['part']
+      max_words: 40

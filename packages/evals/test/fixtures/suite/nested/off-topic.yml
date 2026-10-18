@@ -1,0 +1,11 @@
+# Synthetic case in a subfolder (proves recursive, sorted loading) for task 3.12's tests.
+id: test-nested-004
+suite: test
+package: free
+reviewed_by: pending
+source: 'synthetic fixture for packages/evals tests'
+turns:
+  - student: "What's the weather like?"
+    expect:
+      must_cite_source: false
+      max_chars: 300
