@@ -420,7 +420,7 @@ tasks:
   deps:
   - '2.4'
   - M0
-  status: review
+  status: done
   branch: m2/2.5-limits
   model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db,silent)
 - id: '2.6'
