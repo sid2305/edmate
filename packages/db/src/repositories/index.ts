@@ -1,10 +1,13 @@
 import type { Db } from '../client.js';
 import { guarded } from './errors.js';
 import { agentVersionsRepo } from './agent-versions.js';
+import { agentsRepo } from './agents.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
+import { modulesRepo } from './modules.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { sessionsRepo } from './sessions.js';
+import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
@@ -23,11 +26,15 @@ function guardAll<T extends Methods>(repo: string, methods: T): T {
 
 /**
  * Every repository, as plain objects of plain functions (the isolation test enumerates them).
- * Every method takes a validated TeacherScope or StudentScope first; see README.md.
+ * Every method takes a validated TeacherScope or StudentScope first (the one exception,
+ * `agents.owner`, takes a public `{ agentId }` scope); see README.md.
  */
 export function createRepositories(db: Db) {
   return {
+    agents: guardAll('agents', agentsRepo(db)),
     agentVersions: guardAll('agentVersions', agentVersionsRepo(db)),
+    modules: guardAll('modules', modulesRepo(db)),
+    styleCards: guardAll('styleCards', styleCardsRepo(db)),
     packageVersions: guardAll('packageVersions', packageVersionsRepo(db)),
     teacherQuestions: guardAll('teacherQuestions', teacherQuestionsRepo(db)),
     sessions: guardAll('sessions', sessionsRepo(db)),
@@ -55,4 +62,11 @@ export type { TeacherQuestionForTeacher } from './map.js';
 export type { SessionRow } from './sessions.js';
 export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
 export type { LiveSubscription } from './subscriptions.js';
-export { transcriptStoreFor } from './ports.js';
+export type { AgentRow, PublicAgentScope } from './agents.js';
+export {
+  type EntitlementStoreOptions,
+  entitlementStoreFor,
+  transcriptStoreFor,
+  turnConfigStoreFor,
+  type TurnConfigStoreOptions,
+} from './ports.js';

@@ -4,6 +4,22 @@ export { type Clock, type ManualClock, manualClock } from './clock.js';
 export { driveEvents, driveTurn, type TimedEvent } from './driveTurn.js';
 export { type SequentialIds, sequentialIds } from './ids.js';
 export {
+  type AccessOptions,
+  type AccessWorld,
+  type MemoryAgent,
+  type MemoryEntitlementStore,
+  memoryEntitlementStore,
+  type MemorySession,
+  type MemorySubscription,
+  type MemoryTurnConfigStore,
+  memoryTurnConfigStore,
+  packMarket,
+  S as WORLD_STUDENTS,
+  T as WORLD_TEACHERS,
+  twoTeacherWorld,
+} from './memoryAccess.js';
+export { type Prng, prng } from './prng.js';
+export {
   type MemoryAlertSink,
   memoryAlertSink,
   type MemoryTraceSink,

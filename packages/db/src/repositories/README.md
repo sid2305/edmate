@@ -37,6 +37,11 @@ Isolation between teachers and between students is enforced here, not by Postgre
     `messages.append` reports a duplicate (caller-chosen, globally unique) message id as
     `not_found`, so ids in other sessions can't be probed.
 
+11. **One public read.** `agents.owner({ agentId })` is the only method without a teacher or
+    student scope (task 3.2): it returns `{ teacherId }` for a `live` agent and nothing for a
+    draft, suspended or missing one, because which teacher owns a live agent is public on teacher
+    pages. Its argument is parsed like a scope (`scope` error before any SQL).
+
 ## Adding a method
 
 Add it to a repository returned by `createRepositories`, then add its case to `CASES` in
@@ -48,7 +53,11 @@ runtime with `CASES`, and `test/scope.test.ts` calls every method with bad scope
 
 Frozen ports without a scope parameter are bound to a scope at construction:
 `transcriptStoreFor(repos, scope)` returns a `TranscriptStore` for one student x teacher, built
-per turn by the caller. Other port adapters (EntitlementStore 3.2, ProfileStore 6.2,
+per turn by the caller. `entitlementStoreFor(repos, opts)` (3.2) binds the trusted server state
+(the user's market, the studio's preview package, the eval run's pinned package) and resolves all
+three sources; `turnConfigStoreFor(repos, { locales })` (3.2, ADR-0004) loads a turn's agent,
+package, style card and locale pack and returns null unless the session is the entitlement's and
+open. Other port adapters (ProfileStore 6.2,
 TeacherQuestionStore / CorrectionStore 5.10, UsageMeter 2.4, TraceSink 3.8 / 7.7, RetrievalIndex
 5.3 / 5.4) belong to their tasks and must add their isolation cases here.
 

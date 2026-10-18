@@ -23,6 +23,7 @@ import type {
   TeacherQuestionStore,
   TraceSink,
   TranscriptStore,
+  TurnConfigStore,
   TurnContext,
   TurnEvent,
   TurnInput,
@@ -31,6 +32,7 @@ import type {
   UsageMeter,
 } from '@edmate/contracts';
 import type { CancelToken, Clock, IdSource } from './clock.js';
+import type { TurnLimits } from './limits.js';
 
 /** Localised fallback texts the harness cannot compose itself (no i18n library in the harness). */
 export interface FallbackReplies {
@@ -46,6 +48,15 @@ export interface PipelineDeps {
   ids: IdSource;
   gateway: ModelGateway;
   entitlements: EntitlementStore;
+  /** Loads the agent, package, style card and locale pack at `entitle` (ADR-0004). */
+  turnConfig: TurnConfigStore;
+  /**
+   * Which entitlement this caller resolves, set by the composition root (student web route
+   * `subscription`, studio/CLI preview `teacher_preview`, eval runner `eval`); never from TurnInput.
+   */
+  entitlementSource: Entitlement['source'];
+  /** Long-lived rate and message counters, built once by the composition root. */
+  limits: TurnLimits;
   profiles: ProfileStore;
   transcripts: TranscriptStore;
   retrieval: RetrievalIndex;
@@ -75,7 +86,7 @@ export type Emit = (e: TurnEvent) => void;
 
 export type GuardTrace = TurnTrace['guards'][number];
 
-/** What `entitle` resolves. agent/pkg/locale/styleCard loading is open (plan Q4, before 3.2). */
+/** What `entitle` resolves: the entitlement plus its config, loaded through TurnConfigStore (ADR-0004). */
 export interface Entitled {
   entitlement: Entitlement;
   agent: AgentConfig;

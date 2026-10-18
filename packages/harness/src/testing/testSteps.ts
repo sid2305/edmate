@@ -11,6 +11,7 @@ import {
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
 import type { ModelGateway, PedagogyDecision, Usage } from '@edmate/contracts';
+import { createTurnLimits } from '../pipeline/limits.js';
 import type { CommitRecord, PipelineDeps, StepEnv, Steps } from '../pipeline/types.js';
 import { sequentialIds, type SequentialIds } from './ids.js';
 import {
@@ -220,7 +221,8 @@ export interface TestDeps {
 
 /**
  * Dependencies on a virtual clock with sequential ids, a scripted gateway (default: one text
- * stream), in-memory trace/usage/alert sinks and `unusedPort` stores.
+ * stream), in-memory trace/usage/alert sinks, `unusedPort` stores, source `subscription` and
+ * fresh in-memory limits.
  */
 export function testDeps(
   opts: {
@@ -245,6 +247,9 @@ export function testDeps(
     ids,
     gateway,
     entitlements: unusedPort('entitlements', portCalls),
+    turnConfig: unusedPort('turnConfig', portCalls),
+    entitlementSource: 'subscription',
+    limits: createTurnLimits(clock),
     profiles: unusedPort('profiles', portCalls),
     transcripts: unusedPort('transcripts', portCalls),
     retrieval: unusedPort('retrieval', portCalls),
