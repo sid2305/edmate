@@ -1,9 +1,14 @@
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { createDb } from './client.js';
 
-/** packages/db/migrations, from both src/ (tests) and dist/ (built). */
-export const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
+/**
+ * packages/db/migrations, from both src/ (tests) and dist/ (built). Built with path.join, not
+ * `new URL('../migrations', import.meta.url)`: bundlers (Next's Turbopack, task 1.3) treat that
+ * as an asset import and fail because it is a directory.
+ */
+export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
 /**
  * The migrator's pool: one connection, and no statement timeout, so a long migration (an HNSW

@@ -23,6 +23,8 @@ packages/harness/src/access/**
 packages/payments/**
 apps/web/app/api/webhooks/**
 apps/web/src/auth/**
+apps/web/app/api/auth/**
+packages/db/src/identity/**
 packages/gateway/src/keys/**
 packages/db/src/repositories/**
 

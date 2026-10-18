@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Shared tsconfig, ESLint and Prettier presets for Edmate workspaces.",
   "exports": {
+    "./eslint/app": "./eslint/app.js",
     "./eslint/base": "./eslint/base.js",
     "./eslint/harness": "./eslint/harness.js",
     "./prettier": "./prettier/index.js",

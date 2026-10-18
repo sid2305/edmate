@@ -5,7 +5,7 @@ import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import * as schema from '../src/schema/index.js';
 import { MIGRATIONS_DIR } from '../src/migrate.js';
 
-/** Every table in the build plan's Data model section, one per name listed there. */
+/** Every table in the build plan's Data model section, one per name listed there, plus sign-in. */
 export const DATA_MODEL_TABLES = [
   'users',
   'teacher_profiles',
@@ -43,6 +43,10 @@ export const DATA_MODEL_TABLES = [
   'takedowns',
   'safety_events',
   'audit_log',
+  // Sign-in tables (task 1.3), behind the identity store rather than a repository.
+  'auth_accounts',
+  'auth_sessions',
+  'platform_audit_log',
 ] as const;
 
 /** Drizzle's view of every table the schema exports. */

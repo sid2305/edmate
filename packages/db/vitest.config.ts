@@ -33,7 +33,8 @@ export default defineConfig(async () => {
         // bin/ is a two-line process entrypoint around cli.ts, which is covered. Repositories are
         // only exercised by the integration suite: without Postgres (local, no Docker) they are left
         // out of coverage instead of failing it; CI always runs the suite and enforces them.
-        exclude: ['src/bin/**', ...(integration ? [] : ['src/repositories/**'])],
+        // The identity store (1.3) is the same: integration-only, enforced at the same level.
+        exclude: ['src/bin/**', ...(integration ? [] : ['src/repositories/**', 'src/identity/**'])],
         thresholds: {
           lines: 80,
           branches: 80,
@@ -42,6 +43,12 @@ export default defineConfig(async () => {
           ...(integration
             ? {
                 'src/repositories/**': {
+                  lines: 100,
+                  functions: 100,
+                  branches: 90,
+                  statements: 100,
+                },
+                'src/identity/**': {
                   lines: 100,
                   functions: 100,
                   branches: 90,

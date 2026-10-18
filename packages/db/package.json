@@ -24,7 +24,8 @@
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node dist/bin/migrate.js"
+    "db:migrate": "node dist/bin/migrate.js",
+    "db:grant-role": "node dist/bin/grant-role.js"
   },
   "dependencies": {
     "@edmate/contracts": "workspace:*",
