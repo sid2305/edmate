@@ -1,9 +1,8 @@
-// A minimal injected clock for test doubles. Local to harness/testing on purpose (lead answer Q1):
-// the platform-wide clock/id-generator shape is task 3.1's to define.
+// A minimal injected clock for test doubles. The full clock shape lives in pipeline/clock.ts
+// (task 3.1); the scripted gateway only needs `sleep`.
+import type { Clock as PipelineClock } from '../pipeline/clock.js';
 
-export interface Clock {
-  sleep(ms: number): Promise<void>;
-}
+export type Clock = Pick<PipelineClock, 'sleep'>;
 
 export interface ManualClock extends Clock {
   /** Every requested sleep, in call order. */
