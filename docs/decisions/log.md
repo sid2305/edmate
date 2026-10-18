@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Main model provider · decided by you · risk: medium
+Decided: Anthropic (Claude) gets Edmate's native "main" adapter (task 2.2); the second adapter stays OpenAI-compatible, which also covers OpenRouter. Which model each tier uses is still decided after the cost and eval data (task 7.6).
+Why: Strong instruction-following and refusal behaviour matter for a student-facing tutor and locked content.
+Alternatives: OpenAI, Google Gemini, OpenRouter only for now.
+Reversible: Yes; adapters sit behind the ModelGateway port.
+
 ### 18 Oct 2026 · 0.6 Exact pins for every dev container input · decided by tdd-guide · risk: low
 Decided: Base image `mcr.microsoft.com/devcontainers/base:3.0.10-noble` by digest `sha256:21e9e327...86c3e6`; node feature `2.1.1` with Node `22.22.3` and nvm `0.40.8`; docker-outside-of-docker feature `1.10.1` with Docker CLI `29.5.3` and buildx `0.38.0`; Claude Code `2.1.302`; PyYAML `6.0.1-2build2` (apt); devcontainers CLI `0.89.0` for verification. Node 22.22.3 is the 22.x on the build machine, since `.nvmrc` and `engines` only say 22.
 Why: Lead answer 1: pin everything so builds are repeatable; each version was current and checked to build.
