@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 17 Oct 2026 · Tech stack · decided by Claude (lead), at your request · risk: medium
+Decided: Keep TypeScript end to end; no Rust. Revisit only for a single hot spot at scale, as a Rust service behind an existing port, with its own ADR.
+Why: Turns are dominated by model, database and network waits, not our code; one language lets every app share the Zod contracts; the libraries we need (Next.js, Auth.js, AI SDK, Drizzle, BullMQ, payment SDKs) are TypeScript-first; agents and contributors move faster in TypeScript.
+Alternatives: Rust backend with a TypeScript front end; Rust for the harness only.
+Reversible: Yes, per component behind ports.
+
 ### 17 Oct 2026 · 0.1 Monorepo scaffold · decided by you · risk: low
 Decided: The scaffold does not create empty placeholder folders in risky or safety paths (harness access and guardrails, prompt packs, skills, locales, safety and locked evals, ADRs). The task that fills each folder creates it; the README lists the full layout.
 Why: Empty files there would trigger safety review and approval for nothing.
