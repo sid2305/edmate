@@ -80,3 +80,9 @@ Decided: Added `docs/adr/test_check_headings.py` (stdlib unittest) next to `docs
 Why: The brief asked for tests first; a folder argument lets the tests check failures without breaking the real ADRs.
 Alternatives: Only run the script by hand against the real folder.
 Reversible: Yes, delete the test file.
+
+### 18 Oct 2026 · 0.4 Review · decided by team lead · risk: low
+Decided: check-headings.py does not flag a heading that appears twice; it checks only that every template heading is present and in order. The lead fixed four wording findings in the ADRs and the README in this PR.
+Why: Duplicate headings are harmless and nothing in the spec asks for the check; later ADR edits need three reviewers, so cheap fixes were made now.
+Alternatives: Add a duplicate check.
+Reversible: Yes.

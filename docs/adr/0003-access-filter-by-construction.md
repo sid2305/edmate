@@ -20,10 +20,10 @@ This ADR records the design the build plan already fixes. It makes no new decisi
 
 Locked material is kept away from every model by how the code is built, not by instructions in a prompt. Each point is from build plan § Access filter, points 1 to 9, unless another source is named.
 
-1. **Entitlements are computed on the server.** The `source` is subscription, teacher preview or eval. A package id sent by the client is never trusted.
+1. **Entitlements are computed on the server.** The `source` is subscription, teacher preview or eval. A package id sent by the client is never trusted. The contracts back this up: strict schemas reject a client-sent package id, and a turn context whose retrieved chunks come from a module that isn't allowed fails validation (decision log, 18 Oct 2026: "0.3 Zod version and strict objects" and "0.3 Turn context must be consistent").
 2. **Retrieval is filtered in the query.** `RetrievalIndex.search` requires `allowedModuleIds` in its type (`scope: { teacherId; allowedModuleIds }` in `packages/contracts/src/ports.ts`). The SQL applies `teacher_id = $1 AND module_id = ANY($2)` before ranking. There is no unfiltered search function in any package.
 3. **The probe tells "locked" from "not covered".** `RetrievalIndex.probe(q, { teacherId, moduleIds })` checks the locked modules in code and returns only `{ hit, score }`, never chunk text. `buildContext` turns it into `lockedHit` (build plan § Turn pipeline spec, step 6). `decide` picks `locked` when `lockedHit` is true and allowed retrieval found nothing above threshold; otherwise an uncovered question goes to `ask_teacher`.
-4. **Public titles.** Module and package titles are public; they are on the teacher page. Chunk text from locked modules never reaches any model, including guards: `lockedLeak` is code (n-gram overlap), not a model call.
+4. **Public titles.** Module and package titles are public; they are on the teacher page. Chunk text from locked modules never reaches any model, including guards: `lockedLeak` is code (n-gram overlap), not a model call. It never reaches a log or trace either: the trace contract (`packages/contracts/src/trace.ts`) has no text field, and a future text field must not carry locked chunks.
 5. **Skills are filtered in the registry.** The orchestrator only receives tools whose `skill` is in the entitlement; the prompt lists only those skills.
 6. **Caches are keyed by package version.**
 7. **Changes take effect on the next turn.** Payment webhooks update the subscription; `entitle` reads it fresh each turn.
@@ -33,7 +33,7 @@ Locked material is kept away from every model by how the code is built, not by i
 ## Alternatives
 
 - **Tell the model, in its instructions, not to use locked material.** Not chosen: the PRD (§ Locked means locked) requires locked material to be "kept away from the AI, not merely forbidden in its instructions", because students will try to talk the agent into it.
-- **No probe, so every uncovered question goes to `ask_teacher`.** Not chosen: the build plan (§ Access filter, point 3) needs the agent to tell "locked" from "not covered" without locked text reaching a prompt.
+- **No probe, so every uncovered question goes to `ask_teacher`.** Not chosen: the build plan (§ Access filter, point 3) needs the agent to tell "locked" from "not covered" without locked text reaching a prompt. The code-only probe was added in the spec review (decision log, 17 Oct 2026: "Build plan").
 
 ## Consequences
 
@@ -44,4 +44,4 @@ Locked material is kept away from every model by how the code is built, not by i
 
 ## Reviewers
 
-Pending: architect, security-reviewer, typescript-reviewer (required for `docs/adr/**`).
+architect (opus), security-reviewer (sonnet), typescript-reviewer (sonnet), 18 Oct 2026 (PR #4).

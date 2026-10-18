@@ -40,4 +40,4 @@ Define the ports in `packages/harness`, as the Repo layout says (decision log, 1
 
 ## Reviewers
 
-Pending: architect, security-reviewer, typescript-reviewer (required for `docs/adr/**`).
+architect (opus), security-reviewer (sonnet), typescript-reviewer (sonnet), 18 Oct 2026 (PR #4).

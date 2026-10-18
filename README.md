@@ -72,6 +72,6 @@ evals/
   suites/locked/       (later)
   fixtures/            recorded model responses for offline CI
 docs/
-  adr/                 (later, task 0.4)
+  adr/                 architecture decision records
 docker/                Compose, Caddyfile, env.example (task 0.2)
 ```

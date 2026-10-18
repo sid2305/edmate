@@ -16,7 +16,7 @@ Sources: build plan § Tech stack (fixed); build plan § Agent operating rules, 
 
 ## Decision
 
-Use the stack in the build plan's "Tech stack (fixed)" table, as written:
+Use the stack in the build plan's "Tech stack (fixed)" table. This is a summary; the table, including its Notes column, is the full text:
 
 - TypeScript (strict, `noUncheckedIndexedAccess`) on Node.js 22 LTS.
 - pnpm workspaces and Turborepo, run as `corepack pnpm`, one lockfile.
@@ -57,4 +57,4 @@ Not chosen because turns are dominated by model, database and network waits, not
 
 ## Reviewers
 
-Pending: architect, security-reviewer, typescript-reviewer (required for `docs/adr/**`).
+architect (opus), security-reviewer (sonnet), typescript-reviewer (sonnet), 18 Oct 2026 (PR #4).
