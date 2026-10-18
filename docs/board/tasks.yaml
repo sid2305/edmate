@@ -335,9 +335,9 @@ tasks:
   - '1.1'
   - '1.8'
   - M0
-  status: planning
+  status: running
   branch: m1/1.5-seed
-  model: plan:sonnet
+  model: plan:sonnet build:opus-5.5/medium
 - id: '1.6'
   milestone: M1
   title: Audit log helper
@@ -440,11 +440,11 @@ tasks:
   - '2.2'
   - M0
   - '3.15'
-  status: running
+  status: review
   needs_decision:
   - transcription
   branch: m2/2.7-transcriber-embeddings
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(db,silent)
 - id: '3.1'
   milestone: M3
   title: 'Pipeline runner: eleven steps with the concurrency in Turn pipeline spec, timeouts, injected clock and ids, trace capture'
