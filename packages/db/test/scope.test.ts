@@ -12,6 +12,7 @@ import {
   studentScope,
   teacherScope,
   transcriptStoreFor,
+  usageMeterFor,
 } from '../src/index.js';
 
 const handle = createDb({ DATABASE_URL: 'postgres://u:p@127.0.0.1:1/none' });
@@ -131,6 +132,12 @@ describe('every repository method rejects a bad scope before any SQL', () => {
   it('transcriptStoreFor rejects a bad scope at construction', () => {
     for (const [, bad] of BAD_SCOPES) {
       expectScopeError(() => transcriptStoreFor(repos, bad as never), 'transcriptStoreFor');
+    }
+  });
+
+  it('usageMeterFor rejects a bad scope at construction', () => {
+    for (const [, bad] of BAD_SCOPES) {
+      expectScopeError(() => usageMeterFor(repos, bad as never), 'usageMeterFor');
     }
   });
 });

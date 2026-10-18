@@ -1,5 +1,5 @@
 {
-  "id": "c98d6bf2-9889-44a3-8c45-12cb5039167b",
+  "id": "dbeb0968-a668-4f86-96a8-69b892150f15",
   "prevId": "63832b95-9369-4ee9-9cd9-1bf053fd06ae",
   "version": "7",
   "dialect": "postgresql",
@@ -390,202 +390,6 @@
           "tableFrom": "audit_log",
           "tableTo": "users",
           "columnsFrom": ["student_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_accounts": {
-      "name": "auth_accounts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_account_id": {
-          "name": "provider_account_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "auth_accounts_provider_provider_account_id_key": {
-          "name": "auth_accounts_provider_provider_account_id_key",
-          "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "auth_accounts_user_id_idx": {
-          "name": "auth_accounts_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "auth_accounts_user_id_users_id_fk": {
-          "name": "auth_accounts_user_id_users_id_fk",
-          "tableFrom": "auth_accounts",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_sessions": {
-      "name": "auth_sessions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "session_token_hash": {
-          "name": "session_token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "auth_sessions_session_token_hash_key": {
-          "name": "auth_sessions_session_token_hash_key",
-          "columns": [
-            {
-              "expression": "session_token_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "auth_sessions_user_id_idx": {
-          "name": "auth_sessions_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "auth_sessions_user_id_users_id_fk": {
-          "name": "auth_sessions_user_id_users_id_fk",
-          "tableFrom": "auth_sessions",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -4401,7 +4205,7 @@
           "name": "model",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "tier": {
           "name": "tier",
@@ -4414,19 +4218,46 @@
           "name": "input_tokens",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "output_tokens": {
           "name": "output_tokens",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "cost_micro_usd": {
           "name": "cost_micro_usd",
           "type": "bigint",
           "primaryKey": false,
+          "notNull": false
+        },
+        "turn_id": {
+          "name": "turn_id",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "entitlement_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "usage_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'recorded'"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -4500,6 +4331,54 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "usage_ledger_teacher_id_turn_id_idx": {
+          "name": "usage_ledger_teacher_id_turn_id_idx",
+          "columns": [
+            {
+              "expression": "teacher_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "turn_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "usage_ledger_teacher_id_student_id_created_at_idx": {
+          "name": "usage_ledger_teacher_id_student_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "teacher_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4534,7 +4413,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "usage_ledger_counts_non_negative": {
+          "name": "usage_ledger_counts_non_negative",
+          "value": "\"usage_ledger\".\"input_tokens\" >= 0 and \"usage_ledger\".\"output_tokens\" >= 0 and \"usage_ledger\".\"cost_micro_usd\" >= 0"
+        },
+        "usage_ledger_recorded_has_figures": {
+          "name": "usage_ledger_recorded_has_figures",
+          "value": "\"usage_ledger\".\"status\" <> 'recorded' or (\"usage_ledger\".\"model\" is not null and \"usage_ledger\".\"input_tokens\" is not null\n        and \"usage_ledger\".\"output_tokens\" is not null and \"usage_ledger\".\"cost_micro_usd\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.users": {
@@ -4586,12 +4474,6 @@
         },
         "age_confirmed_at": {
           "name": "age_confirmed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email_verified_at": {
-          "name": "email_verified_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -4752,6 +4634,11 @@
       "schema": "public",
       "values": ["material", "transcript", "teacher_note"]
     },
+    "public.entitlement_source": {
+      "name": "entitlement_source",
+      "schema": "public",
+      "values": ["subscription", "teacher_preview", "eval"]
+    },
     "public.evidence_source": {
       "name": "evidence_source",
       "schema": "public",
@@ -4781,6 +4668,11 @@
       "name": "teacher_question_status",
       "schema": "public",
       "values": ["open", "answered", "dismissed"]
+    },
+    "public.usage_status": {
+      "name": "usage_status",
+      "schema": "public",
+      "values": ["recorded", "unknown", "unpriced"]
     },
     "public.user_role": {
       "name": "user_role",

@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
+    "@edmate/harness": "workspace:*",
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "@vitest/coverage-v8": "5.0.5",

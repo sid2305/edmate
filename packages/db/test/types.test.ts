@@ -3,12 +3,15 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type {
   AgentConfig,
+  EntitlementStore,
   LearnerProfile,
   Message,
   PackageConfig,
   SourceRef,
+  StyleCard,
   TeacherQuestion,
   TranscriptStore,
+  TurnConfigStore,
   TurnTrace,
 } from '@edmate/contracts';
 import type { Db } from '../src/internal.js';
@@ -20,12 +23,16 @@ import type {
   turnTraces,
 } from '../src/internal.js';
 import type {
+  AgentRow,
   createRepositories,
+  entitlementStoreFor,
+  PublicAgentScope,
   RepositoryMethod,
   StudentScope,
   TeacherQuestionForTeacher,
   TeacherScope,
   transcriptStoreFor,
+  turnConfigStoreFor,
 } from '../src/index.js';
 
 type Repos = ReturnType<typeof createRepositories>;
@@ -60,12 +67,21 @@ describe('repository return types', () => {
       TeacherQuestionForTeacher[]
     >();
     expectTypeOf<TeacherQuestionForTeacher>().toEqualTypeOf<Omit<TeacherQuestion, 'studentId'>>();
+    expectTypeOf<Ret<Repos['styleCards']['get']>>().toEqualTypeOf<StyleCard | null>();
+    expectTypeOf<Ret<Repos['packageVersions']['getById']>>().toEqualTypeOf<PackageConfig | null>();
+    expectTypeOf<Ret<Repos['packageVersions']['latest']>>().toEqualTypeOf<PackageConfig | null>();
+    expectTypeOf<Ret<Repos['agents']['get']>>().toEqualTypeOf<AgentRow | null>();
+    expectTypeOf<Ret<Repos['agents']['owner']>>().toEqualTypeOf<{ teacherId: string } | null>();
+    expectTypeOf<Ret<Repos['modules']['ids']>>().toEqualTypeOf<string[]>();
   });
 
   it('take the scope first', () => {
     expectTypeOf<Parameters<Repos['agentVersions']['get']>[0]>().toEqualTypeOf<TeacherScope>();
     expectTypeOf<Parameters<Repos['messages']['append']>[0]>().toEqualTypeOf<StudentScope>();
     expectTypeOf<Parameters<Repos['learnerProfiles']['get']>[0]>().toEqualTypeOf<StudentScope>();
+    expectTypeOf<Parameters<Repos['styleCards']['get']>[0]>().toEqualTypeOf<TeacherScope>();
+    expectTypeOf<Parameters<Repos['modules']['ids']>[0]>().toEqualTypeOf<TeacherScope>();
+    expectTypeOf<Parameters<Repos['agents']['owner']>[0]>().toEqualTypeOf<PublicAgentScope>();
   });
 
   it('name every method as repo.method', () => {
@@ -76,6 +92,8 @@ describe('repository return types', () => {
 
   it('transcriptStoreFor returns the frozen TranscriptStore port', () => {
     expectTypeOf<ReturnType<typeof transcriptStoreFor>>().toEqualTypeOf<TranscriptStore>();
+    expectTypeOf<ReturnType<typeof entitlementStoreFor>>().toEqualTypeOf<EntitlementStore>();
+    expectTypeOf<ReturnType<typeof turnConfigStoreFor>>().toEqualTypeOf<TurnConfigStore>();
     expectTypeOf<Parameters<typeof createRepositories>[0]>().toEqualTypeOf<Db>();
   });
 });

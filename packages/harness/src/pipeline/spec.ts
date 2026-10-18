@@ -52,6 +52,12 @@ export const STEP_SPEC: Readonly<Record<StepName, StepSpec>> = {
   commit: { n: 11, timeoutMs: null, onFailure: 'Queue; never blocks' },
 };
 
+/** admit: "rate limit (10 turns/min/student)"; every source except `eval` (lead answer Q3). */
+export const RATE_LIMIT_TURNS = 10;
+export const RATE_LIMIT_WINDOW_MS = 60_000;
+/** entitle: `PackageConfig.dailyMessageLimit` is a rolling 24-hour window (subscriptions only). */
+export const MESSAGE_WINDOW_MS = 86_400_000;
+
 /** "Alert retried until delivered": backoff starts here and doubles each failed attempt. */
 export const ALERT_RETRY_START_MS = 250;
 /** Backoff ceiling; there is no attempt limit (durable delivery is the 4.3 alert worker). */

@@ -272,7 +272,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError', async () => {
+  it('every stub throws StepNotImplementedError (admit and entitle are built: 3.2)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -282,8 +282,6 @@ describe('defaultSteps (stubs)', () => {
     };
     const anyArg = {} as never;
     const calls: (() => unknown)[] = [
-      () => defaultSteps.admit(env),
-      () => defaultSteps.entitle(env),
       () => defaultSteps.scrub(env, anyArg),
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
@@ -303,13 +301,14 @@ describe('defaultSteps (stubs)', () => {
     });
   });
 
-  it('fails closed: with stub admit the turn is refused', async () => {
+  it('fails closed: the real entitle with a failing store refuses the turn', async () => {
     const t = testDeps();
     const { events } = await driveTurn(
       runTurn(demoTurnInput, { deps: t.deps, steps: defaultSteps }),
       t.clock,
     );
-    expect(events).toEqual([{ type: 'error', code: 'rate_limited', retryable: true }]);
+    expect(events).toEqual([{ type: 'error', code: 'no_access', retryable: true }]);
+    expect(t.portCalls).toEqual(['entitlements.resolve']);
   });
 
   it('fails closed: past admit and entitle, the stub scrub blocks the turn', async () => {
