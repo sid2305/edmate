@@ -354,8 +354,8 @@ describe('migrations are create-only', () => {
   });
 
   it('fixes the embedding dimension without discarding any stored vector (task 2.7)', () => {
-    const m = migrationSql().find((f) => f.file === '0005_chunk_embedding_dimension.sql');
-    expect(m, '0005 exists').toBeDefined();
+    const m = migrationSql().find((f) => f.file === '0006_chunk_embedding_dimension.sql');
+    expect(m, '0006 exists').toBeDefined();
     const sql = m!.sql;
     // The guard runs first and stops the migration instead of dropping a wrong-sized vector.
     const guard = sql.indexOf('RAISE EXCEPTION');

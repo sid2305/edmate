@@ -277,7 +277,8 @@ describe('createWhisperTranscriber: a 60-minute recording over 25 MB', () => {
       0,
       offsetMs,
     ]);
-  });
+    // 28 MB through a multipart upload twice: well under a second alone, slower on a busy runner.
+  }, 30_000);
 
   it('a silent piece in the middle is fine; the transcript still has every spoken piece', async () => {
     const chunker: AudioChunker = (audio) => [

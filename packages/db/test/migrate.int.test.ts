@@ -248,13 +248,13 @@ describe.skipIf(!up)(
       }
     });
 
-    it('0005 stops, and keeps the data, when an embedding has another dimension (task 2.7)', async () => {
-      const sql = migrationSql().find((f) => f.file === '0005_chunk_embedding_dimension.sql')!.sql;
+    it('0006 stops, and keeps the data, when an embedding has another dimension (task 2.7)', async () => {
+      const sql = migrationSql().find((f) => f.file === '0006_chunk_embedding_dimension.sql')!.sql;
       const [guard] = sql.split('--> statement-breakpoint');
       await admin(async (c) => {
         await c.query('BEGIN');
         try {
-          // Back to the pre-0005 column, holding one 3-dimensional vector.
+          // Back to the pre-0006 column, holding one 3-dimensional vector.
           await c.query('DROP INDEX "chunks_embedding_hnsw_idx"');
           await c.query('ALTER TABLE "chunks" ALTER COLUMN "embedding" TYPE vector');
           const doc = await c.query<{ id: string; teacher_id: string; module_id: string }>(

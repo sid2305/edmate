@@ -1,5 +1,5 @@
 // The platform-wide embedding model (task 2.7). One model for every teacher's material, because
-// chunks.embedding has one fixed dimension (vector(1536), packages/db migration 0005) and vectors
+// chunks.embedding has one fixed dimension (vector(1536), packages/db migration 0006) and vectors
 // from different models cannot be compared. Provisional until 7.6's cost and eval pass; changing
 // it means a db migration and re-embedding every chunk.
 //
