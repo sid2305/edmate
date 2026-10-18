@@ -592,7 +592,7 @@ tasks:
   accept: ADR-0004 merged; `TurnConfigStore` exported from @edmate/contracts; type-level test and the spec-types drift test pass with the updated build-plan block; no other contract changes.
   deps:
   - '3.1'
-  status: review
+  status: done
   branch: m3/3.13-turn-config-store
   model: plan:architect(opus)+lead build:opus-5.5/medium review:opus(architect,ts)+sonnet(security)
 - id: '4.0'
