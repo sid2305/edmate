@@ -169,9 +169,9 @@ tasks:
     `apps/worker` (BullMQ no-op worker), `apps/cli` (`edmate --version`), all `packages/*` as empty workspaces'
   accept: '`corepack pnpm build && corepack pnpm test && corepack pnpm lint` green; `/api/health` returns 200 in dev; importing `drizzle-orm` from `packages/harness` fails lint.'
   deps: []
-  status: running
+  status: review
   branch: m0/0.1-monorepo-scaffold
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet+sonnet
 - id: '0.2'
   milestone: M0
   title: Docker Compose (postgres+pgvector, redis, minio, caddy, web, worker) and `env.example`
