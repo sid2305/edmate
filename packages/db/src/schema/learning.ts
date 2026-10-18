@@ -1,0 +1,194 @@
+// Data model rows: sessions / messages, turn_traces, usage_ledger, evidence_events /
+// learner_profiles, teacher_questions.
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  boolean,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+import {
+  evidenceSource,
+  id,
+  messageRole,
+  modelTier,
+  teacherQuestionStatus,
+  timestamps,
+  tstz,
+} from './_shared.js';
+import { agents, packages } from './agents.js';
+import { topics } from './content.js';
+import { studentId, teacherId } from './users.js';
+
+/** A student's study session with one teacher's agent. The retention job applies. */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: id(),
+    studentId: studentId(),
+    teacherId: teacherId(),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id),
+    agentVersion: integer('agent_version').notNull(),
+    /** Hint ladder state for the open problem. */
+    helpState: jsonb('help_state')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    /** ≤ 60 words, written at session end. */
+    summary: text('summary'),
+    endedAt: tstz('ended_at'),
+    ...timestamps(),
+  },
+  (t) => [
+    index('sessions_teacher_id_student_id_idx').on(t.teacherId, t.studentId),
+    index('sessions_student_id_idx').on(t.studentId),
+    index('sessions_agent_id_idx').on(t.agentId),
+  ],
+);
+
+/** Message content. The retention job applies. */
+export const messages = pgTable(
+  'messages',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id),
+    role: messageRole('role').notNull(),
+    text: text('text').notNull(),
+    /** SourceRef[] shown under an agent answer. */
+    sources: jsonb('sources'),
+    ...timestamps(),
+  },
+  (t) => [index('messages_session_id_created_at_idx').on(t.sessionId, t.createdAt)],
+);
+
+/** Per-turn trace. No keys, no names. */
+export const turnTraces = pgTable(
+  'turn_traces',
+  {
+    id: id(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id),
+    steps: jsonb('steps').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    ...timestamps(),
+  },
+  (t) => [index('turn_traces_session_id_idx').on(t.sessionId)],
+);
+
+/** Model spend per teacher, package and student: caps and dashboards. */
+export const usageLedger = pgTable(
+  'usage_ledger',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    packageId: text('package_id')
+      .notNull()
+      .references(() => packages.id),
+    studentId: studentId(),
+    model: text('model').notNull(),
+    tier: modelTier('tier').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    ...timestamps(),
+  },
+  (t) => [
+    index('usage_ledger_teacher_id_package_id_student_id_idx').on(
+      t.teacherId,
+      t.packageId,
+      t.studentId,
+    ),
+    index('usage_ledger_student_id_idx').on(t.studentId),
+    index('usage_ledger_package_id_idx').on(t.packageId),
+  ],
+);
+
+/** Scored evidence that updates mastery. */
+export const evidenceEvents = pgTable(
+  'evidence_events',
+  {
+    id: id(),
+    studentId: studentId(),
+    teacherId: teacherId(),
+    topicId: text('topic_id')
+      .notNull()
+      .references(() => topics.id),
+    correct: boolean('correct').notNull(),
+    source: evidenceSource('source').notNull(),
+    weight: doublePrecision('weight').notNull().default(1),
+    ts: tstz('ts').notNull().defaultNow(),
+    ...timestamps(),
+  },
+  (t) => [
+    index('evidence_events_teacher_id_student_id_idx').on(t.teacherId, t.studentId),
+    index('evidence_events_student_id_idx').on(t.studentId),
+    index('evidence_events_topic_id_idx').on(t.topicId),
+  ],
+);
+
+/** One per (student, teacher). Mirrors the LearnerProfile contract. */
+export const learnerProfiles = pgTable(
+  'learner_profiles',
+  {
+    id: id(),
+    studentId: studentId(),
+    teacherId: teacherId(),
+    lang: text('lang').notNull(),
+    /** Topic id -> { p, n, updatedAt }. */
+    mastery: jsonb('mastery')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    mistakes: jsonb('mistakes')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    lastSummary: text('last_summary'),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('learner_profiles_teacher_id_student_id_key').on(t.teacherId, t.studentId),
+    index('learner_profiles_student_id_idx').on(t.studentId),
+  ],
+);
+
+/** Ask the teacher. `student_id` is stored but hidden from the teacher by the read layer (1.2+). */
+export const teacherQuestions = pgTable(
+  'teacher_questions',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agents.id),
+    studentId: studentId(),
+    text: text('text').notNull(),
+    moduleHint: text('module_hint'),
+    /** Similar open questions are grouped for the teacher. */
+    groupId: text('group_id'),
+    similarIds: text('similar_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    status: teacherQuestionStatus('status').notNull().default('open'),
+    answer: text('answer'),
+    answeredAt: tstz('answered_at'),
+    ...timestamps(),
+  },
+  (t) => [
+    index('teacher_questions_teacher_id_status_idx').on(t.teacherId, t.status),
+    index('teacher_questions_student_id_idx').on(t.studentId),
+    index('teacher_questions_agent_id_idx').on(t.agentId),
+    index('teacher_questions_group_id_idx').on(t.groupId),
+  ],
+);

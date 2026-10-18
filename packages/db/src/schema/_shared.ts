@@ -1,0 +1,73 @@
+import { randomUUID } from 'node:crypto';
+import { customType, pgEnum, text, timestamp } from 'drizzle-orm/pg-core';
+
+/**
+ * Primary key. Ids are `text`, not Postgres `uuid`: the contracts' id format is
+ * /^[A-Za-z0-9_-]{1,128}$/ (fixtures use ids like `stu_test_01`), so the database never rejects an
+ * id the app accepts. New rows get a random UUID, which matches that format.
+ */
+export const id = () =>
+  text('id')
+    .primaryKey()
+    .$defaultFn(() => randomUUID());
+
+/** `created_at` and `updated_at`, both timestamptz, set by the database on insert. */
+export const timestamps = () => ({
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/** A timestamptz column. */
+export const tstz = (name: string) => timestamp(name, { withTimezone: true });
+
+// Enums. Where the contracts define the same set, test/schema.test.ts checks they stay equal.
+export const userRole = pgEnum('user_role', ['student', 'teacher', 'staff']);
+export const subscriptionStatus = pgEnum('subscription_status', [
+  'trial',
+  'active',
+  'past_due',
+  'paused',
+  'ended',
+]);
+export const agentStatus = pgEnum('agent_status', ['draft', 'live', 'suspended']);
+export const chunkKind = pgEnum('chunk_kind', ['material', 'transcript', 'teacher_note']);
+export const messageRole = pgEnum('message_role', ['student', 'agent', 'teacher']);
+export const teacherQuestionStatus = pgEnum('teacher_question_status', [
+  'open',
+  'answered',
+  'dismissed',
+]);
+export const evidenceSource = pgEnum('evidence_source', ['check', 'practice', 'rubric']);
+export const modelTier = pgEnum('model_tier', ['small', 'main']);
+export const ledgerDirection = pgEnum('ledger_direction', ['debit', 'credit']);
+
+/** Text form pgvector accepts: `[1,2.5,-3]`. Rejects empty or non-finite vectors. */
+export function vectorToDriver(value: number[]): string {
+  if (value.length === 0 || !value.every((n) => Number.isFinite(n))) {
+    throw new Error('embedding must be a non-empty array of finite numbers');
+  }
+  return `[${value.join(',')}]`;
+}
+
+/** pgvector returns its text form, which is a JSON array. */
+export function vectorFromDriver(value: string): number[] {
+  return JSON.parse(value) as number[];
+}
+
+/**
+ * pgvector `vector` with no fixed dimension. The embedding model (and so its dimension and the
+ * HNSW index) is chosen in tasks 2.7/5.3, which add both in a later, additive migration.
+ */
+export const vector = customType<{ data: number[]; driverData: string }>({
+  dataType: () => 'vector',
+  toDriver: vectorToDriver,
+  fromDriver: vectorFromDriver,
+});
+
+/** Postgres `tsvector`, read back as its text form. */
+export const tsvector = customType<{ data: string }>({
+  dataType: () => 'tsvector',
+});
