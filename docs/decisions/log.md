@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.4 Unknown figures are NULL; usage_ledger's figure columns are relaxed to nullable · decided by team lead · risk: high
+Decided: `model`, `input_tokens`, `output_tokens` and `cost_micro_usd` are nullable (migration `0003`, `ALTER COLUMN … DROP NOT NULL`, which loses no data; the table is empty). Each row has a `status` (`recorded` | `unknown` | `unpriced`) and a fixed `reason` (`no_usage_reported` | `unpriced_model:<model>`). Unknown rows have NULL tokens and cost; unpriced rows have NULL cost. One CHECK requires a recorded row to have all four figures, and another keeps counts non-negative. Status/figure consistency beyond that is validated on read (`integrity`). `schema.test.ts` allows relaxing NOT NULL and pins the relaxed columns.
+Why: a raw query must never read an unknown call as free (database-reviewer, fix round 1). The lead clarified that "create-only" means "never lose data". Round 0's placeholder-plus-3-branch-CHECK design was replaced.
+Alternatives: placeholders pinned by a CHECK (round 0: brittle, and raw readers see 0).
+Reversible: yes (re-adding NOT NULL needs the unknown rows backfilled or removed).
+Note for 2.5/13.5: `sum()` skips NULL, so totals leave out unknown calls. Report the `unknown`/`unpriced` counts (as `sumForStudent` does) next to any cost.
+
+### 18 Oct 2026 · 2.4 One usage row per provider attempt, metered at the adapter · decided by builder · risk: high
+Decided: `meterRouter(router, …)` rebuilds the router with `Router.withAdapters` so that each adapter call is metered. A failed-over primary writes its own row (unknown, on its model) next to the fallback's. A request the router refuses before any adapter call writes nothing. The gateway-level wrapper was removed so a router can't be metered as one opaque call.
+Why: silent-failure-hunter, fix round 1. Tokens a failed primary spent were invisible.
+Alternatives: record inside `Router` itself (couples routing to billing); keep a gateway-level wrapper too (easy to misuse).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.4 usage_ledger writes are ownership-checked through the package, scoped by student x teacher · decided by builder · risk: high
+Decided: `usageLedger.record` / `recordUnmetered(scope: StudentScope, packageId, entry)` insert with `INSERT … SELECT … FROM packages WHERE id = $pkg AND teacher_id = $scope.teacherId` (0 rows → `not_found`; a ghost student is a FK violation, which reads as `not_found`). Reads filter on the scope's teacher and student. `usageMeterFor(repos, scope)` binds one pair, and a ctx naming another is `scope`. Rows hold ids, model id, tier, counts, cost and the reason code only.
+Why: 1.2's isolation rules. A wrong ctx can't bill another pair.
+Alternatives: trust the ctx's ids per call.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.4 Metering writes are fire-and-track; durable retry is deferred to 3.8 · decided by team lead · risk: low
+Decided: a sink write starts when an attempt ends and is not awaited by the call. `settled()` waits for outstanding writes. A failing write becomes one `metering.failed` warning (error class name only) and is not retried. Durable retry or a dead-letter queue for failed meter writes is deferred to task 3.8 (the async `meter` step's queue).
+Why: pipeline step 10 says metering never blocks; 3.8 owns the queue.
+Alternatives: await the write in the call path; retry in memory (lost on restart anyway).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.4 generateObject/embed are always recorded as unknown (known limit) · decided by team lead · risk: low
+Decided: the frozen `ModelGateway` port returns only the value from `generateObject`/`embed`, so each attempt is recorded as `no_usage_reported` on the adapter's model. Carrying usage out needs a contracts change (ADR). A stream that reports several usage figures writes one row per figure. Chunks pass through unchanged (the usage chunk still says `costMicroUsd: 0`); `computeCostMicroUsd` is exported if 3.7 needs a cost mid-turn.
+Why: no tokens invented, no call left out.
+Alternatives: a contracts change to return usage.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.4 Prices are integer micro-USD per 1M tokens, at most 6 decimals, half-up once · decided by builder · risk: low
+Decided: `prices.yaml` holds USD per 1M tokens (at most 6 decimals), scaled to BigInt micro-USD at load. Cost = (in x pIn + out x pOut) / 1M, rounded half up once; a result past 2^53 throws. `js-yaml` 5.5.0 (the same pin as evals). The build copies `prices.yaml` to `dist/`. The gateway build tsconfig includes node types. The list prices should be checked when 7.6 sets the model mix.
+Why: exact integers, one rounding step.
+Alternatives: floats; per-side rounding.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.4 turn_id is a plain column; source is a new enum checked against the contracts · decided by planner · risk: low
+Decided: `turn_id` is text, not null and not a FK (meter and commit are independent). `entitlement_source` is checked equal to `Entitlement.source`. Indexes `(teacher_id, turn_id)` for `listForTurn` and `(teacher_id, student_id, created_at)` for `sumForStudent` and 2.5.
+Why: as planned, plus database-reviewer's index.
+Alternatives: FK to turn traces.
+Reversible: yes.
+
+Ops note: in round 0, `docker compose … up -d postgres` reported "Recreated" for the shared `edmate-postgres-1` container. Round 1 used `start`/`stop` only.
+
+### 18 Oct 2026 · 2.4 Review · decided by team lead · risk: low
+Decided: generateObject and embed calls in packages/gateway/src/metering/meteredGateway.ts are recorded with status unknown, because the contracts port returns no usage for them; failed meter writes are retried by the worker queue in 3.8; 3.7 derives `source` from the entitlement.
+Why: Adding usage to those port methods is a contracts change worth doing only if the cost data in 7.6 shows it matters.
+Alternatives: A contracts change now.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 1.6 Audit rows are teacher-scoped (optionally also student-scoped); staff-wide reads are 12.1's addition · decided by planner · risk: high
 Decided: every `audit_log` row has a not-null `teacher_id`, and the write/read methods take the same `TeacherScope`/`StudentScope` that 1.2 enforces, with no exception to "scope first, always required." `before`/`after` are redacted against a denylist before they are stored, on top of callers' own care. There is no update or delete method; append-only is enforced in the app layer only (no trigger, no REVOKE). Staff's cross-teacher trust-console view is not built here.
 Why: keeps the one isolation rule 1.2 set (and that security-reviewer checks) true for every repository method; every use the build plan has today (config, staff, memory) is about one teacher.
