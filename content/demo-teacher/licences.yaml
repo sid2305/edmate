@@ -1,0 +1,25 @@
+# Every file here was written originally for the Edmate demo; nothing is quoted from a third party.
+# reviewed_by stays "pending" until the repo owner signs off on the PR and replaces it with their handle.
+reviewed_by: sid2305
+entries:
+  - { path: common-mistakes.yaml, licence: CC0-1.0 }
+  - { path: course.yaml, licence: CC0-1.0 }
+  - { path: modules/conditions/notes.md, licence: CC0-1.0 }
+  - { path: modules/functions/notes.md, licence: CC0-1.0 }
+  - { path: modules/lists-dicts/notes.md, licence: CC0-1.0 }
+  - { path: modules/loops/notes.md, licence: CC0-1.0 }
+  - { path: modules/values-variables/notes.md, licence: CC0-1.0 }
+  - { path: packages/free.yaml, licence: CC0-1.0 }
+  - { path: packages/paid.yaml, licence: CC0-1.0 }
+  - { path: qa-recall.yaml, licence: CC0-1.0 }
+  - { path: question-bank/conditions.yaml, licence: CC0-1.0 }
+  - { path: question-bank/functions.yaml, licence: CC0-1.0 }
+  - { path: question-bank/lists-dicts.yaml, licence: CC0-1.0 }
+  - { path: question-bank/loops.yaml, licence: CC0-1.0 }
+  - { path: question-bank/values-variables.yaml, licence: CC0-1.0 }
+  - { path: rubric-answers/conditions.yaml, licence: CC0-1.0 }
+  - { path: rubric-answers/functions.yaml, licence: CC0-1.0 }
+  - { path: rubric-answers/lists-dicts.yaml, licence: CC0-1.0 }
+  - { path: rubric-answers/loops.yaml, licence: CC0-1.0 }
+  - { path: rubric-answers/values-variables.yaml, licence: CC0-1.0 }
+  - { path: style-card.yaml, licence: CC0-1.0 }

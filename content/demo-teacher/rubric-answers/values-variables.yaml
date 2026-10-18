@@ -1,0 +1,73 @@
+# Scale for every answer: maxScore 4. Two-part questions score 2 + 2 as named in rubricNotes;
+# single-value questions score 4 for the right value and 0 otherwise.
+- id: ra-vv-01
+  moduleId: values-variables
+  questionId: vv-q1
+  studentAnswer: |
+    It prints 3 because // is floor division and throws away the .5. 7 / 2 would print 3.5.
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Result: 3 (2/2). Reason: says // drops the remainder and / gives 3.5 (2/2).
+- id: ra-vv-02
+  moduleId: values-variables
+  questionId: vv-q1
+  studentAnswer: |
+    3.5
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Result: gives the answer for /, not // (0/2). Reason: none given (0/2).
+    Mistake: integer-division. Fix: compare the two rows for / and // in the Module 1 operator table.
+- id: ra-vv-03
+  moduleId: values-variables
+  questionId: vv-q1
+  studentAnswer: |
+    It prints 3. The other one prints 3.5.
+  score: 3
+  maxScore: 4
+  rubricNotes: >-
+    Result: 3 (2/2). Reason: names both outputs but not why they differ (1/2).
+    Fix: say what // does to the remainder.
+- id: ra-vv-04
+  moduleId: values-variables
+  questionId: vv-q3
+  studentAnswer: |
+    input gives back text, so age + 1 is adding a string and a number. Change the first line to
+    age = int(input("Age? "))
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Cause: input() returns a string, which cannot be added to an int (2/2).
+    Fix: wraps input() in int() (2/2).
+- id: ra-vv-05
+  moduleId: values-variables
+  questionId: vv-q3
+  studentAnswer: |
+    You need quotes around the 1, like print(age + "1").
+  score: 1
+  maxScore: 4
+  rubricNotes: >-
+    Cause: sees that both sides must be the same type but does not say input() returns a
+    string (1/2). Fix: joins two strings, so typing 14 prints 141 instead of 15 (0/2).
+    Mistake: string-number-mix. Fix: convert the input to a number with int().
+- id: ra-vv-06
+  moduleId: values-variables
+  questionId: vv-q4
+  studentAnswer: |
+    score, _total and Total are fine. 2nd_place can't start with a number. my-name isn't allowed.
+  score: 3
+  maxScore: 4
+  rubricNotes: >-
+    Valid names: picks exactly score, _total and Total (2/2). Reasons: correct for 2nd_place,
+    missing for my-name (1/2). Fix: explain that Python reads - as minus.
+- id: ra-vv-07
+  moduleId: values-variables
+  questionId: vv-q5
+  studentAnswer: |
+    10
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Single value: 10 is wrong (0/4). The last line used the original 5 instead of the
+    newest value 8. Fix: trace each line in order, writing down x after each one.

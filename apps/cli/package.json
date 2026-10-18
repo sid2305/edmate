@@ -14,6 +14,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@edmate/content": "workspace:*",
     "@edmate/contracts": "workspace:*",
     "@edmate/evals": "workspace:*",
     "@edmate/gateway": "workspace:*"

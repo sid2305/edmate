@@ -10,6 +10,84 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.5 Coverage threshold 0.5 and an unscored chunk counts as not covered · decided by team lead (plan Q2) · risk: medium
+Decided: a turn is covered when some retrieved chunk has `score ≥ coverageThreshold`. The threshold is injected through `PolicyOptions`, with a provisional default of 0.5 on a 0–1 scale. A chunk with no score, or a NaN threshold, counts as not covered. Not covered goes to `locked` if `lockedHit`, otherwise to `ask_teacher`.
+Why: the retrieval score scale is not defined until 5.3, and failing toward `ask_teacher` keeps the agent from answering from general knowledge.
+Alternatives: treat any retrieved chunk as covered; hard-code a threshold.
+Reversible: yes; 5.3 calibrates the default on the demo Q&A set.
+
+### 18 Oct 2026 · 3.5 Distress reaching decide returns redirect, never a throw · decided by team lead (plan Q6) · risk: medium
+Decided: `decidePolicy` checks distress first, before the entitlement and coverage, and returns `redirect` with no tools and no skill.
+Why: the runner escalates distress before decide, so this is defence in depth. A throw would fall back to `ask`, which is a teaching question. Safety-reviewer to confirm.
+Alternatives: throw; return `ask`.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Ladder caps: coach 4, practice 3 · decided by team lead (plan Q7) · risk: medium
+Decided: `effectiveCeiling = min(helpCeiling, finalAnswers never ? 3 : 4, SKILL_CAP[skill])` with coach 4 and practice 3. The stored rung is clamped to it before any transition. Only coach (and mock_interview without a persona, which falls back to coach) and practice hint requests use the ladder.
+Why: practice answer keys stay server-side, so practice never reaches a solution.
+Alternatives: practice capped at 2; one cap for all skills.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Solved vs step, gated rung 3, feedback move · decided by team lead (plan Q3, Q4, Q5) · risk: low
+Decided: `correct` = problem solved (rung 0, `check`, state reset); `partial` = a correct step (same rung, `ask`). At rung 3 with `after_attempt` and no attempt, the move is `ask` (invite an attempt). The same gate applies to a stored rung 4 without a pending check. At a ceiling below 4, the rung repeats its move. `feedback` → `hint`.
+Why: `route` gives one `correct` label; asking for an attempt gets further than repeating the worked example.
+Alternatives: repeat `worked_example` when gated; `feedback` → `explain`.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Non-ladder moves report rung 0 and keep the ladder state · decided by builder (tdd-guide) · risk: low
+Decided: `locked`, `ask_teacher`, `redirect`, and the feedback, revision, mock_interview (with persona), explain and study_plan moves report `rung: 0` in the decision, and leave `next.helpRung` and the help state as they were. The one exception: explain sets or clears `pendingCheck`. A practice item turn reports its clamped rung and resets to 0 on a correct answer.
+Why: the spec gives no rung for non-ladder moves, and a detour into another skill should not lose the student's place on the ladder.
+Alternatives: report the stored rung on every move.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 mustNotReveal and help state ownership · decided by builder (tdd-guide) on the plan · risk: low
+Decided: `mustNotReveal` is a copy of `help.answerKey` for every move except `solution` (and always under `finalAnswers never`), including locked, ask_teacher, redirect and the fallback. `HelpStateSchema` = `{ stuckTurns 0|1, attemptLogged, pendingCheck, answerKey }` is the shape of `sessions.help_state`. A solved problem resets it, including the answer key. A consumed check resets it but keeps the key (fix round 1). Results never alias the input state.
+Why: plan § Help state and rule 7. Keeping the key on non-teaching replies costs nothing and blocks a leak.
+Alternatives: an empty `mustNotReveal` on non-teaching moves.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Only a solved problem clears the answer key · decided by builder (tdd-guide) on safety-reviewer finding · risk: medium
+Decided: the ladder's pending-check reset (after `solution` or `explain`) keeps `answerKey`. Only `correct` (problem solved) and a correct practice item clear it. A mock_interview turn without a persona falls back to coach only when coach is entitled; otherwise it is `locked` (reason `no_persona`). `fallbackPolicy` returns `redirect` with reason `distress` for distress turns.
+Why: a student could tap Explain and then keep asking, emptying `mustNotReveal` mid-problem and leaking the answer under `finalAnswers: never`. The other two fixes stop a skill outside the package from reaching `solution`, and keep a teaching question away from a student in distress.
+Alternatives: give explain its own pending flag.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 A higher coverage bar when lockedHit is true is deferred to 5.3 · decided by team lead (safety review) · risk: low
+Decided: the coverage threshold is the same whether or not `lockedHit` is true. A stricter bar for questions that also match a locked module goes to 5.3 (retrieval calibration).
+Why: the score scale is not defined until 5.3.
+Alternatives: a separate locked threshold now.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.5 Provisional maxOutputTokens table · decided by builder (tdd-guide) on the plan · risk: low
+Decided: ask 200, hint 250, check 250, redirect 150, locked 150, ask_teacher 250, explain 400, worked_example 600, solution 700. Skill overrides: revision 700, feedback 500. Pinned by an inline snapshot.
+Why: coaching stays under 80 words; explain is ≤ 150 words plus an example and a citation.
+Alternatives: one budget for all moves.
+Reversible: yes; 7.6 tunes the numbers on cost data.
+
+### 18 Oct 2026 · Demo course sign-off · decided by you · risk: low
+Decided: You approved the demo teacher course (Python basics, PR #20) as its named reviewer; `reviewed_by: sid2305`.
+Why: Rule 7 needs a named human for teaching content.
+Alternatives: Request changes; review later.
+Reversible: Yes; a real teacher can re-review before launch.
+
+### 18 Oct 2026 · 1.8 Demo course subject and licence · decided by team lead · risk: low
+Decided: The demo teacher teaches Python basics for beginners (5 modules), written from scratch and released as CC0-1.0. Third-party material would need CC BY, CC BY-SA, CC0 or public domain with a source and attribution.
+Why: Easy for the human reviewer to judge, open licensing keeps the public repo clean, and it doesn't pre-empt the pilot-subjects decision.
+Alternatives: Adapt an existing open course; another subject.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.8 Content validator rules · decided by tdd-guide · risk: low
+Decided: Besides the plan's 8 rules, `edmate content validate` fails a non-CC0 file without a source_url, any file outside the documented layout, and a reviewed_by that is an email address.
+Why: Keeps licences traceable, stops stray files, and keeps personal emails out of a public repo.
+Alternatives: Warnings instead of failures.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.8 Rubric scale · decided by pedagogy-author · risk: low
+Decided: Sample student answers are scored out of 4, with the criteria written in rubricNotes.
+Why: A small scale keeps scoring consistent for the feedback skill's agreement test (5.7).
+Alternatives: Out of 10; pass/fail.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 3.2 entitle resolves all three sources server-side and fails closed on any ownership mismatch · decided by builder (tdd-guide) on the plan and lead answers · risk: high
 Decided: `entitle` sends only `{ studentId, agentId, source }` to `EntitlementStore.resolve`, with the source set by the composition root, and never reads package, module or skill ids from the input. It refuses `null`, paused and ended, loads the turn's config through `TurnConfigStore`, and ends the turn with `no_access` unless every object belongs to the entitlement (ADR-0004 Decision 5) and the entitlement's allowed modules and skills are within the package's. The db adapter adds the one repository read without a teacher or student scope, `agents.owner({ agentId })`, which returns only the owner's teacher id and only for live agents. Preview and eval packages are bound from trusted server state when the store is built.
 Why: build plan § Access filter 1 and 7, ADR-0003 point 1 and ADR-0004; the subscription path needs the agent's teacher before any student-scoped read, and that link is public on teacher pages.

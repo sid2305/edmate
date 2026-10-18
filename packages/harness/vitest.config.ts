@@ -6,8 +6,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts'],
-      thresholds: { lines: 80, branches: 80, functions: 80, statements: 80 },
+      exclude: ['src/**/*.test.ts', 'src/pedagogy/testing.ts'],
+      thresholds: {
+        lines: 80,
+        branches: 80,
+        functions: 80,
+        statements: 80,
+        // The teaching policy decides locked, uncovered and distress replies (task 3.5).
+        'src/pedagogy/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+      },
     },
   },
 });

@@ -1,0 +1,4 @@
+- tag: off-by-one
+  description: Loop runs one time too many or too few.
+- tag: string-number-mixup
+  description: Adds a string to a number.

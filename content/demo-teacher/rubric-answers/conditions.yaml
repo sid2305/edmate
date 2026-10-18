@@ -1,0 +1,75 @@
+# Scale for every answer: maxScore 4. Two-part questions score 2 + 2 as named in rubricNotes;
+# single-value questions score 4 for the right value and 0 otherwise.
+- id: ra-co-01
+  moduleId: conditions
+  questionId: co-q1
+  studentAnswer: |
+    You need two equals signs: if score == 10:. One = means store a value.
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Problem: = stores, == compares (2/2). Fix: if score == 10: (2/2).
+- id: ra-co-02
+  moduleId: conditions
+  questionId: co-q1
+  studentAnswer: |
+    Nothing is wrong, it checks if score is 10.
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Problem: not found (0/2). Fix: none (0/2). Mistake: assign-vs-equals.
+    Fix: re-read the "Watch out" box in Module 2, section 2.1.
+- id: ra-co-03
+  moduleId: conditions
+  questionId: co-q2
+  studentAnswer: |
+    Warm
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Single value: Warm is right (4/4).
+- id: ra-co-04
+  moduleId: conditions
+  questionId: co-q2
+  studentAnswer: |
+    Warm and Cool
+  score: 0
+  maxScore: 4
+  rubricNotes: >-
+    Single value: wrong (0/4). Only the first branch whose condition is True runs; the else
+    is skipped. Fix: re-read Module 2, section 2.3.
+- id: ra-co-05
+  moduleId: conditions
+  questionId: co-q3
+  studentAnswer: |
+    85 is also bigger than 50, so the first if catches it and the elif is skipped. Put the
+    >= 80 check first and the >= 50 one second.
+  score: 4
+  maxScore: 4
+  rubricNotes: >-
+    Reason: the first true branch wins and 80+ also matches >= 50 (2/2).
+    Fix: strictest check first (2/2).
+- id: ra-co-06
+  moduleId: conditions
+  questionId: co-q3
+  studentAnswer: |
+    Change the elif to if.
+  score: 1
+  maxScore: 4
+  rubricNotes: >-
+    Reason: none given (0/2). Fix: with two separate ifs, 85 prints both Pass and
+    Distinction, so it only half works (1/2). Mistake: elif-order. Fix: keep the chain but
+    put the >= 80 check first.
+- id: ra-co-07
+  moduleId: conditions
+  questionId: co-q7
+  studentAnswer: |
+    if n % 2 = 0:
+        print("Even")
+    else:
+        print("Odd")
+  score: 3
+  maxScore: 4
+  rubricNotes: >-
+    Test: uses the remainder n % 2 against 0 (2/2). Code: right if/else shape, but = instead
+    of == makes it a SyntaxError (1/2). Mistake: assign-vs-equals.

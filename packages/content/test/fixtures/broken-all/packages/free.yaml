@@ -1,0 +1,13 @@
+name: Free
+moduleIds:
+  - variables
+skills:
+  - explain
+helpCeiling: 2
+finalAnswers: never
+dailyMessageLimit: 20
+liveClassesPerMonth: 0
+pricePerMonth:
+  amountMinor: 0
+  currency: USD
+lockedReply: name_package

@@ -1,0 +1,69 @@
+- id: lo-q1
+  moduleId: loops
+  question: |
+    What numbers does this print?
+
+    ```python
+    for i in range(1, 5):
+        print(i)
+    ```
+  answer: |
+    1, 2, 3 and 4, each on its own line. The stop number 5 is not included.
+- id: lo-q2
+  moduleId: loops
+  question: |
+    Write a loop that adds up the numbers from 1 to 10 and prints the total.
+  answer: |
+    ```python
+    total = 0
+    for n in range(1, 11):
+        total += n
+    print(total)   # 55
+    ```
+    Start the total at 0 before the loop, use `range(1, 11)` so 10 is included,
+    add each number inside the loop, and print once after the loop.
+- id: lo-q3
+  moduleId: loops
+  question: |
+    Why does this loop never stop, and how do you fix it?
+
+    ```python
+    count = 0
+    while count < 5:
+        print(count)
+    ```
+  answer: |
+    Nothing inside the loop changes `count`, so `count < 5` stays True forever (an infinite
+    loop). Fix: add `count += 1` inside the loop, indented under `print(count)`.
+- id: lo-q4
+  moduleId: loops
+  question: |
+    What numbers does `range(0, 10, 3)` produce?
+  answer: |
+    0, 3, 6, 9. It starts at 0, steps by 3, and stops before 10.
+- id: lo-q5
+  moduleId: loops
+  question: |
+    What is the difference between `break` and `continue` in a loop?
+  answer: |
+    `break` leaves the loop straight away. `continue` skips the rest of the current pass
+    and goes on to the next one.
+- id: lo-q6
+  moduleId: loops
+  question: |
+    How many times does this print "Hi"?
+
+    ```python
+    for i in range(3):
+        print("Hi")
+    ```
+  answer: |
+    3 times. `range(3)` gives 0, 1 and 2.
+- id: lo-q7
+  moduleId: loops
+  question: |
+    When would you choose a `while` loop instead of a `for` loop?
+  answer: |
+    When you do not know in advance how many times to repeat, and want to keep going until
+    something happens, such as the user typing "quit". Use `for` when you know what to go
+    through, such as the numbers in a `range()` or the characters of a string.

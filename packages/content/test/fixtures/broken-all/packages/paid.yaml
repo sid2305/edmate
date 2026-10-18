@@ -1,0 +1,13 @@
+name: Paid
+moduleIds:
+  - loops
+skills:
+  - practice
+helpCeiling: 4
+finalAnswers: after_attempt
+dailyMessageLimit: 20
+liveClassesPerMonth: 2
+pricePerMonth:
+  amountMinor: 900
+  currency: USD
+lockedReply: name_package

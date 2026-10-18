@@ -1,0 +1,69 @@
+- id: co-q1
+  moduleId: conditions
+  question: |
+    What is wrong with `if score = 10:`, and how do you fix it?
+  answer: |
+    A single `=` stores a value; it does not compare. In an `if` this is a SyntaxError.
+    Use `==` to compare: `if score == 10:`.
+- id: co-q2
+  moduleId: conditions
+  question: |
+    What does this print?
+
+    ```python
+    temp = 25
+    if temp > 30:
+        print("Hot")
+    elif temp > 20:
+        print("Warm")
+    else:
+        print("Cool")
+    ```
+  answer: |
+    Warm. 25 > 30 is False, 25 > 20 is True, so the elif branch runs and the rest are skipped.
+- id: co-q3
+  moduleId: conditions
+  question: |
+    This code never prints "Distinction", even for 85 marks. Why, and how do you fix it?
+
+    ```python
+    if marks >= 50:
+        print("Pass")
+    elif marks >= 80:
+        print("Distinction")
+    ```
+  answer: |
+    Python runs only the first branch whose condition is True. Any mark of 80 or more is also
+    50 or more, so `marks >= 50` always matches first. Fix: check the strictest condition
+    first, `if marks >= 80:` for Distinction, then `elif marks >= 50:` for Pass.
+- id: co-q4
+  moduleId: conditions
+  question: |
+    What are the values of `5 > 3 and 2 > 4` and `5 > 3 or 2 > 4`?
+  answer: |
+    `5 > 3 and 2 > 4` is False, because `and` needs both parts True and 2 > 4 is False.
+    `5 > 3 or 2 > 4` is True, because `or` needs only one part True.
+- id: co-q5
+  moduleId: conditions
+  question: |
+    Write a condition that is True when `n` is between 1 and 10, including 1 and 10.
+  answer: |
+    `n >= 1 and n <= 10`, or the chained form `1 <= n <= 10`.
+- id: co-q6
+  moduleId: conditions
+  question: |
+    Is `"Yes" == "yes"` True or False? How would you make a yes/no check ignore capital letters?
+  answer: |
+    False: comparisons of strings are case-sensitive. Use `.lower()` on the answer first,
+    for example `if answer.lower() == "yes":`.
+- id: co-q7
+  moduleId: conditions
+  question: |
+    Write code that prints "Even" if `n` is even and "Odd" otherwise.
+  answer: |
+    ```python
+    if n % 2 == 0:
+        print("Even")
+    else:
+        print("Odd")
+    ```

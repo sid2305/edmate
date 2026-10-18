@@ -1,0 +1,105 @@
+- id: loops-r01
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 1.
+  score: 1
+  maxScore: 10
+  rubricNotes: Fixture rubric note 1.
+- id: loops-r02
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 2.
+  score: 2
+  maxScore: 10
+  rubricNotes: Fixture rubric note 2.
+- id: loops-r03
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 3.
+  score: 3
+  maxScore: 10
+  rubricNotes: Fixture rubric note 3.
+- id: loops-r04
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 4.
+  score: 4
+  maxScore: 10
+  rubricNotes: Fixture rubric note 4.
+- id: loops-r05
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 5.
+  score: 5
+  maxScore: 10
+  rubricNotes: Fixture rubric note 5.
+- id: loops-r06
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 6.
+  score: 6
+  maxScore: 10
+  rubricNotes: Fixture rubric note 6.
+- id: loops-r07
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 7.
+  score: 7
+  maxScore: 10
+  rubricNotes: Fixture rubric note 7.
+- id: loops-r08
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 8.
+  score: 8
+  maxScore: 10
+  rubricNotes: Fixture rubric note 8.
+- id: loops-r09
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 9.
+  score: 9
+  maxScore: 10
+  rubricNotes: Fixture rubric note 9.
+- id: loops-r10
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 10.
+  score: 10
+  maxScore: 10
+  rubricNotes: Fixture rubric note 10.
+- id: loops-r11
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 11.
+  score: 0
+  maxScore: 10
+  rubricNotes: Fixture rubric note 11.
+- id: loops-r12
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 12.
+  score: 1
+  maxScore: 10
+  rubricNotes: Fixture rubric note 12.
+- id: loops-r13
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 13.
+  score: 2
+  maxScore: 10
+  rubricNotes: Fixture rubric note 13.
+- id: loops-r14
+  moduleId: loops
+  questionId: loops-q2
+  studentAnswer: Fixture student answer 14.
+  score: 3
+  maxScore: 10
+  rubricNotes: Fixture rubric note 14.
+- id: loops-r15
+  moduleId: loops
+  questionId: loops-q1
+  studentAnswer: Fixture student answer 15.
+  score: 4
+  maxScore: 10
+  rubricNotes: Fixture rubric note 15.
