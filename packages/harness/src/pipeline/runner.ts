@@ -68,9 +68,10 @@ import type {
  * country names; the locale pack's helplines come through the normal paths.
  */
 export const LAST_RESORT_DISTRESS_REPLY =
-  'I am really glad you told me, and you matter. You do not have to face this alone. ' +
-  'Please talk to a trusted adult near you right now, like a parent, teacher or school ' +
-  'counsellor. If you might be in danger, contact your local emergency services now.';
+  "I'm really glad you told me, and I'm sorry it's this hard right now. You matter. " +
+  "I'm an AI, so please reach out to someone you trust right now, like a friend, " +
+  'family member, teacher or counsellor. If you are in danger or might hurt yourself, ' +
+  'contact your local emergency services now.';
 
 export interface RunTurnOptions {
   deps: PipelineDeps;
@@ -223,6 +224,15 @@ class Turn {
     if (scrubbed !== null) this.safeInput = scrubbed;
     if (!sc.ok || scrubbed === null) {
       this.trace.step('preGuard', sc.ms, 'failed');
+      // In-process keyword check on the raw text (no model call; the text is never stored,
+      // traced or reported). A hit escalates without running any step on the raw text.
+      if (this.distressHit(input, 'raw')) {
+        return this.sendEscalation(e, null, this.buildAlert(input, e, undefined), {
+          replyText: LAST_RESORT_DISTRESS_REPLY,
+          outcome: 'fallback',
+          ms: 0,
+        });
+      }
       this.endWithError(PRE_GUARD_FAILED);
       return this.finish(e, { outcome: 'blocked', input: null }, 'on_task', 'redirect');
     }
@@ -260,7 +270,12 @@ class Turn {
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
-    if (preAlert !== undefined || intent === 'distress') {
+    // A failed preGuard means no classifier verdict: the keyword check still runs.
+    if (
+      preAlert !== undefined ||
+      intent === 'distress' ||
+      (!pg.ok && this.distressHit(scrubbed, 'scrubbed'))
+    ) {
       return this.escalate(scrubbed, e, preAlert);
     }
     if (!pg.ok || pg.value.result === 'block') {
@@ -346,10 +361,7 @@ class Turn {
       ),
       EscalateResultSchema,
     );
-    const alert =
-      (es.ok ? es.value.alert : undefined) ?? preAlert ?? fallbackAlert(input, e, this.deps);
-    // Dispatch the alert before anything else can fail.
-    const delivered = this.deliverAlert(alert);
+    const built = this.buildAlert(input, e, (es.ok ? es.value.alert : undefined) ?? preAlert);
 
     // The reply is never empty: the step's text, else the locale fallback, else the last resort.
     let replyText = es.ok ? es.value.replyText : '';
@@ -369,17 +381,74 @@ class Turn {
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
     }
-    this.trace.step('escalate', es.ms, outcome);
+    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms });
+  }
+
+  /**
+   * The end of every escalated turn: dispatch the alert (if one could be built), record escalate
+   * (`failed` when the alert could not be built first time), send safety + reply + done, save.
+   * `commitInput` is null when the scrub failed, so the raw text is never stored.
+   */
+  private sendEscalation(
+    e: Entitled,
+    commitInput: TurnInput | null,
+    built: { alert: SafetyAlert | null; failed: boolean },
+    reply: { replyText: string; outcome: 'ok' | 'fallback' | 'failed'; ms: number },
+  ): Promise<TurnRunResult> {
+    const delivered = built.alert === null ? undefined : this.deliverAlert(built.alert);
+    this.trace.step('escalate', reply.ms, built.failed ? 'failed' : reply.outcome);
     this.send({ type: 'safety', level: 'alert' });
-    this.send({ type: 'token', text: replyText });
+    this.send({ type: 'token', text: reply.replyText });
     this.done();
     return this.finish(
       e,
-      { outcome: 'escalated', input, intent: 'distress', replyText, alert },
+      {
+        outcome: 'escalated',
+        input: commitInput,
+        intent: 'distress',
+        replyText: reply.replyText,
+        ...(built.alert === null ? {} : { alert: built.alert }),
+      },
       'distress',
       'redirect',
       delivered,
     );
+  }
+
+  /**
+   * The alert to raise: `preferred` (from escalate or preGuard), else a runner-built one. Building
+   * is tried twice; each failure goes to `finished.background`. Never throws.
+   */
+  private buildAlert(
+    input: TurnInput,
+    e: Entitled,
+    preferred: SafetyAlert | undefined,
+  ): { alert: SafetyAlert | null; failed: boolean } {
+    if (preferred !== undefined) return { alert: preferred, failed: false };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return { alert: fallbackAlert(input, e, this.deps), failed: attempt > 0 };
+      } catch (error) {
+        this.background.push({ task: 'alert', error });
+      }
+    }
+    return { alert: null, failed: true };
+  }
+
+  /**
+   * The injected keyword check; never throws. On the raw (unscrubbed) text, a failure is reported
+   * without its error, which could quote the text.
+   */
+  private distressHit(input: TurnInput, kind: 'raw' | 'scrubbed'): boolean {
+    try {
+      return this.deps.distressCheck(input.text ?? '', input.lang) === true;
+    } catch (error) {
+      this.background.push({
+        task: 'runner',
+        error: kind === 'raw' ? new Error('distressCheck failed on the unscrubbed text') : error,
+      });
+      return false;
+    }
   }
 
   /** "Alert retried until delivered": backoff 250 ms doubling to 30 s, no attempt limit. */

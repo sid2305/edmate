@@ -29,7 +29,7 @@ import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
 import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
 import { ALERT_ATTEMPT_TIMEOUT_MS, STEP_SPEC, type StepName } from './spec.js';
-import type { StepEnv, TurnRunResult } from './types.js';
+import type { StepEnv, Steps, TurnRunResult } from './types.js';
 
 const boom = (): Promise<never> => Promise.reject(new Error('step failed'));
 /** Sleeps past any budget; resolves only if the runner fails to time it out. */
@@ -511,9 +511,174 @@ describe(`escalate: ${policy('escalate')}`, () => {
     it('the built-in reply is warm, country-neutral and has no phone numbers', () => {
       expect(LAST_RESORT_DISTRESS_REPLY.trim().length).toBeGreaterThan(40);
       expect(LAST_RESORT_DISTRESS_REPLY).not.toMatch(/\d/);
-      expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/trusted adult/);
+      expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/someone you trust/);
+      expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/I'm an AI/);
       expect(LAST_RESORT_DISTRESS_REPLY).toMatch(/emergency services/);
+      expect(LAST_RESORT_DISTRESS_REPLY).toBe(
+        "I'm really glad you told me, and I'm sorry it's this hard right now. You matter. " +
+          "I'm an AI, so please reach out to someone you trust right now, like a friend, " +
+          'family member, teacher or counsellor. If you are in danger or might hurt yourself, ' +
+          'contact your local emergency services now.',
+      );
     });
+  });
+
+  describe('building the alert fails', () => {
+    const routeDistress: StepOverrides = {
+      route: { run: () => Promise.resolve({ intent: 'distress', attempt: 'none', usage: [] }) },
+    };
+    const failingAlertIds = (failures: number) => {
+      const t = testDeps();
+      const base = t.deps.ids;
+      let n = 0;
+      t.deps.ids = {
+        next: (kind) => {
+          if (kind === 'alert' && n++ < failures) throw new Error('id source down');
+          return base.next(kind);
+        },
+      };
+      return t;
+    };
+
+    it('fails once → built on the retry; the failure is in background and the trace', async () => {
+      const t = failingAlertIds(1);
+      const steps = testSteps(routeDistress);
+      const { events, result } = await driveTurn(
+        runTurn(demoTurnInput, { deps: t.deps, steps }),
+        t.clock,
+      );
+      expect(events.map((e) => e.type)).toEqual(['safety', 'token', 'done']);
+      expect(t.alerts.raised).toHaveLength(1);
+      expect(result.background.map((b) => b.task)).toEqual(['alert']);
+      expect(outcomeOf(result, 'escalate')).toBe('failed');
+    });
+
+    it('fails twice → the reply is still sent; no alert; recorded', async () => {
+      const t = failingAlertIds(2);
+      const steps = testSteps(routeDistress);
+      const { events, result } = await driveTurn(
+        runTurn(demoTurnInput, { deps: t.deps, steps }),
+        t.clock,
+      );
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: TEST_CARING_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toEqual([]);
+      expect(result.background.map((b) => b.task)).toEqual(['alert', 'alert']);
+      expect(outcomeOf(result, 'escalate')).toBe('failed');
+      expect(steps.commits[0]).toMatchObject({ outcome: 'escalated' });
+      expect(steps.commits[0]?.alert).toBeUndefined();
+      expect(t.traces.records).toHaveLength(1);
+    });
+  });
+});
+
+describe('distress keyword check when step 3 fails', () => {
+  const RAW = demoTurnInput.text;
+  const checkDeps = (impl: (text: string) => boolean) => {
+    const seen: string[] = [];
+    const t = testDeps({
+      overrides: {
+        distressCheck: (text) => {
+          seen.push(text);
+          return impl(text);
+        },
+      },
+    });
+    return { t, seen };
+  };
+
+  it.each([
+    ['throws', boom],
+    ['times out', hang()],
+  ] as const)(
+    'scrub %s + a hit on the raw text → alert and last-resort reply',
+    async (_l, scrub) => {
+      const { t, seen } = checkDeps(() => true);
+      const steps = testSteps({ scrub: scrub as Steps['scrub'] });
+      const { events, result } = await driveTurn(
+        runTurn(demoTurnInput, { deps: t.deps, steps }),
+        t.clock,
+      );
+      expect(seen).toEqual([RAW]);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toEqual([
+        expect.objectContaining({ id: 'alert_1', kind: 'distress', excerptRedacted: '' }),
+      ]);
+      // Nothing later sees the raw text: the escalate step, route and guards never run.
+      for (const s of ['preGuard', 'route', 'buildContext', 'escalate', 'decide']) {
+        expect(ran(steps.log, s)).toBe(false);
+      }
+      expect(steps.commits[0]).toMatchObject({
+        outcome: 'escalated',
+        input: null,
+        intent: 'distress',
+        replyText: LAST_RESORT_DISTRESS_REPLY,
+      });
+      expect(steps.log.find((l) => l.step === 'commit')?.text).toBeUndefined();
+      expect(result.trace).toMatchObject({ intent: 'distress', move: 'redirect' });
+      expect(outcomeOf(result, 'preGuard')).toBe('failed');
+      expect(outcomeOf(result, 'escalate')).toBe('fallback');
+      expect(JSON.stringify(result.trace)).not.toContain(RAW);
+    },
+  );
+
+  it('scrub fails and the check finds nothing → guard_blocked as before', async () => {
+    const { t } = checkDeps(() => false);
+    const steps = testSteps({ scrub: boom });
+    const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(t.alerts.raised).toEqual([]);
+  });
+
+  it('scrub fails and the check throws → guard_blocked; the reported error carries no raw text', async () => {
+    const { t } = checkDeps((text) => {
+      throw new Error(`cannot check: ${text}`);
+    });
+    const steps = testSteps({ scrub: boom });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(result.background.map((b) => b.task)).toEqual(['runner']);
+    expect(String(result.background[0]?.error)).not.toContain(RAW);
+  });
+
+  it.each([
+    ['throws', boom],
+    ['times out', hang()],
+  ] as const)('preGuard %s, route on_task, check hit → escalates', async (_l, preGuard) => {
+    const { t, seen } = checkDeps(() => true);
+    const steps = testSteps({ preGuard: preGuard as Steps['preGuard'] });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(seen).toEqual([RAW]); // the happy scrub passes the text through unchanged
+    expect(events).toEqual([
+      { type: 'safety', level: 'alert' },
+      { type: 'token', text: TEST_CARING_REPLY },
+      { type: 'done', messageId: 'message_1', usage: [] },
+    ]);
+    expect(t.alerts.raised).toHaveLength(1);
+    expect(result.trace?.intent).toBe('distress');
+  });
+
+  it('preGuard ok: the check is not consulted', async () => {
+    const { t, seen } = checkDeps(() => true);
+    const { events } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps: testSteps() }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(seen).toEqual([]);
   });
 });
 

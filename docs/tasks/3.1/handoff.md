@@ -39,11 +39,7 @@ Root gates:
 
 These two items came from silent-failure-hunter. Both are on the distress path.
 
-1. **The last-resort caring reply** (HIGH). The escalate step's reply text is used if it is non-empty. Otherwise the runner uses `fallbackReplies.distress(lang, locale)`. If that throws or returns empty text, it sends a constant built into the runner, `LAST_RESORT_DISTRESS_REPLY` in `runner.ts`. This constant is not injected. The `token` text is therefore never empty. The SafetyAlert is still dispatched before the reply, and the message and trace are still saved. The trace marks escalate `failed`, so this is visible apart from an ordinary `fallback`. The failure is also listed in `finished.background`. Exact text, for the safety reviewer:
-
-   > I am really glad you told me, and you matter. You do not have to face this alone. Please talk to a trusted adult near you right now, like a parent, teacher or school counsellor. If you might be in danger, contact your local emergency services now.
-
-   It has no digits, phone numbers or country names; a test asserts there are no digits and that it mentions "trusted adult" and "emergency services". Tests in `policies.test.ts` › `last-resort caring reply`:
+1. **The last-resort caring reply** (HIGH). The escalate step's reply text is used if it is non-empty. Otherwise the runner uses `fallbackReplies.distress(lang, locale)`. If that throws or returns empty text, it sends a constant built into the runner, `LAST_RESORT_DISTRESS_REPLY` in `runner.ts`. This constant is not injected. The `token` text is therefore never empty. The SafetyAlert is still dispatched before the reply, and the message and trace are still saved. The trace marks escalate `failed`, so this is visible apart from an ordinary `fallback`. The failure is also listed in `finished.background`. The text was replaced in fix round 2; the current exact text is under "Fix round 2". Tests in `policies.test.ts` › `last-resort caring reply`:
    - the fallback text throws → the built-in reply;
    - the fallback text returns empty → the built-in reply;
    - each case checks the alert was raised, the commit was `escalated` with this reply, there is one trace, and escalate is `failed`;
@@ -51,6 +47,25 @@ These two items came from silent-failure-hunter. Both are on the distress path.
 2. **The distress check when `route.onFailure` fails** (MEDIUM). The plan put the keyword check inside `route.onFailure` (3.3), so it was lost when that function threw. There is now an injected `PipelineDeps.distressCheck(text, lang): boolean`, which runs on the scrubbed text whenever `onFailure` throws or returns invalid data. A hit escalates the turn. If the check also throws, the turn uses `on_task`/`none`, the trace marks route `failed`, and both errors go to `finished.background`. Tests in `policies.test.ts` › `onFailure itself throws or returns junk`: no hit → `on_task`, route `fallback`; a hit → `safety`, an alert, trace intent `distress`; the check throws → `on_task`, route `failed`, two `runner` entries.
 
 `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → harness `Tests 176 passed (176)`; `src/pipeline` 98.89% statements, 96.13% branches, 100% functions and lines; `Tasks: 10 successful, 10 total`. The root gates and the secret scan were re-run after merging origin/main (results are in the round 1 commit and the report).
+
+## Fix round 2
+
+These four items came from safety-reviewer. Tests are in `policies.test.ts`.
+
+1. **The scrub fails** (HIGH). The distress check (`deps.distressCheck`) now runs in-process on the raw text. It is a keyword check with no model call. The raw text is never stored, traced or reported: if the check throws, a generic error replaces it.
+   - On a hit, the runner raises a runner-built alert and sends the last-resort reply. It runs no step on the raw text (escalate, route and guards are skipped).
+   - It still saves the commit (`input: null`, outcome `escalated`) and the trace (preGuard `failed`, escalate `fallback`, intent `distress`). Neither contains the raw text.
+   - No hit → `guard_blocked` as before.
+   - Tests in `distress keyword check when step 3 fails`: scrub throws or times out with a hit; no hit; the check throws (the reported error does not contain the raw text).
+2. **preGuard is not ok** (MEDIUM). When preGuard throws or times out and route didn't say distress, the check runs on the scrubbed text, and a hit escalates. Tests: preGuard throws or times out with a hit → escalation; preGuard ok → the check is not consulted.
+3. **Building the alert fails** (LOW). The alert is built through `buildAlert`, which never throws and tries `fallbackAlert` twice. The reply is always sent. Each failure goes to `finished.background` (`alert`), and the trace marks escalate `failed`. If both attempts fail, the turn still sends safety, the reply and done, and is saved with no alert. Tests in `building the alert fails`: fails once (built on the retry); fails twice.
+4. **New last-resort text** (LOW). The exact text of `LAST_RESORT_DISTRESS_REPLY`, for the safety reviewer:
+
+   > I'm really glad you told me, and I'm sorry it's this hard right now. You matter. I'm an AI, so please reach out to someone you trust right now, like a friend, family member, teacher or counsellor. If you are in danger or might hurt yourself, contact your local emergency services now.
+
+   A test pins the exact string. It also asserts there are no digits and that the text mentions "someone you trust", "I'm an AI" and "emergency services".
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...` → harness `Tests 185 passed (185)`; `src/pipeline` 98.94% statements, 95.91% branches, 100% functions and lines.
 
 ## Changes
 
@@ -181,7 +196,7 @@ Alternatives: Store the raw input.
 Reversible: Yes.
 
 ### 18 Oct 2026 · 3.1 Built-in last-resort distress reply · decided by lead (fix round 1, silent-failure-hunter) · risk: medium
-Decided: When the escalate step gives no reply text and `fallbackReplies.distress` throws or returns empty, the runner sends `LAST_RESORT_DISTRESS_REPLY`. This constant is built into the runner, is country-neutral and has no numbers. The trace marks escalate `failed`, and the alert, message and trace are still saved.
+Decided: When the escalate step gives no reply text and `fallbackReplies.distress` throws or returns empty, the runner sends `LAST_RESORT_DISTRESS_REPLY`. This constant is built into the runner, is country-neutral and has no numbers. Its wording was set by safety-reviewer in fix round 2: it says "I'm an AI" and points to someone you trust and local emergency services. The trace marks escalate `failed`, and the alert, message and trace are still saved.
 Why: A distressed student must never get an empty reply. A constant can't fail the way an injected text source can.
 Alternatives: An injected text only (the original design); end with an error.
 Reversible: Yes. The text should be reviewed by the safety reviewer and replaced by the 3.10/3.11 pack text paths, never removed.
@@ -191,3 +206,21 @@ Decided: `PipelineDeps.distressCheck(text, lang): boolean` is a required depende
 Why: "Distress keywords still escalate" must hold even when the route fallback itself breaks.
 Alternatives: Only `ROUTE_DEFAULT` (the original design); a check hard-coded in the harness (keywords belong in locale packs).
 Reversible: Yes. 3.3/4.3 provide the real keyword check, and the caller wires it in.
+
+### 18 Oct 2026 · 3.1 Distress keyword check on the raw text when the scrub fails · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: When the scrub throws or times out, the runner runs `deps.distressCheck` in-process on the raw text. On a hit, it raises a runner-built alert, sends the last-resort reply and saves the commit (with `input: null`) and the trace. No step runs on the raw text. The raw text is never stored, traced or reported, and a check failure is reported as a generic error.
+Why: A failed scrub must not silently block a student in distress. The keyword check is local code with no model call, so the raw text never leaves the process.
+Alternatives: Always block on a scrub failure (the original design); run the escalate step on the raw text.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Distress keyword check whenever preGuard is not ok · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: When preGuard throws, times out or returns an invalid result, and route did not say distress, the runner runs `distressCheck` on the scrubbed text. A hit escalates instead of blocking.
+Why: A classifier timeout must not turn a distress message into a plain block.
+Alternatives: Rely on route alone.
+Reversible: Yes.
+
+### 18 Oct 2026 · 3.1 Building the alert never breaks the escalation · decided by lead (fix round 2, safety-reviewer) · risk: medium
+Decided: The runner-built alert is tried twice. Each failure is listed in `finished.background` (`alert`), and the trace marks escalate `failed`. The caring reply, the safety event and `done` are always sent. If both attempts fail, the turn is saved without an alert.
+Why: Previously a throwing id source sent `provider_error` to a distressed student, and no alert was raised.
+Alternatives: End with an error.
+Reversible: Yes.
