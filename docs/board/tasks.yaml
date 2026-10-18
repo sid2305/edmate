@@ -440,7 +440,7 @@ tasks:
   - '2.2'
   - M0
   - '3.15'
-  status: review
+  status: done
   needs_decision:
   - transcription
   branch: m2/2.7-transcriber-embeddings
