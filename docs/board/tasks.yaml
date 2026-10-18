@@ -222,13 +222,16 @@ tasks:
   model: null
 - id: '0.7'
   milestone: M0
-  title: 'Harness fixes from the 0.1 dry run, rescoped 18 Oct 2026 (the lead decides every merge, no hook prompts): (1) merge_gate.py passes risky branches only when review.md names the required reviewers per risk group and the handoff has a risk: high decision, with no exit 3 and no PR label; (2) [wontfix] needs a decision entry, board.py done needs handoff decisions verbatim in the log; (3) reviewers never write files; (4) planner checks every path against risk-paths.txt, plan.md committed on main before the build, board.py next warns about planning tasks with no plan; docs updated. No hook edits.'
-  accept: '`python3 -m unittest discover .claude/tests` passes; the gate exits 0 for a risky branch with the required reviewers and a risk: high entry and 1 when either is missing, in task-id and --pr modes; CLAUDE.md, build plan, merge-gate and team-lead skills describe lead-approved merges.'
+  title: 'Harness fixes from the 0.1 dry run, rescoped 18 Oct 2026 (the lead decides every merge, no hook prompts): (1) merge_gate.py passes risky branches only when review.md names the required reviewers
+    per risk group and the handoff has a risk: high decision, with no exit 3 and no PR label; (2) [wontfix] needs a decision entry, board.py done needs handoff decisions verbatim in the log; (3) reviewers
+    never write files; (4) planner checks every path against risk-paths.txt, plan.md committed on main before the build, board.py next warns about planning tasks with no plan; docs updated. No hook edits.'
+  accept: '`python3 -m unittest discover .claude/tests` passes; the gate exits 0 for a risky branch with the required reviewers and a risk: high entry and 1 when either is missing, in task-id and --pr modes;
+    CLAUDE.md, build plan, merge-gate and team-lead skills describe lead-approved merges.'
   deps:
   - '0.1'
-  status: running
+  status: review
   branch: m0/0.7-harness-fixes
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus-5.5/medium review:opus(security)+sonnet(code)
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
