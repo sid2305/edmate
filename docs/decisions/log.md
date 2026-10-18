@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Turn config loading · decided by team lead (architect's design) · risk: high
+Decided: Add one contracts port, `TurnConfigStore`, recorded in ADR-0004 (task 3.13). `entitle` loads the agent, package version, style card and locale pack in one call and fails closed if any object doesn't belong to the entitled teacher. This moves style card and locale loading from buildContext to entitle, a deviation from the Turn pipeline spec.
+Why: Scrub needs PII patterns and escalate needs helplines before buildContext runs; ADR-0002 keeps adapter-backed ports in contracts.
+Alternatives: Widen EntitlementStore; a harness-only dependency; four separate stores.
+Reversible: Yes, with another ADR.
+
 ### 18 Oct 2026 · Minimum learner age · decided by you · risk: high
 Decided: Learners are 13+. In the US no parental consent is needed (COPPA covers under-13 only); in India 13–17 need verifiable parental consent (DPDP), so the age gate asks country and birth year.
 Why: The product needs nothing that requires 18+; school-age learners widen reach. India's DPDP treats under-18s as children.

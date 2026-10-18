@@ -462,6 +462,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
+  - '3.13'
   status: todo
   risk: risky
   branch: null
@@ -585,6 +586,15 @@ tasks:
   - judge-model
   branch: m3/3.12-eval-runner
   model: plan:sonnet build:opus-5.5/medium review:sonnet(ts,silent)
+- id: '3.13'
+  milestone: M3
+  title: 'Contracts: add the TurnConfigStore port (agent, package, style card and locale pack for a turn) with ADR-0004; update the Core contracts block in the build plan to match'
+  accept: ADR-0004 merged; `TurnConfigStore` exported from @edmate/contracts; type-level test and the spec-types drift test pass with the updated build-plan block; no other contract changes.
+  deps:
+  - '3.1'
+  status: running
+  branch: m3/3.13-turn-config-store
+  model: plan:architect(opus)+lead build:opus-5.5/medium
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
