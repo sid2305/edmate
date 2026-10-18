@@ -16,6 +16,8 @@ export const users = pgTable(
     market: text('market').notNull(),
     role: userRole('role').notNull(),
     ageConfirmedAt: tstz('age_confirmed_at'),
+    /** When the sign-in provider (or 1.4's magic link) last confirmed the email (task 1.3). */
+    emailVerifiedAt: tstz('email_verified_at'),
     ...timestamps(),
   },
   (t) => [

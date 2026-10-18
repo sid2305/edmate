@@ -1047,10 +1047,10 @@ describe.skipIf(!up)(
       expect(await snapshot()).toBe(before);
     });
 
-    it('openDatabase gives repositories and a close, without a raw handle', async () => {
+    it('openDatabase gives repositories, the identity store and a close, without a raw handle', async () => {
       const opened = openDatabase({ DATABASE_URL: TEST_URL });
       try {
-        expect(Object.keys(opened).sort()).toEqual(['close', 'repos']);
+        expect(Object.keys(opened).sort()).toEqual(['close', 'identity', 'repos']);
         expect(await opened.repos.learnerProfiles.get(sScope('1B'))).not.toBeNull();
       } finally {
         await opened.close();

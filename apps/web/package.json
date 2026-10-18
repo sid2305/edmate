@@ -13,9 +13,13 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@edmate/contracts": "workspace:*",
+    "@edmate/db": "workspace:*",
     "next": "16.4.2",
+    "next-auth": "5.0.0-beta.32",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
@@ -24,6 +28,7 @@
     "@types/react-dom": "19.3.0",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
+    "jose": "6.2.12",
     "typescript": "6.0.3",
     "vitest": "5.0.5"
   }

@@ -1,3 +1,3 @@
-import base from '@edmate/config/eslint/base';
+import app from '@edmate/config/eslint/app';
 
-export default [...base, { ignores: ['next-env.d.ts'] }];
+export default [...app, { ignores: ['next-env.d.ts'] }];
