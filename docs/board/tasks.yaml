@@ -197,20 +197,20 @@ tasks:
   accept: files merged.
   deps:
   - '0.1'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m0/0.4-adrs
+  model: plan:sonnet
 - id: '0.5'
   milestone: M0
   title: 'GitHub Actions: CI, secret scan, merge-gate check (re-runs merge_gate.py --pr on every PR: required reviewers per risk group and a risk: high decision; no human label), risk labeller; PR template'
   accept: 'CI blocks a failing test; the merge-gate check fails a risky PR whose review.md lacks the required reviewers or whose handoff lacks a risk: high decision.'
   deps:
   - '0.1'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m0/0.5-ci
+  model: plan:sonnet
 - id: '0.6'
   milestone: M0
   title: 'Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create'
