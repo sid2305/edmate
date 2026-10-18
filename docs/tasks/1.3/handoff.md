@@ -23,7 +23,7 @@ so it accepts next 16.4.2 and react 19.3.1. It pins `@auth/core` 0.41.3, which e
 | Deny by default for real routes | `src/auth/route-coverage.test.ts`: walks every `app/api/**/route.ts`, imports it, and asserts that each exported HTTP method carries the `GUARD` brand and that the brand equals `policyFor(method, samplePath)`. Covers `/api/health` and `/api/auth/[...nextauth]` today. |
 | Google sign-in with a mocked provider | `src/auth/flow.test.ts` (11 tests) runs through Auth.js's real `handlers`. Google discovery, JWKS and token endpoints are a fake (`customFetch`) that signs id_tokens with a `jose` RS256 test key. `test/setup.ts` makes the global fetch reject, and one test asserts it was never called. Tested: the redirect carries state, nonce and S256 PKCE; a POST without CSRF is refused (`error=MissingCSRF`); the first sign-in creates `student` usr_1 with an httpOnly, SameSite=Lax, Path=/ cookie; a second sign-in reuses the user; a grant is visible on the next request and the guard follows it (studio 200, /api/me 403); an unverified Google email is `AccessDenied` and creates nothing; an existing email is `OAuthAccountNotLinked` and no link is made; a bad code gives no session; sign-out deletes the session. |
 | Roles never self-assigned | `adapter.test.ts`: `createUser` passes only `{email, emailVerifiedAt, name}`, so `role`, `image`, `market` and a chosen id are dropped. `updateUser` only records `emailVerified`. `identity.int.test.ts` (Postgres): `createStudent` writes `student`/`global`/`en`. A `role`, `market` or `image` field is `invalid`. `grantRole` writes the role plus `audit_log` row `{actor: operator, actor_role: staff, action: role.grant, target: user:<id>, teacher_id: <id>, before {role: student}, after {role: staff}}`. When the audit insert fails (trigger) the role rolls back. A bad role, actor or extra field is `invalid`, an unknown user is `not_found`, and nothing is written. |
-| CSRF and cookies | `config.test.ts`: over http the cookie is `authjs.session-token` with `{httpOnly, sameSite: 'lax', path: '/', secure: false}`. Over https it is `__Secure-authjs.session-token` with `secure: true` (follows `AUTH_URL`). `guard.test.ts`: POST/PATCH/DELETE/PUT with a missing, `null`, foreign or wrong-port Origin, or a foreign Origin plus `Sec-Fetch-Site: same-origin`, is 403 before the session is read. Same-origin passes by Origin or by Sec-Fetch-Site, and `providerRoute` skips the check. Auth.js's CSRF token stays on (flow test). |
+| CSRF and cookies | `config.test.ts`: over http the cookie is `authjs.session-token` with `{httpOnly, sameSite: 'lax', path: '/', secure: false}`. Over https it is `__Host-authjs.session-token` with `secure: true` and no domain (follows `AUTH_URL`). `guard.test.ts`: POST/PATCH/DELETE/PUT with a missing, `null`, foreign or wrong-port Origin, or a foreign Origin plus `Sec-Fetch-Site: same-origin`, is 403 before the session is read. Same-origin passes by Origin or by Sec-Fetch-Site, and `providerRoute` skips the check. Auth.js's CSRF token stays on (flow test). |
 | Secrets from env only | `env.test.ts` (10 tests): a missing, blank or short `AUTH_SECRET`, a bad `AUTH_URL`, or a missing Google id or secret throws `AuthConfigError` that names the variable and never the value. `index.test.ts`: the module imports with no `AUTH_*` or `DATABASE_URL`, and a guarded route then returns 500 rather than treating the caller as anonymous. `docker/env.example` has empty `AUTH_SECRET=`, `AUTH_GOOGLE_ID=` and `AUTH_GOOGLE_SECRET=`. |
 | No `@edmate/db/internal` in apps | `packages/config/eslint/__tests__/app-preset.test.ts` (8 tests): `lintText` reports `@edmate/db/internal` (also type-only, re-export and deep `dist/` paths) in `apps/web/app/**` and in `src/auth/**`. It reports `next-auth`, `next-auth/*` and `@auth/core` outside `src/auth` and allows them inside. |
 | Gates | `TEST_DATABASE_URL=… corepack pnpm turbo run build typecheck lint test --force` (whole repo) → `Tasks: 41 successful, 41 total`. web `Tests 126 passed (126)`, db `329 passed (329)` (identity.int 19, grant-role-cli 14, migrate.int with 0004), config `42 passed`, contracts 282, harness 308, gateway 264, evals 103, cli 29, worker 24. |
@@ -33,6 +33,35 @@ so it accepts next 16.4.2 and react 19.3.1. It pins `@auth/core` 0.41.3, which e
 | Format | `prettier --check .` flags only `.github/workflows/ci.yml`, which this branch doesn't touch and which is the same on main. |
 | Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0, no output. Fake test secrets are built at runtime (`'test-only-'.padEnd(40,'x')`, `randomUUID()`). |
 | Contracts | `packages/contracts/**` untouched. Roles come from the db `user_role` enum; `ErrorCode` is reused. |
+
+## Fix round 1
+
+All six review findings are fixed. Tests were written first and failed before the fix.
+
+| # | Finding | Fix | Evidence |
+|---|---|---|---|
+| 1 | security: shared-device account linking (MEDIUM) | `signIn` callback refuses any Google account other than the live session's own; unique index `auth_accounts (user_id, provider)` | `flow.test.ts` "shared device": A signed in, sibling B's Google sign-in → `AccessDenied`, nothing linked to A, no user for B, A's cookie and session untouched; after sign-out B gets usr_2. `config.test.ts`: refuses a new account and another user's, allows the same account, fails closed with no request. `identity.int.test.ts`: a second Google account for one user is `invalid`; the index exists and is `UNIQUE (user_id, provider)`. |
+| 2 | security: `__Host-` prefix (LOW) | `sessionCookieName(true)` = `__Host-authjs.session-token`, path `/`, no domain | `config.test.ts` |
+| 3 | security: grant actor unchecked (LOW) | `by` must be `operator` or a current staff user (share-locked), else `scope`; the real actor role is recorded | `identity.int.test.ts`: student, teacher, unknown id and `Operator` → `scope`, nothing written; a staff actor is recorded as `staff`, the CLI as `operator` |
+| 4 | database: expires_at index (MEDIUM) | `auth_sessions_expires_at_idx` | `identity.int.test.ts` pg_indexes check |
+| 5 | database: grant audit broke audit_log's teacher rule (MEDIUM) | new `platform_audit_log` (+ enum `platform_actor_role`); `audit_log` untouched; README rule 6 documents it | `identity.int.test.ts`: the grant row lands in `platform_audit_log`, `audit_log` count unchanged; the role rolls back when the platform audit insert fails |
+| 6 | typescript: Session cast (LOW) | `declare module 'next-auth' { interface Session { user: { id: string; role: Role } } }` | `tsc` clean; `config.test.ts` session payload test |
+
+Migration: `0004_auth_identity.sql` was regenerated rather than altered by a second migration, because it has never been merged. It is additive only: CREATE TYPE, CREATE TABLE, ADD COLUMN, ADD FK and CREATE INDEX.
+
+Gates, with Postgres up, after merging origin/main (1.8, 3.5; no new migrations): `corepack pnpm turbo run build typecheck lint test --force` → `Tasks: 45 successful, 45 total`.
+- web 132 passed (100/100/100/100)
+- db 333 passed (identity.int 23)
+- config 42
+- contracts 282
+- harness 1900
+- gateway 264
+- content 93
+- evals 103
+- cli 46
+- worker 24
+
+Secret scan exit 0.
 
 ## Changes
 
@@ -97,7 +126,8 @@ Decided:
 - **Roles.** New users are always `student`. Only `grantRole` changes a role: the `db:grant-role` operator CLI now, 12.1 later. Each grant writes an audit row in the same transaction.
 - **Route guard.** Every API route export must be wrapped by `withRole`, `publicRoute` or `providerRoute`, and its access must match `ROUTE_POLICY`. An unmatched path is denied at runtime, and an unwrapped or mismatched export fails `route-coverage.test.ts`. There is no role inheritance.
 - **Origin.** Unsafe methods need a same-origin `Origin` (or `Sec-Fetch-Site: same-origin`).
-- **Cookies.** httpOnly, SameSite=Lax, path `/`, and Secure with the `__Secure-` prefix when `AUTH_URL` is https.
+- **Cookies.** httpOnly, SameSite=Lax, path `/`, and Secure with the `__Host-` prefix when `AUTH_URL` is https.
+- **No linking while signed in.** A live session admits only its own Google account; each user has at most one Google account (review round 1).
 - **Browser session JSON.** `{ user: { id, role }, expires }` only.
 - **Stored data.** No Google OAuth tokens and no photos are stored.
 
@@ -126,18 +156,44 @@ Why: Both columns are NOT NULL, and guessing from IP is unreliable and privacy-h
 Alternatives: Make the columns nullable, or infer from `Accept-Language`.
 Reversible: yes.
 
-### 18 Oct 2026 · 1.3 Role grants are audited with the target user as scope · decided by team lead (Q3) · risk: medium
-Decided: The audit row for `grantRole` has:
-- actor: the staff user id, or `operator` for the CLI
-- actorRole: `staff`
+### 18 Oct 2026 · 1.3 Role grants go to a new platform_audit_log, and only operator or current staff may grant · decided by builder (tdd-guide) on review round 1 (database-reviewer 5, security-reviewer 3) · risk: medium
+Decided: Role grants are no longer written to 1.6's `audit_log`. They go to a new append-only `platform_audit_log`, used for staff and operator actions that belong to no teacher. Each row has:
+- actor: a staff user id, or `operator`
+- `actor_role`: enum `platform_actor_role`, either `staff` or `operator`, recording the real role
 - action: `role.grant`
 - target: `user:<id>`
-- teacherId scope: the target user (1.6 requires a teacher scope)
+- `subject_user_id`: the user the grant is about (FK to users)
+- reason
 - before/after: `{ role }`
+- ts
 
-The first staff account is bootstrapped with `db:grant-role --by operator`. There is no HTTP grant endpoint in 1.3.
-Why: Every audit row needs a teacher scope, and a role change belongs to the user it changes.
-Alternatives: A separate role-grant table; an HTTP endpoint now.
+Indexes are (target, ts), (actor, ts) and (subject_user_id, ts).
+
+`grantRole` accepts `by` only if it is exactly `operator` or a user whose role is `staff` at that moment. That user's row is share-locked inside the transaction, so a concurrent demotion can't slip in. Anything else is `scope` and nothing is written. The identity store only inserts into the table; 12.1's trust console adds the read path.
+
+The first staff account is still bootstrapped with `db:grant-role --by operator`.
+Why: Using the target user as `teacher_id` broke `audit_log`'s rule that every row belongs to one teacher. Recording `staff` for an unchecked `by` misattributed grants.
+Alternatives: A nullable-teacher "platform" scope inside `audit_log`. It would weaken 1.6's NOT NULL rule and its teacher-scoped reads.
+Reversible: yes. The table is additive, and 1.6 is untouched.
+
+### 18 Oct 2026 · 1.3 No account linking while signed in; one Google account per user · decided by builder (tdd-guide) on review round 1 (security-reviewer 1) · risk: medium
+Decided: While a session is live, the `signIn` callback allows only the signed-in user's own Google account. Any other account, new or another user's, is refused as `AccessDenied`, and the current session is left as it was.
+
+The callback reads the session cookie from the request through NextAuth's per-request config (`NextAuth((req) => createAuthConfig({ …, request: req }))`). With no request available it refuses (fails closed).
+
+A unique index on `auth_accounts (user_id, provider)` also limits each user to one account per provider. It replaces the plain `user_id` index and still leads with `user_id`.
+Why: On a shared device, Auth.js would otherwise attach sibling B's new Google account to A's signed-in user, and B could open A's account.
+Alternatives: Allow linking behind a fresh re-authentication. That is not needed in 1.3.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.3 Secure session cookie uses the `__Host-` prefix; auth_sessions.expires_at indexed · decided by builder (tdd-guide) on review round 1 · risk: low
+Decided:
+- Over https the session cookie is `__Host-authjs.session-token`, with Secure, Path=/ and no Domain.
+- `auth_sessions_expires_at_idx` is added for sweeping expired sessions.
+- next-auth's `Session` type is augmented to `user: { id, role }`, which replaces the `as unknown as Session` cast.
+
+Why: `__Host-` stops any subdomain from setting or shadowing the session cookie. Expiry sweeps need the index.
+Alternatives: The `__Secure-` prefix.
 Reversible: yes.
 
 ### 18 Oct 2026 · 1.3 Google sign-in checks state + nonce + PKCE · decided by builder (tdd-guide) · risk: low
