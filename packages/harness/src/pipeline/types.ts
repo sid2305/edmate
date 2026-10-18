@@ -31,6 +31,7 @@ import type {
   Usage,
   UsageMeter,
 } from '@edmate/contracts';
+import type { HelpState } from '../pedagogy/helpState.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { TurnLimits } from './limits.js';
 
@@ -93,6 +94,11 @@ export interface Entitled {
   pkg: PackageConfig;
   locale: LocalePack;
   styleCard: StyleCard;
+  /**
+   * The session's stored help state, raw and unvalidated (ADR-0005); buildContext parses it.
+   * Server-side only: it holds `answerKey`, so it never goes into TurnContext, events or traces.
+   */
+  helpState?: unknown;
 }
 
 export interface Scrubbed {
@@ -118,6 +124,11 @@ export interface BuiltContext {
   lockedHit: boolean;
   persona?: Persona;
   helpRung: TurnContext['helpRung'];
+  /**
+   * The rest of the parsed help state (ADR-0005). Kept out of TurnContext (it holds `answerKey`);
+   * 3.6/3.8 thread it into decide and commit.
+   */
+  helpState: HelpState;
 }
 
 export interface EscalateResult {

@@ -51,6 +51,19 @@ describe('entitle: each rejection returns its code (through runTurn)', () => {
     expect(a.modelCalls).toEqual([]);
   });
 
+  it("passes the session's raw help state through unchanged (ADR-0005; buildContext parses it)", async () => {
+    const stored = { v: 1, rung: 3, anything: ['as stored'] };
+    const a = accessTurns();
+    const session = a.world.sessions.find((x) => x.id === 'ses_1a');
+    if (session === undefined) throw new Error('fixture');
+    session.helpState = stored;
+    const out = await a.run(input);
+    expect(out.code).toBe('passed');
+    expect(out.entitled?.helpState).toEqual(stored);
+    const none = await accessTurns().run(input);
+    expect(none.entitled?.helpState).toBeUndefined();
+  });
+
   it.each([
     ['no live subscription (resolve null)', { agentId: 'agt_b', sessionId: 'ses_1b' }],
     ['a paused subscription', { studentId: 'stu_2', sessionId: 'ses_2a' }],

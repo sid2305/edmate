@@ -18,6 +18,12 @@ export {
   T as WORLD_TEACHERS,
   twoTeacherWorld,
 } from './memoryAccess.js';
+export {
+  type MemoryRetrieval,
+  memoryRetrieval,
+  OUT_OF_SCOPE_TEXT,
+  retrievalWorld,
+} from './memoryRetrieval.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,

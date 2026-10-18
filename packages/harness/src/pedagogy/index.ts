@@ -6,7 +6,16 @@ export {
   SKILL_OUTPUT_TOKENS,
 } from './budgets.js';
 export { coverageGate, DEFAULT_COVERAGE_THRESHOLD, isCovered } from './coverage.js';
-export { type HelpState, HelpStateSchema, INITIAL_HELP_STATE } from './helpState.js';
+export {
+  type HelpState,
+  HelpStateSchema,
+  INITIAL_HELP_STATE,
+  parseSessionHelp,
+  type SessionHelp,
+  SessionHelpSchema,
+  serializeSessionHelp,
+  type StoredSessionHelp,
+} from './helpState.js';
 export {
   attemptLoggedAfter,
   effectiveCeiling,
