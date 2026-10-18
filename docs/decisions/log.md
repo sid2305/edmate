@@ -10,6 +10,18 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Judge model for evals · decided by you · risk: medium
+Decided: The eval runner scores answers with one mid-tier model (e.g. Claude Sonnet via the Anthropic adapter), pinned per release so scores stay comparable across runs.
+Why: Cheapest consistent option; the board's recommendation.
+Alternatives: The main model as judge; two judges that must agree.
+Reversible: Yes, per release.
+
+### 18 Oct 2026 · Demo course reviewer · decided by you · risk: low
+Decided: You are the named subject expert in `reviewed_by` for the open-licensed demo course (task 1.8) for now; a real teacher re-reviews it before launch.
+Why: Rule 7 needs a named human; this keeps 1.8 moving.
+Alternatives: Name another person; postpone 1.8.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 2.6 Fixture format and location · decided by planner · risk: low
 Decided: Scripts are hand-written TypeScript data modules in `packages/harness/src/testing/`, typed against the contracts `ModelChunk`/`ModelRequest`. They are not JSON files and not in `evals/fixtures/`.
 Why: Harness purity rules out loading files at runtime. `evals/fixtures/` is for 3.12's recorded live responses, which have a different lifecycle.
