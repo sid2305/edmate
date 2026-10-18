@@ -140,7 +140,7 @@ export function toTeacherQuestionForTeacher(
 const AuditRowSchema = z.strictObject({
   id: z.string().min(1),
   actor: z.string().min(1),
-  actorRole: z.enum(['student', 'teacher', 'staff']),
+  actorRole: z.enum(['student', 'teacher', 'staff', 'system']),
   action: z.string().min(1),
   target: z.string().min(1),
   teacherId: z.string().min(1),

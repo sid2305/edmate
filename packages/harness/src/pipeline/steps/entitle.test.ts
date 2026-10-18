@@ -3,7 +3,11 @@ import { demoTurnInput } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { accessTurns, type AccessTurnOutcome } from '../../testing/accessTurn.js';
 import { type AccessOptions, memoryTurnConfigStore } from '../../testing/memoryAccess.js';
+import { cancelSource } from '../clock.js';
+import { TurnRejection } from '../errors.js';
 import { MESSAGE_WINDOW_MS, RATE_LIMIT_WINDOW_MS } from '../spec.js';
+import type { FallbackReplies } from '../types.js';
+import { DEFAULT_LIMIT_REACHED_REPLY, entitle } from './entitle.js';
 
 /** stu_1's own open session with teacher A's live agent; subscription sub_1a (pkg_a v2). */
 const input: TurnInput = {
@@ -268,6 +272,88 @@ describe('entitle: rolling 24-hour message limit → limit_reached', () => {
     await turns(a, 19, input);
     const [x, y] = await Promise.all([a.run(input), a.run(input)]);
     expect([x.code, y.code].sort()).toEqual(['limit_reached', 'passed']);
+  });
+});
+
+describe('entitle: limit_reached carries a friendly message (task 2.5)', () => {
+  /** Calls the real entitle directly, so the thrown TurnRejection itself can be inspected. */
+  async function rejection(a: ReturnType<typeof accessTurns>, i: TurnInput): Promise<unknown> {
+    for (const p of a.world.packages) p.dailyMessageLimit = 0;
+    const env = { input: i, deps: a.t.deps, cancel: cancelSource().token, turnId: 'turn_x' };
+    return entitle(env).then(
+      () => new Error('entitle passed'),
+      (e: unknown) => e,
+    );
+  }
+
+  const friendly = (lang: string): string => `[${lang}] you have used today's messages`;
+  const withText = (limitReached: (lang: string) => string): FallbackReplies => ({
+    safeReply: () => 'safe',
+    distress: () => 'distress',
+    limitReached,
+  });
+
+  it("uses the injected fallbackReplies.limitReached text in the student's language", async () => {
+    const langs: string[] = [];
+    const a = accessTurns({
+      overrides: {
+        fallbackReplies: withText((lang) => {
+          langs.push(lang);
+          return friendly(lang);
+        }),
+      },
+    });
+    const err = await rejection(a, { ...input, lang: 'hi' });
+    expect(err).toBeInstanceOf(TurnRejection);
+    expect(err).toMatchObject({ code: 'limit_reached', retryable: false });
+    expect((err as TurnRejection).message).toBe(friendly('hi'));
+    expect((err as TurnRejection).message).not.toContain('turn rejected');
+    expect(langs).toEqual(['hi']);
+  });
+
+  it('the wire event stays the frozen { type, code, retryable } shape', async () => {
+    const a = accessTurns({ overrides: { fallbackReplies: withText(friendly) } });
+    for (const p of a.world.packages) p.dailyMessageLimit = 0;
+    const out = await a.run(input);
+    expect(out.events).toEqual([{ type: 'error', code: 'limit_reached', retryable: false }]);
+  });
+
+  it.each([
+    ['no limitReached text is injected', undefined],
+    ['the injected text is empty', () => ''],
+    ['the injected text is blank', () => '   '],
+    [
+      'the injected function throws',
+      () => {
+        throw new Error('locale missing');
+      },
+    ],
+    ['the injected function returns a non-string', () => 42 as unknown as string],
+  ] as [string, ((lang: string) => string) | undefined][])(
+    'falls back to the built-in friendly English text when %s',
+    async (_l, fn) => {
+      const replies: FallbackReplies = {
+        safeReply: () => 'safe',
+        distress: () => 'distress',
+        ...(fn === undefined ? {} : { limitReached: fn }),
+      };
+      const a = accessTurns({ overrides: { fallbackReplies: replies } });
+      const err = await rejection(a, input);
+      expect(err).toBeInstanceOf(TurnRejection);
+      expect((err as TurnRejection).code).toBe('limit_reached');
+      expect((err as TurnRejection).message).toBe(DEFAULT_LIMIT_REACHED_REPLY);
+    },
+  );
+
+  it('the built-in text is friendly, country-neutral and names no ids or numbers', () => {
+    expect(DEFAULT_LIMIT_REACHED_REPLY).toMatch(/24 hours/);
+    expect(DEFAULT_LIMIT_REACHED_REPLY).not.toMatch(/turn rejected|limit_reached|error/i);
+    expect(DEFAULT_LIMIT_REACHED_REPLY.replace('24', '')).not.toMatch(/\d/);
+  });
+
+  it('the default test deps (no override) still give the built-in text', async () => {
+    const err = await rejection(accessTurns(), input);
+    expect((err as TurnRejection).message).toBe(DEFAULT_LIMIT_REACHED_REPLY);
   });
 });
 

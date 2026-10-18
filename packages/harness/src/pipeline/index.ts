@@ -29,6 +29,7 @@ export {
   type StepSpec,
 } from './spec.js';
 export { checkInputLimits } from './steps/admit.js';
+export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
 export { defaultSteps } from './steps/index.js';
 export { runWithTimeout, type TimedResult } from './timeout.js';
 export type {
