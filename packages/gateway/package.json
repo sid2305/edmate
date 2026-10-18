@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Model gateway: provider adapters, routing, metering, caps (empty until M2).",
+  "description": "Model gateway: provider keys, adapters, routing, metering, caps.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -11,13 +11,21 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
-    "typescript": "6.0.3"
+    "pino": "10.4.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
   }
 }
