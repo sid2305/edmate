@@ -2,10 +2,12 @@
 // gateway, ingest and worker packages implement them by importing contracts; the harness uses them.
 import type { ZodType } from 'zod';
 import type { Entitlement } from './access.js';
+import type { LocalePack } from './locale.js';
 import type { EvidenceEvent, LearnerProfile } from './memory.js';
 import type { ModelChunk, ModelRequest } from './model.js';
 import type { GuardResult, SafetyAlert } from './safety.js';
 import type { Skill, ToolName, Usage } from './shared.js';
+import type { AgentConfig, PackageConfig, StyleCard } from './teacher.js';
 import type { TurnTrace } from './trace.js';
 import type { Chunk, Message, TeacherQuestion, TurnContext, TurnInput } from './turn.js';
 
@@ -34,6 +36,22 @@ export interface EntitlementStore {
     x: { studentId: string; agentId: string; source: Entitlement['source'] },
     at: string,
   ): Promise<Entitlement | null>;
+}
+
+/**
+ * The config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version
+ * (ADR-0004). `entitle` checks every object belongs to the entitlement's teacher; null fails closed.
+ */
+export interface TurnConfigStore {
+  load(
+    e: Entitlement,
+    sessionId: string,
+  ): Promise<{
+    agent: AgentConfig;
+    pkg: PackageConfig;
+    styleCard: StyleCard;
+    locale: LocalePack;
+  } | null>;
 }
 
 export interface ProfileStore {

@@ -44,6 +44,7 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.Guard>().toEqualTypeOf<Spec.Guard>();
     expectTypeOf<C.RetrievalIndex>().toEqualTypeOf<Spec.RetrievalIndex>();
     expectTypeOf<C.EntitlementStore>().toEqualTypeOf<Spec.EntitlementStore>();
+    expectTypeOf<C.TurnConfigStore>().toEqualTypeOf<Spec.TurnConfigStore>();
     expectTypeOf<C.ProfileStore>().toEqualTypeOf<Spec.ProfileStore>();
     expectTypeOf<C.TranscriptStore>().toEqualTypeOf<Spec.TranscriptStore>();
     expectTypeOf<C.CorrectionStore>().toEqualTypeOf<Spec.CorrectionStore>();

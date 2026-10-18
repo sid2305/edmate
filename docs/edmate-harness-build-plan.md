@@ -111,7 +111,7 @@ edmate/
   docker/                compose.yaml, Caddyfile, env.example
 ```
 
-**Ports and adapters:** `harness` defines ports (`EntitlementStore`, `ProfileStore`, `TranscriptStore`, `RetrievalIndex`, `CorrectionStore`, `UsageMeter`, `TraceSink`, `AlertSink`, `ModelGateway`); `db`, `gateway`, `ingest` and `worker` provide adapters. Tests use in-memory adapters from `harness/testing`.
+**Ports and adapters:** `harness` defines ports (`EntitlementStore`, `TurnConfigStore`, `ProfileStore`, `TranscriptStore`, `RetrievalIndex`, `CorrectionStore`, `UsageMeter`, `TraceSink`, `AlertSink`, `ModelGateway`); `db`, `gateway`, `ingest` and `worker` provide adapters. Tests use in-memory adapters from `harness/testing`.
 
 ## Core contracts
 
@@ -263,6 +263,9 @@ interface RetrievalIndex {
   probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
 }
 interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
+interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)
+  load(e: Entitlement, sessionId: string): Promise<{ agent: AgentConfig; pkg: PackageConfig; styleCard: StyleCard; locale: LocalePack } | null>;
+}
 interface ProfileStore { get(studentId: string, teacherId: string): Promise<LearnerProfile>; applyEvidence(e: EvidenceEvent[]): Promise<LearnerProfile> }
 interface TranscriptStore { history(sessionId: string, limit: number): Promise<Message[]>; append(sessionId: string, m: Message): Promise<void> }
 interface CorrectionStore {         // teacher answers and corrections become teacher notes + eval cases
@@ -292,11 +295,11 @@ Every student turn runs eleven steps inside `harness/pipeline`; each step is a p
 | # | Step | Does | Model tier | Timeout | On failure |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `admit` | Auth, rate limit (10 turns/min/student), input limits (≤ 4,000 chars, ≤ 2 attachments) | — | 50 ms | `error` event; no model call |
-| 2 | `entitle` | Resolve the entitlement server-side (subscription, teacher preview or eval); refuse none, paused or ended; rolling 24-hour message limit | — | 50 ms | Fail closed: `no_access` or `limit_reached` |
+| 2 | `entitle` | Resolve the entitlement server-side (subscription, teacher preview or eval); refuse none, paused or ended; rolling 24-hour message limit; load the agent, package, style card and locale pack through `TurnConfigStore` and check each belongs to the entitlement's teacher (ADR-0004) | — | 50 ms | Fail closed: `no_access` or `limit_reached` |
 | 3 | `preGuard` | PII scrub (regex, first), moderation, jailbreak; rules first, small model only if inconclusive | small | 400 ms | Fail closed: safe message |
 | 4 | `route` | Intent and `attempt` (none, wrong, partial, correct); rules first, small model only if inconclusive | small | 400 ms | Default `on_task` / `none`; distress keywords still escalate |
 | 5 | `escalate` | If distress: caring reply + helplines from the locale pack, `SafetyAlert` to the trust team, then skip to step 11 (message and trace still saved) | — | 200 ms | Alert retried until delivered |
-| 6 | `buildContext` | Profile and last summary, trimmed history, **access-filtered retrieval** (teacher notes ranked first), `probe` of locked modules → `lockedHit`, style card, persona | — | 300 ms | Proceed without retrieval → `ask_teacher` path |
+| 6 | `buildContext` | Profile and last summary, trimmed history, **access-filtered retrieval** (teacher notes ranked first), `probe` of locked modules → `lockedHit`, style card (already loaded by `entitle`), persona | — | 300 ms | Proceed without retrieval → `ask_teacher` path |
 | 7 | `decide` | Teaching policy picks move, rung, `mustNotReveal`, prompt, tools allowed by the entitlement, `maxOutputTokens` | — (rules) | 50 ms | Fall back to `ask` |
 | 8 | `generate` | Stream from main model, tool calls (max 3 rounds), cite sources; abort if `MAX_TURN_COST_MICRO_USD` is exceeded | main | 15 s | One retry on the fallback model; then apologetic error |
 | 9 | `postGuard` | Answer leak, locked leak, grounding, advice, persona boundary, tone | small | 2 s | `rewrite` once; else safe reply |
