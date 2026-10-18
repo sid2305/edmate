@@ -207,10 +207,10 @@ tasks:
   accept: 'CI blocks a failing test; the merge-gate check fails a risky PR whose review.md lacks the required reviewers or whose handoff lacks a risk: high decision.'
   deps:
   - '0.1'
-  status: running
+  status: review
   risk: risky
   branch: m0/0.5-ci
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(code)
 - id: '0.6'
   milestone: M0
   title: 'Dev container (`.devcontainer/`): Node 22 with corepack pnpm, Docker access for Compose, Claude Code, Python 3 with PyYAML, jq; `git config core.hooksPath .githooks` on create'
