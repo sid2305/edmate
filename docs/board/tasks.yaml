@@ -197,7 +197,7 @@ tasks:
   accept: files merged.
   deps:
   - '0.1'
-  status: review
+  status: done
   risk: risky
   branch: m0/0.4-adrs
   model: plan:sonnet build:opus-5.5/medium review:opus(architect)+sonnet x2

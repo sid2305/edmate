@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.4 ADRs recorded · decided by team lead · risk: high
+Decided: Three architecture decisions already made in the build plan and the decision log are now written down as ADRs: the tech stack (TypeScript throughout, no Rust), where port interfaces live (`packages/contracts/src/ports.ts`, type-only, differing from the Repo-layout prose that says harness defines them), and the access filter being built by construction (filtered search, the code-only probe, public titles, the 8-token leak definition). A template (`docs/adr/0000-template.md`) fixes the shape every future ADR must use.
+Why: Rule 2 requires an ADR before contracts, stack or prompt-pack behaviour can change again; writing these three down now gives that rule something to point at, and the ports note resolves a reader-visible conflict between two parts of the spec. No code or contract changed; the ADRs only record what the spec and log already say, each with its source.
+Alternatives: Leave the decisions only in the build plan and decision log, with no `docs/adr/` folder yet.
+Reversible: Only by a new ADR superseding one of these.
+
+### 18 Oct 2026 · 0.4 Builder writes the ADR text · decided by team lead · risk: low
+Decided: For task 0.4 the builder wrote the ADR text directly from the build plan, PRD and decision log; `architect` did not pre-draft it, but still reviews every ADR and its findings are fixed before merge.
+Why: Saves tokens; these ADRs only record decisions already made, so there is nothing for architect to decide up front.
+Alternatives: Architect drafts the full ADR text first and the builder copies it, as the plan and the merge-gate skill describe.
+Reversible: Yes; later ADRs can go back to architect drafting.
+
+### 18 Oct 2026 · 0.4 Heading check has its own tests · decided by tdd-guide · risk: low
+Decided: Added `docs/adr/test_check_headings.py` (stdlib unittest) next to `docs/adr/check-headings.py`, and the script takes an optional folder argument so tests can run it on temporary folders.
+Why: The brief asked for tests first; a folder argument lets the tests check failures without breaking the real ADRs.
+Alternatives: Only run the script by hand against the real folder.
+Reversible: Yes, delete the test file.
+
+### 18 Oct 2026 · 0.4 Review · decided by team lead · risk: low
+Decided: check-headings.py does not flag a heading that appears twice; it checks only that every template heading is present and in order. The lead fixed four wording findings in the ADRs and the README in this PR.
+Why: Duplicate headings are harmless and nothing in the spec asks for the check; later ADR edits need three reviewers, so cheap fixes were made now.
+Alternatives: Add a duplicate check.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.3 Contracts created · decided by team lead · risk: high
 Decided: The shared contracts now exist as Zod schemas, exactly matching the build plan's Core contracts. Tests fail if the code and the spec drift apart. Unknown fields are rejected, and the limits in the spec comments are enforced. From now on, changing a contract needs an ADR.
 Why: Every package builds on these shapes; the tests prove they match the spec.
