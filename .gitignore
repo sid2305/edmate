@@ -36,6 +36,7 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+next-env.d.ts
 
 # --- OS and editors ---
 .DS_Store

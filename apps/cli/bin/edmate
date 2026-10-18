@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// Runs the built CLI; `corepack pnpm build` must have produced dist/ first.
+import { run } from '../dist/cli.js';
+
+process.exitCode = run(process.argv.slice(2));

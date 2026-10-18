@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Dependency install scripts are off unless listed here as true.
+# msgpackr-extract is an optional native speed-up for BullMQ; msgpackr falls back to plain JS.
+# pnpm is a root devDependency so Turborepo finds a `pnpm` binary without a global install;
+# its install script links the platform binary.
+allowBuilds:
+  msgpackr-extract: false
+  pnpm: true

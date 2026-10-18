@@ -1,0 +1,23 @@
+{
+  "name": "@edmate/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle schema, migrations and repositories (empty until M1).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@edmate/config": "workspace:*",
+    "eslint": "10.13.0",
+    "typescript": "6.0.3"
+  }
+}

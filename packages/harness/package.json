@@ -1,0 +1,26 @@
+{
+  "name": "@edmate/harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turn pipeline and teaching engine. Imports only @edmate/contracts, zod, mathjs and its own modules (build plan rule 3).",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@edmate/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@edmate/config": "workspace:*",
+    "eslint": "10.13.0",
+    "typescript": "6.0.3"
+  }
+}
