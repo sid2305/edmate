@@ -428,9 +428,9 @@ tasks:
   deps:
   - '2.6'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.1-pipeline-runner
+  model: plan:opus
 - id: '3.2'
   milestone: M3
   title: '`admit` and `entitle`: rate limit, input limits, server-side entitlement for all three sources, rolling message limit'
