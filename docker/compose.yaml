@@ -1,0 +1,130 @@
+# Edmate local stack (task 0.2): Postgres 16 + pgvector, Redis, MinIO (S3-compatible), Caddy,
+# the Next.js web app and the BullMQ worker.
+#
+#   docker compose -f docker/compose.yaml up -d --build
+#   curl -i localhost:8080/api/health
+#   docker compose -f docker/compose.yaml exec worker npm run storage:roundtrip
+#
+# Runs with no env file: every setting is `${VAR:-dev-default}`, and docker/env.example documents
+# each one. The defaults are dev-only placeholders, not secrets; override them for anything shared.
+# Only Caddy (and MinIO, for local tools) publish ports, on 127.0.0.1. Data lives in docker/data/
+# (gitignored).
+
+name: edmate
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://${POSTGRES_USER:-edmate}:${POSTGRES_PASSWORD:-edmate-dev}@postgres:5432/${POSTGRES_DB:-edmate}
+  REDIS_URL: redis://redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-edmate-dev}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-edmate-dev}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+  S3_FORCE_PATH_STYLE: 'true'
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-edmate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edmate-dev}
+      POSTGRES_DB: ${POSTGRES_DB:-edmate}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/001-extensions.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4.6-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # Upstream MinIO stopped publishing images; pgsty/minio is a maintained community build of
+    # the same server with dated RELEASE tags (see docs/tasks/0.2/handoff.md, Decisions).
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-edmate-dev}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+    ports:
+      - '127.0.0.1:${EDMATE_S3_PORT:-9000}:9000'
+      - '127.0.0.1:${EDMATE_S3_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - ./data/minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: edmate-web:dev
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 10
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    image: edmate-worker:dev
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    healthcheck:
+      # The worker has no HTTP port; healthy = its process is up and can reach Redis (its queue).
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('node:net').connect(6379,'redis').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${EDMATE_HTTP_PORT:-8080}:80'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+    depends_on:
+      web: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:2019/config/']
+      interval: 5s
+      timeout: 3s
+      retries: 10
