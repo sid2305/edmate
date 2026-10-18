@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.5 Cost alarm threshold · decided by team lead · risk: medium
+Decided: The monthly cost alarm fires at a provisional 50 USD per teacher per calendar month (UTC), configurable. It alerts staff and the teacher and pauses free packages only; once staff unpause, the same month doesn't re-pause. Calls with unknown cost are counted and reported, never treated as free.
+Why: The spec sets no number; this is a placeholder until the cost data in 7.6.
+Alternatives: A rolling 30-day window; no default.
+Reversible: Yes, config.
+
 ### 18 Oct 2026 · Session help state and Transcriber ports · decided by team lead (architect's design) · risk: high
 Decided: ADR-0005 (task 3.15) adds two contracts ports and one small extension: TurnConfigStore.load also returns the session's raw help state; a new SessionStateStore.saveHelpState writes it back to the student's own open session; a new Transcriber port with strict transcript schemas. The help state stays untyped in contracts and is parsed by the harness.
 Why: Turns need the help ladder's state across messages, and transcription needs a port; one combined ADR avoids two parallel contracts changes.
