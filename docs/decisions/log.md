@@ -10,6 +10,104 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 1.3 Google sign-in with database sessions; roles change only by a server-side grant; deny-by-default route guard · decided by planner, accepted by team lead · risk: high
+Decided:
+- **Sign-in.** Auth.js (next-auth pinned at 5.0.0-beta.32) with Google only. The provider checks state, nonce and PKCE, and `allowDangerousEmailAccountLinking` is false.
+- **Sessions.** Database sessions with 30-day expiry, refreshed daily. Only the SHA-256 of the cookie token is stored, in `auth_sessions`.
+- **Identity store.** A separate store in `packages/db/src/identity/`, outside the scoped repositories. It returns identity fields only.
+- **Roles.** New users are always `student`. Only `grantRole` changes a role: the `db:grant-role` operator CLI now, 12.1 later. Each grant writes an audit row in the same transaction.
+- **Route guard.** Every API route export must be wrapped by `withRole`, `publicRoute` or `providerRoute`, and its access must match `ROUTE_POLICY`. An unmatched path is denied at runtime, and an unwrapped or mismatched export fails `route-coverage.test.ts`. There is no role inheritance.
+- **Origin.** Unsafe methods need a same-origin `Origin` (or `Sec-Fetch-Site: same-origin`).
+- **Cookies.** httpOnly, SameSite=Lax, path `/`, and Secure with the `__Host-` prefix when `AUTH_URL` is https.
+- **No linking while signed in.** A live session admits only its own Google account; each user has at most one Google account (review round 1).
+- **Browser session JSON.** `{ user: { id, role }, expires }` only.
+- **Stored data.** No Google OAuth tokens and no photos are stored.
+
+Why:
+- Role changes and revocation apply at once.
+- No role sits in a client-held token.
+- Sign-in has one door.
+- Auth must read `users` and delete sessions, which repository rules 1, 7 and 9 forbid.
+
+Alternatives:
+- JWT sessions: the role stays stale until the token expires.
+- `@auth/drizzle-adapter`: it writes `image`, needs nullable market, locale and role, and can't force the role.
+- A proxy-only check: it can be bypassed, and Next doesn't recommend it.
+
+Reversible: yes. `createAuthConfig` and `createIdentityStore` sit behind interfaces, and the migration is additive.
+
+### 18 Oct 2026 · 1.3 next-auth 5.0.0-beta.32 pinned (v5 has no stable release) · decided by builder (tdd-guide) under the lead's Q1 rule · risk: medium
+Decided: Pin `next-auth` exactly at `5.0.0-beta.32`. Its peer range is `next ^16` and `react ^19`, and it bundles `@auth/core` 0.41.3 with `customFetch`. Vitest inlines `next-auth` because it imports `next/server` without an extension.
+Why: The tech stack names Auth.js, and v5 is the only line that supports the App Router on Next 16. v4 (`latest`) is the old API.
+Alternatives: next-auth 4.24.15; bare `@auth/core`, or Better Auth, either of which needs an ADR.
+Reversible: yes. Bump the pin once a stable v5 ships.
+
+### 18 Oct 2026 · 1.3 First sign-in sets market `global` and locale `en` · decided by team lead (Q2) · risk: low
+Decided: `createStudent` hard-codes `market: 'global'` and `locale: 'en'`. Neither is ever guessed from IP or headers; 1.7's country question sets the real market.
+Why: Both columns are NOT NULL, and guessing from IP is unreliable and privacy-hostile.
+Alternatives: Make the columns nullable, or infer from `Accept-Language`.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.3 Role grants go to a new platform_audit_log, and only operator or current staff may grant · decided by builder (tdd-guide) on review round 1 (database-reviewer 5, security-reviewer 3) · risk: medium
+Decided: Role grants are no longer written to 1.6's `audit_log`. They go to a new append-only `platform_audit_log`, used for staff and operator actions that belong to no teacher. Each row has:
+- actor: a staff user id, or `operator`
+- `actor_role`: enum `platform_actor_role`, either `staff` or `operator`, recording the real role
+- action: `role.grant`
+- target: `user:<id>`
+- `subject_user_id`: the user the grant is about (FK to users)
+- reason
+- before/after: `{ role }`
+- ts
+
+Indexes are (target, ts), (actor, ts) and (subject_user_id, ts).
+
+`grantRole` accepts `by` only if it is exactly `operator` or a user whose role is `staff` at that moment. That user's row is share-locked inside the transaction, so a concurrent demotion can't slip in. Anything else is `scope` and nothing is written. The identity store only inserts into the table; 12.1's trust console adds the read path.
+
+The first staff account is still bootstrapped with `db:grant-role --by operator`.
+Why: Using the target user as `teacher_id` broke `audit_log`'s rule that every row belongs to one teacher. Recording `staff` for an unchecked `by` misattributed grants.
+Alternatives: A nullable-teacher "platform" scope inside `audit_log`. It would weaken 1.6's NOT NULL rule and its teacher-scoped reads.
+Reversible: yes. The table is additive, and 1.6 is untouched.
+
+### 18 Oct 2026 · 1.3 No account linking while signed in; one Google account per user · decided by builder (tdd-guide) on review round 1 (security-reviewer 1) · risk: medium
+Decided: While a session is live, the `signIn` callback allows only the signed-in user's own Google account. Any other account, new or another user's, is refused as `AccessDenied`, and the current session is left as it was.
+
+The callback reads the session cookie from the request through NextAuth's per-request config (`NextAuth((req) => createAuthConfig({ …, request: req }))`). With no request available it refuses (fails closed).
+
+A unique index on `auth_accounts (user_id, provider)` also limits each user to one account per provider. It replaces the plain `user_id` index and still leads with `user_id`.
+Why: On a shared device, Auth.js would otherwise attach sibling B's new Google account to A's signed-in user, and B could open A's account.
+Alternatives: Allow linking behind a fresh re-authentication. That is not needed in 1.3.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.3 Secure session cookie uses the `__Host-` prefix; auth_sessions.expires_at indexed · decided by builder (tdd-guide) on review round 1 · risk: low
+Decided:
+- Over https the session cookie is `__Host-authjs.session-token`, with Secure, Path=/ and no Domain.
+- `auth_sessions_expires_at_idx` is added for sweeping expired sessions.
+- next-auth's `Session` type is augmented to `user: { id, role }`, which replaces the `as unknown as Session` cast.
+
+Why: `__Host-` stops any subdomain from setting or shadowing the session cookie. Expiry sweeps need the index.
+Alternatives: The `__Secure-` prefix.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.3 Google sign-in checks state + nonce + PKCE · decided by builder (tdd-guide) · risk: low
+Decided: Set `checks: ['pkce', 'state', 'nonce']` on the Google provider.
+Why: Auth.js 0.41 defaults to PKCE only, and the plan's acceptance needs state on the redirect. Nonce adds id_token replay protection.
+Alternatives: The default (PKCE only).
+Reversible: yes.
+
+### 18 Oct 2026 · 1.3 Small choices: tables, timing, proxy, lint, exports · decided by builder (tdd-guide) on the plan · risk: low
+Decided:
+- **Tables.** Tables are prefixed `auth_`, because the learning `sessions` table already exists.
+- **Session timing.** 30-day sessions, refreshed after 24 h.
+- **No proxy.** No `proxy.ts`; each route handler enforces its own role (Q8).
+- **Lint.** A new `@edmate/config/eslint/app` preset bans `@edmate/db/internal` in apps, and bans `next-auth` / `@auth/*` outside `src/auth/**`.
+- **Exports.** `auth` is not exported from `src/auth`: server components use `requireRole`.
+- **Email verification.** Google users keep `email_verified_at` null, because Auth.js passes null for OAuth and the `signIn` callback enforces Google's `email_verified`.
+- **Migrations path.** `MIGRATIONS_DIR` uses `path.join` so Turbopack can build the web app.
+
+Why: These follow the plan's recommendations, and they keep the build and the guard simple.
+Alternatives: As listed in the plan.
+Reversible: yes.
+
 ### 18 Oct 2026 · Speech-to-text and embedding vendor · decided by you · risk: medium
 Decided: OpenAI for both: Whisper for transcription (the adapter splits recordings over 25 MB) and text-embedding-3-small (1536 dimensions) for embeddings, through the OpenAI-compatible path. One extra vendor and key.
 Why: Anthropic offers neither; one vendor keeps keys and bills simple.
