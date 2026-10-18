@@ -220,6 +220,19 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.7'
+  milestone: M0
+  title: 'Harness fixes from the 0.1 dry run: (1) the merge gate accepts a local human approval (no GitHub yet) that only the human can create and that is tied to the branch head commit; (2) the gate fails
+    a [wontfix] finding with no decision-log entry, and board.py refuses `done` when the handoff''s decisions are not in docs/decisions/log.md; (3) guard-bash asks before shell commands that write into
+    frozen, safety, access or payments paths (Edit/Write hooks already do); reviewer agents are told never to write files; (4) planner must check every planned path against risk-paths.txt; the lead commits
+    plan.md on main before the build (guard-bash allows docs/tasks/<id>/plan.md on main); board.py next warns about a task in planning with no plan.md'
+  accept: Python tests for merge_gate.py, board.py and the guard-bash.sh rules pass (`python3 -m unittest discover .claude/tests`); an agent-run approval command is denied by the hook; the gate exits 0
+    for a risky task only with an approval matching the branch head, and 3 again after a new commit; team-lead and merge-gate skills describe the new local approval step.
+  deps:
+  - '0.1'
+  status: planning
+  branch: m0/0.7-harness-fixes
+  model: plan:opus
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
