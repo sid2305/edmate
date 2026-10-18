@@ -10,6 +10,54 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.1 Provider key module · decided by planner · risk: high
+Decided: Provider keys are read once at startup, only by `packages/gateway/src/keys`, from a `KeySource` (the environment now; a secret manager later through the same interface, no vendor chosen). Each value is wrapped in a `Secret` that prints and serialises as `[redacted]` and is read only with `reveal()`, which only adapters call. A missing or malformed key stops startup with one error that names the variables but never shows a value, a length or a fragment. Rotating a key means a restart.
+Why: one door and one wrapper make "never logged, never returned" something a test can check, not just a habit.
+Alternatives: Read `process.env` in each adapter; plain strings plus a logger redaction list; hot reload of keys.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Env variable names · decided by planner · risk: medium
+Decided: Provider key variables are `EDMATE_<PROVIDER>_<FIELD>`, starting with `EDMATE_OPENAI_COMPATIBLE_API_KEY`, not the SDK defaults such as `OPENAI_API_KEY`.
+Why: AI SDK provider packages read their default variable on their own when no key is passed. A different name means a key can't bypass our module.
+Alternatives: The SDK default names.
+Reversible: Yes, renaming the variables in deploys.
+
+### 18 Oct 2026 · 2.1 process.env left as is · decided by planner · risk: low
+Decided: The loader does not delete key variables from `process.env` after reading them.
+Why: the spec doesn't ask for it, and `--live` runs and other tools read the environment. The leak tests cover our own outputs.
+Alternatives: Scrub the variables after load.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Pino pinned as a devDependency · decided by tdd-guide · risk: low
+Decided: `pino` `10.4.0` (current stable on 18 Oct 2026) is pinned exactly as a gateway devDependency, used only by the log-scan test.
+Why: Pino is the stack's logger; testing the real logger is stronger than testing `JSON.stringify` alone (lead answer Q3).
+Alternatives: Test only `JSON.stringify`; make Pino a runtime dependency now.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Blank optional key means unset · decided by tdd-guide · risk: medium
+Decided: For a provider that is not required, a variable that is empty or whitespace-only counts as unset, so the provider is skipped. For a required provider it is still the `empty` problem.
+Why: copying `docker/env.example` gives `EDMATE_OPENAI_COMPATIBLE_API_KEY=` (empty); startup must not fail for a provider nobody asked for.
+Alternatives: Treat any set variable, even empty, as "configured" and fail.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Unknown provider id is a reported problem · decided by tdd-guide · risk: low
+Decided: An id in `required` that is not in `PROVIDER_KEYS` adds an `unknown_provider` problem to the same `KeyConfigError` instead of being ignored.
+Why: the type stops it in TypeScript, but plain JS or a config string could pass one; failing loudly beats a silent skip.
+Alternatives: Ignore it; throw a separate error type.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Log scan uses a real node Console, not stdout spies · decided by tdd-guide · risk: low
+Decided: The console part of the log-scan test writes through `new Console({ stdout, stderr })` into memory instead of spying on `process.stdout.write`.
+Why: Vitest intercepts the global console in workers, so stdout spies would see nothing and the check would pass vacuously. The per-sink positive control proves this sink captures output.
+Alternatives: Spy on `process.stdout.write` (vacuous under Vitest); set Vitest's `disableConsoleIntercept`.
+Reversible: Yes.
+
+### 18 Oct 2026 · 2.1 Review · decided by team lead · risk: low
+Decided: Three LOW notes in packages/gateway/src/keys/load.ts stay as they are: error messages may name the caller's provider id (never a key value), and two type casts (`raw as string`, the generic cast in `get()`) are covered by tests. 2.2's adapters must always pass the key so the OpenAI SDK never falls back to OPENAI_API_KEY.
+Why: None can expose a key; the casts are proven by tests.
+Alternatives: Validate the id before use; discriminated results instead of casts.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 0.9 Per-commit secret scan runs main's scanner, allow list and driver · decided by tdd-guide · risk: high
 Decided: A new CI job `secrets` (pull_request only) scans every commit in `origin/main..HEAD`. It uses the scanner and allow list from main (`git show origin/main:...` into `$RUNNER_TEMP`) and the driver `.github/scripts/scan-pr-commits.py`, also from main. The PR that adds the driver is the only one that uses its own copy, and it logs a warning when it does. The output shows commit, path, line and finding type only. Errors fail the job.
 Why: A secret deleted in a later commit is still public in the history. Using main's copies stops a PR from weakening the scan of its own commits. It does not cover a PR that edits `ci.yml` itself: that is a `.github/**` risky path, so it needs a security review and a risk: high decision.
