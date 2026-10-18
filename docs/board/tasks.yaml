@@ -267,7 +267,7 @@ tasks:
   accept: migrate up/down clean; teacher-owned tables indexed on `teacher_id`.
   deps:
   - M0
-  status: review
+  status: done
   branch: m1/1.1-drizzle-schema
   model: plan:sonnet build:opus-5.5/medium review:sonnet x3 (db, security, ts)
 - id: '1.2'

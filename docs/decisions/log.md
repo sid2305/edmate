@@ -10,6 +10,76 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 1.1 CI Postgres service container on the node job · decided by tdd-guide · risk: high
+Decided: `.github/workflows/ci.yml`'s `node` job runs a `postgres` service (pgvector/pgvector:0.8.1-pg16, pinned by digest,
+health-checked) with a throwaway password, and sets `TEST_DATABASE_URL`. `turbo.json` passes `TEST_DATABASE_URL` and `CI` to
+`test`. The db integration tests fail when `CI=true` and the database is unreachable, and skip with a message locally.
+Why: The acceptance ("migrate up/down clean") needs a real Postgres + pgvector on every PR (lead answer). Touches `.github/**`, so security-reviewer.
+Alternatives: pglite (different engine, partial pgvector); a separate job (duplicates install/build); keep it local-only (no CI proof).
+Reversible: Yes. Remove the service block and the env lines.
+
+### 18 Oct 2026 · 1.1 Text ids with a UUID default · decided by planner · risk: low
+Decided: Every primary and foreign key is `text`; new rows get `crypto.randomUUID()`.
+Why: The contracts' id is any `[A-Za-z0-9_-]{1,128}` (fixtures use `stu_test_01`); a `uuid` column would reject valid ids.
+Alternatives: Postgres `uuid`; prefixed ids.
+Reversible: Yes, with a type-changing migration.
+
+### 18 Oct 2026 · 1.1 "Migrate up/down clean" = apply, drop the test schemas, re-apply · decided by planner (lead accepted) · risk: low
+Decided: Migrations are forward-only (drizzle-kit, no down files). The test applies them to an empty throwaway database, drops
+`public` and `drizzle`, and applies them again; re-running on an applied database is a no-op.
+Why: `database-migrations` skill: forward-only migrations; drizzle-kit has no per-file rollback.
+Alternatives: Hand-written down.sql per migration.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Embedding column has no dimension and no vector index yet · decided by planner (lead accepted) · risk: low
+Decided: `chunks.embedding` is a nullable dimensionless `vector` (a custom type). The dimension and the HNSW index come with
+the embedding model in 2.7/5.3, in an additive migration. `0000_enable_pgvector.sql` runs `CREATE EXTENSION IF NOT EXISTS vector`
+so CI and managed hosts work without docker/postgres/init.sql.
+Why: The embedding model isn't chosen; guessing a dimension would mean a re-index later.
+Alternatives: Fix 1536 now.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Isolation in repositories, not RLS · decided by planner (lead accepted) · risk: low
+Decided: No Postgres RLS policies. Teacher and student scoping is enforced by task 1.2's repositories; the schema gives every
+teacher-owned table a `teacher_id` (FK to users, leading an index) and every student table a `student_id` (leading an index).
+Why: ADR-0002's port split; one app database user.
+Alternatives: RLS policies per table.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Postgres enums for the fixed sets, checked against the contracts · decided by tdd-guide · risk: low
+Decided: 9 `pgEnum`s: user_role, subscription_status, agent_status, chunk_kind, message_role, teacher_question_status,
+evidence_source, model_tier, ledger_direction. Tests fail if a set drifts from the contracts' Zod enum. Open-ended values
+(verification_status, payment/payout status, report/takedown/safety status, consent kind) are plain `text`.
+Why: The database rejects values the app can't produce; adding a value later is an additive `ALTER TYPE … ADD VALUE`.
+Alternatives: text + CHECK (changing it needs DROP CONSTRAINT, which the merge gate flags as destructive); text with no constraint.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Full-text search uses the 'simple' configuration · decided by tdd-guide · risk: low
+Decided: `chunks.search` is `to_tsvector('simple', text)`, generated and stored, with a GIN index.
+Why: Edmate is country-neutral; 'simple' doesn't stem for one language, so it behaves the same for every locale. Per-locale configs can come with 2.7.
+Alternatives: 'english'; a per-row regconfig column.
+Reversible: Yes (additive migration with a new column/index).
+
+### 18 Oct 2026 · 1.1 Money and cost as bigint read as JS numbers · decided by tdd-guide · risk: low
+Decided: `amount_minor` and `cost_micro_usd` are `bigint` columns mapped to `number` (`mode: 'number'`), matching the contracts' `count()`;
+ledger entries are positive amounts with a debit/credit direction grouped by `transaction_id`.
+Why: Values stay far below 2^53; the contracts use numbers.
+Alternatives: `mode: 'bigint'`; numeric.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Dependency pins and esbuild build script · decided by tdd-guide · risk: low
+Decided: drizzle-orm 0.45.4, drizzle-kit 0.31.11, pg 8.23.1, @types/pg 8.23.1 (npm `latest` on 18 Oct 2026; drizzle 1.0 is still rc).
+`pnpm-workspace.yaml` sets `allowBuilds: esbuild: false`: drizzle-kit's esbuild uses its prebuilt optional platform package.
+Why: Exact pins (rule); pnpm refuses unlisted install scripts.
+Alternatives: drizzle 1.0.0-rc; allow esbuild's install script.
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.1 Review · decided by team lead · risk: low
+Decided: Money and cost columns in packages/db/src/schema/billing.ts stay `bigint` in number mode, which is exact up to 2^53 (about 9 quadrillion minor units); contracts use JS numbers too. Typed jsonb columns, session joins for message isolation, and pool limits are follow-ups in task 1.2.
+Why: The ceiling is far above any realistic amount, and 1.2 is where rows are mapped to contract shapes.
+Alternatives: bigint as strings or BigInt everywhere.
+Reversible: Yes, one migration.
+
 ### 18 Oct 2026 · 2.1 Provider key module · decided by planner · risk: high
 Decided: Provider keys are read once at startup, only by `packages/gateway/src/keys`, from a `KeySource` (the environment now; a secret manager later through the same interface, no vendor chosen). Each value is wrapped in a `Secret` that prints and serialises as `[redacted]` and is read only with `reveal()`, which only adapters call. A missing or malformed key stops startup with one error that names the variables but never shows a value, a length or a fragment. Rotating a key means a restart.
 Why: one door and one wrapper make "never logged, never returned" something a test can check, not just a habit.
