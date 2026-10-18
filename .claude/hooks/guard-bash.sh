@@ -9,8 +9,11 @@ decide() { jq -n --arg d "$1" --arg r "$2" \
 if grep -qE "git\s+push\b.*(\s-f\b|--force\b|--force-with-lease)" <<<"$cmd"; then
   decide deny "No force pushes: other agents and reviewers may be on this branch."
 fi
+# Agents may push main (the human's decision, 18 Oct 2026), but the public repo gets a secret scan first.
 if grep -qE "git\s+push\b.*\s(origin\s+)?(main|HEAD:main)(\s|$)" <<<"$cmd"; then
-  decide deny "Never push to main. Push the task branch (m<milestone>/<task-id>-<slug>) and open a PR."
+  scan=$(cd "${CLAUDE_PROJECT_DIR:-$PWD}" && python3 .githooks/secret-scan.py --all 2>&1) || \
+    decide deny "Secret scan flagged files; fix them before pushing main (the repo is public):
+$scan"
 fi
 if grep -qE "git\s+(merge|rebase)\b" <<<"$cmd" && [ "$(git -C "${cwd:-.}" branch --show-current 2>/dev/null)" = main ]; then
   decide ask "Merging into main locally. PR merges are a human call — confirm."

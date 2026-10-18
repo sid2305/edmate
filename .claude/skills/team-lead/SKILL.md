@@ -57,7 +57,7 @@ The human picks your own model (the main session); opus is recommended for the l
 7. **Merge:**
    - On GitHub: push the branch, `gh pr create`, then `gh pr merge <n> --squash`. The hook re-runs the gate.
    - Before GitHub exists: `git merge --squash` into `main` locally. The hook asks the human to confirm.
-8. **Close:** append the handoff's decisions to `docs/decisions/log.md`, set the board to `done --model ...`, remove the worktree, and commit the board and log on `main` (allowed without asking).
+8. **Close:** append the handoff's decisions to `docs/decisions/log.md`, set the board to `done --model ...`, remove the worktree, and commit the board and log on `main` (allowed without asking). Then `git push origin main`; the hook runs the secret scan first.
 
 ## 4. When to involve the human
 - **Ask (AskUserQuestion):** open decisions, BLOCKED plans, risky PRs, 2 failed fix rounds, any spec conflict. Give a recommendation, not just options.

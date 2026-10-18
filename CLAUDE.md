@@ -43,4 +43,4 @@ Website and launch agents (React, e2e, a11y, performance, SEO, marketing) are ad
 
 ## Hooks (`.claude/settings.json`)
 - **Edits:** ask before touching contracts, safety or access/payments code, the spec or the harness config; block `.env` and key files; reject impure harness imports and anything the secret scan flags.
-- **Shell:** no force-push and no pushes to `main`; `gh pr merge` must pass the merge gate; only the human adds `human-approved`; commits on `main` ask unless they only touch `docs/board/` or `docs/decisions/`.
+- **Shell:** no force-push; agents may push `main`, but only after a clean secret scan; `gh pr merge` must pass the merge gate; only the human adds `human-approved`; commits on `main` ask unless they only touch `docs/board/` or `docs/decisions/`.

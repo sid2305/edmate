@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Repo and push policy · decided by you · risk: high
+Decided: The code is now on GitHub at github.com/sid2305/edmate (public). Agents push, including straight to main; there is no human push step. Force-push stays blocked, and every push to main runs the secret scan first and is refused if anything is flagged.
+Why: You don't want to run pushes yourself.
+Alternatives: Agents push task branches only and the human pushes main; PR-only merges.
+Reversible: Yes; restore the deny rule in guard-bash.sh.
+
 ### 18 Oct 2026 · Merge policy · decided by you · risk: high
 Decided: Changes to packages/contracts no longer need your approval. The team lead decides, provided an ADR (written by architect) explains the change, security-reviewer and an Opus typescript-reviewer have reviewed it, and the lead logs it as risk: high. ADRs about the tech stack or prompt-pack behaviour, and all other risky paths, still need you.
 Why: You don't want to be the bottleneck for contract changes.
