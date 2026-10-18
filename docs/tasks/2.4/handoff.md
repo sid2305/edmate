@@ -114,3 +114,9 @@ Alternatives: FK to turn traces.
 Reversible: yes.
 
 Ops note: in round 0, `docker compose … up -d postgres` reported "Recreated" for the shared `edmate-postgres-1` container. Round 1 used `start`/`stop` only.
+
+### 18 Oct 2026 · 2.4 Review · decided by team lead · risk: low
+Decided: generateObject and embed calls in packages/gateway/src/metering/meteredGateway.ts are recorded with status unknown, because the contracts port returns no usage for them; failed meter writes are retried by the worker queue in 3.8; 3.7 derives `source` from the entitlement.
+Why: Adding usage to those port methods is a contracts change worth doing only if the cost data in 7.6 shows it matters.
+Alternatives: A contracts change now.
+Reversible: Yes.
