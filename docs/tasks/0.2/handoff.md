@@ -113,3 +113,9 @@ Decided: The worker counts as healthy when its container can open a connection t
 Why: The worker has no HTTP port yet and app code was out of scope; this shows the process is up and its one dependency is reachable.
 Alternatives: A heartbeat file or HTTP endpoint written by the worker (needs a change to apps/worker/src/index.ts); no healthcheck.
 Reversible: Yes, when real queues land.
+
+### 18 Oct 2026 · 0.2 Review · decided by team lead · risk: low
+Decided: Three LOW review notes stay as they are: the MinIO healthcheck in docker/compose.yaml uses the image's own `mc`; apps/web/Dockerfile has no `outputFileTracingRoot`; roundtrip.ts picks a random object key by default. The MinIO community image is pinned by digest.
+Why: Each is shown working in the evidence; none affects production.
+Alternatives: Add a custom healthcheck, set outputFileTracingRoot, pass an explicit key.
+Reversible: Yes.
