@@ -92,11 +92,10 @@ export const turnTraces = pgTable(
 );
 
 /**
- * Model spend per teacher, package and student: caps and dashboards. One row per model call
- * (task 2.4). `status` says whether the figures are real: an `unknown` row (the provider reported
- * no usage) or an `unpriced` row (no price for the model) is never a free call, even though the
- * NOT NULL columns from 1.1 hold 0 or '' for it; the checks below pin those placeholders, and the
- * repository reads them back as null.
+ * Model spend per teacher, package and student: caps and dashboards. One row per provider attempt
+ * (task 2.4). `status` says whether the figures are known: `unknown` (the provider reported no
+ * usage: tokens and cost are NULL) or `unpriced` (tokens known, no price: cost is NULL). NULL,
+ * never 0, so a raw query can't read an unknown call as free. A `recorded` row has every figure.
  */
 export const usageLedger = pgTable(
   'usage_ledger',
@@ -107,11 +106,12 @@ export const usageLedger = pgTable(
       .notNull()
       .references(() => packages.id),
     studentId: studentId(),
-    model: text('model').notNull(),
+    /** The model the attempt was sent to, or the one the provider reported. */
+    model: text('model'),
     tier: modelTier('tier').notNull(),
-    inputTokens: integer('input_tokens').notNull(),
-    outputTokens: integer('output_tokens').notNull(),
-    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }),
     /**
      * The turn the call served. Not a foreign key: meter and commit are independent async steps,
      * so a usage row never waits for (or depends on) a trace.
@@ -136,14 +136,16 @@ export const usageLedger = pgTable(
       'usage_ledger_counts_non_negative',
       sql`${t.inputTokens} >= 0 and ${t.outputTokens} >= 0 and ${t.costMicroUsd} >= 0`,
     ),
+    // sumForStudent, and 2.5's rolling windows per student x teacher.
+    index('usage_ledger_teacher_id_student_id_created_at_idx').on(
+      t.teacherId,
+      t.studentId,
+      t.createdAt,
+    ),
     check(
-      'usage_ledger_reason_matches_status',
-      sql`(${t.status} = 'recorded' and ${t.reason} is null and ${t.model} <> '')
-        or (${t.status} = 'unknown' and ${t.reason} is not distinct from 'no_usage_reported'
-          and ${t.model} = '' and ${t.inputTokens} = 0 and ${t.outputTokens} = 0
-          and ${t.costMicroUsd} = 0)
-        or (${t.status} = 'unpriced' and ${t.reason} is not distinct from ('unpriced_model:' || ${t.model})
-          and ${t.model} <> '' and ${t.costMicroUsd} = 0)`,
+      'usage_ledger_recorded_has_figures',
+      sql`${t.status} <> 'recorded' or (${t.model} is not null and ${t.inputTokens} is not null
+        and ${t.outputTokens} is not null and ${t.costMicroUsd} is not null)`,
     ),
   ],
 );

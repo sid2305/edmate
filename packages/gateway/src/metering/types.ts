@@ -20,8 +20,8 @@ export interface UnmeteredUsage extends MeterContext {
   readonly reason: UnmeteredReason;
   /** The tier the call asked for (embed has no tier in the port; the router serves it on main). */
   readonly tier: Usage['tier'];
-  /** Known only when the provider reported usage (the unpriced case). */
-  readonly model?: string;
+  /** The attempt's model: the adapter's when unknown, the reported one when unpriced. */
+  readonly model: string;
   /** Known only when the provider reported usage (the unpriced case). */
   readonly tokens?: { readonly inputTokens: number; readonly outputTokens: number };
 }

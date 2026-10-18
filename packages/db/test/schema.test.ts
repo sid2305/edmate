@@ -233,14 +233,30 @@ describe('usage_ledger: one row per model call (task 2.4)', () => {
     expect(idx?.columns.map((c) => c.expression)).toEqual(['teacher_id', 'turn_id']);
   });
 
-  it('checks that unknown and unpriced rows can never look like a priced call', () => {
+  it('figures are nullable, so an unknown call is NULL, never a free 0', () => {
+    for (const c of ['model', 'input_tokens', 'output_tokens', 'cost_micro_usd']) {
+      expect(t.columns[c]?.notNull, c).toBe(false);
+    }
+  });
+
+  it('is indexed on (teacher_id, student_id, created_at) for per-student sums and windows', () => {
+    const idx = Object.values(t.indexes).find(
+      (i) => i.name === 'usage_ledger_teacher_id_student_id_created_at_idx',
+    );
+    expect(idx?.columns.map((c) => c.expression)).toEqual([
+      'teacher_id',
+      'student_id',
+      'created_at',
+    ]);
+  });
+
+  it('checks that a recorded row has every figure, and no count is negative', () => {
     expect(Object.keys(t.checkConstraints).sort()).toEqual([
       'usage_ledger_counts_non_negative',
-      'usage_ledger_reason_matches_status',
+      'usage_ledger_recorded_has_figures',
     ]);
-    const rule = t.checkConstraints.usage_ledger_reason_matches_status?.value ?? '';
-    expect(rule).toMatch(/'unknown'.*'no_usage_reported'/s);
-    expect(rule).toMatch(/'unpriced'.*'unpriced_model:'/s);
+    const rule = t.checkConstraints.usage_ledger_recorded_has_figures?.value ?? '';
+    expect(rule).toMatch(/'recorded'.*cost_micro_usd" is not null/s);
   });
 });
 
@@ -277,13 +293,30 @@ describe('enums match the contracts', () => {
   });
 });
 
+/** `ALTER TABLE "t" ALTER COLUMN "c" DROP NOT NULL;`: one statement, nothing else in it. */
+const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/g;
+
 describe('migrations are create-only', () => {
   it('has at least one migration and none drop, truncate, delete or update data', () => {
     const files = migrationSql();
     expect(files.length).toBeGreaterThan(0);
     for (const { file, sql } of files) {
-      expect(DESTRUCTIVE_SQL.test(sql), `${file} is destructive`).toBe(false);
+      // Relaxing NOT NULL loses no data (lead, task 2.4 fix round 1); everything else is checked.
+      const rest = sql.replace(RELAX_NOT_NULL, '');
+      expect(DESTRUCTIVE_SQL.test(rest), `${file} is destructive`).toBe(false);
     }
+  });
+
+  it('relaxes NOT NULL only where a reviewed task did', () => {
+    const relaxed = migrationSql().flatMap(({ file, sql }) =>
+      [...sql.matchAll(RELAX_NOT_NULL)].map((m) => `${file}: ${m[1]}.${m[2]}`),
+    );
+    expect(relaxed).toEqual([
+      '0003_usage_ledger_metering.sql: usage_ledger.model',
+      '0003_usage_ledger_metering.sql: usage_ledger.input_tokens',
+      '0003_usage_ledger_metering.sql: usage_ledger.output_tokens',
+      '0003_usage_ledger_metering.sql: usage_ledger.cost_micro_usd',
+    ]);
   });
 
   it('enables pgvector before any table uses it', () => {

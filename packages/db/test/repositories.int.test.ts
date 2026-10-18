@@ -819,8 +819,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           'invalid',
         ],
         [
-          'unknown usage with a model',
-          write({ ...base, reason: 'no_usage_reported', model: 'm' }),
+          'unknown usage with an empty model',
+          write({ ...base, reason: 'no_usage_reported', model: '' }),
           'invalid',
         ],
         [

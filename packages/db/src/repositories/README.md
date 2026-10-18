@@ -70,9 +70,10 @@ returns the frozen `UsageMeter` plus `recordUnmetered`: the sink `@edmate/gatewa
 `createMeteredGateway` writes to. A context naming another pair is `scope`. The `usageLedger`
 repository's four methods have their cases in `CASES`; writes take the package from the scope's
 teacher (`INSERT … SELECT … FROM packages WHERE id = $p AND teacher_id = $t`, else `not_found`).
-A call with unknown usage, or an unpriced model, is a row with `status` `unknown` / `unpriced`
-and a fixed `reason`; the NOT NULL columns from 1.1 hold `''` / `0` placeholders that the table's
-check constraint pins, and reads return them as `null`. Rows hold ids, the model id, tier, counts,
+A call with unknown usage, or an unpriced model, is a row with `status` `unknown` / `unpriced`,
+a fixed `reason`, and NULL for what is not known (tokens and cost, or cost); a CHECK requires a
+`recorded` row to have every figure. One row per provider attempt: `@edmate/gateway` meters each
+adapter, so a primary that fails over has its own row. Rows hold ids, the model id, tier, counts,
 cost and the reason code only; never request text (`test/usage-ledger.int.test.ts` checks the
 parameters every write sends).
 

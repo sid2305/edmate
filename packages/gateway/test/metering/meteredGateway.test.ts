@@ -1,12 +1,16 @@
-// Task 2.4: every call is metered once, unknown usage is never free, metering never changes what
-// the caller sees. Scripted gateways and fake adapters only (rule 4).
+// Task 2.4: every provider attempt is metered once (a failed-over primary too), unknown usage is
+// never free, metering never changes what the caller sees. Scripted gateways and fake adapters
+// only (rule 4).
 import type { Entitlement, ModelChunk, ModelGateway, Usage } from '@edmate/contracts';
 import { manualClock, ScriptedGateway, type GatewayScript } from '@edmate/harness/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GatewayError } from '../../src/adapters/errors.js';
+import type { ModelAdapter } from '../../src/adapters/types.js';
 import {
-  createMeteredGateway,
+  createMeter,
+  meterAdapter,
+  meterRouter,
   type MeterContext,
   type MeteringWarning,
   type MeterSink,
@@ -19,6 +23,7 @@ import {
   collectUntilError,
   failingAdapter,
   fakeAdapter,
+  FULL_CAPABILITIES,
   req,
 } from '../router/fake-adapter.js';
 
@@ -78,14 +83,40 @@ function scripted(script: GatewayScript): ModelGateway {
   return new ScriptedGateway(script, manualClock());
 }
 
-function setup(inner: ModelGateway, opts: { fail?: boolean; ctx?: MeterContext } = {}) {
+/** A gateway as a provider adapter bound to `model`. */
+function asAdapter(inner: ModelGateway, model = 'priced-model'): ModelAdapter {
+  return {
+    id: 'anthropic',
+    model,
+    capabilities: FULL_CAPABILITIES,
+    stream: (r) => inner.stream(r),
+    generateObject: (r, schema) => inner.generateObject(r, schema),
+    embed: (texts) => inner.embed(texts),
+  };
+}
+
+/** Plain gateways are served as one adapter on both tiers. */
+function routerOf(inner: ModelGateway | Router): Router {
+  if (inner instanceof Router) return inner;
+  const a = asAdapter(inner);
+  return new Router({ tiers: { small: a, main: a } });
+}
+
+function setup(inner: ModelGateway | Router, opts: { fail?: boolean; ctx?: MeterContext } = {}) {
   const sink = recordingSink(opts.fail);
   const warnings: MeteringWarning[] = [];
-  const gw = createMeteredGateway(inner, sink, opts.ctx ?? CTX, PRICES, {
+  const gw = meterRouter(routerOf(inner), sink, opts.ctx ?? CTX, PRICES, {
     warn: (w) => warnings.push(w),
   });
   return { gw, sink, warnings };
 }
+
+const unknownRow = (tier: Usage['tier'], model: string) => ({
+  ...CTX,
+  reason: 'no_usage_reported',
+  tier,
+  model,
+});
 
 const text = (t: string): ModelChunk => ({ type: 'text', text: t });
 
@@ -146,7 +177,7 @@ describe('stream: one row per call', () => {
     expect(seen).toEqual([]);
     expect(got).toBe(err);
     expect(sink.recorded).toEqual([]);
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'main' }]);
+    expect(sink.flagged).toEqual([unknownRow('main', 'fake-model')]);
     expect(sink.flagged[0]).not.toHaveProperty('tokens');
   });
 
@@ -155,7 +186,7 @@ describe('stream: one row per call', () => {
     expect(await collect(gw.stream(req({ tier: 'small' })))).toEqual([text('hi')]);
     await gw.settled();
     expect(sink.recorded).toEqual([]);
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'small' }]);
+    expect(sink.flagged).toEqual([unknownRow('small', 'priced-model')]);
   });
 
   it('records an unpriced row with real tokens and logs the model once', async () => {
@@ -181,8 +212,10 @@ describe('stream: one row per call', () => {
   it('logs the unpriced model on stderr as one JSON line by default', async () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const sink = recordingSink();
-    const gw = createMeteredGateway(
-      scripted({ stream: [{ steps: [{ type: 'usage', usage: usage({ model: 'nope' }) }] }] }),
+    const gw = meterRouter(
+      routerOf(
+        scripted({ stream: [{ steps: [{ type: 'usage', usage: usage({ model: 'nope' }) }] }] }),
+      ),
       sink,
       CTX,
       PRICES,
@@ -238,21 +271,98 @@ describe('stream: one row per call', () => {
     expect(sink.flagged).toEqual([]);
   });
 
-  it('a router failover inside one call is one call: only the fallback reports usage', async () => {
+  it('a router failover meters both attempts: the failed primary as unknown, the fallback priced', async () => {
     const http5xx = new GatewayError('provider_error', true, 'anthropic', 'anthropic: HTTP 503');
     const fallback = fakeAdapter({
       id: 'openai-compatible',
+      model: 'backup-model',
       script: { stream: [{ steps: [text('ok'), { type: 'usage', usage: usage() }] }] },
     });
-    const router = new Router({
-      tiers: { small: failingAdapter(http5xx), main: failingAdapter(http5xx) },
-      fallback,
-    });
+    const primary = failingAdapter(http5xx, { model: 'primary-model' });
+    const router = new Router({ tiers: { small: primary, main: primary }, fallback });
     const { gw, sink } = setup(router);
-    await collect(gw.stream(request));
+    expect(await collect(gw.stream(request))).toEqual([
+      text('ok'),
+      { type: 'usage', usage: usage() },
+    ]);
     await gw.settled();
+    expect(sink.flagged).toEqual([unknownRow('main', 'primary-model')]);
+    expect(sink.recorded).toEqual([{ u: { ...usage(), costMicroUsd: 33_000 }, ctx: CTX }]);
+  });
+
+  it('a primary that streamed usage and then failed over keeps its priced row', async () => {
+    // The router only fails over before any chunk; a usage chunk is a chunk, so this is one row.
+    const err = new GatewayError('provider_error', true, 'anthropic', 'anthropic: reset');
+    const primary = asAdapter(
+      {
+        async *stream() {
+          yield { type: 'usage', usage: usage({ inputTokens: 1, outputTokens: 1 }) };
+          throw err;
+        },
+        generateObject: () => Promise.reject(new Error('unused')),
+        embed: () => Promise.reject(new Error('unused')),
+      },
+      'priced-model',
+    );
+    const fallback = fakeAdapter({ model: 'backup-model', script: { stream: [{ steps: [] }] } });
+    const { gw, sink } = setup(new Router({ tiers: { small: primary, main: primary }, fallback }));
+    const { err: got } = await collectUntilError(gw.stream(request));
+    await gw.settled();
+    expect(got).toBe(err);
     expect(sink.recorded).toHaveLength(1);
+    expect(sink.recorded[0]?.u.costMicroUsd).toBe(18);
     expect(sink.flagged).toEqual([]);
+    expect(fallback.calls.stream).toBe(0);
+  });
+
+  it('generateObject and embed failovers meter both attempts', async () => {
+    const http5xx = new GatewayError('provider_error', true, 'anthropic', 'anthropic: HTTP 503');
+    const primary = failingAdapter(http5xx, { model: 'primary-model' });
+    const fallback = fakeAdapter({
+      model: 'backup-model',
+      script: { generateObject: [{ value: { intent: 'q' } }], embed: [{ vectors: [[1]] }] },
+    });
+    const { gw, sink } = setup(new Router({ tiers: { small: primary, main: primary }, fallback }));
+    expect(
+      await gw.generateObject(req({ tier: 'small' }), z.object({ intent: z.string() })),
+    ).toEqual({
+      intent: 'q',
+    });
+    expect(await gw.embed(['x'])).toEqual([[1]]);
+    await gw.settled();
+    expect(sink.flagged).toEqual([
+      unknownRow('small', 'primary-model'),
+      unknownRow('small', 'backup-model'),
+      unknownRow('main', 'primary-model'),
+      unknownRow('main', 'backup-model'),
+    ]);
+  });
+
+  it('a request the router refuses before any provider call writes no row', async () => {
+    const noTools = fakeAdapter({ capabilities: { tools: false } });
+    const { gw, sink } = setup(new Router({ tiers: { small: noTools, main: noTools } }));
+    const tool = { name: 'check_answer', description: 'Check', inputSchema: {} };
+    const { err } = await collectUntilError(gw.stream(req({ tools: [tool] })));
+    await gw.settled();
+    expect(err).toBeInstanceOf(GatewayError);
+    expect(noTools.calls.stream).toBe(0);
+    expect(sink.flagged).toEqual([]);
+    expect(sink.recorded).toEqual([]);
+  });
+
+  it('meterAdapter and createMeter compose by hand, sharing one settled()', async () => {
+    const sink = recordingSink();
+    const meter = createMeter(sink, CTX, PRICES, { warn: () => undefined });
+    const a = meterAdapter(
+      fakeAdapter({ model: 'm1', script: { stream: [{ steps: [text('x')] }] } }),
+      meter,
+    );
+    expect(a.model).toBe('m1');
+    expect(a.id).toBe('anthropic');
+    expect(a.capabilities).toEqual(FULL_CAPABILITIES);
+    await collect(a.stream(request));
+    await meter.settled();
+    expect(sink.flagged).toEqual([unknownRow('main', 'm1')]);
   });
 });
 
@@ -268,7 +378,7 @@ describe('generateObject and embed', () => {
     expect(await gw.generateObject(req({ tier: 'small' }), schema)).toEqual({ intent: 'question' });
     await gw.settled();
     expect(sink.recorded).toEqual([]);
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'small' }]);
+    expect(sink.flagged).toEqual([unknownRow('small', 'priced-model')]);
   });
 
   it('generateObject: a failing call is recorded as unknown and its error is unchanged', async () => {
@@ -278,7 +388,7 @@ describe('generateObject and embed', () => {
     );
     await expect(gw.generateObject(request, schema)).rejects.toBe(err);
     await gw.settled();
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'main' }]);
+    expect(sink.flagged).toEqual([unknownRow('main', 'fake-model')]);
   });
 
   it('embed: returns vectors unchanged and records unknown usage on the main tier', async () => {
@@ -286,7 +396,7 @@ describe('generateObject and embed', () => {
     const { gw, sink } = setup(scripted({ embed: [{ vectors }] }));
     expect(await gw.embed(['some chunk'])).toEqual(vectors);
     await gw.settled();
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'main' }]);
+    expect(sink.flagged).toEqual([unknownRow('main', 'priced-model')]);
   });
 
   it('embed: a failing call is recorded as unknown and its error is unchanged', async () => {
@@ -339,8 +449,10 @@ describe('metering never changes the call', () => {
       },
       recordUnmetered: () => Promise.reject('plain string'),
     };
-    const gw = createMeteredGateway(
-      scripted({ stream: [{ steps: [{ type: 'usage', usage: usage() }] }, { steps: [] }] }),
+    const gw = meterRouter(
+      routerOf(
+        scripted({ stream: [{ steps: [{ type: 'usage', usage: usage() }] }, { steps: [] }] }),
+      ),
       sink,
       CTX,
       PRICES,
@@ -363,7 +475,7 @@ describe('metering never changes the call', () => {
     await collect(gw.stream(request));
     await gw.settled();
     expect(sink.recorded).toEqual([]);
-    expect(sink.flagged).toEqual([{ ...CTX, reason: 'no_usage_reported', tier: 'main' }]);
+    expect(sink.flagged).toEqual([unknownRow('main', 'priced-model')]);
     expect(warnings).toEqual([{ event: 'metering.failed', method: 'stream', error: 'RangeError' }]);
   });
 
@@ -378,8 +490,8 @@ describe('metering never changes the call', () => {
       },
       recordUnmetered: () => Promise.resolve(),
     };
-    const gw = createMeteredGateway(
-      scripted({ stream: [{ steps: [{ type: 'usage', usage: usage() }] }] }),
+    const gw = meterRouter(
+      routerOf(scripted({ stream: [{ steps: [{ type: 'usage', usage: usage() }] }] })),
       sink,
       CTX,
       PRICES,

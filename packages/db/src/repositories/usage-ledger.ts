@@ -1,6 +1,6 @@
-// usage_ledger (task 2.4): one row per model call, scoped by student x teacher like every other
-// repository. A call whose usage is unknown, or whose model has no price, is stored with a status
-// and reason and read back with null figures: never as a free call.
+// usage_ledger (task 2.4): one row per provider attempt, scoped by student x teacher like every
+// other repository. An attempt whose usage is unknown, or whose model has no price, is stored with
+// a status, a reason and NULL figures: never as a free call.
 //
 // The row holds ids, the model id, the tier, counts, a cost and a fixed reason code. No method
 // takes or stores request text (system prompt, messages) or anything else a student wrote.
@@ -33,7 +33,7 @@ export interface UnmeteredEntry {
   source: UsageSource;
   tier: Usage['tier'];
   reason: UnmeteredReason;
-  /** Required when unpriced (the reason names it); absent when unknown. */
+  /** Required when unpriced (the reason names it); the attempted model, if known, when unknown. */
   model?: string;
   /** Required when unpriced; absent when unknown. */
   tokens?: { inputTokens: number; outputTokens: number };
@@ -90,6 +90,8 @@ const Unknown = z.strictObject({
   source: Source,
   tier: Tier,
   reason: z.literal('no_usage_reported'),
+  /** The model the attempt was sent to, when the caller knows it. */
+  model: Model.optional(),
 });
 const Unpriced = z
   .strictObject({
@@ -103,35 +105,35 @@ const Unpriced = z
   .refine((u) => u.reason === `unpriced_model:${u.model}`);
 const Unmetered = z.union([Unknown, Unpriced]);
 
-const Row = z.strictObject({
-  id: IdSchema,
-  teacherId: IdSchema,
-  packageId: IdSchema,
-  studentId: IdSchema,
-  turnId: IdSchema,
-  source: Source,
-  status: z.enum(['recorded', 'unknown', 'unpriced']),
-  reason: z.string().nullable(),
-  model: z.string(),
-  tier: Tier,
-  inputTokens: Count,
-  outputTokens: Count,
-  costMicroUsd: Count,
-  createdAt: z.date(),
-});
+const Row = z
+  .strictObject({
+    id: IdSchema,
+    teacherId: IdSchema,
+    packageId: IdSchema,
+    studentId: IdSchema,
+    turnId: IdSchema,
+    source: Source,
+    status: z.enum(['recorded', 'unknown', 'unpriced']),
+    reason: z.string().nullable(),
+    model: z.string().nullable(),
+    tier: Tier,
+    inputTokens: Count.nullable(),
+    outputTokens: Count.nullable(),
+    costMicroUsd: Count.nullable(),
+    createdAt: z.date(),
+  })
+  // A row whose figures disagree with its status is never returned as either.
+  .refine((r) =>
+    r.status === 'unknown'
+      ? r.inputTokens === null && r.outputTokens === null && r.costMicroUsd === null
+      : r.status === 'unpriced'
+        ? r.costMicroUsd === null && r.inputTokens !== null && r.outputTokens !== null
+        : r.reason === null,
+  );
 
-/** Stored placeholders (the checks in the schema pin them) become null on the way out. */
 function toUsageRow(raw: unknown, method: string): UsageRow {
   const r = checked(Row, raw, method);
-  const unknown = r.status === 'unknown';
-  return {
-    ...r,
-    model: unknown ? null : r.model,
-    inputTokens: unknown ? null : r.inputTokens,
-    outputTokens: unknown ? null : r.outputTokens,
-    costMicroUsd: r.status === 'recorded' ? r.costMicroUsd : null,
-    createdAt: iso(r.createdAt),
-  };
+  return { ...r, createdAt: iso(r.createdAt) };
 }
 
 const TotalsRow = z.strictObject({
@@ -149,8 +151,8 @@ const asText = (expr: SQL) => sql<string>`(${expr})::text`;
 function count(filter?: SQL): SQL<string> {
   return asText(filter ? sql`count(*) filter (where ${filter})` : sql`count(*)`);
 }
-function sum(expr: SQL, filter: SQL): SQL<string> {
-  return asText(sql`coalesce(sum(${expr}) filter (where ${filter}), 0)`);
+function sum(expr: SQL): SQL<string> {
+  return asText(sql`coalesce(sum(${expr}), 0)`);
 }
 function exact(value: string, method: string): number {
   const n = Number(value);
@@ -229,12 +231,11 @@ export function usageLedgerRepo(db: Db) {
           unpriced ? sql`'unpriced'::usage_status` : sql`'unknown'::usage_status`,
         ],
         [usageLedger.reason, sql`${e.reason}::text`],
-        // Placeholders the schema's check pins: '' and 0 for unknown, cost 0 for unpriced.
-        [usageLedger.model, sql`${unpriced ? e.model : ''}::text`],
+        // Unknown figures are NULL, never 0 (cost is always NULL here).
+        [usageLedger.model, sql`${e.model ?? null}::text`],
         [usageLedger.tier, sql`${e.tier}::model_tier`],
-        [usageLedger.inputTokens, sql`${unpriced ? e.tokens.inputTokens : 0}::integer`],
-        [usageLedger.outputTokens, sql`${unpriced ? e.tokens.outputTokens : 0}::integer`],
-        [usageLedger.costMicroUsd, sql`${0}::bigint`],
+        [usageLedger.inputTokens, sql`${unpriced ? e.tokens.inputTokens : null}::integer`],
+        [usageLedger.outputTokens, sql`${unpriced ? e.tokens.outputTokens : null}::integer`],
       ]);
     },
 
@@ -279,16 +280,16 @@ export function usageLedgerRepo(db: Db) {
       const recorded = sql`${usageLedger.status} = 'recorded'`;
       const unknown = sql`${usageLedger.status} = 'unknown'`;
       const unpriced = sql`${usageLedger.status} = 'unpriced'`;
-      const known = sql`${usageLedger.status} <> 'unknown'`;
+      // sum() skips NULL, so unknown figures are left out, and counted in `unknown` / `unpriced`.
       const [row] = await db
         .select({
           calls: count(),
           recorded: count(recorded),
           unknown: count(unknown),
           unpriced: count(unpriced),
-          costMicroUsd: sum(sql`${usageLedger.costMicroUsd}`, recorded),
-          inputTokens: sum(sql`${usageLedger.inputTokens}::bigint`, known),
-          outputTokens: sum(sql`${usageLedger.outputTokens}::bigint`, known),
+          costMicroUsd: sum(sql`${usageLedger.costMicroUsd}`),
+          inputTokens: sum(sql`${usageLedger.inputTokens}::bigint`),
+          outputTokens: sum(sql`${usageLedger.outputTokens}::bigint`),
         })
         .from(usageLedger)
         .where(

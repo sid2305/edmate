@@ -1,5 +1,8 @@
 export {
-  createMeteredGateway,
+  createMeter,
+  meterAdapter,
+  meterRouter,
+  type Meter,
   type MeteredGateway,
   type MeteringOptions,
 } from './meteredGateway.js';

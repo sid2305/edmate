@@ -183,9 +183,31 @@ describe.skipIf(!up)(
         model: 'x',
         tokens: { inputTokens: 5, outputTokens: 6 },
       });
+      // An attempt that reached a known model but reported no usage keeps the model.
+      await repos.usageLedger.recordUnmetered(S2A, PKG_A, {
+        turnId: t,
+        source: 'teacher_preview',
+        tier: 'main',
+        reason: 'no_usage_reported',
+        model: 'attempted-model',
+      });
       const rows = await repos.usageLedger.listForTurn(S2A, t);
-      const unknown = rows.find((r) => r.status === 'unknown') as UsageRow;
+      const unknown = rows.find((r) => r.status === 'unknown' && r.model === null) as UsageRow;
       const unpriced = rows.find((r) => r.status === 'unpriced') as UsageRow;
+      expect(rows.find((r) => r.model === 'attempted-model')).toMatchObject({
+        status: 'unknown',
+        inputTokens: null,
+        costMicroUsd: null,
+      });
+      // Stored as NULL, so a raw query can't read these calls as free.
+      const stored = await raw.query<{ status: string; input: number | null; cost: string | null }>(
+        `select status, input_tokens as input, cost_micro_usd as cost from usage_ledger
+          where turn_id = $1 and status <> 'recorded'`,
+        [t],
+      );
+      expect(stored.rows).toHaveLength(3);
+      for (const r of stored.rows) expect(r.cost, r.status).toBeNull();
+      expect(stored.rows.filter((r) => r.input === null)).toHaveLength(2);
       expect(unknown).toMatchObject({
         reason: 'no_usage_reported',
         model: null,
@@ -254,28 +276,37 @@ describe.skipIf(!up)(
       expect(await rowCount()).toBe(count);
     });
 
-    it('the database rejects a placeholder row that would pass for a priced or free call', async () => {
-      const insert = (status: string, reason: string | null, model: string, cost: number) =>
+    it('the database rejects a recorded row with a missing figure, and negative counts', async () => {
+      type Figures = [
+        model: string | null,
+        input: number | null,
+        output: number | null,
+        cost: number | null,
+      ];
+      const insert = (status: string, [model, input, output, cost]: Figures) =>
         raw.query(
           `insert into usage_ledger (id, teacher_id, package_id, student_id, model, tier,
-             input_tokens, output_tokens, cost_micro_usd, turn_id, source, status, reason)
-           values ($1, 'tch_a', 'pkg_a', 'stu_1', $2, 'main', 0, 0, $3, 'turn_x', 'subscription', $4, $5)`,
-          [`ul_bad_${++n}`, model, cost, status, reason],
+             input_tokens, output_tokens, cost_micro_usd, turn_id, source, status)
+           values ($1, 'tch_a', 'pkg_a', 'stu_1', $2, 'main', $3, $4, $5, 'turn_x', 'subscription', $6)`,
+          [`ul_bad_${++n}`, model, input, output, cost, status],
         );
-      const violations: [string, string | null, string, number][] = [
-        ['unknown', 'no_usage_reported', 'm', 0], // unknown with a model
-        ['unknown', 'no_usage_reported', '', 5], // unknown with a cost
-        ['unknown', null, '', 0], // unknown with no reason
-        ['unpriced', 'unpriced_model:m', 'm', 5], // unpriced with a cost
-        ['unpriced', 'unpriced_model:x', 'm', 0], // reason names another model
-        ['recorded', 'no_usage_reported', 'm', 1], // recorded with a reason
-        ['recorded', null, '', 1], // recorded with no model
-        ['recorded', null, 'm', -1], // negative cost
+      const violations: [string, Figures][] = [
+        ['recorded', [null, 1, 1, 1]],
+        ['recorded', ['m', null, 1, 1]],
+        ['recorded', ['m', 1, null, 1]],
+        ['recorded', ['m', 1, 1, null]],
+        ['recorded', ['m', -1, 1, 1]],
+        ['unpriced', ['m', 1, -1, null]],
+        ['recorded', ['m', 1, 1, -1]],
       ];
-      for (const v of violations) {
-        await expect(insert(...v), v.join(' ')).rejects.toMatchObject({ code: '23514' });
+      for (const [status, f] of violations) {
+        await expect(insert(status, f), `${status} ${f.join(',')}`).rejects.toMatchObject({
+          code: '23514',
+        });
       }
-      await expect(insert('recorded', null, 'm', 1)).resolves.toBeDefined();
+      await expect(insert('recorded', ['m', 1, 1, 1])).resolves.toBeDefined();
+      await expect(insert('unknown', [null, null, null, null])).resolves.toBeDefined();
+      await expect(insert('unpriced', ['m', 1, 1, null])).resolves.toBeDefined();
     });
 
     it('writes carry only ids, the model, tier, counts and a reason code: no request text', async () => {
@@ -312,8 +343,7 @@ describe.skipIf(!up)(
           'mystery',
           'unpriced_model:mystery',
           'no_usage_reported',
-          '',
-          0,
+          null,
           1,
           2,
           3,
@@ -379,6 +409,26 @@ describe.skipIf(!up)(
       await expect(
         repos.usageLedger.listForTurn({ studentId: 'stu_2', teacherId: 'tch_b' }, 'turn_corrupt'),
       ).rejects.toMatchObject({ kind: 'integrity', method: 'usageLedger.listForTurn' });
+
+      // Figures that disagree with the status (possible only by hand): never returned as either.
+      const bad: [string, string, string | null, number | null, number | null][] = [
+        ['ul_odd_1', 'unknown', 'no_usage_reported', 3, null], // unknown with tokens
+        ['ul_odd_2', 'unpriced', 'unpriced_model:m', null, null], // unpriced without tokens
+        ['ul_odd_3', 'recorded', 'no_usage_reported', 1, 1], // recorded with a reason
+      ];
+      for (const [id, status, reason, tokens, cost] of bad) {
+        const turnId = `turn_${id}`;
+        await raw.query(
+          `insert into usage_ledger (id, teacher_id, package_id, student_id, model, tier,
+             input_tokens, output_tokens, cost_micro_usd, turn_id, source, status, reason)
+           values ($1, 'tch_b', 'pkg_b', 'stu_2', 'm', 'main', $2, $2, $3, $4, 'eval', $5, $6)`,
+          [id, tokens, cost, turnId, status, reason],
+        );
+        await expect(
+          repos.usageLedger.listForTurn({ studentId: 'stu_2', teacherId: 'tch_b' }, turnId),
+          status,
+        ).rejects.toMatchObject({ kind: 'integrity' });
+      }
     });
 
     it('a total past 2^53 micro-USD is integrity, never a rounded number', async () => {
