@@ -38,7 +38,7 @@ decisions:
     - 18+ only
     - Also 13–17 with parental consent
     recommendation: 18+ for the MVP
-    answer: '13+. US: no parental consent needed (COPPA covers under-13 only). India: 13–17 need verifiable parental consent (DPDP); the age gate asks country and birth year'
+    answer: 13+; US needs no parental consent (COPPA covers under-13); India 13-17 need verifiable parental consent (DPDP); age gate asks country and birth year
   payment-provider:
     status: decided
     question: Payment provider for the pilot market
@@ -350,8 +350,8 @@ tasks:
   model: plan:sonnet build:opus-5.5/medium review:sonnet(security,db)
 - id: '1.7'
   milestone: M1
-  title: 'Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records'
-  accept: a user who does not confirm 18+ cannot create an account; consent versions stored.
+  title: 'Age and consent per locale pack (13+; 13-17 need verifiable parental consent where the locale requires it, e.g. India; US none): country and birth year at sign-up, privacy notice, consent records'
+  accept: 'An under-13 cannot create an account; a 13-17 learner in a market that requires consent cannot use the agent until a parent consents; consent versions stored.'
   deps:
   - '1.3'
   - M0
