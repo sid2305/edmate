@@ -10,6 +10,46 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.5c "baar"/"times" are weak markers: a run verb next to them, never an imperative · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: `numbers.ts` drops "baar"/"times"/"बार" from the always-on answer-word set and instead checks the token right next to them: it counts only when a run/print verb (chalega, chalegi, chalti, chalta, runs, prints, print, executes, execute, loops, loop, चलेगा, चलेगी, छपेगा) is adjacent, never when an imperative (karo, padho, socho, dekho, try, read, likho) is — the imperative check wins over a run verb on the other side, so "do baar chalega, socho" still never counts. "Ek baar try karo" and "Do baar socho" (an imperative right next to the count word) no longer trip a one-digit key; "Loop teen baar chalega" and "It runs three times" (a run verb right next to it, or a run-verb marker elsewhere in the sentence) still do.
+Why: a bare count word ("ek baar", "do baar", "X times") is ordinary lesson Hinglish; only a verb that names the code running or printing turns it into an answer.
+Alternatives: drop the markers to zero context (misses genuine "teen baar chalega" leaks); keep them unconditional (the false positives this task was opened for).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c No own-code exemption when the student offered two code lines that differ only at the key · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: before granting a code-shaped key the own-code exemption, `compileAnswerKeys` now also checks whether the student's message holds a second line, also clearly code, that is identical to the key's line except for a span covering the key (`if s.upper()...` next to `if s.lower()...`). If so, the key is never exempted (confirmation words or not): the student offered two options and picked neither yet, so quoting one back is still a leak. A single quoted line with no alternative stays exempt, as does a line the student repeated verbatim (not "two options").
+Why: the fix-round-1 exemption (a clearly-code line, confirmed-context aside) let a tutor's "Keep s.lower()" through once the student had typed both branches as code, which is still telling the student the answer.
+Alternatives: require the confirmation-word list to catch "keep"/"pick"/"wala lagao" too (an open-ended word list, always behind); drop the own-code exemption whenever the message holds more than one code line regardless of content (would also block a student who fixed a typo and resent the same line).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c Spelling variants and spoken fraction, percentage and digit-by-digit decimal forms · decided by tdd-guide (safety-reviewer's deferred list) · risk: medium
+Decided: `baiyaalis`/`byalis`/`beyalis` (42) and `unatees` (29) are added to the Hindi-Latin 21-99 table as explicit spellings, since `latinFold` folds them to a different value than the table's own spelling for 42/29 (the table's "never guess" rule means a fold collision is dropped, not guessed, so these needed listing by hand, not a fold change). `numbers.ts` also now reads spoken fractions ("five sixths", "5 out of 6"; numerator/denominator each one number word or digit), a percentage ("83%", "83.5%"; over 100, at its own written decimals plus two) and a decimal read digit by digit ("zero point eight three"; one number word for the whole part, then digit words after "point"), each matched against a key at the existing fraction/decimal precision rules (unchanged).
+Why: these are ordinary ways a tutor or student would say a fraction, percentage or decimal answer, and the matcher already has the precision rules to compare them; only the forms that reach those rules were missing.
+Alternatives: a judge model for paraphrase generally (4.5b, needs a live model, out of scope here); support multi-word whole parts for spoken decimals ("twelve point five") — narrowed to one word to avoid a greedy regex swallowing unrelated preceding prose ("the point eight three").
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c `CommitRecord.escalatedText` was already out of history and the model; added the round-trip test · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: no code change to `commit.ts` was needed — it already persists only `record.replyText` to the transcript store, never `record.escalatedText`. Added `runner.escalatedText.test.ts`: a real postGuard-escalate turn runs the real `commit` step against a real in-memory transcript store, then a real `buildContext` call (and a full second turn through the real `buildContext` and `generate` steps, with a scripted-gateway spy) confirms the escalated text is absent from the transcript store, from the next turn's `history`, and from the next turn's `ModelRequest`s.
+Why: the safety review flagged this as still open; verifying it end to end (not just that `commit`'s own unit test omits the field) is what "never reaches a later turn's model request" means.
+Alternatives: trust the existing `commit.test.ts`/`runner.answerLeak.test.ts` coverage (neither drives a second turn's `buildContext`/`generate` off a real transcript store, so neither proves the field can't leak back in through history).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c fix round A spoken fraction, "out of", percentage or spoken decimal needs an answer context whatever the key's length · decided by build-error-resolver (PR #53 follow-up) · risk: medium
+Decided: `numbers.ts` marks a mention from `FRACTION_WORDS`, `OUT_OF`, `PERCENT` or `SPOKEN_DECIMAL` as `weak`; `answerKey.ts`'s leak check now requires an answer context for a weak mention no matter how long the key's canonical value is, instead of letting any key longer than one digit through unconditionally. "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do, same as a one-digit key's words and arithmetic already worked.
+Why: these four forms are new enough (4.5c, this same task) that the house's existing one-digit answer-context rule had not been extended to them, and a bare "83% of students passed" or "5 out of 6 tests passed" is ordinary lesson/word-problem text, not an answer.
+Alternatives: keep the key-length rule and widen the one-digit exception to "any key whose value came from one of these four forms" (same effect, more roundabout: ties the rule to the key instead of the mention, which is what varies); require context only for percentage and spoken-decimal, not spoken fraction/"out of" (inconsistent — all four are equally ordinary word-problem phrasing).
+Reversible: Yes.
+
+---
+
 ### 19 Oct 2026 · 3.14 No ADR; Redis over Postgres; harness-owned `TurnCounter` · decided by lead (plan's Q1–Q3) · risk: low
 - Decided: `TurnCounter`/`TurnLimits` stay harness-owned types (no contracts port, no ADR);
   `packages/queue` depends on `@edmate/harness` as a production dependency to consume them,

@@ -916,7 +916,7 @@ tasks:
   accept: tests for each probe in the 4.5 re-review; no new false positives on the existing negative list.
   deps:
   - '4.5'
-  status: running
+  status: done
   branch: m4/4.5c-answerleak-followups
   model: build:sonnet
 - id: '4.6'
