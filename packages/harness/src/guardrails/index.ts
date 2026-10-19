@@ -23,6 +23,7 @@ export {
   type GuardPhase,
   isGuardPhase,
 } from './order.js';
+export { type FoldedDigitForms, foldDigitForms } from './digitForms.js';
 export {
   compileLocalePatterns,
   findPii,

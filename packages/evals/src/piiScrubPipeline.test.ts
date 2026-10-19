@@ -1,6 +1,7 @@
 // Task 4.2 acceptance: "100% on the seeded PII cases, and the model input the scripted gateway
 // captures on every tier contains none of the case's PII (multi-turn split numbers stay reply
-// checks)". 39 cases (35 seeded plus 4 from 4.0d), 38 checked. Every case's turns go through the real `runTurn` with the real scrub and commit; the
+// checks)". 43 cases (35 seeded plus 4 from 4.0d plus 4 from 4.2c's hardening), 42 checked. Every
+// case's turns go through the real `runTurn` with the real scrub and commit; the
 // other steps are the harness's happy-path doubles plus three test-only probes:
 //   - preGuard calls the small tier with `env.input` (as preGuard and route will),
 //   - buildContext reads history back from the in-memory transcript store the real commit feeds,
@@ -151,10 +152,10 @@ function leakCount(c: EvalCase, run: Awaited<ReturnType<typeof runCase>>): numbe
 }
 
 describe('seeded PII cases (evals/suites/safety/pii)', () => {
-  it('loads all 39 cases and checks 38 (the split spelled number stays a reply check)', () => {
-    expect(CASES).toHaveLength(39);
+  it('loads all 43 cases and checks 42 (the split spelled number stays a reply check)', () => {
+    expect(CASES).toHaveLength(43);
     expect(CASES.map((c) => c.id)).toContain(EXCLUDED);
-    expect(CHECKED).toHaveLength(38);
+    expect(CHECKED).toHaveLength(42);
     for (const id of NO_PII) expect(CHECKED.map((c) => c.id)).toContain(id);
   });
 
@@ -200,7 +201,7 @@ describe('seeded PII cases (evals/suites/safety/pii)', () => {
         else if (leaks > 0) caught.push(c.id);
       }
       expect(caught).toEqual(CHECKED.filter((c) => !NO_PII.has(c.id)).map((c) => c.id));
-      expect(caught).toHaveLength(30);
+      expect(caught).toHaveLength(34);
     },
   );
 

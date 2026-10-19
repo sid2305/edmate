@@ -617,3 +617,232 @@ describe('scrubPii converges whatever the match count (fix round, CRITICAL)', ()
     expect(findPii(out, IN)).toEqual([]);
   });
 });
+
+// ---- 4.2c: PII pattern hardening from the 4.2 safety review -------------------------------
+
+describe('4.2c item 1: keycap, superscript and circled digits', () => {
+  it('a keycap phone number, glued together, after a phone keyword', () => {
+    expect(scrub('my number is 9️⃣8️⃣7️⃣6️⃣5️⃣4️⃣3️⃣2️⃣1️⃣0️⃣ save it for reminders')).toBe(
+      `my number is ${P.phone} save it for reminders`,
+    );
+  });
+
+  it('superscript digits, grouped (unconditional, like any other grouped phone shape)', () => {
+    expect(scrub('call ⁹⁰⁰⁰⁰ ¹¹¹¹¹ now')).toBe(`call ${P.phone} now`);
+  });
+
+  it('circled digits after an OTP keyword', () => {
+    expect(scrub('OTP ①②③④ hai')).toBe(`OTP ${P.otp} hai`);
+  });
+
+  it('a stray mark right after a digit never splits a number (CGJ)', () => {
+    expect(scrub('call 90000͏11111 now')).toBe(`call ${P.phone} now`);
+  });
+});
+
+describe('4.2c item 2: flexible phone separators and groupings', () => {
+  it.each(
+    each([
+      ['multi-space gap', 'my number is 98765   43210', `my number is ${P.phone}`],
+      ['pair groups', 'my number is 98 76 54 32 10', `my number is ${P.phone}`],
+      ['uneven dash groups', 'my number is 98-765-43210', `my number is ${P.phone}`],
+      ['+CC, UK-shaped groups', 'call +44 20 7946 0958 now', `call ${P.phone} now`],
+    ]),
+  )('$label', ({ input, expected }) => {
+    expect(scrub(input)).toBe(expected);
+  });
+
+  it('a flexible-group phone with no keyword is left alone', () => {
+    const t = 'the groups are 98 76 54 32 10 in the output';
+    expect(scrub(t)).toBe(t);
+  });
+
+  it('a flexible-group near-miss (years, spaced) is still left alone', () => {
+    expect(scrub('call me: the years 2023 2024 2025 matter')).toBe(
+      'call me: the years 2023 2024 2025 matter',
+    );
+  });
+
+  it('a +CC flexible-group near-miss (years, spaced) is still left alone', () => {
+    expect(scrub('the code is +91 2023 2024 2025 for the lab')).toBe(
+      'the code is +91 2023 2024 2025 for the lab',
+    );
+  });
+});
+
+describe('4.2c item 3: card hardening', () => {
+  it('dot-separated card groups', () => {
+    expect(scrub('card 4111.1111.1111.1111 ok')).toBe(`card ${P.card} ok`);
+  });
+
+  it('unlabelled CVV and expiry near a card, no keyword at all', () => {
+    expect(scrub('card 4111.1111.1111.1111 / 12/29 / 123 pls buy the course for me')).toBe(
+      `card ${P.card} / ${P.card} / ${P.card} pls buy the course for me`,
+    );
+  });
+
+  it('an unlabelled bare MM/YY still stays alone across an unrelated word (near-miss)', () => {
+    expect(scrub('4111 1111 1111 1111 and the exam on 12/29')).toBe(
+      `${P.card} and the exam on 12/29`,
+    );
+  });
+
+  it('an unlabelled 3-4 digit run with no date present, after a card', () => {
+    expect(scrub('card 4111 1111 1111 1111 / 123 only')).toBe(`card ${P.card} / ${P.card} only`);
+  });
+
+  it('an unlabelled 3-4 digit run that is really just the tail of the date is not doubled', () => {
+    expect(scrub('card 4111 1111 1111 1111 / 29/2029 ok')).toBe(`card ${P.card} / ${P.card} ok`);
+  });
+
+  it('a spaced-digit CVV next to a card', () => {
+    expect(scrub('card 4111 1111 1111 1111 cvv 1 2 3')).toBe(`card ${P.card} cvv ${P.card}`);
+  });
+
+  it('a spelled-out CVV next to a card', () => {
+    expect(scrub('card 4111 1111 1111 1111 cvv one two three')).toBe(
+      `card ${P.card} cvv ${P.card}`,
+    );
+  });
+
+  it('a spelled-out CVV with no card at all is left alone (near-miss)', () => {
+    expect(scrub('cvv one two three, why only 3 digits?')).toBe(
+      'cvv one two three, why only 3 digits?',
+    );
+  });
+});
+
+describe('4.2c item 4: OTP hardening', () => {
+  it.each(
+    each([
+      ['spaced digits after OTP', 'otp 4 8 2 9 1 3 aaya hai', `otp ${P.otp} aaya hai`],
+      ['dashed digits after "otp:"', 'otp: 482-913', `otp: ${P.otp}`],
+      ['Devanagari spaced digits', 'OTP ४ ८ २ ९ १ ३ आया है', `OTP ${P.otp} आया है`],
+      ['"code" after the number', '482913 code hai, use it', `${P.otp} code hai, use it`],
+      ['bheja after the number', '482913 bheja', `${P.otp} bheja`],
+      ['aaya after the number', '482913 aaya', `${P.otp} aaya`],
+    ]),
+  )('$label', ({ input, expected }) => {
+    expect(scrub(input)).toBe(expected);
+  });
+
+  it('spaced digits with no OTP keyword nearby are left alone (near-miss)', () => {
+    expect(scrub('the printout was 4 8 2 9 1 3 that day')).toBe(
+      'the printout was 4 8 2 9 1 3 that day',
+    );
+  });
+});
+
+describe('4.2c item 5: name hardening', () => {
+  it.each(
+    each([
+      ['hai right after the strong phrase', 'mera naam hai Aarav', `mera naam hai ${P.name}`],
+      [
+        'है right after the Devanagari strong phrase',
+        'मेरा नाम है आरव',
+        `मेरा नाम है ${P.name}`,
+      ],
+      ['name:', 'name: Riya Kapoor', `name: ${P.name} ${P.name}`],
+      ['naam:', 'naam: Riya', `naam: ${P.name}`],
+      ['मैं ... हूँ', 'मैं आरव हूँ', `मैं ${P.name} हूँ`],
+      [
+        'the proposed eval case (word order)',
+        'mera naam hai Riya Kapoor, mere naam se greeting print karo',
+        `mera naam hai ${P.name} ${P.name}, mere naam se greeting print karo`,
+      ],
+    ]),
+  )('$label', ({ input, expected }) => {
+    expect(scrub(input)).toBe(expected);
+  });
+
+  it.each([
+    ['main Khatam hoon', 'main Khatam hoon'],
+    ['main Barbaad hoon', 'main Barbaad hoon'],
+    ['main Bekaar hoon', 'main Bekaar hoon'],
+    ["I'm Nothing", "I'm Nothing"],
+  ])('stop-list addition: %s is left alone', (_label, input) => {
+    expect(findPii(input, IN)).toEqual([]);
+    expect(scrub(input)).toBe(input);
+  });
+
+  it('मैं ... हूँ stops at a Devanagari filler word (near-miss)', () => {
+    expect(scrub('मैं परेशान हूँ')).toBe('मैं परेशान हूँ');
+  });
+});
+
+describe('4.2c item 6: spelled-out single-turn numbers', () => {
+  it('a spelled phone number, English, after a phone keyword', () => {
+    expect(scrub('save my number nine eight seven six five four three two one zero please')).toBe(
+      `save my number ${P.phone} please`,
+    );
+  });
+
+  it('a spelled phone number, Hinglish, after a phone keyword', () => {
+    expect(scrub('mera number ek do teen char paanch che saat aath nau do hai')).toBe(
+      `mera number ${P.phone} hai`,
+    );
+  });
+
+  it('a spelled OTP, Hinglish, after an OTP keyword', () => {
+    expect(scrub('otp panch che saat aath nau ek hai')).toBe(`otp ${P.otp} hai`);
+  });
+
+  it('a spelled run with no phone or OTP keyword nearby is left alone (near-miss)', () => {
+    const t = 'counting practice: one two three four five six seven';
+    expect(scrub(t)).toBe(t);
+  });
+});
+
+describe('4.2c item 8: constant and counting digit runs are not over-scrubbed', () => {
+  it('a constant run is not an Aadhaar/mobile-shaped id just because of its length', () => {
+    expect(scrub('x = 9999999999')).toBe('x = 9999999999');
+  });
+
+  it('a counting run with no keyword nearby is left alone', () => {
+    expect(scrub('matrix 1 2 3 4 5 6 7 8 9')).toBe('matrix 1 2 3 4 5 6 7 8 9');
+  });
+});
+
+describe('fix round item 2 (MEDIUM): up to 3 filler words between the number and "code"', () => {
+  it('"is the verification code" after the number', () => {
+    expect(scrub('482913 is the verification code')).toBe(`${P.otp} is the verification code`);
+  });
+
+  it('"is your code" after the number', () => {
+    expect(scrub('482913 is your code')).toBe(`${P.otp} is your code`);
+  });
+
+  it('near-miss: a 3-digit number ("line 482 is the code that fails") is never redacted', () => {
+    expect(scrub('line 482 is the code that fails')).toBe('line 482 is the code that fails');
+  });
+});
+
+describe('fix round item 3 (MEDIUM): reversed Hinglish order and comma sign-offs', () => {
+  it('reversed Hinglish order: "<Name> mera naam hai"', () => {
+    expect(scrub('Aarav mera naam hai')).toBe(`${P.name} mera naam hai`);
+  });
+
+  it('reversed order, Devanagari: "<Name> मेरा नाम है" (fix round 2)', () => {
+    expect(scrub('आरव मेरा नाम है')).toBe(`${P.name} मेरा नाम है`);
+  });
+
+  it('reversed order, Devanagari, near-miss: a stop-list word before the phrase is never a name', () => {
+    expect(scrub('परेशान मेरा नाम है')).toBe('परेशान मेरा नाम है');
+  });
+
+  it('sign-off with a comma: "Thanks, Aarav"', () => {
+    expect(scrub('Thanks, Aarav')).toBe(`Thanks, ${P.name}`);
+  });
+
+  it('sign-off with a comma: "Regards, Riya Sen"', () => {
+    expect(scrub('Regards, Riya Sen')).toBe(`Regards, ${P.name} ${P.name}`);
+  });
+
+  it('near-miss: "Thanks, that worked" is never redacted', () => {
+    expect(scrub('Thanks, that worked')).toBe('Thanks, that worked');
+  });
+
+  it('near-miss: "Regards to the teacher" is never redacted', () => {
+    expect(scrub('Regards to the teacher')).toBe('Regards to the teacher');
+  });
+});
