@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 0.14 Wall-clock latency bounds are gross-regression guards only · decided by team lead · risk: low
+Decided: the stream-gate latency test keeps a 5 s wall-clock bound; linear work is asserted by counting work, not by timing.
+Why: shared CI runners with coverage are 8–12× slower than local runs, and the 1 s bound turned main's CI red.
+Alternatives: drop the timing test; skip it on CI.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
 Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
 Why: the model's instructions are the last line of defence when a guard misses.
