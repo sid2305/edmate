@@ -13,15 +13,29 @@
 // - Metering never changes what the caller sees: chunks pass through unchanged and unbuffered,
 //   errors propagate unchanged, and a failing sink is logged, not thrown. Sink writes are not
 //   awaited by the call; `settled()` waits for them. Durable retry of failed writes is 3.8's.
-import type { ModelChunk, ModelGateway, ModelRequest, Usage } from '@edmate/contracts';
+import type {
+  ModelChunk,
+  ModelGateway,
+  ModelRequest,
+  TranscribeInput,
+  Transcript,
+  Usage,
+} from '@edmate/contracts';
 import type { ZodType } from 'zod';
 import type { ModelAdapter } from '../adapters/types.js';
 import { computeCostMicroUsd } from '../pricing/cost.js';
 import type { PriceTable } from '../pricing/load.js';
 import type { Router } from '../router/router.js';
-import type { MeterContext, MeterSink, MeteringWarning, UnmeteredUsage } from './types.js';
+import type { ModelTranscriber } from '../transcriber/whisper.js';
+import type {
+  MeterContext,
+  MeteredMethod,
+  MeterSink,
+  MeteringWarning,
+  UnmeteredUsage,
+} from './types.js';
 
-type Method = 'stream' | 'generateObject' | 'embed';
+type Method = MeteredMethod;
 
 export interface MeteringOptions {
   /** Where loud lines go. Defaults to one JSON line on stderr via console.warn. */
@@ -170,6 +184,25 @@ export function meterAdapter(adapter: ModelAdapter, meter: Meter): ModelAdapter 
       } finally {
         // Embeddings have no tier in the port; the router serves them on main.
         meter.attempt('embed', 'main', adapter.model, []);
+      }
+    },
+  };
+}
+
+/**
+ * The transcriber with every call metered as one attempt on `transcriber.model` (task 2.7). The
+ * port returns no usage figure, so each attempt is recorded as unknown (`no_usage_reported`)
+ * until per-minute pricing exists; `Transcript.durationMs` is what that pricing will use.
+ */
+export function meterTranscriber(transcriber: ModelTranscriber, meter: Meter): ModelTranscriber {
+  return {
+    model: transcriber.model,
+    async transcribe(i: TranscribeInput): Promise<Transcript> {
+      try {
+        return await transcriber.transcribe(i);
+      } finally {
+        // Transcription has no tier in the port; it is recorded on main, like embed.
+        meter.attempt('transcribe', 'main', transcriber.model, []);
       }
     },
   };

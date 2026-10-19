@@ -10,6 +10,72 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 2.7 New `openai` provider key for Whisper and the platform embedding model · decided by builder · risk: high
+Decided: `PROVIDER_KEYS.openai` reads `EDMATE_OPENAI_API_KEY`, loaded through 2.1's `loadProviderKeys`. Both the Whisper transcriber and the embedding adapter take `KeysFor<'openai'>`. The key is revealed only in `src/adapters/openai.ts` and `src/adapters/openai-compatible.ts`, and the base URL is always passed. A test checks that `OPENAI_API_KEY`/`OPENAI_BASE_URL` are never read.
+Why: both services live on api.openai.com under one OpenAI account. Keeping them off `openai-compatible` keeps that key free for OpenRouter or a self-hosted chat server.
+Alternatives: reuse the `openai-compatible` key for embeddings (the plan's Q3 note), which breaks once a deployment points that key at OpenRouter; a separate key per OpenAI service.
+Reversible: yes (one entry and two factory signatures).
+
+### 18 Oct 2026 · 2.7 Whisper through the AI SDK's OpenAI transcription model, called at the model level · decided by builder · risk: medium
+Decided: `@ai-sdk/openai` 4.0.96 (lead Q2: an AI SDK provider exists for the pinned `ai`). The adapter calls `transcription('whisper-1').doGenerate(...)` directly, not `ai`'s `transcribe()`. It sends `verbose_json` with segment timestamps, the language hint as `language`, and a per-piece timeout. SDK errors go through `mapProviderError`. A 2xx with an unparseable body is `provider_error` with `reason: 'truncated'`.
+Why: `transcribe()` guesses the media type from the bytes (falling back to `audio/wav`) and would download a URL itself; the adapter has to send the declared MIME type and do the download itself under the allowlist.
+Alternatives: a plain HTTP client; `ai`'s `transcribe()`.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Storage download rules for signed URLs · decided by builder · risk: medium
+Decided: `allowedHosts` entries must be bare hosts (an optional non-default port is allowed; they are lower-cased). A wrong entry fails at construction. The URL's parsed `host` (including the port) must match exactly. Redirects are followed by hand, only to the same host over https, at most 3. Downloads are capped at 600 MB (refused from `content-length` before reading, or while streaming) with a 10-minute timeout. With a content-length the body must arrive whole (fix round 1). 401/403 → `forbidden`, 404/410 → `not_found`, 429 → `rate_limited`, 5xx → retryable `provider_error`, an empty body → `validation`. Errors never carry a `cause`. Traces name `scheme://host/path` only.
+Why: ADR-0005 Decision 5 and its Consequences (SSRF, the signed URL is a bearer credential).
+Alternatives: refuse every redirect (some storage gateways redirect within the host); match `hostname` without the port.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Recordings over 24 MiB are split by a built-in WAV/MP3 chunker, or by an injected one · decided by builder · risk: medium
+Decided: pieces are at most 24 MiB (Whisper's limit is 25 MB, and the multipart envelope needs room). The built-in `defaultChunker` cuts WAV on sample-frame boundaries (each piece gets its own header) and MPEG layer III on frame boundaries (ID3 tags skipped), with exact offsets and durations from the sample counts. Any other format over the limit (webm, m4a, ...) is `input_too_large` unless the composition root passes a `chunker` (for example an ffmpeg one in the worker, 5.2). Unreadable audio is `validation`. A chunker's pieces are checked (non-empty, under the limit, in order) before any upload.
+Why: splitting compressed containers needs a decoder, and the gateway takes no native or ffmpeg dependency.
+Alternatives: add ffmpeg to the gateway; cut raw bytes (it breaks most containers); transcode everything to MP3 first (that belongs in the worker).
+Reversible: yes. 5.1/5.2 should transcode uploads to MP3 or WAV, or inject a chunker.
+
+### 18 Oct 2026 · 2.7 How pieces are stitched, and what counts as cut off · decided by builder · risk: medium
+Decided: pieces are transcribed one after another, in order. Segment text is trimmed and blank segments are dropped. Times are `piece offset + round(seconds x 1000)`. The text is the non-empty piece texts joined by a space. `durationMs` is the larger of the last piece's `offset + reported duration` (or the chunker's duration) and the latest segment end. The language is the first piece's valid ISO code (the SDK maps Whisper's names), otherwise omitted. A piece with text but no segment timings fails. So does a piece heard more than 2 s shorter than the chunker says it is (`truncated`). In a split recording an empty piece fails the call, unless it is the final piece and under 1 s, which is skipped and flagged `anomaly: 'empty_final_piece'` in its trace line (fix round 1). Any piece failing fails the whole call.
+Why: ADR-0005: the transcriber throws and never returns an empty or partial transcript. The tolerance absorbs rounding but catches a real cut.
+Alternatives: transcribe pieces in parallel (rate limits; order is easy either way); keep a partial transcript (forbidden by the port).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Migration 0006 stops instead of discarding wrong-sized embeddings · decided by builder · risk: medium
+Decided: `0006_chunk_embedding_dimension` first raises an exception if any `chunks.embedding` is not 1536-dimensional, then sets `vector(1536)` (`USING "embedding"::vector(1536)`), then creates `chunks_embedding_hnsw_idx` (HNSW, `vector_cosine_ops`, default build parameters). `EMBEDDING_DIMENSIONS = 1536` lives in `packages/db` beside `EMBEDDING_CONFIG.dimension` in the gateway. The two are kept equal by comments, because db does not depend on gateway.
+Why: "data-safe": no stored vector is nulled or rewritten silently. The table is empty today, so the guard passes everywhere it has run.
+Alternatives: null the wrong-sized vectors in the same statement; a cross-package test (it would add a dependency between the two packages).
+Reversible: yes (a later migration changes the type and rebuilds the index; the model change in 7.6 needs that anyway).
+
+### 18 Oct 2026 · 2.7 Embeddings-only adapter on the OpenAI-compatible path · decided by builder · risk: low
+Decided: `createEmbeddingAdapter(keys, { config?, fetch? })` wraps `createOpenAICompatibleAdapter` with `embeddingModel = EMBEDDING_CONFIG.model`. It reports `id: 'openai-compatible'`, `model: 'text-embedding-3-small'` and only the `embeddings` capability. `stream`/`generateObject` throw a `GatewayError` before any request. `embed` fails as `validation` unless it gets one finite vector of `config.dimension` numbers per text. It is never plugged into the turn `Router`.
+Why: lead Q3 (the OpenAI-compatible path, 1536 dimensions); 2.4's `meterAdapter` needs a `ModelAdapter`; a wrong-sized vector must never reach `vector(1536)`.
+Alternatives: return `Pick<ModelGateway,'embed'>` (it could not be metered unchanged); use `@ai-sdk/openai`'s embedding model.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Transcription is metered as unknown on tier main · decided by builder · risk: low
+Decided: `meterTranscriber(t, meter)` records one `no_usage_reported` attempt per call on `t.model` (`whisper-1`), tier `main` (the port has no tier, the same as `embed`). The new `MeteredMethod` type includes `'transcribe'`. Per-minute pricing from `Transcript.durationMs`, and the ingestion billing context, are left to 5.1–5.3 (lead Q5).
+Why: the lead's instruction and the plan's decision; the port returns no usage figure.
+Alternatives: price per minute now.
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Live smoke tests run only through `test:live` · decided by builder · risk: low
+Decided: `corepack pnpm --filter @edmate/gateway test:live` runs `vitest.live.config.ts` (no network stub, only `*.live.smoke.test.ts`, `EDMATE_LIVE_TESTS=1`). The default config excludes those files, and each also skips itself without the variable and its key (and, for Whisper, `EDMATE_LIVE_TRANSCRIBE_URL`, a signed URL to synthetic speech). A test checks the exclusion and the gate.
+Why: rule 4 ("live calls only in `--live` runs"); vitest has no `--live` flag.
+Alternatives: keep them in the default run, skipped (the default setup's fetch stub would block them anyway).
+Reversible: yes.
+
+### 18 Oct 2026 · 2.7 Fix round 1: a download must arrive whole, and an empty piece is a gap · decided by builder · risk: medium
+Decided: (1) A download with a usable content-length must deliver exactly that many bytes, or it fails as a retryable `provider_error` (`truncated` when short). Compressed responses are exempt. (2) An empty piece in a split recording fails the call, except a final piece under 1 s, which is skipped and traced as `anomaly: 'empty_final_piece'`. (3) The default download cap is 600 MB, read into one buffer when the length is known.
+Why: silent-failure-hunter and security-reviewer, fix round 1. A short body or an empty piece would otherwise become a transcript with a hole in it.
+Alternatives: keep skipping empty pieces and only trace them (the gap would still reach ingestion unflagged); a separate anomaly in metering (the meter has no notes field; the trace is where it shows).
+Reversible: yes. A class with a long genuine silence (more than one 24 MiB piece) now fails. If that happens in practice, 5.2 can lower the piece size or treat a near-silent piece by its audio level.
+
+### 18 Oct 2026 · 2.7 Review · decided by team lead · risk: low
+Decided: The HNSW index in packages/db/migrations/0006_chunk_embedding_dimension.sql keeps pgvector's default tuning (m 16, ef_construction 64). A genuinely silent stretch in the middle of a recording now fails the whole transcription rather than leaving a gap.
+Why: Defaults are right at pilot scale; failing loudly lets an operator retry or check a recording instead of storing a transcript with a hidden hole.
+Alternatives: Tune the index now; skip silent chunks.
+Reversible: Yes.
+
 ### 18 Oct 2026 · 3.4 Context budget in characters: 32,000 total, 16,000 for history · decided by builder (tdd-guide), lead answer Q3 · risk: low
 Decided: history text plus retrieved chunk text stays within 32,000 UTF-16 units; history gets up to 16,000 and retrieval the rest; 40 messages fetched; chunks that don't fit are skipped in rank order.
 Why: harness purity rules out a tokenizer; about 8k tokens leaves room for the system prompt, style card and reply.

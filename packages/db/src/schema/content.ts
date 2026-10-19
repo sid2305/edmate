@@ -1,7 +1,15 @@
 // Data model rows: courses / modules / topics, documents / chunks, style_cards, corrections.
 import { sql } from 'drizzle-orm';
 import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
-import { chunkKind, id, timestamps, tsvector, tstz, vector } from './_shared.js';
+import {
+  chunkKind,
+  EMBEDDING_DIMENSIONS,
+  id,
+  timestamps,
+  tsvector,
+  tstz,
+  vector,
+} from './_shared.js';
 import { teacherId } from './users.js';
 
 /** From the teacher's outline. */
@@ -93,8 +101,8 @@ export const chunks = pgTable(
     sourceTitle: text('source_title').notNull(),
     /** Page, slide, heading or timestamp. */
     locator: text('locator').notNull(),
-    /** Null until embedded; dimension and HNSW index come with the embedding model (2.7/5.3). */
-    embedding: vector('embedding'),
+    /** Null until embedded. Fixed at the platform embedding model's dimension (task 2.7). */
+    embedding: vector('embedding', { dimensions: EMBEDDING_DIMENSIONS }),
     /** 'simple' config: no language-specific stemming, so it works for every locale. */
     search: tsvector('search')
       .notNull()
@@ -106,6 +114,8 @@ export const chunks = pgTable(
     index('chunks_module_id_idx').on(t.moduleId),
     index('chunks_document_id_idx').on(t.documentId),
     index('chunks_search_idx').using('gin', t.search),
+    // Cosine distance (`<=>`), the metric OpenAI embeddings are meant for (task 2.7; 5.3 ranks).
+    index('chunks_embedding_hnsw_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
 );
 
