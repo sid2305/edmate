@@ -45,5 +45,3 @@ None beyond what is in the parent handoff's `## 4.6b` section (no task plan: the
 ## Decisions
 
 None
-
-(All 4.6b decisions are logged in `docs/tasks/4.6/handoff.md` under their `4.6b` titles; the merge gate maps this lettered sub-task to the parent task's docs.)
