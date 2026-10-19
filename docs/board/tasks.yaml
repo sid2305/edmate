@@ -606,6 +606,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 3.11d
+  milestone: M3
+  title: 'Teacher-label hardening (3.11b safety review): teacher turns in the history go in a non-assistant wrapper; the teacher-note string is neutralised in student input; the server, not the model, counts
+    persona questions; no learner summary on locked turns after a downgrade (compose.ts:223)'
+  accept: a forged teacher note in student text reaches the model neutralised; the history never shows teacher text as the model's own reply; tests; prompt-pack behaviour changes get an ADR note.
+  deps:
+  - 3.11b
+  status: todo
+  branch: null
+  model: null
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
@@ -672,9 +682,19 @@ tasks:
   accept: two overlapping migrateDatabase() runs leave the index valid (int test); the lookup uses to_regclass or pg_namespace.
   deps:
   - 3.16b
-  status: running
+  status: done
   branch: m7/3.16c-migration-hardening
   model: build:sonnet
+- id: 3.16d
+  milestone: M7
+  title: 'Migration follow-ups (3.16c review): quote the index identifier in to_regclass via format(''%I.%I''); bounded statement_timeout and a caveat for CREATE INDEX CONCURRENTLY behind a stray idle-in-transaction
+    session; unlock only when the advisory lock was taken'
+  accept: tests for a mixed-case index name, a post-migrate timeout, and an acquire failure that keeps its original error.
+  deps:
+  - 3.16c
+  status: todo
+  branch: null
+  model: null
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -1343,7 +1363,7 @@ tasks:
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
-  accept: component tests + e2e.
+  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews)
   deps:
   - GATE
   - '1.3'
