@@ -1,4 +1,4 @@
-import type { ModelChunk, ModelRequest, Usage } from '@edmate/contracts';
+import { LIMITS, type ModelChunk, type ModelRequest, type Usage } from '@edmate/contracts';
 import { turnContextFull, usageMain } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -114,13 +114,24 @@ describe('runToolLoop: rounds', () => {
   it('0 rounds: one call with the tools offered; text is shown and joined; usage recorded', async () => {
     const s = setup([[say('Think about '), say('denominators.'), used]]);
     const out = await s.run();
-    expect(out).toEqual({ draft: 'Think about denominators.', toolRounds: 0 });
+    expect(out).toEqual({
+      draft: 'Think about denominators.',
+      raw: 'Think about denominators.',
+      toolRounds: 0,
+    });
     expect(s.shown).toEqual(['Think about ', 'denominators.']);
     expect(s.recorded).toEqual([usageMain]);
     expect(s.spy.requests).toHaveLength(1);
     expect(s.spy.requests[0]?.tools?.map((t) => t.name)).toEqual(['calculator']);
     expect(s.spy.requests[0]?.messages).toEqual(base.messages);
     expect(s.checks).toBe(1);
+  });
+
+  it('raw keeps at most one reply of model text (fix round 1)', async () => {
+    const s = setup([[say('a'.repeat(LIMITS.modelTextMaxLength - 10)), say('b'.repeat(50)), used]]);
+    const out = await s.run();
+    expect(out.raw).toHaveLength(LIMITS.modelTextMaxLength);
+    expect(out.raw.endsWith('b'.repeat(10))).toBe(true);
   });
 
   it('no tools offered: the request has no tools field', async () => {
@@ -135,7 +146,11 @@ describe('runToolLoop: rounds', () => {
       [say('So it is a sixth-based sum.'), used],
     ]);
     const out = await s.run();
-    expect(out).toEqual({ draft: 'Let me check. So it is a sixth-based sum.', toolRounds: 1 });
+    expect(out).toEqual({
+      draft: 'Let me check. So it is a sixth-based sum.',
+      raw: 'Let me check. So it is a sixth-based sum.',
+      toolRounds: 1,
+    });
     expect(s.registry.runs).toEqual([{ name: 'calculator', input: { expression: '1/2+1/3' } }]);
     expect(s.outputs).toEqual([{ name: 'calculator', output: { value: '5/6' } }]);
     const second = s.spy.requests[1];
@@ -161,7 +176,7 @@ describe('runToolLoop: rounds', () => {
       [say('d'), used],
     ]);
     const out = await s.run();
-    expect(out).toEqual({ draft: 'abcd', toolRounds: 3 });
+    expect(out).toEqual({ draft: 'abcd', raw: 'abcd', toolRounds: 3 });
     expect(s.spy.requests.map((r) => r.tools !== undefined)).toEqual([true, true, true, false]);
     expect(s.spy.requests[3]?.messages).toHaveLength(1 + 2 * 3);
     expect(s.registry.runs).toHaveLength(3);

@@ -31,6 +31,7 @@ import {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PostGuardStepFailed,
   ScrubFailedError,
   UnpricedUsage,
 } from './errors.js';
@@ -80,6 +81,7 @@ import type {
   DecideResult,
   Emit,
   Entitled,
+  GenerateResult,
   PipelineDeps,
   Scrubbed,
   StepEnv,
@@ -187,6 +189,8 @@ class Turn {
   private guardGateway: TurnGateway | null = null;
   /** Streamed text is on the student's screen and no `replace` cleared it yet. */
   private shown = false;
+  /** A post guard's escalate text (4.5): saved with the turn, never shown. */
+  private escalatedText: string | undefined;
 
   constructor(
     private readonly input: TurnInput,
@@ -247,6 +251,15 @@ class Turn {
       if (parsed.data.type === 'token' || parsed.data.type === 'skill') this.shown = true;
       this.queue.push(parsed.data);
     };
+  }
+
+  /**
+   * Before postGuard replaces the reply (4.5): `replace ''` always, so skill events and sources
+   * shown with the rejected draft clear too, not only streamed text.
+   */
+  private clearAll(): void {
+    this.shown = false;
+    this.send({ type: 'replace', text: '' });
   }
 
   /** Clears unguarded streamed text off the student's screen (before a retry or an error). */
@@ -507,8 +520,14 @@ class Turn {
       decision.move === 'ask_teacher' ? await this.openTeacherQuestion(scrubbed, e) : undefined;
     if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
 
-    // 9. postGuard on the whole reply, before done; a failure sends the safe reply.
-    const replyText = await this.postGuard(scrubbed, ctx, decision, gen.draft);
+    // 9. postGuard on the whole reply, before done; a failure sends the safe reply. A post guard
+    // that escalates clears the reply and ends the turn as an escalation (caring template, 4.5).
+    const post = await this.postGuard(scrubbed, ctx, decision, gen);
+    if (typeof post !== 'string') {
+      this.clearAll();
+      return this.escalate(scrubbed, e, post.alert);
+    }
+    const replyText = post;
     this.done();
     return this.finish(
       e,
@@ -757,7 +776,7 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
-  ): Promise<{ draft: string } | TurnError | typeof CANCELLED> {
+  ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
     for (const attempt of ['primary', 'fallback'] as const) {
@@ -789,7 +808,7 @@ class Turn {
       const g = check(raw, GenerateResultSchema);
       if (g.ok && !state.invalid) {
         this.trace.step('generate', ms, attempt === 'primary' ? 'ok' : 'fallback');
-        return { draft: g.value.draft };
+        return g.value;
       }
       // Every failed attempt is reported, by kind and error name only (never a foreign message).
       this.background.push({ task: 'generate', error: attemptFailure(attempt, raw, state) });
@@ -809,29 +828,44 @@ class Turn {
     input: TurnInput,
     ctx: TurnContext,
     decision: PedagogyDecision,
-    draft: string,
-  ): Promise<string> {
-    const p = check(
-      await this.timed(input, timeoutOf('postGuard'), (env) =>
-        this.steps.postGuard(env, { ctx, decision, draft }),
-      ),
-      PostGuardResultSchema,
+    gen: GenerateResult,
+  ): Promise<string | { alert: SafetyAlert }> {
+    const { draft } = gen;
+    const x = {
+      ctx,
+      decision,
+      draft,
+      ...(gen.raw === undefined ? {} : { raw: gen.raw }),
+      ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
+    };
+    const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
+      this.steps.postGuard(env, x),
     );
+    const p = check(raw, PostGuardResultSchema);
     if (p.ok) {
       this.trace.addGuards(p.value.guards);
       this.addReported(p.value.usage);
       this.trace.step('postGuard', p.ms, 'ok');
       if (p.value.result === 'ok') return draft;
+      // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
+      if (p.value.result === 'escalate') {
+        this.escalatedText = p.value.text;
+        return { alert: p.value.alert };
+      }
+      this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
       return p.value.text;
     }
     this.trace.step('postGuard', p.ms, 'fallback');
+    // Reported like every other step failure: kind and error name only, never a message.
+    this.background.push({ task: 'runner', error: postGuardFailure(raw) });
     let safe = '';
     try {
       safe = this.deps.fallbackReplies.safeReply(input.lang);
     } catch (error) {
       this.background.push({ task: 'runner', error });
     }
+    this.clearAll();
     this.send({ type: 'replace', text: safe });
     return safe;
   }
@@ -857,6 +891,7 @@ class Turn {
       receivedAt: this.receivedAt,
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
+      ...(this.escalatedText === undefined ? {} : { escalatedText: this.escalatedText }),
     };
     // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
     const usage = this.meterable.map((u) => ({ ...u }));
@@ -925,6 +960,13 @@ class Turn {
 }
 
 /** What a failed generate attempt reports: the kind and the underlying error's name. */
+/** What a failed postGuard step reports: the kind and the underlying error's name. */
+function postGuardFailure(r: TimedResult<unknown>): PostGuardStepFailed {
+  if (r.status === 'timeout') return new PostGuardStepFailed('timeout');
+  if (r.status === 'error') return new PostGuardStepFailed('error', errorName(r.error));
+  return new PostGuardStepFailed('invalid_result');
+}
+
 function attemptFailure(
   attempt: 'primary' | 'fallback',
   raw: TimedResult<unknown>,
