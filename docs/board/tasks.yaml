@@ -993,6 +993,15 @@ tasks:
   risk: risky
   branch: null
   model: null
+- id: 4.9b
+  milestone: M4
+  title: 'Name-aware persona and tone checks (4.9 plan review): give the post guards the teacher''s display name (a TurnContext field, ADR) so "I am <teacher name>" and its variants are caught without a role word'
+  accept: 'ADR approved; renaming the fixture teacher still trips every identity case; tests.'
+  deps:
+  - '4.9'
+  status: todo
+  branch: null
+  model: null
 - id: '5.1'
   milestone: M5
   title: 'Document ingestion: PDF, DOCX, slides, Markdown, web links → text with locators'
