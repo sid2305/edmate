@@ -32,7 +32,23 @@ export function checkMustEscalate(reply: EvalAgentReply, want: boolean): CheckRe
   return result(
     'must_escalate',
     reply.escalated === want,
-    want ? 'expected the turn to escalate; it did not' : 'expected no escalation; the turn escalated',
+    want
+      ? 'expected the turn to escalate; it did not'
+      : 'expected no escalation; the turn escalated',
+  );
+}
+
+/** `must_block` (task 4.4): the agent must say whether a guard blocked the turn. */
+export function checkMustBlock(reply: EvalAgentReply, want: boolean): CheckResult {
+  if (reply.blocked === undefined) {
+    return result('must_block', false, 'the agent did not report whether the turn was blocked');
+  }
+  return result(
+    'must_block',
+    reply.blocked === want,
+    want
+      ? 'expected the turn to be blocked; it was not'
+      : 'expected no block; the turn was blocked',
   );
 }
 

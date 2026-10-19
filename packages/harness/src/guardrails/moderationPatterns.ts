@@ -93,7 +93,10 @@ const RULES: readonly Rule[] = [
       `(?:people of |the |all )?(?:a |an |any |one |some |that |this )?` +
       `(?:particular |certain |specific |other |lower )?${GROUP}`,
   ),
-  rule('hate', `${GROUP}${gap(2)} (?:ke|ka|ki) (?:liye )?(?:gaali|gaaliyan|gaaliyon|galiyan|galiyon|gaaliya)`),
+  rule(
+    'hate',
+    `${GROUP}${gap(2)} (?:ke|ka|ki) (?:liye )?(?:gaali|gaaliyan|gaaliyon|galiyan|galiyon|gaaliya)`,
+  ),
   rule(
     'hate',
     `(?:community|jaati|jati|dharam|dharm|mazhab|religion|caste)${gap(5)} ` +
@@ -115,7 +118,10 @@ const RULES: readonly Rule[] = [
     '(?:way|ways|how) to (?:hurt|harm|injure|beat up|attack|poison|stab|punch|kill|break the (?:arm|leg|nose) of)' +
       `${gap(1)} ${OTHER_PERSON}`,
   ),
-  rule('harm_to_others', '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)'),
+  rule(
+    'harm_to_others',
+    '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)',
+  ),
   rule(
     'harm_to_others',
     `(?:use|usko|unko|ladke ko|ladki ko|bande ko|teacher ko)${gap(4)} ` +
@@ -166,7 +172,10 @@ const RULES: readonly Rule[] = [
       `${gap(3)} (?:about|on|for|to) (?:a |the |this |that |my )?` +
       '(?:girl|boy|kid|classmate|friend|teacher|student|guy|person|him|her)',
   ),
-  rule('harassment', 'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)'),
+  rule(
+    'harassment',
+    'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)',
+  ),
   rule(
     'harassment',
     `(?:fake|morphed|edited|photoshopped)${gap(2)} (?:photo|pic|picture|image|video|nude|nudes)` +
@@ -178,7 +187,10 @@ const RULES: readonly Rule[] = [
     'harassment',
     `(?:fake|false|spread|spreading|start|starting)${gap(1)} (?:a )?rumou?rs?|rumou?rs? about`,
   ),
-  rule('harassment', '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)'),
+  rule(
+    'harassment',
+    '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)',
+  ),
   rule('harassment', '(?:झूठी|झूठा|झूठे) (?:अफवाह|खबर)|अफवाह (?:फैला|वाला|वाली)'),
   rule(
     'harassment',
@@ -187,7 +199,10 @@ const RULES: readonly Rule[] = [
   ),
 
   // ---- Cheating -------------------------------------------------------------------------------------
-  rule('cheating', `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`),
+  rule(
+    'cheating',
+    `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`,
+  ),
   rule(
     'cheating',
     '(?:write|do|take|solve|complete|finish) my (?:\\S+ ){0,3}(?:exam|test|assignment|quiz|paper)' +
@@ -201,7 +216,10 @@ const RULES: readonly Rule[] = [
   ),
   rule('cheating', 'answers? copy kar'),
   rule('cheating', 'अपने नाम से (?:जमा|सबमिट)'),
-  rule('cheating', '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)'),
+  rule(
+    'cheating',
+    '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)',
+  ),
 
   // ---- Extremism -------------------------------------------------------------------------------------
   rule(
@@ -238,7 +256,10 @@ function firstHit(forms: readonly string[]): ModerationCode | null {
  * The moderation code a rule gives `text`, or null. `context` is the student's last few messages
  * (scrubbed), read only for a minor marker: a hit always comes from this message.
  */
-export function matchModeration(text: string, context: readonly string[] = []): ModerationCode | null {
+export function matchModeration(
+  text: string,
+  context: readonly string[] = [],
+): ModerationCode | null {
   const s = scanTexts(text);
   let code = firstHit(s.forms);
   for (const h of s.hidden) code ??= firstHit(h.forms);

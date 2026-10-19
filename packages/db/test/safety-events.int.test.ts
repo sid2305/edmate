@@ -116,9 +116,21 @@ describe.skipIf(!up)(`safetyEvents on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
 
   it("another student's or teacher's session is not_found; nothing is written", async () => {
     const before = await raw.query('select count(*)::int as n from safety_events');
-    expect(await kind(repos.safetyEvents.record(own, event({ sessionId: ids.session('2A'), turnId: 'trn_x1' })))).toBe('not_found');
-    expect(await kind(repos.safetyEvents.record(own, event({ sessionId: ids.session('1B'), turnId: 'trn_x2' })))).toBe('not_found');
-    expect(await kind(repos.safetyEvents.record(own, event({ sessionId: 'ses_missing', turnId: 'trn_x3' })))).toBe('not_found');
+    expect(
+      await kind(
+        repos.safetyEvents.record(own, event({ sessionId: ids.session('2A'), turnId: 'trn_x1' })),
+      ),
+    ).toBe('not_found');
+    expect(
+      await kind(
+        repos.safetyEvents.record(own, event({ sessionId: ids.session('1B'), turnId: 'trn_x2' })),
+      ),
+    ).toBe('not_found');
+    expect(
+      await kind(
+        repos.safetyEvents.record(own, event({ sessionId: 'ses_missing', turnId: 'trn_x3' })),
+      ),
+    ).toBe('not_found');
     const after = await raw.query('select count(*)::int as n from safety_events');
     expect(after.rows[0].n).toBe(before.rows[0].n);
   }, 10_000);

@@ -80,6 +80,16 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`, `gateway`, `us
 - **Testing:** `indiaLocalePackWithHelplines` (Tele-MANAS 14416) for the `distress/in` cases.
 - **Testing:** `fakeGuard(name, phase, resultOrFn, { usage?, spy? })` from `@edmate/harness/testing`.
 
+## moderationIn, jailbreak and safety events (task 4.4, ADR-0006)
+
+The `pre` phase is now complete per `GUARD_ORDER`: `distressDetect`, `moderationIn`, `jailbreak`.
+
+- **Rule tables** (`moderationPatterns.ts`, `jailbreakPatterns.ts`): phrase-level patterns in English, romanised Hindi and Devanagari, matched on 4.3's normalised forms (reused, not copied) and on what an encoding hides (`decodeAttempts.ts`: base64, hex and URL runs up to 2 levels with size caps, plus ROT13 and backwards readings). A hit decides with no model call. A jailbreak hit seen only through a decode is `jailbreak_encoded`.
+- **Classifier** (`safetyClassifier.ts`): when no rule hits, one small-tier call with the guard's own taxonomy plus `none`, on the scrubbed message and the last 3 scrubbed student messages as JSON data. A throw, timeout (250 ms), cancel or answer outside the taxonomy propagates: the chain fails closed. moderationIn skips its classifier when a jailbreak rule hits (jailbreak blocks next).
+- **Verdicts:** `self_harm` escalates with a distress alert (caring reply), never blocks. Any other code awaits `PipelineDeps.safetyEvents.record` (ids, guard, code, source; dedupe `${turnId}:${guard}`), then blocks with the code as reason. A jailbreak event is a strike; strikes are only counted (open question B-12).
+- **Replies** (`blockReplies.ts`): one English reply per code; preGuard returns it with the block and the runner sends it as the turn's reply (saved `blocked`). `harm_to_others` also carries a misuse `SafetyAlert`, delivered like an escalation's.
+- **Testing:** `memorySafetyEventSink()`; `testDeps()` exposes `safetyEvents`.
+
 ## Replacing a stub
 
 Every step lives in its own file under `src/pipeline/steps/`. Until its task lands, a step throws `StepNotImplementedError`, so the runner applies its failure policy (admit, entitle and preGuard fail closed). To build a step, replace the body in its file and keep the `Steps['<name>']` type; `defaultSteps` picks it up.

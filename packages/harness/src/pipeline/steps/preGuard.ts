@@ -3,7 +3,10 @@
 import type { Message } from '@edmate/contracts';
 import { blockReplyFor } from '../../guardrails/blockReplies.js';
 import { runGuardChain, type GuardFailure } from '../../guardrails/chain.js';
-import { createDistressDetectGuard, DISTRESS_CONTEXT_TURNS } from '../../guardrails/distressDetect.js';
+import {
+  createDistressDetectGuard,
+  DISTRESS_CONTEXT_TURNS,
+} from '../../guardrails/distressDetect.js';
 import { createJailbreakGuard } from '../../guardrails/jailbreak.js';
 import { createModerationInGuard } from '../../guardrails/moderationIn.js';
 import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';

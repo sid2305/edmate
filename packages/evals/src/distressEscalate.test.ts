@@ -66,8 +66,13 @@ function gatewayFor(mode: Mode): ModelGateway & { classifierCalls: number } {
     async *stream(): AsyncIterable<ModelChunk> {
       yield { type: 'text', text: COACH_REPLY };
     },
-    generateObject<T>(): Promise<T> {
+    generateObject<T>(_req: unknown, schema: { safeParse(v: unknown): { success: boolean } }): Promise<T> {
       g.classifierCalls++;
+      // 4.4: moderationIn and jailbreak ask their own classifiers; in this mode they say none.
+      if (mode === 'false' && !schema.safeParse({ distress: false }).success) {
+        g.classifierCalls--;
+        return Promise.resolve({ category: 'none' } as T);
+      }
       if (mode === 'false') return Promise.resolve({ distress: false } as T);
       if (mode === 'never answers') return new Promise<T>(() => undefined);
       return Promise.reject(new Error('classifier provider down'));

@@ -25,7 +25,9 @@ export function safetyEventProcessor(
 ): (job: TurnJob) => Promise<SafetyEventOutcome> {
   return async (job) => {
     if (job.name !== JOB.safetyEventRecord) {
-      throw new PermanentJobError(`unknown safety-event job ${JSON.stringify(job.name).slice(0, 60)}`);
+      throw new PermanentJobError(
+        `unknown safety-event job ${JSON.stringify(job.name).slice(0, 60)}`,
+      );
     }
     const parsed = SafetyEventJobSchema.safeParse(job.data);
     if (!parsed.success) throw new PermanentJobError(`${job.name}: invalid job payload`);
@@ -93,7 +95,12 @@ export function createSafetyEventWorker(
     void failed(job, error);
   });
   worker.on('error', (error) => {
-    o.log({ level: 'error', event: 'worker.error', queue: worker.name, error: describeError(error) });
+    o.log({
+      level: 'error',
+      event: 'worker.error',
+      queue: worker.name,
+      error: describeError(error),
+    });
   });
   return worker;
 }

@@ -24,7 +24,7 @@ function ctx(answer: unknown): PreGuardCtx {
       throw new Error('unused');
     },
     embed: () => Promise.reject(new Error('unused')),
-    generateObject: <X,>() => Promise.resolve(answer as X),
+    generateObject: <X>() => Promise.resolve(answer as X),
   };
   return {
     locale: demoLocalePack,
@@ -43,47 +43,65 @@ function ctx(answer: unknown): PreGuardCtx {
 }
 
 describe('askClassifier', () => {
-  it('returns a valid answer', async () => {
-    const req = buildModerationClassifierRequest('hi', []);
-    await expect(
-      askClassifier(
-        'moderationIn',
-        ctx({ category: 'none' }),
-        cancelSource().token,
-        req,
-        ModerationVerdictSchema,
-      ),
-    ).resolves.toEqual({ category: 'none' });
-  }, T);
+  it(
+    'returns a valid answer',
+    async () => {
+      const req = buildModerationClassifierRequest('hi', []);
+      await expect(
+        askClassifier(
+          'moderationIn',
+          ctx({ category: 'none' }),
+          cancelSource().token,
+          req,
+          ModerationVerdictSchema,
+        ),
+      ).resolves.toEqual({ category: 'none' });
+    },
+    T,
+  );
 
-  it('an already-cancelled token throws before any call', async () => {
-    const c = cancelSource();
-    c.cancel();
-    await expect(
-      askClassifier(
-        'jailbreak',
-        ctx({ category: 'none' }),
-        c.token,
-        buildJailbreakClassifierRequest('hi', []),
-        JailbreakVerdictSchema,
-      ),
-    ).rejects.toBeInstanceOf(SafetyGuardCancelledError);
-  }, T);
+  it(
+    'an already-cancelled token throws before any call',
+    async () => {
+      const c = cancelSource();
+      c.cancel();
+      await expect(
+        askClassifier(
+          'jailbreak',
+          ctx({ category: 'none' }),
+          c.token,
+          buildJailbreakClassifierRequest('hi', []),
+          JailbreakVerdictSchema,
+        ),
+      ).rejects.toBeInstanceOf(SafetyGuardCancelledError);
+    },
+    T,
+  );
 
-  it('the two taxonomies differ and both allow none', () => {
-    expect(ModerationVerdictSchema.safeParse({ category: 'hate' }).success).toBe(true);
-    expect(JailbreakVerdictSchema.safeParse({ category: 'hate' }).success).toBe(false);
-    expect(JailbreakVerdictSchema.safeParse({ category: 'jailbreak_encoded' }).success).toBe(true);
-    expect(ModerationVerdictSchema.safeParse({ category: 'none', extra: 1 }).success).toBe(false);
-  }, T);
+  it(
+    'the two taxonomies differ and both allow none',
+    () => {
+      expect(ModerationVerdictSchema.safeParse({ category: 'hate' }).success).toBe(true);
+      expect(JailbreakVerdictSchema.safeParse({ category: 'hate' }).success).toBe(false);
+      expect(JailbreakVerdictSchema.safeParse({ category: 'jailbreak_encoded' }).success).toBe(
+        true,
+      );
+      expect(ModerationVerdictSchema.safeParse({ category: 'none', extra: 1 }).success).toBe(false);
+    },
+    T,
+  );
 
-  it('the requests are small-tier, temperature 0, with the text only as JSON data', () => {
-    const r = buildJailbreakClassifierRequest('canary_text', ['a', 'b', 'c', 'd']);
-    expect(r).toMatchObject({ tier: 'small', temperature: 0, maxOutputTokens: 20 });
-    expect(r.system).not.toContain('canary_text');
-    expect(JSON.parse(r.messages[0]?.content ?? '')).toEqual({
-      earlier: ['b', 'c', 'd'],
-      latest: 'canary_text',
-    });
-  }, T);
+  it(
+    'the requests are small-tier, temperature 0, with the text only as JSON data',
+    () => {
+      const r = buildJailbreakClassifierRequest('canary_text', ['a', 'b', 'c', 'd']);
+      expect(r).toMatchObject({ tier: 'small', temperature: 0, maxOutputTokens: 20 });
+      expect(r.system).not.toContain('canary_text');
+      expect(JSON.parse(r.messages[0]?.content ?? '')).toEqual({
+        earlier: ['b', 'c', 'd'],
+        latest: 'canary_text',
+      });
+    },
+    T,
+  );
 });

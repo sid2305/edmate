@@ -451,7 +451,8 @@ class Turn {
       preAlert !== undefined ||
       intent === 'distress' ||
       rawDistress ||
-      (!pg.ok && (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
+      (!pg.ok &&
+        (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
     ) {
       return this.escalate(scrubbed, e, preAlert);
     }

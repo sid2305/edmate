@@ -1210,7 +1210,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       const { id } = result as { id: string };
       for (const p of PAIRS) {
         const rows = await r.safetyEvents.listForSession(sScope(p), ids.session(actor));
-        expect(rows.some((x) => x.id === id), `${p} sees ${actor}'s safety event`).toBe(p === actor);
+        expect(
+          rows.some((x) => x.id === id),
+          `${p} sees ${actor}'s safety event`,
+        ).toBe(p === actor);
       }
     },
     mismatches: (a) => [

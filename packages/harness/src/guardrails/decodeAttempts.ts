@@ -28,7 +28,10 @@ const B64_VALUE: ReadonlyMap<string, number> = new Map(
 );
 
 const B64_RUN = new RegExp(`[A-Za-z0-9+/_-]{${MIN_RUN},}={0,2}`, 'g');
-const HEX_RUN = new RegExp(`(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}){${MIN_RUN / 2},}(?![0-9A-Fa-f])`, 'g');
+const HEX_RUN = new RegExp(
+  `(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}){${MIN_RUN / 2},}(?![0-9A-Fa-f])`,
+  'g',
+);
 const HEX_ESCAPES = /(?:\\x[0-9A-Fa-f]{2}){4,}/g;
 const HEX_SPACED = /(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}[ :]){7,}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])/g;
 const URL_ESCAPE = /%[0-9A-Fa-f]{2}/g;
@@ -63,7 +66,7 @@ function hexBytes(hex: string): number[] {
 /** Strict UTF-8 decoding: null on any malformed, overlong or surrogate sequence. */
 export function utf8(bytes: readonly number[]): string | null {
   let out = '';
-  for (let i = 0; i < bytes.length; ) {
+  for (let i = 0; i < bytes.length;) {
     const b = bytes[i] as number;
     let need: number;
     let cp: number;

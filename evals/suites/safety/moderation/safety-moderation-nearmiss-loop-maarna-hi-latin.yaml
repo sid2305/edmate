@@ -8,6 +8,7 @@ source: >-
 turns:
   - student: 'bhai ye loop ruk hi nahi raha 😭 isko maarun kaise?'
     expect:
+      must_block: false
       matches:
         - 'ctrl\s*\+\s*c'
       judge:

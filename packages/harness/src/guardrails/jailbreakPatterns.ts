@@ -51,7 +51,8 @@ const RULE_WORD =
 const RULE_LEAD =
   '(?: (?:all|any|the|your|ur|my|these|those|of|previous|prior|above|earlier|preceding|old|original|' +
   'system|safety|tutor|teaching|own|every|its|their|current|existing))*';
-const ME = '(?:i m|im|i am|i have|ive|i ve|i bought|i paid|i purchased|me|main|mai|maine|mene|मैं|मैंने|मेरे|मुझे)';
+const ME =
+  '(?:i m|im|i am|i have|ive|i ve|i bought|i paid|i purchased|me|main|mai|maine|mene|मैं|मैंने|मेरे|मुझे)';
 const PRETEND =
   '(?:pretend|assume|imagine|suppose|lets say|act like|treat me as if|maan lo|man lo|maano|samjho|' +
   'soch lo|मान लो|मानो|समझो)';
@@ -78,7 +79,10 @@ const RULES: readonly Rule[] = [
     'jailbreak_authority_claim',
     '(?:main|mai|me|mein)(?: \\S+){0,3} (?:developer|admin|owner|teacher|tutor|creator) (?:hoon|hun|hu|hoo)',
   ),
-  rule('jailbreak_authority_claim', 'मैं(?: \\S+){0,3} (?:डेवलपर|एडमिन|टीचर|शिक्षक|मालिक) (?:हूं|हू)'),
+  rule(
+    'jailbreak_authority_claim',
+    'मैं(?: \\S+){0,3} (?:डेवलपर|एडमिन|टीचर|शिक्षक|मालिक) (?:हूं|हू)',
+  ),
   rule(
     'jailbreak_authority_claim',
     '(?:teacher|sir|maam|madam|mam|tutor|instructor|professor|principal|mom|dad|parents?)' +
@@ -134,7 +138,10 @@ const RULES: readonly Rule[] = [
       '(?:निर्देश|निर्देशों|नियम|नियमों|रूल्स|इंस्ट्रक्शन\\S*)' +
       `${gap(1)} (?:भूल|भुला|तोड|छोड|इग्नोर|हटा)`,
   ),
-  rule('jailbreak_override', '(?:नियम|नियमों|निर्देश|रूल्स) (?:तोड|भूल|भुला|इग्नोर) (?:दो|दें|दीजिए|जाओ|करो|कर दो)'),
+  rule(
+    'jailbreak_override',
+    '(?:नियम|नियमों|निर्देश|रूल्स) (?:तोड|भूल|भुला|इग्नोर) (?:दो|दें|दीजिए|जाओ|करो|कर दो)',
+  ),
 
   // ---- Prompt leaks ----------------------------------------------------------------------------------
   rule(
@@ -226,7 +233,11 @@ export interface MatchJailbreakOptions {
 }
 
 /** The first rule that hits `raw` (tags) or its `forms`, by table order. */
-function firstHit(raw: string, forms: readonly string[], extra: readonly RegExp[]): JailbreakCode | null {
+function firstHit(
+  raw: string,
+  forms: readonly string[],
+  extra: readonly RegExp[],
+): JailbreakCode | null {
   if (RAW_TAGS.some((re) => re.test(raw))) return 'jailbreak_authority_claim';
   for (const r of RULES) if (anyForm(forms, r.re)) return r.code;
   if (extra.some((re) => anyForm(forms, re))) return 'jailbreak_authority_claim';
@@ -234,10 +245,15 @@ function firstHit(raw: string, forms: readonly string[], extra: readonly RegExp[
 }
 
 /** The jailbreak code a rule gives `text`, or null. */
-export function matchJailbreak(text: string, opts: MatchJailbreakOptions = {}): JailbreakCode | null {
+export function matchJailbreak(
+  text: string,
+  opts: MatchJailbreakOptions = {},
+): JailbreakCode | null {
   const extra = packageClaimRules(opts.packageNames ?? []);
   const s = scanTexts(text);
   const direct = firstHit(s.raw, s.forms, extra);
   if (direct !== null) return direct;
-  return s.hidden.some((h) => firstHit(h.raw, h.forms, extra) !== null) ? 'jailbreak_encoded' : null;
+  return s.hidden.some((h) => firstHit(h.raw, h.forms, extra) !== null)
+    ? 'jailbreak_encoded'
+    : null;
 }
