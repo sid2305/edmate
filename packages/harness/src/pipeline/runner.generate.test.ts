@@ -38,6 +38,7 @@ import { BACKGROUND_LOG_MESSAGE_MAX } from './backgroundLog.js';
 import { cancelSource } from './clock.js';
 import { HarnessError } from './errors.js';
 import { runTurn } from './runner.js';
+import { passThroughGate } from './generate/streamGate.js';
 import { defaultSteps } from './steps/index.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import type { PipelineDeps, Steps } from './types.js';
@@ -47,7 +48,10 @@ const used = { type: 'usage', usage: usageMain } satisfies ModelChunk;
 const wait = (ms: number) => ({ type: 'delay', ms }) satisfies StreamStep;
 const fail = { type: 'error', code: 'provider_error' } satisfies StreamStep;
 
-/** testDeps with the spy on a scripted gateway; the real generate step. */
+/**
+ * testDeps with the spy on a scripted gateway; the real generate step. These tests are about the
+ * runner, so text passes straight through (the sentence gate has its own tests, 4.5).
+ */
 function world(
   streams: StreamStep[][],
   o: {
@@ -63,7 +67,11 @@ function world(
   );
   const t = testDeps({
     clock,
-    overrides: { gatewayFor: (s) => spy.gatewayFor(s), ...o.overrides },
+    overrides: {
+      gatewayFor: (s) => spy.gatewayFor(s),
+      streamGate: passThroughGate,
+      ...o.overrides,
+    },
   });
   const steps = testSteps({ entitle: fixtureEntitle, generate: defaultSteps.generate, ...o.steps });
   return { t, spy, steps, clock };
@@ -516,7 +524,12 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
     w.steps.postGuard = () =>
       Promise.resolve({ result: 'replace', text: 'rewritten', guards: [], usage: [] });
     const { events } = await w.run();
-    expect(events.slice(-3).map((e) => e.type)).toEqual(['teacher_question', 'replace', 'done']);
+    expect(events.slice(-4)).toEqual([
+      { type: 'teacher_question', questionId: 'tq_mem_1' },
+      { type: 'replace', text: '' },
+      { type: 'replace', text: 'rewritten' },
+      { type: 'done', messageId: 'message_1', usage: expect.anything() as unknown },
+    ]);
   });
 
   it('a failing store: no event, done still sent, the failure is reported, no id on commit', async () => {
@@ -894,7 +907,10 @@ describe('fix round: generate failures, unpriced usage, runner-bug clearing, clo
     const gw = closingGateway(clock, closeMs, fails);
     const t = testDeps({
       clock,
-      overrides: { gatewayFor: () => ({ gateway: gw, metered: false }) },
+      overrides: {
+        gatewayFor: () => ({ gateway: gw, metered: false }),
+        streamGate: passThroughGate,
+      },
     });
     const c = cancelSource();
     const steps = testSteps({

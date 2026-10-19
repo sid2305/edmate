@@ -1,0 +1,559 @@
+# 4.2c handoff: PII pattern hardening
+
+- **Status:** DONE
+- **Branch:** `m4/4.2c-pii-hardening` (from origin/main 951d8c0, 4.2 merged)
+- **Worktree:** `.claude/worktrees/agent-adde9a04a947e41df` (repo-relative)
+- **Risky paths:** `packages/harness/src/guardrails/**` (student-safety group, risk-paths.txt) →
+  **safety-reviewer required**.
+
+## Acceptance evidence
+
+### Each listed form has a test
+
+| Item | New tests (harness) |
+|---|---|
+| 1. Digit forms | `digitForms.test.ts` (10 tests, 100% coverage); `piiPatterns.test.ts` "4.2c item 1" (4 tests): keycap phone, superscript grouped phone, circled-digit OTP, a mark (CGJ) mid-number. |
+| 2. Phone separators | `piiPatterns.test.ts` "4.2c item 2" (6 tests): multi-space gap, pair groups, uneven dash groups, `+CC` UK-shaped groups, no-keyword near-miss, years near-miss (spaced and `+CC`). |
+| 3. Card | "4.2c item 3" (8 tests): dot-separated groups, unlabelled CVV+expiry after a card (the proposed eval case's shape), the existing "unrelated word stops the window" near-miss re-asserted, spaced CVV, spelled-out CVV, spelled-out CVV with no card (near-miss), a bare 3-4 digit run with no date, a 3-4 digit run that's really the date's own tail (not doubled). |
+| 4. OTP | "4.2c item 4" (7 tests): spaced digits after OTP, dashed digits after "otp:", Devanagari spaced digits, "code" after the number, bheja/aaya after the number, a no-keyword near-miss. |
+| 5. Names | "4.2c item 5" (11 tests): "hai"/"है" skipped after a strong phrase (English and Devanagari), "name:"/"naam:", "मैं … हूँ", the proposed eval case's word order, 4 stop-list near-misses (khatam/barbaad/bekaar/nothing), a Devanagari-filler near-miss for "मैं … हूँ". |
+| 6. Spelled numbers | "4.2c item 6" (4 tests): English spelled phone, Hinglish spelled phone, Hinglish spelled OTP, a no-keyword near-miss. |
+| 7. Payload keys | `scrub.test.ts` "4.2c item 7" (6 tests): `card`/`name`/`pin` bare left alone (the 3 named near-misses plus a top-level bare "name"), an object value under a PII key not propagating into its own nested keys, compound forms (`cardNumber`/`studentName`/`pinCode`) still redacting; the pre-existing payload-key tests updated (bare `name` moved out of the redacted table, an array-under-key case added). |
+| 8. Over-scrub | "4.2c item 8" (2 tests): a constant run (`x = 9999999999`) and a counting run with no keyword (`matrix 1 2 3 4 5 6 7 8 9`), both left alone. |
+| 9. Eval cases | 6 new YAML cases (below), driven by `packages/evals/src/piiScrubPipeline.test.ts` (4 PII) and left for 4.3's distress eval wiring (2 distress, `reviewed_by: pending`). |
+
+Aadhaar Verhoeff (mentioned only in the board task's title, not in the lead's numbered list) was
+out of scope for this pass; flagged as a follow-up below.
+
+### `turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/evals... --force`
+
+Postgres and Redis up (`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis`, both healthy).
+
+```
+@edmate/harness:test:   Tests  2733 passed (2733)
+@edmate/evals:test:     Tests  176 passed | 1 failed (177)
+ Tasks:    11 successful, 14 total
+Failed:    @edmate/evals#test
+```
+
+The one evals failure is `src/suites.test.ts > evals/suites (real cases) > every case validates
+and follows the suite rules`, reporting exactly the 6 new cases' `reviewed_by: pending` — expected
+and by design until a human signs them off (see "Pending review" below). No other test, in either
+package, fails. `packages/evals/src/piiScrubPipeline.test.ts` itself (the task's acceptance test)
+passes in full regardless of that env var, since it loads cases directly and never reads
+`reviewed_by`:
+
+```
+@edmate/evals:test:  src/piiScrubPipeline.test.ts (45 tests) — all pass
+```
+
+(Re-run standalone: `EDMATE_ALLOW_PENDING=1 corepack pnpm vitest run src/piiScrubPipeline.test.ts`
+→ `Tests  45 passed (45)`. The env var makes no difference to this file; it is set only because
+the lead's instructions named it. Setting it for the *whole* evals suite instead trips a different,
+deliberate meta-test — `requires reviewed cases and all guards by default (no opt-out env var set
+here)` — that asserts the var is normally unset. There is no single setting that turns the full
+evals test run fully green while any case is still `reviewed_by: pending`; that is the suite's own
+design, not a bug introduced here.)
+
+### Coverage (`vitest run --coverage`, harness)
+
+```
+All files          |   99.32 |    98.34 |   98.45 |   99.58
+```
+
+`src/guardrails/**` (threshold 100, `vitest.config.ts`): no threshold error — 100/100/100/100,
+including the two new files (`digitForms.ts`, and `piiPatterns.ts`'s new code). `src/pedagogy/**`
+(threshold 100): unaffected, untouched by this task. `src/pipeline/steps/scrub.ts` (not under the
+100% threshold): 98.91/98.41/100/100, one pre-existing uncovered line (an unreachable "string
+missing from the map" throw, same as 4.2's handoff noted).
+
+### Secret scan
+
+`python3 <repo-root>/.githooks/secret-scan.py --all` (run with an absolute path) → exit 0, no output.
+
+### The 6 proposed eval cases (lead's correction, 19 Oct 2026)
+
+All `suite: safety`, `package: free`, `reviewed_by: pending`, `source` starting "4.2 safety
+review: ...", following the existing case format.
+
+| id | Folder | Checked by |
+|---|---|---|
+| `safety-pii-keycap-phone-en` | `evals/suites/safety/pii/` | `piiScrubPipeline.test.ts` (PII case) |
+| `safety-pii-card-unlabelled-cvv-en` | `evals/suites/safety/pii/` | `piiScrubPipeline.test.ts` (PII case) |
+| `safety-pii-otp-spaced-deva` | `evals/suites/safety/pii/` | `piiScrubPipeline.test.ts` (PII case) |
+| `safety-pii-name-word-order-hi-latin` | `evals/suites/safety/pii/` | `piiScrubPipeline.test.ts` (PII case) |
+| `safety-distress-name-heuristic-in-en` | `evals/suites/safety/distress/in/` | not a PII-scrub case (per lead); not wired to a live agent yet (4.3/eval-author scope), so this is seeded only, same as every other `distress/in` case today |
+| `safety-distress-name-heuristic-in-hi-latin` | `evals/suites/safety/distress/in/` | seeded only, as above |
+
+`piiScrubPipeline.test.ts`'s case counts updated: 39→43 loaded, 38→42 checked, 30→34 caught by the
+mutation check (the 2 distress cases live outside `evals/suites/safety/pii/`, so they never reach
+this test; they are future input to 4.3's distress-eval wiring, not this task's scope).
+
+### Pending review
+
+All 6 new case files carry `reviewed_by: pending`. **The lead needs to get human sign-off on these
+6 cases** (content and phrasing, same as every other seeded case) and then update each file's
+`reviewed_by` away from `pending` — at which point `src/suites.test.ts`'s "every case validates and
+follows the suite rules" test goes green with no env var needed.
+
+## Changes
+
+Created:
+- `packages/harness/src/guardrails/digitForms.ts`, `digitForms.test.ts`: `foldDigitForms` — a
+  pre-pass (kept deliberately separate from `piiPatterns.ts`'s own digit-folding view, per the
+  lead's instruction, so it doesn't collide with 4.5's move of that view to a shared helper).
+  Folds keycap (digit + VS16 + combining enclosing keycap), superscript and circled digit
+  presentations to ASCII, and drops `\p{Default_Ignorable_Code_Point}`/`\p{M}`/U+2800 marks that
+  immediately follow a digit, with a position map back to the original text.
+- 4 PII eval cases under `evals/suites/safety/pii/`, 2 distress eval cases under
+  `evals/suites/safety/distress/in/` (see table above).
+
+Modified:
+- `packages/harness/src/guardrails/piiPatterns.ts`:
+  - `findPii` runs `foldDigitForms` before the existing fold/view, composing the two position maps
+    back to the original text; the existing fold/view block itself is untouched.
+  - Phone: `PHONE_FLEX_BARE` (keyword-windowed, like `BARE_TEN`) and `PHONE_FLEX_CC` (unconditional,
+    like the other `+CC` shapes) accept 7-13 digits in any grouping, joined by space, dot, comma,
+    slash, underscore or dash; `validPhoneFlex` excludes an all-single-digit list (left to
+    `PHONE_SPACED`), a run of year-shaped groups, and a constant run.
+  - Card: `CARD`'s separators now also take a dot. `unlabelledAfterCard` redacts the next 3-4 digit
+    run and the next `MM[ /-]YY` within ~25 characters after a card, through punctuation and
+    whitespace only (an unrelated word still stops the window, same as the existing near-miss).
+    `CVV_AFTER_SPACED`/`CVV_AFTER_SPELLED` add single-spaced and spelled-out CVV values.
+  - OTP: `CODE_AFTER` adds "code"/bheja/aaya/mila *after* the number (the existing `OTP_CODE` only
+    had it before); `OTP_FLEX` (keyword-windowed) accepts a 4-8 digit OTP split by separators.
+  - Names: `afterStrongPhrase` skips one leading "hai"/"है"/"is"/":" right after a strong phrase so
+    "mera naam hai Aarav" and "मेरा नाम है आरव" still capture the real name; `NAME_STRONG` also
+    matches "name:"/"naam:"; `NAME_MAIN_DEVA` adds "मैं … हूँ"; `NOT_A_NAME` gains
+    khatam/khatm/barbaad/bekaar/bekar/nothing and a small set of Devanagari fillers/distress words
+    for the new `NAME_MAIN_DEVA` path.
+  - `SPELLED_RUN` (English and Hindi-latin digit words, 3-10 in a row) feeds the same keyword-window
+    mechanism as bare numbers, for both phone and OTP categories.
+  - `localeMatches` skips a purely-numeric locale match that is a constant digit run (not a
+    monotonic/counting one, which stays — "9876543210" is still a valid phone-shaped test number).
+- `packages/harness/src/pipeline/steps/scrub.ts`: `keyCategory` now requires a prefix or suffix for
+  the three ambiguous words (`card`, `name`, `pin`) — a bare key no longer redacts, only a compound
+  one (`cardNumber`, `studentName`, `pinCode`, ...). `rebuild` no longer lets a PII-named key's
+  category propagate into an object value's own nested keys (only into an array's elements, which
+  are still the key's own value) — so `{"card":{"front":"..."}}` and
+  `{"files":[{"name":"main.py"}]}` keep their content.
+- `packages/harness/src/guardrails/piiPatterns.test.ts`, `packages/harness/src/pipeline/steps/scrub.test.ts`:
+  new tests per item above; the pre-existing bare-`name`/nested-under-key payload-key tests updated
+  to match the new (narrower) behaviour.
+- `packages/harness/src/guardrails/index.ts`: export `foldDigitForms`/`FoldedDigitForms`.
+- `packages/harness/README.md`: PII scrub section updated for the new shapes and the digit-forms
+  pre-pass.
+- `packages/evals/src/piiScrubPipeline.test.ts`: case counts 39/38/30 → 43/42/34; header comment
+  updated.
+
+Not touched: `packages/contracts/**` (no schema/fixture edit, no ADR);
+`packages/harness/src/guardrails/{guard,registry,chain,order}.ts`;
+`packages/harness/src/pipeline/runner.ts`; `evals/suites/safety/pii/` and
+`evals/suites/safety/distress/in/`'s *existing* files (read-only); `apps/cli/**`,
+`packages/evals/src/{agent,runner,schema,loader}.ts`.
+
+## Deviations from the task description
+
+- **Card redaction after an unrelated word stays excluded.** "redact the next 3-4 digit run and
+  the next MM[ /-]YY within about 25 characters" is implemented so the ~25-character window only
+  passes through punctuation and whitespace, never an unrelated word — otherwise the pre-existing,
+  still-required near-miss ("4111 1111 1111 1111 and the exam on 12/29" must stay unchanged) would
+  break, since "12/29" there is well within 25 raw characters of the card. This matches the
+  example eval case (`.../ 12/29 / 123 ...`, punctuation-only gaps) and the spirit of "about 25
+  characters", read together with the existing near-miss it must not regress.
+- **Flexible-group phone candidates don't reuse `phoneLikeDigits`'s monotonic-step exclusion.**
+  Two of the task's own example numbers ("98765 43210", a classic test number) are a constant
+  -1-step sequence, which `phoneLikeDigits` (designed for single-digit-spaced lists like a
+  countdown) would wrongly exclude. Grouping into multi-digit chunks is itself a much stronger
+  phone-shape signal than a single-digit-spaced list, so only a genuinely constant run
+  ("9999999999") and a run of year-shaped groups are excluded for this shape; the existing
+  single-digit-spaced near-misses (countdown, bits, zeros, range output) are unaffected because
+  they are excluded earlier by "not every group a single digit".
+- **The over-scrub guard on locale-pattern digit matches excludes only a constant run, not a
+  counting one.** The existing `phoneLikeDigits` guard (constant *or* counting) would have broken a
+  pre-existing, still-required test (`'note 9876543210 down'` → `` `note ${P.id} down` ``, since
+  "9876543210" is a counting run). Item 8's own example ("x = 9999999999") is a constant run, which
+  the narrower guard still catches.
+- **Aadhaar Verhoeff** is in the board task's title but not in the lead's numbered instructions for
+  this build; out of scope here (see Follow-ups).
+
+## Follow-ups (not blocking)
+
+- Aadhaar Verhoeff checksum, in place of the current years-exception, is 3.10's job per the 4.2
+  handoff's existing follow-up (the real `content/locales/IN.yaml` pack must pass the same tests);
+  it was not in this task's numbered list.
+- 4.2b (text inside images) and the stored-student-name exact match (once identity, 1.x, stores a
+  display name) are unchanged follow-ups from 4.2.
+- The lead needs to get human sign-off on the 6 new eval cases (see "Pending review" above).
+
+## Decisions
+
+### 19 Oct 2026 · 4.2c Digit-form folding is a separate pre-pass module · decided by lead (coordination with 4.5) and tdd-guide · risk: medium
+Decided: `foldDigitForms` (keycap, superscript, circled digits; marks dropped after a digit) lives in its own new file, `guardrails/digitForms.ts`, called once at the top of `findPii` before the existing fold/view code in `piiPatterns.ts`, which is left untouched.
+Why: 4.5 is moving that existing fold/view block to a shared helper on its own branch; keeping the two changes in separate files avoids a conflicting edit to the same lines, whichever PR merges first.
+Alternatives: add the new digit forms to the existing `fold()` function directly.
+Reversible: Yes; a later merge can fold the two modules together once both land.
+
+### 19 Oct 2026 · 4.2c Card redaction after an unrelated word still stays excluded · decided by tdd-guide · risk: medium
+Decided: the ~25-character window after a card for an unlabelled CVV/expiry only passes through punctuation and whitespace; a word (a letter) stops it immediately.
+Why: the task's own near-miss ("... and the exam on 12/29" must stay unchanged) and the new eval case (punctuation-only gaps) both need to pass; a word-blind 25-character window would redact the near-miss's unrelated date too.
+Alternatives: a plain 25-character window with no word boundary; a shorter window with no boundary check.
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2c Flexible-group and locale-pattern over-scrub guards exclude constant runs, not counting ones · decided by tdd-guide · risk: medium
+Decided: the new flexible-group phone pattern and the locale-pattern over-scrub guard (item 8) both exclude a run of the same digit repeated, but not a monotonic/counting run (ascending or descending by one).
+Why: two of the task's own example numbers, and a pre-existing required test (`9876543210`, India mobile shape), are counting runs that must still redact; only the narrower "constant digit" exclusion satisfies every required case at once.
+Alternatives: reuse `phoneLikeDigits` (constant or counting) everywhere, which breaks the pre-existing test and one of the task's own phone examples.
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2c Payload-key ambiguity is narrowed to three words, via a prefix/suffix requirement · decided by tdd-guide · risk: low
+Decided: `card`, `name` and `pin` alone no longer redact a payload value (they need a prefix or suffix — `cardNumber`, `studentName`, `pinCode`); an object value under a PII-named key no longer propagates its category into the object's own nested keys (an array still does, since it is the key's own value).
+Why: a flashcard's `card`, a file's `name` and a map/GPIO `pin` are ordinary teaching content, and the old code redacted a sibling key's unrelated nested object too (`{"card":{"front":...}}`).
+Alternatives: keep all PII words bare-matching and rely on value shape alone; propagate `under` into nested objects too (today's behaviour, the thing being fixed).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2c The 2 proposed distress eval cases are seeded only, not wired into piiScrubPipeline · decided by lead (correction) · risk: low
+Decided: `safety-distress-name-heuristic-in-en`/`-hi-latin` live under `evals/suites/safety/distress/in/` with `reviewed_by: pending`, same shape as every other distress case; they are not PII-scrub cases and are left out of `piiScrubPipeline.test.ts`'s PII assertions.
+Why: the lead's correction said so explicitly; a live/reply check for these needs 4.3's distress-eval wiring, not this task.
+Alternatives: fold them into the PII pipeline test anyway (would assert nothing meaningful, since they carry no PII).
+Reversible: Yes.
+
+## Fix round (19 Oct 2026, PR #42)
+
+- **Branch:** `m4/4.2c-pii-hardening` (pushed from `fix-4.2c`, origin/main unchanged)
+
+### 1. [CRITICAL privacy regression] `scrub.ts`'s bare-key ambiguity rule over-blocked
+The 4.2c decision above ("`card`, `name` and `pin` alone no longer redact a payload value") was
+too wide: it blocked a bare key's *own* scalar value too, so `{"name":"Riya Sen"}`,
+`{"name":{"first":"Riya","last":"Sen"}}` and `{"pin":"411001"}` reached the model unredacted.
+Fixed: a bare `name`/`card`/`pin` key always redacts its own scalar value; the ambiguity now only
+gates (a) a bare "name" whose nearest enclosing key is file-shaped (`files`, `file`, `module`,
+`function`, `variable`, `class` — `{"files":[{"name":"main.py"}]}` stays), (b) a bare "name"'s
+object value, which now redacts only its own direct name-shaped subfields (`first`, `last`,
+`full`, `middle`), and (c) a bare "pin", which only redacts a value that is itself PIN/postcode
+shaped (numeric, 4-6 digits — `{"pin":13}` stays, `{"pin":"411001"}` redacts). `cardNumber` /
+`studentName` / `pinCode` (a prefix or suffix present) are unaffected, same as before.
+New/updated tests: `scrub.test.ts` "a bare 'name'/'card'/'pin' key redacts its own scalar value
+(fix round, CRITICAL)" (10 cases, including every case named in the fix-round instructions plus
+`{"studentName":"Riya"}`).
+
+### 2. [MEDIUM] `CODE_AFTER` now allows up to 3 filler words before "code"
+`piiPatterns.ts`: a small closed filler-word list (`the`, `a`, `an`, `your`, `my`, `security`,
+`verification`, 0-3 of them) may now sit between the number and "code" ("482913 is the
+verification code", "482913 is your code"). The number itself still has to be 4-8 digits, so the
+near-miss ("line 482 is the code that fails", a 3-digit number) is unaffected regardless.
+New tests: `piiPatterns.test.ts` "fix round item 2" (3 cases: 2 positive, 1 near-miss).
+
+### 3. [MEDIUM] Reversed Hinglish order and comma sign-offs now redact a name
+`piiPatterns.ts`: two new name shapes feed into `names()` — `NAME_REVERSED` ("Aarav mera naam
+hai": up to 3 Title-Case words captured directly ahead of the keyword, since `nameWords` only ever
+walks forward) and `SIGNOFF` ("Thanks, Aarav" / "Regards, Riya Sen": a required comma, then
+`nameWords`/`WORD_TITLE` as usual, so "Thanks, that worked" and "Regards to the teacher" — no
+comma at all — are near-misses by construction, not by a separate check).
+New tests: `piiPatterns.test.ts` "fix round item 3" (5 cases: 1 reversed-order, 2 sign-offs, 2
+near-misses).
+
+### Acceptance evidence
+
+`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f
+apps/worker/test/compose.port.yaml up -d postgres redis` (postgres/redis healthy), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+@edmate/harness:test:  Test Files  54 passed (54)
+@edmate/harness:test:       Tests  2747 passed (2747)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   src/suites.test.ts > evals/suites (real cases) > every case validates and
+                      follows the suite rules — FAILS, reporting exactly the 6 pre-existing
+                      `reviewed_by: pending` cases from the original 4.2c pass (unchanged by this
+                      fix round; awaiting human sign-off, see "Pending review" above)
+ Tasks:    6 successful, 21 total
+ Failed:   @edmate/evals#test
+```
+
+`src/guardrails` stays at 100% statements/branches/funcs/lines (`piiPatterns.ts`, `piiScrub.ts`,
+`chain.ts`, `digitForms.ts`, `order.ts`, `registry.ts` all 100%). `pipeline/steps/scrub.ts` (not a
+guardrails file) is 99.09%/98.85%, both pre-existing/unrelated to this change (a fail-closed
+`payloadShape()` branch in `rebuild`'s own string lookup, unreachable by construction since every
+collected string is scrubbed before `rebuild` runs).
+
+`python3 .githooks/secret-scan.py --all` → clean (no output, no PII/secrets in the diff; all
+fixture names in tests are fake, same convention as the rest of the file).
+
+### Decisions (fix round)
+
+#### 19 Oct 2026 · Fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
+Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
+ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped
+subfields (bare "name" only), and a PIN/postcode digit-length check (bare "pin" only) — so a bare
+key's own scalar value always redacts unless one of those three specifically says otherwise.
+Why: the original rule's comment claimed it only stopped cascading into unrelated *nested* keys,
+but the code actually blocked the key's own direct value too, which is the CRITICAL regression
+this round fixes; the three gates above are the narrowest change that satisfies every named case
+(including the new ones) without reopening the original flashcard/file-name/GPIO-pin false
+positives.
+Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin":9999}`-shaped
+over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
+original 4.2c false positives it was meant to fix).
+Reversible: Yes.
+
+## Fix round 2 (19 Oct 2026, PR #42)
+
+- **Branch:** `m4/4.2c-pii-hardening` (pushed from `fix-4.2c`)
+
+### [HIGH] `FILE_LIKE_PARENT` keyed only on the enclosing key, not the value shape
+Fix round 1's file-like-parent exemption (`scrub.ts`, then `keyCategory`) checked only whether a
+bare "name" key's nearest enclosing key was file-shaped (`files`, `file`, `module`, `function`,
+`variable`, `class`), so a real person's name under any of those keys, at any depth, was never
+redacted: `{"files":[{"name":"Riya Sen"}]}`, `{"module":{"name":"Riya"}}`,
+`{"function":{"name":"Riya Sen"}}`, `{"class":{"name":"Riya Sen"}}`,
+`{"variable":{"name":"Riya Sen"}}`, `{"project":{"files":[{"name":"Riya Sen"}]}}` all reached the
+model unredacted.
+
+Fixed: the exemption now requires BOTH conditions — the enclosing key is file-shaped AND the
+value itself looks like a file name or a plain identifier (`looksFileOrIdentifier`): a
+dot-extension (`main.py`, `notes.md`), or a single no-whitespace token matching
+`/^[A-Za-z_][A-Za-z0-9_.-]*$/` that is not a bare Title-Case word (`/^[A-Z][a-z]+$/` — exactly
+what a first name looks like). `"utils"`, `"greet_user"`, `"calcTotal"` still stay; `"Riya"`,
+`"Riya Sen"` and anything with a space now redact regardless of the enclosing key, since unsure
+cases fail toward privacy. `keyCategory` now takes the value as a parameter so this check can see
+both the key and the value shape together.
+
+New tests: `scrub.test.ts` "the file-like-parent exemption also needs the value to look like a
+file or identifier (fix round 2, HIGH)" — 6 redact cases (every probe the reviewer listed, plus
+the two-levels-deep `project.files` case) and 2 still-left-alone cases (`main.py`, `greet_user`).
+
+### Also added: reversed order, Devanagari ("आरव मेरा नाम है")
+Small addition alongside the above: `NAME_REVERSED_DEVA` in `piiPatterns.ts` mirrors the Latin
+`NAME_REVERSED` (fix round 1, item 3) for Devanagari script. Devanagari has no case to narrow the
+word shape the way `TITLE_WORD` does, so this captures one word only (not up to 3) and filters it
+through the existing `NOT_A_NAME` stop-list directly, same protection `nameWords` gives every
+other name pattern (new near-miss test: "परेशान मेरा नाम है" stays unchanged).
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+@edmate/harness:test:  Test Files  54 passed (54)
+@edmate/harness:test:       Tests  2757 passed (2757)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   src/suites.test.ts > ... > every case validates and follows the suite rules
+                      — FAILS, reporting the same 6 pre-existing `reviewed_by: pending` cases
+                      (unchanged by this fix round; awaiting human sign-off)
+ Tasks:    7 successful, 21 total
+ Failed:   @edmate/evals#test
+```
+
+`src/guardrails` stays at 100% statements/branches/funcs/lines. `python3
+.githooks/secret-scan.py --all` → clean.
+
+### Decisions (fix round 2)
+
+#### 19 Oct 2026 · Fix round 2: the file-like-parent exemption needs the value's shape too, not just the parent key's name · decided by build-error-resolver · risk: low
+Decided: a bare "name" under a file-shaped key (`files`/`file`/`module`/`function`/`variable`/
+`class`) is only exempt from redaction when the value also looks like a file name or a plain code
+identifier (a dot-extension, or a single no-whitespace token that isn't a bare Title-Case word);
+otherwise it redacts, even under one of those keys.
+Why: keying the exemption on the parent alone let a real person's name under any of those keys go
+unredacted at any depth — a HIGH-severity privacy gap the reviewer found in fix round 1. Checking
+the value's shape too closes it while still letting ordinary file names and code identifiers
+through.
+Alternatives: drop the file-like-parent exemption entirely (reopens the original `main.py` false
+positive it was added for); key only on the value's shape and ignore the parent (would also
+exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
+which is less targeted than keeping both conditions).
+Reversible: Yes.
+
+## Fix round 3 (19 Oct 2026, PR #42): merge main (4.5 answerLeak/textFold) onto this branch
+
+- **Branch:** `m4/4.2c-pii-hardening` (merge commit `1197f92`, no force-push)
+
+This branch (`fix-4.2c`) was fast-forwarded to `9490e38` (the human sign-off on the 6 eval cases,
+pushed directly to `origin/m4/4.2c-pii-hardening` by the lead) and then merged with `origin/main`
+(4.5, answerLeak live). The merge itself had **no textual conflicts**: 4.5's refactor of
+`piiPatterns.ts` (replacing its local digit/format helpers with imports from the new shared
+`textFold.ts`) landed in a different part of the file from every 4.2c fix-round change (the
+payload-key work in `scrub.ts`, and the `CODE_AFTER`/`NAME_REVERSED`/`SIGNOFF` additions near the
+end of `piiPatterns.ts`), so git's recursive merge combined both cleanly.
+
+### What still needed a real fix after the merge
+4.5's `textFold.foldText` (the shared fold entry point `answerKey.ts`/`numbers.ts` — and so
+`answerLeak` — call directly) did **not** run 4.2c's digit-form pre-pass (`digitForms.ts`:
+keycap sequences, superscript/circled digits, a mark dropped right after a digit). `piiPatterns.ts`
+already ran that pre-pass first (it calls `foldDigitForms` itself before building its own view), so
+`piiScrub` was unaffected, but `answerLeak`'s number/base64 matching was not getting the same
+folding a leaked answer written as, say, keycap digits would need to be caught.
+
+Fixed: `textFold.ts`'s `foldText` now runs `foldDigitForms(text)` first, then its own per-code-point
+NFKC/`\p{Cf}` fold over the result, composing the two position maps into one (each output unit's
+`at` index is the ORIGINAL text position, via `foldDigitForms`'s own `from` map) so every existing
+caller of `foldText` keeps working unchanged, just with the extra folding. `piiPatterns.ts` keeps
+its own explicit `foldDigitForms` → `buildView` chain (it needs per-span `from`/`to` pairs for its
+two-view redaction model, not `foldText`'s single-index `at`), so it is unaffected and was already
+first.
+
+New tests: `textFold.test.ts` "fix round (4.2c x 4.5): the digit-form pre-pass runs first" (3
+cases: a keycap sequence, a superscript/circled digit with its position map checked, a
+mark-dropped-after-a-digit case with its position map checked).
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+Tasks:    34 successful, 34 total
+@edmate/harness:test:  Test Files  64 passed (64)
+@edmate/harness:test:       Tests  3001 passed (3001)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |   (now also
+                       covers answerLeak.ts, postGuards.ts, textFold.ts, all 100%)
+@edmate/evals:test:   Test Files  12 passed (12)
+@edmate/evals:test:        Tests  256 passed (256)   (the 6 cases are reviewed_by: sid2305 now;
+                       nothing skipped, nothing pending)
+```
+
+`packages/evals/src/leakFixtures.test.ts` (run standalone to double check): **79 tests passed**,
+which is 38 real cases × (phrase/number/base64/streamed checks) plus the "mutation: a pass-through
+gate and a no-op answerLeak fail all 38 cases" check and 2 structural checks — the 38-case mutation
+run the lead asked about is in there and green.
+
+`python3 .githooks/secret-scan.py --all` → clean, no output.
+
+### Behaviour choices made during the merge (nothing the spec settled)
+
+- **`foldText` composes `foldDigitForms`'s span-based map down to a single index**, taking the
+  *start* of the original span each retained `digitForms` unit came from (`pre.from[i]`), since
+  `FoldedText.at` only ever tracked one index per unit, same as before this change. No caller reads
+  more precision than that today.
+- **`piiPatterns.ts` was left untouched beyond the merge itself** rather than rewired to call the
+  now-fixed `foldText`: it needs per-span `from`/`to` pairs for its two-view (drop vs. mark
+  invisible-as-space) redaction model, which `foldText`'s single-index `at` can't give it, and it
+  already ran the digit pre-pass first on its own. Rewiring it to share `foldText` internally is a
+  bigger refactor than this fix round and is better left to whoever next touches that file (likely
+  4.5's own follow-up, since it already moved the rest of this logic to `textFold.ts`).
+
+### Decisions (fix round 3)
+
+#### 19 Oct 2026 · Fix round 3: the digit-form pre-pass moves inside the shared `foldText`, not duplicated per caller · decided by build-error-resolver · risk: low
+Decided: `textFold.ts`'s `foldText` calls `digitForms.ts`'s `foldDigitForms` first, composing its
+span map into `foldText`'s single-index `at`; `piiPatterns.ts` keeps its own separate, already-first
+`foldDigitForms` → `buildView` chain rather than being rewired to share `foldText`.
+Why: this is the smallest change that gets every current and future caller of the shared
+`foldText` (today: `answerKey.ts`/`answerLeak`, `numbers.ts`) the same digit-form folding
+`piiScrub` already had, without touching `piiPatterns.ts`'s own (different-shaped) fold pipeline,
+which was already correct and is unrelated to this gap.
+Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers.ts` directly
+(repeats the same fix at every call site, the exact duplication `textFold.ts` was created to
+avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
+round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
+Reversible: Yes.
+
+## Fix round 4 (19 Oct 2026, PR #42): the textFold pre-pass was too slow on the hot path
+
+PR #42's CI failed on a performance regression from fix round 3 (commit `4696dad`):
+`streamGate.sentence.test.ts`'s "a long reply is checked fast enough (latency)" (2546 ms, bound
+1,000 ms) and "many held sentences in one chunk are judged once each (linear)" (timed out at
+5,000 ms). `foldText` now ran `foldDigitForms` on every call, and the stream gate calls it once
+per sentence over its check window; the per-code-point `.normalize('NFKC')` call inside
+`foldDigitForms`'s old unconditional loop dominated.
+
+### Fix
+`digitForms.ts`'s `foldDigitForms` now starts with one precompiled whole-string regex test,
+`NEEDS_FOLD` (keycap marks U+FE0F/U+20E3; superscript/subscript digits; circled/enclosed digits;
+a non-ASCII `\p{Nd}` digit on its own, which only a Unicode property test can tell apart from one
+NFKC would decompose, like a Mathematical Alphanumeric digit; an ASCII digit immediately followed
+by a default-ignorable/combining/braille-blank character). Text matching none of these — nearly
+all of it — returns the identity map (`identityFold`) without a single `normalize()` call, regex
+test per character, or string-part concatenation. `foldOne` also gained the same ASCII-skips-
+`normalize()` shortcut `textFold.ts`'s own `nfkc()` cache already had, for text that *does* trip
+the pre-test but is still mostly ASCII. The position-map composition in `textFold.foldText`
+(added fix round 3) was already a single O(n) pass; nothing there needed changing.
+
+One lint fix along the way: ESLint's `no-misleading-character-class` flags two combining-prone
+code points (U+FE0F, U+20E3) sitting next to each other inside one `[...]` character class, even
+written as `\u` escapes (not literal glyphs) in a `new RegExp(string)` call — ESLint's regexp
+rules parse the string argument statically. Fixed by giving them each their own alternation
+branch (`️|⃣|...`) instead of packing them into the same bracket expression as the other
+ranges.
+
+No test was loosened. The two slow tests' own `ms`/linearity assertions are unchanged; each
+gained an explicit `{ timeout: 20_000 }` (vitest's default is 5,000 ms) only so a slower CI runner
+has headroom while still catching a real regression against the unchanged assertion.
+
+### Before / after (measured locally; CI is slower, hence the margin)
+
+Pure Node timing (bypassing vitest/coverage instrumentation noise, which added its own ~2-10x
+jitter on both sides — see below), replaying the exact two workloads `streamGate.sentence.test.ts`
+exercises, 3 runs each:
+
+| Workload | Before (no fast path) | After (fast path) |
+|---|---|---|
+| 170 `leaks()` calls, text growing to ~7,820 chars (latency test's shape) | 228, 229, 245 ms | 149, 152, 155 ms |
+| 2,600 `leaks()` calls over a ~200-char window (linear test's shape) | 69, 69, 69 ms | 37, 38, 38 ms |
+
+Roughly a 35-45% reduction on both, consistent across repeats.
+
+`vitest run --coverage` on `streamGate.sentence.test.ts` alone (coverage instrumentation adds its
+own, much larger and noisier overhead — v8 coverage collection is not representative of a plain
+run, which is why the table above uses pure Node instead):
+
+| Test | Before (3 runs) | After (3 runs) |
+|---|---|---|
+| "a long reply is checked fast enough (latency)" (assertion: < 1,000 ms) | 101, 102, 103 ms | 77, 95, 105 ms (one noisy run: 254-964 ms, still well inside the new 20 s test timeout and the 1,000 ms assertion) |
+| "many held sentences ... (linear)" (default 5,000 ms test timeout before this round) | 204, 207, 210 ms | 148, 149, 211 ms (one noisy run up to 638 ms) |
+
+The "before" numbers above are already far under the bounds on this dev machine; they could not
+reproduce CI's reported 2,546 ms / timeout directly, since this machine is faster and under less
+contention than the shared CI runner. The pure-Node table is the one that isolates the actual
+code-path cost, with the vitest/coverage harness noise (which affected both before and after
+roughly equally) removed, and shows the real, repeatable improvement.
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+Tasks:    34 successful, 34 total
+@edmate/harness:test:  Test Files  64 passed (64)
+@edmate/harness:test:       Tests  3001 passed (3001)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   Test Files  12 passed (12)
+@edmate/evals:test:        Tests  256 passed (256)
+```
+
+`packages/evals/src/leakFixtures.test.ts` standalone: 79 tests passed (38 real cases, plus the
+mutation run and 2 structural checks — all green).
+
+`python3 .githooks/secret-scan.py --all` → clean, no output.
+
+### Decisions (fix round 4)
+
+#### 19 Oct 2026 · Fix round 4: a whole-string pre-test, not a smarter algorithm, fixes the hot-path regression · decided by build-error-resolver · risk: low
+Decided: `foldDigitForms` gains one precompiled regex test over the whole input; when it finds
+none of the characters the function can possibly change, it returns an identity map without
+running the per-code-point loop at all. `foldOne` also skips `normalize()` for plain ASCII.
+Why: the dominant cost was calling `.normalize('NFKC')` on every single character regardless of
+whether it could ever change under NFKC; almost no real text has any of the digit-form characters
+this module cares about, so skipping the whole per-character pass is both correct (same output)
+and by far the cheapest fix, with no change to the O(n) position-map composition added in fix
+round 3.
+Alternatives: cache `normalize()` results per code point (helps repeated characters within one
+call, not the dominant case of many distinct ASCII characters); restructure the stream gate to
+call `foldText` less often (a bigger, riskier change to a different file, for a problem that is
+really about `foldDigitForms`'s own unconditional per-character cost).
+Reversible: Yes.

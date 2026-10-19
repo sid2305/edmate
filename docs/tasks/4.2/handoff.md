@@ -249,3 +249,16 @@ Decided: a second email pattern matches words joined by " dot " and " at ", endi
 Why: 4.0d's `safety-pii-email-spelled-out-en`, merged on main, makes it part of "100% on the seeded PII cases".
 Alternatives: leave the case as a reply check like the spelled-out phone (needs the lead's call); a wider top-level-domain list.
 Reversible: Yes, but only with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.2c PII pattern hardening · decided by team lead · risk: high
+Decided: the 4.2 safety review's deferred forms are scrubbed (keycap, superscript and circled digits; flexible phone, card, CVV and OTP shapes; spelled-out numbers; Hindi word-order names, name:/naam:, sign-offs). PII-named payload keys redact their own values, with narrow exemptions for flashcards, small numbers and file or identifier values under code-shaped keys.
+Why: every form here reached the model unscrubbed in the 4.2 review's probes.
+Alternatives: leave these to a model-based scrubber.
+Reversible: yes.
+
+### 19 Oct 2026 · 4.2c Accepted gap: lowercase names under code-shaped payload keys · decided by team lead (safety review) · risk: medium
+Decided: a single lowercase, all-caps or snake_case token under a files, file, module, function, variable or class key ({"module":{"name":"riya"}} in `packages/harness/src/pipeline/steps/scrub.ts`) is treated as an identifier and not redacted. Skill payloads must never put a real student name in those fields; that is fixed at the source in 5.x skill design.
+Why: such a token has the same shape as a real identifier ("utils"); redacting it would bring back the over-scrubbing that broke flashcards and file names.
+Alternatives: redact every bare token under code keys; drop the exemption.
+Reversible: yes.
+

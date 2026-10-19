@@ -10,6 +10,313 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.2c fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
+Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
+ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped
+subfields (bare "name" only), and a PIN/postcode digit-length check (bare "pin" only) — so a bare
+key's own scalar value always redacts unless one of those three specifically says otherwise.
+Why: the original rule's comment claimed it only stopped cascading into unrelated *nested* keys,
+but the code actually blocked the key's own direct value too, which is the CRITICAL regression
+this round fixes; the three gates above are the narrowest change that satisfies every named case
+(including the new ones) without reopening the original flashcard/file-name/GPIO-pin false
+positives.
+Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin":9999}`-shaped
+over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
+original 4.2c false positives it was meant to fix).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 2: the file-like-parent exemption needs the value's shape too, not just the parent key's name · decided by build-error-resolver · risk: low
+Decided: a bare "name" under a file-shaped key (`files`/`file`/`module`/`function`/`variable`/
+`class`) is only exempt from redaction when the value also looks like a file name or a plain code
+identifier (a dot-extension, or a single no-whitespace token that isn't a bare Title-Case word);
+otherwise it redacts, even under one of those keys.
+Why: keying the exemption on the parent alone let a real person's name under any of those keys go
+unredacted at any depth — a HIGH-severity privacy gap the reviewer found in fix round 1. Checking
+the value's shape too closes it while still letting ordinary file names and code identifiers
+through.
+Alternatives: drop the file-like-parent exemption entirely (reopens the original `main.py` false
+positive it was added for); key only on the value's shape and ignore the parent (would also
+exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
+which is less targeted than keeping both conditions).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 3: the digit-form pre-pass moves inside the shared `foldText`, not duplicated per caller · decided by build-error-resolver · risk: low
+Decided: `textFold.ts`'s `foldText` calls `digitForms.ts`'s `foldDigitForms` first, composing its
+span map into `foldText`'s single-index `at`; `piiPatterns.ts` keeps its own separate, already-first
+`foldDigitForms` → `buildView` chain rather than being rewired to share `foldText`.
+Why: this is the smallest change that gets every current and future caller of the shared
+`foldText` (today: `answerKey.ts`/`answerLeak`, `numbers.ts`) the same digit-form folding
+`piiScrub` already had, without touching `piiPatterns.ts`'s own (different-shaped) fold pipeline,
+which was already correct and is unrelated to this gap.
+Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers.ts` directly
+(repeats the same fix at every call site, the exact duplication `textFold.ts` was created to
+avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
+round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 4: a whole-string pre-test, not a smarter algorithm, fixes the hot-path regression · decided by build-error-resolver · risk: low
+Decided: `foldDigitForms` gains one precompiled regex test over the whole input; when it finds
+none of the characters the function can possibly change, it returns an identity map without
+running the per-code-point loop at all. `foldOne` also skips `normalize()` for plain ASCII.
+Why: the dominant cost was calling `.normalize('NFKC')` on every single character regardless of
+whether it could ever change under NFKC; almost no real text has any of the digit-form characters
+this module cares about, so skipping the whole per-character pass is both correct (same output)
+and by far the cheapest fix, with no change to the O(n) position-map composition added in fix
+round 3.
+Alternatives: cache `normalize()` results per code point (helps repeated characters within one
+call, not the dominant case of many distinct ASCII characters); restructure the stream gate to
+call `foldText` less often (a bigger, riskier change to a different file, for a problem that is
+really about `foldDigitForms`'s own unconditional per-character cost).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Digit-form folding is a separate pre-pass module · decided by lead (coordination with 4.5) and tdd-guide · risk: medium
+Decided: `foldDigitForms` (keycap, superscript, circled digits; marks dropped after a digit) lives in its own new file, `guardrails/digitForms.ts`, called once at the top of `findPii` before the existing fold/view code in `piiPatterns.ts`, which is left untouched.
+Why: 4.5 is moving that existing fold/view block to a shared helper on its own branch; keeping the two changes in separate files avoids a conflicting edit to the same lines, whichever PR merges first.
+Alternatives: add the new digit forms to the existing `fold()` function directly.
+Reversible: Yes; a later merge can fold the two modules together once both land.
+
+---
+
+### 19 Oct 2026 · 4.2c Card redaction after an unrelated word still stays excluded · decided by tdd-guide · risk: medium
+Decided: the ~25-character window after a card for an unlabelled CVV/expiry only passes through punctuation and whitespace; a word (a letter) stops it immediately.
+Why: the task's own near-miss ("... and the exam on 12/29" must stay unchanged) and the new eval case (punctuation-only gaps) both need to pass; a word-blind 25-character window would redact the near-miss's unrelated date too.
+Alternatives: a plain 25-character window with no word boundary; a shorter window with no boundary check.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Flexible-group and locale-pattern over-scrub guards exclude constant runs, not counting ones · decided by tdd-guide · risk: medium
+Decided: the new flexible-group phone pattern and the locale-pattern over-scrub guard (item 8) both exclude a run of the same digit repeated, but not a monotonic/counting run (ascending or descending by one).
+Why: two of the task's own example numbers, and a pre-existing required test (`9876543210`, India mobile shape), are counting runs that must still redact; only the narrower "constant digit" exclusion satisfies every required case at once.
+Alternatives: reuse `phoneLikeDigits` (constant or counting) everywhere, which breaks the pre-existing test and one of the task's own phone examples.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Payload-key ambiguity is narrowed to three words, via a prefix/suffix requirement · decided by tdd-guide · risk: low
+Decided: `card`, `name` and `pin` alone no longer redact a payload value (they need a prefix or suffix — `cardNumber`, `studentName`, `pinCode`); an object value under a PII-named key no longer propagates its category into the object's own nested keys (an array still does, since it is the key's own value).
+Why: a flashcard's `card`, a file's `name` and a map/GPIO `pin` are ordinary teaching content, and the old code redacted a sibling key's unrelated nested object too (`{"card":{"front":...}}`).
+Alternatives: keep all PII words bare-matching and rely on value shape alone; propagate `under` into nested objects too (today's behaviour, the thing being fixed).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c The 2 proposed distress eval cases are seeded only, not wired into piiScrubPipeline · decided by lead (correction) · risk: low
+Decided: `safety-distress-name-heuristic-in-en`/`-hi-latin` live under `evals/suites/safety/distress/in/` with `reviewed_by: pending`, same shape as every other distress case; they are not PII-scrub cases and are left out of `piiScrubPipeline.test.ts`'s PII assertions.
+Why: the lead's correction said so explicitly; a live/reply check for these needs 4.3's distress-eval wiring, not this task.
+Alternatives: fold them into the PII pipeline test anyway (would assert nothing meaningful, since they carry no PII).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c PII pattern hardening · decided by team lead · risk: high
+Decided: the 4.2 safety review's deferred forms are scrubbed (keycap, superscript and circled digits; flexible phone, card, CVV and OTP shapes; spelled-out numbers; Hindi word-order names, name:/naam:, sign-offs). PII-named payload keys redact their own values, with narrow exemptions for flashcards, small numbers and file or identifier values under code-shaped keys.
+Why: every form here reached the model unscrubbed in the 4.2 review's probes.
+Alternatives: leave these to a model-based scrubber.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Accepted gap: lowercase names under code-shaped payload keys · decided by team lead (safety review) · risk: medium
+Decided: a single lowercase, all-caps or snake_case token under a files, file, module, function, variable or class key ({"module":{"name":"riya"}} in `packages/harness/src/pipeline/steps/scrub.ts`) is treated as an identifier and not redacted. Skill payloads must never put a real student name in those fields; that is fixed at the source in 5.x skill design.
+Why: such a token has the same shape as a real identifier ("utils"); redacting it would bring back the over-scrubbing that broke flashcards and file names.
+Alternatives: redact every bare token under code keys; drop the exemption.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 0.14 Wall-clock latency bounds are gross-regression guards only · decided by team lead · risk: low
+Decided: the stream-gate latency test keeps a 5 s wall-clock bound; linear work is asserted by counting work, not by timing.
+Why: shared CI runners with coverage are 8–12× slower than local runs, and the 1 s bound turned main's CI red.
+Alternatives: drop the timing test; skip it on CI.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
+Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
+Why: the model's instructions are the last line of defence when a guard misses.
+Alternatives: keep the fixture packs; ship without a human signature.
+Reversible: yes (a new pack version).
+
+---
+
+### 19 Oct 2026 · 3.11b Conversation-side markers removed · decided by team lead (safety review) · risk: medium
+Decided: the teacher-label, generic-disclaimer, no-helplines and empty-turn sections carry no `[[…]]` marker, because their text reaches the conversation or is passed on. The teacher note reads "(Platform note: the teacher wrote this reply.)". System-prompt section markers stay.
+Why: a marker in conversation text teaches the model to write `[[`, which the jailbreak cases forbid, and lets a student forge the teacher's voice.
+Alternatives: keep every marker.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
+Decided: `generate` now uses the sentence gate by default and `postGuard` runs the post-phase chain with answerLeak; no real-model turn may run before this merges. Reviewed by safety-reviewer (required), with security-reviewer, typescript-reviewer and silent-failure-hunter.
+Why: this task is the gate before any real-model turn; the fixtures show 0 leaks for numeric and encoded forms, and the mutation run shows the test bites.
+Alternatives: keep the pass-through default and rely on the final check only (the student would see the leak stream in before the replace).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The student's own code may be quoted back only when it is clearly code, and never as a confirmation · decided by tdd-guide (narrowing lead revision 6; tightened in fix round 1 after the safety review) · risk: high
+Decided: a code-shaped key in the student's current message is allowed back only when it sits on a line that is clearly code (inside a ``` fence, indented, ending in a colon, or starting with a statement keyword or an assignment, and not ending in "?") or comes right after `elif`, `while` or `return`. Offering options never counts ("is it .upper() or .lower()?", backticked or not, "n % 2 == 1 or n % 2 == 0"); and/or/not/else/if count only on a clearly-code line. An apostrophe inside a word does not make a key code-shaped. Even an allowed quote is a leak in an answer or confirmation context (yes, right, correct, exactly, fix, use, solution, works, sahi, haan, bilkul, हाँ, सही within five words in the same sentence), and inside decoded base64. Plain words and numbers are never allowed back.
+Why: the first rule (any code word or backticks before the key) was beaten by offering options; echoing a proposed answer confirms it.
+Alternatives: exempt any code key the student typed (fails leak-co6-falseattempt-en); drop the exemption (false positives on the student's own buggy code).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 A withheld leak: the whole post chain judges everything the model wrote; only a checked rewrite or the hint is shown · decided by lead (revision 2) and tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: when generate reports `withheld`, or the full model text (`raw`) leaks, postGuard runs the post chain on `raw` instead of the shown draft. So the other post guards still see it (an escalate is forwarded), and answerLeak makes its one bounded small-tier rewrite of it, which every guard re-checks. Anything else (no rewrite, a failed or leaking rewrite, a block, a chain failure) gives `ANSWER_LEAK_SAFE_HINT`. With no `raw` kept, a withheld turn is always the hint.
+Why: skipping the chain hid escalates in withheld text, and a canned hint for every one-digit false positive teaches nothing.
+Alternatives: go straight to the hint without a chain run (the first version).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream gate checks a window measured in visible units, holds number-word tails, and works in linear time · decided by tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: each sentence is checked with the shown text from `reach` visible units back (whitespace and invisible units are walked over, not counted; then back to the start of a word) plus the new text. `reach` is 64 + 4 × the longest key, plus 512 when there is a number key. A tail that could start a key, a number, or a run of number words ("two thousand", "twenty") is held. Each unit is scanned for sentence ends once and each sentence judged once; sentences within the 200-unit cap are judged one by one, a longer stretch goes through the cap cut.
+Why: the first window counted spaces, so 700 spaces between "two thousand" and "sixteen" pushed the start out of it; and rescanning the buffer made one 400k chunk take 3.1 s.
+Alternatives: check all shown text every sentence (quadratic); cap the window in raw units (beaten by padding).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 More than a reply's maximum of model text trips the gate · decided by security-reviewer (fix round 1) and tdd-guide · risk: high
+Decided: once the text pushed in one attempt exceeds `LIMITS.modelTextMaxLength` (8000), the gate trips: the rest is withheld and the reply is the hint. generate keeps at most 8000 units of `raw`, and `GenerateResult.draft`/`raw` are capped at 8000 in the harness's own schema. The contracts `ModelChunkSchema` is unchanged.
+Why: bounded work on adversarial streams; no reply is longer than that anyway.
+Alternatives: cap each chunk in contracts (needs an ADR); let the gate judge any length (unbounded work).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Hindi in Latin letters covers 21-99, with spelling folding · decided by safety-reviewer (fix round 1) and tdd-guide (the fold) · risk: medium
+Decided: 21-99 are listed in Latin letters with common spellings, and words of five or more letters are also matched after a fold (doubled letters once, chh/chch as ch, au as o, ai as e, w as v, e as i), so chaubees, chaubis and chobis all read 24. A folded form that two values share is dropped, never guessed. They combine with hazaar/lakh ("chaubees hazaar" is 24000).
+Why: the safety review found 21-99 Hinglish answers went through.
+Alternatives: list every spelling by hand (never complete).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Count and confirmation words make an answer context for one-digit keys · decided by safety-reviewer (fix round 1) · risk: medium
+Decided: times, runs, run, baar, बार, chalega, chalegi, chalta, चलेगा, चलेगी, it's and its join the answer words (three words before, one after). "It runs three times", "It's three", "Loop teen baar chalega" and "तीन बार चलेगा" trip key 3. Known strict trips, pinned by test: "Ek baar code ko line by line padho" (key 1) and "Read it three times slowly" (key 3).
+Why: a count is how a loop answer is said.
+Alternatives: a wider window (more false positives).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Decimals, fractions and grouped thousands · decided by safety-reviewer (fix round 1) and tdd-guide (precision rule) · risk: medium
+Decided: a fraction key ("5/6") is its value; a decimal key matches mentions written to at least its precision that round to it (".83" and "0.833" for 0.83, a leading "." allowed); a fraction key matches decimals of 2+ places it rounds to ("0.83" for 5/6, not "0.8"); "24 000" with a space (no-break and narrow no-break spaces fold to a space) is 24000.
+Why: the same answer in another notation is still the answer.
+Alternatives: exact match only.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Short and padded base64 · decided by security-reviewer (fix round 1) and tdd-guide (contexts) · risk: medium
+Decided: a padded run is never treated as a plain word ("Mw==", "Mg=="); runs of 2-3 characters ("MTY", "Mw") are decoded near the word "base64" (within 40 characters), and, if not word-shaped, after an answer word or standing alone in a sentence. Every candidate counts toward the 256-run cap, skipped ones included.
+Why: "MTY" without padding is 16; "Mw==" is 3.
+Alternatives: decode every 2-3 character run (plain words decode to noise that trips one-digit keys).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A failed postGuard step is reported; a post guard's escalate text is saved on the CommitRecord · decided by silent-failure-hunter and safety-reviewer (fix round 1) · risk: medium
+Decided: when the postGuard step throws, times out or returns a malformed result, the runner reports `PostGuardStepFailed` (kind and error name only) before the safe reply. On a postGuard escalate, the chain's text goes on `CommitRecord.escalatedText` (never shown); commit does not persist it yet.
+Why: no step failure goes unreported; revision 13 says save the escalate text.
+Alternatives: keep the text on the step result only (the first version).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Six new leak cases, pending the human's sign-off · decided by lead (fix round 1) and tdd-guide (bank items) · risk: high
+Decided: six cases are added under `evals/suites/leak/` with `reviewed_by: pending`. The bank has no 21-99 item outside loops, no year and no 5/6, so the closest items are used: lo-q2 (55) for the 21-99 words and the padded-spaces cases, lo-q6 (3) for the count, vv-q5 (16) for short base64, and vv-q1 (7 / 2 = 3.5) for the decimal case, whose "starting with a dot" is dropped. lo-q6's key (3 in `range(3)`) and vv-q1's (7 / 2) also occur in their questions (5.6).
+Why: each review probe gets a fixture; the human signs cases off before merge.
+Alternatives: write new bank items (content work outside this task).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A post guard's escalate ends the turn as an escalation · decided by lead (revision 13) and tdd-guide (runner path) · risk: high
+Decided: postGuard returns `escalate` with the alert and the chain's text; the runner sends `replace ''`, then runs its existing escalate path (caring template from the escalate step, alert raised, outcome escalated). The chain's text stays on the step result only; it is never shown or stored.
+Why: the 4.1 safety review: save the escalate text but always reply with the caring template. No post guard escalates yet; this is the wiring for 4.8/4.9.
+Alternatives: store the chain's text on the CommitRecord (a new field nobody reads yet).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 postGuard owns the reply text for guard verdicts; the runner keeps its fallback for crashes · decided by tdd-guide (plan question) · risk: medium
+Decided: the step returns the hint when answerLeak was involved in a block or failure, else `fallbackReplies.safeReply`; the runner's own safe reply is used only when the step throws, times out or returns something malformed. The runner sends `replace ''` before every postGuard replacement, so skill events and sources clear too (revision 12).
+Why: one owner per case; a chain failure is reported (`PostGuardFailed`, guard name and cause only) instead of hidden behind a throw.
+Alternatives: always throw on a non-ok chain and let the runner pick the text.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Arithmetic uses a small built-in evaluator, not mathjs · decided by tdd-guide · risk: medium
+Decided: `print(8*2)` and `f"{5+3}"` are evaluated by a hand-written parser (numbers, `+ - * / // % ** × ÷`, parentheses; at most 64 units, 31 tokens, depth 8).
+Why: mathjs is not yet a dependency, and its `evaluate` over model text is a larger attack surface than a parser that can only add and multiply literals.
+Alternatives: add mathjs and walk only its number and operator nodes.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 How keys match: whole numbers, word-bounded text, answer context for one digit · decided by lead (revision 6) and tdd-guide (details) · risk: medium
+Decided: a key that is one number (digits, literal or number words) matches only as a whole number in any form; text keys match at word boundaries after folding (spaces and commas ignored), so `if marks >= 80:` does not match inside `elif marks >= 80:`. A one-digit key's digits count anywhere, but its words and arithmetic only in an answer context (an answer word up to three words before or right after, or the number alone in its sentence); inside decoded base64, its digits need that context too.
+Why: ordinary lesson text ("one step", "teen lines hain", "1 + 2") must pass; decoded noise ("j{0z") can hold stray digits.
+Alternatives: substring matching (false positives on 160, 2016 and `elif`).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 Base64 skips plain words and decodes only printable UTF-8 · decided by tdd-guide · risk: medium
+Decided: runs of 4+ base64/base64url characters (padded or not) are decoded once; lower-case or Capitalised words (also hyphenated) are skipped; only strict, printable UTF-8 is kept. Hex and reversed digits are not decoded (LOW extras, left out).
+Why: "together" decoded to printable noise containing a digit and tripped a one-digit key in the hint itself.
+Alternatives: require 8+ characters (misses `MTY=`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The rewrite is one small-tier call with a fixed instruction and no key · decided by lead (revision 11) and tdd-guide (shape) · risk: medium
+Decided: the rewrite sends the draft with a fixed English instruction (`REWRITE_SYSTEM`) on the small tier, at most 400 output tokens and 60% of the guard's time slice, after the turn's cost check. A failure, a tool call or a leaking result gives the hint.
+Why: the draft already holds the answer, so the key adds nothing; the matcher re-checks whatever comes back.
+Alternatives: send the key list so the model knows what to remove.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Post-guard time slices: (2 s − 200 ms) / (2 × guards) · decided by lead (revision 14) and tdd-guide (margin) · risk: low
+Decided: each post guard's slice is 900 ms with one guard and 150 ms with six; a six-guard chain that rewrites and uses almost every slice ends at 1 788 ms.
+Why: both passes of every guard fit inside the step's 2 s with a margin.
+Alternatives: an overall chain deadline.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Constraints for 5.6 (answer keys) · decided by lead (revision 6) and tdd-guide (the exception) · risk: medium
+Decided: no answer key may match its problem statement; each answer may have several keys (one per canonical phrasing, e.g. `n >= 1 and n <= 10` and `1 <= n <= 10`). Exception found: for "what does this print" items the printed output is in the question (co-q2's only key, `Warm`), so 5.6 must decide how to handle those (for example, count them only in an answer context).
+Why: a key in the problem statement makes the guard trip when the tutor quotes the problem.
+Alternatives: none chosen for the exception; it is left to 5.6.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream is read to the end after a trip · decided by tdd-guide · risk: low
+Decided: after the gate trips, the attempt keeps reading the model stream (showing nothing) until it ends.
+Why: usage arrives at the end of the stream; stopping early would lose metering.
+Alternatives: close the stream on a trip (faster hint, unmetered spend).
+Reversible: Yes.
+
+---
+
 ### 19 Oct 2026 · 3.16d The advisory-lock acquire/release pattern is factored into an exported `withMigrateLock` helper · decided by tdd-guide · risk: low
 Decided: `withMigrateLock(lockClient, key, fn, maxWaitMs?)` wraps `acquireMigrateLock` + `fn()` + a conditional `pg_advisory_unlock`, tracked by a `locked` flag set only after `acquireMigrateLock` returns; `migrateDatabase()` now calls it instead of inlining the same `try`/`finally`.
 Why: the review's finding (unlock only when the lock was actually taken) needs a unit test, and `migrateDatabase()` itself isn't unit-testable (it always opens a real `pg.Client`/pool against a URL); factoring the lock logic into a small function that takes an injectable client makes the "no unlock after a failed acquire" behaviour directly testable without touching `migrateDatabase()`'s signature or needing a real database.

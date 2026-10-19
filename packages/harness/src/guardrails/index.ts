@@ -1,4 +1,11 @@
-// Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9 (4.2: piiScrub).
+// Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9 (4.2: piiScrub,
+// 4.5: answerLeak).
+export {
+  ANSWER_LEAK_SAFE_HINT,
+  createAnswerLeakGuard,
+  type LeakRewrite,
+  type PostGuardCtx,
+} from './answerLeak.js';
 export {
   type GuardBlockCause,
   type GuardChainOptions,
@@ -16,6 +23,7 @@ export {
   type GuardPhase,
   isGuardPhase,
 } from './order.js';
+export { type FoldedDigitForms, foldDigitForms } from './digitForms.js';
 export {
   compileLocalePatterns,
   findPii,
@@ -27,4 +35,6 @@ export {
   scrubPii,
 } from './piiPatterns.js';
 export { createPiiScrubGuard, type PiiScrubCtx } from './piiScrub.js';
+export { postGuards } from './postGuards.js';
 export { GuardRegistry, GuardRegistryError } from './registry.js';
+export { digitValue, type FoldedText, foldText, isDecimalDigit, isFormatChar } from './textFold.js';
