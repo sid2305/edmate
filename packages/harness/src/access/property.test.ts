@@ -20,6 +20,8 @@ import { testDeps } from '../testing/testSteps.js';
 /** Change the seed to explore; a failure prints it so the run can be replayed. */
 const SEED = 20261018;
 const ITERATIONS = 2_000;
+/** 2,000 hostile-store turns took 5.1-5.8s on CI runners (well under 1s locally); give headroom. */
+const TEST_TIMEOUT_MS = 30_000;
 /** The harness lib has no DOM or Node types; vitest prints console output. */
 const log = (s: string): void =>
   (globalThis as { console?: { log(s: string): void } }).console?.log(s);
@@ -140,48 +142,52 @@ function checkInvariant(out: Entitled, input: TurnInput) {
 }
 
 describe('entitle property: fail closed or return only what the entitlement owns', () => {
-  it(`${ITERATIONS} random turns against hostile stores (seed ${SEED})`, async () => {
-    log(`[access property] seed ${SEED}`);
-    const r = prng(SEED);
-    const tally: Record<string, number> = {};
-    for (let i = 0; i < ITERATIONS; i++) {
-      // Half the turns start from a coherent (source, student, agent, session); half are random.
-      const coherent = r.chance(0.5) ? r.pick(COHERENT) : null;
-      const source = coherent?.source ?? r.pick(SOURCES);
-      const opts = coherent && r.chance(0.8) ? COHERENT_OPTS : optionsFor(r);
-      const w = twoTeacherWorld();
-      const t = testDeps({
-        overrides: {
-          entitlementSource: source,
-          entitlements: hostileEntitlements(memoryEntitlementStore(w, opts), r),
-          turnConfig: hostileConfig(memoryTurnConfigStore(w), r),
-        },
-      });
-      const input: TurnInput = {
-        ...demoTurnInput,
-        studentId: coherent?.studentId ?? r.pick(STUDENTS),
-        agentId: coherent?.agentId ?? r.pick(AGENTS),
-        sessionId: coherent && r.chance(0.8) ? coherent.sessionId : r.pick(SESSIONS),
-      };
-      let outcome: string;
-      try {
-        const out = await entitle({
-          input,
-          deps: t.deps,
-          cancel: cancelSource().token,
-          turnId: `turn_${i}`,
+  it(
+    `${ITERATIONS} random turns against hostile stores (seed ${SEED})`,
+    async () => {
+      log(`[access property] seed ${SEED}`);
+      const r = prng(SEED);
+      const tally: Record<string, number> = {};
+      for (let i = 0; i < ITERATIONS; i++) {
+        // Half the turns start from a coherent (source, student, agent, session); half are random.
+        const coherent = r.chance(0.5) ? r.pick(COHERENT) : null;
+        const source = coherent?.source ?? r.pick(SOURCES);
+        const opts = coherent && r.chance(0.8) ? COHERENT_OPTS : optionsFor(r);
+        const w = twoTeacherWorld();
+        const t = testDeps({
+          overrides: {
+            entitlementSource: source,
+            entitlements: hostileEntitlements(memoryEntitlementStore(w, opts), r),
+            turnConfig: hostileConfig(memoryTurnConfigStore(w), r),
+          },
         });
-        checkInvariant(out, input);
-        outcome = `${source}:ok`;
-      } catch (err) {
-        if (!(err instanceof TurnRejection)) throw err;
-        expect(['no_access', 'limit_reached']).toContain(err.code);
-        outcome = err.code;
+        const input: TurnInput = {
+          ...demoTurnInput,
+          studentId: coherent?.studentId ?? r.pick(STUDENTS),
+          agentId: coherent?.agentId ?? r.pick(AGENTS),
+          sessionId: coherent && r.chance(0.8) ? coherent.sessionId : r.pick(SESSIONS),
+        };
+        let outcome: string;
+        try {
+          const out = await entitle({
+            input,
+            deps: t.deps,
+            cancel: cancelSource().token,
+            turnId: `turn_${i}`,
+          });
+          checkInvariant(out, input);
+          outcome = `${source}:ok`;
+        } catch (err) {
+          if (!(err instanceof TurnRejection)) throw err;
+          expect(['no_access', 'limit_reached']).toContain(err.code);
+          outcome = err.code;
+        }
+        tally[outcome] = (tally[outcome] ?? 0) + 1;
       }
-      tally[outcome] = (tally[outcome] ?? 0) + 1;
-    }
-    log(`[access property] outcomes ${JSON.stringify(tally)}`);
-    // The generator reaches acceptance for every source, not only refusals.
-    for (const s of SOURCES) expect(tally[`${s}:ok`] ?? 0, s).toBeGreaterThan(0);
-  });
+      log(`[access property] outcomes ${JSON.stringify(tally)}`);
+      // The generator reaches acceptance for every source, not only refusals.
+      for (const s of SOURCES) expect(tally[`${s}:ok`] ?? 0, s).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
