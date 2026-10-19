@@ -1,5 +1,6 @@
 // Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9.
 export {
+  type GuardBlockCause,
   type GuardChainOptions,
   type GuardChainResult,
   type GuardFailure,

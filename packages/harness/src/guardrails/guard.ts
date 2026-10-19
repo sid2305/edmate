@@ -13,7 +13,8 @@ export interface GuardRun {
 /**
  * One guard. `Ctx` is phase-specific and owned by the guard tasks (4.2-4.9): scrub and pre guards
  * need locale and entitlement context, post guards the turn context and retrieved chunks.
- * `cancel` fires when the guard's time slice runs out or the step is cancelled; stop work then.
+ * `cancel` fires when the guard's own time slice runs out or the calling step's cancel token
+ * (`GuardChainOptions.cancel`) fires; stop work then. The chain stops waiting either way.
  */
 export interface Guard<Ctx> {
   readonly name: string;

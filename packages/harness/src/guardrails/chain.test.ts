@@ -5,7 +5,13 @@ import { cancelSource } from '../pipeline/clock.js';
 import { fakeGuard } from '../testing/guardFixtures.js';
 import { prng } from '../testing/prng.js';
 import { type VirtualClock, virtualClock } from '../testing/virtualClock.js';
-import { type GuardChainOptions, type GuardOutcomeEvent, runGuardChain } from './chain.js';
+import {
+  type GuardChainOptions,
+  type GuardChainResult,
+  type GuardFailure,
+  type GuardOutcomeEvent,
+  runGuardChain,
+} from './chain.js';
 import type { Guard } from './guard.js';
 import { GUARD_ORDER, type GuardPhase } from './order.js';
 import { GuardRegistry } from './registry.js';
@@ -38,6 +44,14 @@ function setup(phase: GuardPhase, extra: Partial<GuardChainOptions> = {}) {
 function rawGuard(name: string, phase: GuardPhase, run: Guard<Ctx>['run']): Guard<Ctx> {
   return { name, phase, run };
 }
+
+const failureOf = (r: GuardChainResult): GuardFailure | undefined =>
+  r.outcome === 'failed' ? r.failure : undefined;
+const textOf = (r: GuardChainResult): string | undefined =>
+  r.outcome === 'ok' || r.outcome === 'escalate' ? r.text : undefined;
+const parsesAsTrace = (r: GuardChainResult): void => {
+  expect(TurnTraceSchema.shape.guards.parse(r.guards)).toEqual(r.guards);
+};
 
 describe('runGuardChain: declared order', () => {
   it('runs guards in GUARD_ORDER order, whatever the registration order', async () => {
@@ -78,9 +92,16 @@ describe('runGuardChain: declared order', () => {
     expect(b.calls[0]?.ctx).toBe(CTX);
   });
 
-  it('an empty chain is ok with the text unchanged (stubs stay fail-closed until a guard lands)', async () => {
+  it('an empty chain fails closed (cause empty), never a silent pass', async () => {
     const { run } = setup('scrub');
-    expect(await run([], 'x')).toEqual({ outcome: 'ok', text: 'x', guards: [], usage: [] });
+    const res = await run([], 'x');
+    expect(res).toEqual({
+      outcome: 'failed',
+      failure: { name: '(empty chain)', cause: 'empty' },
+      guards: [{ name: '(empty chain)', ok: false, action: 'failed' }],
+      usage: [],
+    });
+    parsesAsTrace(res);
   });
 
   it('fails closed before running anything when the list is out of declared order', async () => {
@@ -88,9 +109,9 @@ describe('runGuardChain: declared order', () => {
     const b = fakeGuard<Ctx>('jailbreak', 'pre', OK);
     const { run } = setup('pre');
     const res = await run([b, a]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'distressDetect', cause: 'out_of_order' });
-    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'block' }]);
+    expect(res.outcome).toBe('failed');
+    expect(failureOf(res)).toEqual({ name: 'distressDetect', cause: 'out_of_order' });
+    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'failed' }]);
     expect(a.calls).toEqual([]);
     expect(b.calls).toEqual([]);
   });
@@ -99,29 +120,34 @@ describe('runGuardChain: declared order', () => {
     const a = fakeGuard<Ctx>('jailbreak', 'pre', OK);
     const { run } = setup('pre');
     const res = await run([a, a]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure?.cause).toBe('out_of_order');
+    expect(failureOf(res)?.cause).toBe('out_of_order');
     expect(a.calls).toEqual([]);
   });
 
-  it('fails closed on an unknown guard that bypassed the registry', async () => {
+  it('fails closed on an unknown guard; the trace names it (undeclared), never its name', async () => {
     const a = fakeGuard<Ctx>('distressDetect', 'pre', OK);
-    const unknown = fakeGuard<Ctx>('profanity', 'pre', OK);
+    const unknown = fakeGuard<Ctx>('secret-name', 'pre', OK);
     const { run } = setup('pre');
     const res = await run([a, unknown]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'profanity', cause: 'undeclared' });
-    expect(res.guards).toEqual([{ name: 'profanity', ok: false, action: 'block' }]);
+    expect(res.outcome).toBe('failed');
+    expect(failureOf(res)).toEqual({ name: 'secret-name', cause: 'undeclared' });
+    expect(res.guards).toEqual([{ name: '(undeclared)', ok: false, action: 'failed' }]);
     expect(a.calls).toEqual([]);
+  });
+
+  it('caps an undeclared name at 100 characters in the failure', async () => {
+    const { run } = setup('pre');
+    const res = await run([fakeGuard<Ctx>('x'.repeat(500), 'pre', OK)]);
+    expect(failureOf(res)?.name).toBe('x'.repeat(100));
   });
 
   it('fails closed on a guard from another phase, even with a declared name', async () => {
     const tone = fakeGuard<Ctx>('tone', 'post', OK);
     const { run } = setup('pre');
-    expect((await run([tone])).failure).toEqual({ name: 'tone', cause: 'undeclared' });
+    expect(failureOf(await run([tone]))).toEqual({ name: 'tone', cause: 'undeclared' });
     // A guard object that claims the right phase but carries a post-phase name.
     const sneaky = fakeGuard<Ctx>('tone', 'pre', OK);
-    expect((await run([sneaky])).failure).toEqual({ name: 'tone', cause: 'undeclared' });
+    expect(failureOf(await run([sneaky]))).toEqual({ name: 'tone', cause: 'undeclared' });
     expect(tone.calls).toEqual([]);
     expect(sneaky.calls).toEqual([]);
   });
@@ -130,52 +156,115 @@ describe('runGuardChain: declared order', () => {
     const { run } = setup('pre');
     for (const bad of [null, undefined, {}, { name: 'jailbreak', phase: 'pre' }, { name: 3 }]) {
       const res = await run([bad as never]);
-      expect(res.outcome).toBe('block');
-      expect(res.failure?.cause).toBe('undeclared');
-      expect(TurnTraceSchema.shape.guards.parse(res.guards)).toEqual(res.guards);
+      expect(res.outcome).toBe('failed');
+      expect(failureOf(res)?.cause).toBe('undeclared');
+      parsesAsTrace(res);
     }
   });
 
-  it('fails closed on an unknown phase', async () => {
+  it('fails closed on an unknown phase, with or without guards', async () => {
     const { run } = setup('mid' as never);
     const res = await run([fakeGuard<Ctx>('jailbreak', 'pre', OK)]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure?.cause).toBe('undeclared');
-    const empty = await run([]);
-    expect(empty.outcome).toBe('block');
-    expect(empty.failure).toEqual({ name: 'mid', cause: 'undeclared' });
+    expect(failureOf(res)).toEqual({ name: 'jailbreak', cause: 'undeclared' });
+    expect(failureOf(await run([]))).toEqual({ name: '(empty chain)', cause: 'undeclared' });
+  });
+
+  it('a guard whose name getter throws fails closed as invalid, with or without a bad phase', async () => {
+    const hostile = Object.defineProperty({ phase: 'pre', run: () => Promise.resolve() }, 'name', {
+      get(): never {
+        throw new Error('name getter');
+      },
+    }) as never;
+    const pre = setup('pre');
+    const res = await pre.run([hostile]);
+    expect(failureOf(res)).toEqual({ name: '(invalid guard)', cause: 'undeclared' });
+    expect(res.guards).toEqual([{ name: '(undeclared)', ok: false, action: 'failed' }]);
+    const mid = setup('mid' as never);
+    expect(failureOf(await mid.run([hostile]))?.name).toBe('(invalid guard)');
+    expect(failureOf(await mid.run([{ name: 7 } as never]))?.name).toBe('(invalid guard)');
+    expect(failureOf(await mid.run([null as never]))?.name).toBe('(invalid guard)');
+  });
+
+  it('reads each guard once: a list or name changed while the chain runs has no effect', async () => {
+    const reads: string[] = [];
+    let flips = 0;
+    const shifty = {
+      phase: 'pre' as const,
+      get name(): string {
+        reads.push('name');
+        return flips++ === 0 ? 'distressDetect' : 'secret-other';
+      },
+      run: () => Promise.resolve({ result: OK, usage: [] }),
+    };
+    const list: Guard<Ctx>[] = [shifty, fakeGuard<Ctx>('jailbreak', 'pre', OK)];
+    const { clock } = setup('pre');
+    const pending = runGuardChain(list, 'hi', CTX, { phase: 'pre', clock, timeoutMs: SLICE_MS });
+    list.length = 0; // the caller mutates its array after the call
+    const res = await clock.drive(pending);
+    expect(res.outcome).toBe('ok');
+    expect(res.guards.map((g) => g.name)).toEqual(['distressDetect', 'jailbreak']);
+    expect(reads).toEqual(['name']);
   });
 });
 
 describe('runGuardChain: fail closed', () => {
-  it('a guard that throws blocks the chain; later guards never run', async () => {
-    const boom = new Error('model said: secret text');
+  it('a guard that throws fails the chain; later guards never run; no raw error kept', async () => {
+    const boom = new RangeError('model said: secret text');
     const a = rawGuard('distressDetect', 'pre', () => Promise.reject(boom));
     const b = fakeGuard<Ctx>('moderationIn', 'pre', OK);
     const { run } = setup('pre');
     const res = await run([a, b]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'distressDetect', cause: 'error', error: boom });
-    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'block' }]);
-    expect(JSON.stringify(res.guards)).not.toContain('secret');
+    expect(res).toEqual({
+      outcome: 'failed',
+      failure: { name: 'distressDetect', cause: 'error', errorName: 'RangeError' },
+      guards: [{ name: 'distressDetect', ok: false, action: 'failed' }],
+      usage: [],
+    });
+    expect(JSON.stringify(res)).not.toContain('secret');
     expect(b.calls).toEqual([]);
   });
 
-  it('a guard that throws synchronously also blocks', async () => {
+  it('a guard that throws synchronously also fails the chain', async () => {
     const a = rawGuard('jailbreak', 'pre', () => {
       throw new TypeError('sync');
     });
     const { run } = setup('pre');
-    const res = await run([a]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure?.cause).toBe('error');
-    expect(res.failure?.error).toBeInstanceOf(TypeError);
+    expect(failureOf(await run([a]))).toEqual({
+      name: 'jailbreak',
+      cause: 'error',
+      errorName: 'TypeError',
+    });
   });
 
-  it('a non-Error rejection blocks too', async () => {
-    const a = rawGuard('jailbreak', 'pre', () => Promise.reject('nope'));
+  it.each<[string, unknown, string]>([
+    ['a string', 'secret text', 'string'],
+    ['undefined', undefined, 'undefined'],
+    ['null', null, 'object'],
+    ['a plain object', { message: 'secret' }, 'object'],
+    [
+      'an Error with a long name',
+      Object.assign(new Error('x'), { name: 'N'.repeat(300) }),
+      'N'.repeat(100),
+    ],
+    ['an Error whose name is not a string', Object.assign(new Error('x'), { name: 42 }), 'Error'],
+  ])('a rejection with %s records only a capped error name', async (_l, thrown, errorName) => {
+    const a = rawGuard('jailbreak', 'pre', () => Promise.reject(thrown));
     const { run } = setup('pre');
-    expect((await run([a])).failure).toEqual({ name: 'jailbreak', cause: 'error', error: 'nope' });
+    const res = await run([a]);
+    expect(failureOf(res)).toEqual({ name: 'jailbreak', cause: 'error', errorName });
+    expect(JSON.stringify(res)).not.toContain('secret');
+  });
+
+  it('an Error whose name getter throws records "unknown"', async () => {
+    const e = new Error('x');
+    Object.defineProperty(e, 'name', {
+      get(): never {
+        throw new Error('getter');
+      },
+    });
+    const a = rawGuard('jailbreak', 'pre', () => Promise.reject(e));
+    const { run } = setup('pre');
+    expect(failureOf(await run([a]))?.errorName).toBe('unknown');
   });
 
   const invalid: [string, unknown][] = [
@@ -192,7 +281,11 @@ describe('runGuardChain: fail closed', () => {
     [
       'a reason over the cap',
       {
-        result: { ok: false, action: 'block', reason: 'r'.repeat(LIMITS.guardReasonMaxLength + 1) },
+        result: {
+          ok: false,
+          action: 'block',
+          reason: 'r'.repeat(LIMITS.guardReasonMaxLength + 1),
+        },
         usage: [],
       },
     ],
@@ -218,21 +311,23 @@ describe('runGuardChain: fail closed', () => {
     ['an extra top-level key', { result: { ok: true }, usage: [], note: 'x' }],
   ];
   it.each(invalid)(
-    'a guard returning %s blocks with cause invalid_result',
+    'a guard returning %s fails with cause invalid_result',
     async (_label, value) => {
       const a = rawGuard('answerLeak', 'post', () => Promise.resolve(value as never));
       const b = fakeGuard<Ctx>('tone', 'post', OK);
       const { run } = setup('post');
       const res = await run([a, b]);
-      expect(res.outcome).toBe('block');
-      expect(res.failure).toEqual({ name: 'answerLeak', cause: 'invalid_result' });
-      expect(res.guards).toEqual([{ name: 'answerLeak', ok: false, action: 'block' }]);
-      expect(res.usage).toEqual([]);
+      expect(res).toEqual({
+        outcome: 'failed',
+        failure: { name: 'answerLeak', cause: 'invalid_result' },
+        guards: [{ name: 'answerLeak', ok: false, action: 'failed' }],
+        usage: [],
+      });
       expect(b.calls).toEqual([]);
     },
   );
 
-  it('a result whose getter throws while being checked blocks as an error', async () => {
+  it('a result whose getter throws while being checked fails as an error', async () => {
     const hostile = {
       get result(): never {
         throw new Error('getter');
@@ -241,12 +336,10 @@ describe('runGuardChain: fail closed', () => {
     };
     const a = rawGuard('tone', 'post', () => Promise.resolve(hostile as never));
     const { run } = setup('post');
-    const res = await run([a]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure?.cause).toBe('error');
+    expect(failureOf(await run([a]))?.cause).toBe('error');
   });
 
-  it('a guard past its own time slice blocks; later guards never run', async () => {
+  it('a guard past its own time slice fails; later guards never run', async () => {
     let cancelled = false;
     const slow = rawGuard('moderationIn', 'pre', (_t, _c, cancel) => {
       cancel.onCancel(() => {
@@ -257,16 +350,15 @@ describe('runGuardChain: fail closed', () => {
     const after = fakeGuard<Ctx>('jailbreak', 'pre', OK);
     const { run, clock } = setup('pre');
     const res = await run([slow, after]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'moderationIn', cause: 'timeout' });
-    expect(res.guards).toEqual([{ name: 'moderationIn', ok: false, action: 'block' }]);
+    expect(res.outcome).toBe('failed');
+    expect(failureOf(res)).toEqual({ name: 'moderationIn', cause: 'timeout' });
     expect(clock.now()).toBe(SLICE_MS);
     expect(cancelled).toBe(true);
     expect(after.calls).toEqual([]);
     expect(clock.pending).toBe(0);
   });
 
-  it('the slice is per guard, not shared: two guards each under the slice both pass', async () => {
+  it('the slice is per guard, not shared: three guards each under the slice all pass', async () => {
     const clockRef: { c?: VirtualClock } = {};
     const sleepy = (name: string) =>
       rawGuard(name, 'pre', async (_t, _c, cancel) => {
@@ -280,7 +372,7 @@ describe('runGuardChain: fail closed', () => {
     expect(clock.now()).toBe(3 * (SLICE_MS - 1));
   });
 
-  it('a late result after the slice is ignored (the guard is already a block)', async () => {
+  it('a late result after the slice is ignored (the guard has already failed)', async () => {
     const clockRef: { c?: VirtualClock } = {};
     const late = rawGuard('tone', 'post', async () => {
       await clockRef.c?.sleep(SLICE_MS + 10);
@@ -289,36 +381,33 @@ describe('runGuardChain: fail closed', () => {
     const { run, clock } = setup('post');
     clockRef.c = clock;
     const res = await run([late]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure?.cause).toBe('timeout');
+    expect(failureOf(res)?.cause).toBe('timeout');
     expect(res.usage).toEqual([]);
   });
 
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY * -1])(
-    'a non-positive or invalid slice (%s) blocks without running the guard',
+  it.each([0, -1, Number.NaN, Number.NEGATIVE_INFINITY])(
+    'a non-positive or invalid slice (%s) fails without running the guard',
     async (timeoutMs) => {
       const a = fakeGuard<Ctx>('jailbreak', 'pre', OK);
       const { run } = setup('pre', { timeoutMs });
       const res = await run([a]);
-      expect(res.outcome).toBe('block');
-      expect(res.failure).toEqual({ name: 'jailbreak', cause: 'timeout' });
+      expect(failureOf(res)).toEqual({ name: 'jailbreak', cause: 'timeout' });
       expect(a.calls).toEqual([]);
     },
   );
 
-  it('an already-cancelled step runs no guard and blocks', async () => {
+  it('an already-cancelled step runs no guard and fails', async () => {
     const src = cancelSource();
     src.cancel();
     const a = fakeGuard<Ctx>('distressDetect', 'pre', OK);
     const { run } = setup('pre', { cancel: src.token });
     const res = await run([a]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'distressDetect', cause: 'cancelled' });
-    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'block' }]);
+    expect(failureOf(res)).toEqual({ name: 'distressDetect', cause: 'cancelled' });
+    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'failed' }]);
     expect(a.calls).toEqual([]);
   });
 
-  it('a step cancelled while a guard runs blocks after it, even if the guard said ok', async () => {
+  it('a step cancelled while a guard runs fails after it, even if the guard said ok', async () => {
     const src = cancelSource();
     const a = rawGuard('distressDetect', 'pre', () => {
       src.cancel();
@@ -327,15 +416,31 @@ describe('runGuardChain: fail closed', () => {
     const b = fakeGuard<Ctx>('jailbreak', 'pre', OK);
     const { run } = setup('pre', { cancel: src.token });
     const res = await run([a, b]);
-    expect(res.outcome).toBe('block');
-    expect(res.failure).toEqual({ name: 'distressDetect', cause: 'cancelled' });
-    expect(res.guards).toEqual([{ name: 'distressDetect', ok: false, action: 'block' }]);
+    expect(failureOf(res)).toEqual({ name: 'distressDetect', cause: 'cancelled' });
     expect(res.usage).toEqual([usageSmall]);
     expect(b.calls).toEqual([]);
   });
 
+  it('a cancelled step cancels the in-flight guard and stops waiting at once', async () => {
+    const src = cancelSource();
+    let guardSawCancel = false;
+    const hung = rawGuard('moderationIn', 'pre', (_t, _c, cancel) => {
+      cancel.onCancel(() => {
+        guardSawCancel = true;
+      });
+      return new Promise(() => undefined); // ignores the cancel and never settles
+    });
+    const { run, clock } = setup('pre', { cancel: src.token });
+    void clock.sleep(10).then(() => src.cancel());
+    const res = await run([hung]);
+    expect(failureOf(res)).toEqual({ name: 'moderationIn', cause: 'cancelled' });
+    expect(guardSawCancel).toBe(true);
+    expect(clock.now()).toBe(10);
+    expect(clock.pending).toBe(0);
+  });
+
   it(
-    'never outputs ok when any guard did not pass (seeded property, 2000 chains)',
+    'never outputs ok unless every guard passed on the final text (seeded, 2000 chains)',
     { timeout: 20_000 },
     async () => {
       const rng = prng(4101);
@@ -348,8 +453,9 @@ describe('runGuardChain: fail closed', () => {
           rawGuard(name, 'post', () => {
             const k = plan[j];
             if (k === 'throw') throw new Error('x');
-            if (k === 'invalid')
+            if (k === 'invalid') {
               return Promise.resolve({ result: { ok: false }, usage: [] } as never);
+            }
             const result =
               k === 'ok'
                 ? OK
@@ -363,54 +469,136 @@ describe('runGuardChain: fail closed', () => {
         );
         const { run } = setup('post');
         const res = await run(guards, 'draft');
+        parsesAsTrace(res);
         const stop = plan.findIndex((k) => k !== 'ok' && k !== 'rewrite');
-        const ran = stop === -1 ? plan.length : stop + 1;
-        expect(res.guards).toHaveLength(ran);
-        if (stop === -1) {
-          expect(res.outcome).toBe('ok');
-        } else if (plan[stop] === 'escalate') {
-          expect(res.outcome).toBe('escalate');
+        const firstRewrite = plan.indexOf('rewrite');
+        if (stop !== -1) {
+          const k = plan[stop];
+          const expected = k === 'escalate' ? 'escalate' : k === 'block' ? 'block' : 'failed';
+          expect(res.outcome).toBe(expected);
+          expect(res.guards).toHaveLength(stop + 1);
+        } else if (firstRewrite !== -1) {
+          // The rewriting guard rewrites again on the verification pass: unverified, block.
+          expect(res).toMatchObject({ outcome: 'block', cause: 'rewrite_unverified' });
+          expect(res.guards).toHaveLength(n + firstRewrite + 1);
         } else {
-          expect(res.outcome).toBe('block');
+          expect(res.outcome).toBe('ok');
+          expect(res.guards).toHaveLength(n);
         }
-        expect(TurnTraceSchema.shape.guards.parse(res.guards)).toEqual(res.guards);
       }
     },
   );
 });
 
-describe('runGuardChain: rewrite, block, escalate', () => {
-  it('rewrite returns the replacement text and the chain goes on', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', rewrite('a safer hint'));
+describe('runGuardChain: rewrite and the verification pass', () => {
+  // Rewrites only text it has not rewritten yet, so the verification pass sees its own output.
+  const once = (from: string, to: string) => (t: string) => (t === from ? rewrite(to) : OK);
+
+  it('rewrite returns the replacement text; a clean verification pass keeps it', async () => {
+    const a = fakeGuard<Ctx>('answerLeak', 'post', once('the answer is 42', 'a safer hint'));
     const b = fakeGuard<Ctx>('tone', 'post', OK);
     const { run } = setup('post');
     const res = await run([a, b], 'the answer is 42');
-    expect(res.outcome).toBe('ok');
-    expect(res.text).toBe('a safer hint');
-    expect(b.calls).toEqual([{ text: 'a safer hint', ctx: CTX }]);
-    expect(res.guards).toEqual([
-      { name: 'answerLeak', ok: false, action: 'rewrite' },
-      { name: 'tone', ok: true },
-    ]);
+    expect(res).toEqual({
+      outcome: 'ok',
+      text: 'a safer hint',
+      guards: [
+        { name: 'answerLeak', ok: false, action: 'rewrite' },
+        { name: 'tone', ok: true },
+        { name: 'answerLeak', ok: true },
+        { name: 'tone', ok: true },
+      ],
+      usage: [],
+    });
+    expect(b.calls.map((c) => c.text)).toEqual(['a safer hint', 'a safer hint']);
+    expect(a.calls.map((c) => c.text)).toEqual(['the answer is 42', 'a safer hint']);
   });
 
   it('two rewrites compose: the second sees the first and its text is final', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', (t) => rewrite(`${t} +a`));
-    const b = fakeGuard<Ctx>('lockedLeak', 'post', (t) => rewrite(`${t} +b`));
+    const a = fakeGuard<Ctx>('answerLeak', 'post', once('draft', 'draft +a'));
+    const b = fakeGuard<Ctx>('lockedLeak', 'post', once('draft +a', 'draft +a +b'));
     const { run } = setup('post');
     const res = await run([a, b], 'draft');
-    expect(res.text).toBe('draft +a +b');
+    expect(textOf(res)).toBe('draft +a +b');
     expect(b.calls[0]?.text).toBe('draft +a');
     expect(res.outcome).toBe('ok');
   });
 
-  it('a rewrite to the empty string is honoured', async () => {
-    const a = fakeGuard<Ctx>('piiScrub', 'scrub', rewrite(''));
-    const { run } = setup('scrub');
-    expect((await run([a], 'my phone is ...')).text).toBe('');
+  it('a later rewrite that puts the withheld answer back is caught by an earlier guard', async () => {
+    // answerLeak passes the draft; grounding then rewrites the answer back in.
+    const answerLeak = fakeGuard<Ctx>('answerLeak', 'post', (t) =>
+      t.includes('42') ? rewrite('try the next step') : OK,
+    );
+    const lockedLeak = fakeGuard<Ctx>('lockedLeak', 'post', OK);
+    const grounding = fakeGuard<Ctx>('grounding', 'post', once('draft', 'the answer is 42'));
+    const tone = fakeGuard<Ctx>('tone', 'post', OK);
+    const { run } = setup('post');
+    const res = await run([answerLeak, lockedLeak, grounding, tone], 'draft');
+    expect(res).toEqual({
+      outcome: 'block',
+      cause: 'rewrite_unverified',
+      blockedBy: 'answerLeak',
+      guards: [
+        { name: 'answerLeak', ok: true },
+        { name: 'lockedLeak', ok: true },
+        { name: 'grounding', ok: false, action: 'rewrite' },
+        { name: 'tone', ok: true },
+        { name: 'answerLeak', ok: false, action: 'block' },
+      ],
+      usage: [],
+    });
+    expect(answerLeak.calls.map((c) => c.text)).toEqual(['draft', 'the answer is 42']);
+    expect(tone.calls).toHaveLength(1); // the verification pass stopped at answerLeak
+    expect(JSON.stringify(res)).not.toContain('42');
   });
 
-  it('block stops the chain without a failure (the guard decided, nothing broke)', async () => {
+  it('a block verdict on the verification pass is rewrite_unverified too', async () => {
+    const a = fakeGuard<Ctx>('answerLeak', 'post', (t) => (t === 'bad' ? BLOCK : OK));
+    const b = fakeGuard<Ctx>('tone', 'post', once('draft', 'bad'));
+    const { run } = setup('post');
+    expect(await run([a, b], 'draft')).toMatchObject({
+      outcome: 'block',
+      cause: 'rewrite_unverified',
+      blockedBy: 'answerLeak',
+    });
+  });
+
+  it('a guard failure on the verification pass fails the chain', async () => {
+    let calls = 0;
+    const a = rawGuard('answerLeak', 'post', () =>
+      calls++ === 0 ? Promise.resolve({ result: OK, usage: [] }) : Promise.reject(new Error('x')),
+    );
+    const b = fakeGuard<Ctx>('tone', 'post', once('draft', 'better'));
+    const { run } = setup('post');
+    const res = await run([a, b], 'draft');
+    expect(failureOf(res)).toEqual({ name: 'answerLeak', cause: 'error', errorName: 'Error' });
+  });
+
+  it('an escalate on the verification pass still escalates (a stronger outcome than block)', async () => {
+    const a = fakeGuard<Ctx>('distressDetect', 'pre', (t) => (t === 'scary' ? ESCALATE : OK));
+    const b = fakeGuard<Ctx>('jailbreak', 'pre', once('hi', 'scary'));
+    const { run } = setup('pre');
+    expect(await run([a, b], 'hi')).toMatchObject({
+      outcome: 'escalate',
+      alert: demoSafetyAlert,
+      text: 'scary',
+    });
+  });
+
+  it('no verification pass runs when nothing rewrote', async () => {
+    const a = fakeGuard<Ctx>('distressDetect', 'pre', OK);
+    const { run } = setup('pre');
+    await run([a]);
+    expect(a.calls).toHaveLength(1);
+  });
+
+  it('a rewrite to the empty string is honoured', async () => {
+    const a = fakeGuard<Ctx>('piiScrub', 'scrub', once('my phone is ...', ''));
+    const { run } = setup('scrub');
+    expect(textOf(await run([a], 'my phone is ...'))).toBe('');
+  });
+
+  it('block stops the chain as a guard verdict, not a failure, and carries no text', async () => {
     const a = fakeGuard<Ctx>('distressDetect', 'pre', OK);
     const b = fakeGuard<Ctx>('moderationIn', 'pre', BLOCK);
     const c = fakeGuard<Ctx>('jailbreak', 'pre', OK);
@@ -418,13 +606,15 @@ describe('runGuardChain: rewrite, block, escalate', () => {
     const res = await run([a, b, c]);
     expect(res).toEqual({
       outcome: 'block',
-      text: 'hello',
+      cause: 'verdict',
+      blockedBy: 'moderationIn',
       guards: [
         { name: 'distressDetect', ok: true },
         { name: 'moderationIn', ok: false, action: 'block' },
       ],
       usage: [],
     });
+    expect('text' in res).toBe(false);
     expect(c.calls).toEqual([]);
   });
 
@@ -432,8 +622,7 @@ describe('runGuardChain: rewrite, block, escalate', () => {
     const a = fakeGuard<Ctx>('distressDetect', 'pre', ESCALATE);
     const b = fakeGuard<Ctx>('moderationIn', 'pre', OK);
     const { run } = setup('pre');
-    const res = await run([a, b]);
-    expect(res).toEqual({
+    expect(await run([a, b])).toEqual({
       outcome: 'escalate',
       alert: demoSafetyAlert,
       text: 'hello',
@@ -445,14 +634,13 @@ describe('runGuardChain: rewrite, block, escalate', () => {
 });
 
 describe('runGuardChain: usage, trace and the outcome hook', () => {
+  const u = (n: number): Usage => ({ ...usageSmall, inputTokens: n });
+
   it('concatenates usage from every guard that ran, including the one that stopped it', async () => {
-    const u = (n: number): Usage => ({ ...usageSmall, inputTokens: n });
-    const cases: [GuardResult, string][] = [
+    for (const [last, outcome] of [
       [BLOCK, 'block'],
       [ESCALATE, 'escalate'],
-      [rewrite('x'), 'ok'],
-    ];
-    for (const [last, outcome] of cases) {
+    ] as const) {
       const a = fakeGuard<Ctx>('answerLeak', 'post', OK, { usage: [u(1)] });
       const b = fakeGuard<Ctx>('lockedLeak', 'post', rewrite('y'), { usage: [u(2), u(3)] });
       const c = fakeGuard<Ctx>('grounding', 'post', last, { usage: [usageMain] });
@@ -460,10 +648,17 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
       const { run } = setup('post');
       const res = await run([a, b, c, d]);
       expect(res.outcome).toBe(outcome);
-      const expected =
-        outcome === 'ok' ? [u(1), u(2), u(3), usageMain, u(9)] : [u(1), u(2), u(3), usageMain];
-      expect(res.usage).toEqual(expected);
+      expect(res.usage).toEqual([u(1), u(2), u(3), usageMain]);
     }
+  });
+
+  it('adds usage from the verification pass', async () => {
+    const a = fakeGuard<Ctx>('answerLeak', 'post', (t) => (t === 'x' ? rewrite('y') : OK), {
+      usage: [u(1)],
+    });
+    const b = fakeGuard<Ctx>('tone', 'post', OK, { usage: [u(2)] });
+    const { run } = setup('post');
+    expect((await run([a, b], 'x')).usage).toEqual([u(1), u(2), u(1), u(2)]);
   });
 
   it('keeps usage from earlier guards when a later one throws', async () => {
@@ -478,14 +673,15 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
     for (const r of results) {
       const { run } = setup('post');
       const res = await run([fakeGuard<Ctx>('answerLeak', 'post', r)], 'secret draft');
-      expect(TurnTraceSchema.shape.guards.parse(res.guards)).toEqual(res.guards);
-      for (const g of res.guards)
+      parsesAsTrace(res);
+      for (const g of res.guards) {
         expect(Object.keys(g).sort()).toEqual(g.ok ? ['name', 'ok'] : ['action', 'name', 'ok']);
+      }
       expect(JSON.stringify(res.guards)).not.toContain('secret');
     }
   });
 
-  it('calls onGuardOutcome once per guard that ran, with name, phase and outcome only', async () => {
+  it('calls onGuardOutcome once per guard that ran, with no reason or text', async () => {
     const events: GuardOutcomeEvent[] = [];
     const { run } = setup('post', { onGuardOutcome: (e) => events.push(e) });
     await run([
@@ -495,23 +691,32 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
       fakeGuard<Ctx>('tone', 'post', OK),
     ]);
     expect(events).toEqual([
-      { name: 'answerLeak', phase: 'post', outcome: 'ok' },
-      { name: 'lockedLeak', phase: 'post', outcome: 'rewrite' },
-      { name: 'grounding', phase: 'post', outcome: 'block' },
+      { name: 'answerLeak', phase: 'post', pass: 1, outcome: 'ok' },
+      { name: 'lockedLeak', phase: 'post', pass: 1, outcome: 'rewrite' },
+      { name: 'grounding', phase: 'post', pass: 1, outcome: 'block' },
     ]);
-    for (const e of events) expect(Object.keys(e).sort()).toEqual(['name', 'outcome', 'phase']);
+    expect(JSON.stringify(events)).not.toContain('secret');
   });
 
-  it('reports escalate and fail-closed blocks to onGuardOutcome', async () => {
+  it('reports the verification pass, escalate and failures (with cause) to onGuardOutcome', async () => {
     const events: GuardOutcomeEvent[] = [];
-    const { run } = setup('pre', { onGuardOutcome: (e) => events.push(e) });
-    await run([fakeGuard<Ctx>('distressDetect', 'pre', ESCALATE)]);
-    await run([rawGuard('jailbreak', 'pre', () => Promise.reject(new Error('x')))]);
-    await run([fakeGuard<Ctx>('profanity', 'pre', OK)]);
+    const pre = setup('pre', { onGuardOutcome: (e) => events.push(e) });
+    await pre.run([fakeGuard<Ctx>('distressDetect', 'pre', ESCALATE)]);
+    await pre.run([rawGuard('jailbreak', 'pre', () => Promise.reject(new Error('x')))]);
+    await pre.run([fakeGuard<Ctx>('profanity', 'pre', OK)]);
+    await pre.run([fakeGuard<Ctx>('jailbreak', 'pre', rewrite('again'))], 'hi');
     expect(events).toEqual([
-      { name: 'distressDetect', phase: 'pre', outcome: 'escalate' },
-      { name: 'jailbreak', phase: 'pre', outcome: 'block' },
-      { name: 'profanity', phase: 'pre', outcome: 'block' },
+      { name: 'distressDetect', phase: 'pre', pass: 1, outcome: 'escalate' },
+      { name: 'jailbreak', phase: 'pre', pass: 1, outcome: 'failed', cause: 'error' },
+      { name: '(undeclared)', phase: 'pre', pass: 1, outcome: 'failed', cause: 'undeclared' },
+      { name: 'jailbreak', phase: 'pre', pass: 1, outcome: 'rewrite' },
+      {
+        name: 'jailbreak',
+        phase: 'pre',
+        pass: 2,
+        outcome: 'block',
+        cause: 'rewrite_unverified',
+      },
     ]);
   });
 
@@ -521,10 +726,52 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
         throw new Error('observer broke');
       },
     });
-    const ok = await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)]);
-    expect(ok.outcome).toBe('ok');
-    const blocked = await run([fakeGuard<Ctx>('jailbreak', 'pre', BLOCK)]);
-    expect(blocked.outcome).toBe('block');
+    expect((await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)])).outcome).toBe('ok');
+    expect((await run([fakeGuard<Ctx>('jailbreak', 'pre', BLOCK)])).outcome).toBe('block');
+  });
+
+  it('an async onGuardOutcome that rejects is not an unhandled rejection', async () => {
+    // Vitest fails the run on any unhandled rejection, so this test passing is the evidence.
+    let calls = 0;
+    const { run } = setup('pre', {
+      onGuardOutcome: async () => {
+        calls++;
+        await Promise.resolve();
+        throw new Error('async observer broke');
+      },
+    });
+    expect((await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)])).outcome).toBe('ok');
+    expect(calls).toBe(1);
+  });
+
+  it('attaches a rejection handler to a thenable the observer returns', async () => {
+    const handlers: unknown[] = [];
+    const thenable = {
+      then(_onOk: unknown, onErr: unknown) {
+        handlers.push(onErr);
+      },
+    };
+    const { run } = setup('pre', { onGuardOutcome: () => thenable as never });
+    await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)]);
+    expect(handlers).toHaveLength(1);
+    expect(typeof handlers[0]).toBe('function');
+  });
+
+  it('an observer returning null, a plain object or a function changes nothing', async () => {
+    for (const value of [null, {}, () => undefined]) {
+      const { run } = setup('pre', { onGuardOutcome: () => value as never });
+      expect((await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)])).outcome).toBe('ok');
+    }
+  });
+
+  it('an observer returning a thenable whose then getter throws changes nothing', async () => {
+    const hostile = Object.defineProperty({}, 'then', {
+      get(): never {
+        throw new Error('then getter');
+      },
+    });
+    const { run } = setup('pre', { onGuardOutcome: () => hostile as never });
+    expect((await run([fakeGuard<Ctx>('distressDetect', 'pre', OK)])).outcome).toBe('ok');
   });
 });
 
