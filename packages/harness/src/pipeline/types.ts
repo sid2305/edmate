@@ -105,6 +105,12 @@ export interface FallbackReplies {
    * failing, entitle uses the built-in English `DEFAULT_LIMIT_REACHED_REPLY`.
    */
   limitReached?(lang: Lang): string;
+  /**
+   * The reply that replaces one holding locked material (task 4.6). `packageName` is the student's
+   * own package, given only when the teacher chose `name_package`. Optional: when absent, empty or
+   * failing, the built-in English `lockedReplyText` is used.
+   */
+  lockedReply?(lang: Lang, packageName?: string): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -270,6 +276,11 @@ export interface GenerateResult {
   raw?: string;
   /** The stream gate withheld text as an answer leak (4.5): postGuard forces the hint. */
   withheld?: boolean;
+  /**
+   * The stream's locked check withheld text (4.6): `hit` gives the locked reply, `failed` (the
+   * check could not answer) the safe reply.
+   */
+  locked?: 'hit' | 'failed';
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -365,6 +376,8 @@ export interface Steps {
       raw?: string;
       /** The stream gate withheld a leak (GenerateResult.withheld). */
       withheld?: boolean;
+      /** The stream's locked check withheld text (GenerateResult.locked). */
+      locked?: 'hit' | 'failed';
     },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;

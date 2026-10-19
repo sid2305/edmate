@@ -1,5 +1,5 @@
-// Task 4.5: the postGuard step. Keys are synthetic ("16").
-import type { GuardResult, PedagogyDecision, Usage } from '@edmate/contracts';
+// Tasks 4.5 and 4.6: the postGuard step. Keys and material are synthetic ("16", retrievalWorld).
+import type { GuardResult, PedagogyDecision, RetrievalIndex, Usage } from '@edmate/contracts';
 import {
   demoPedagogyDecision,
   demoSafetyAlert,
@@ -10,12 +10,14 @@ import {
 import { describe, expect, it } from 'vitest';
 import { ANSWER_LEAK_SAFE_HINT, type PostGuardCtx } from '../../guardrails/answerLeak.js';
 import type { Guard } from '../../guardrails/guard.js';
+import { LockedLeakDetected, lockedReplyText } from '../../guardrails/lockedLeak.js';
 import { GUARD_ORDER } from '../../guardrails/order.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
 import { type StreamStep, ScriptedGateway } from '../../testing/scriptedGateway.js';
 import { spyGateway } from '../../testing/spyGateway.js';
+import { memoryRetrieval, retrievalWorld } from '../../testing/memoryRetrieval.js';
 import { TEST_SAFE_REPLY, testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { STEP_SPEC } from '../spec.js';
@@ -36,13 +38,24 @@ const used: StreamStep = { type: 'usage', usage: usageSmall };
 
 function setup(
   rewrites: StreamStep[][] = [],
-  o: { overBudget?: boolean; studentText?: string } = {},
+  o: {
+    overBudget?: boolean;
+    studentText?: string;
+    retrieval?: RetrievalIndex;
+    lockedReply?: (lang: string, packageName?: string) => string;
+  } = {},
 ) {
   const clock = virtualClock();
   const spy = spyGateway(
     new ScriptedGateway({ stream: rewrites.map((steps) => ({ steps })) }, clock),
   );
-  const { deps } = testDeps({ clock });
+  const { deps } = testDeps({
+    clock,
+    overrides: o.retrieval === undefined ? {} : { retrieval: o.retrieval },
+  });
+  if (o.lockedReply !== undefined) {
+    deps.fallbackReplies = { ...deps.fallbackReplies, lockedReply: o.lockedReply };
+  }
   const reported: unknown[] = [];
   const env: StepEnv = {
     input: { ...demoTurnInput, text: o.studentText ?? 'What is x at the end?' },
@@ -59,8 +72,11 @@ function setup(
     report: (e) => void reported.push(e),
     track: () => undefined,
   };
-  const run = (draft: string, extra: { raw?: string; withheld?: boolean } = {}, step = postGuard) =>
-    clock.drive(step(env, { ctx: demoTurnContext, decision, draft, ...extra }));
+  const run = (
+    draft: string,
+    extra: { raw?: string; withheld?: boolean; locked?: 'hit' | 'failed' } = {},
+    step = postGuard,
+  ) => clock.drive(step(env, { ctx: demoTurnContext, decision, draft, ...extra }));
   return { clock, spy, env, reported, run };
 }
 
@@ -71,7 +87,13 @@ const hint = (guards: unknown[], usage: Usage[] = []) => ({
   usage,
 });
 const leakTrace = [
+  { name: 'lockedLeak', ok: true },
   { name: 'answerLeak', ok: false, action: 'rewrite' },
+  { name: 'lockedLeak', ok: true },
+  { name: 'answerLeak', ok: true },
+];
+const cleanTrace = [
+  { name: 'lockedLeak', ok: true },
   { name: 'answerLeak', ok: true },
 ];
 
@@ -80,7 +102,7 @@ describe('postGuard: answerLeak', () => {
     const s = setup();
     expect(await s.run('Trace it line by line. What is x after line two?')).toEqual({
       result: 'ok',
-      guards: [{ name: 'answerLeak', ok: true }],
+      guards: cleanTrace,
       usage: [],
     });
     expect(s.spy.requests).toEqual([]);
@@ -159,9 +181,7 @@ describe('postGuard: answerLeak', () => {
 
   it('a withheld leak no guard rewrites (no raw kept) still gives the hint', async () => {
     const s = setup();
-    expect(await s.run('Good question. ', { withheld: true })).toEqual(
-      hint([{ name: 'answerLeak', ok: true }]),
-    );
+    expect(await s.run('Good question. ', { withheld: true })).toEqual(hint(cleanTrace));
   });
 
   it('a withheld leak still reaches the other post guards: an escalate is caught', async () => {
@@ -341,4 +361,157 @@ describe('postGuard: time', () => {
     });
     expect(s.clock.now() - t0).toBe(postGuardSliceMs(1));
   });
+});
+
+describe('postGuard: lockedLeak (4.6)', () => {
+  // demoTurnContext: the preview entitlement (allowed mod_test_01), package "Free", name_package.
+  const LOCKED = 'Integration by parts: choose u and dv, then integrate.';
+  const REPLY = lockedReplyText('Free');
+  const world = () => memoryRetrieval({ chunks: retrievalWorld() });
+  const hitTrace = [
+    { name: 'lockedLeak', ok: false, action: 'rewrite' },
+    { name: 'answerLeak', ok: true },
+    { name: 'lockedLeak', ok: true },
+    { name: 'answerLeak', ok: true },
+  ];
+
+  it('a reply holding a locked span is replaced whole by the locked reply, and reported', async () => {
+    const r = world();
+    const s = setup([], { retrieval: r });
+    expect(await s.run(`Good question. Here it is: ${LOCKED} Hope that helps.`)).toEqual({
+      result: 'replace',
+      text: REPLY,
+      guards: hitTrace,
+      usage: [],
+    });
+    expect(REPLY).toContain('Free');
+    expect(s.reported).toEqual([new LockedLeakDetected('reply')]);
+    expect(r.leakChecks.map((c) => c.scope)).toEqual([
+      { teacherId: 'tch_test_01', allowedModuleIds: ['mod_test_01'] },
+    ]);
+  }, 5_000);
+
+  it('runs before answerLeak: the rewriter never receives a locked span', async () => {
+    const s = setup([[say('Look again.'), used]], { retrieval: world() });
+    const r = await s.run(`It is 16. ${LOCKED}`);
+    expect(r).toMatchObject({ result: 'replace', text: REPLY });
+    expect(s.spy.requests).toEqual([]);
+    // Withheld answer leak plus locked text in the unseen part: still no rewrite call.
+    const w = setup([[say('Look again.'), used]], { retrieval: world() });
+    const out = await w.run('Good. ', { raw: `Good. It is 16. ${LOCKED}`, withheld: true });
+    expect(out).toMatchObject({ result: 'replace', text: REPLY });
+    expect(w.spy.requests).toEqual([]);
+  }, 5_000);
+
+  it('a reply with no locked span is checked and passes unchanged', async () => {
+    const s = setup([], { retrieval: world() });
+    const allowed = 'Fractions name equal parts of a whole, so think about the parts.';
+    expect(await s.run(allowed)).toEqual({ result: 'ok', guards: cleanTrace, usage: [] });
+  }, 5_000);
+
+  it('the student’s own words quoted back are not a leak', async () => {
+    const s = setup([], {
+      retrieval: world(),
+      studentText: `My notes: "${LOCKED}" Is that right?`,
+    });
+    expect(await s.run(`You wrote: "${LOCKED}" Let us look at it.`)).toMatchObject({
+      result: 'ok',
+    });
+  }, 5_000);
+
+  it('the stream withheld locked text: the locked reply at once, no chain, no rewrite', async () => {
+    const r = world();
+    const s = setup([[say('x'), used]], { retrieval: r });
+    expect(await s.run('Good. ', { raw: `Good. ${LOCKED} 16.`, locked: 'hit' })).toEqual({
+      result: 'replace',
+      text: REPLY,
+      guards: [{ name: 'lockedLeak', ok: false, action: 'rewrite' }],
+      usage: [],
+    });
+    expect(r.leakChecks).toEqual([]);
+    expect(s.spy.requests).toEqual([]);
+  }, 5_000);
+
+  it('the stream could not check its text: the safe reply (the hint if an answer leaked too)', async () => {
+    const s = setup([], { retrieval: world() });
+    const failed = [{ name: 'lockedLeak', ok: false, action: 'failed' }];
+    expect(await s.run('Good. ', { locked: 'failed' })).toEqual({
+      result: 'replace',
+      text: TEST_SAFE_REPLY,
+      guards: failed,
+      usage: [],
+    });
+    expect(await s.run('Good. ', { locked: 'failed', withheld: true })).toEqual(hint(failed));
+  }, 5_000);
+
+  it('a failing index fails the chain closed: safe reply, reported, no rewrite call', async () => {
+    const down = memoryRetrieval({ chunks: [], leakCheck: new Error('index down') });
+    const s = setup([[say('Look again.'), used]], { retrieval: down });
+    expect(await s.run(`Long enough reply to be checked by the index today.`)).toMatchObject({
+      result: 'replace',
+      text: TEST_SAFE_REPLY,
+    });
+    expect(String(s.reported[0])).toBe(
+      'PostGuardFailed: post guard chain failed: error (lockedLeak) LockedCheckFailed',
+    );
+    // An answer leak in it too: still fixed text, and the rewriter never runs.
+    expect(await s.run(`It is 16, the reply is long enough to be checked.`)).toMatchObject({
+      text: TEST_SAFE_REPLY,
+    });
+    const withheld = {
+      raw: 'Good. It is 16, and the reply is long enough to check.',
+      withheld: true,
+    };
+    expect(await s.run('Good. ', withheld)).toMatchObject({ text: ANSWER_LEAK_SAFE_HINT });
+    expect(s.spy.requests).toEqual([]);
+  }, 5_000);
+
+  it('a hanging index times out and fails closed inside the step budget', async () => {
+    const hang: RetrievalIndex = {
+      ...world(),
+      leakCheck: () => new Promise(() => undefined),
+    };
+    const s = setup([], { retrieval: hang });
+    const t0 = s.clock.now();
+    expect(await s.run('A reply that is long enough to be sent to the index.')).toMatchObject({
+      text: TEST_SAFE_REPLY,
+    });
+    expect(s.clock.now() - t0).toBeLessThan(STEP_SPEC.postGuard.timeoutMs as number);
+  }, 5_000);
+
+  it('uses the locale’s locked reply when it gives one, else the built-in one', async () => {
+    const calls: [string, string | undefined][] = [];
+    const s = setup([], {
+      retrieval: world(),
+      lockedReply: (lang, name) => {
+        calls.push([lang, name]);
+        return 'LOCALE LOCKED REPLY';
+      },
+    });
+    expect(await s.run(LOCKED)).toMatchObject({ text: 'LOCALE LOCKED REPLY' });
+    expect(calls).toEqual([[demoTurnInput.lang, 'Free']]);
+
+    for (const bad of [() => '  ', () => 'x'.repeat(9_000)]) {
+      const b = setup([], { retrieval: world(), lockedReply: bad });
+      expect(await b.run(LOCKED)).toMatchObject({ text: REPLY });
+    }
+    const throwing = setup([], {
+      retrieval: world(),
+      lockedReply: () => {
+        throw new RangeError('locale broke');
+      },
+    });
+    expect(await throwing.run(LOCKED)).toMatchObject({ text: REPLY });
+    expect(throwing.reported[0]).toBeInstanceOf(RangeError);
+  }, 5_000);
+
+  it('names no package when the teacher chose a generic locked reply', async () => {
+    const s = setup([], { retrieval: world() });
+    const ctx = {
+      ...demoTurnContext,
+      pkg: { ...demoTurnContext.pkg, lockedReply: 'generic' as const },
+    };
+    const r = await s.clock.drive(postGuard(s.env, { ctx, decision, draft: LOCKED }));
+    expect(r).toMatchObject({ result: 'replace', text: lockedReplyText() });
+  }, 5_000);
 });

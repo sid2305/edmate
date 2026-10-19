@@ -10,7 +10,7 @@ import {
   demoStyleCard,
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
-import type { PedagogyDecision } from '@edmate/contracts';
+import type { PedagogyDecision, RetrievalIndex } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
 import { refusingGateway } from '../pipeline/turnGateway.js';
@@ -256,6 +256,18 @@ export function stepEnvExtras(
   };
 }
 
+/**
+ * A retrieval port whose `leakCheck` finds nothing (generate and postGuard ask it about every
+ * reply, 4.6); `search` and `probe` stay the given (usually unused) port's.
+ */
+function noLockedMaterial(port: RetrievalIndex): RetrievalIndex {
+  return {
+    search: (q, scope, k) => port.search(q, scope, k),
+    probe: (q, scope) => port.probe(q, scope),
+    leakCheck: () => Promise.resolve({ hit: false }),
+  };
+}
+
 export interface TestDeps {
   deps: PipelineDeps;
   clock: VirtualClock;
@@ -311,7 +323,7 @@ export function testDeps(
     profiles: unusedPort('profiles', portCalls),
     transcripts: unusedPort('transcripts', portCalls),
     sessionState: unusedPort('sessionState', portCalls),
-    retrieval: unusedPort('retrieval', portCalls),
+    retrieval: noLockedMaterial(unusedPort<RetrievalIndex>('retrieval', portCalls)),
     teacherQuestions: unusedPort('teacherQuestions', portCalls),
     usage,
     traces,

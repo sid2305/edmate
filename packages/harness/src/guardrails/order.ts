@@ -2,6 +2,9 @@
 // phase and the order they run in. Registration order never decides it, so guard tasks that land
 // out of order (4.2-4.9) cannot reorder a chain. Copied from the build plan § Guardrails and safety
 // guard table; `piiScrub` (stage "pre" in the table) runs in its own scrub sub-step (step 3a).
+// One departure from the table (task 4.6, lead decision, risk: high): `lockedLeak` runs BEFORE
+// `answerLeak`, so a reply holding locked material is replaced before answerLeak's rewrite could
+// send it to a model.
 
 export const GUARD_PHASES = Object.freeze(['scrub', 'pre', 'post'] as const);
 export type GuardPhase = (typeof GUARD_PHASES)[number];
@@ -10,8 +13,8 @@ export const GUARD_ORDER: Readonly<Record<GuardPhase, readonly string[]>> = Obje
   scrub: Object.freeze(['piiScrub']),
   pre: Object.freeze(['distressDetect', 'moderationIn', 'jailbreak']),
   post: Object.freeze([
-    'answerLeak',
     'lockedLeak',
+    'answerLeak',
     'grounding',
     'adviceGuard',
     'personaBoundary',

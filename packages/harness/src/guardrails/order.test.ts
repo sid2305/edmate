@@ -9,10 +9,11 @@ describe('GUARD_ORDER', () => {
     expect(GUARD_ORDER.scrub).toEqual(['piiScrub']);
     // Rows 2-4: distressDetect, moderationIn, jailbreak.
     expect(GUARD_ORDER.pre).toEqual(['distressDetect', 'moderationIn', 'jailbreak']);
-    // Rows 5-10: answerLeak, lockedLeak, grounding, adviceGuard, personaBoundary, tone.
+    // Rows 5-10, except that lockedLeak (row 6) runs before answerLeak (row 5): task 4.6 lead
+    // decision, so the answer rewriter never receives locked material.
     expect(GUARD_ORDER.post).toEqual([
-      'answerLeak',
       'lockedLeak',
+      'answerLeak',
       'grounding',
       'adviceGuard',
       'personaBoundary',

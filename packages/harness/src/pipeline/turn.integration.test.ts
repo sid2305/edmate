@@ -78,6 +78,7 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const retrieval: RetrievalIndex = {
     search: () => Promise.resolve([{ ...demoChunkScored }]),
     probe: () => Promise.resolve({ hit: false, score: 0 }),
+    leakCheck: () => Promise.resolve({ hit: false }),
   };
   const tools = memoryToolRegistry([
     testTool({

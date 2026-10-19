@@ -2,9 +2,12 @@
 // for the student's screen (a practice item, interview state). Fail closed: the event is sent only
 // when the skill is entitled, the payload fits LIMITS.skillPayloadMaxJsonLength, and no do-not-say
 // string (the answer key) appears in it, in any form the shared matcher reads (answerKey.ts, 4.5),
-// and the lockedLeak seam (`lockedCheck`, filled by 4.6) does not flag it.
+// and the locked check (4.6) passes it: each string leaf and the leaves joined, never only the
+// JSON text. A hit, or a check that rejects, drops the event (fail closed).
 import { LIMITS, SkillSchema, type TurnContext, type TurnEvent } from '@edmate/contracts';
 import { z } from 'zod';
+import type { LockedCheck } from '../../guardrails/answerLeak.js';
+import { stringLeaves } from '../../guardrails/lockedMatch.js';
 import type { RegisteredTool } from '../tools.js';
 import { errorName, HarnessError } from '../errors.js';
 import { revealsAnswerKey } from './answerKey.js';
@@ -34,14 +37,14 @@ export class SkillEventDropped extends HarnessError {
 
 const PresentationSchema = z.strictObject({ skill: SkillSchema, payload: z.unknown() });
 
-/** The event, `undefined` when the tool shows nothing, or why it was dropped. */
-export function skillEvent(
+/** The event, `undefined` when the tool shows nothing, or why it was dropped. Never rejects. */
+export async function skillEvent(
   entry: RegisteredTool,
   output: unknown,
   ctx: TurnContext,
   mustNotReveal: readonly string[],
-  lockedCheck?: (value: unknown) => boolean,
-): Extract<TurnEvent, { type: 'skill' }> | SkillEventDropped | undefined {
+  lockedCheck: LockedCheck,
+): Promise<Extract<TurnEvent, { type: 'skill' }> | SkillEventDropped | undefined> {
   if (entry.present === undefined) return undefined;
   const drop = (reason: SkillDropReason) => new SkillEventDropped(entry.tool.name, reason);
   let shown: unknown;
@@ -57,6 +60,10 @@ export function skillEvent(
   const json = jsonSafe(p.data.payload);
   if (!json.ok || json.json.length > LIMITS.skillPayloadMaxJsonLength) return drop('too_large');
   if (revealsAnswerKey(json.value, mustNotReveal)) return drop('answer_key');
-  if (lockedCheck?.(json.value) === true) return drop('locked');
+  try {
+    if (await lockedCheck(stringLeaves(json.value))) return drop('locked');
+  } catch (e) {
+    return new SkillEventDropped(entry.tool.name, 'locked', errorName(e));
+  }
   return { type: 'skill', skill: p.data.skill, payload: json.value };
 }

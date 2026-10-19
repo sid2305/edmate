@@ -41,6 +41,7 @@ export {
   type StreamGateFactory,
   type StreamGateInput,
 } from './streamGate.js';
+export { type LockedStream, lockedStream } from './lockedStream.js';
 export { InvalidChunkError, raceCancel, StreamCloseFailed, StreamReader } from './streamReader.js';
 export {
   MAX_TOOL_CALLS_PER_ROUND,
@@ -52,6 +53,7 @@ export {
   type ToolFailReason,
   ToolFailed,
   type ToolLoopInput,
+  type ToolLoopResult,
 } from './toolLoop.js';
 export {
   jsonSafe,

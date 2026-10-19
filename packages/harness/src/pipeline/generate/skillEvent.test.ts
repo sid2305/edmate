@@ -3,22 +3,33 @@ import { turnContextFull } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { testTool } from '../../testing/memoryToolRegistry.js';
 import type { SkillPresentation } from '../tools.js';
+import type { LockedCheck } from '../../guardrails/answerLeak.js';
+import { LockedCheckFailed } from '../../guardrails/lockedLeak.js';
+import type { RegisteredTool } from '../tools.js';
 import { SkillEventDropped, skillEvent } from './skillEvent.js';
 
 const KEY = '5/6';
+const NONE: LockedCheck = () => Promise.resolve(false);
+const ev = (
+  entry: RegisteredTool,
+  output: unknown,
+  ctx: typeof turnContextFull,
+  keys: string[],
+  lockedCheck: LockedCheck = NONE,
+) => skillEvent(entry, output, ctx, keys, lockedCheck);
 const withPresent = (present: (o: unknown) => SkillPresentation | undefined) =>
   testTool({ name: 'practice.next_item', skill: 'practice', present });
 
 describe('skillEvent', () => {
-  it('a tool without present gives no event', () => {
-    expect(skillEvent(testTool({ name: 't', skill: 'practice' }), {}, turnContextFull, [KEY])).toBe(
+  it('a tool without present gives no event', async () => {
+    expect(await ev(testTool({ name: 't', skill: 'practice' }), {}, turnContextFull, [KEY])).toBe(
       undefined,
     );
   });
 
-  it('present returning undefined gives no event', () => {
+  it('present returning undefined gives no event', async () => {
     expect(
-      skillEvent(
+      await ev(
         withPresent(() => undefined),
         {},
         turnContextFull,
@@ -27,8 +38,8 @@ describe('skillEvent', () => {
     ).toBeUndefined();
   });
 
-  it('an entitled, small, clean payload becomes a skill event', () => {
-    const r = skillEvent(
+  it('an entitled, small, clean payload becomes a skill event', async () => {
+    const r = await ev(
       withPresent((o) => ({ skill: 'practice', payload: { item: o } })),
       { q: 'Add 1/4 and 1/4' },
       turnContextFull,
@@ -47,10 +58,10 @@ describe('skillEvent', () => {
     expect((r as SkillEventDropped).message).not.toContain(KEY);
   };
 
-  it('a skill outside the entitlement is dropped', () => {
+  it('a skill outside the entitlement is dropped', async () => {
     // turnContextFull's entitlement has no mock_interview.
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'mock_interview', payload: {} })),
         {},
         turnContextFull,
@@ -60,7 +71,7 @@ describe('skillEvent', () => {
     );
   });
 
-  it('a payload holding the answer key (any case, any depth) is dropped', () => {
+  it('a payload holding the answer key (any case, any depth) is dropped', async () => {
     for (const payload of [
       { answer: KEY },
       { steps: [{ text: `so it is ${KEY}` }] },
@@ -68,7 +79,7 @@ describe('skillEvent', () => {
       { [KEY]: true },
     ]) {
       dropped(
-        skillEvent(
+        await ev(
           withPresent(() => ({ skill: 'practice', payload })),
           {},
           turnContextFull,
@@ -84,9 +95,9 @@ describe('skillEvent', () => {
     ['fullwidth digits', { a: '２４０００' }],
     ['zero-width split', { a: '24​000' }],
     ['a number leaf', { a: 24000 }],
-  ])('a normalised answer key (%s) is still caught', (_n, payload) => {
+  ])('a normalised answer key (%s) is still caught', async (_n, payload) => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'practice', payload })),
         {},
         turnContextFull,
@@ -96,8 +107,8 @@ describe('skillEvent', () => {
     );
   });
 
-  it('a throwing present keeps only the error name as cause', () => {
-    const r = skillEvent(
+  it('a throwing present keeps only the error name as cause', async () => {
+    const r = await ev(
       withPresent(() => {
         throw new TypeError(`quotes ${KEY}`);
       }),
@@ -109,9 +120,9 @@ describe('skillEvent', () => {
     expect(JSON.stringify((r as SkillEventDropped).cause)).not.toContain(KEY);
   });
 
-  it('an answer key with a quote is still caught (string leaves, not only JSON text)', () => {
+  it('an answer key with a quote is still caught (string leaves, not only JSON text)', async () => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'practice', payload: { a: 'x "q" y' } })),
         {},
         turnContextFull,
@@ -121,9 +132,9 @@ describe('skillEvent', () => {
     );
   });
 
-  it('empty do-not-say entries never match everything', () => {
+  it('empty do-not-say entries never match everything', async () => {
     expect(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'practice', payload: { a: 1 } })),
         {},
         turnContextFull,
@@ -132,9 +143,9 @@ describe('skillEvent', () => {
     ).toMatchObject({ type: 'skill' });
   });
 
-  it(`a payload over ${LIMITS.skillPayloadMaxJsonLength} JSON characters is dropped`, () => {
+  it(`a payload over ${LIMITS.skillPayloadMaxJsonLength} JSON characters is dropped`, async () => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({
           skill: 'practice',
           payload: 'x'.repeat(LIMITS.skillPayloadMaxJsonLength),
@@ -147,9 +158,9 @@ describe('skillEvent', () => {
     );
   });
 
-  it('a payload that is not JSON-safe is dropped as too large', () => {
+  it('a payload that is not JSON-safe is dropped as too large', async () => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'practice', payload: 1n })),
         {},
         turnContextFull,
@@ -159,9 +170,9 @@ describe('skillEvent', () => {
     );
   });
 
-  it('a throwing present is dropped', () => {
+  it('a throwing present is dropped', async () => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => {
           throw new Error(`leaks ${KEY}`);
         }),
@@ -173,9 +184,9 @@ describe('skillEvent', () => {
     );
   });
 
-  it('a malformed presentation is dropped', () => {
+  it('a malformed presentation is dropped', async () => {
     dropped(
-      skillEvent(
+      await ev(
         withPresent(() => ({ skill: 'nope', payload: {} }) as unknown as SkillPresentation),
         {},
         turnContextFull,
@@ -184,4 +195,32 @@ describe('skillEvent', () => {
       'invalid',
     );
   });
+
+  it('a payload holding locked material is dropped; the check sees each leaf and all joined', async () => {
+    const seen: (readonly string[])[] = [];
+    const r = await ev(
+      withPresent(() => ({ skill: 'practice', payload: { card: ['front words', 'back words'] } })),
+      {},
+      turnContextFull,
+      [],
+      (texts) => {
+        seen.push(texts);
+        return Promise.resolve(true);
+      },
+    );
+    dropped(r, 'locked');
+    expect(seen).toEqual([['card', 'front words', 'back words', 'card front words back words']]);
+  }, 5_000);
+
+  it('a locked check that rejects drops the event (fail closed), error name only', async () => {
+    const r = await ev(
+      withPresent(() => ({ skill: 'practice', payload: { a: 'x' } })),
+      {},
+      turnContextFull,
+      [],
+      () => Promise.reject(new LockedCheckFailed('timeout')),
+    );
+    dropped(r, 'locked');
+    expect((r as SkillEventDropped).cause).toEqual({ name: 'LockedCheckFailed' });
+  }, 5_000);
 });

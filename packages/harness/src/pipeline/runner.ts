@@ -837,6 +837,7 @@ class Turn {
       draft,
       ...(gen.raw === undefined ? {} : { raw: gen.raw }),
       ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
+      ...(gen.locked === undefined ? {} : { locked: gen.locked }),
     };
     const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
       this.steps.postGuard(env, x),
