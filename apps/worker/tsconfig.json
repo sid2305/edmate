@@ -1,9 +1,9 @@
 {
   "extends": "@edmate/config/tsconfig/base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "test", "*.config.ts"]
 }

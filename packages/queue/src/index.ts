@@ -27,10 +27,17 @@ export interface TurnQueues {
   close(): Promise<void>;
 }
 
-/** The two producer queues on a connection the caller owns. Nothing connects until a job is added. */
-export function createTurnQueues(connection: ConnectionOptions): TurnQueues {
-  const meter = new Queue(METER_QUEUE, { connection });
-  const commit = new Queue(COMMIT_QUEUE, { connection });
+/**
+ * The two producer queues on a connection the caller owns (`prefix`: BullMQ's key prefix, for
+ * tests). Nothing connects until a job is added.
+ */
+export function createTurnQueues(
+  connection: ConnectionOptions,
+  opts: { prefix?: string } = {},
+): TurnQueues {
+  const common = { connection, ...(opts.prefix === undefined ? {} : { prefix: opts.prefix }) };
+  const meter = new Queue(METER_QUEUE, common);
+  const commit = new Queue(COMMIT_QUEUE, common);
   return {
     meter,
     commit,
