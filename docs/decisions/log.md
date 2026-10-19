@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.16 Any package or version change ends the session, and the summary is cleared only by the call that ended it · decided by team lead (plan decision 1 and security plan review) · risk: high
+Decided: `turnConfigStoreFor.load` ends the session (and the db clears the pair's `last_summary`) whenever the entitlement's package or version differs from the session's pin, by any source; the clear happens in the same transaction and only if that UPDATE moved the session from open to ended.
+Why: earlier history, sources and summary of a lapsed package must never reach the model, and a retried or stale turn must never wipe a newer session's summary.
+Alternatives: end only on a downgrade (compare module sets); clear the summary on every call; two separate repository methods.
+Reversible: yes, inside packages/db; no port changes.
+
+---
+
+### 18 Oct 2026 · 3.16 Migration 0009 backfills each open session's pin from its live entitlement, or ends it and clears the pair's summary · decided by team lead (lead answer and security plan review) · risk: high
+Decided: an open session whose student has a live (not ended, paused included) subscription with that teacher to a package of the session's agent gets that package version; any other open session is ended and its pair's `last_summary` is set to NULL; already-ended sessions stay as they are with no pin. No row is deleted; counts are reported as a NOTICE. Tests used all three paths.
+Why: the lead's rule that the migration never loses rows, without leaving an open session that could carry content from an unknown package.
+Alternatives: 0007-style "stop if rows exist" guard; backfill everything with a guessed pin; leave unpinned open sessions open.
+Reversible: the pins and `ended_at` values can be cleared or changed later; a cleared `last_summary` can't be restored (it's the intended effect, like `endOnPackageChange`).
+
+---
+
+### 18 Oct 2026 · 3.16 Pin columns are nullable, with checks that every open session has a full pin to a real package version · decided by builder (tdd-guide) · risk: medium
+Decided: `package_id`/`package_version` are nullable, with a composite foreign key to `package_versions (package_id, version)`, a both-or-neither check and an "open sessions have a pin" check.
+Why: already-ended sessions get no pin (security plan review), so `NOT NULL` is impossible; the checks keep the guarantee for usable sessions.
+Alternatives: `NOT NULL` with a fake pin on ended sessions; a foreign key to `packages.id` only.
+Reversible: yes, by a later migration.
+
+---
+
+### 18 Oct 2026 · 3.16 `sessions.create` checks the package against the agent and teacher · decided by team lead (plan decision 3) · risk: low
+Decided: the INSERT … SELECT joins the package and version and requires them to be the given agent's and the scope teacher's; anything else is `not_found` and nothing is written.
+Why: the same defense in depth as the existing agent-version check.
+Alternatives: trust the caller's pin.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.16 `endOnPackageChange` returns `{ ended }` and treats an own, already-ended session as a no-op · decided by builder (tdd-guide) · risk: low
+Decided: the method returns `{ ended: true }` when it ended the session, `{ ended: false }` for the scope's own already-ended session, and `not_found` for anything outside the scope.
+Why: retries are safe, a cross-tenant call still fails closed for the isolation grid, and tests can see which call did the work.
+Alternatives: return void; throw on an already-ended session.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16 0009's FK and both CHECKs are added `NOT VALID` then validated in separate statements; the plain `CREATE INDEX` stays as it is · decided by build-error-resolver (fix round) · risk: low
+Decided: `sessions_package_version_fk`, `sessions_package_pin_complete` and `sessions_open_has_package` are each added `NOT VALID` and validated by a following `ALTER TABLE ... VALIDATE CONSTRAINT`, so the ACCESS EXCLUSIVE lock needed to add them is held only briefly and the table-scan runs under `VALIDATE CONSTRAINT`'s lighter SHARE UPDATE EXCLUSIVE lock instead. The index stays a plain (non-`CONCURRENTLY`) `CREATE INDEX`: drizzle runs every migration file in one transaction, and `CREATE INDEX CONCURRENTLY` cannot run inside a transaction, so splitting it out would need a second migration file for no real benefit on a table this small.
+Why: minimise how long `sessions` is unavailable for reads and writes while 0009 runs, without changing the schema or the backfill.
+Alternatives: leave the FK and CHECKs as plain `ADD CONSTRAINT` (longer lock); move the index to its own non-transactional migration.
+Reversible: yes; a later migration can re-order or re-validate.
+
+---
+
+### 19 Oct 2026 · 3.16 Migration lock duration accepted for the pilot · decided by team lead · risk: medium
+Decided: 0009's constraints are validated inside drizzle's migration transaction. drizzle 0.45 runs every pending migration in one transaction, so a split file wouldn't shorten the ACCESS EXCLUSIVE lock. At pilot scale (about 500 students) the `sessions` scan takes milliseconds, so the finding is re-rated from HIGH to MEDIUM, and 3.16b adds a VALIDATE path outside the migrator before the table grows.
+Why: the reviewer's HIGH assumed a large production table, which doesn't exist; a correct fix needs migration tooling, not a file split.
+Alternatives: a second migrate() run; an ops script with autocommit; switching migrators.
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · 4.0d Coverage-gap cases follow the 4.0 conventions · decided by team lead · risk: high
 Decided: the six cases use the 4.0 market folders, placeholders and reply-check notes. The broad last-5-digits phrase in `evals/suites/safety/pii/safety-pii-phone-hyphenated-en.yaml` is kept to match its merged siblings, and tightening phone phrases suite-wide waits until 4.2 asserts on the scrubbed model input.
 Why: one convention across the suite; reply phrases matter less once 4.2 checks the input.
