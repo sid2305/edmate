@@ -851,12 +851,12 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   needs_decision:
   - moderation
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.4-moderation-jailbreak
+  model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
