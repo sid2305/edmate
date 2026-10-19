@@ -5,11 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createAnthropicAdapter } from '../../src/adapters/anthropic.js';
 import { createOpenAICompatibleAdapter } from '../../src/adapters/openai-compatible.js';
+import { createEmbeddingAdapter } from '../../src/embedding/config.js';
+import { createWhisperTranscriber } from '../../src/transcriber/whisper.js';
 import type { ModelAdapter } from '../../src/adapters/types.js';
 import { Secret } from '../../src/keys/secret.js';
 import { anthropicFixtures } from '../fixtures/anthropic.js';
 import type { ContractFixtures } from '../fixtures/contract.js';
 import { openAICompatibleFixtures } from '../fixtures/openai-compatible.js';
+import { mp3 } from '../fixtures/transcriber/audio.js';
+import { whisperOk, whisperRateLimited } from '../fixtures/transcriber/whisper.js';
 import { fakeKey, leaks } from '../helpers/fake-key.js';
 import { type FetchMock, fetchMock } from '../helpers/fetch-mock.js';
 import { baseRequest, collect } from './contract-suite.js';
@@ -135,6 +139,50 @@ describe('SDK env defaults are never read or sent', () => {
       for (const text of texts) expect(leaks(text, key)).toBe(false);
     });
   }
+
+  // Task 2.7: the OpenAI key (Whisper and the platform embedding model) has the same discipline.
+  it('openai: Whisper transcription (success and an error) and embeddings use only the Secret', async () => {
+    const key = fakeKey();
+    const mock = fetchMock([
+      { body: mp3(2) },
+      whisperOk,
+      { body: mp3(2) },
+      whisperRateLimited,
+      openAICompatibleFixtures.embeddings!,
+    ]);
+    const t = createWhisperTranscriber(
+      { apiKey: Secret.of(key) },
+      { allowedHosts: ['storage.edmate.invalid'], fetch: mock.fetch },
+    );
+    const input = { url: 'https://storage.edmate.invalid/r.mp3?sig=fake0', mimeType: 'audio/mpeg' };
+    const texts: string[] = [];
+    await t.transcribe(input);
+    try {
+      await t.transcribe(input);
+    } catch (err) {
+      texts.push(String((err as Error).message), String((err as Error).stack), JSON.stringify(err));
+    }
+    const embedder = createEmbeddingAdapter(
+      { apiKey: Secret.of(key) },
+      {
+        fetch: mock.fetch,
+        config: { baseURL: 'https://api.openai.invalid/v1', model: 'm', dimension: 3 },
+      },
+    );
+    await embedder.embed(['a', 'b']);
+
+    expect(reads).toEqual([]);
+    expect(globalFetch).not.toHaveBeenCalled();
+    const sent = mock.requests.filter((r) => !r.url.startsWith('https://storage.edmate.invalid/'));
+    expect(sent).toHaveLength(3);
+    for (const r of sent) expect(r.headers['authorization'] === `Bearer ${key}`).toBe(true);
+    // Whisper goes to OpenAI itself, never to a base URL from the environment.
+    expect(new URL(sent[0]!.url).host).toBe('api.openai.com');
+    const corpus = [mock.corpus(), ...texts].join('\n');
+    for (const name of WATCHED) expect(leaks(corpus, sentinels[name]!)).toBe(false);
+    expect(texts.length).toBe(3);
+    for (const text of texts) expect(leaks(text, key)).toBe(false);
+  });
 
   it('the proxy really sees env reads (the check above is not vacuous)', () => {
     expect(process.env['ANTHROPIC_API_KEY'] === sentinels['ANTHROPIC_API_KEY']).toBe(true);

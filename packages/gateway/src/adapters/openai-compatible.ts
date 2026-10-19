@@ -2,7 +2,7 @@
 // here, into the SDK client and always passed, so nothing falls back to OPENAI_API_KEY. There
 // is no default base URL: the deployment names the endpoint.
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { KeysFor } from '../keys/providers.js';
+import type { KeysFor, ProviderId } from '../keys/providers.js';
 import { createSdkAdapter } from './sdk-adapter.js';
 import type { AdapterCapabilities, ModelAdapter } from './types.js';
 
@@ -42,7 +42,7 @@ declare const URL: new (input: string) => { readonly protocol: string; readonly 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /** The key travels in a header to this URL, so it must be https unless the server is local. */
-function checkBaseURL(value: string): void {
+export function checkBaseURL(value: string, provider: ProviderId): void {
   let url: { readonly protocol: string; readonly hostname: string } | undefined;
   try {
     url = new URL(value);
@@ -55,7 +55,7 @@ function checkBaseURL(value: string): void {
   // The value is not echoed: a mistyped URL can hold credentials.
   if (!ok) {
     throw new Error(
-      'openai-compatible: baseURL must be an https URL (http is allowed only for localhost, 127.0.0.1 or ::1)',
+      `${provider}: baseURL must be an https URL (http is allowed only for localhost, 127.0.0.1 or ::1)`,
     );
   }
 }
@@ -64,7 +64,7 @@ export function createOpenAICompatibleAdapter(
   keys: KeysFor<'openai-compatible'>,
   opts: OpenAICompatibleAdapterOptions,
 ): ModelAdapter {
-  checkBaseURL(opts.baseURL);
+  checkBaseURL(opts.baseURL, 'openai-compatible');
   const provider = createOpenAICompatible({
     name: 'openai-compatible',
     baseURL: opts.baseURL,

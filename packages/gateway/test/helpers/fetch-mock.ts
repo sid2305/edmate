@@ -3,7 +3,10 @@
 
 export interface FakeResponse {
   readonly status?: number;
-  readonly body: string;
+  /** Text, or raw bytes (a recording); bytes default to application/octet-stream. */
+  readonly body: string | Uint8Array;
+  /** Extra response headers, for example a redirect's location. */
+  readonly headers?: Readonly<Record<string, string>>;
   /** Defaults to text/event-stream when the body starts with `event:` or `data:`, else JSON. */
   readonly contentType?: string;
   /** Keep the body open after `body` (a provider still generating), until the request is aborted. */
@@ -28,6 +31,7 @@ export interface FetchMock {
 
 function contentTypeOf(r: FakeResponse): string {
   if (r.contentType !== undefined) return r.contentType;
+  if (typeof r.body !== 'string') return 'application/octet-stream';
   return /^(?:event|data):/.test(r.body) ? 'text/event-stream' : 'application/json';
 }
 
@@ -46,10 +50,11 @@ export function fetchMock(responses: readonly FakeResponse[]): FetchMock {
     requests.push(captured);
     const next = queue.shift();
     if (next === undefined) throw new Error('fetch-mock: no response queued');
-    const body = next.hold === true ? held(next.body, captured) : next.body;
-    return new Response(body, {
+    const body =
+      next.hold === true && typeof next.body === 'string' ? held(next.body, captured) : next.body;
+    return new Response(body as ConstructorParameters<typeof Response>[0], {
       status: next.status ?? 200,
-      headers: { 'content-type': contentTypeOf(next) },
+      headers: { 'content-type': contentTypeOf(next), ...next.headers },
     });
   };
   return {

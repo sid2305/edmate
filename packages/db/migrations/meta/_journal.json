@@ -43,6 +43,13 @@
       "when": 1792364028451,
       "tag": "0005_cost_alarm",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792366087262,
+      "tag": "0006_chunk_embedding_dimension",
+      "breakpoints": true
     }
   ]
 }

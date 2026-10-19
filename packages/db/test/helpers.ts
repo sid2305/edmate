@@ -58,7 +58,7 @@ export function schemaTables() {
 
 export interface SnapshotIndex {
   name: string;
-  columns: { expression: string; isExpression: boolean }[];
+  columns: { expression: string; isExpression: boolean; opclass?: string }[];
   isUnique: boolean;
   where?: string;
   method: string;

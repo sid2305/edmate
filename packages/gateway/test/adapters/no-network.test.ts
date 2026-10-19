@@ -30,6 +30,27 @@ describe('no real network in gateway tests', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('live smoke tests (task 2.7) are opt-in: excluded from the default run, gated, imported by nothing', async () => {
+    const live = files.filter((f) => f.path.endsWith('.live.smoke.test.ts')).map((f) => f.path);
+    expect(live.sort()).toEqual([
+      'embedding/embedding.live.smoke.test.ts',
+      'transcriber/transcriber.live.smoke.test.ts',
+    ]);
+    const config = (await import('../../vitest.config.js')).default as {
+      test: { exclude: string[] };
+    };
+    expect(config.test.exclude).toContain('test/**/*.live.smoke.test.ts');
+    for (const f of files.filter((x) => live.includes(x.path))) {
+      expect(f.text, f.path).toMatch(/describe\.skipIf\(!live\)/);
+      expect(f.text, f.path).toMatch(/env\['EDMATE_LIVE_TESTS'\] === '1'/);
+    }
+    expect(
+      files
+        .filter((f) => /live\.smoke/.test(f.text) && f.path !== 'adapters/no-network.test.ts')
+        .map((f) => f.path),
+    ).toEqual([]);
+  });
+
   it('URLs handed to adapters use reserved .invalid hosts or are only asserted on', () => {
     // Real provider hosts may appear only in assertions about where requests would go.
     const realHost = /https?:\/\/(?![^/'"`\s]*\.invalid\b)[^/'"`\s]+/g;

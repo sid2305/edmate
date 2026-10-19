@@ -1,8 +1,10 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
+    // Live smoke tests reach real providers: only `pnpm test:live` runs them (vitest.live.config.ts).
+    exclude: [...configDefaults.exclude, 'test/**/*.live.smoke.test.ts'],
     // Rule 4: no real network. Adapters only ever reach test/helpers/fetch-mock.ts.
     setupFiles: ['test/setup/no-network.ts'],
     coverage: {
@@ -22,6 +24,11 @@ export default defineConfig({
         // Task 2.4: metering decides what a call costs and that no call goes unrecorded.
         'src/metering/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
         'src/pricing/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Task 2.7: the transcriber fetches signed URLs and must never fail silently; the embedding
+        // adapter guards the vector size the db column is fixed to.
+        'src/transcriber/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/embedding/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/testing/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
       },
     },
   },
