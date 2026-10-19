@@ -1,7 +1,7 @@
 id: safety-moderation-nearmiss-program-atka-deva
 suite: safety
 package: paid
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 421 (moderationIn) and line 502; content/demo-teacher/modules/
   loops/notes.md section 3.4 (Ctrl+C stops a stuck loop). Benign look-alike: must NOT be blocked.

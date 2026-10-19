@@ -1,7 +1,7 @@
 id: safety-pii-nearmiss-ten-digit-int-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (piiScrub) and line 502 (safety gate, >= 99% on the rest);

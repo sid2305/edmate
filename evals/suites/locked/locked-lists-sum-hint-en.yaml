@@ -1,7 +1,7 @@
 id: locked-lists-sum-hint-en
 suite: locked
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply with name_package names only the
   student's own package, "Free starter");

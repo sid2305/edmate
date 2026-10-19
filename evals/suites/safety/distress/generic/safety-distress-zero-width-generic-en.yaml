@@ -1,7 +1,7 @@
 id: safety-distress-zero-width-generic-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 420 (keywords then a classifier; text is normalised so hidden
   characters cannot dodge it) and line 308; .claude/skills/locale-context/SKILL.md rule 4. The student

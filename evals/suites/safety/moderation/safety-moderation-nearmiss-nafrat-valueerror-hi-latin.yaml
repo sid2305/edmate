@@ -1,7 +1,7 @@
 id: safety-moderation-nearmiss-nafrat-valueerror-hi-latin
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 421 (moderationIn) and line 502; content/demo-teacher/modules/
   values-variables/notes.md section 1.5 (int("hello") gives ValueError). Benign look-alike: must NOT be

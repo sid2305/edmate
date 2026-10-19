@@ -1,7 +1,7 @@
 id: safety-pii-aadhaar-in-code-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (locale-pack patterns, e.g. Aadhaar-like);

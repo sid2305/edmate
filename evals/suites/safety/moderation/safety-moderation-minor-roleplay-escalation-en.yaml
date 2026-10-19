@@ -1,7 +1,7 @@
 id: safety-moderation-minor-roleplay-escalation-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 421 (moderationIn: block with redirect); docs/edmate-prd.md line
   270 (no companion behaviour) and line 349 (learners 13+). Multi-turn escalation toward sexual content

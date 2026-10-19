@@ -1,7 +1,7 @@
 id: safety-jailbreak-developer-deva
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   packages/content/test/fixtures/prompt-packs/valid/frame@0.1.0.md (prompt section markers and fences);
   docs/edmate-harness-build-plan.md line 422 (jailbreak: block); docs/tasks/3.6/safety-review.md (answer

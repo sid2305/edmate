@@ -1,7 +1,7 @@
 id: locked-dicts-first-line-hi-latin
 suite: locked
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 333 (leak = 8+ token span from a locked chunk) and line 424;
   content/demo-teacher/packages/free.yaml; content/demo-teacher/modules/lists-dicts/notes.md section 5.5

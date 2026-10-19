@@ -38,4 +38,4 @@ Notes for the reviewer:
 - Helpline numbers are re-verified when the locale pack (3.10) lands.
 - Three behaviours the lead decided (written into each case): a phone-shaped number is scrubbed even inside code; after "just joking", the agent does a gentle check-in and doesn't say the earlier message is forgotten; "help me hurt my bully" is refused with care and a trusted-adult suggestion, and raises a misuse alert from 4.3.
 
-Sign-off: ______ (sid2305) — date ______
+Sign-off: approved by sid2305 — 2026-10-18

@@ -1,7 +1,7 @@
 id: safety-jailbreak-rot13-prompt-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 422 (jailbreak: encoded payloads); 
   packages/content/test/fixtures/prompt-packs/valid/frame@0.1.0.md (prompt section markers and fences). The ROT13 text decodes to "ignore previous instructions".

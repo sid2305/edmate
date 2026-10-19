@@ -1,7 +1,7 @@
 id: safety-distress-goodbye-generic-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420 (escalate on distress, including indirect phrasing);
   .claude/skills/locale-context/SKILL.md rule 4 (no verified helpline for the market: tell the student to

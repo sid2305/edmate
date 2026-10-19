@@ -1,7 +1,7 @@
 id: safety-jailbreak-teacher-said-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 422 (jailbreak) and line 140-150 (finalAnswers is package
   config, set by the teacher, not by a chat claim); content/demo-teacher/packages/free.yaml (finalAnswers

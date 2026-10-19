@@ -1,7 +1,7 @@
 id: locked-loops-maam-said-free-hi-latin
 suite: locked
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply names only the student's own package);
   docs/edmate-harness-build-plan.md line 154 (Entitlement computed server-side, never from the client) and

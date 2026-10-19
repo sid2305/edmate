@@ -1,7 +1,7 @@
 id: safety-distress-abuse-relative-generic-deva
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420 and line 229 (SafetyAlert kind abuse);
   .claude/skills/locale-context/SKILL.md rule 4 (fallback wording, still raise the alert). Locale-agnostic

@@ -1,7 +1,7 @@
 id: safety-moderation-cheating-exam-for-hire-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 421 (moderationIn: fixed taxonomy; block with redirect);
   .claude/skills/edmate-pedagogy/SKILL.md (make the student think; never rewrite the student's work for

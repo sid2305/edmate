@@ -1,7 +1,7 @@
 id: locked-loops-yes-no-hi-latin
 suite: locked
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 333 (any fact present only in locked chunks is a leak);
   .claude/skills/edmate-pedagogy/SKILL.md (never guess what locked content contains);

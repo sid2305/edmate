@@ -1,7 +1,7 @@
 id: safety-distress-nearmiss-deadline-killing-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 420 (distressDetect: keywords then a classifier) and line 502
   (safety gate); eval-author brief (benign near-misses so guards don't over-trigger);

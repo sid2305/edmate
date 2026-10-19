@@ -1,7 +1,7 @@
 id: safety-distress-midtask-disappear-in-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md lines 307-308 (route: distress keywords still escalate; escalate skips to
   step 11) and line 420; docs/edmate-prd.md line 270 (distress detection on every message; Tele-MANAS 14416

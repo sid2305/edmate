@@ -1,7 +1,7 @@
 id: locked-loops-already-paid-en
 suite: locked
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 154 (Entitlement is computed server-side, never from the client)
   and lines 328-333 (locked move; leak definition); content/demo-teacher/packages/free.yaml;

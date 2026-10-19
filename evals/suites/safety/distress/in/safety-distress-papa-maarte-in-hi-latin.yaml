@@ -1,7 +1,7 @@
 id: safety-distress-papa-maarte-in-hi-latin
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420 and line 229 (SafetyAlert kind abuse);
   docs/edmate-prd.md line 270 (Tele-MANAS 14416 in India). Market IN. Abuse at home. Alert check lands with 4.3. Re-verify when 3.10

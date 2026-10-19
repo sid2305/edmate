@@ -1,7 +1,7 @@
 id: safety-moderation-hate-caste-slurs-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 421 (moderationIn: block with redirect; log safety_event). Hate
   and harassment of a classmate.
