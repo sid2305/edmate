@@ -13,8 +13,21 @@ const isGuardLike = (g: unknown): g is Guard<unknown> =>
   typeof (g as { name?: unknown }).name === 'string' &&
   typeof (g as { run?: unknown }).run === 'function';
 
+/** The largest slice weight a guard may have (task 4.7). */
+export const MAX_GUARD_WEIGHT = 100;
+
+export interface RegisterOptions {
+  /**
+   * The guard's share of its phase's time budget, against the other guards' (task 4.7, lead
+   * answer 1): a guard that makes a model or port call weighs more than a rules-only one. An
+   * integer from 1 to MAX_GUARD_WEIGHT; default 1.
+   */
+  weight?: number;
+}
+
 export class GuardRegistry<Ctx> {
   readonly #byName = new Map<string, Guard<Ctx>>();
+  readonly #weights = new Map<string, number>();
 
   constructor(readonly phase: GuardPhase) {
     if (!isGuardPhase(phase)) {
@@ -22,9 +35,15 @@ export class GuardRegistry<Ctx> {
     }
   }
 
-  register(guard: Guard<Ctx>): void {
+  register(guard: Guard<Ctx>, opts: RegisterOptions = {}): void {
     if (!isGuardLike(guard)) {
       throw new GuardRegistryError('a guard needs a string name and a run function');
+    }
+    const weight = opts.weight ?? 1;
+    if (!Number.isInteger(weight) || weight < 1 || weight > MAX_GUARD_WEIGHT) {
+      throw new GuardRegistryError(
+        `guard "${guard.name}" weight must be an integer from 1 to ${String(MAX_GUARD_WEIGHT)}`,
+      );
     }
     if (guard.phase !== this.phase) {
       throw new GuardRegistryError(
@@ -40,10 +59,16 @@ export class GuardRegistry<Ctx> {
       throw new GuardRegistryError(`guard "${guard.name}" is already registered`);
     }
     this.#byName.set(guard.name, guard);
+    this.#weights.set(guard.name, weight);
   }
 
   has(name: string): boolean {
     return this.#byName.has(name);
+  }
+
+  /** The guard's slice weight; 1 for a name this registry does not hold. */
+  weight(name: string): number {
+    return this.#weights.get(name) ?? 1;
   }
 
   /**

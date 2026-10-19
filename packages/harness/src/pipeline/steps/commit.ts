@@ -4,9 +4,10 @@
 // 2. The agent's reply (when the student was shown one), with the `done` event's message id.
 // 3. The session's next help state (when decide produced one), via SessionStateStore only.
 // 4. Learner-profile evidence (when the turn produced any — task 3.17), via `profiles.applyEvidence`.
-// 5. The TeacherQuestion for an `ask_teacher` turn, as a fallback, when the live (3.7) attempt left
-//    `teacherQuestionId` unset (its own open timed out or failed) — never a second question when
-//    it is already set (`teacherQuestion.ts`'s shared, idempotent open).
+// 5. The TeacherQuestion for an `ask_teacher` turn, or one the grounding guard escalated (4.7,
+//    `escalateToTeacher`), as a fallback, when the live (3.7) attempt left `teacherQuestionId`
+//    unset (its own open timed out or failed) — never a second question when it is already set
+//    (`teacherQuestion.ts`'s shared, idempotent open).
 //
 // The answer key lives in `record.next` and in `record.decision` (systemPrompt, mustNotReveal);
 // it goes to saveHelpState and nowhere else (ADR-0005): messages, evidence and the TeacherQuestion
@@ -43,7 +44,7 @@ export const commit: Steps['commit'] = async (env, record) => {
     await profiles.applyEvidence(record.evidence);
   }
   if (
-    record.decision?.move === 'ask_teacher' &&
+    (record.decision?.move === 'ask_teacher' || record.escalateToTeacher === true) &&
     record.teacherQuestionId === undefined &&
     text !== undefined &&
     text.trim() !== ''

@@ -499,8 +499,10 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
     const store = memoryTeacherQuestionStore({ similar: [teacherQuestionOpen] });
     const w = askWorld(store);
     const { events, result } = await w.run();
-    expect(events.slice(-2)).toEqual([
+    // The ask_teacher reply is held until postGuard passes it (4.7), so it comes after the event.
+    expect(events).toEqual([
       { type: 'teacher_question', questionId: 'tq_mem_1' },
+      { type: 'token', text: 'I sent that to your teacher.' },
       { type: 'done', messageId: 'message_1', usage: [usageMain] },
     ]);
     expect(store.searched).toEqual([
@@ -549,12 +551,17 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
       open: () => new Promise(() => undefined),
     };
     const w = askWorld(hanging);
+    const t0 = w.clock.now();
     const { events, result, timed } = await w.run();
     expect(events.at(-1)?.type).toBe('done');
     expect(result.background.map((b) => String(b.error))).toEqual([
       'Error: TeacherQuestionStore timed out',
     ]);
-    expect((timed.at(-1)?.at ?? 0) - (timed.at(-2)?.at ?? 0)).toBe(500);
+    // The held reply (4.7) and done both come once the open was given up on.
+    expect(timed.map((e) => [e.event.type, e.at - t0])).toEqual([
+      ['token', 500],
+      ['done', 500],
+    ]);
   });
 
   it("findSimilar returning another teacher's question fails closed", async () => {
@@ -889,7 +896,8 @@ describe('fix round: generate failures, unpriced usage, runner-bug clearing, clo
           return {
             next: () =>
               first
-                ? ((first = false), Promise.resolve({ value: say('First. '), done: false as const }))
+                ? ((first = false),
+                  Promise.resolve({ value: say('First. '), done: false as const }))
                 : new Promise<IteratorResult<ModelChunk>>(() => undefined),
             return: async () => {
               await clock.sleep(closeMs);

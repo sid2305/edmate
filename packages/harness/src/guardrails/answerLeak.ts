@@ -8,7 +8,7 @@
 //
 // Its reason is a fixed code, never the key or the text. Paraphrased answers ("the hot-ish one")
 // need a judge and are task 4.5b.
-import type { PedagogyDecision, TurnContext, Usage } from '@edmate/contracts';
+import type { PedagogyDecision, SourceRef, TurnContext, Usage } from '@edmate/contracts';
 import { LIMITS } from '@edmate/contracts';
 import { compileAnswerKeys } from '../pipeline/generate/answerKey.js';
 import type { CancelToken } from '../pipeline/clock.js';
@@ -34,6 +34,21 @@ export interface LeakRewrite {
  */
 export type LockedCheck = (texts: readonly string[]) => Promise<boolean>;
 
+/** One grounding judge request (4.7): a fixed instruction and the delimited data. */
+export interface JudgeRequest {
+  system: string;
+  user: string;
+}
+
+/** What the judge call returns: its raw text (undefined when the call failed) and usage. */
+export interface JudgeReply {
+  text: string | undefined;
+  usage: Usage[];
+}
+
+/** One bounded small-tier judge call (4.7), built by the postGuard step; never throws. */
+export type GroundingJudge = (req: JudgeRequest, cancel: CancelToken) => Promise<JudgeReply>;
+
 /** The post phase's guard context (4.5; 4.6-4.9 add what their guards need). */
 export interface PostGuardCtx {
   readonly ctx: TurnContext;
@@ -46,6 +61,17 @@ export interface PostGuardCtx {
   readonly lockedCheck: LockedCheck;
   /** The reply lockedLeak sends instead of a reply that holds locked material (4.6). */
   readonly lockedReply: string;
+  /**
+   * decide's numbered sources, in `[n]` order (4.7, grounding's citation check). Absent: one per
+   * retrieved chunk.
+   */
+  readonly sources?: readonly SourceRef[];
+  /** grounding's judge (4.7). Absent: every judged reply fails closed to the ask-teacher reply. */
+  readonly judge?: GroundingJudge;
+  /** The reply grounding sends for an ungrounded reply (4.7). Absent: the built-in English one. */
+  readonly askTeacherReply?: string;
+  /** Fixed texts every post guard passes as they are: the safe and distress replies (4.7). */
+  readonly fixedTexts?: readonly string[];
 }
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };

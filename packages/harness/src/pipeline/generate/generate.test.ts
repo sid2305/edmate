@@ -7,7 +7,13 @@ import type {
   Usage,
 } from '@edmate/contracts';
 import { LIMITS, TurnEventSchema } from '@edmate/contracts';
-import { demoTurnInput, turnContextFull, usageMain } from '@edmate/contracts/fixtures';
+import {
+  demoChunk,
+  demoChunkScored,
+  demoTurnInput,
+  turnContextFull,
+  usageMain,
+} from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
@@ -23,7 +29,7 @@ import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
-import { generate } from '../steps/generate.js';
+import { generate, HOLD_MARGIN, holdsReply } from '../steps/generate.js';
 import type { RegisteredTool } from '../tools.js';
 import type { StepEnv, UsageRecorder } from '../types.js';
 import { SkillEventDropped } from './skillEvent.js';
@@ -196,7 +202,7 @@ describe('generate: events in order', () => {
     },
   );
 
-  it.each(['ask', 'explain', 'check', 'redirect', 'ask_teacher'] as const)(
+  it.each(['ask', 'explain', 'check', 'redirect'] as const)(
     '%s sends no hint_rung',
     async (move) => {
       const s = setup([[say('x'), used]], { decision: { move } });
@@ -204,6 +210,56 @@ describe('generate: events in order', () => {
       expect(types(s.events)).toEqual(['token']);
     },
   );
+
+  it('ask_teacher sends no hint_rung and holds its text for postGuard (4.7)', async () => {
+    const s = setup([[say('It has gone '), say('to your teacher.'), used]], {
+      decision: { move: 'ask_teacher' },
+    });
+    const r = await s.run();
+    expect(types(s.events)).toEqual([]);
+    expect(r).toMatchObject({ draft: 'It has gone to your teacher.', held: true });
+  });
+
+  it('a teaching turn near the coverage threshold is held; a well-covered one streams (4.7)', async () => {
+    const near = setup([[say('x'), used]], {
+      decision: { move: 'explain' },
+      ctx: { ...ctx, retrieved: [{ ...demoChunkScored, score: 0.55 }] },
+    });
+    expect(await near.run()).toMatchObject({ held: true });
+    expect(types(near.events)).toEqual([]);
+    const far = setup([[say('x'), used]], { decision: { move: 'explain' } });
+    expect(await far.run()).not.toHaveProperty('held');
+    expect(types(far.events)).toEqual(['token']);
+  });
+});
+
+describe('holdsReply (4.7, lead answer 13)', () => {
+  const at = (...scores: (number | undefined)[]) => ({
+    retrieved: scores.map((score) =>
+      score === undefined ? demoChunk : { ...demoChunkScored, score },
+    ),
+  });
+
+  it('holds ask_teacher always', () => {
+    expect(holdsReply(at(), 'ask_teacher')).toBe(true);
+    expect(holdsReply(at(0.99), 'ask_teacher')).toBe(true);
+  });
+
+  it('holds a teaching move whose best scored chunk is under the threshold plus the margin', () => {
+    expect(HOLD_MARGIN).toBe(0.1);
+    expect(holdsReply(at(0.59, 0.2), 'hint')).toBe(true);
+    expect(holdsReply(at(0.3), 'ask')).toBe(true);
+    expect(holdsReply(at(0.6), 'hint')).toBe(false);
+    expect(holdsReply(at(0.82, 0.55), 'solution')).toBe(false);
+    expect(holdsReply(at(0.65), 'explain', 0.6)).toBe(true);
+  });
+
+  it('streams turns with no scored chunk, and redirect or locked turns', () => {
+    expect(holdsReply(at(), 'explain')).toBe(false);
+    expect(holdsReply(at(undefined), 'check')).toBe(false);
+    expect(holdsReply(at(0.1), 'redirect')).toBe(false);
+    expect(holdsReply(at(0.1), 'locked')).toBe(false);
+  });
 
   it('no sources event when nothing is cited, or only out-of-range numbers', async () => {
     const s = setup([[say('See [7] and [0].'), used]], { decision: { move: 'ask' } });

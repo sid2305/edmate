@@ -52,6 +52,27 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     expect(parseSessionHelp(raw)).toEqual(DEFAULT);
   });
 
+  it('keeps the grounding escalation count when there is one (task 4.7)', () => {
+    expect(parseSessionHelp({ ...VALID, groundingAsks: 2 })).toEqual({
+      rung: 3,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: ['42'],
+        groundingAsks: 2,
+      },
+    });
+    for (const bad of [-1, 1.5, '2', 1_001]) {
+      expect(parseSessionHelp({ ...VALID, groundingAsks: bad })).toEqual(DEFAULT);
+    }
+    const s = {
+      rung: 1 as const,
+      help: { ...INITIAL_HELP_STATE, answerKey: [], groundingAsks: 3 },
+    };
+    expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
+  });
+
   it('the default never aliases the frozen INITIAL_HELP_STATE', () => {
     const a = parseSessionHelp(undefined);
     a.help.answerKey.push('x');

@@ -14,6 +14,11 @@ export const HelpStateSchema = z.strictObject({
   pendingCheck: z.boolean(),
   /** The current problem's answer; goes to `mustNotReveal`. Filled by 5.6. */
   answerKey: z.array(z.string()),
+  /**
+   * How many times this session the grounding guard sent a question to the teacher (task 4.7);
+   * absent until the first. The runner caps it (GROUNDING_ASKS_PER_SESSION) and carries it over.
+   */
+  groundingAsks: z.int().min(0).max(1_000).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -56,8 +61,10 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey } = r.data;
-  return { rung, help: copyHelp({ stuckTurns, attemptLogged, pendingCheck, answerKey }) };
+  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, groundingAsks } = r.data;
+  const help: HelpState = { stuckTurns, attemptLogged, pendingCheck, answerKey };
+  if (groundingAsks !== undefined) help.groundingAsks = groundingAsks;
+  return { rung, help: copyHelp(help) };
 }
 
 /**

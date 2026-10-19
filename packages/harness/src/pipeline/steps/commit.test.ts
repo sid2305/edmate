@@ -254,6 +254,29 @@ describe('commit', () => {
     expect(w.teacherQuestions.opened).toEqual([]);
   });
 
+  it('opens the fallback question for a turn grounding escalated (4.7), once, never with an id set', async () => {
+    const w = world();
+    await commit(w.env, record({ decision: demoPedagogyDecision, escalateToTeacher: true }));
+    expect(w.teacherQuestions.opened).toHaveLength(1);
+    expect(w.teacherQuestions.opened[0]?.text).toBe('How do I add [number] and 1/3?');
+    const live = world();
+    await commit(
+      live.env,
+      record({
+        decision: demoPedagogyDecision,
+        escalateToTeacher: true,
+        teacherQuestionId: 'tq_live_01',
+      }),
+    );
+    expect(live.teacherQuestions.opened).toEqual([]);
+    const notEscalated = world();
+    await commit(
+      notEscalated.env,
+      record({ decision: demoPedagogyDecision, escalateToTeacher: false }),
+    );
+    expect(notEscalated.teacherQuestions.opened).toEqual([]);
+  });
+
   it('never opens a question for any other move, even with no id set', async () => {
     const w = world();
     await commit(w.env, record({ decision: demoPedagogyDecision }));

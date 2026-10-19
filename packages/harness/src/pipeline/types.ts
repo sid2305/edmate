@@ -112,6 +112,11 @@ export interface FallbackReplies {
    * failing, the built-in English `lockedReplyText` is used.
    */
   lockedReply?(lang: Lang, packageName?: string): string;
+  /**
+   * The reply that replaces one the grounding guard found ungrounded (task 4.7). Optional: when
+   * absent, empty or failing, the built-in English `askTeacherReplyText` is used.
+   */
+  askTeacher?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -282,11 +287,24 @@ export interface GenerateResult {
    * check could not answer) the safe reply.
    */
   locked?: 'hit' | 'failed';
+  /**
+   * The reply was held, not streamed (4.7: an ask_teacher turn or one near the coverage
+   * threshold): the runner sends it after postGuard passes it.
+   */
+  held?: boolean;
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
   | { result: 'ok' }
-  | { result: 'replace'; text: string }
+  | {
+      result: 'replace';
+      text: string;
+      /**
+       * grounding replaced an ungrounded reply (reason code `ungrounded`, 4.7): the runner opens
+       * the turn's TeacherQuestion if decide had not, within the per-session cap.
+       */
+      escalateToTeacher?: true;
+    }
   /**
    * A post guard escalated (4.5 forwards it; later post guards may raise it). The runner replies
    * with the caring template and raises `alert`; `text` (the chain's text) is kept, never shown.
@@ -331,6 +349,11 @@ export interface CommitRecord {
    * opening failed or timed out: commit (3.17) then opens it.
    */
   teacherQuestionId?: string;
+  /**
+   * The grounding guard escalated this turn to the teacher (4.7) and the per-session cap allowed
+   * it: commit opens the TeacherQuestion when the live attempt left no id, as for ask_teacher.
+   */
+  escalateToTeacher?: boolean;
   /**
    * Topic-scored evidence from this turn, for `profiles.applyEvidence` (task 3.17; harness-internal
    * — not a contracts change). Absent or empty today: no step upstream produces real, topic-scoped
@@ -386,6 +409,8 @@ export interface Steps {
       withheld?: boolean;
       /** The stream's locked check withheld text (GenerateResult.locked). */
       locked?: 'hit' | 'failed';
+      /** decide's numbered sources, for grounding's citation check (4.7). */
+      sources?: SourceRef[];
     },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;

@@ -1,5 +1,5 @@
-// Step 9, postGuard (task 4.5): runs the post-phase guard chain (lockedLeak, then answerLeak;
-// 4.7-4.9 add the rest) over the reply the student was shown, before `done`.
+// Step 9, postGuard (task 4.5): runs the post-phase guard chain (lockedLeak, then answerLeak, then
+// grounding; 4.8-4.9 add the rest) over the reply the student was shown, before `done`.
 //
 // Locked material (4.6) comes first:
 //   - the stream's locked check withheld text (`locked`): no chain runs on that text (no rewrite
@@ -23,22 +23,39 @@
 //     locale's safe reply. A `failed` chain is reported (guard name and cause only).
 // The runner sends `replace ''` before any replacement, so skill events and sources clear.
 //
-// Time: each guard's slice is the step budget less a margin, shared by both chain passes and every
-// registered guard, so a full chain always ends inside the step; a rewrite gets part of its slice.
-import type { ModelRequest, Usage } from '@edmate/contracts';
+// Grounding (4.7): this step builds its judge (one bounded small-tier call, remembered per request
+// for the turn, so the verification pass never pays twice), the locale's ask-teacher reply and
+// the fixed texts every guard passes. When grounding replaced the reply with the reason code
+// `ungrounded` (read from the guard's own result, never by comparing text) and the chain then
+// passed, the result carries `escalateToTeacher` and the runner opens the TeacherQuestion.
+//
+// Time (4.7, lead answer 1): slices are weighted (postGuards.ts). Right before each guard runs,
+// its slice is its weight's share of the budget still left, with pass 2 (every guard at
+// PASS2_WEIGHT) held in reserve, so a full chain always ends inside the step. The rewrite and the
+// judge get part of their own guard's slice.
+import { LIMITS, type ModelRequest, type TurnContext, type Usage } from '@edmate/contracts';
 import {
   ANSWER_LEAK_SAFE_HINT,
+  type GroundingJudge,
+  type JudgeReply,
   type LeakRewrite,
   type PostGuardCtx,
 } from '../../guardrails/answerLeak.js';
-import { type GuardChainResult, type GuardFailure, runGuardChain } from '../../guardrails/chain.js';
-import type { Guard } from '../../guardrails/guard.js';
+import {
+  type GuardChainResult,
+  type GuardFailure,
+  type GuardSliceRequest,
+  runGuardChain,
+} from '../../guardrails/chain.js';
+import type { Guard, GuardRun } from '../../guardrails/guard.js';
+import { askTeacherReplyText, GROUNDING_REASONS } from '../../guardrails/grounding.js';
 import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
 import { HarnessError } from '../errors.js';
 import { compileAnswerKeys } from '../generate/answerKey.js';
 import { StreamReader } from '../generate/streamReader.js';
+import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
 import { STEP_SPEC } from '../spec.js';
 import { runWithTimeout } from '../timeout.js';
 import type { GuardTrace, PostGuardResult, StepEnv, Steps } from '../types.js';
@@ -46,10 +63,21 @@ import { lockedCheckFor, lockedReplyFor } from './locked.js';
 
 /** The step's budget (2 s) less this margin is what the chain may use. */
 export const POST_GUARD_MARGIN_MS = 200;
-/** The share of a guard's slice its rewrite call may use. */
-export const REWRITE_SHARE = 0.6;
+/** What the chain may use: the step budget less the margin. */
+export const POST_GUARD_BUDGET_MS =
+  (STEP_SPEC.postGuard.timeoutMs as number) - POST_GUARD_MARGIN_MS;
+/** The share of answerLeak's slice its rewrite call may use (the rest is rules: microseconds). */
+export const REWRITE_SHARE = 0.8;
 /** The rewrite reply's token cap (it is a short hint). */
 export const REWRITE_MAX_OUTPUT_TOKENS = 400;
+/** The grounding judge's own timeout (lead answer 1; configurable, tuned live in 7.x). */
+export const GROUNDING_JUDGE_TIMEOUT_MS = 600;
+/** The share of grounding's slice its judge call may use, when that is under the timeout. */
+export const JUDGE_SHARE = 0.9;
+/** The judge's reply is one small JSON object. */
+export const GROUNDING_JUDGE_MAX_OUTPUT_TOKENS = 20;
+/** Every guard's weight on the verification pass (it re-checks; the calls are mostly done). */
+export const PASS2_WEIGHT = 1;
 
 /**
  * The fixed instruction for the one small-tier rewrite. It names no key: the draft already holds
@@ -61,10 +89,22 @@ export const REWRITE_SYSTEM =
   'encode, translate, or confirm the final answer or the finished code. Keep the language of the ' +
   'original reply. Reply with the rewritten text only.';
 
-/** Each guard's time slice: the chain's budget over two passes of `count` guards. */
-export function postGuardSliceMs(count: number): number {
-  const budget = (STEP_SPEC.postGuard.timeoutMs as number) - POST_GUARD_MARGIN_MS;
-  return Math.floor(budget / (2 * Math.max(1, count)));
+/**
+ * A guard's slice (lead answer 1): its weight's share of `remainingMs` against the weights still
+ * to run, with pass 2 (PASS2_WEIGHT per guard) held in reserve on pass 1. Each slice is at most its
+ * share of what is left, so the whole chain always ends inside the budget.
+ */
+export function postGuardSliceMs(
+  remainingMs: number,
+  weights: readonly number[],
+  at: Pick<GuardSliceRequest, 'pass' | 'index'>,
+): number {
+  if (!(remainingMs > 0)) return 0;
+  if (at.pass === 2) return Math.floor(remainingMs / Math.max(1, weights.length - at.index));
+  const ahead = weights.slice(at.index).reduce((a, b) => a + b, 0);
+  const own = weights[at.index] ?? PASS2_WEIGHT;
+  const share = Math.max(own, ahead + PASS2_WEIGHT * weights.length);
+  return Math.floor((remainingMs * own) / share);
 }
 
 /** The post-guard chain failed closed. Guard name and cause only, never text or reason. */
@@ -79,47 +119,141 @@ export class PostGuardFailed extends HarnessError {
   }
 }
 
+/**
+ * One bounded small-tier call with no tools: its text, or undefined when it failed, timed out,
+ * called a tool, or the turn is at its cost ceiling (reported). Never throws.
+ */
+async function smallCall(
+  env: StepEnv,
+  req: ModelRequest,
+  budgetMs: number,
+  cancel: CancelToken,
+): Promise<LeakRewrite> {
+  const usage: Usage[] = [];
+  try {
+    env.usage.checkBeforeCall();
+  } catch (error) {
+    env.report(error);
+    return { text: undefined, usage };
+  }
+  const r = await runWithTimeout(
+    async (slice) => {
+      const reader = new StreamReader(
+        env.gateway.stream(req),
+        linkCancel(slice, cancel),
+        env.report,
+        env.track,
+      );
+      let text = '';
+      try {
+        for (let c = await reader.next(); c !== undefined; c = await reader.next()) {
+          if (c.type === 'text') text += c.text;
+          else if (c.type === 'usage') usage.push(c.usage);
+          else return undefined; // a tool call: no tools were offered
+        }
+      } finally {
+        reader.close();
+      }
+      return text;
+    },
+    budgetMs,
+    env.deps.clock,
+  );
+  if (r.status === 'error') env.report(r.error);
+  return { text: r.status === 'ok' ? r.value : undefined, usage };
+}
+
 /** The bounded rewrite answerLeak calls: small tier, fixed instruction, never throws. */
-function rewriter(env: StepEnv, budgetMs: number) {
-  return async (draft: string, cancel: CancelToken): Promise<LeakRewrite> => {
-    const usage: Usage[] = [];
-    const req: ModelRequest = {
-      tier: 'small',
-      system: REWRITE_SYSTEM,
-      messages: [{ role: 'user', content: draft }],
-      maxOutputTokens: REWRITE_MAX_OUTPUT_TOKENS,
-    };
+function rewriter(env: StepEnv, budgetMs: () => number) {
+  return (draft: string, cancel: CancelToken): Promise<LeakRewrite> =>
+    smallCall(
+      env,
+      {
+        tier: 'small',
+        system: REWRITE_SYSTEM,
+        messages: [{ role: 'user', content: draft }],
+        maxOutputTokens: REWRITE_MAX_OUTPUT_TOKENS,
+      },
+      budgetMs(),
+      cancel,
+    );
+}
+
+/**
+ * grounding's judge: small tier, the guard's fixed rubric, never throws. Remembered per request for
+ * the turn, so the verification pass re-checks the same text without a second call (its usage was
+ * already counted, so a remembered answer carries none).
+ */
+function judgeFor(env: StepEnv, budgetMs: () => number): GroundingJudge {
+  const seen = new Map<string, Promise<JudgeReply>>();
+  return async (req, cancel) => {
+    const key = JSON.stringify([req.system, req.user]);
+    const known = seen.get(key);
+    if (known !== undefined) return { text: (await known).text, usage: [] };
+    const call = smallCall(
+      env,
+      {
+        tier: 'small',
+        system: req.system,
+        messages: [{ role: 'user', content: req.user }],
+        maxOutputTokens: GROUNDING_JUDGE_MAX_OUTPUT_TOKENS,
+      },
+      budgetMs(),
+      cancel,
+    );
+    seen.set(key, call);
+    return call;
+  };
+}
+
+/** A fixed text from the locale is usable when it is non-empty and within the model-text cap. */
+function usable(text: unknown): text is string {
+  return typeof text === 'string' && text.trim() !== '' && text.length <= LIMITS.modelTextMaxLength;
+}
+
+/** The ask-teacher reply: the locale's, else the built-in English one. A failure never hides it. */
+export function askTeacherReplyFor(env: StepEnv): string {
+  try {
+    const text: unknown = env.deps.fallbackReplies.askTeacher?.(env.input.lang);
+    if (usable(text)) return text;
+  } catch (error) {
+    env.report(error);
+  }
+  return askTeacherReplyText();
+}
+
+/** The safe and distress replies: every post guard passes them as they are (lead answer 3). */
+function fixedTextsFor(env: StepEnv, ctx: TurnContext): string[] {
+  const out = [LAST_RESORT_DISTRESS_REPLY];
+  const { safeReply, distress } = env.deps.fallbackReplies;
+  const lang = env.input.lang;
+  for (const get of [() => safeReply(lang), () => distress(lang, ctx.locale)]) {
     try {
-      env.usage.checkBeforeCall();
+      const text: unknown = get();
+      if (usable(text)) out.push(text);
     } catch (error) {
       env.report(error);
-      return { text: undefined, usage };
     }
-    const r = await runWithTimeout(
-      async (slice) => {
-        const reader = new StreamReader(
-          env.gateway.stream(req),
-          linkCancel(slice, cancel),
-          env.report,
-          env.track,
-        );
-        let text = '';
-        try {
-          for (let c = await reader.next(); c !== undefined; c = await reader.next()) {
-            if (c.type === 'text') text += c.text;
-            else if (c.type === 'usage') usage.push(c.usage);
-            else return undefined; // a tool call: no tools were offered
-          }
-        } finally {
-          reader.close();
-        }
-        return text;
-      },
-      budgetMs,
-      env.deps.clock,
-    );
-    if (r.status === 'error') env.report(r.error);
-    return { text: r.status === 'ok' ? r.value : undefined, usage };
+  }
+  return out;
+}
+
+/** Wraps grounding so the step reads its reason code (never its text) for the escalation. */
+function watched(g: Guard<PostGuardCtx>, reasons: string[]): Guard<PostGuardCtx> {
+  if (g.name !== 'grounding') return g;
+  return {
+    name: g.name,
+    phase: g.phase,
+    async run(text, x, cancel): Promise<GuardRun> {
+      const r = await g.run(text, x, cancel);
+      // The chain validates the result; this only reads a string reason if there is one.
+      const res: unknown = (r as { result?: unknown } | null | undefined)?.result;
+      if (typeof res === 'object' && res !== null && 'reason' in res) {
+        const reason: unknown = res.reason;
+        if (typeof reason === 'string') reasons.push(reason);
+      }
+      return r;
+    },
   };
 }
 
@@ -131,7 +265,10 @@ const lockedLeakHit = (g: GuardTrace): boolean =>
 export function createPostGuard(
   guards: readonly Guard<PostGuardCtx>[] = postGuards.ordered(),
 ): Steps['postGuard'] {
-  return async (env, { ctx, decision, draft, raw, withheld, locked }): Promise<PostGuardResult> => {
+  return async (
+    env,
+    { ctx, decision, draft, raw, withheld, locked, sources },
+  ): Promise<PostGuardResult> => {
     const studentText = env.input.text;
     const own = studentText === undefined ? {} : { studentText };
     const hint = (guards: GuardTrace[], usage: Usage[]): PostGuardResult => ({
@@ -164,30 +301,55 @@ export function createPostGuard(
       return { result: 'replace', text, guards: trace, usage: [] };
     }
 
-    const slice = postGuardSliceMs(guards.length);
+    // Each guard's slice is worked out right before it runs; the rewrite and the judge read it.
+    const weights = guards.map((g) => postGuards.weight(g.name));
+    const started = env.deps.clock.now();
+    const slices = new Map<string, number>();
+    const sliceOf = (at: GuardSliceRequest): number => {
+      const left = POST_GUARD_BUDGET_MS - (env.deps.clock.now() - started);
+      const ms = postGuardSliceMs(left, weights, at);
+      slices.set(at.name, ms);
+      return ms;
+    };
+    const share = (name: string, part: number): number =>
+      Math.floor((slices.get(name) ?? 0) * part);
+    const reasons: string[] = [];
     const x: PostGuardCtx = {
       ctx,
       decision,
       ...own,
-      rewrite: rewriter(env, Math.floor(slice * REWRITE_SHARE)),
+      rewrite: rewriter(env, () => share('answerLeak', REWRITE_SHARE)),
       lockedCheck: lockedCheckFor(env, ctx),
       lockedReply,
+      ...(sources === undefined ? {} : { sources }),
+      judge: judgeFor(env, () =>
+        Math.min(GROUNDING_JUDGE_TIMEOUT_MS, share('grounding', JUDGE_SHARE)),
+      ),
+      askTeacherReply: askTeacherReplyFor(env),
+      fixedTexts: fixedTextsFor(env, ctx),
     };
-    const r: GuardChainResult = await runGuardChain(guards, subject, x, {
-      phase: 'post',
-      clock: env.deps.clock,
-      timeoutMs: slice,
-      cancel: env.cancel,
-    });
+    const r: GuardChainResult = await runGuardChain(
+      guards.map((g) => watched(g, reasons)),
+      subject,
+      x,
+      { phase: 'post', clock: env.deps.clock, timeoutMs: sliceOf, cancel: env.cancel },
+    );
     const { guards: trace, usage } = r;
     if (trace.some(lockedLeakHit)) env.report(new LockedLeakDetected('reply'));
     switch (r.outcome) {
-      case 'ok':
+      case 'ok': {
         // A known leak that no guard rewrote is never shown: fail to the hint.
         if (leaked && r.text === subject) return hint(trace, usage);
-        return r.text === draft
-          ? { result: 'ok', guards: trace, usage }
-          : { result: 'replace', text: r.text, guards: trace, usage };
+        if (r.text === draft) return { result: 'ok', guards: trace, usage };
+        const escalate = reasons.includes(GROUNDING_REASONS.ungrounded);
+        return {
+          result: 'replace',
+          text: r.text,
+          ...(escalate ? { escalateToTeacher: true as const } : {}),
+          guards: trace,
+          usage,
+        };
+      }
       case 'escalate':
         return { result: 'escalate', alert: r.alert, text: r.text, guards: trace, usage };
       case 'failed':

@@ -292,7 +292,10 @@ function isAnswerMarker(toks: readonly Token[], k: number): boolean {
   if (!WEAK_MARKERS.has(w)) return false;
   const before = neighborWord(toks, k, -1);
   const after = neighborWord(toks, k, 1);
-  if ((before !== undefined && IMPERATIVES.has(before)) || (after !== undefined && IMPERATIVES.has(after))) {
+  if (
+    (before !== undefined && IMPERATIVES.has(before)) ||
+    (after !== undefined && IMPERATIVES.has(after))
+  ) {
     return false;
   }
   const end = sentenceEnd(toks, k);
@@ -517,4 +520,79 @@ export function mentionMatches(m: NumberMention, k: NumericKey): boolean {
     return k.num.toFixed(d) === m.num.toFixed(d);
   }
   return false;
+}
+
+// ---- claimed arithmetic results (task 4.7, grounding Rule C) ----------------------------------
+
+/** One "expression, then a claimed result" pair, e.g. "7 // 2 is 4". */
+export interface ArithmeticClaim {
+  /** The claimed number's span in the ORIGINAL text. */
+  start: number;
+  end: number;
+  /** The value the expression really has (Python semantics: `//` floors, `**` binds right). */
+  computed: number;
+  /** `computed` as text, sign kept: what a fix writes. */
+  computedText: string;
+  correct: boolean;
+}
+
+/**
+ * Connector words between an expression and its claimed result. Strict on purpose (lead answer 9):
+ * "expr is N", "expr = N", "expr == N" and the same in Hindi ("ka answer N", "का जवाब N"); any
+ * looser phrasing is left to the judge.
+ */
+const CONNECTOR = String.raw`(?:==|=|(?:is|equals|gives|ka|ki|answer|jawab|uttar|result|output|the)(?![\p{L}\p{M}])|का|की|जवाब|उत्तर)`;
+const CLAIM_AFTER = new RegExp(
+  String.raw`^(?:\s*${CONNECTOR}){1,3}\s*([-−]?)(\d+(?:\.\d+)?)(?![\d.]*\d)(?!\s*(?:\*\*|//|[-+*/%×÷])\s*\d)`,
+  'u',
+);
+/** A unary sign next to `**`: the evaluator binds the sign first, Python binds `**` first. */
+const UNARY_WITH_POWER = /(?:^|[-+*/%(])\s*[-+]\s*\d/;
+
+function signedText(n: number): string | undefined {
+  const c = canonicalNumber(n);
+  return c === undefined ? undefined : `${n < 0 ? '-' : ''}${c}`;
+}
+
+/** Whether the claim names the computed value, at the precision it was written ("3.33"). */
+function claimHolds(claimed: string, computed: number): boolean {
+  if (Number(computed.toPrecision(12)) === Number(claimed)) return true;
+  const dot = claimed.indexOf('.');
+  return dot >= 0 && computed.toFixed(claimed.length - dot - 1) === claimed;
+}
+
+/** Every arithmetic expression in `text` that is directly followed by a claimed result. */
+export function arithmeticClaims(text: string): ArithmeticClaim[] {
+  const f = foldText(text, (u) => foldWord(u.toLowerCase()));
+  const s = f.s;
+  const out: ArithmeticClaim[] = [];
+  for (const span of arithmeticSpans(s)) {
+    const expr = s.slice(span.start, span.end);
+    if (expr.includes('**') && UNARY_WITH_POWER.test(expr)) continue;
+    const m = CLAIM_AFTER.exec(s.slice(span.end));
+    const computedText = signedText(span.value);
+    if (m === null || computedText === undefined) continue;
+    const sign = m[1] as string;
+    const digits = m[2] as string;
+    const claimEnd = span.end + m[0].length;
+    const claimStart = claimEnd - digits.length - sign.length;
+    out.push({
+      start: f.at[claimStart] as number,
+      end: claimEnd < f.at.length ? (f.at[claimEnd] as number) : text.length,
+      computed: span.value,
+      computedText,
+      correct: claimHolds(`${sign === '' ? '' : '-'}${digits}`, span.value),
+    });
+  }
+  return out;
+}
+
+/** `text` with every wrong claimed result replaced by the computed value; `fixed` counts them. */
+export function correctArithmeticClaims(text: string): { text: string; fixed: number } {
+  const wrong = arithmeticClaims(text).filter((c) => !c.correct);
+  let out = text;
+  for (const c of [...wrong].reverse()) {
+    out = out.slice(0, c.start) + c.computedText + out.slice(c.end);
+  }
+  return { text: out, fixed: wrong.length };
 }

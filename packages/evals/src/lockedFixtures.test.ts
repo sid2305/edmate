@@ -492,7 +492,9 @@ async function runOne(student: string, lang: string, rounds: string[][], config:
     chunks: CHUNKS,
     ...(config === 'index says no' ? { leakCheck: false } : {}),
   });
+  // grounding (4.7) is not under test here: its judge says "grounded".
   const t = testDeps({
+    judge: 'grounded',
     script: { stream },
     overrides: {
       retrieval,

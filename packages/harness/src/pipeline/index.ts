@@ -61,6 +61,7 @@ export {
   type StepSpec,
   STREAM_CLOSE_SETTLE_MS,
   TEACHER_QUESTION_TIMEOUT_MS,
+  GROUNDING_ASKS_PER_SESSION,
 } from './spec.js';
 export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
@@ -68,7 +69,13 @@ export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
 export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
 export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
 export {
+  askTeacherReplyFor,
   createPostGuard,
+  GROUNDING_JUDGE_MAX_OUTPUT_TOKENS,
+  GROUNDING_JUDGE_TIMEOUT_MS,
+  JUDGE_SHARE,
+  PASS2_WEIGHT,
+  POST_GUARD_BUDGET_MS,
   POST_GUARD_MARGIN_MS,
   PostGuardFailed,
   postGuardSliceMs,
@@ -76,6 +83,7 @@ export {
   REWRITE_SHARE,
   REWRITE_SYSTEM,
 } from './steps/postGuard.js';
+export { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 export { defaultSteps } from './steps/index.js';
 export { runWithTimeout, type TimedResult } from './timeout.js';
 export type {
