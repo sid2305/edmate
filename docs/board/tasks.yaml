@@ -672,9 +672,9 @@ tasks:
   accept: two overlapping migrateDatabase() runs leave the index valid (int test); the lookup uses to_regclass or pg_namespace.
   deps:
   - 3.16b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/3.16c-migration-hardening
+  model: build:sonnet
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -800,7 +800,7 @@ tasks:
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
-  status: running
+  status: review
   branch: m4/4.2c-pii-hardening
   model: build:sonnet
 - id: 4.3b
