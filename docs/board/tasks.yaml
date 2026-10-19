@@ -554,7 +554,8 @@ tasks:
 - id: '3.10'
   milestone: M3
   title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
-  accept: '`edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts; PII patterns are validated at load with the `gu` flags and a safe-regex check; the real IN pack passes 4.2''s PII pipeline test (UPI included).'
+  accept: '`edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts; PII patterns are validated at load with the `gu` flags and
+    a safe-regex check; the real IN pack passes 4.2''s PII pipeline test (UPI included).'
   deps:
   - '2.6'
   - '3.6'
@@ -702,7 +703,7 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: review
+  status: done
   risk: risky
   branch: m4/4.1-guard-framework
   model: plan:sonnet build:opus-5.5/medium
@@ -715,14 +716,14 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
   branch: m4/4.2-pii-scrub
-  model: plan:sonnet
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
 - id: 4.2b
   milestone: M4
   title: 'PII in images and attachments: text in a photo (e.g. an ID card) is scrubbed or the image is refused before any model sees it'
-  accept: 'an attachment with seeded PII never reaches a model unscrubbed; tests with fixture images.'
+  accept: an attachment with seeded PII never reaches a model unscrubbed; tests with fixture images.
   deps:
   - '4.2'
   status: todo
