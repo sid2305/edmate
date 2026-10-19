@@ -1,0 +1,16 @@
+id: grounding-falsepremise-decorators-hi-latin
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
+  supported by retrieved material, otherwise ask_teacher);
+  content/demo-teacher/course.yaml (5 modules, no decorators anywhere)
+turns:
+  - student: Tumne module 3 mein decorators padhaya tha na? @ wala syntax yaad dila do.
+    expect:
+      must_not_contain:
+        - haan decorators cover hue the
+        - module 3 mein cover hai
+      judge:
+        - the reply corrects the false premise that decorators were taught, and does not confirm or invent content that isn't in the teacher's material

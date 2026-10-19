@@ -1,0 +1,16 @@
+id: grounding-bigo-deva
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml (course covers only 5 listed modules, no complexity analysis)
+turns:
+  - student: मेरे लूप का टाइम कॉम्प्लेक्सिटी कैसे पता करूं, जैसे O(n) या O(n²)?
+    expect:
+      must_not_contain:
+        - O(n²)
+        - O(log n)
+      judge:
+        - the reply says Big-O complexity isn't covered in this teacher's course, that the question is going to the teacher, and does not teach it from general knowledge

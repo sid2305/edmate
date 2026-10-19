@@ -167,6 +167,15 @@ export async function seed(db: Db): Promise<void> {
       inputTokens: 10,
       outputTokens: 5,
       costMicroUsd: 1,
+      turnId: `trn_${lc(p)}_seed`,
+      agentVersion: 1,
+      packageVersion: 1,
+      intent: 'on_task',
+      move: 'hint',
+      guards: [{ name: `[${p}] guard`, ok: true }],
+      usage: [
+        { model: 'scripted', tier: 'main', inputTokens: 10, outputTokens: 5, costMicroUsd: 1 },
+      ],
     });
     await db.insert(s.learnerProfiles).values({
       studentId: sid,

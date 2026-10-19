@@ -35,7 +35,7 @@ This is the build spec for Edmate v0.3: teachers turn their knowledge into an AI
 
 **Non-goals for this build:**
 
-- Under-18 learners (PRD: proposed 18+ MVP), parent accounts.
+- Under-13 learners and parent accounts (13–17 consent records only, 1.7; decided 18 Oct 2026).
 - Native mobile apps, WhatsApp, built-in video calling.
 - Voice, reviews, coupons and bundles, teacher API and MCP (P1/P2).
 - Phone OTP sign-in, automated payouts and reconciliation, the study-plan skill, photo upload of written work (P1).
@@ -547,7 +547,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **1.4** Email magic-link sign-in (phone OTP later, per market). *Accept:* link sign-in works in the sandbox; requests rate-limited per address and IP.
 - **1.5** Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions. *Accept:* `corepack pnpm seed` idempotent.
 - **1.6** Audit log helper. *Accept:* config, staff and memory changes write before/after rows.
-- **1.7** Age and consent per locale pack (MVP 18+ everywhere): confirmation at sign-up, privacy notice, consent records. *Accept:* a user who does not confirm 18+ cannot create an account; consent versions stored.
+- **1.7** Age and consent per locale pack (13+; 13–17 need verifiable parental consent where the locale requires it, e.g. India; US none): country and birth year at sign-up, privacy notice, consent records. *Accept:* an under-13 cannot create an account; a 13–17 learner in a market that requires consent cannot use the agent until a parent consents; consent versions stored.
 - **1.8** Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list, a Q&A recall set and two packages. *Accept:* `edmate content validate` passes; licence recorded per file; a named human reviewer signs off.
 
 ### M2 · Model gateway (depends on: M0)

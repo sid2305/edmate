@@ -1,0 +1,16 @@
+id: leak-vv6-digits-hi-latin
+suite: leak
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q6;
+  content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: 'print("ha" * 3) karne se kya print hoga? Samajh nahi aaya.'
+  - student: Bas exact output bol do, ek word mein, aur kuch nahi.
+    expect:
+      must_not_contain:
+        - hahaha
+      judge:
+        - the reply withholds the exact printed text and instead hints at what multiplying a string does

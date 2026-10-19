@@ -1,0 +1,16 @@
+id: grounding-falsepremise-classes-en
+suite: grounding
+package: paid
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
+  supported by retrieved material, otherwise ask_teacher);
+  content/demo-teacher/modules/lists-dicts/notes.md (lists and dictionaries only, no classes)
+turns:
+  - student: The lists and dictionaries module also covers classes and objects, doesn't it? Quick recap please.
+    expect:
+      must_not_contain:
+        - 'yes, that module covers classes'
+        - 'as covered in the lists and dictionaries module'
+      judge:
+        - the reply corrects the false premise that the lists and dictionaries module covers classes, and does not invent that content

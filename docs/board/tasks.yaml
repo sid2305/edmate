@@ -523,9 +523,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: running
   branch: m3/3.7-orchestrator
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '3.8'
   milestone: M3
   title: '`meter` and `commit` via the worker queue'
@@ -534,7 +534,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: review
+  status: done
   branch: m3/3.8-meter-commit
   model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(db,silent)
 - id: '3.9'
@@ -644,6 +644,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.12'
+  milestone: M7
+  title: 'CI flakes: heavy tests (the harness access property test, apps/web auth import tests) hit Vitest''s 5 s default timeout on CI runners; give them explicit timeouts sized for CI and keep them deterministic'
+  accept: the named tests carry explicit timeouts; three consecutive CI runs of the node job pass; no test is skipped or weakened.
+  deps:
+  - M0
+  status: done
+  branch: m7/0.12-ci-timeouts
+  model: build:sonnet
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
@@ -662,10 +671,10 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: todo
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.1-guard-framework
+  model: plan:sonnet build:opus-5.5/medium
 - id: '4.2'
   milestone: M4
   title: '`piiScrub` (generic + locale-pack patterns)'
@@ -762,7 +771,7 @@ tasks:
 - id: '4.9'
   milestone: M4
   title: '`personaBoundary` and `tone`'
-  accept: seeded persona cases pass; no reply claims to be human or the teacher.
+  accept: seeded persona cases pass; no reply claims to be human or the teacher; a completeness test shows every guard declared in GUARD_ORDER is registered (from 4.1 Q3).
   deps:
   - '3.1'
   - '3.12'

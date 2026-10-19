@@ -19,6 +19,7 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SessionStateStore,
   SourceRef,
   StyleCard,
   TeacherQuestionStore,
@@ -69,6 +70,11 @@ export interface PipelineDeps {
   limits: TurnLimits;
   profiles: ProfileStore;
   transcripts: TranscriptStore;
+  /**
+   * Saves the session's help state after the turn (commit, ADR-0005). The only place the answer
+   * key is written; the composition root binds it to the turn's student x teacher.
+   */
+  sessionState: SessionStateStore;
   retrieval: RetrievalIndex;
   teacherQuestions: TeacherQuestionStore;
   usage: UsageMeter;
@@ -184,7 +190,13 @@ export type TurnOutcome = 'replied' | 'escalated' | 'blocked' | 'error';
 /** What `commit` persists: messages, a TeacherQuestion for `ask_teacher`, learner memory. */
 export interface CommitRecord {
   turnId: string;
+  /** The session the turn belongs to (from the original input; ids are not PII), set even when `input` is null. */
+  sessionId: string;
+  /** The agent's reply's id: the `done` event's `messageId`. */
   messageId: string;
+  /** When the turn started: the student message's timestamp. */
+  receivedAt: string;
+  /** When the turn finished: the agent message's timestamp. */
   createdAt: string;
   entitled: Entitled;
   /** The scrubbed input; `null` when the scrub failed, so unscrubbed text is never stored. */

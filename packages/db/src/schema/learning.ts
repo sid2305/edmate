@@ -82,13 +82,25 @@ export const turnTraces = pgTable(
       .notNull()
       .references(() => sessions.id),
     steps: jsonb('steps').$type<TurnTrace['steps']>().notNull(),
+    /** Summary of `usage`: the distinct models, comma-separated ('' when the turn made no call). */
     model: text('model').notNull(),
     inputTokens: integer('input_tokens').notNull(),
     outputTokens: integer('output_tokens').notNull(),
     costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    // The rest of the TurnTrace contract (task 3.8, migration 0007). One trace per turn.
+    turnId: text('turn_id').notNull(),
+    agentVersion: integer('agent_version').notNull(),
+    packageVersion: integer('package_version').notNull(),
+    intent: text('intent').$type<TurnTrace['intent']>().notNull(),
+    move: text('move').$type<TurnTrace['move']>().notNull(),
+    guards: jsonb('guards').$type<TurnTrace['guards']>().notNull(),
+    usage: jsonb('usage').$type<TurnTrace['usage']>().notNull(),
     ...timestamps(),
   },
-  (t) => [index('turn_traces_session_id_idx').on(t.sessionId)],
+  (t) => [
+    index('turn_traces_session_id_idx').on(t.sessionId),
+    uniqueIndex('turn_traces_turn_id_key').on(t.turnId),
+  ],
 );
 
 /**
@@ -145,6 +157,8 @@ export const usageLedger = pgTable(
     // The monthly cost alarm (2.5): one teacher's rows since a date, across every student. Not
     // partial: unknown and unpriced rows are counted next to the cost, never skipped.
     index('usage_ledger_teacher_id_created_at_idx').on(t.teacherId, t.createdAt),
+    // The scheduled cost alarm's teacher list (3.8): every teacher's non-eval rows since a date.
+    index('usage_ledger_created_at_source_idx').on(t.createdAt, t.source),
     check(
       'usage_ledger_recorded_has_figures',
       sql`${t.status} <> 'recorded' or (${t.model} is not null and ${t.inputTokens} is not null

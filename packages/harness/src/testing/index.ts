@@ -28,8 +28,12 @@ export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,
   memoryAlertSink,
+  type MemorySessionStateStore,
+  memorySessionStateStore,
   type MemoryTraceSink,
   memoryTraceSink,
+  type MemoryTranscriptStore,
+  memoryTranscriptStore,
   type MemoryUsageMeter,
   memoryUsageMeter,
   UnusedPortError,

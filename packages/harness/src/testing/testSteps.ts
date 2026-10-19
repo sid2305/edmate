@@ -276,6 +276,7 @@ export function testDeps(
     limits: createTurnLimits(clock),
     profiles: unusedPort('profiles', portCalls),
     transcripts: unusedPort('transcripts', portCalls),
+    sessionState: unusedPort('sessionState', portCalls),
     retrieval: unusedPort('retrieval', portCalls),
     teacherQuestions: unusedPort('teacherQuestions', portCalls),
     usage,

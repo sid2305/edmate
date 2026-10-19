@@ -119,6 +119,7 @@ class Turn {
   // Drawn at the start of run(), so a failing IdSource ends the stream instead of throwing here.
   private turnId = '';
   private messageId = '';
+  private receivedAt = '';
   private terminated = false;
   /** What meter and commit see: the scrubbed input once the scrub passed; never unscrubbed text. */
   private safeInput: TurnInput;
@@ -195,6 +196,7 @@ class Turn {
     const { input, steps } = this;
     this.turnId = this.deps.ids.next('turn');
     this.messageId = this.deps.ids.next('message');
+    this.receivedAt = isoAt(this.deps.clock.now());
 
     // 1. admit: no model call, no later step, no trace.
     const admitted = await this.timed(input, timeoutOf('admit'), (env) => steps.admit(env));
@@ -585,7 +587,10 @@ class Turn {
 
   private async finish(
     e: Entitled,
-    rec: Omit<CommitRecord, 'turnId' | 'messageId' | 'createdAt' | 'entitled'>,
+    rec: Omit<
+      CommitRecord,
+      'turnId' | 'sessionId' | 'messageId' | 'receivedAt' | 'createdAt' | 'entitled'
+    >,
     intent: Intent,
     move: PedagogyDecision['move'],
     alertDelivered?: Promise<void>,
@@ -593,7 +598,10 @@ class Turn {
     const record: CommitRecord = {
       ...rec,
       turnId: this.turnId,
+      // The original input's session id: set even when the scrub failed and `input` is null.
+      sessionId: this.input.sessionId,
       messageId: this.messageId,
+      receivedAt: this.receivedAt,
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
     };

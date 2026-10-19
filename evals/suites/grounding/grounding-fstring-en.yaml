@@ -1,0 +1,15 @@
+id: grounding-fstring-en
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.4 Working with
+  strings (f-strings); docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: What's the easiest way to put a variable's value inside a sentence when I print it?
+    expect:
+      must_contain:
+        - f-string
+      must_cite_source: true
+      judge:
+        - the reply introduces f-strings as the teacher's notes do, with an example using curly braces, and cites the source
