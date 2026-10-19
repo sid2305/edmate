@@ -1,4 +1,4 @@
-import { LIMITS, MessageSchema, type TurnInput } from '@edmate/contracts';
+import { LIMITS, MessageSchema, type EvidenceEvent, type TurnInput } from '@edmate/contracts';
 import {
   demoAgentConfig,
   demoEntitlementSubscription,
@@ -11,7 +11,9 @@ import {
 import { describe, expect, it } from 'vitest';
 import { sequentialIds } from '../../testing/ids.js';
 import {
+  memoryProfileStore,
   memorySessionStateStore,
+  memoryTeacherQuestionStore,
   memoryTraceSink,
   memoryTranscriptStore,
 } from '../../testing/memoryPorts.js';
@@ -21,16 +23,27 @@ import { commit } from './commit.js';
 
 const CANARY = 'CANARY-ANSWER-7f3a';
 
-function world(o: { transcriptsFail?: boolean; stateFail?: boolean } = {}) {
+function world(
+  o: {
+    transcriptsFail?: boolean;
+    stateFail?: boolean;
+    profilesFail?: boolean;
+    teacherQuestionsFail?: boolean;
+  } = {},
+) {
   const transcripts = memoryTranscriptStore({ fail: o.transcriptsFail === true });
   const sessionState = memorySessionStateStore({ fail: o.stateFail === true });
   const traces = memoryTraceSink();
+  const profiles = memoryProfileStore({ fail: o.profilesFail === true });
+  const teacherQuestions = memoryTeacherQuestionStore({ fail: o.teacherQuestionsFail === true });
   const deps: PipelineDeps = {
     ...testDeps().deps,
     ids: sequentialIds(),
     transcripts,
     sessionState,
     traces,
+    profiles,
+    teacherQuestions,
   };
   const env: StepEnv = {
     input: demoTurnInput,
@@ -39,8 +52,19 @@ function world(o: { transcriptsFail?: boolean; stateFail?: boolean } = {}) {
     turnId: 'turn_commit',
     ...stepEnvExtras(),
   };
-  return { env, transcripts, sessionState, traces };
+  return { env, transcripts, sessionState, traces, profiles, teacherQuestions };
 }
+
+const evidenceEvent = (o: Partial<EvidenceEvent> = {}): EvidenceEvent => ({
+  studentId: demoEntitlementSubscription.studentId,
+  teacherId: demoEntitlementSubscription.teacherId,
+  topicId: 'top_fractions',
+  correct: true,
+  source: 'practice',
+  weight: 1,
+  ts: '2026-10-19T10:00:00.000Z',
+  ...o,
+});
 
 function record(o: Partial<CommitRecord> = {}): CommitRecord {
   return {
@@ -182,5 +206,98 @@ describe('commit', () => {
   it('a failing transcript or state port fails the step', async () => {
     await expect(commit(world({ transcriptsFail: true }).env, record())).rejects.toThrow('down');
     await expect(commit(world({ stateFail: true }).env, record())).rejects.toThrow('down');
+  });
+
+  // Task 3.17: evidence and the TeacherQuestion fallback.
+  it('calls applyEvidence only when there is evidence', async () => {
+    const w = world();
+    await commit(w.env, record());
+    expect(w.profiles.applied).toEqual([]);
+
+    const events = [evidenceEvent(), evidenceEvent({ topicId: 'top_other', correct: false })];
+    await commit(w.env, record({ evidence: events }));
+    expect(w.profiles.applied).toEqual(events);
+  });
+
+  it('never calls applyEvidence for an empty evidence array', async () => {
+    const w = world();
+    await commit(w.env, record({ evidence: [] }));
+    expect(w.profiles.applied).toEqual([]);
+  });
+
+  it('opens a TeacherQuestion as a fallback only when the move is ask_teacher and no id is set', async () => {
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        decision: { ...demoPedagogyDecision, move: 'ask_teacher' },
+      }),
+    );
+    expect(w.teacherQuestions.opened).toHaveLength(1);
+    expect(w.teacherQuestions.opened[0]).toMatchObject({
+      teacherId: demoEntitlementSubscription.teacherId,
+      agentId: demoEntitlementSubscription.agentId,
+      studentId: demoEntitlementSubscription.studentId,
+      text: 'How do I add [number] and 1/3?',
+    });
+  });
+
+  it('never opens a second question when the live attempt already set teacherQuestionId', async () => {
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        decision: { ...demoPedagogyDecision, move: 'ask_teacher' },
+        teacherQuestionId: 'tq_live_01',
+      }),
+    );
+    expect(w.teacherQuestions.opened).toEqual([]);
+  });
+
+  it('never opens a question for any other move, even with no id set', async () => {
+    const w = world();
+    await commit(w.env, record({ decision: demoPedagogyDecision }));
+    expect(w.teacherQuestions.opened).toEqual([]);
+  });
+
+  it('opens no question when the turn had no text (ask_teacher with input null)', async () => {
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        decision: { ...demoPedagogyDecision, move: 'ask_teacher' },
+        input: null,
+        outcome: 'escalated',
+      }),
+    );
+    expect(w.teacherQuestions.opened).toEqual([]);
+  });
+
+  it('a failing applyEvidence or TeacherQuestion open fails the step', async () => {
+    await expect(
+      commit(world().env, record({ evidence: [evidenceEvent()] })),
+    ).resolves.toBeUndefined();
+    await expect(
+      commit(world({ profilesFail: true }).env, record({ evidence: [evidenceEvent()] })),
+    ).rejects.toThrow('down');
+    await expect(
+      commit(
+        world({ teacherQuestionsFail: true }).env,
+        record({ decision: { ...demoPedagogyDecision, move: 'ask_teacher' } }),
+      ),
+    ).rejects.toThrow('down');
+  });
+
+  it('the answer key and locked text never reach evidence or the TeacherQuestion', async () => {
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        decision: { ...demoPedagogyDecision, move: 'ask_teacher', mustNotReveal: [CANARY] },
+        evidence: [evidenceEvent()],
+      }),
+    );
+    expect(JSON.stringify(w.profiles.applied)).not.toContain(CANARY);
+    expect(JSON.stringify(w.teacherQuestions.opened)).not.toContain(CANARY);
   });
 });

@@ -16,6 +16,7 @@ export {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PilotLanguageClamped,
   ScrubFailedError,
   type ScrubFailureCause,
   type ScrubFailureDetail,

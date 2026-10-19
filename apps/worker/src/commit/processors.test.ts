@@ -1,6 +1,6 @@
-import type { Message, TurnTrace } from '@edmate/contracts';
+import type { EvidenceEvent, LearnerProfile, Message, TurnTrace } from '@edmate/contracts';
 import { type Repositories, RepositoryError } from '@edmate/db';
-import { JOB, usageRowId } from '@edmate/queue';
+import { evidenceEventId, JOB, usageRowId } from '@edmate/queue';
 import { describe, expect, it } from 'vitest';
 import type { LogLine } from '../log.js';
 import { commitProcessor, meterProcessor, PermanentJobError } from './processors.js';
@@ -42,6 +42,10 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
   const messages: { sessionId: string; m: Message }[] = [];
   const traces: TurnTrace[] = [];
   const help: { sessionId: string; value: unknown }[] = [];
+  const evidence: (EvidenceEvent & { id: string })[] = [];
+  const profile: { value: LearnerProfile } = {
+    value: { studentId: scope.studentId, teacherId: scope.teacherId, lang: 'en', mastery: {}, mistakes: [] },
+  };
   const calls: string[] = [];
   const check = (name: string) => {
     calls.push(name);
@@ -103,8 +107,41 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
         return Promise.resolve();
       },
     },
+    evidenceEvents: {
+      append: (_s: unknown, events: (EvidenceEvent & { id?: string })[]) => {
+        check('evidenceEvents.append');
+        const written: EvidenceEvent[] = [];
+        for (const e of events) {
+          const id = e.id ?? `ev_${evidence.length}`;
+          if (evidence.some((r) => r.id === id)) continue;
+          const rest: EvidenceEvent = {
+            studentId: e.studentId,
+            teacherId: e.teacherId,
+            topicId: e.topicId,
+            correct: e.correct,
+            source: e.source,
+            weight: e.weight,
+            ts: e.ts,
+          };
+          evidence.push({ ...rest, id });
+          written.push(rest);
+        }
+        return Promise.resolve(written);
+      },
+    },
+    learnerProfiles: {
+      get: () => {
+        check('learnerProfiles.get');
+        return Promise.resolve(profile.value);
+      },
+      applyMastery: (_s: unknown, patch: LearnerProfile['mastery']) => {
+        check('learnerProfiles.applyMastery');
+        profile.value = { ...profile.value, mastery: { ...profile.value.mastery, ...patch } };
+        return Promise.resolve();
+      },
+    },
   };
-  return { repos: repos as unknown as Repositories, ledger, messages, traces, help, calls };
+  return { repos: repos as unknown as Repositories, ledger, messages, traces, help, evidence, profile, calls };
 }
 
 const usageJob = (index = 0) => ({
@@ -281,5 +318,50 @@ describe('commitProcessor', () => {
       await expect(run({ name, data: { scope } })).rejects.toThrow(`${name}: invalid job payload`);
     }
     await expect(run({ name: 'other', data: {} })).rejects.toThrow(/unknown commit job/);
+  });
+
+  // Task 3.17: the evidence job writes the row (idempotent by id) then folds mastery only for
+  // what it actually wrote.
+  const event: EvidenceEvent = {
+    studentId: scope.studentId,
+    teacherId: scope.teacherId,
+    topicId: 'top_fractions',
+    correct: true,
+    source: 'practice',
+    weight: 1,
+    ts: '2026-10-19T10:00:00.000Z',
+  };
+  const evidenceJob = { name: JOB.evidence, data: { scope, event } };
+
+  it('writes the evidence row once and folds mastery once: a replay is already_written, mastery unchanged', async () => {
+    const w = memoryRepos();
+    const run = commitProcessor(w.repos, noLog);
+    expect(await run(evidenceJob)).toBe('written');
+    const afterFirst = w.profile.value.mastery[event.topicId];
+    expect(afterFirst?.n).toBe(1);
+    expect(await run(evidenceJob)).toBe('already_written');
+    expect(w.profile.value.mastery[event.topicId]).toEqual(afterFirst);
+    expect(w.evidence).toHaveLength(1);
+    expect(w.evidence[0]?.id).toBe(evidenceEventId(event));
+  });
+
+  it('a db outage on the write is retryable; scope/not_found/invalid/integrity are permanent', async () => {
+    const down = new RepositoryError('failed', 'evidenceEvents.append');
+    await expect(
+      commitProcessor(memoryRepos({ 'evidenceEvents.append': down }).repos, noLog)(evidenceJob),
+    ).rejects.toBe(down);
+    for (const kind of ['scope', 'not_found', 'invalid', 'integrity'] as const) {
+      const w = memoryRepos({ 'evidenceEvents.append': new RepositoryError(kind, 'evidenceEvents.append') });
+      await expect(commitProcessor(w.repos, noLog)(evidenceJob)).rejects.toBeInstanceOf(
+        PermanentJobError,
+      );
+    }
+  });
+
+  it('a malformed evidence payload is permanent and names no student text', async () => {
+    const run = commitProcessor(memoryRepos().repos, noLog);
+    const e = await run({ name: JOB.evidence, data: { scope } }).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(PermanentJobError);
+    expect((e as Error).message).toBe('evidence.apply: invalid job payload');
   });
 });

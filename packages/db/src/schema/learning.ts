@@ -275,5 +275,15 @@ export const teacherQuestions = pgTable(
     index('teacher_questions_student_id_idx').on(t.studentId),
     index('teacher_questions_agent_id_idx').on(t.agentId),
     index('teacher_questions_group_id_idx').on(t.groupId),
+    // Task 3.17: the live (3.7) attempt and the commit-step (3.17) fallback can both try to open
+    // the "same" question for one turn; this makes a second attempt land on the first row instead
+    // of a duplicate (teacherQuestionsRepo.open is insert-or-return-existing). `md5(text)`, not
+    // `text` itself (text is up to LIMITS.turnTextMaxLength = 8000 chars, well past a btree
+    // index's ~2.7 KB row limit); a 32-char hex digest is a column, not an expression, so a plain
+    // (non-CONCURRENTLY) migration is proportionate: teacher_questions is small and low-write,
+    // unlike sessions (risk: high, see docs/tasks/3.17/handoff.md).
+    uniqueIndex('teacher_questions_open_dedup_key')
+      .on(t.teacherId, t.studentId, t.agentId, sql`md5(${t.text})`)
+      .where(sql`${t.status} = 'open'`),
   ],
 );

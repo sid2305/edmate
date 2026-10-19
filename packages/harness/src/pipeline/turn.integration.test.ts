@@ -68,7 +68,12 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const turnConfig: TurnConfigStore = {
     load: () =>
       Promise.resolve({
-        agent: { ...demoAgentConfig, promptPackVersion: FIXTURE_PROMPT_PACK_VERSION },
+        // Pilot policy (3.11c): English only, so this turn's `background` stays empty.
+        agent: {
+          ...demoAgentConfig,
+          languages: ['en'],
+          promptPackVersion: FIXTURE_PROMPT_PACK_VERSION,
+        },
         pkg: demoPackagePaid,
         styleCard: demoStyleCard,
         locale: demoLocalePack,

@@ -10,6 +10,86 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.17 fix round · Duplicate `teacher_questions` rows are dismissed, not left open and not deleted · decided by build-error-resolver (fix round) · risk: medium, reversible
+Decided: 0011's dedup cleanup sets every open duplicate but the oldest to `status = 'dismissed'` (append-only, no deletes), so the new unique index can always be created even against data seeded before it existed.
+Why: the review's instruction was explicit ("close duplicates... never delete rows"); `dismissed` is the only terminal status besides `answered` in `teacher_question_status`, and a duplicate asked only because of the pre-fix race was never actually answered.
+Alternatives: delete the duplicate rows (violates "never delete"); leave them open and make the index `CREATE UNIQUE INDEX CONCURRENTLY` with a pre-check that refuses to proceed on conflict (adds an operational step with no clear owner, and still needs some resolution of the conflicting rows first).
+Reversible: Yes — a later migration could re-open a dismissed duplicate if that ever mattered (none of this pilot's history needs it).
+
+---
+
+### 19 Oct 2026 · 3.17 No locale/age (DPDP) gate on learner-profile writes yet · decided by lead (pre-build) · risk: high
+Decided: ship 3.17 without a locale/age gate on `applyEvidence` or `get`; the gap is tracked by board task 6.0b (the DPDP gate for learner memory), which must land before any India pilot.
+Why: `ProfileStore` has no market/age parameter — adding one here is a contracts change needing an ADR, disproportionate to a plumbing task with no real evidence producer yet (route/3.3, the practice skill/5.6 and the topic map/6.1 are all still `todo`); `buildContext` already reads whatever is in `learner_profiles` for every session today, independent of this task, so this task's write path does not newly expose anything an India 13–17 session doesn't already carry.
+Alternatives: add a market/age check to `ProfileStore` now (contracts ADR); block 3.17 until 6.0b lands.
+Reversible: Yes — 6.0b can add the gate without touching this task's write path.
+
+---
+
+### 19 Oct 2026 · 3.17 TeacherQuestion open-dedup via a new partial unique index + insert-or-return-existing · decided by lead (plan) and tdd-guide (the `md5(text)` expression, found while writing the migration) · risk: high
+Decided: migration 0011 adds a partial unique index on `teacher_questions (teacher_id, student_id, agent_id, md5(text)) WHERE status = 'open'`; `teacherQuestionsRepo.open()` becomes insert-or-return-existing on that key, so the live (3.7) attempt and commit's (3.17) fallback — which can both try to open "the same" question for one turn, since a timed-out live attempt may still land — converge on one row instead of raising a duplicate. A plain (non-`CONCURRENTLY`) migration, unlike 3.16's session-pin indexes: `teacher_questions` is small and low-write.
+Why: without this, an `ask_teacher` turn whose live open timed out (but still landed) would get a second, duplicate question from commit's fallback.
+Alternatives: dedup in application code only (a read-then-write race window); index on raw `text` (would exceed btree's row-size limit for a long question); `CREATE INDEX CONCURRENTLY` via a post-migrate step (disproportionate for a small, low-write table).
+Reversible: Only with a new migration and a review of any `open()` callers relying on the current raw-insert behaviour.
+
+---
+
+### 19 Oct 2026 · 3.17 Evidence idempotency: content-hash id over the original timestamp, one shared function · decided by lead (answer) · risk: medium
+Decided: `evidenceEventId` (in `packages/queue`) hashes `studentId|teacherId|topicId|correct|source|weight|ts` with a fixed field order and encoding (`JSON.stringify` of a fixed-key array); `ts` must be the event's *original* timestamp, documented with a code comment at the one place it is computed (`queues.ts`) and at every call site (`profileStore.ts`'s producer, `processors.ts`'s worker). The same function is used for the BullMQ job id (`jobId.evidence`) and the row id `evidenceEventsRepo.append` writes, so a replayed job and the first attempt agree on one id. A test (`adapters.test.ts`, "jobId.evidence and the producer both derive from this one function") asserts the two call sites produce the same id for the same event.
+Why: a retry must hash to the same id as the first attempt, or dedup breaks; one shared function (not two copies) removes the chance of the hash algorithm drifting between the producer and the processor.
+Alternatives: a per-event id chosen by the caller (loses the "replay reproduces the same id" property unless the caller is also deterministic); separate hash functions in `@edmate/queue` and `@edmate/db` (duplication risk).
+Reversible: Yes — changing the hash's field order or encoding is a one-file change, though it invalidates in-flight job ids across a deploy.
+
+---
+
+### 19 Oct 2026 · 3.17 `profileStoreFor.applyMastery`'s write path closes the 3.16 "last_summary clobbered" finding structurally · decided by lead (plan) · risk: medium, reversible
+Decided: `learnerProfilesRepo.applyMastery`'s `SET` list only ever names `mastery` and `updated_at`; `mistakes` and `last_summary` are never in the statement, so this write path cannot clobber `last_summary` no matter what calls it. `learnerProfiles.save()`'s own semantics (and any session-open/package-pin check on it) are unchanged — closing this specific write path does not close the finding for `save()` in general, which is still 6.4's job (`EvidenceEvent` has no `sessionId` to check against).
+Why: evidence should never erase a student's last-session summary.
+Alternatives: give `applyMastery` a `save()`-style full-row overwrite (reintroduces the risk); add a session check here anyway (no session id available on `EvidenceEvent`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.17 `TeacherQuestionStore.findSimilar` always returns `[]` for now · decided by tdd-guide (build-time finding, logged for the lead) · risk: medium
+Decided: `teacherQuestionStoreFor.findSimilar` returns `[]` unconditionally (still scope-checked). No embeddings-backed similarity search exists yet in this codebase; building one is out of this task's scope (a RAG/embeddings task) and not in the plan's file list.
+Why: shipping plumbing, not an invented heuristic — matches the task's own stated approach for evidence extraction.
+Alternatives: a naive text-similarity heuristic (e.g. trigram overlap) now; block this task on the embeddings task.
+Reversible: Yes — a later task can replace the body without changing the port's shape.
+
+---
+
+### 19 Oct 2026 · 3.17 New-profile default: `lang: 'en'`, empty mastery/mistakes · decided by tdd-guide (plan's own recommendation) · risk: low
+Decided: `profileStoreFor.get`/`applyMastery` default a never-seen (student, teacher) pair to `lang: 'en'` (the pilot is English-only today).
+Why: `ProfileStore.get` has no `lang` parameter (unlike `fallbackContext`'s `input.lang`), so some default is needed; English matches the current pilot.
+Alternatives: default to the entitlement's market's locale (no market available at this port's level); throw instead of defaulting (breaks `buildContext`, which calls this every turn).
+Reversible: Yes, once locale work lands.
+
+---
+
+### 19 Oct 2026 · 3.11c Pilot-policy validation lives in `packages/content`, called from the one real construction site · decided by tdd-guide · risk: medium
+Decided: `checkPilotLanguages`/`PILOT_LANGUAGES` (18 Oct 2026 English-only decision) are added to `@edmate/content`, not to `packages/contracts` (a contracts change needs an ADR, and `AgentConfigSchema.languages` must stay general per the task). The content package's own `validateContentDir`/CONTENT_RULES are untouched because no content-tree file carries `languages` yet (no agent config field exists in the teacher content layout; it is built only by `packages/db/src/seed.ts`, the one real `AgentConfigSchema.parse` call with live `languages` data today). `seed.ts` calls `checkPilotLanguages(agentConfig.languages)` right after parsing and throws a clear message if it ever fails; it cannot fail today because the seed's `languages` is a hardcoded `['en']`, so this is forward defence, not a reachable branch (db's coverage threshold is 80%, not 100%, so this is allowed).
+Why: grepping `AgentConfigSchema` across `packages/content`, `packages/db` and `apps/cli` (task instruction) found no teacher-facing publish path with a `languages` field yet — `edmate content validate` validates course/style-card/package/licence files only. Putting the check where the real data flows, and exporting it from content so a future studio/publish path (and apps/cli) can reuse the same function, seemed better than inventing an unused content-tree field.
+Alternatives: add a no-op `ContentRule` for a `languages` field that doesn't exist yet (speculative); put the function directly in `packages/db` (then a future `apps/cli`/content publish path would need to depend on `@edmate/db` to reuse it, the wrong dependency direction).
+Reversible: yes — the function can move or be called from new sites without changing its shape.
+
+---
+
+### 19 Oct 2026 · 3.11c The harness clamp lives in `replyLanguage`/`composeSystemPrompt`; the warning is reported from `decide`, not from `compose.ts` · decided by tdd-guide · risk: high
+Decided: `compose.ts` gains its own `PILOT_LANGUAGES` constant (the harness may import only contracts, zod, mathjs and its own modules, so it cannot import `@edmate/content`'s copy) and clamps `replyLanguage` to `'en'` whenever `agent.languages` is not exactly `['en']`, regardless of the student's requested language or what the agent config otherwise claims to allow. `composeSystemPrompt` stays pure and now also returns `languageClamped: boolean` on `Composed`. `decide.ts` (which already holds a `StepEnv` with `.report`) reports a `PilotLanguageClamped` (a `HarnessError` with fixed, content-free text) to `finished.background` when `languageClamped` is true, exactly like every other background-only failure in the pipeline (ids and error name only, never agent or student text). This touches `packages/harness/src/pedagogy/**`, a risk-paths group requiring safety-reviewer sign-off.
+Why: the task calls for "a narrow input clamp... where the language is picked" plus a background-only warning; `replyLanguage` is literally where the language is picked, and `decide` is the first place downstream that already has a reporting channel, so no new plumbing (a new `BackgroundTask` variant, a logger param on `compose.ts`) was needed to keep `compose.ts` pure.
+Alternatives: thread a logger or callback into `composeSystemPrompt` itself (breaks purity, a `prompt-pack behaviour is frozen` file the task said to touch narrowly); add a new `BackgroundTask` union member for this (unneeded — the existing default `'runner'` task plus the error's own `name` already identifies it uniquely in the background log).
+Reversible: yes, but only with safety-reviewer sign-off (risk-paths rule).
+
+---
+
+### 19 Oct 2026 · 3.11c Existing demoAgentConfig-based tests updated for the new clamp, not left to describe stale behaviour · decided by tdd-guide · risk: low
+Decided: `compose.test.ts`'s locale-pack test, `decide.test.ts`'s "uses the input language" test, and `turn.integration.test.ts`'s turn-config loader were updated: the fixture `demoAgentConfig` carries `languages: ['en', 'hi']` (the contracts fixture is general on purpose and was not touched), so turns built from it are now clamped to English; the integration test's loader was given `languages: ['en']` instead, since that test is about turn flow, not language policy, and its `expect(result.background).toEqual([])` assertion predates this task.
+Why: task instruction 3 ("the harness clamp falls back to en") is a behaviour change from the pre-task state, so the old assertions (`replyLanguage('hi', {...})` returning `'hi'`) described exactly the gap this task closes; updating them in place (TDD red→green) rather than leaving them failing or weakening the clamp was the only option that keeps both the policy and the test suite honest.
+Alternatives: give `compose.snapshot.test.ts`'s `demoAgentConfig`-based cases a non-pilot-compliant agent too (unnecessary — every snapshot case requests `lang: 'en'`, which the clamp also resolves to `'en'`, so no snapshot changed).
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 4.2c fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
 Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
 ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped

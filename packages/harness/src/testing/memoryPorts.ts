@@ -1,7 +1,10 @@
 // In-memory port doubles for pipeline tests. Synthetic data only.
 import type {
   AlertSink,
+  EvidenceEvent,
+  LearnerProfile,
   Message,
+  ProfileStore,
   SafetyAlert,
   SessionStateStore,
   TeacherQuestion,
@@ -141,6 +144,43 @@ export function memoryTeacherQuestionStore(
         status: 'open',
         createdAt: opts.createdAt ?? '2026-10-17T10:00:00.000Z',
       });
+    },
+  };
+}
+
+export interface MemoryProfileStore extends ProfileStore {
+  /** Every `applyEvidence` call's events, flattened, in order. */
+  readonly applied: EvidenceEvent[];
+}
+
+/**
+ * Starts every (studentId, teacherId) pair at `learnerProfileNew`-shaped defaults (lang `en`, empty
+ * mastery/mistakes); `applyEvidence` is a no-op on mastery (no BKT here — that is the db adapter's
+ * job) but records what it was called with and returns the pair's current (unmoved) profile,
+ * unless `fail` rejects it.
+ */
+export function memoryProfileStore(opts: { fail?: boolean } = {}): MemoryProfileStore {
+  const applied: EvidenceEvent[] = [];
+  const profiles = new Map<string, LearnerProfile>();
+  const key = (studentId: string, teacherId: string) => `${studentId}\u0000${teacherId}`;
+  const of = (studentId: string, teacherId: string): LearnerProfile =>
+    profiles.get(key(studentId, teacherId)) ?? {
+      studentId,
+      teacherId,
+      lang: 'en',
+      mastery: {},
+      mistakes: [],
+    };
+  return {
+    applied,
+    get(studentId, teacherId) {
+      return Promise.resolve(of(studentId, teacherId));
+    },
+    applyEvidence(events) {
+      if (opts.fail === true) return Promise.reject(new Error('profile store down'));
+      applied.push(...events);
+      const [first] = events;
+      return Promise.resolve(of(first?.studentId ?? '', first?.teacherId ?? ''));
     },
   };
 }
