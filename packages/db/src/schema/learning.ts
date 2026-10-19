@@ -157,6 +157,8 @@ export const usageLedger = pgTable(
     // The monthly cost alarm (2.5): one teacher's rows since a date, across every student. Not
     // partial: unknown and unpriced rows are counted next to the cost, never skipped.
     index('usage_ledger_teacher_id_created_at_idx').on(t.teacherId, t.createdAt),
+    // The scheduled cost alarm's teacher list (3.8): every teacher's non-eval rows since a date.
+    index('usage_ledger_created_at_source_idx').on(t.createdAt, t.source),
     check(
       'usage_ledger_recorded_has_figures',
       sql`${t.status} <> 'recorded' or (${t.model} is not null and ${t.inputTokens} is not null

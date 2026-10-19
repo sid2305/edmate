@@ -1,11 +1,16 @@
 export {
   DEAD_LETTER_JOB,
   type DeadLetterEntry,
-  deadLetterData,
+  deadLetterOptions,
+  type DeadLetterRefs,
+  deadLetterRefs,
   type FailedHandlerDeps,
   type FailedJob,
   isFinal,
   onJobFailed,
+  PRUNE_BATCH,
+  type PrunableQueue,
+  pruneDeadLetters,
 } from './deadLetter.js';
 export {
   commitProcessor,

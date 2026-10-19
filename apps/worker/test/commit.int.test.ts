@@ -16,6 +16,7 @@ import {
   COMMIT_QUEUE,
   createTurnQueues,
   DEAD_LETTER_QUEUE,
+  FAILED_JOB_TTL_SECONDS,
   JOB,
   jobOptions,
   queuedTurnPorts,
@@ -239,8 +240,8 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
         },
       },
     };
-    const meter = meterProcessor(db.repos);
-    const commit = commitProcessor(db.repos);
+    const meter = meterProcessor(db.repos, (l) => lines.push(l));
+    const commit = commitProcessor(db.repos, (l) => lines.push(l));
     for (let i = 0; i < 2; i += 1) {
       const expected = i === 0 ? 'written' : 'already_written';
       expect(await meter(jobs.usage)).toBe(expected);
@@ -264,8 +265,8 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
   it('a permanent failure (another student’s session) is dead-lettered after one attempt', async () => {
     const message = {
       id: 'msg_wrong',
-      role: 'agent',
-      text: 'x',
+      role: 'student',
+      text: 'STUDENT-TEXT-CANARY-4e1',
       createdAt: '2026-10-18T11:00:00.000Z',
     };
     await queues.commit.add(
@@ -277,7 +278,14 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
     expect(dead.find((x) => x.jobId === 'msg_wrong.message')).toMatchObject({
       name: JOB.message,
       attemptsMade: 1,
+      refs: { sessionId: 'ses_test_02', messageId: 'msg_wrong', role: 'student' },
     });
+    // The entry keeps ids only, and expires after 7 days.
+    expect(JSON.stringify(dead)).not.toContain('STUDENT-TEXT-CANARY');
+    const [stored] = (await deadLetter.getJobs(['waiting'])).filter(
+      (j) => j.id === `${COMMIT_QUEUE}.msg_wrong.message`,
+    );
+    expect(stored?.opts.removeOnFail).toEqual({ age: FAILED_JOB_TTL_SECONDS });
     expect(await count(`select count(*)::text as n from messages where id = 'msg_wrong'`)).toBe(0);
     expect(
       lines.some((l) => l.event === 'job.dead_lettered' && l.jobId === 'msg_wrong.message'),

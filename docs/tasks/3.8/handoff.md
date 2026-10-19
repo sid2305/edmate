@@ -41,7 +41,24 @@
 - The help-state size check is in the repository (`sessions.saveHelpState`) and the producer, not in `sessionStateStoreFor` itself; the adapter delegates.
 - Out of scope, as the lead said: TeacherQuestion for `ask_teacher` and `ProfileStore.applyEvidence` (task 3.17).
 
+## Fix round 1
+
+| Finding | Fix | Evidence |
+|---|---|---|
+| [privacy MEDIUM] student text kept in the dead-letter queue forever | Dead-letter entries keep `refs` only (a whitelist: student/teacher ids, session, turn, message id + role, package, index), plus the error and attempt count; no `message.text`, sources or help state. `FAILED_JOB_TTL_SECONDS` = 7 days (`@edmate/queue`): failed turn jobs `removeOnFail: { age, count: 1000 }`; dead-letter jobs `removeOnComplete`/`removeOnFail: { age }`; `pruneDeadLetters` removes waiting entries older than that (worker start, then hourly). | `deadLetter.test.ts`: entry has no `student text` / source title, in entry or log; `deadLetterRefs` per job kind and on malformed payloads; prune calls `clean(604800000, 1000, 'wait')`, logs, never throws. `commit.int.test.ts`: the real dead-letter entry has no student-text canary and `removeOnFail: { age: 604800 }`. |
+| [LOW] trace duplicate check read every trace of the session | New `turnTraces.findForTurn(scope, { sessionId, turnId })` (uses the turn_id index); the processor uses it. | Isolation-grid case `turnTraces.findForTurn`; `trace-sink.int.test.ts` (own, other session, other student, missing, bad id → `invalid`, corrupt → `integrity`). |
+| [db MEDIUM] `teacherIdsWithUsageSince` had no index | `usage_ledger_created_at_source_idx` on `(created_at, source)`, migration `0008_usage_ledger_created_at_index.sql` (generated; CREATE INDEX only). | `migrate.int.test.ts` applies all migrations. |
+| [silent-failure MEDIUM] `once()` swallowed the recheck error | Processors take the injected `Log`; a failing recheck logs `job.recheck_failed` (job name, job id, error name/message) and the write's own error still decides the retry. | `processors.test.ts`: exact log line, with and without a BullMQ id. |
+
+Gates: `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker... --filter=@edmate/db... --filter=@edmate/queue...` (compose Postgres + Redis up, no suite skipped) → `Tasks: 26 successful, 26 total`; worker `Tests 102 passed`, db `Tests 401 passed`, queue `Tests 20 passed` (100 %), harness `2111 passed`; `deadLetter.ts`, `processors.ts`, `turn-traces.ts` 100 / 100 / 100 / 100. `python3 .githooks/secret-scan.py --all` → exit 0.
+
 ## Decisions
+
+### 18 Oct 2026 · 3.8 Dead letters keep ids only and expire after 7 days · decided by tdd-guide (review fix) · risk: medium
+Decided: a dead-letter entry keeps a whitelist of ids, the error and the attempt count, never message text, sources or the help state. Failed jobs and dead-letter entries expire after 7 days; the worker prunes waiting entries hourly, because BullMQ's removeOn options never reach jobs that only wait.
+Why: privacy review; an entry still names what to replay.
+Alternatives: keep payloads for replay; no expiry.
+Reversible: yes.
 
 ### 18 Oct 2026 · 3.8 Turn writes go through BullMQ; answer key stays in sessions.help_state · decided by tdd-guide · risk: high
 Decided: meter and commit only enqueue; apps/worker writes through the scoped db adapters, retries 5 times with backoff, then dead-letters. The help state is written only by `sessions.saveHelpState` (own open session, size cap); its job is removed on failure and its dead-letter entry drops the value. Touches `packages/db/src/repositories/**` and `.github/**`.

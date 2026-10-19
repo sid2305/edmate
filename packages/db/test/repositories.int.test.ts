@@ -519,6 +519,19 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ];
     },
   },
+  'turnTraces.findForTurn': {
+    scope: 'student',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, p) =>
+      r.turnTraces.findForTurn(scope, {
+        sessionId: ids.session(p),
+        turnId: `trn_${p.toLowerCase()}_seed`,
+      }),
+    random: (r, scope, rid) => r.turnTraces.findForTurn(scope, { sessionId: rid, turnId: rid }),
+    owners: (x: { steps: { name: string }[] } | null) =>
+      x ? x.steps.flatMap((st) => markers(st.name)) : [],
+  },
   'turnTraces.listForSession': {
     scope: 'student',
     op: 'read',

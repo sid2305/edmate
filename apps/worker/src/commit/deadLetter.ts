@@ -1,10 +1,13 @@
 // Failed jobs (task 3.8). Every failure is logged. A job that failed for good (its attempts used
-// up, or a permanent error) is copied to `edmate-dead-letter`, where it stays until someone looks:
-// BullMQ has no dead-letter queue of its own, and its failed set is easy to lose track of.
+// up, or a permanent error) is copied to `edmate-dead-letter` for someone to look at: BullMQ has
+// no dead-letter queue of its own, and its failed set is easy to lose track of.
 //
-// The help state's payload holds the answer key: its dead-letter entry keeps the ids and drops
-// the value (the next turn saves a fresh one anyway). Log lines never carry a payload.
-import { DEAD_LETTER_QUEUE, JOB, type JobQueue } from '@edmate/queue';
+// A dead-letter entry keeps references only: the job's ids (scope, session, turn, message id and
+// role, package, index), the error's name and message and the attempt count. Never a payload's
+// free text (message text, sources) or the help state (the answer key). Entries expire after
+// FAILED_JOB_TTL_SECONDS: `pruneDeadLetters` removes older ones (they wait, never complete, so
+// BullMQ's own removeOn* options don't reach them). Log lines never carry a payload either.
+import { DEAD_LETTER_QUEUE, FAILED_JOB_TTL_SECONDS, type JobQueue } from '@edmate/queue';
 import { describeError, type Log } from '../log.js';
 
 /** What the failed handler needs from a BullMQ Job. */
@@ -17,6 +20,18 @@ export interface FailedJob {
   opts: { attempts?: number | undefined };
 }
 
+/** The ids a dead-letter entry keeps from a job's payload, as far as they are present. */
+export interface DeadLetterRefs {
+  studentId?: string;
+  teacherId?: string;
+  sessionId?: string;
+  turnId?: string;
+  messageId?: string;
+  role?: string;
+  packageId?: string;
+  index?: number;
+}
+
 export interface DeadLetterEntry {
   queue: string;
   name: string;
@@ -24,18 +39,45 @@ export interface DeadLetterEntry {
   attemptsMade: number;
   error: { name: string; message: string };
   failedAt: string;
-  /** The job's payload, except a help state's value. */
-  data: unknown;
+  refs: DeadLetterRefs;
 }
 
 export const DEAD_LETTER_JOB = 'dead';
 
-/** The payload as the dead-letter entry keeps it: a help state's value is dropped. */
-export function deadLetterData(name: string, data: unknown): unknown {
-  if (name !== JOB.helpState || typeof data !== 'object' || data === null) return data;
-  const kept = { ...(data as Record<string, unknown>) };
-  delete kept.helpState;
-  return { ...kept, helpStateDropped: true };
+const record = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+
+/**
+ * The references a dead-letter entry keeps: a whitelist of id fields, read defensively (the
+ * payload may be the malformed one that failed). Anything else in the payload is dropped.
+ */
+export function deadLetterRefs(data: unknown): DeadLetterRefs {
+  const d = record(data);
+  const scope = record(d.scope);
+  const message = record(d.message);
+  const trace = record(d.trace);
+  const refs: DeadLetterRefs = {};
+  const str = (key: Exclude<keyof DeadLetterRefs, 'index'>, value: unknown) => {
+    if (typeof value === 'string') refs[key] = value.slice(0, 128);
+  };
+  str('studentId', scope.studentId);
+  str('teacherId', scope.teacherId);
+  str('sessionId', d.sessionId ?? trace.sessionId);
+  str('turnId', d.turnId ?? trace.turnId);
+  str('messageId', message.id);
+  str('role', message.role);
+  str('packageId', d.packageId);
+  if (Number.isSafeInteger(d.index)) refs.index = d.index as number;
+  return refs;
+}
+
+/** The options of a dead-letter job: kept for FAILED_JOB_TTL_SECONDS whatever happens to it. */
+export function deadLetterOptions(jobId: string) {
+  return {
+    jobId,
+    removeOnComplete: { age: FAILED_JOB_TTL_SECONDS },
+    removeOnFail: { age: FAILED_JOB_TTL_SECONDS },
+  };
 }
 
 /** True when BullMQ will not retry: a permanent error, or the last attempt. */
@@ -70,14 +112,14 @@ export function onJobFailed(deps: FailedHandlerDeps) {
       ...ids,
       error: err,
       failedAt: deps.now().toISOString(),
-      data: deadLetterData(job.name, job.data),
+      refs: deadLetterRefs(job.data),
     };
     try {
-      await deps.deadLetter.add(DEAD_LETTER_JOB, entry, {
-        jobId: `${job.queueName}.${jobId}`,
-        removeOnComplete: false,
-        removeOnFail: false,
-      });
+      await deps.deadLetter.add(
+        DEAD_LETTER_JOB,
+        entry,
+        deadLetterOptions(`${job.queueName}.${jobId}`),
+      );
       deps.log({
         level: 'error',
         event: 'job.dead_lettered',
@@ -95,4 +137,29 @@ export function onJobFailed(deps: FailedHandlerDeps) {
       });
     }
   };
+}
+
+/** What `pruneDeadLetters` needs from a BullMQ Queue. */
+export interface PrunableQueue {
+  clean(graceMs: number, limit: number, type: 'wait'): Promise<string[]>;
+}
+
+/** How many expired entries one prune removes at most; the next run takes the rest. */
+export const PRUNE_BATCH = 1_000;
+
+/**
+ * Removes dead-letter entries older than FAILED_JOB_TTL_SECONDS. Never rejects: a failure is
+ * logged and the next run tries again. Returns how many it removed.
+ */
+export async function pruneDeadLetters(queue: PrunableQueue, log: Log): Promise<number> {
+  try {
+    const removed = await queue.clean(FAILED_JOB_TTL_SECONDS * 1_000, PRUNE_BATCH, 'wait');
+    if (removed.length > 0) {
+      log({ level: 'info', event: 'dead_letter.pruned', removed: removed.length });
+    }
+    return removed.length;
+  } catch (error) {
+    log({ level: 'error', event: 'dead_letter.prune_failed', error: describeError(error) });
+    return 0;
+  }
 }

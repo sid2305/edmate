@@ -2,7 +2,14 @@ import { JOB } from '@edmate/queue';
 import { UnrecoverableError } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import type { LogLine } from '../log.js';
-import { deadLetterData, type FailedJob, isFinal, onJobFailed } from './deadLetter.js';
+import {
+  deadLetterRefs,
+  type FailedJob,
+  isFinal,
+  onJobFailed,
+  PRUNE_BATCH,
+  pruneDeadLetters,
+} from './deadLetter.js';
 
 const CANARY = 'CANARY-ANSWER-0b1d';
 const NOW = new Date('2026-10-18T10:00:00.000Z');
@@ -28,7 +35,17 @@ const job = (o: Partial<FailedJob> = {}): FailedJob => ({
   id: 'msg_1.message',
   name: JOB.message,
   queueName: 'edmate-turn-commit',
-  data: { scope: { studentId: 'stu_1', teacherId: 'tch_a' }, message: { text: 'student text' } },
+  data: {
+    scope: { studentId: 'stu_1', teacherId: 'tch_a' },
+    sessionId: 'ses_1',
+    message: {
+      id: 'msg_1',
+      role: 'student',
+      text: 'student text',
+      createdAt: '2026-10-18T10:00:00.000Z',
+      sources: [{ title: 'student notes title', locator: 'p. 1', kind: 'material' }],
+    },
+  },
   attemptsMade: 5,
   opts: { attempts: 5 },
   ...o,
@@ -43,19 +60,39 @@ describe('isFinal', () => {
   });
 });
 
-describe('deadLetterData', () => {
-  it('drops the help state value (the answer key) and keeps everything else', () => {
-    const data = {
-      scope: { studentId: 's' },
+describe('deadLetterRefs', () => {
+  it('keeps the ids of every job kind and nothing else', () => {
+    const scope = { studentId: 'stu_1', teacherId: 'tch_a' };
+    expect(deadLetterRefs(job().data)).toEqual({
+      studentId: 'stu_1',
+      teacherId: 'tch_a',
       sessionId: 'ses_1',
-      helpState: { answerKey: [CANARY] },
-    };
-    const kept = deadLetterData(JOB.helpState, data);
-    expect(JSON.stringify(kept)).not.toContain(CANARY);
-    expect(kept).toEqual({ scope: { studentId: 's' }, sessionId: 'ses_1', helpStateDropped: true });
-    expect(deadLetterData(JOB.message, data)).toBe(data);
-    expect(deadLetterData(JOB.helpState, null)).toBeNull();
-    expect(deadLetterData(JOB.helpState, 'x')).toBe('x');
+      messageId: 'msg_1',
+      role: 'student',
+    });
+    expect(
+      deadLetterRefs({
+        scope,
+        packageId: 'pkg_a',
+        turnId: 'turn_1',
+        index: 2,
+        source: 'subscription',
+        usage: { model: 'm' },
+      }),
+    ).toEqual({ ...scope, packageId: 'pkg_a', turnId: 'turn_1', index: 2 });
+    expect(
+      deadLetterRefs({ scope, trace: { turnId: 'turn_1', sessionId: 'ses_1', guards: [] } }),
+    ).toEqual({ ...scope, turnId: 'turn_1', sessionId: 'ses_1' });
+    const help = deadLetterRefs({ scope, sessionId: 'ses_1', helpState: { answerKey: [CANARY] } });
+    expect(help).toEqual({ ...scope, sessionId: 'ses_1' });
+  });
+
+  it('reads a malformed payload defensively', () => {
+    expect(deadLetterRefs(null)).toEqual({});
+    expect(deadLetterRefs('student text')).toEqual({});
+    expect(
+      deadLetterRefs({ scope: 'x', sessionId: 7, index: 1.5, turnId: 'x'.repeat(500) }),
+    ).toEqual({ turnId: 'x'.repeat(128) });
   });
 });
 
@@ -90,17 +127,27 @@ describe('onJobFailed', () => {
           attemptsMade: 5,
           error: { name: 'Error', message: 'db down' },
           failedAt: NOW.toISOString(),
-          data: job().data,
+          refs: {
+            studentId: 'stu_1',
+            teacherId: 'tch_a',
+            sessionId: 'ses_1',
+            messageId: 'msg_1',
+            role: 'student',
+          },
         },
         opts: {
           jobId: 'edmate-turn-commit.msg_1.message',
-          removeOnComplete: false,
-          removeOnFail: false,
+          removeOnComplete: { age: 604_800 },
+          removeOnFail: { age: 604_800 },
         },
       },
     ]);
+    // No student free text in the dead-letter entry or the log.
+    for (const text of ['student text', 'student notes title']) {
+      expect(JSON.stringify(w.dead)).not.toContain(text);
+      expect(JSON.stringify(w.lines)).not.toContain(text);
+    }
     expect(w.lines.map((l) => [l.level, l.event])).toEqual([['error', 'job.dead_lettered']]);
-    expect(JSON.stringify(w.lines)).not.toContain('student text');
   });
 
   it('a help-state job is dead-lettered without its value', async () => {
@@ -137,6 +184,42 @@ describe('onJobFailed', () => {
     expect(w.lines.map((l) => [l.event, l.jobId])).toEqual([
       ['job.failed', null],
       ['job.failed_will_retry', ''],
+    ]);
+  });
+});
+
+describe('pruneDeadLetters', () => {
+  it('removes waiting entries older than 7 days and logs how many', async () => {
+    const lines: LogLine[] = [];
+    const calls: unknown[][] = [];
+    const queue = {
+      clean: (...args: unknown[]) => {
+        calls.push(args);
+        return Promise.resolve(['a', 'b']);
+      },
+    };
+    expect(await pruneDeadLetters(queue, (l) => lines.push(l))).toBe(2);
+    expect(calls).toEqual([[604_800_000, PRUNE_BATCH, 'wait']]);
+    expect(lines).toEqual([{ level: 'info', event: 'dead_letter.pruned', removed: 2 }]);
+  });
+
+  it('logs nothing when nothing expired; a failure is logged, never thrown', async () => {
+    const lines: LogLine[] = [];
+    expect(await pruneDeadLetters({ clean: () => Promise.resolve([]) }, (l) => lines.push(l))).toBe(
+      0,
+    );
+    expect(lines).toEqual([]);
+    expect(
+      await pruneDeadLetters({ clean: () => Promise.reject(new Error('redis down')) }, (l) =>
+        lines.push(l),
+      ),
+    ).toBe(0);
+    expect(lines).toEqual([
+      {
+        level: 'error',
+        event: 'dead_letter.prune_failed',
+        error: { name: 'Error', message: 'redis down' },
+      },
     ]);
   });
 });

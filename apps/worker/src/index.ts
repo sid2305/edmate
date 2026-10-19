@@ -7,7 +7,7 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { createCostAlarmWorker, logCostAlarmSink, scheduleCostAlarm } from './alarms/index.js';
 import { COST_ALARM_QUEUE } from './alarms/schedule.js';
-import { createTurnWorkers } from './commit/index.js';
+import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
 import { describeError, jsonLog } from './log.js';
 import { createNoopWorker } from './worker.js';
 
@@ -47,8 +47,16 @@ scheduleCostAlarm(costAlarmQueue).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
+// Dead-letter entries expire after 7 days (FAILED_JOB_TTL_SECONDS): prune at start, then hourly.
+const PRUNE_EVERY_MS = 60 * 60 * 1_000;
+void pruneDeadLetters(deadLetter, log);
+const pruneTimer = setInterval(() => {
+  void pruneDeadLetters(deadLetter, log);
+}, PRUNE_EVERY_MS);
+
 async function shutdown(signal: string): Promise<void> {
   log({ level: 'info', event: 'worker.shutdown', signal });
+  clearInterval(pruneTimer);
   await Promise.all(workers.map((w) => w.close()));
   await Promise.all([deadLetter.close(), costAlarmQueue.close()]);
   await db.close();

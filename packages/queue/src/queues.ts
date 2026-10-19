@@ -38,16 +38,22 @@ export const RETRY: Pick<JobsOptions, 'attempts' | 'backoff'> = {
 };
 
 /**
- * Completed jobs are removed (the database has the row). Failed ones are kept, bounded, beside
- * the dead-letter entry; a failed help-state job is removed at once, because its payload holds
- * the answer key and the dead-letter entry leaves it out.
+ * How long a failed job, or a dead-letter entry, is kept: 7 days. They can hold a student's
+ * message text (the failed set) or ids (the dead-letter queue), so neither stays forever.
+ */
+export const FAILED_JOB_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Completed jobs are removed (the database has the row). Failed ones are kept beside the
+ * dead-letter entry for FAILED_JOB_TTL_SECONDS (and at most 1 000); a failed help-state job is
+ * removed at once, because its payload holds the answer key.
  */
 export function jobOptions(jobId: string, name: JobName): JobsOptions {
   return {
     ...RETRY,
     jobId,
     removeOnComplete: true,
-    removeOnFail: name === JOB.helpState ? true : { count: 1_000 },
+    removeOnFail: name === JOB.helpState ? true : { age: FAILED_JOB_TTL_SECONDS, count: 1_000 },
   };
 }
 

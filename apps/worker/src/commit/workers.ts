@@ -49,14 +49,18 @@ export function createTurnWorkers(o: TurnWorkersOptions): { meter: Worker; commi
     autorun: o.autorun ?? false,
     ...(o.prefix === undefined ? {} : { prefix: o.prefix }),
   };
-  const meter = new Worker(METER_QUEUE, permanentToUnrecoverable(meterProcessor(o.repos)), {
+  const meter = new Worker(METER_QUEUE, permanentToUnrecoverable(meterProcessor(o.repos, o.log)), {
     ...common,
     concurrency: 4,
   });
-  const commit = new Worker(COMMIT_QUEUE, permanentToUnrecoverable(commitProcessor(o.repos)), {
-    ...common,
-    concurrency: 1,
-  });
+  const commit = new Worker(
+    COMMIT_QUEUE,
+    permanentToUnrecoverable(commitProcessor(o.repos, o.log)),
+    {
+      ...common,
+      concurrency: 1,
+    },
+  );
   const failed = onJobFailed({
     deadLetter: o.deadLetter,
     log: o.log,

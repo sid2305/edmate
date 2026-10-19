@@ -36,6 +36,38 @@ function summary(t: TurnTrace) {
 }
 
 const Stored = TurnTraceSchema.omit({ sessionId: true, turnId: true });
+const TurnRef = z.strictObject({ sessionId: IdSchema, turnId: IdSchema });
+
+const COLUMNS = {
+  id: turnTraces.id,
+  sessionId: turnTraces.sessionId,
+  turnId: turnTraces.turnId,
+  agentVersion: turnTraces.agentVersion,
+  packageVersion: turnTraces.packageVersion,
+  steps: turnTraces.steps,
+  intent: turnTraces.intent,
+  move: turnTraces.move,
+  guards: turnTraces.guards,
+  usage: turnTraces.usage,
+  model: turnTraces.model,
+  inputTokens: turnTraces.inputTokens,
+  outputTokens: turnTraces.outputTokens,
+  costMicroUsd: turnTraces.costMicroUsd,
+  createdAt: turnTraces.createdAt,
+};
+
+type Selected = { [K in keyof typeof COLUMNS]: (typeof COLUMNS)[K]['_']['data'] };
+
+/** A selected row as a TurnTraceRow; jsonb that no longer parses is `integrity`. */
+function toRow(r: Selected, method: string): TurnTraceRow {
+  const { steps, intent, move, guards, usage, agentVersion, packageVersion } = r;
+  const c = checked(
+    Stored,
+    { steps, intent, move, guards, usage, agentVersion, packageVersion },
+    method,
+  );
+  return { ...r, ...c, createdAt: iso(r.createdAt) };
+}
 
 export function turnTracesRepo(db: Db) {
   return {
@@ -90,36 +122,39 @@ export function turnTracesRepo(db: Db) {
       const sc = studentScope(scope, method);
       const id = parseArg(IdSchema, sessionId, method);
       const rows = await db
-        .select({
-          id: turnTraces.id,
-          sessionId: turnTraces.sessionId,
-          turnId: turnTraces.turnId,
-          agentVersion: turnTraces.agentVersion,
-          packageVersion: turnTraces.packageVersion,
-          steps: turnTraces.steps,
-          intent: turnTraces.intent,
-          move: turnTraces.move,
-          guards: turnTraces.guards,
-          usage: turnTraces.usage,
-          model: turnTraces.model,
-          inputTokens: turnTraces.inputTokens,
-          outputTokens: turnTraces.outputTokens,
-          costMicroUsd: turnTraces.costMicroUsd,
-          createdAt: turnTraces.createdAt,
-        })
+        .select(COLUMNS)
         .from(turnTraces)
         .innerJoin(sessions, eq(sessions.id, turnTraces.sessionId))
         .where(and(eq(turnTraces.sessionId, id), ownSession(id, sc)))
         .orderBy(asc(turnTraces.createdAt), asc(turnTraces.id));
-      return rows.map((r) => {
-        const { steps, intent, move, guards, usage, agentVersion, packageVersion } = r;
-        const c = checked(
-          Stored,
-          { steps, intent, move, guards, usage, agentVersion, packageVersion },
-          method,
-        );
-        return { ...r, ...c, createdAt: iso(r.createdAt) };
-      });
+      return rows.map((r) => toRow(r, method));
+    },
+
+    /**
+     * One turn's trace on one of the scope's sessions, or null (missing, or another scope's).
+     * A worker retry uses it to tell it already wrote the trace (task 3.8); the turn_id index
+     * serves it.
+     */
+    async findForTurn(
+      scope: StudentScope,
+      ref: { sessionId: string; turnId: string },
+    ): Promise<TurnTraceRow | null> {
+      const method = 'turnTraces.findForTurn';
+      const sc = studentScope(scope, method);
+      const { sessionId, turnId } = parseArg(TurnRef, ref, method);
+      const [row] = await db
+        .select(COLUMNS)
+        .from(turnTraces)
+        .innerJoin(sessions, eq(sessions.id, turnTraces.sessionId))
+        .where(
+          and(
+            eq(turnTraces.turnId, turnId),
+            eq(turnTraces.sessionId, sessionId),
+            ownSession(sessionId, sc),
+          ),
+        )
+        .limit(1);
+      return row ? toRow(row, method) : null;
     },
   };
 }

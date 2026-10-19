@@ -7,7 +7,7 @@
 // - message: the id is the caller's; a duplicate is reported `not_found` (no probing), so on
 //   `not_found` the session's history is read back: the id there means it was written.
 // - help state: an UPDATE, last write wins: running it again changes nothing.
-// - trace: one per turn (unique turn_id); a trace for the turn already listed means it was written.
+// - trace: one per turn (unique turn_id); a trace found for the turn means it was written.
 //
 // A failure that a retry cannot fix (a malformed payload, a scope / not_found / invalid /
 // integrity error) is thrown as `PermanentJobError`, which the worker turns into BullMQ's
@@ -28,9 +28,12 @@ import {
   UsageJobSchema,
   usageRowId,
 } from '@edmate/queue';
+import { describeError, type Log } from '../log.js';
 
 /** A job as the processors see it (BullMQ's Job has more). */
 export interface TurnJob {
+  /** BullMQ's job id, for log lines. */
+  id?: string | undefined;
   name: string;
   data: unknown;
 }
@@ -66,33 +69,51 @@ function parse<T>(
 
 /** Writes once; on any failure, `exists()` decides whether an earlier run already wrote it. */
 async function once(
-  job: string,
+  job: TurnJob,
+  log: Log,
   exists: () => Promise<boolean>,
   write: () => Promise<void>,
 ): Promise<JobOutcome> {
   try {
     if (await exists()) return 'already_written';
   } catch (error) {
-    return classify(job, error);
+    return classify(job.name, error);
   }
   try {
     await write();
     return 'written';
   } catch (error) {
     // A concurrent or earlier run may have won the race (unique id or turn).
-    if (await exists().catch(() => false)) return 'already_written';
-    return classify(job, error);
+    let found = false;
+    try {
+      found = await exists();
+    } catch (recheckError) {
+      // The write's error is the one that decides the retry; the recheck's is logged, not lost.
+      log({
+        level: 'warn',
+        event: 'job.recheck_failed',
+        name: job.name,
+        jobId: job.id ?? null,
+        error: describeError(recheckError),
+      });
+    }
+    if (found) return 'already_written';
+    return classify(job.name, error);
   }
 }
 
 /** Processes `edmate-turn-meter` jobs: usage rows. */
-export function meterProcessor(repos: Repositories): (job: TurnJob) => Promise<JobOutcome> {
+export function meterProcessor(
+  repos: Repositories,
+  log: Log,
+): (job: TurnJob) => Promise<JobOutcome> {
   return async (job) => {
     if (job.name === JOB.usage) {
       const d = parse(UsageJobSchema, job);
       const id = usageRowId(d.turnId, d.index);
       return once(
-        job.name,
+        job,
+        log,
         async () =>
           (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
         () =>
@@ -108,7 +129,8 @@ export function meterProcessor(repos: Repositories): (job: TurnJob) => Promise<J
       const d = parse(UnmeteredJobSchema, job);
       const id = usageRowId(d.turnId, d.index);
       return once(
-        job.name,
+        job,
+        log,
         async () =>
           (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
         () =>
@@ -128,7 +150,10 @@ export function meterProcessor(repos: Repositories): (job: TurnJob) => Promise<J
 }
 
 /** Processes `edmate-turn-commit` jobs: messages, the help state and the trace. */
-export function commitProcessor(repos: Repositories): (job: TurnJob) => Promise<JobOutcome> {
+export function commitProcessor(
+  repos: Repositories,
+  log: Log,
+): (job: TurnJob) => Promise<JobOutcome> {
   return async (job) => {
     if (job.name === JOB.message) {
       const d = parse(MessageJobSchema, job);
@@ -157,11 +182,13 @@ export function commitProcessor(repos: Repositories): (job: TurnJob) => Promise<
     if (job.name === JOB.trace) {
       const d = parse(TraceJobSchema, job);
       return once(
-        job.name,
+        job,
+        log,
         async () =>
-          (await repos.turnTraces.listForSession(d.scope, d.trace.sessionId)).some(
-            (t) => t.turnId === d.trace.turnId,
-          ),
+          (await repos.turnTraces.findForTurn(d.scope, {
+            sessionId: d.trace.sessionId,
+            turnId: d.trace.turnId,
+          })) !== null,
         () => traceSinkFor(repos, d.scope).record(d.trace),
       );
     }

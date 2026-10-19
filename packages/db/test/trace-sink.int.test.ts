@@ -114,12 +114,36 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
     expect(() => traceSinkFor(repos, { studentId: 'x', teacherId: '' })).toThrow(RepositoryError);
   });
 
+  it('findForTurn reads one turn’s trace on the scope’s session; else null or invalid', async () => {
+    await traceSinkFor(repos, own).record(trace({ turnId: 'trn_find' }));
+    const ref = { sessionId: ids.session('1A'), turnId: 'trn_find' };
+    expect((await repos.turnTraces.findForTurn(own, ref))?.turnId).toBe('trn_find');
+    expect(
+      await repos.turnTraces.findForTurn(own, { ...ref, sessionId: ids.session('2A') }),
+    ).toBeNull();
+    expect(
+      await repos.turnTraces.findForTurn(
+        { studentId: studentId('2'), teacherId: teacherId('A') },
+        ref,
+      ),
+    ).toBeNull();
+    expect(await repos.turnTraces.findForTurn(own, { ...ref, turnId: 'trn_none' })).toBeNull();
+    expect(await kind(repos.turnTraces.findForTurn(own, { ...ref, turnId: 'bad id!' }))).toBe(
+      'invalid',
+    );
+  });
+
   it('a stored trace whose jsonb no longer parses is an integrity error, never returned', async () => {
     await traceSinkFor(repos, own).record(trace({ turnId: 'trn_corrupt' }));
     await raw.query(
       `update turn_traces set guards = '"nope"'::jsonb where turn_id = 'trn_corrupt'`,
     );
     expect(await kind(repos.turnTraces.listForSession(own, ids.session('1A')))).toBe('integrity');
+    expect(
+      await kind(
+        repos.turnTraces.findForTurn(own, { sessionId: ids.session('1A'), turnId: 'trn_corrupt' }),
+      ),
+    ).toBe('integrity');
     await raw.query(`delete from turn_traces where turn_id = 'trn_corrupt'`);
   });
 });

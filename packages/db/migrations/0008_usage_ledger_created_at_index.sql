@@ -1,0 +1,1 @@
+CREATE INDEX "usage_ledger_created_at_source_idx" ON "usage_ledger" USING btree ("created_at","source");

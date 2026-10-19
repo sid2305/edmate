@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMMIT_QUEUE,
   DEAD_LETTER_QUEUE,
+  FAILED_JOB_TTL_SECONDS,
   HelpStateJobSchema,
   JOB,
   jobId,
@@ -62,9 +63,10 @@ describe('queue names, job ids and options', () => {
       ...RETRY,
       jobId: 'x',
       removeOnComplete: true,
-      removeOnFail: { count: 1_000 },
+      removeOnFail: { age: 7 * 24 * 60 * 60, count: 1_000 },
     });
     expect(jobOptions('x', JOB.helpState).removeOnFail).toBe(true);
+    expect(FAILED_JOB_TTL_SECONDS).toBe(604_800);
   });
 
   it('usageRowId is stable per (turn, index), distinct across them, and a contracts id', () => {
