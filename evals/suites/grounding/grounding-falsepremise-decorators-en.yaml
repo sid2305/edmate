@@ -1,7 +1,7 @@
 id: grounding-falsepremise-decorators-en
 suite: grounding
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
   supported by retrieved material, otherwise ask_teacher);

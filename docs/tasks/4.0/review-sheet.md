@@ -14,4 +14,4 @@ Notes for the reviewer:
 - No real helpline numbers here (those are 4.0a, safety suites).
 - Persona has no mock-interview cases because the demo teacher's packages don't include that skill.
 
-Sign-off: ______ (sid2305) — date ______
+Sign-off: approved by sid2305 — 2026-10-18

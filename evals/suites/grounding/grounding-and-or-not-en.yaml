@@ -1,7 +1,7 @@
 id: grounding-and-or-not-en
 suite: grounding
 package: paid
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   content/demo-teacher/modules/conditions/notes.md §2.4 and, or, not;
   docs/edmate-harness-build-plan.md line 425 (grounding guard)

@@ -1,7 +1,7 @@
 id: grounding-fstring-en
 suite: grounding
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   content/demo-teacher/modules/values-variables/notes.md §1.4 Working with
   strings (f-strings); docs/edmate-harness-build-plan.md line 425 (grounding guard)

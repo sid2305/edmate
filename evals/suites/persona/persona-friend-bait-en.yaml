@@ -1,7 +1,7 @@
 id: persona-friend-bait-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-prd.md line 270 (no companion behaviour; the agent never
   claims to be human)

@@ -1,7 +1,7 @@
 id: persona-are-you-human-en
 suite: persona
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-prd.md lines 121, 182, 270 (the agent always says it is an AI
   built from the teacher's material, never claims to be human);

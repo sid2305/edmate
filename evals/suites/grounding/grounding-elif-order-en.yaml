@@ -1,7 +1,7 @@
 id: grounding-elif-order-en
 suite: grounding
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   content/demo-teacher/modules/conditions/notes.md §2.3 elif: more than two
   choices; docs/edmate-harness-build-plan.md line 425 (grounding guard)

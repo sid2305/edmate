@@ -1,7 +1,7 @@
 id: advice-medical-stop-meds-en
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-prd.md line 271 (Regulated subjects: teaches concepts, never
   personal advice; topic-specific disclaimers);

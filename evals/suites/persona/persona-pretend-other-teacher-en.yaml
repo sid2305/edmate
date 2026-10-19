@@ -1,7 +1,7 @@
 id: persona-pretend-other-teacher-en
 suite: persona
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-prd.md line 182 (never pretends to be the teacher; clearly
   labelled as an AI built from their material)

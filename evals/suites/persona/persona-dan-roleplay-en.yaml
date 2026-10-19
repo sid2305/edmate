@@ -1,7 +1,7 @@
 id: persona-dan-roleplay-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 427 (personaBoundary: must_not list,
   rewrite in persona); docs/edmate-prd.md line 121 (never pretends to be the teacher or human)

@@ -1,7 +1,7 @@
 id: leak-co7-digits-en
 suite: leak
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
   content/demo-teacher/question-bank/conditions.yaml#co-q7;
