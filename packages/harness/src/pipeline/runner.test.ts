@@ -59,7 +59,9 @@ import { STEP_NAMES, STEP_SPEC } from './spec.js';
 import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
 import { decide } from './steps/decide.js';
+import { GuardRegistry } from '../guardrails/registry.js';
 import { buildCaringReply } from './steps/escalate.js';
+import { createPreGuardStep } from './steps/preGuard.js';
 import { defaultSteps } from './steps/index.js';
 
 function starts(log: { step: string; phase: string }[]): string[] {
@@ -960,21 +962,9 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     });
   }, 2_000);
 
-  it('the chain fails (step budget gone) on a hard keyword: the runner keyword check still escalates', async () => {
-    const t = testDeps({
-      overrides: {
-        // A history read that never answers, so preGuard is still waiting when its budget ends.
-        transcripts: { history: () => new Promise(() => undefined), append: () => Promise.resolve() },
-        distressCheck: hasDistressKeyword,
-      },
-    });
-    const steps = realDistress({
-      // A slow scrub leaves preGuard almost no budget, so step 3 times out → failed.
-      scrub: async (env) => {
-        await env.deps.clock.sleep((STEP_SPEC.preGuard.timeoutMs ?? 0) - 5);
-        return { ...(env.input.text === undefined ? {} : { text: env.input.text }), guards: [] };
-      },
-    });
+  it('the chain fails (no pre guard registered) on a hard keyword: the runner keyword check still escalates', async () => {
+    const t = deps();
+    const steps = realDistress({ preGuard: createPreGuardStep(new GuardRegistry('pre')) });
     const { events, result } = await driveTurn(
       runTurn(at('i want to kill myself'), { deps: t.deps, steps }),
       t.clock,
@@ -984,6 +974,38 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
     // The runner-built alert: no excerpt.
     expect(t.alerts.raised).toEqual([expect.objectContaining({ excerptRedacted: '' })]);
     expect(steps.commits[0]).toMatchObject({ outcome: 'escalated' });
+  }, 2_000);
+
+  it('a slow scrub plus a soft hit: preGuard times out, the runner still escalates (safety review)', async () => {
+    const t = testDeps({
+      overrides: {
+        transcripts: { history: () => new Promise(() => undefined), append: () => Promise.resolve() },
+        // The raw-text and fallback dep stays hard-only; the soft check is the runner's own.
+        distressCheck: hasDistressKeyword,
+      },
+    });
+    const steps = realDistress({
+      scrub: async (env) => {
+        await env.deps.clock.sleep((STEP_SPEC.preGuard.timeoutMs ?? 0) - 5);
+        return { ...(env.input.text === undefined ? {} : { text: env.input.text }), guards: [] };
+      },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(at('i feel so hopeless'), { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+    expect(result.trace?.steps.find((s) => s.name === 'preGuard')?.outcome).toBe('failed');
+    expect(steps.commits[0]).toMatchObject({ outcome: 'escalated' });
+  }, 2_000);
+
+  it('a soft hit never escalates through the raw-text check alone (it stays hard-only)', async () => {
+    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const { events } = await driveTurn(
+      runTurn(at('i feel so hopeless'), { deps: t.deps, steps: realDistress() }),
+      t.clock,
+    );
+    expect(events.some((e) => e.type === 'safety')).toBe(false);
   }, 2_000);
 
   it('soft keyword + classifier false → a normal reply (no alert)', async () => {

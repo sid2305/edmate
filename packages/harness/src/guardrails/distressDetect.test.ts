@@ -15,6 +15,7 @@ import {
   DISTRESS_CLASSIFIER_TIMEOUT_MS,
   DISTRESS_EXCERPT_MAX,
   DistressClassifierTimeoutError,
+  DistressGuardCancelledError,
 } from './distressDetect.js';
 import type { PreGuardCtx } from './preGuardCtx.js';
 
@@ -25,7 +26,7 @@ const NONE = 'how do i reverse a list in python';
 function ctxWith(
   gateway: ModelGateway,
   clock: VirtualClock = virtualClock(),
-  recent: string[] = [],
+  recent: PreGuardCtx['recentStudentTurns'] = [],
 ): PreGuardCtx {
   return {
     locale: demoLocalePack,
@@ -155,6 +156,87 @@ describe('no hard keyword: the small-tier classifier decides', () => {
     const content = s.requests[0]?.messages.at(-1)?.content ?? '';
     const parsed = JSON.parse(content) as { earlier: string[]; latest: string };
     expect(parsed).toEqual({ earlier: ['t2', 't3', 't4'], latest: NONE });
+  }, 1_000);
+});
+
+describe('several soft phrases: the classifier still decides (safety review)', () => {
+  const TWO_SOFT = 'i bought rope today. tomorrow i wont be here';
+
+  it('two soft + classifier false → ok', async () => {
+    const s = scripted({ generateObject: [{ value: { distress: false } }] });
+    expect((await run(ctxWith(s.gateway), TWO_SOFT)).result).toEqual({ ok: true });
+    expect(s.requests).toHaveLength(1);
+  }, 1_000);
+
+  it('two soft + classifier down → escalate', async () => {
+    const r = await run(ctxWith(scripted({}).gateway), TWO_SOFT);
+    expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
+  }, 1_000);
+});
+
+describe('earlier messages arrive as a promise, waited for outside the classifier deadline', () => {
+  it('a slow history read does not eat the classifier time', async () => {
+    const clock = virtualClock();
+    let seen: unknown;
+    const gateway: ModelGateway = {
+      stream: () => {
+        throw new Error('unused');
+      },
+      embed: () => Promise.reject(new Error('unused')),
+      generateObject<T>(req: ModelRequest) {
+        seen = JSON.parse(req.messages[0]?.content ?? '{}');
+        // Answers just inside the classifier's own deadline.
+        return clock.sleep(DISTRESS_CLASSIFIER_TIMEOUT_MS - 10).then(() => ({ distress: true }) as T);
+      },
+    };
+    const history = clock.sleep(40).then(() => ['earlier']);
+    const r = await clock.drive(run(ctxWith(gateway, clock, history), NONE));
+    expect(r.result).toMatchObject({ action: 'escalate' });
+    expect(seen).toEqual({ earlier: ['earlier'], latest: NONE });
+  }, 1_000);
+
+  it('a hard keyword does not wait for the history', async () => {
+    const r = await run(ctxWith(scripted({}).gateway, virtualClock(), new Promise(() => undefined)), HARD);
+    expect(r.result).toMatchObject({ action: 'escalate' });
+  }, 1_000);
+});
+
+describe('cancelled before the classifier call', () => {
+  const cancelled = () => {
+    const c = cancelSource();
+    c.cancel();
+    return c.token;
+  };
+
+  it('soft → escalate without a model call', async () => {
+    const s = scripted({});
+    const r = await createDistressDetectGuard().run(SOFT, ctxWith(s.gateway), cancelled());
+    expect(r.result).toMatchObject({ action: 'escalate' });
+    expect(s.requests).toEqual([]);
+  }, 1_000);
+
+  it('cancelled while waiting for the earlier messages → no model call either', async () => {
+    const s = scripted({});
+    const c = cancelSource();
+    const history = Promise.resolve([]).then((h) => {
+      c.cancel();
+      return h;
+    });
+    const r = await createDistressDetectGuard().run(
+      SOFT,
+      ctxWith(s.gateway, virtualClock(), history),
+      c.token,
+    );
+    expect(r.result).toMatchObject({ action: 'escalate' });
+    expect(s.requests).toEqual([]);
+  }, 1_000);
+
+  it('no keyword → DistressGuardCancelledError, no model call', async () => {
+    const s = scripted({});
+    await expect(
+      createDistressDetectGuard().run(NONE, ctxWith(s.gateway), cancelled()),
+    ).rejects.toBeInstanceOf(DistressGuardCancelledError);
+    expect(s.requests).toEqual([]);
   }, 1_000);
 });
 

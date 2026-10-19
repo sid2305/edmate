@@ -18,7 +18,18 @@ import {
 } from '@edmate/queue';
 import { PermanentJobError } from '../commit/processors.js';
 import type { Log } from '../log.js';
-import type { AckStore, AlertNotifier } from './types.js';
+import type { AckStore, AlertAudience, AlertNotifier } from './types.js';
+
+/** A notifier call that takes longer fails (and is retried): a hung vendor must not stall it. */
+export const ALERT_NOTIFY_TIMEOUT_MS = 20_000;
+
+/** The notifier did not answer in time. Names the audience and the limit, nothing else. */
+export class NotifyTimeoutError extends Error {
+  override readonly name = 'NotifyTimeoutError';
+  constructor(audience: AlertAudience, ms: number) {
+    super(`alert notify to ${audience} timed out after ${ms} ms`);
+  }
+}
 
 export interface AlertJob {
   id?: string | undefined;
@@ -35,6 +46,8 @@ export interface AlertProcessorDeps {
   queue: JobQueue;
   /** Time between escalation checks (ALERT_ESCALATION_MS; tests shorten it). */
   escalateAfterMs: number;
+  /** Per notifier call (default ALERT_NOTIFY_TIMEOUT_MS). */
+  notifyTimeoutMs?: number;
   log: Log;
 }
 
@@ -48,11 +61,25 @@ function parse<T>(
 }
 
 export function alertProcessor(d: AlertProcessorDeps) {
+  const limit = d.notifyTimeoutMs ?? ALERT_NOTIFY_TIMEOUT_MS;
+  const notify = async (alert: Parameters<AlertNotifier['notify']>[0], audience: AlertAudience) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new NotifyTimeoutError(audience, limit));
+      }, limit);
+    });
+    try {
+      await Promise.race([d.notifier.notify(alert, audience), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   return async (job: AlertJob): Promise<AlertJobOutcome> => {
     switch (job.name) {
       case JOB.alertRaise: {
         const { alert } = parse(AlertRaiseJobSchema, job);
-        await d.notifier.notify(alert, 'trust_team');
+        await notify(alert, 'trust_team');
         d.log({
           level: 'info',
           event: 'safety_alert.notified',
@@ -70,7 +97,7 @@ export function alertProcessor(d: AlertProcessorDeps) {
           { alert, round: next },
           alertJobOptions(jobId.alertEscalate(alert.id, next), d.escalateAfterMs),
         );
-        await d.notifier.notify(alert, 'on_call');
+        await notify(alert, 'on_call');
         d.log({ level: 'warn', event: 'safety_alert.escalated', alertId: alert.id, round });
         return 'escalated';
       }

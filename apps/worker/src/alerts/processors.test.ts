@@ -7,7 +7,7 @@ import type { JobsOptions } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
 import type { LogLine } from '../log.js';
-import { alertProcessor } from './processors.js';
+import { ALERT_NOTIFY_TIMEOUT_MS, alertProcessor, NotifyTimeoutError } from './processors.js';
 import type { AlertAudience } from './types.js';
 
 const EXCERPT = 'EXCERPT-CANARY i want to kill myself';
@@ -126,6 +126,36 @@ describe('alert.escalate_check', () => {
     await expect(
       w.process({ name: JOB.alertEscalateCheck, data: { alert, round: -2 } }),
     ).rejects.toThrow(PermanentJobError);
+  }, 1_000);
+});
+
+describe('a hung notifier', () => {
+  const hung = (audience: AlertAudience) =>
+    alertProcessor({
+      notifier: {
+        notify: (_a, au) => (au === audience ? new Promise<void>(() => undefined) : Promise.resolve()),
+      },
+      ackStore: { acknowledge: () => Promise.resolve(), isAcknowledged: () => Promise.resolve(false) },
+      queue: { add: () => Promise.resolve() },
+      escalateAfterMs: ALERT_ESCALATION_MS,
+      notifyTimeoutMs: 20,
+      log: () => undefined,
+    });
+
+  it('the trust-team call times out and throws (BullMQ retries it)', async () => {
+    await expect(hung('trust_team')({ name: JOB.alertRaise, data: { alert } })).rejects.toThrow(
+      new NotifyTimeoutError('trust_team', 20),
+    );
+  }, 2_000);
+
+  it('the on-call call times out and throws', async () => {
+    await expect(
+      hung('on_call')({ name: JOB.alertEscalateCheck, data: { alert, round: 0 } }),
+    ).rejects.toBeInstanceOf(NotifyTimeoutError);
+  }, 2_000);
+
+  it('the default limit is 20 s', () => {
+    expect(ALERT_NOTIFY_TIMEOUT_MS).toBe(20_000);
   }, 1_000);
 });
 

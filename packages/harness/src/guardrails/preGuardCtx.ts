@@ -18,7 +18,8 @@ export interface PreGuardCtx {
   clock: Clock;
   /**
    * The student's earlier messages this session (scrubbed when they were saved), oldest first,
-   * at most a few. Empty when there are none or the history could not be read in time.
+   * at most a few. Empty when there are none or the history could not be read in time. A promise
+   * when preGuard starts the read concurrently with the guards (a guard awaits it only if needed).
    */
-  recentStudentTurns: readonly string[];
+  recentStudentTurns: readonly string[] | Promise<readonly string[]>;
 }

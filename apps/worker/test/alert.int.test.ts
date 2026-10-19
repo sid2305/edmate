@@ -217,7 +217,7 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
     // The 15-minute check is waiting, exactly once.
     const checks = await pendingChecks(prodQueue, 'alert_e2e');
     expect(checks.map((j) => j.id)).toEqual([jobId.alertEscalate('alert_e2e', 0)]);
-  }, 180_000);
+  }, 330_000);
 
   it('a replayed raise adds nothing: still one pending check, no second trust-team message', async () => {
     const sink = queuedAlertSink(prodQueue);

@@ -158,8 +158,10 @@ describe('createPreGuardStep: outcome mapping', () => {
       sessionId: demoTurnInput.sessionId,
       lang: demoTurnInput.lang,
       locale: demoLocalePack,
-      recentStudentTurns: ['first', 'second'],
     });
+    // Started before the chain, not awaited by preGuard itself.
+    expect(seen[0]?.recentStudentTurns).toBeInstanceOf(Promise);
+    expect(await seen[0]?.recentStudentTurns).toEqual(['first', 'second']);
   }, 1_000);
 });
 

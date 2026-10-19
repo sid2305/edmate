@@ -15,6 +15,7 @@ export {
   DISTRESS_CONTEXT_TURNS,
   DISTRESS_EXCERPT_MAX,
   DistressClassifierTimeoutError,
+  DistressGuardCancelledError,
   type DistressDetectOptions,
   DistressVerdictSchema,
 } from './distressDetect.js';
@@ -24,6 +25,7 @@ export {
   type DistressKeywordLevel,
   type DistressKeywordMatch,
   distressKeywordMatch,
+  hasAnyDistressKeyword,
   hasDistressKeyword,
   normaliseForDistress,
 } from './distressKeywords.js';

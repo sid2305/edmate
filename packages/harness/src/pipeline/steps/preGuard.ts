@@ -72,7 +72,8 @@ export function createPreGuardStep(
       gateway: env.gateway,
       ids: env.deps.ids,
       clock: env.deps.clock,
-      recentStudentTurns: await recentStudentTurns(env),
+      // Read concurrently with the guards; distressDetect waits for it only before its classifier.
+      recentStudentTurns: recentStudentTurns(env),
     };
     const chain = await runGuardChain(registry.ordered(), env.input.text ?? '', ctx, {
       phase: 'pre',

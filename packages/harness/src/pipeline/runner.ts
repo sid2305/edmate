@@ -23,6 +23,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import { z } from 'zod';
+import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
 import type { HelpState } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
@@ -443,13 +444,14 @@ class Turn {
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
-    // A failed preGuard means no classifier verdict: the keyword check still runs. A hit on the
-    // raw text (before the scrub) always counts.
+    // A failed preGuard means no classifier verdict: the keyword check still runs, and there a
+    // soft phrase counts too (no verdict to bypass; 4.3 safety review). A hit on the raw text
+    // (before the scrub, hard phrases only) always counts.
     if (
       preAlert !== undefined ||
       intent === 'distress' ||
       rawDistress ||
-      (!pg.ok && this.distressHit(scrubbed, 'scrubbed'))
+      (!pg.ok && (this.distressHit(scrubbed, 'scrubbed') || hasAnyDistressKeyword(scrubbed.text ?? '')))
     ) {
       return this.escalate(scrubbed, e, preAlert);
     }
