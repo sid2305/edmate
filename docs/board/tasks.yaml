@@ -808,7 +808,7 @@ tasks:
   accept: an attachment with seeded PII never reaches a model unscrubbed; tests with fixture images.
   deps:
   - '4.2'
-  status: todo
+  status: running
   branch: null
   model: null
 - id: '4.3'
