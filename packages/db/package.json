@@ -25,9 +25,11 @@
     "test": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/bin/migrate.js",
-    "db:grant-role": "node dist/bin/grant-role.js"
+    "db:grant-role": "node dist/bin/grant-role.js",
+    "db:seed": "node dist/bin/seed.js"
   },
   "dependencies": {
+    "@edmate/content": "workspace:*",
     "@edmate/contracts": "workspace:*",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1",

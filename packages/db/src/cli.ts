@@ -3,6 +3,7 @@ import { createDb } from './client.js';
 import { createIdentityStore, ROLES, type IdentityStore, type Role } from './identity/index.js';
 import { migrateDatabase } from './migrate.js';
 import { redact } from './redact.js';
+import { SEED_TABLES, seedDemoTeacher, type SeedOptions, type SeedResult } from './seed.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
 export async function runMigrateCli(
@@ -121,5 +122,50 @@ export async function runGrantRoleCli(
     return 1;
   } finally {
     await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Runs the demo seed against a database URL (injected in tests). */
+export type RunSeed = (url: string, options: SeedOptions) => Promise<SeedResult>;
+
+const runSeed: RunSeed = async (url, options) => {
+  const { db, close } = createDb({ DATABASE_URL: url });
+  try {
+    return await seedDemoTeacher(db, options);
+  } finally {
+    await close().catch(() => undefined);
+  }
+};
+
+/**
+ * `corepack pnpm seed`: the demo teacher, its packages and 20 fictional students (task 1.5).
+ * Idempotent; prints how many rows each table got (0 on a re-run) and warns about seeded rows that
+ * no longer match the content. EDMATE_SEED_CONTENT_DIR overrides the content tree. Returns the
+ * exit code.
+ */
+export async function runSeedCli(
+  env: { DATABASE_URL?: string | undefined; EDMATE_SEED_CONTENT_DIR?: string | undefined },
+  log: (line: string) => void,
+  seed: RunSeed = runSeed,
+): Promise<number> {
+  const url = env.DATABASE_URL;
+  if (!url) {
+    log('seed: DATABASE_URL is not set');
+    return 1;
+  }
+  try {
+    const dir = env.EDMATE_SEED_CONTENT_DIR;
+    const { inserted, drift } = await seed(url, dir ? { contentDir: dir } : {});
+    const total = SEED_TABLES.reduce((n, t) => n + inserted[t], 0);
+    const counts = SEED_TABLES.map((t) => `${t}=${inserted[t]}`).join(' ');
+    log(total === 0 ? 'seed: already seeded (inserted 0 rows)' : `seed: inserted ${total} rows`);
+    log(`seed: ${counts}`);
+    for (const d of drift) {
+      log(`seed: warning: existing row differs from content, left as is: ${d}`);
+    }
+    return 0;
+  } catch (err) {
+    log(`seed: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
+    return 1;
   }
 }

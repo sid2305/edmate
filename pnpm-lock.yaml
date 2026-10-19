@@ -390,6 +390,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@edmate/content':
+        specifier: workspace:*
+        version: link:../content
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../contracts
