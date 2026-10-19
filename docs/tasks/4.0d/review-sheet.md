@@ -13,4 +13,4 @@ For the named human reviewer (sid2305). Six new cases, from the gaps the 4.0a sa
 
 Please check the Hinglish wording of the two distress cases.
 
-Sign-off: ______ (sid2305) — date ______
+Sign-off: approved by sid2305 — 2026-10-19
