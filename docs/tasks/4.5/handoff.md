@@ -187,6 +187,50 @@ Latency after the fix (20 runs): sentence gate over a 7 860-char reply (131 sent
 
 Deferred to the board (lead): what `replace` means to the client (9.4's accept line); MIME-wrapped and double base64 (LOW); persisting `CommitRecord.escalatedText` in commit.
 
+## 4.5c (safety-reviewer's deferred list)
+
+Four follow-ups from `review.md`/`safety-review.md`, test-first, no real model calls.
+
+1. **"baar"/"times" are weak markers.** They count as a one-digit key's answer word only when a run/print verb (chalega, chalegi, chalti, chalta, runs, prints, print, executes, execute, loops, loop, चलेगा, चलेगी, छपेगा) sits right next to them, never when an imperative (karo, padho, socho, dekho, try, read, likho) does — the imperative check wins if both sides disagree. "Ek baar try karo", "Ek baar code ko line by line padho", "Do baar socho" and "Read it three times slowly" no longer trip; "Loop teen baar chalega" and "It runs three times" still do (unchanged, already covered by `numbers.fixround.test.ts`).
+2. **No own-code exemption when the student offered options as code.** `compileAnswerKeys` now checks, for every code-shaped key the student wrote as code, whether the student's message holds a second code line that differs from the key's line only at the key's own span (`if s.upper()...` next to `if s.lower()...`); if so, that key is never exempted, confirmation words or not. "Keep s.lower()", "Pick s.lower() here" and "s.lower() wala lagao" now trip; a single quoted line with no alternative stays exempt, and a line repeated verbatim is not "two options".
+3. **Spelling and fraction forms.** `baiyaalis`/`byalis`/`beyalis` (42) and `unatees` (29) are listed explicitly in the Hindi-Latin 21-99 table (their `latinFold` would land on a different value than the table's own spelling, so folding alone can't find them — the file's "never guess" rule holds). `numbers.ts` now also reads spoken fractions ("five sixths", "5 out of 6": numerator/denominator each a number word or digit, divided like the existing `a/b` key), a percentage ("83%", "83.5%": over 100, at its own written precision plus two), and a decimal read digit by digit ("zero point eight three": one number word for the whole part, then digit words after "point") — each computed to the fraction/decimal key's own precision rule already in place (unchanged).
+4. **`CommitRecord.escalatedText` confirmed out of history and the model.** `commit.ts` already only ever persists `record.replyText` to the transcript store, never `record.escalatedText`; no code change was needed there. Added `runner.escalatedText.test.ts`: a postGuard escalate's `escalatedText` is handed to the real `commit` step with a real in-memory transcript store; the transcript holds no trace of it; a second, real `buildContext` call in the same session reads that history back and it is still absent; a full second turn, driven through the real `buildContext` and `generate` steps, sends that history to a scripted gateway spy, and the gateway's recorded `ModelRequest`s never contain it either. Teacher-facing views do not exist yet (`CommitRecord.escalatedText` is not persisted anywhere outside the commit record itself, per the board's `persisting CommitRecord.escalatedText in commit` deferral), so there is nothing else to check.
+
+### Acceptance evidence (4.5c)
+
+- `source ~/.nvm/nvm.sh && corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force` → 34/34 tasks succeeded; harness: 65 files, 3024 tests passed; `src/access` and `src/guardrails` 100%/100%/100%/100%; `answerKey.ts` 100% statements / 96.4% branches / 100% functions / 100% lines (remaining gaps pre-existing, unrelated to this task); `numbers.ts`/`numberWords.ts` new code covered (remaining gaps pre-existing).
+- `source ~/.nvm/nvm.sh && corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --force` → `src/leakFixtures.test.ts`: 79/79 passed (38 leak cases × the stream/final/mutation checks) — the mutation run (pass-through gate, an answerLeak that passes everything) still fails every case.
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+- docker: `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis` (already running; `@edmate/db`/`@edmate/worker` integration tests in the harness-filter run above passed against it).
+
+### Changes (4.5c)
+
+- `pipeline/generate/numbers.ts`: `WEAK_MARKERS`/`RUN_VERBS`/`IMPERATIVES`, `isAnswerMarker`/`neighborWord` (replaces the plain `isMarker` membership check); `DENOMINATOR_WORDS`/`FRACTION_WORDS`/`OUT_OF`/`PERCENT`/`DIGIT_WORDS`/`SPOKEN_DECIMAL` and their mentions in `numberMentions`.
+- `pipeline/generate/numberWords.ts`: four explicit Hindi-Latin spellings added to the 21-99 table (42, 29).
+- `pipeline/generate/answerKey.ts`: `codeLines`, `differsOnlyAroundKey`, `offeredAsOptions`; wired into the `own` filter in `compileAnswerKeys`.
+- New `pipeline/runner.escalatedText.test.ts`.
+- Tests: `answerKey.falsePositives.test.ts` (two STRICT rows moved to CLEAN, now fixed; two new CLEAN rows), `answerKey.forms.test.ts` (new describe block), `numbers.fixround.test.ts` (new describe blocks for each of items 1 and 3, plus targeted branch coverage for the new weak-marker and spoken-decimal code).
+
+## 4.5c fix round (build-error-resolver, PR #53 follow-ups)
+
+Three more follow-ups, test-first, no real model calls:
+
+1. **A weak marker's run verb can be anywhere in its sentence, not just right next to it.** `isAnswerMarker` now scans forward from the marker to the end of its sentence for a run/print verb ("three times it runs", "teen baar yeh chalega", "teen baar to chalega" all trip key 3 now); the imperative veto still wins when an imperative sits right next to the marker or is the sentence's last word ("Ek baar try karo", "Do baar socho", "Read it three times slowly" still never trip). The scan is forward-only (never looks at words before the marker), so a sentence that opens with an instruction word spelled the same as a run verb ("Loop teen baar. Chalega.") still does not trip on the run verb in the next sentence.
+2. **A trailing comment no longer hides two offered code options.** `differsOnlyAroundKey` first drops a trailing `# ...`/`// ...` comment and trailing whitespace from both lines before comparing them, so `if s.lower() == "Y": # maybe this` next to `if s.upper() == "Y": # or this` is still read as two options that differ only at the key; "Keep s.lower()" trips.
+3. **Spoken fraction, "out of", percentage and digit-by-digit decimal forms need an answer context, whatever the key's length.** These four `numbers.ts` forms are now flagged `weak: true` on the mention; `answerKey.ts`'s leak check requires `answerContext` for a weak mention regardless of the key's length (a multi-digit key no longer gets a free pass the way a one-digit key's rule never gave one). "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do.
+
+### Acceptance evidence (4.5c fix round)
+
+- `source ~/.nvm/nvm.sh && corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force` → 34/34 tasks succeeded. `@edmate/harness:test`: 65 files, 3034 tests passed, including `answerKey.ts` 100% statements / 96.49% branches / 100% functions / 100% lines and `numbers.ts` 98.28% statements / 96.42% branches / 100% functions / 100% lines (remaining gaps pre-existing). `@edmate/evals:test`: `src/leakFixtures.test.ts` 79/79 passed (38 leak cases × stream/final/mutation; the mutation run — a pass-through gate and a no-op answerLeak — still fails all 38 cases).
+- `python3 .githooks/secret-scan.py --all` (absolute path from the worktree root) → clean, no output.
+- Postgres and Redis were up via `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis`; `@edmate/db`/`@edmate/worker` integration tests in the same filtered run passed against them (449/449 and worker suite green).
+
+### Changes (4.5c fix round)
+
+- `pipeline/generate/numbers.ts`: `isAnswerMarker` now does a forward, sentence-bounded scan for a run verb (new `sentenceEnd` helper replaces the old pure-adjacency check); `NumberMention.weak` added and set on the four spoken/percentage forms (`FRACTION_WORDS`, `OUT_OF`, `PERCENT`, `SPOKEN_DECIMAL`); `push()` takes an optional `weak` flag.
+- `pipeline/generate/answerKey.ts`: `differsOnlyAroundKey` strips a trailing `#`/`//` comment and trailing whitespace before comparing two code lines; `plainLeak`'s number-mention check requires `answerContext` whenever `m.weak` is true, instead of falling back to the key-length rule.
+- Tests: `numbers.fixround.test.ts` (new describe blocks for the whole-sentence weak-marker scan and the weak-form answer-context rule), `answerKey.forms.test.ts` (trailing-comment options test), `answerKey.falsePositives.test.ts` (two new CLEAN rows for the bare percentage/out-of forms).
+
 ## Decisions
 
 ### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
@@ -307,4 +351,34 @@ Reversible: Yes.
 Decided: after the gate trips, the attempt keeps reading the model stream (showing nothing) until it ends.
 Why: usage arrives at the end of the stream; stopping early would lose metering.
 Alternatives: close the stream on a trip (faster hint, unmetered spend).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c "baar"/"times" are weak markers: a run verb next to them, never an imperative · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: `numbers.ts` drops "baar"/"times"/"बार" from the always-on answer-word set and instead checks the token right next to them: it counts only when a run/print verb (chalega, chalegi, chalti, chalta, runs, prints, print, executes, execute, loops, loop, चलेगा, चलेगी, छपेगा) is adjacent, never when an imperative (karo, padho, socho, dekho, try, read, likho) is — the imperative check wins over a run verb on the other side, so "do baar chalega, socho" still never counts. "Ek baar try karo" and "Do baar socho" (an imperative right next to the count word) no longer trip a one-digit key; "Loop teen baar chalega" and "It runs three times" (a run verb right next to it, or a run-verb marker elsewhere in the sentence) still do.
+Why: a bare count word ("ek baar", "do baar", "X times") is ordinary lesson Hinglish; only a verb that names the code running or printing turns it into an answer.
+Alternatives: drop the markers to zero context (misses genuine "teen baar chalega" leaks); keep them unconditional (the false positives this task was opened for).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c No own-code exemption when the student offered two code lines that differ only at the key · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: before granting a code-shaped key the own-code exemption, `compileAnswerKeys` now also checks whether the student's message holds a second line, also clearly code, that is identical to the key's line except for a span covering the key (`if s.upper()...` next to `if s.lower()...`). If so, the key is never exempted (confirmation words or not): the student offered two options and picked neither yet, so quoting one back is still a leak. A single quoted line with no alternative stays exempt, as does a line the student repeated verbatim (not "two options").
+Why: the fix-round-1 exemption (a clearly-code line, confirmed-context aside) let a tutor's "Keep s.lower()" through once the student had typed both branches as code, which is still telling the student the answer.
+Alternatives: require the confirmation-word list to catch "keep"/"pick"/"wala lagao" too (an open-ended word list, always behind); drop the own-code exemption whenever the message holds more than one code line regardless of content (would also block a student who fixed a typo and resent the same line).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c Spelling variants and spoken fraction, percentage and digit-by-digit decimal forms · decided by tdd-guide (safety-reviewer's deferred list) · risk: medium
+Decided: `baiyaalis`/`byalis`/`beyalis` (42) and `unatees` (29) are added to the Hindi-Latin 21-99 table as explicit spellings, since `latinFold` folds them to a different value than the table's own spelling for 42/29 (the table's "never guess" rule means a fold collision is dropped, not guessed, so these needed listing by hand, not a fold change). `numbers.ts` also now reads spoken fractions ("five sixths", "5 out of 6"; numerator/denominator each one number word or digit), a percentage ("83%", "83.5%"; over 100, at its own written decimals plus two) and a decimal read digit by digit ("zero point eight three"; one number word for the whole part, then digit words after "point"), each matched against a key at the existing fraction/decimal precision rules (unchanged).
+Why: these are ordinary ways a tutor or student would say a fraction, percentage or decimal answer, and the matcher already has the precision rules to compare them; only the forms that reach those rules were missing.
+Alternatives: a judge model for paraphrase generally (4.5b, needs a live model, out of scope here); support multi-word whole parts for spoken decimals ("twelve point five") — narrowed to one word to avoid a greedy regex swallowing unrelated preceding prose ("the point eight three").
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c `CommitRecord.escalatedText` was already out of history and the model; added the round-trip test · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: no code change to `commit.ts` was needed — it already persists only `record.replyText` to the transcript store, never `record.escalatedText`. Added `runner.escalatedText.test.ts`: a real postGuard-escalate turn runs the real `commit` step against a real in-memory transcript store, then a real `buildContext` call (and a full second turn through the real `buildContext` and `generate` steps, with a scripted-gateway spy) confirms the escalated text is absent from the transcript store, from the next turn's `history`, and from the next turn's `ModelRequest`s.
+Why: the safety review flagged this as still open; verifying it end to end (not just that `commit`'s own unit test omits the field) is what "never reaches a later turn's model request" means.
+Alternatives: trust the existing `commit.test.ts`/`runner.answerLeak.test.ts` coverage (neither drives a second turn's `buildContext`/`generate` off a real transcript store, so neither proves the field can't leak back in through history).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c fix round A spoken fraction, "out of", percentage or spoken decimal needs an answer context whatever the key's length · decided by build-error-resolver (PR #53 follow-up) · risk: medium
+Decided: `numbers.ts` marks a mention from `FRACTION_WORDS`, `OUT_OF`, `PERCENT` or `SPOKEN_DECIMAL` as `weak`; `answerKey.ts`'s leak check now requires an answer context for a weak mention no matter how long the key's canonical value is, instead of letting any key longer than one digit through unconditionally. "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do, same as a one-digit key's words and arithmetic already worked.
+Why: these four forms are new enough (4.5c, this same task) that the house's existing one-digit answer-context rule had not been extended to them, and a bare "83% of students passed" or "5 out of 6 tests passed" is ordinary lesson/word-problem text, not an answer.
+Alternatives: keep the key-length rule and widen the one-digit exception to "any key whose value came from one of these four forms" (same effect, more roundabout: ties the rule to the key instead of the mention, which is what varies); require context only for percentage and spoken-decimal, not spoken fraction/"out of" (inconsistent — all four are equally ordinary word-problem phrasing).
 Reversible: Yes.

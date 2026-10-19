@@ -548,6 +548,8 @@ tasks:
   - '3.7'
   - M0
   - '4.5'
+  - '4.3'
+  - '4.4'
   status: todo
   branch: null
   model: null
@@ -612,6 +614,7 @@ tasks:
     persona questions; no learner summary on locked turns after a downgrade (compose.ts:223)'
   accept: a forged teacher note in student text reaches the model neutralised; the history never shows teacher text as the model's own reply; tests; prompt-pack behaviour changes get an ADR note.
   deps:
+  - '4.7'
   - 3.11b
   status: todo
   branch: null
@@ -817,7 +820,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: running
   risk: risky
   branch: m4/4.3-distress
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -843,8 +846,9 @@ tasks:
   model: null
 - id: 4.3c
   milestone: M7
-  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page
-    forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
+  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier per B-13 (SMS to the on-call phone plus email backup, e.g. Twilio and Resend, behind a notifier port; re-page every 15 min until
+    acked), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm
+    on the classifier failure rate'
   accept: a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.
   deps:
   - '4.3'
@@ -916,7 +920,7 @@ tasks:
   accept: tests for each probe in the 4.5 re-review; no new false positives on the existing negative list.
   deps:
   - '4.5'
-  status: running
+  status: done
   branch: m4/4.5c-answerleak-followups
   model: build:sonnet
 - id: '4.6'
@@ -954,6 +958,18 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.4e
+  milestone: M4
+  title: 'Strike consequence (human decision B-12): after 3 strikes in a session, later messages in that session get stricter checks (ambiguous jailbreak and moderation hits block instead of only flagging;
+    the classifier runs on every message) and one trust-team notice goes out through the alert path; no pause, lockout or punishment, and the student sees no change in tone'
+  accept: a session with 3 strikes blocks the next ambiguous-only hit and sends exactly one trust-team notice; a session with 2 strikes behaves as today; the count resets with a new session; no student
+    text in the notice.
+  deps:
+  - '4.4'
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
@@ -963,10 +979,20 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.7-grounding
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.7b
+  milestone: M4
+  title: 'Grounding follow-ups (4.7 reviews): per-request random judge delimiters and full-width/look-alike fence breaking; citations like "[ 3 ]", "[３]" and "source 3"; reversed or worded premise forms ("I got 4 for 7 // 2", "seven // two is four");
+    canonicalNumber over 1e15 without the cast; the concurrent-turn race on groundingAsks (no per-session turn serialisation exists: an atomic cap in the session store, or serialise turns per session); the cast-free reason read in postGuard.ts watched()'
+  accept: each item has a unit test; the reversed-premise pending case passes offline; two concurrent ungrounded turns at groundingAsks 2 open at most one question.
+  deps:
+  - '4.7'
+  status: todo
+  branch: null
+  model: null
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -1448,7 +1474,7 @@ tasks:
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
-  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews)
+  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews); streamed text is shown as provisional until done, and a replacement is visibly marked (4.7 safety review)
   deps:
   - GATE
   - '1.3'

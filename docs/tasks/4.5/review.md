@@ -19,3 +19,12 @@ A safety plan review added 14 revisions before the build. The first build review
 - [LOW] [deferred 4.5c] packages/harness/src/pipeline/generate/numberWords.ts:45 — spelling variants and fraction words ("five sixths", "83%").
 - [LOW] [deferred 4.5b] packages/harness/src/pipeline/generate/answerKey.ts:1 — paraphrase, and confirming a guess without quoting it, need a judge.
 - [LOW] [deferred 9.4] packages/contracts/src/turn.ts:247 — the client clears text, skill events and sources on `replace ''` (9.4's accept line).
+
+## 4.5c (PR #53) — APPROVE
+Reviewer: safety-reviewer (sonnet): the build (2 HIGH, 1 MEDIUM), then re-verification of 3715e17 (APPROVE)
+
+- [HIGH] [fixed] packages/harness/src/pipeline/generate/numbers.ts:266 — "three times it runs" missed (weak marker checked only the adjacent token). There is now a sentence-bounded scan for a run verb; re-verified in both word orders.
+- [HIGH] [fixed] packages/harness/src/pipeline/generate/answerKey.ts:109 — a trailing comment defeated the offered-options rule. Comments are stripped before comparing; re-verified.
+- [MEDIUM] [fixed] packages/harness/src/pipeline/generate/numbers.ts:88 — "83% of students passed" tripped a 0.83 key. Fraction, percent and spoken-decimal forms need an answer context; re-verified.
+
+leakFixtures 38/38, the mutation run still fails all 38, and harness 3,034 tests pass.
