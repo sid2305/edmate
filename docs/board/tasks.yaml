@@ -851,12 +851,22 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   needs_decision:
   - moderation
   risk: risky
   branch: m4/4.4-moderation-jailbreak
   model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
+- id: 4.4b
+  milestone: M4
+  title: 'Pre-guard latency before live models (4.4 handoff): distress, moderation and jailbreak classifiers run as one combined small-model call (or concurrently) so a benign turn fits step 3''s 400 ms
+    budget; rule hits still skip the model'
+  accept: with the scripted gateway at realistic latencies, a benign turn finishes step 3 under 400 ms; every pre-guard eval result unchanged.
+  deps:
+  - '4.4'
+  status: todo
+  branch: null
+  model: null
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
