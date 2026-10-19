@@ -578,6 +578,33 @@ tasks:
   risk: risky
   branch: null
   model: null
+- id: 3.11a
+  milestone: M3
+  title: 'Prompt packs v1.0.0, code half: persona-template schema and loader, risk-paths line, snapshot tests of the real set (distress drops persona, investing disclaimers, locked replies), a no-fixture-text test'
+  accept: 'loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.'
+  deps:
+  - '3.6'
+  status: todo
+  branch: null
+  model: null
+- id: 3.11b
+  milestone: M3
+  title: 'Prompt packs v1.0.0, content half: frame, safety preamble, 6 skill packs, 5 mode packs, 2 persona templates (English only), safety-reviewed, then signed off per row by the human'
+  accept: 'packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.'
+  deps:
+  - 3.11a
+  status: todo
+  branch: null
+  model: null
+- id: 3.11c
+  milestone: M3
+  title: 'Pin pilot agents to English: agent config validation rejects languages other than [en] while the pilot is English-only (from the 3.11 plan review)'
+  accept: 'an agent config with hi is rejected with a clear message; tests.'
+  deps:
+  - '3.11'
+  status: todo
+  branch: null
+  model: null
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
