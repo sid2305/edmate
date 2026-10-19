@@ -49,6 +49,7 @@ export const EntitledSchema: z.ZodType<Entitled> = z.strictObject({
 
 export const ScrubbedSchema: z.ZodType<Scrubbed> = z.strictObject({
   text: z.string().exactOptional(),
+  skillPayload: z.unknown().exactOptional(),
   guards,
 });
 

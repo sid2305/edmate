@@ -21,7 +21,11 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { driveEvents, driveTurn } from '../testing/driveTurn.js';
-import { memorySessionStateStore, memoryTranscriptStore } from '../testing/memoryPorts.js';
+import {
+  memorySessionStateStore,
+  memoryTranscriptStore,
+  memoryTurnLog,
+} from '../testing/memoryPorts.js';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from '../testing/memoryRetrieval.js';
 import { scriptedStreamText } from '../testing/gatewayFixtures.js';
 import {
@@ -30,16 +34,26 @@ import {
 } from '../testing/promptPackFixtures.js';
 import {
   type StepOverrides,
+  TEST_CARING_REPLY,
   testAskDecision,
   testDecideResult,
   stepEnvExtras,
   testDeps,
   testSteps,
 } from '../testing/testSteps.js';
-import { InvalidEventError, StepNotImplementedError } from './errors.js';
+import type { PiiScrubCtx } from '../guardrails/piiScrub.js';
+import { fakeGuard } from '../testing/guardFixtures.js';
+import { prng } from '../testing/prng.js';
+import {
+  HarnessError,
+  InvalidEventError,
+  ScrubFailedError,
+  StepNotImplementedError,
+} from './errors.js';
+import { createScrub } from './steps/scrub.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES } from './spec.js';
-import type { BuiltContext } from './types.js';
+import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
 import { decide } from './steps/decide.js';
 import { defaultSteps } from './steps/index.js';
@@ -314,7 +328,6 @@ describe('defaultSteps (stubs)', () => {
     };
     const anyArg = {} as never;
     const calls: (() => unknown)[] = [
-      () => defaultSteps.scrub(env, anyArg),
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
       () => defaultSteps.escalate(env, anyArg, undefined),
@@ -337,7 +350,7 @@ describe('defaultSteps (stubs)', () => {
     expect(t.portCalls).toEqual(['entitlements.resolve']);
   });
 
-  it('fails closed: past admit and entitle, the stub scrub blocks the turn', async () => {
+  it('fails closed: past admit and entitle and the real scrub, the stub preGuard blocks the turn', async () => {
     const t = testDeps();
     const happy = testSteps();
     const steps = {
@@ -348,7 +361,216 @@ describe('defaultSteps (stubs)', () => {
     };
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    expect(t.portCalls).toEqual([]);
+    // The real buildContext runs alongside the stub preGuard; it only read (and hit an unused store).
+    expect(t.portCalls).toEqual(['profiles.get']);
+  });
+});
+
+describe('runTurn with the real scrub (4.2)', () => {
+  // Fake numbers from the eval cases; never in a test name.
+  const PHONE = '90000 11111';
+  const piiInput = { ...demoTurnInput, text: `save my number ${PHONE} and text me` };
+  const scrubbedText = 'save my number [phone] and text me';
+
+  it('threads the scrubbed text to every later step, the model and CommitRecord.input', async () => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: defaultSteps.scrub });
+    const { events, result } = await driveTurn(runTurn(piiInput, { deps: t.deps, steps }), t.clock);
+    const seen = t.gateway.requests.map((r) => JSON.stringify(r));
+    expect(events.at(-1)?.type).toBe('done');
+    for (const s of ['preGuard', 'route', 'buildContext', 'decide', 'generate', 'commit']) {
+      const entry = steps.log.find((l) => l.step === s && l.phase === 'start');
+      expect(entry?.text, s).toBe(scrubbedText);
+    }
+    expect(steps.log.find((l) => l.step === 'scrub')?.text).toBe(piiInput.text);
+    expect(steps.commits[0]?.input?.text).toBe(scrubbedText);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain(scrubbedText);
+    expect(seen.join('')).not.toContain(PHONE);
+    expect(result.trace?.guards.slice(0, 2)).toEqual([
+      { name: 'piiScrub', ok: false, action: 'rewrite' },
+      { name: 'piiScrub', ok: true },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(PHONE);
+  });
+
+  describe('the distress keyword check on the raw text (fix round, safety review)', () => {
+    const MARKER = 'RAWDISTRESSMARKER';
+    const raw = { ...demoTurnInput, text: `I feel ${MARKER} today` };
+    // A scrub that removes the words the keyword check needs (what over-redaction would do).
+    const wipe = (env: StepEnv) =>
+      Promise.resolve({ text: (env.input.text ?? '').replace(MARKER, '[name]'), guards: [] });
+    const deps = (impl: (text: string) => boolean) => {
+      const seen: string[] = [];
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => {
+            seen.push(text);
+            return impl(text);
+          },
+        },
+      });
+      return { t, seen };
+    };
+
+    it('runs before the scrub; a hit escalates even when the scrub removed the words', async () => {
+      const { t, seen } = deps((text) => text.includes(MARKER));
+      const steps = testSteps({ scrub: wipe });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(seen[0]).toBe(raw.text);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: TEST_CARING_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toHaveLength(1);
+      expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', intent: 'distress' });
+      // Only the boolean is kept: the raw text reaches no step after the scrub, no alert or trace.
+      const after = steps.log.filter((l) => !['admit', 'entitle', 'scrub'].includes(l.step));
+      expect(after.map((l) => l.text)).not.toContain(raw.text);
+      const kept = JSON.stringify([result, steps.commits, t.alerts.raised, t.traces.records]);
+      expect(kept).not.toContain(MARKER);
+    });
+
+    it('no hit on the raw text → the turn replies as usual', async () => {
+      const { t, seen } = deps(() => false);
+      const steps = testSteps({ scrub: wipe });
+      const { events } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)?.type).toBe('done');
+      expect(t.alerts.raised).toEqual([]);
+      expect(seen).toEqual([raw.text]);
+    });
+
+    it('a throwing check is reported without the text and the turn goes on', async () => {
+      const { t } = deps((text) => {
+        throw new Error(`cannot check ${text}`);
+      });
+      const steps = testSteps({ scrub: wipe });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)?.type).toBe('done');
+      expect(result.background.map((b) => String(b.error))).toEqual([
+        'Error: distressCheck failed on the unscrubbed text',
+      ]);
+    });
+  });
+
+  it('scrubs the skill payload before any later step sees it', async () => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: defaultSteps.scrub });
+    let payloadSeen: unknown;
+    const input = { ...demoTurnInput, skillPayload: { note: `call ${PHONE}` } };
+    const route = steps.route.run;
+    steps.route.run = (env, e) => {
+      payloadSeen = env.input.skillPayload;
+      return route(env, e);
+    };
+    await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+    expect(payloadSeen).toEqual({ note: 'call [phone]' });
+    expect(JSON.stringify(steps.commits)).not.toContain(PHONE);
+  });
+
+  it('a scrub that drops the payload fails closed', async () => {
+    const t = testDeps();
+    const steps = testSteps({
+      scrub: (env) => Promise.resolve({ text: env.input.text ?? '', guards: [] }),
+    });
+    const input = { ...demoTurnInput, skillPayload: { a: 1 } };
+    const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(result.background.map((b) => (b.error as Error).cause)).toEqual([
+      { guardCause: 'step_invalid_result' },
+    ]);
+  });
+
+  it.each([
+    [
+      'the step throws a ScrubFailedError',
+      () => Promise.reject(new ScrubFailedError({ guardCause: 'error', errorName: 'TypeError' })),
+      { guardCause: 'error', errorName: 'TypeError' },
+    ],
+    [
+      'the step throws a plain Error',
+      () => Promise.reject(new RangeError(`bad ${PHONE}`)),
+      { guardCause: 'step_error', errorName: 'RangeError' },
+    ],
+    [
+      'the step throws a non-Error',
+      () => Promise.reject(`raw ${PHONE}`),
+      { guardCause: 'step_error', errorName: 'string' },
+    ],
+    [
+      'the step throws an Error with a non-string name',
+      () => Promise.reject(Object.assign(new Error(PHONE), { name: 7 })),
+      { guardCause: 'step_error', errorName: 'Error' },
+    ],
+    [
+      'the step returns a bad result',
+      () => Promise.resolve({ text: 1 } as never),
+      { guardCause: 'step_invalid_result' },
+    ],
+    [
+      'the step times out',
+      () => new Promise<never>(() => undefined),
+      { guardCause: 'step_timeout' },
+    ],
+  ] as const)('a failed scrub is reported on background: %s', async (_label, scrub, cause) => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: scrub as never });
+    const { events, result } = await driveTurn(runTurn(piiInput, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(result.background).toHaveLength(1);
+    const bg = result.background[0];
+    expect(bg?.task).toBe('runner');
+    expect(bg?.error).toBeInstanceOf(ScrubFailedError);
+    expect((bg?.error as Error).cause).toEqual(cause);
+    expect(steps.commits[0]?.input).toBeNull();
+  });
+
+  it('a scrub failure reaches the background log as a HarnessError: name and fixed message only', async () => {
+    const log = memoryTurnLog();
+    const t = testDeps({ overrides: { log } });
+    const guard = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', (text) => {
+      throw new TypeError(`broke on ${text}`);
+    });
+    const steps = testSteps({ scrub: createScrub([guard]) });
+    await driveTurn(runTurn(piiInput, { deps: t.deps, steps }), t.clock);
+    expect(new ScrubFailedError({ guardCause: 'error' })).toBeInstanceOf(HarnessError);
+    expect(log.entries).toHaveLength(1);
+    expect(log.entries[0]).toMatchObject({
+      task: 'runner',
+      errorName: 'ScrubFailedError',
+      errorMessage: 'scrub failed closed (error)',
+    });
+    expect(JSON.stringify(log.entries)).not.toContain(PHONE);
+  });
+
+  it('property: a guard error that quotes the input never reaches background, trace or commit', async () => {
+    const r = prng(4_2);
+    const phones = ['90000 11111', '80000 33333', '+91 90000 66666', '९०००० १२३४५'];
+    const errors = [Error, TypeError, RangeError, SyntaxError];
+    for (let i = 0; i < 40; i++) {
+      const literal = r.pick(phones);
+      const Ctor = r.pick(errors);
+      const guard = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', (text) => {
+        throw new Ctor(`guard broke on: ${text} (${literal})`);
+      });
+      const t = testDeps();
+      const steps = testSteps({ scrub: createScrub([guard]) });
+      const input = { ...demoTurnInput, text: `my number is ${literal}` };
+      const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)).toEqual({ type: 'error', code: 'guard_blocked', retryable: true });
+      const bg = result.background.map((b) => {
+        const e = b.error as Error;
+        return [b.task, String(e), e.message, e.stack, JSON.stringify({ ...e, cause: e.cause })];
+      });
+      expect(bg).toHaveLength(1);
+      expect((result.background[0]?.error as Error).cause).toEqual({
+        guardCause: 'error',
+        errorName: Ctor.name,
+      });
+      const all = JSON.stringify([bg, result.trace, steps.commits, t.traces.records]);
+      expect(all).not.toContain(literal);
+    }
   });
 });
 

@@ -109,6 +109,7 @@ function happySteps(commits: CommitRecord[]): Steps {
     scrub: (env) =>
       Promise.resolve({
         ...(env.input.text === undefined ? {} : { text: env.input.text }),
+        ...(env.input.skillPayload === undefined ? {} : { skillPayload: env.input.skillPayload }),
         guards: [{ name: 'piiScrub', ok: true }],
       }),
     preGuard: () =>

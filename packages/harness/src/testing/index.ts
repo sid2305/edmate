@@ -30,6 +30,7 @@ export {
   OUT_OF_SCOPE_TEXT,
   retrievalWorld,
 } from './memoryRetrieval.js';
+export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,

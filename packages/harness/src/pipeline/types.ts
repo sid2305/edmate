@@ -156,8 +156,9 @@ export interface PipelineDeps {
    */
   promptPacks: PromptPackLibrary;
   /**
-   * Last-line distress keyword check on the scrubbed text, used only when `route.onFailure`
-   * itself fails ("distress keywords still escalate"). True escalates the turn.
+   * Last-line distress keyword check, used only when `route.onFailure` itself fails ("distress
+   * keywords still escalate"). True escalates the turn. Receives the raw, unscrubbed text on
+   * every turn: implementations must never log, store or send their input.
    */
   distressCheck(text: string, lang: Lang): boolean;
 }
@@ -207,6 +208,8 @@ export interface Entitled {
 export interface Scrubbed {
   /** The input text with PII replaced; absent when the input had no text. */
   text?: string;
+  /** The skill payload with every string (and PII-shaped number) scrubbed; absent when none. */
+  skillPayload?: unknown;
   guards: GuardTrace[];
 }
 
