@@ -165,3 +165,23 @@ Out of bounds:
 - Q1-Q6 above, once the lead confirms (Q6 has the biggest scope consequence).
 - Distress keywords and the India helpline fixture stay harness-internal/test-only until 3.10.
 - `apps/worker/src/alerts/`'s `AckStore` is real but unreachable by any UI yet; delivery notification is a log stand-in pending a vendor decision (same gap as the cost alarm).
+
+## Lead answers and plan revisions from the safety plan review (19 Oct 2026; these override the Design section)
+
+Context: the pilot is English-only with a Hindi/Hinglish safety net (human decision, 18 Oct 2026). 4.2's fix round adds a raw-text distress keyword boolean before scrub, because the name heuristic can redact distress words. 4.3 owns the real keyword matcher behind that seam; reuse it, don't duplicate it.
+
+1. **Every language table, always (CRITICAL).** `hasDistressKeyword` checks the English, romanised-Hindi and Devanagari tables whatever `lang` is. Test all 39 cases with `lang: 'en'`.
+2. **Normalise before matching (HIGH).** Apply NFKC, strip `\p{Cf}` and ZWJ/ZWNJ, casefold, map curly apostrophes, collapse whitespace and punctuation between single letters ("k i l l", "k.i.l.l"), squash repeated letters, and map common leetspeak (0/1/3/@/$). Never add the obfuscated eval strings themselves to the table.
+3. **Hard and soft lists (HIGH).** A hard keyword escalates immediately. A soft keyword asks the classifier, and a soft hit plus a classifier throw, timeout or parse failure escalates.
+4. **Alerts are never lost (HIGH).** `queuedAlertSink.raise` enqueues `escalate_check` together with or before `alert.raise`. Alert jobs get unlimited (or very high) attempts, with backoff capped at 30–60 s. `escalate_check` re-notifies on_call and reschedules every 15 minutes until acked. The int test covers a notifier that fails more than 5 times.
+5. **The eval can't be satisfied by the classifier script (HIGH).** Run all 33 distress cases twice, once with the classifier scripted `false` and once with it throwing or timing out, and require 33/33 escalations both times. Near-misses: assert no hard-keyword hit, and report them as a separate ≥ 99% score.
+6. **Logs carry no excerpt (HIGH).** The log sink writes id, kind, level, the student, teacher and session ids, audience and createdAt, and never `excerptRedacted`. The guard's excerpt is ≤ 160 characters, taken from scrubbed text only.
+7. **Caring reply (MEDIUM).** Start from the `LAST_RESORT_DISTRESS_REPLY` wording and add the pack's helplines. It says it is an AI, doesn't promise to stay, keeps "someone you trust", and contains no ids, "alert" or "trust team". English only (pilot decision).
+8. **Multi-turn (MEDIUM).** The classifier also sees the last 2–3 scrubbed student turns. Turn 1 of the midtask cases gets `must_escalate: false`. A session distress flag (retract-joke check-in) is follow-up board task 4.3b.
+9. **Over-escalation (MEDIUM).** Use phrase-level patterns with `\p{L}\p{M}`-aware lookarounds under `/u`, and a negative test list ("kill -9", "skill", "diet", "die roll", "loop khatam", "laptop hangs", "cut the string"). Keep a held-out paraphrase set so the table isn't fitted to the 33 seeds.
+10. **Eval schema (MEDIUM).** The generic runner fails on any check it doesn't implement, so `must_escalate` can't pass silently. distressEscalate.test.ts also runs each case's `matches`/`must_not_contain` against the reply.
+11. **preGuard (LOW).** Map a chain `block` to `{ result: 'block' }` and throw only on `failed`, so 4.4's moderation blocks aren't hidden as framework failures.
+12. **Idempotency (LOW).** Correct the plan's claim; test "at most one pending escalate_check".
+13. **Scrub-failure distress reply (LOW).** Follow-up: use `fallbackReplies.distress` with pack helplines (board task 4.3b).
+- Reviewers: safety-reviewer (opus, required), typescript-reviewer (sonnet), silent-failure-hunter (sonnet). risk: high entries.
+- Build: tdd-guide on opus. If 4.2 hasn't merged when you start, branch from main and rebase onto it once it lands. The raw-text keyword seam is shared, so coordinate through it.
