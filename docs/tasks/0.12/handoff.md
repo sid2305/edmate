@@ -68,24 +68,14 @@ python3 .githooks/secret-scan.py --all
 
 ## Decisions
 
-### 18 Oct 2026 · 0.12 explicit CI timeouts for heavy tests · decided by build-error-resolver · risk: low
+### 18 Oct 2026 · 0.12 Explicit CI timeouts for heavy tests · decided by build-error-resolver · risk: low
+Decided: the three CI-flaky tests get named per-test timeouts (30 s for the 2,000-iteration access property test, 20 s for the two next-auth cold-import tests); Vitest's global timeout, iteration counts and per-test fresh imports stay as they were.
+Why: CI runners took 5.1–5.8 s against the 5 s default, a load problem, not a logic bug; a global bump would hide real hangs.
+Alternatives: raise the global testTimeout; cut iterations; share one import in beforeAll (breaks the per-test fresh module the auth tests rely on).
+Reversible: yes.
 
-Decided: Give the three CI-flaky tests named, explicit `it(..., timeoutMs)` timeouts (30 s for the
-2,000-iteration property test, 20 s for the two next-auth cold-import tests) instead of raising
-vitest's global `testTimeout` or trimming iteration counts/import work.
-
-Why: The task evidence showed each test taking 5.1-5.8 s against a 5000 ms default timeout — a CI-load
-problem, not a logic bug. A global timeout bump would mask future genuine hangs across the whole
-suite; per-test timeouts fix exactly the tests with evidence of being slow, with a one-line comment
-explaining why, and without touching `.github/**` (a risky path) or lowering test fidelity.
-
-Alternatives: (a) raise vitest's global `testTimeout` — rejected, hides real hangs elsewhere; (b) cut
-`ITERATIONS` or `windowMs`-style loop counts — rejected, the task said not to and it would reduce
-property-test coverage; (c) move the `route-coverage.test.ts` and `index.test.ts` imports into a
-single `beforeAll` — considered allowed by the task, but `index.test.ts` relies on a fresh module
-instance per test (different `AUTH_*`/`DATABASE_URL` env, and `getRuntime()` memoizes at module scope),
-so sharing the import would either break that isolation or require a larger refactor; a per-test
-timeout is the smaller, behavior-preserving diff.
-
-Reversible: yes — revert the three timeout additions (or replace with a different constant) to go
-back to vitest's default 5000 ms.
+### 18 Oct 2026 · 0.12 Test-only edits in the access and auth risky paths · decided by team lead · risk: high
+Decided: 0.12 touches `packages/harness/src/access/property.test.ts` and `apps/web/src/auth/*.test.ts` only to add timeouts; no assertion, input or import changes, checked by security-reviewer.
+Why: these paths are risky (access filter, sign-in), so even a test-only change gets the required reviewer.
+Alternatives: none.
+Reversible: yes.

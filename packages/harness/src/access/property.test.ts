@@ -20,7 +20,7 @@ import { testDeps } from '../testing/testSteps.js';
 /** Change the seed to explore; a failure prints it so the run can be replayed. */
 const SEED = 20261018;
 const ITERATIONS = 2_000;
-/** 2,000 hostile-store turns run 5.1-5.8s locally; CI machines are slower, so give headroom. */
+/** 2,000 hostile-store turns took 5.1-5.8s on CI runners (well under 1s locally); give headroom. */
 const TEST_TIMEOUT_MS = 30_000;
 /** The harness lib has no DOM or Node types; vitest prints console output. */
 const log = (s: string): void =>
