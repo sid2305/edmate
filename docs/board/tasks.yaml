@@ -585,7 +585,7 @@ tasks:
   accept: loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.
   deps:
   - '3.6'
-  status: running
+  status: done
   branch: m3/3.11a-prompt-pack-code
   model: build:sonnet
 - id: 3.11b
@@ -707,7 +707,8 @@ tasks:
   milestone: M7
   title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and
     parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead
-    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
+    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy; the merge gate maps lettered sub-tasks (m4/4.0c-…) to their own docs/tasks/<id>/ (today it drops the
+    letter and reads the parent task''s docs, which 4.0c, 4.0d and 3.11a hit)'
   accept: one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead
     skill states the new rules.
   deps:
@@ -813,8 +814,9 @@ tasks:
   model: null
 - id: 4.3c
   milestone: M7
-  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
-  accept: 'a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.'
+  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page
+    forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
+  accept: a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.
   deps:
   - '4.3'
   status: todo

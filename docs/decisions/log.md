@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.11a Persona-template file layout: no front-matter-name/file-name match check · decided by tdd-guide · risk: low
+Decided: `readPersonaTemplateDir` validates `<id>@<semver>.yaml` (id is a free file-naming slug) and the persona's YAML body, but never checks the id against the persona's own `name` field, unlike `promptPacks.ts`'s pack-name/file-name check.
+Why: the persona's `name` is a role name shown to the model ("Interviewer"), not an identifier matching the file (`job-interview`); the two are different things by design (task scope: "Role names only"), so there is nothing correct to compare them against.
+Alternatives: add a separate `id`-style metadata field matching the filename (contracts' `Persona.id` already exists for this and is left as-is, not re-purposed as a file-name key); require the filename's slug to kebab-case-match `name` (would force role names like "job-interview" instead of "Interviewer").
+Reversible: yes — a match check can be added later without changing the schema shape.
+
+---
+
+### 19 Oct 2026 · 3.11a `packages/content/src/personaTemplates.ts` added to the safety-reviewer risk-paths group · decided by tdd-guide, per the 3.11 plan's lead answers · risk: high
+Decided: `.claude/skills/merge-gate/risk-paths.txt` now lists `packages/content/src/personaTemplates.ts` under the same safety-reviewer block as `packages/content/src/promptPacks.ts` (3.6 precedent), so this PR and every future edit to the persona-template loader needs safety-reviewer sign-off.
+Why: build plan rule 6 (risky paths need a named reviewer); the loader governs what shape of persona content can ever reach the composer's `persona` section, which is safety-reviewed content behaviour.
+Alternatives: leave it out of risk-paths.txt and rely on `packages/content/src/promptPacks.ts`'s existing coverage of the directory it reads from (doesn't cover this new file).
+Reversible: yes (a later task could narrow or remove the line), but not without a fresh safety-reviewer judgment.
+
+---
+
+### 19 Oct 2026 · 3.11a No real pack or persona prose in this PR · decided by tdd-guide, per the 3.11 plan's split · risk: low
+Decided: this PR ships only the loader, schema, fixtures (under `packages/content/test/fixtures/`) and tests; `content/prompt-packs/` and `content/skills/` stay empty until 3.11b, and `noFixtureProse.test.ts` passes trivially until then.
+Why: the task brief and the 3.11 plan's "Lead answers and plan revisions" section split 3.11 into code (3.11a, this PR) and content (3.11b, `pedagogy-author` on opus, safety-reviewer first, then human sign-off per row).
+Alternatives: none — this was given, not decided.
+Reversible: n/a.
+
+---
+
 ### 19 Oct 2026 · 3.16b A post-migrate step runs lock-heavy statements as their own autocommit transactions after migrate() commits · decided by tdd-guide · risk: high
 Decided: `migrateDatabase()` calls drizzle's `migrate()` to apply pending migration files (unchanged), then calls a new `runPostMigrateSteps()` against the same single-connection pool, running each of 0009's three `VALIDATE CONSTRAINT`s (skipped if already valid) and its `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as separate, non-transactional statements. 0009's SQL file itself only adds the FK and two CHECKs as `NOT VALID` and no longer runs `CREATE INDEX`.
 Why: drizzle-orm 0.45 runs every pending migration file in one transaction (established in the 3.16 review and decision log), so neither a `VALIDATE CONSTRAINT` nor a `CREATE INDEX CONCURRENTLY` written into any migration file — this one or a new one — ever escapes that transaction's ACCESS EXCLUSIVE lock, and `CREATE INDEX CONCURRENTLY` is refused by Postgres inside a transaction block at all. A step that runs after the migrator's transaction has committed is the only way to get the lighter `SHARE UPDATE EXCLUSIVE` lock (validate) or no blocking lock at all (concurrent index) before `sessions` grows past pilot scale.
