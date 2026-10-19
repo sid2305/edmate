@@ -62,5 +62,11 @@ export const MESSAGE_WINDOW_MS = 86_400_000;
 export const ALERT_RETRY_START_MS = 250;
 /** Backoff ceiling; there is no attempt limit (durable delivery is the 4.3 alert worker). */
 export const ALERT_RETRY_MAX_MS = 30_000;
+/**
+ * Opening the TeacherQuestion for an `ask_teacher` turn (findSimilar + open), before `done`
+ * (lead answer Q3). Past this budget the turn goes on without the event; commit (3.17) opens it.
+ */
+export const TEACHER_QUESTION_TIMEOUT_MS = 500;
+
 /** One `AlertSink.raise` attempt that hangs this long counts as failed and is retried. */
 export const ALERT_ATTEMPT_TIMEOUT_MS = 5_000;

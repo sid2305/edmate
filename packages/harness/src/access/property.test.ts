@@ -15,7 +15,7 @@ import {
   twoTeacherWorld,
 } from '../testing/memoryAccess.js';
 import { type Prng, prng } from '../testing/prng.js';
-import { testDeps } from '../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../testing/testSteps.js';
 
 /** Change the seed to explore; a failure prints it so the run can be replayed. */
 const SEED = 20261018;
@@ -174,6 +174,7 @@ describe('entitle property: fail closed or return only what the entitlement owns
             deps: t.deps,
             cancel: cancelSource().token,
             turnId: `turn_${i}`,
+            ...stepEnvExtras(),
           });
           checkInvariant(out, input);
           outcome = `${source}:ok`;

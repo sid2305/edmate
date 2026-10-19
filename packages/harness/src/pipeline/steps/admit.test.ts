@@ -2,6 +2,7 @@ import type { TurnInput } from '@edmate/contracts';
 import { demoAttachment, demoTurnInput, turnInputHint } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { accessTurns, type AccessTurnOutcome } from '../../testing/accessTurn.js';
+import { stepEnvExtras } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
 import { TurnRejection } from '../errors.js';
 import { RATE_LIMIT_WINDOW_MS } from '../spec.js';
@@ -188,6 +189,7 @@ describe('admit: direct call', () => {
       deps: a.t.deps,
       cancel: cancelSource().token,
       turnId: 't',
+      ...stepEnvExtras(),
     };
     await expect(admit(env)).rejects.toBeInstanceOf(TurnRejection);
     expect(a.t.portCalls).toEqual([]);

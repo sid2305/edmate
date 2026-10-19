@@ -30,6 +30,10 @@ export {
   memoryAlertSink,
   type MemorySessionStateStore,
   memorySessionStateStore,
+  type MemoryTeacherQuestionStore,
+  memoryTeacherQuestionStore,
+  type MemoryTurnLog,
+  memoryTurnLog,
   type MemoryTraceSink,
   memoryTraceSink,
   type MemoryTranscriptStore,
@@ -46,6 +50,7 @@ export {
   TEST_CARING_REPLY,
   TEST_DISTRESS_REPLY,
   TEST_SAFE_REPLY,
+  stepEnvExtras,
   testAskDecision,
   testDecideResult,
   type TestDeps,
@@ -62,6 +67,8 @@ export {
   fixturePromptPackSet,
 } from './promptPackFixtures.js';
 export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualClock.js';
+export { type MemoryToolRegistry, memoryToolRegistry, testTool } from './memoryToolRegistry.js';
+export { type SpyGateway, spyGateway } from './spyGateway.js';
 export {
   scriptedEmbedPair,
   scriptedObjectIntent,

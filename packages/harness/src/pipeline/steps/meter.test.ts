@@ -6,7 +6,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { memoryUsageMeter } from '../../testing/memoryPorts.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import type { PipelineDeps, StepEnv } from '../types.js';
 import { meter } from './meter.js';
 
@@ -16,6 +16,7 @@ function env(deps: Partial<PipelineDeps>): StepEnv {
     deps: { ...testDeps().deps, ...deps },
     cancel: { cancelled: false, onCancel: () => undefined },
     turnId: 'turn_meter',
+    ...stepEnvExtras(),
   };
 }
 

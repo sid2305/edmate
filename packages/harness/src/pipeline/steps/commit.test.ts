@@ -15,7 +15,7 @@ import {
   memoryTraceSink,
   memoryTranscriptStore,
 } from '../../testing/memoryPorts.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import type { CommitRecord, PipelineDeps, StepEnv } from '../types.js';
 import { commit } from './commit.js';
 
@@ -37,6 +37,7 @@ function world(o: { transcriptsFail?: boolean; stateFail?: boolean } = {}) {
     deps,
     cancel: { cancelled: false, onCancel: () => undefined },
     turnId: 'turn_commit',
+    ...stepEnvExtras(),
   };
   return { env, transcripts, sessionState, traces };
 }

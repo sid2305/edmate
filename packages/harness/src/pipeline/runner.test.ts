@@ -23,8 +23,6 @@ import { describe, expect, it } from 'vitest';
 import { driveEvents, driveTurn } from '../testing/driveTurn.js';
 import { memorySessionStateStore, memoryTranscriptStore } from '../testing/memoryPorts.js';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from '../testing/memoryRetrieval.js';
-import { buildModelRequest } from '../pedagogy/modelRequest.js';
-import { resolvePromptPackSet } from '../pedagogy/promptPacks.js';
 import { scriptedStreamText } from '../testing/gatewayFixtures.js';
 import {
   FIXTURE_PROMPT_PACK_VERSION,
@@ -34,6 +32,7 @@ import {
   type StepOverrides,
   testAskDecision,
   testDecideResult,
+  stepEnvExtras,
   testDeps,
   testSteps,
 } from '../testing/testSteps.js';
@@ -209,7 +208,7 @@ describe('runTurn events from steps', () => {
         calls++;
         if (calls === 1) emit({ type: 'token', text: 5 } as unknown as TurnEvent);
         else emit({ type: 'token', text: 'ok' });
-        return Promise.resolve({ draft: 'ok', usage: [] });
+        return Promise.resolve({ draft: 'ok' });
       },
     });
     const { events, result } = await driveTurn(
@@ -234,7 +233,7 @@ describe('runTurn events from steps', () => {
         } catch (e) {
           thrown = e;
         }
-        return Promise.resolve({ draft: 'x', usage: [] });
+        return Promise.resolve({ draft: 'x' });
       },
     });
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
@@ -250,11 +249,11 @@ describe('runTurn events from steps', () => {
         if (x.attempt === 'primary') {
           late = () => emit({ type: 'token', text: 'late' });
           await env.deps.clock.sleep(20_000);
-          return { draft: 'late', usage: [] };
+          return { draft: 'late' };
         }
         emit({ type: 'token', text: 'retry' });
         late?.();
-        return { draft: 'retry', usage: [] };
+        return { draft: 'retry' };
       },
     });
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
@@ -304,13 +303,14 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; meter, commit: 3.8)', async () => {
+  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
       deps: t.deps,
       cancel: { cancelled: false, onCancel: () => undefined },
       turnId: 'turn_x',
+      ...stepEnvExtras(),
     };
     const anyArg = {} as never;
     const calls: (() => unknown)[] = [
@@ -318,7 +318,6 @@ describe('defaultSteps (stubs)', () => {
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
       () => defaultSteps.escalate(env, anyArg, undefined),
-      () => defaultSteps.generate(env, anyArg, () => undefined),
       () => defaultSteps.postGuard(env, anyArg),
     ];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
@@ -527,20 +526,8 @@ describe('runTurn with the real decide (3.6)', () => {
         ...o.built,
       }),
       decide: { ...decide, ...o.decide },
-      // A generate that builds its request the way 3.7 is expected to.
-      async generate(env, { ctx, decision }, emit) {
-        const set = resolvePromptPackSet(env.deps.promptPacks, ctx.agent.promptPackVersion);
-        let draft = '';
-        for await (const c of env.deps.gateway.stream(
-          buildModelRequest({ ctx, decision, input: env.input, set }),
-        )) {
-          if (c.type === 'text') {
-            draft += c.text;
-            emit({ type: 'token', text: c.text });
-          }
-        }
-        return { draft, usage: [] };
-      },
+      // The real generate (3.7).
+      generate: defaultSteps.generate,
     });
     return { t, steps, requests };
   }

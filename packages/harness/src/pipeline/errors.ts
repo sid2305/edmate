@@ -43,3 +43,15 @@ export class InvalidEventError extends Error {
     super(`invalid turn event from a step: ${eventType}`);
   }
 }
+
+/**
+ * The turn was cancelled (the client went away, or the caller's `RunTurnOptions.cancel` fired).
+ * Internal to generate and the runner: never retried, never sent as its own error code.
+ */
+export class TurnCancelled extends Error {
+  override readonly name = 'TurnCancelled';
+
+  constructor() {
+    super('turn cancelled');
+  }
+}
