@@ -643,7 +643,7 @@ tasks:
   accept: Daily message limits survive a restart and hold across web processes; tests prove it against real Postgres or Redis.
   deps:
   - '3.2'
-  status: running
+  status: review
   branch: m7/3.14-durable-counters
   model: plan:sonnet build:sonnet
 - id: '3.15'
@@ -940,9 +940,9 @@ tasks:
   accept: tests for each item; 0 locked tokens streamed in the fixture runs; the 34 locked cases still pass.
   deps:
   - '4.6'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.6b-lockedleak-followups
+  model: build:sonnet
 - id: 4.4d
   milestone: M4
   title: 'Jailbreak rule follow-ups (4.4 third safety review): exempt "rules of/for <noun>" and app or "my" mode switches ("dev mode on in my app"); add rules for "नियमों को छोड़ो", "skip the instructions
