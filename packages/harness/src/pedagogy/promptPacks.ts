@@ -54,6 +54,8 @@ export const FRAME_SECTIONS = Object.freeze({
   'generic-disclaimer': NONE,
   'no-helplines': NONE,
   decision: slots(['move', 'rung', 'move_instruction', 'skills']),
+  /** Distress: no move name and no skills list, only the caring instruction. */
+  'decision-distress': slots(['move_instruction']),
   'do-not-say': slots(['do_not_say']),
   tools: slots(['tools']),
   material: slots(['sources']),

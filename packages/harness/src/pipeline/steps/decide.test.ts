@@ -153,6 +153,8 @@ describe('decide.fallback', () => {
     const p = fallbackPolicy(c, help);
     expect(DecideResultSchema.parse(r)).toEqual(r);
     expect(r.decision).toMatchObject({ move: 'ask', mustNotReveal: ['5/6'], tools: [] });
+    // postGuard still gets the key; the fallback prompt does not (closed modes carry no key).
+    expect(r.decision.systemPrompt).not.toContain('5/6');
     expect(r.reason).toBe('fallback');
     expect(r.next).toEqual({ rung: p.next.helpRung, help: p.next.help });
     expect(r.decision.systemPrompt).toContain(fixturePromptPackSet.packs.fallback.body);

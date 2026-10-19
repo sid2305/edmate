@@ -63,6 +63,23 @@ describe('readPromptPackLibrary', () => {
     expect(validatePromptPackDir(dir)).toEqual({ ok: true, issues: [] });
   });
 
+  it('manifest and front-matter names never reach a file path (traversal stays a lookup miss)', () => {
+    // A real, valid pack file just outside the pack directory: a path built from the manifest
+    // name would load it.
+    const parent = mkdtempSync(join(tmpdir(), 'edmate-packs-parent-'));
+    temps.push(parent);
+    const dir = join(parent, 'packs');
+    cpSync(VALID, dir, { recursive: true });
+    cpSync(join(dir, 'coach@0.1.0.md'), join(parent, 'evil@0.1.0.md'));
+    editFile(dir, SET, (t) => t.replace('  coach: 0.1.0', '  ../evil: 0.1.0\n  coach: 0.1.0'));
+    editFile(dir, 'explain@0.1.0.md', (t) => t.replace('name: explain', 'name: ../evil'));
+    const r = validatePromptPackDir(dir);
+    expect(r.issues).toEqual([
+      'explain@0.1.0.md: the file name says explain@0.1.0 but the front matter says ../evil@0.1.0',
+      'set@0.1.0-fixture.yaml: pack ../evil@0.1.0 not found (no ../evil@0.1.0.md)',
+    ]);
+  });
+
   it('loads two sets side by side', () => {
     const dir = broken((d) => {
       cpSync(join(d, SET), join(d, 'set@0.2.0.yaml'));

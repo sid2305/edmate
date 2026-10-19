@@ -20,9 +20,13 @@ export interface ModelRequestInput {
 }
 
 /**
- * Keyed by the agent, package, prompt-pack set and style card versions (ADR-0003 point 6: caches
- * are keyed by package version), never by student, so it is shared across students safely only
- * when everything that shapes the prompt prefix matches.
+ * A provider prompt-caching hint for the stable prefix of the system prompt (safety → locale),
+ * keyed by the agent, package, prompt-pack set and style card versions (ADR-0003 point 6: caches
+ * are keyed by package version), never by student.
+ *
+ * It must NEVER be used as an app-level response or prompt cache key: it does not cover the
+ * help state, the answer key, retrieved material, the learner summary or the input, so two
+ * different students' turns share it.
  */
 export function promptCacheKey(ctx: TurnContext): string {
   return [

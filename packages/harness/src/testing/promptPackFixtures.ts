@@ -43,6 +43,10 @@ Helplines:
 [[DECISION]] Move {{move}}, rung {{rung}}. Skills in this package: {{skills}}.
 {{move_instruction}}
 
+## decision-distress
+[[DECISION-DISTRESS]] This is not a lesson turn.
+{{move_instruction}}
+
 ## do-not-say
 [[DO-NOT-SAY]] Never state or confirm any of these, in any form:
 {{do_not_say}}

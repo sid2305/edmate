@@ -23,7 +23,7 @@ import {
   replyLanguage,
 } from './compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from './policy.js';
-import { parsePromptPackSet } from './promptPacks.js';
+import { parsePromptPackSet, renderTemplate } from './promptPacks.js';
 import { ctxWith, type CtxOverrides, deepFreeze, helpWith, turnOf } from './testing.js';
 
 /** A deep copy of plain JSON data (the harness has no DOM or Node globals). */
@@ -141,7 +141,7 @@ describe('composition order', () => {
     const p = policy({ skill: 'mock_interview', reason: 'mock_interview' });
     expect(prompt(ctx(), p)).not.toContain('[[PERSONA]]');
     expect(prompt(ctx({ persona: demoPersona }), p)).toContain(
-      '[[PERSONA]] Play Interviewer. Style: Formal, one question at a time. Never: give feedback mid-interview. End after 5 questions.',
+      `[[PERSONA]] Play Interviewer. Style: ${DATA_OPEN}\nFormal, one question at a time.\n${DATA_CLOSE} Never: ${DATA_OPEN}\ngive feedback mid-interview\n${DATA_CLOSE}. End after 5 questions.`,
     );
   });
 
@@ -445,6 +445,24 @@ describe('distress wording', () => {
     expect(distress).not.toContain('[[DISCLAIMER]]');
   });
 
+  it('distress has its own decision line: no move name, no skills list', () => {
+    const c = ctx({ intent: 'distress' });
+    for (const p of [
+      decidePolicy({ ctx: c, turn: turnOf(), help: helpWith() }),
+      fallbackPolicy(c),
+    ]) {
+      const text = prompt(c, p);
+      expect(text).toContain(
+        renderTemplate(set.frame['decision-distress'], {
+          move_instruction: set.frame['move-distress'],
+        }),
+      );
+      expect(text).not.toContain('[[DECISION]]');
+      expect(text).not.toMatch(/redirect/i);
+      expect(text).not.toContain(c.entitlement.skills.join(', '));
+    }
+  });
+
   it('distress without helplines uses the no-helplines text', () => {
     const c = ctx({ intent: 'distress', locale: localePackMinimal });
     expect(prompt(c, fallbackPolicy(c))).toContain(set.frame['no-helplines']);
@@ -464,6 +482,26 @@ describe('move instructions', () => {
     for (const move of ['ask', 'worked_example', 'explain', 'solution', 'check'] as const) {
       expect(prompt(ctx(), policy({ move }))).toContain(set.frame[`move-${move}`]);
     }
+  });
+
+  it('closed modes never carry the answer key (no do-not-say list)', () => {
+    const KEY = 'ANSWER_KEY_CLOSED_9d1e';
+    const closed = [
+      policy({ move: 'locked', skill: null, reason: 'locked_module' }),
+      policy({ move: 'ask_teacher', skill: null, reason: 'not_covered' }),
+      policy({ move: 'redirect', skill: null, reason: 'off_topic' }),
+      policy({ move: 'redirect', skill: null, reason: 'distress' }),
+      policy({ move: 'ask', skill: null, reason: 'fallback' }),
+    ];
+    for (const p of closed) {
+      const text = prompt(ctx(), { ...p, mustNotReveal: [KEY] });
+      expect(text).not.toContain(KEY);
+      expect(text).not.toContain('[[DO-NOT-SAY]]');
+    }
+    const help = helpWith({ answerKey: [KEY] });
+    const d = ctx({ intent: 'distress' });
+    expect(prompt(d, fallbackPolicy(d, help))).not.toContain(KEY);
+    expect(prompt(ctx(), fallbackPolicy(ctx(), help))).not.toContain(KEY);
   });
 
   it('the answer key appears only in the do-not-say list, quoted', () => {

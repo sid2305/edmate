@@ -11,6 +11,7 @@
 | Gates (root, all packages, after merging origin/main at `9e4b428`) | `corepack pnpm turbo run typecheck lint test` → `Tasks: 40 successful, 40 total`. Under heavy machine load (load average 25–36, other sessions running) two earlier runs timed out in tests this task does not touch (`access/property.test.ts`, `apps/web` auth tests: "Test timed out in 5000ms"); each passes alone (property test 271 ms) and the whole gate passed once the load dropped. |
 | harness test | `Tests 2095 passed (2095)` (2000 before) · `All files 99.47 / 97.68 / 100 / 100`; every `src/pedagogy/**` file 100 / 100 / 100 / 100 (threshold holds) |
 | content test | `Tests 119 passed (119)` (93 before) · `promptPacks.ts 99 / 90 / 100 / 100` |
+| Fix round 1 | harness `Tests 2097 passed`, content `Tests 120 passed` (see `## Fix round 1`) |
 | Agent harness tests | `python3 -m unittest discover .claude/tests` → `Ran 122 tests … OK` |
 | Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0 |
 | Snapshot per skill and mode | `pedagogy/compose.snapshot.test.ts`, one `.snap` file: every `SkillSchema.options` skill (study_plan → redirect), coach at rungs 0–4, and modes locked, ask_teacher, redirect (off_topic), distress, fallback (34 snapshots). A test fails if a skill or mode has no case, and checks the rung cases reach 0–4. |
@@ -52,6 +53,14 @@
 - 3.7: generate receives `sources` (in `[n]` order) for the `sources` event; `buildModelRequest` is ready to use; tools are not in the request yet (the registry's descriptions come with 5.x).
 - 3.8: `CommitRecord.next` is a `SessionHelp`; save it with `serializeSessionHelp`. `CommitRecord.promptPack` holds the set and per-pack versions for the message row.
 - 3.11: follow the layout in `content/src/promptPacks.ts`; the frame needs every `FRAME_SECTIONS` section; update the 3.6 snapshots (they use the fixture set, so they change only if 3.11 changes the composer).
+
+## Fix round 1
+
+- [HIGH] safety: the do-not-say list (answer key) is now added only on teaching turns (skill packs); locked, ask_teacher, redirect, distress and fallback prompts carry no answer key. `PedagogyDecision.mustNotReveal` still carries it for postGuard. Tests: `compose.test.ts` "closed modes never carry the answer key", `decide.test.ts` fallback prompt has no key; 7 snapshots updated (the distress, fallback, locked, ask_teacher and redirect snapshots no longer contain "5/6").
+- [MEDIUM] safety: distress uses a new frame section `decision-distress` (only `{{move_instruction}}`), so the prompt has no move name and no skills list. Test: "distress has its own decision line".
+- [MEDIUM] safety: `promptCacheKey` documented as a provider prompt-caching hint for the stable prefix (safety → locale) only; it must never be an app-level response or prompt cache key, because it does not cover the help state, answer key, material, learner summary or input.
+- [LOW] security: persona style and must-not list are fenced like other data.
+- [LOW] security: a content test pins that manifest and front-matter names never become file paths (`../evil` stays a lookup miss even with a valid `evil@0.1.0.md` next to the directory).
 
 ## Decisions
 
@@ -107,4 +116,16 @@ Reversible: yes (harness-internal types).
 Decided: each broken case copies `valid/` to a temp directory and applies one edit, instead of committed `broken-*/` directories.
 Why: one source of truth; each case shows exactly what is broken.
 Alternatives: committed broken directories (the plan's layout).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Answer key only on teaching turns; distress gets its own decision line · decided by builder (tdd-guide), safety-reviewer fix round 1 · risk: medium
+Decided: the do-not-say list is rendered only for skill packs; closed modes get none. Distress renders `decision-distress` (no move name, no skills) instead of `decision`.
+Why: a closed mode never discusses the problem, so the key in its prompt is pure leak risk; a distress prompt should not read as a lesson.
+Alternatives: keep the list on every move (round 0).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Deferred: fake citations and transcript contents · decided by lead (fix round 1) · risk: low
+Decided: chunk text that fakes `[n]` citations is left to the grounding check (4.7); making sure `systemPrompt`, `mustNotReveal` and `next` are never written to the transcript is left to commit (3.8).
+Why: both belong to the steps that own those checks.
+Alternatives: handle them in the composer now.
 Reversible: yes.

@@ -104,8 +104,7 @@ function checkScope(ctx: TurnContext): void {
   });
 }
 
-function moveSection(p: PolicyResult, mode: ComposeMode): FrameSection {
-  if (mode === 'distress') return 'move-distress';
+function moveSection(p: PolicyResult): FrameSection {
   if (p.move === 'hint') return p.rung >= 2 ? 'move-hint-2' : 'move-hint-1';
   return `move-${p.move}` as const;
 }
@@ -130,6 +129,7 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   const mode = composeMode(policy);
   const f = set.frame;
   const distress = mode === 'distress';
+  const teaching = (SKILL_PACKS as readonly string[]).includes(mode);
   const chunks = showsMaterial(mode) ? ctx.retrieved : [];
   const parts: string[] = [set.packs.safety.body];
 
@@ -149,8 +149,8 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
     parts.push(
       renderTemplate(f.persona, {
         persona_name: inline(p.name),
-        persona_style: inline(p.style),
-        persona_must_not: p.mustNot.map(inline).join('; '),
+        persona_style: fenced(p.style),
+        persona_must_not: fenced(p.mustNot.join('; ')),
         persona_end_after: String(p.endAfterQuestions),
       }),
     );
@@ -191,16 +191,22 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
     );
   }
 
+  // Distress gets no move name and no skills list: nothing that reads as a lesson.
   parts.push(
-    renderTemplate(f.decision, {
-      move: policy.move,
-      rung: String(policy.rung),
-      skills: ctx.entitlement.skills.join(', '),
-      move_instruction: f[moveSection(policy, mode)],
-    }),
+    distress
+      ? renderTemplate(f['decision-distress'], { move_instruction: f['move-distress'] })
+      : renderTemplate(f.decision, {
+          move: policy.move,
+          rung: String(policy.rung),
+          skills: ctx.entitlement.skills.join(', '),
+          move_instruction: f[moveSection(policy)],
+        }),
   );
-  // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4).
-  if (policy.mustNotReveal.length > 0) {
+  // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and
+  // only on teaching turns: a closed mode (locked, ask_teacher, redirect, distress, fallback)
+  // never discusses the problem, so it gets no answer key at all. postGuard still receives
+  // `mustNotReveal` on the decision.
+  if (teaching && policy.mustNotReveal.length > 0) {
     parts.push(
       renderTemplate(f['do-not-say'], {
         do_not_say: policy.mustNotReveal.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
