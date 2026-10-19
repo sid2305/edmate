@@ -15,6 +15,7 @@ export { type ProfileReader, queuedProfileStore } from './profileStore.js';
 export { queuedSessionStateStore } from './sessionStateStore.js';
 export { queuedTraceSink } from './traceSink.js';
 export { queuedTranscriptStore } from './transcriptStore.js';
+export { type RedisTurnCounterOptions, redisTurnCounter, redisTurnLimits } from './turnLimits.js';
 export {
   MAX_TRACKED_TURNS,
   type QueuedUsageMeter,
