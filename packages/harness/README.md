@@ -59,7 +59,7 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`, `gateway`, `us
 - **Verification pass:** when any guard rewrote, every guard runs once more on the final text; a rewrite or block there is `block` / `rewrite_unverified` ("rewrite once; else safe reply"). An escalate still escalates.
 - **Time and cancel:** each guard has its own `timeoutMs` slice on the injected clock; the step's `cancel` token cancels the in-flight guard and fails the chain. The trace entries are `GuardTrace` (`{ name, ok, action? }`, action `failed` for framework failures, `(undeclared)` for an undeclared name), never reason or text.
 - **Safety-event seam:** `onGuardOutcome({ name, phase, pass, outcome, cause? })` fires once per guard run; a throw or a rejected promise from it is ignored. Persistence (`safety_events`) waits for its ADR (lead answer Q1).
-- **Wiring:** the `scrub` phase is wired (4.2, below). The `preGuard` and `postGuard` step stubs still fail closed; 4.3 and 4.5 wire their phases the same way when they land each phase's first guard.
+- **Wiring:** the `scrub` phase (4.2) and the `pre` phase (4.3) are wired (below). The `postGuard` step stub still fails closed; 4.5 wires its phase the same way when it lands the phase's first guard.
 
 ## PII scrub (task 4.2, `src/guardrails/piiScrub.ts`, `src/pipeline/steps/scrub.ts`)
 
@@ -70,6 +70,14 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`, `gateway`, `us
 - **Raw-text distress check:** the runner calls `deps.distressCheck` on the raw input before the scrub and keeps only the boolean, which escalates at step 5. Nothing the scrub redacts can hide distress.
 - **Step:** `scrub` scrubs `input.text` and every string (and PII-shaped number) in `input.skillPayload`. Values under PII-named keys (`otp`, `name`, `phone_number`, `studentName`, `upi-id`, ...) are redacted whole. Any chain outcome but `ok` throws `ScrubFailedError` whose `cause` is `{ guardCause, errorName? }` only; the runner reports it on `finished.background` (`task: 'runner'`). Transcripts (2.7) arrive as `input.text`, so they are scrubbed the same way; text inside images is 4.2b.
 - **Testing:** `indiaLocalePackWithPii` / `IN_PII_PATTERNS` from `@edmate/harness/testing` (a stopgap until 3.10's real `content/locales/IN.yaml`, which must pass the same tests).
+
+## distressDetect, preGuard and escalate (task 4.3)
+
+- **Keywords (`distressKeywords.ts`)** are the single source of keyword truth. Every table (English, romanised Hindi, Devanagari) runs on every message whatever `lang` says. The text is normalised first (NFKC, format characters such as zero-width spaces, case, apostrophes, spaced or dotted letters, leetspeak inside words, repeated letters). `hard` phrases escalate on their own; `soft` ones are ambiguous; two different soft phrases count as hard. `hasDistressKeyword` (hard only) is the implementation behind `PipelineDeps.distressCheck`; a composition root wires `distressCheck: hasDistressKeyword`.
+- **distressDetect** (`pre` phase): a hard keyword escalates with no model call. Otherwise one small-tier classifier call (`{ distress: boolean }`) sees the message and up to 3 earlier student messages. A soft keyword plus a classifier throw, timeout (250 ms) or bad output escalates; with no keyword, a classifier failure propagates and the chain fails closed. The alert excerpt is at most 160 code points of the scrubbed text.
+- **preGuard** builds `PreGuardCtx` (4.4's `moderationIn` and `jailbreak` reuse it and register in `defaultPreGuardRegistry`), runs the chain with a 300 ms slice per guard and maps `ok` / `escalate` / `block`; a `failed` chain throws `PreGuardChainFailedError` (no text), so the runner's own keyword check still runs.
+- **escalate** always replies with `buildCaringReply(locale)`: `LAST_RESORT_DISTRESS_REPLY` plus the pack's helplines. It never uses the alert. English only for the pilot.
+- **Testing:** `indiaLocalePackWithHelplines` (Tele-MANAS 14416) for the `distress/in` cases.
 - **Testing:** `fakeGuard(name, phase, resultOrFn, { usage?, spy? })` from `@edmate/harness/testing`.
 
 ## Replacing a stub
