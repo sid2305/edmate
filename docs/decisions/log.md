@@ -10,6 +10,72 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 3.6 Composer: locked text kept out, distress wording, prompt-pack layout · decided by builder (tdd-guide), lead answers Q1–Q5 · risk: high
+Decided: the composer checks every retrieved chunk against the entitlement (teacher and allowed modules) before rendering, on every call and in every mode, and throws `LockedMaterialError` naming only an index; `decide.fallback` composes with no retrieved chunks, so a leaky context still gets a material-free `ask` prompt. Distress is chosen by `reason`, not by move: the distress pack plus its own `move-distress` line, with no style card, learner summary, disclaimer or teaching-question line. Packs are a flat directory of `set@<semver>.yaml` manifests and `<name>@<semver>.md` files; all prose comes from packs and code fills only fixed, allow-listed placeholders, checked at load time.
+Why: ADR-0003 (locked material never reaches a model, built in), build plan rule 6 (distress replies never teach), lead answers Q2 and Q5.
+Alternatives: check only in modes that show material; reuse the redirect pack for distress; one version for the whole set with no manifest.
+Reversible: yes for layout and wording (new pack set version); the scope check should stay.
+
+### 18 Oct 2026 · 3.6 The answer key goes into the system prompt's do-not-say list · decided by lead (Q4), safety-reviewer to judge · risk: high
+Decided: `mustNotReveal` (the help state's answer key) is rendered as a quoted list in the frame's do-not-say section and nowhere else in the prompt; it is also on `PedagogyDecision.mustNotReveal` and `CommitRecord.next` (server-side), never in events or the trace.
+Why: the spec puts the "do not say" list in the decision block, and the model needs the answer to coach.
+Alternatives: keep the answer out of the prompt and rely on postGuard alone.
+Reversible: yes. Safety-reviewer must judge the leak risk and whether postGuard/lockedLeak (4.x) covers it.
+
+### 18 Oct 2026 · 3.6 Pack versions on CommitRecord, no contract change · decided by lead (Q1) · risk: medium
+Decided: `CommitRecord.promptPack = { set, packs: { name → semver } }` lists the set and the packs this prompt used (safety, the skill or mode pack, frame); the trace is unchanged (its `agentVersion` pins `promptPackVersion`).
+Why: `TurnTraceSchema` is strict and frozen; 3.8 can store the versions with the message.
+Alternatives: ADR-0006 adding a trace field; listing every pack in the set.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 One manifest per set, each pack with its own semver · decided by lead (Q2) · risk: medium
+Decided: `set@<v>.yaml` lists `name: semver` per pack; unreferenced older pack files may stay; a README and hidden files are ignored; anything else in the directory is an issue; YAML is read with the failsafe schema so versions stay strings.
+Why: a set bump can change one pack without copying every file.
+Alternatives: one directory per set version.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Data blocks are fenced and cannot close their fence · decided by builder (tdd-guide) · risk: low
+Decided: material, style card text and the learner summary sit between `<<<` and `>>>`; any run of three or more `<` or `>` in data is spaced out; one-line data (titles, locators, helpline fields, package and persona names) has whitespace collapsed; do-not-say items are JSON-quoted.
+Why: teacher and student-derived text must not fake a section or instruction (the pack labels these blocks as reference text).
+Alternatives: no fences; random per-turn fences (not deterministic).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Small composer defaults · decided by builder (tdd-guide), plan Q6 · risk: low
+Decided: teacher messages go to `assistant` prefixed by the frame's teacher label; a regulated subject with no market disclaimer uses the frame's generic one; ask_teacher keeps the below-threshold material; `locked` with `name_package` names only the student's own package; a `hint` at rung 0 or 1 uses the nudge line, rung 2 the conceptual line; an agent with no languages replies in the input language; a turn with no text gets the frame's empty-turn line in the model request.
+Why: plan Q6, and the spec's rung 1/2 split; the rest are edge cases the spec does not cover.
+Alternatives: as listed in the plan.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Set versions that differ only in build metadata are duplicates · decided by builder (tdd-guide) · risk: low
+Decided: `createPromptPackLibrary` rejects two sets whose versions match after removing `+…`; lookup stays an exact match on `promptPackVersion`.
+Why: semver precedence ignores build metadata; two such sets would be ambiguous to a reviewer.
+Alternatives: exact-string duplicates only.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Step signatures: decide takes the help state, generate gets sources · decided by builder (tdd-guide) · risk: low
+Decided: `decide.run(env, { ctx, help })` and `decide.fallback(env, { ctx, help })` return a `DecideResult`; generate's argument gains `sources`; the runner's fallback check allows `redirect` only for a distress context.
+Why: the help state must reach the policy without entering TurnContext (ADR-0005); 3.7 needs the numbered sources.
+Alternatives: put sources on `PedagogyDecision` (contracts change).
+Reversible: yes (harness-internal types).
+
+### 18 Oct 2026 · 3.6 Broken loader fixtures built at test time · decided by builder (tdd-guide) · risk: low
+Decided: each broken case copies `valid/` to a temp directory and applies one edit, instead of committed `broken-*/` directories.
+Why: one source of truth; each case shows exactly what is broken.
+Alternatives: committed broken directories (the plan's layout).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Answer key only on teaching turns; distress gets its own decision line · decided by builder (tdd-guide), safety-reviewer fix round 1 · risk: medium
+Decided: the do-not-say list is rendered only for skill packs; closed modes get none. Distress renders `decision-distress` (no move name, no skills) instead of `decision`.
+Why: a closed mode never discusses the problem, so the key in its prompt is pure leak risk; a distress prompt should not read as a lesson.
+Alternatives: keep the list on every move (round 0).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.6 Deferred: fake citations and transcript contents · decided by lead (fix round 1) · risk: low
+Decided: chunk text that fakes `[n]` citations is left to the grounding check (4.7); making sure `systemPrompt`, `mustNotReveal` and `next` are never written to the transcript is left to commit (3.8).
+Why: both belong to the steps that own those checks.
+Alternatives: handle them in the composer now.
+Reversible: yes.
+
 ### 18 Oct 2026 · No real-model turns before the answer-leak guard · decided by team lead (safety-reviewer's advice) · risk: high
 Decided: The composer keeps the answer key in the model's do-not-say list, but only on teaching moves (fix in 3.6). No turn runs against a real model until the answer-leak guard (4.5) is merged and tested (numbers in other forms, translation, base64, role-play): task 3.9, the first real-model CLI chat, now depends on 4.5.
 Why: A hash can't let the model check an answer and a paraphrase still gives it away; the real protection is the post-guard.

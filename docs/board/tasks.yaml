@@ -511,7 +511,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: review
+  status: done
   risk: risky
   branch: m3/3.6-prompt-composer
   model: plan:opus build:opus-5.5/medium review:opus(safety)+sonnet(security,ts)
@@ -623,6 +623,24 @@ tasks:
   accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
+  status: todo
+  branch: null
+  model: null
+- id: '3.17'
+  milestone: M3
+  title: 'Commit follow-ups from 3.8: open a TeacherQuestion when the move is ask_teacher, and apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with their db adapters'
+  accept: An ask_teacher turn creates exactly one teacher question scoped to that teacher and student; evidence updates the learner profile idempotently; tests on real Postgres.
+  deps:
+  - '3.8'
+  status: todo
+  branch: null
+  model: null
+- id: '0.11'
+  milestone: M7
+  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md'
+  accept: No agent file tells reviewers to require human approval; safety-reviewer still writes findings the lead turns into safety-review.md.
+  deps:
+  - '0.7'
   status: todo
   branch: null
   model: null
