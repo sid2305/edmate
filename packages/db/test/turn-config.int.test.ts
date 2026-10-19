@@ -4,7 +4,7 @@
 import type { Entitlement, TurnInput } from '@edmate/contracts';
 import { demoTurnInput } from '@edmate/contracts/fixtures';
 import { cancelSource, defaultSteps, TurnRejection } from '@edmate/harness';
-import { testDeps } from '@edmate/harness/testing';
+import { stepEnvExtras, testDeps } from '@edmate/harness/testing';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
@@ -64,6 +64,7 @@ async function entitleCode(sessionId: string, store = turnConfigStoreFor(repos, 
       deps: t.deps,
       cancel: cancelSource().token,
       turnId: 'turn_1',
+      ...stepEnvExtras(),
     });
     return { code: 'ok', out };
   } catch (e) {

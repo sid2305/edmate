@@ -6,6 +6,7 @@ import type { TurnContext } from '@edmate/contracts';
 import { composeSystemPrompt } from '../../pedagogy/compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from '../../pedagogy/policy.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
+import { noTools, policyTools } from '../tools.js';
 import type { DecideResult, StepEnv, Steps } from '../types.js';
 
 function decided(env: StepEnv, ctx: TurnContext, policy: PolicyResult): DecideResult {
@@ -31,7 +32,9 @@ export const decide: Steps['decide'] = {
   run: (env, { ctx, help }) =>
     // The executor turns a throw (unknown pack version, locked material) into a rejection.
     new Promise<DecideResult>((resolve) => {
-      resolve(decided(env, ctx, decidePolicy({ ctx, turn: env.input, help })));
+      // Only the entitled tools reach the policy (access rule 5); generate checks them again.
+      const tools = policyTools(env.deps.tools ?? noTools, ctx.entitlement);
+      resolve(decided(env, ctx, decidePolicy({ ctx, turn: env.input, help, tools })));
     }),
   // The `ask` fallback (`redirect` for distress) teaches nothing, so it shows no material: a
   // context that made `run` throw still gives a prompt with no retrieved text in it.

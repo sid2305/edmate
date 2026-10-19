@@ -82,7 +82,6 @@ export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({
 
 export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   draft: z.string(),
-  usage,
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [

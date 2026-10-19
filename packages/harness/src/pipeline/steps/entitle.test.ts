@@ -2,6 +2,7 @@ import type { Entitlement, EntitlementStore, TurnConfigStore, TurnInput } from '
 import { demoTurnInput } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { accessTurns, type AccessTurnOutcome } from '../../testing/accessTurn.js';
+import { stepEnvExtras } from '../../testing/testSteps.js';
 import { type AccessOptions, memoryTurnConfigStore } from '../../testing/memoryAccess.js';
 import { cancelSource } from '../clock.js';
 import { TurnRejection } from '../errors.js';
@@ -292,7 +293,13 @@ describe('entitle: limit_reached carries a friendly message (task 2.5)', () => {
   /** Calls the real entitle directly, so the thrown TurnRejection itself can be inspected. */
   async function rejection(a: ReturnType<typeof accessTurns>, i: TurnInput): Promise<unknown> {
     for (const p of a.world.packages) p.dailyMessageLimit = 0;
-    const env = { input: i, deps: a.t.deps, cancel: cancelSource().token, turnId: 'turn_x' };
+    const env = {
+      input: i,
+      deps: a.t.deps,
+      cancel: cancelSource().token,
+      turnId: 'turn_x',
+      ...stepEnvExtras(),
+    };
     return entitle(env).then(
       () => new Error('entitle passed'),
       (e: unknown) => e,
