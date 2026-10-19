@@ -56,8 +56,8 @@ Postgres and Redis: `docker compose -f docker/compose.yaml -f packages/db/test/c
 
 - None.
 
+The 3.16d decisions are logged under docs/tasks/3.16/handoff.md's Decisions section (the merge gate reads the parent task's docs for lettered sub-tasks).
+
 ## Decisions
 
-See `docs/tasks/3.16/handoff.md`'s `## Decisions` section (the three `3.16d` entries dated
-19 Oct 2026): `withMigrateLock` as a unit-testable helper, `set_config` over a plain `SET` for the
-step timeout, and the blocker-reproduction note for the integration test.
+None

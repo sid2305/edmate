@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.16d The advisory-lock acquire/release pattern is factored into an exported `withMigrateLock` helper · decided by tdd-guide · risk: low
+Decided: `withMigrateLock(lockClient, key, fn, maxWaitMs?)` wraps `acquireMigrateLock` + `fn()` + a conditional `pg_advisory_unlock`, tracked by a `locked` flag set only after `acquireMigrateLock` returns; `migrateDatabase()` now calls it instead of inlining the same `try`/`finally`.
+Why: the review's finding (unlock only when the lock was actually taken) needs a unit test, and `migrateDatabase()` itself isn't unit-testable (it always opens a real `pg.Client`/pool against a URL); factoring the lock logic into a small function that takes an injectable client makes the "no unlock after a failed acquire" behaviour directly testable without touching `migrateDatabase()`'s signature or needing a real database.
+Alternatives: add a client-factory parameter to `migrateDatabase()` for test injection (keeps one function, but widens its public signature for a test-only need); test the behaviour only at the integration level (real Postgres, no quick unit coverage of the "connection already dead" branch).
+Reversible: yes; an internal implementation detail of `migrateDatabase()`.
+
+---
+
+### 19 Oct 2026 · 3.16d The post-migrate step timeout is set on the connection with `set_config`, not a plain `SET` · decided by tdd-guide · risk: low
+Decided: `migrateDatabase()` runs `select set_config('statement_timeout', $1, false)` (parameterized, session-level — the third argument `false` means "not transaction-local") on the post-migrate connection before `runPostMigrateSteps`, instead of string-building a `SET statement_timeout = <value>` statement.
+Why: Postgres's `SET` doesn't accept a bind parameter, so a literal value would have to be built with string interpolation even though `stepTimeoutMs()` already validates it is a safe positive integer; `set_config` takes the value as a normal parameterized argument, which is both simpler and avoids ever building SQL by concatenating a number into a string, as a matter of habit.
+Alternatives: `SET statement_timeout = ${n}` (works given the validation, but trains the eventual next reader/editor that string-built SQL is fine here); a second, dedicated pool just for the post-migrate steps with `statement_timeout` baked into its `pg.PoolConfig` (more connections and a second `close()` to manage, for no behavioural difference since the migrator pool is already `max: 1`).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16d Reproducing the blocked-`CREATE INDEX CONCURRENTLY` test needed an actively running blocker statement, not just an idle-in-transaction one · decided by tdd-guide (int test red run) · risk: low
+Decided: the integration test's blocking connection runs `BEGIN; select pg_sleep(2)` (not awaited; rolled back afterwards) and the test waits ~300 ms before calling the timed `migrateDatabase()`, rather than `BEGIN; select 1` with no delay.
+Why: the first attempt (`BEGIN; select 1`, no delay) did not reproduce a wait: `CREATE INDEX CONCURRENTLY` completed in a few milliseconds even though `pg_stat_activity` showed the blocker as `idle in transaction` at that instant, confirmed with debug logging before the fix; a manual `psql` reproduction with the same table and a `pg_sleep`-based blocker reliably blocked and timed out as the Postgres documentation describes. The exact reason for the gap wasn't tracked down further (not needed for the test itself), but a blocker with an in-flight statement and a short lead time reproduces the behaviour deterministically.
+Alternatives: keep polling `pg_stat_activity`/`pg_locks` until some specific lock or wait-event condition is observed before issuing the timed call (more precise, meaningfully more complex for a test); accept flakiness with the idle-in-transaction form.
+Reversible: yes; an internal detail of the test, not of `migrate.ts` itself.
+
+---
+
+### 19 Oct 2026 · 3.16d Accepted edge cases in the migration lock and its timeout test · decided by team lead · risk: low
+Decided: in `packages/db/src/migrate.ts`, a failure inside the locked section followed by a failed unlock reports the unlock error (both need a dead connection, and the lock is released when the session ends anyway); `packages/db/test/migrate.int.test.ts` keeps its fixed 300 ms lead before the timed call.
+Why: rare, and harmless to data; a fix would add code paths with no test value now.
+Alternatives: wrap the unlock in try/catch and rethrow the original; poll pg_stat_activity in the test.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 3.16c The migration lock is polled with `pg_try_advisory_lock`, not held by blocking on `pg_advisory_lock` · decided by tdd-guide (red run) · risk: medium
 Decided: `migrateDatabase()` acquires `MIGRATE_LOCK_KEY` by polling `pg_try_advisory_lock` on its own dedicated connection every 50 ms (10-minute default give-up), instead of a single blocking `pg_advisory_lock` call.
 Why: the int test (two concurrent `migrateDatabase()` calls against a fresh database) hung forever with a blocking `pg_advisory_lock`: that call itself holds an open snapshot on its connection for the whole wait, and `CREATE INDEX CONCURRENTLY` (the post-migrate index steps) must wait out every transaction with an older snapshot, table or not — so the lock holder's own index build waited on the second caller's still-blocked lock request, which only clears once the first caller releases the lock after finishing the build: a self-deadlock, reproduced and confirmed with debug logging before the fix.

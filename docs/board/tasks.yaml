@@ -692,7 +692,7 @@ tasks:
   accept: tests for a mixed-case index name, a post-migrate timeout, and an acquire failure that keeps its original error.
   deps:
   - 3.16c
-  status: running
+  status: done
   branch: m7/3.16d-migration-followups
   model: build:sonnet
 - id: '3.17'
@@ -879,6 +879,17 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.5c
+  milestone: M4
+  title: 'answerLeak follow-ups (4.5 safety re-review): "baar/times" counts as an answer word only next to run or print words, never before an imperative ("ek baar try karo"); no own-code exemption when
+    the student wrote two code lines that differ only at the key; spelling variants (baiyaalis, unatees) and fraction or decimal words ("five sixths", "5 out of 6", "83%"); keep CommitRecord.escalatedText
+    out of model history and teacher views'
+  accept: tests for each probe in the 4.5 re-review; no new false positives on the existing negative list.
+  deps:
+  - '4.5'
+  status: todo
+  branch: null
+  model: null
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'
@@ -1044,6 +1055,18 @@ tasks:
   deps:
   - '5.1'
   - M3
+  status: todo
+  branch: null
+  model: null
+- id: 6.0b
+  milestone: M6
+  title: 'DPDP gate for learner memory (logged decision, 18 Oct 2026; raised again by 3.17): before any India pilot, decide and enforce what learner memory (mastery, mistakes, summaries, evidence) may be
+    kept for India learners under 18; no tracking or behavioural monitoring of children; likely a locale-pack rule plus a ProfileStore check (ADR if contracts change)'
+  accept: an India learner under 18 has no learner memory written or read beyond what the locale pack allows; tests; human sign-off on the rule.
+  deps:
+  - '3.17'
+  - '3.10'
+  - '1.7'
   status: todo
   branch: null
   model: null
