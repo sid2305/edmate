@@ -650,7 +650,7 @@ tasks:
   accept: the named tests carry explicit timeouts; three consecutive CI runs of the node job pass; no test is skipped or weakened.
   deps:
   - M0
-  status: review
+  status: done
   branch: m7/0.12-ci-timeouts
   model: build:sonnet
 - id: '4.0'
