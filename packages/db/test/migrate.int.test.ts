@@ -89,6 +89,38 @@ describe.skipIf(!up)(
       await dropDatabase(dbName);
     });
 
+    // Task 3.16c: migrateDatabase() takes a session-level advisory lock around drizzle's migrate()
+    // and the post-migrate steps, so two overlapping runs (two app instances starting at once)
+    // serialize instead of racing drizzle's migrations-table insert or the post-migrate index
+    // build/drop.
+    it('two concurrent migrateDatabase() calls against a fresh database both resolve, and the second finds the index valid and skips the drop', async () => {
+      const concurrentDbName = throwawayName();
+      const concurrentUrl = urlFor(concurrentDbName);
+      await createDatabase(concurrentDbName);
+      try {
+        await Promise.all([migrateDatabase(concurrentUrl), migrateDatabase(concurrentUrl)]);
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index
+               where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+
+          const cons = await c.query<{ conname: string; convalidated: boolean }>(
+            `select conname, convalidated from pg_constraint where conrelid = 'sessions'::regclass
+               and conname in ('sessions_package_version_fk', 'sessions_package_pin_complete', 'sessions_open_has_package')`,
+          );
+          expect(cons.rows).toHaveLength(3);
+          for (const row of cons.rows) {
+            expect(row.convalidated, row.conname).toBe(true);
+          }
+        }, concurrentUrl);
+      } finally {
+        await dropDatabase(concurrentDbName);
+      }
+    });
+
     it('apply cleanly to an empty database', async () => {
       await migrateDatabase(TEST_URL);
       const got = await expectFullSchema();
@@ -110,7 +142,7 @@ describe.skipIf(!up)(
     // way with CREATE INDEX CONCURRENTLY. migrateDatabase() above already ran this twice
     // ('apply cleanly' then 're-running is a no-op'), so both assertions also cover "runs twice,
     // still correct" for the post-migrate step itself.
-    it('validates the three 0009 constraints and builds the package-pin index outside the migration transaction', async () => {
+    it('validates the three 0009 constraints and builds the package-pin and open-session indexes outside the migration transaction', async () => {
       await admin(async (c) => {
         const cons = await c.query<{ conname: string; convalidated: boolean }>(
           `select conname, convalidated from pg_constraint where conrelid = 'sessions'::regclass
@@ -121,12 +153,24 @@ describe.skipIf(!up)(
           expect(row.convalidated, row.conname).toBe(true);
         }
 
-        const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
-          `select indisvalid, indisready from pg_index
-             where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+        for (const indexName of [
+          'sessions_package_id_package_version_idx',
+          'sessions_open_teacher_id_student_id_idx',
+        ]) {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index where indexrelid = $1::regclass`,
+            [indexName],
+          );
+          expect(idx.rows, indexName).toHaveLength(1);
+          expect(idx.rows[0], indexName).toMatchObject({ indisvalid: true, indisready: true });
+        }
+
+        // Partial: only rows for an open session (ended_at is null) land in the index predicate.
+        const pred = await c.query<{ indpred: string }>(
+          `select pg_get_expr(indpred, indrelid) as indpred from pg_index
+             where indexrelid = 'sessions_open_teacher_id_student_id_idx'::regclass`,
         );
-        expect(idx.rows).toHaveLength(1);
-        expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+        expect(pred.rows[0]?.indpred).toMatch(/ended_at.*IS NULL/i);
       }, TEST_URL);
     });
 
