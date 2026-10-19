@@ -797,10 +797,19 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: planning
+  status: todo
   risk: risky
   branch: m4/4.5-answer-leak
   model: plan:sonnet
+- id: 4.5b
+  milestone: M4
+  title: 'answerLeak paraphrase and non-numeric keys (from the 4.5 plan review): a judge pass (small model, recorded fixtures) for paraphrased answers and word or code answer keys'
+  accept: leak cases with word or code keys and a paraphrased answer are caught on recorded fixtures; the judge rubric lines run in replay.
+  deps:
+  - '4.5'
+  status: todo
+  branch: null
+  model: null
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'
