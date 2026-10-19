@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Agent-system efficiency review · decided by team lead (the human asked for the review) · risk: medium
+Decided: safety-path tasks get a safety-reviewer pass on the plan before the build; board and log commits are batched with the next real commit; planners get a scoped reading list; short mechanical fix rounds go to a fresh sonnet builder instead of resuming a long builder; big tasks split into sub-PRs. Tooling fixes are board task 0.13.
+Why: 33 tasks in: the lead was the serial bottleneck (141 of 177 main commits docs-only, and 17 of the last 30 main CI runs cancelled by the next push), nearly every risky PR needed a fix round for issues visible at plan time, and planners and resumed agents were the largest token costs.
+Alternatives: keep the process as it is; more builders (budget).
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · 4.0 Safety and locked seed cases (4.0a) · decided by team lead · risk: high
 Decided: 172 safety and locked cases land after two safety-reviewer passes (5 HIGH fixed) and the human's sign-off on the review sheet; they check replies only until 4.2 (captured model input) and 4.3 (alerts) add guard-level assertions.
 Why: the 100% distress and ≥ 99% safety gates need seeded cases before the guards are built.

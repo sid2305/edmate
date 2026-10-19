@@ -653,6 +653,15 @@ tasks:
   status: done
   branch: m7/0.12-ci-timeouts
   model: build:sonnet
+- id: '0.13'
+  milestone: M7
+  title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
+  accept: 'one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead skill states the new rules.'
+  deps:
+  - '0.7'
+  status: todo
+  branch: null
+  model: null
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
