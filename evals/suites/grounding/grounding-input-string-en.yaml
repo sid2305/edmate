@@ -1,0 +1,15 @@
+id: grounding-input-string-en
+suite: grounding
+package: free
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.6 input() always
+  gives you a string; docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: Why does input() always give me a string, even if the user types a number like 7?
+    expect:
+      must_contain:
+        - string
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that input() always returns a string and that int() or float() is needed to convert it

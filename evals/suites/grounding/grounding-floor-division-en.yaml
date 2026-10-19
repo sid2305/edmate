@@ -1,0 +1,16 @@
+id: grounding-floor-division-en
+suite: grounding
+package: free
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.3 Arithmetic;
+  docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
+  supported by retrieved material)
+turns:
+  - student: What's the actual difference between / and // in Python? I keep mixing them up.
+    expect:
+      must_contain:
+        - floor
+      must_cite_source: true
+      judge:
+        - the reply's explanation matches the teacher's notes on / giving a float and // rounding down, with no invented behaviour

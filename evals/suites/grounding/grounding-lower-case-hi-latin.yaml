@@ -1,0 +1,15 @@
+id: grounding-lower-case-hi-latin
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/conditions/notes.md §2.5 Two everyday checks
+  (.lower()); docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: Agar user "YES" capital mein type kare to mera yes/no check kaise match kare?
+    expect:
+      must_contain:
+        - .lower()
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes on using .lower() to ignore capital letters and cites the source

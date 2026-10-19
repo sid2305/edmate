@@ -1,0 +1,15 @@
+id: grounding-and-or-not-en
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/conditions/notes.md §2.4 and, or, not;
+  docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: What's the difference between using "and" and using "or" in an if statement?
+    expect:
+      must_contain:
+        - both
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that "and" needs both parts True and "or" needs at least one part True

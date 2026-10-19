@@ -1,0 +1,15 @@
+id: grounding-naming-rules-en
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.2 Variables
+  (Naming rules); docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: Can a Python variable name start with a number, like 2nd_place?
+    expect:
+      must_contain:
+        - digit
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that a name cannot start with a digit, and does not invent an exception that isn't in the material

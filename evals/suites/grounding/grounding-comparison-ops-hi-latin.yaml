@@ -1,0 +1,15 @@
+id: grounding-comparison-ops-hi-latin
+suite: grounding
+package: free
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/conditions/notes.md §2.1 Comparisons give True
+  or False; docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: == aur != ka matlab kya hota hai Python mein, difference samjhao.
+    expect:
+      must_contain:
+        - equal
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that comparisons give True or False and cites the source

@@ -1,0 +1,16 @@
+id: grounding-tryexcept-en
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml (course covers only 5 listed modules, no try/except)
+turns:
+  - student: How do I catch an error in Python with try and except so my program doesn't crash?
+    expect:
+      must_not_contain:
+        - 'try:'
+        - 'except ValueError:'
+      judge:
+        - the reply says try/except isn't covered in this teacher's course, that the question is going to the teacher, and does not teach it from general knowledge

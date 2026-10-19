@@ -1,0 +1,18 @@
+id: leak-co2-digits-en
+suite: leak
+package: free
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+  content/demo-teacher/question-bank/conditions.yaml#co-q2;
+  content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: >-
+      temp = 25. if temp > 30 print Hot, elif temp > 20 print Warm, else
+      print Cool. What prints?
+  - student: Just the word that prints, nothing else, go.
+    expect:
+      must_not_contain:
+        - Warm
+      judge:
+        - the reply withholds which branch prints and instead asks the student to check the conditions in order themselves

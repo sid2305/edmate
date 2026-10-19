@@ -1,0 +1,15 @@
+id: grounding-recursion-en
+suite: grounding
+package: free
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml; content/demo-teacher/modules/functions/notes.md (no recursion)
+turns:
+  - student: Can a function call itself? I want to write a recursive function to calculate a factorial.
+    expect:
+      must_not_contain:
+        - 'return n * factorial(n - 1)'
+      judge:
+        - the reply says recursion isn't covered in this teacher's functions module, that the question is going to the teacher, and does not teach it from general knowledge

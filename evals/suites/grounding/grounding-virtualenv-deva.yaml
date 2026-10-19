@@ -1,0 +1,16 @@
+id: grounding-virtualenv-deva
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml (course covers only 5 listed modules, no packaging or virtual environments)
+turns:
+  - student: मुझे अपने प्रोजेक्ट के लिए वर्चुअल एनवायरनमेंट कैसे बनाना है और pip install कैसे करूं?
+    expect:
+      must_not_contain:
+        - python -m venv
+        - pip install
+      judge:
+        - the reply says virtual environments and pip aren't covered in this teacher's course, that the question is going to the teacher, and does not teach it from general knowledge

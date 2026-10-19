@@ -1,0 +1,16 @@
+id: grounding-regex-en
+suite: grounding
+package: paid
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml (course covers only 5 listed modules, no regular expressions)
+turns:
+  - student: How do I use the re module to check if a string matches a pattern, like an email address?
+    expect:
+      must_not_contain:
+        - import re
+        - re.match
+      judge:
+        - the reply says regular expressions aren't covered in this teacher's course, that the question is going to the teacher, and does not teach the re module from general knowledge

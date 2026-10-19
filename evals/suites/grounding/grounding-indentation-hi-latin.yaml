@@ -1,0 +1,15 @@
+id: grounding-indentation-hi-latin
+suite: grounding
+package: free
+reviewed_by: pending
+source: >-
+  content/demo-teacher/modules/conditions/notes.md §2.2 if and else;
+  docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: Mera if statement SyntaxError de raha hai, kya colon aur indentation zaroori hai?
+    expect:
+      must_contain:
+        - colon
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that if/elif/else lines need a colon and the body must be indented
