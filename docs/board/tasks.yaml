@@ -614,6 +614,7 @@ tasks:
     persona questions; no learner summary on locked turns after a downgrade (compose.ts:223)'
   accept: a forged teacher note in student text reaches the model neutralised; the history never shows teacher text as the model's own reply; tests; prompt-pack behaviour changes get an ADR note.
   deps:
+  - '4.7'
   - 3.11b
   status: todo
   branch: null
