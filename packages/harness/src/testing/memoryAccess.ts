@@ -43,9 +43,32 @@ export interface MemorySession {
   agentId: string;
   /** Set server-side when the session was created. */
   agentVersion: number;
+  /**
+   * The package version the entitlement resolved to when the session was created (task 3.16);
+   * null only on a session that ended before the pin existed.
+   */
+  packageId: string | null;
+  packageVersion: number | null;
   endedAt: string | null;
   /** sessions.help_state as stored (ADR-0005); unset reads as `undefined`. Never validated here. */
   helpState?: unknown;
+}
+
+/**
+ * The db's own invariant (migration 0009): `packageId` and `packageVersion` are both-or-neither,
+ * and an open session (`endedAt === null`) always carries a pin. A fixture that breaks either is
+ * a bug in the test, not a state the real adapter can reach, so this throws instead of silently
+ * reading a bad row.
+ */
+function assertValidSession(s: MemorySession): void {
+  if ((s.packageId === null) !== (s.packageVersion === null)) {
+    throw new Error(
+      `memory fixture: session ${s.id} has only one of packageId/packageVersion set`,
+    );
+  }
+  if (s.endedAt === null && s.packageId === null) {
+    throw new Error(`memory fixture: open session ${s.id} has no package pin`);
+  }
 }
 
 export interface AccessWorld {
@@ -212,36 +235,52 @@ export function memoryTurnConfigStore(world: AccessWorld): MemoryTurnConfigStore
     calls,
     load(e, sessionId) {
       calls.push({ e, sessionId });
-      // ADR-0004 Decision 3: the session must be open and the entitlement's student, teacher, agent.
-      const session = world.sessions.find(
-        (s) =>
-          s.id === sessionId &&
-          s.studentId === e.studentId &&
-          s.teacherId === e.teacherId &&
-          s.agentId === e.agentId &&
-          s.endedAt === null,
-      );
-      // Decision 4: the agent at exactly the session's server-set version.
-      const agent = session
-        ? world.agents
-            .find((a) => a.id === e.agentId && a.teacherId === e.teacherId)
-            ?.versions.find((v) => v.version === session.agentVersion)
-        : undefined;
-      const pkg = world.packages.find(
-        (p) =>
-          p.id === e.packageId && p.version === e.packageVersion && p.teacherId === e.teacherId,
-      );
-      const styleCard = agent
-        ? world.styleCards.find((c) => c.id === agent.styleCardId && c.teacherId === e.teacherId)
-        : undefined;
-      const locale = world.locales.find((l) => l.market === e.market);
-      return Promise.resolve(
-        session && agent && pkg && styleCard && locale
-          ? { agent, pkg, styleCard, locale, helpState: session.helpState }
-          : null,
-      );
+      // Async, so a bad fixture rejects like a real adapter error instead of throwing synchronously.
+      return Promise.resolve().then(() => loadNow(e, sessionId));
     },
   };
+
+  function loadNow(
+    e: Entitlement,
+    sessionId: string,
+  ): Awaited<ReturnType<TurnConfigStore['load']>> {
+    // ADR-0004 Decision 3: the session must be open and the entitlement's student, teacher, agent.
+    const session = world.sessions.find(
+      (s) =>
+        s.id === sessionId &&
+        s.studentId === e.studentId &&
+        s.teacherId === e.teacherId &&
+        s.agentId === e.agentId &&
+        s.endedAt === null,
+    );
+    if (session) assertValidSession(session);
+    // Task 3.16: sessions follow the package. Pinned to another package or version: end it and
+    // load nothing. (The db adapter also clears the pair's last summary; there is no profile
+    // here.)
+    if (
+      session &&
+      (session.packageId !== e.packageId || session.packageVersion !== e.packageVersion)
+    ) {
+      session.endedAt = new Date().toISOString();
+      return null;
+    }
+    // Decision 4: the agent at exactly the session's server-set version.
+    const agent = session
+      ? world.agents
+          .find((a) => a.id === e.agentId && a.teacherId === e.teacherId)
+          ?.versions.find((v) => v.version === session.agentVersion)
+      : undefined;
+    const pkg = world.packages.find(
+      (p) => p.id === e.packageId && p.version === e.packageVersion && p.teacherId === e.teacherId,
+    );
+    const styleCard = agent
+      ? world.styleCards.find((c) => c.id === agent.styleCardId && c.teacherId === e.teacherId)
+      : undefined;
+    const locale = world.locales.find((l) => l.market === e.market);
+    return session && agent && pkg && styleCard && locale
+      ? { agent, pkg, styleCard, locale, helpState: session.helpState }
+      : null;
+  }
 }
 
 // ---- a two-teacher world --------------------------------------------------------------------
@@ -337,16 +376,20 @@ export function twoTeacherWorld(): AccessWorld {
       sub('sub_1b', S.one, T.B, 'pkg_b', 1, 'ended'),
       sub('sub_2b', S.two, T.B, 'pkg_b', 1, 'trial'),
     ],
+    // Each pinned (task 3.16) to what its entitlement resolves to in the tests.
     sessions: [
-      session('ses_1a', S.one, T.A, 'agt_a', 1),
-      { ...session('ses_1a_ended', S.one, T.A, 'agt_a', 2), endedAt: '2026-10-17T09:00:00.000Z' },
-      session('ses_1a_draft', S.one, T.A, 'agt_a_draft', 1),
-      session('ses_2a', S.two, T.A, 'agt_a', 2),
-      session('ses_1b', S.one, T.B, 'agt_b', 1),
-      session('ses_2b', S.two, T.B, 'agt_b', 1),
-      session('ses_preview_a', T.A, T.A, 'agt_a', 2),
-      session('ses_preview_a_draft', T.A, T.A, 'agt_a_draft', 1),
-      session('ses_eval_a', S.evalStudent, T.A, 'agt_a', 2),
+      session('ses_1a', S.one, T.A, 'agt_a', 1, 'pkg_a', 2),
+      {
+        ...session('ses_1a_ended', S.one, T.A, 'agt_a', 2, 'pkg_a', 2),
+        endedAt: '2026-10-17T09:00:00.000Z',
+      },
+      session('ses_1a_draft', S.one, T.A, 'agt_a_draft', 1, 'pkg_a_draft', 1),
+      session('ses_2a', S.two, T.A, 'agt_a', 2, 'pkg_a', 1),
+      session('ses_1b', S.one, T.B, 'agt_b', 1, 'pkg_b', 1),
+      session('ses_2b', S.two, T.B, 'agt_b', 1, 'pkg_b', 1),
+      session('ses_preview_a', T.A, T.A, 'agt_a', 2, 'pkg_a', 2),
+      session('ses_preview_a_draft', T.A, T.A, 'agt_a_draft', 1, 'pkg_a_draft', 1),
+      session('ses_eval_a', S.evalStudent, T.A, 'agt_a', 2, 'pkg_a', 2),
     ],
     locales: [demoLocalePack, localePackMinimal],
   };
@@ -377,6 +420,17 @@ function session(
   teacherId: string,
   agentId: string,
   agentVersion: number,
+  packageId: string,
+  packageVersion: number,
 ): MemorySession {
-  return { id, studentId, teacherId, agentId, agentVersion, endedAt: null };
+  return {
+    id,
+    studentId,
+    teacherId,
+    agentId,
+    agentVersion,
+    packageId,
+    packageVersion,
+    endedAt: null,
+  };
 }

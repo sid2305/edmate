@@ -88,6 +88,20 @@ describe('entitle: each rejection returns its code (through runTurn)', () => {
     expectRejected(await a.run({ ...input, ...patch } as TurnInput), a.modelCalls, 'no_access');
   });
 
+  // Task 3.16: the session is pinned to the package version it started under.
+  it.each([
+    ['the package changed (downgrade)', { packageId: 'pkg_a_draft', packageVersion: 1 }],
+    ['the package version changed', { packageId: 'pkg_a', packageVersion: 1 }],
+  ])('%s since the session started → no_access, and the session ends', async (_label, pin) => {
+    const a = accessTurns();
+    const session = a.world.sessions.find((x) => x.id === 'ses_1a');
+    if (session === undefined) throw new Error('fixture');
+    Object.assign(session, pin);
+    expectRejected(await a.run(input), a.modelCalls, 'no_access');
+    expect(session.endedAt).not.toBeNull();
+    expect(a.turnConfig.calls).toHaveLength(1);
+  });
+
   it('malformed ids never reach the stores', async () => {
     const a = accessTurns();
     await a.run({ ...input, sessionId: 7 } as unknown as TurnInput);

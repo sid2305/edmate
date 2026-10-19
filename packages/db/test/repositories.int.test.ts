@@ -156,6 +156,16 @@ function auditOwners(rows: AuditRow[], kind: 'teacher' | 'student'): string[] {
   ]);
 }
 
+/** sessions.create input for teacher t's agent, pinned to what the seed's subscription resolves to. */
+const newSession = (t: Teacher) => ({
+  agentId: ids.agent(t),
+  agentVersion: 1,
+  packageId: ids.pkg(t),
+  packageVersion: 1,
+});
+/** A spare open session per pair, for sessions.endOnPackageChange (inserted in beforeAll). */
+const endable = (p: Pair) => `${ids.session(p)}_end`;
+
 /** Over the 10 000-character cap on a serialised before/after. */
 const BIG = { blob: 'x'.repeat(10_001) };
 const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
@@ -331,8 +341,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     owns: (a, t) => teacherOf(a) === teacherOf(t),
-    attempt: (r, scope, _a, target) =>
-      r.sessions.create(scope, { agentId: ids.agent(teacherOf(target)), agentVersion: 1 }),
+    attempt: (r, scope, _a, target) => r.sessions.create(scope, newSession(teacherOf(target))),
     verify: async (r, actor, res) => {
       const { id } = res as { id: string };
       await onlyPairSees(
@@ -344,12 +353,28 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     mismatches: (a) => [
       [
         'a version that does not exist',
-        (r) => r.sessions.create(sScope(a), { agentId: ids.agent(teacherOf(a)), agentVersion: 99 }),
+        (r) => r.sessions.create(sScope(a), { ...newSession(teacherOf(a)), agentVersion: 99 }),
         'not_found',
       ],
       [
         'an agent that does not exist',
-        (r) => r.sessions.create(sScope(a), { agentId: 'agt_nowhere', agentVersion: 1 }),
+        (r) =>
+          r.sessions.create(sScope(a), { ...newSession(teacherOf(a)), agentId: 'agt_nowhere' }),
+        'not_found',
+      ],
+      // Task 3.16: the pin must be one of this agent's (so this teacher's) package versions.
+      [
+        "the other teacher's package",
+        (r) =>
+          r.sessions.create(sScope(a), {
+            ...newSession(teacherOf(a)),
+            packageId: ids.pkg(otherTeacher(teacherOf(a))),
+          }),
+        'not_found',
+      ],
+      [
+        'a package version that does not exist',
+        (r) => r.sessions.create(sScope(a), { ...newSession(teacherOf(a)), packageVersion: 9 }),
         'not_found',
       ],
     ],
@@ -396,6 +421,40 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         ],
       ];
     },
+  },
+  // Task 3.16: ends the scope's own session and clears its own pair's summary; anything else is
+  // not_found and writes nothing. Targets a spare session per pair (seeded in beforeAll).
+  'sessions.endOnPackageChange': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) => r.sessions.endOnPackageChange(scope, endable(target)),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ ended: true });
+      for (const p of PAIRS) {
+        const row = await r.sessions.get(sScope(p), endable(actor));
+        if (p === actor) expect(row?.endedAt).not.toBeNull();
+        else expect(row, `${p} reads ${actor}'s session`).toBeNull();
+        const summary = (await r.learnerProfiles.get(sScope(p)))?.lastSummary;
+        expect(summary, `${p}'s summary`).toBe(p === actor ? undefined : `[${p}] last time`);
+      }
+      // Put the summary back for the cases that read it later.
+      await raw.query(
+        'update learner_profiles set last_summary = $1 where student_id = $2 and teacher_id = $3',
+        [`[${actor}] last time`, sScope(actor).studentId, sScope(actor).teacherId],
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a session id that is not an id',
+        (r) => r.sessions.endOnPackageChange(sScope(a), 'ses not an id'),
+        'invalid',
+      ],
+      [
+        'a session that does not exist',
+        (r) => r.sessions.endOnPackageChange(sScope(a), 'ses_nowhere'),
+        'not_found',
+      ],
+    ],
   },
   'messages.history': {
     scope: 'student',
@@ -1208,6 +1267,14 @@ describe.skipIf(!up)(
       repos = createRepositories(handle.db);
       raw = new pg.Client({ connectionString: TEST_URL });
       await raw.connect();
+      for (const p of PAIRS) {
+        const t = teacherOf(p);
+        await raw.query(
+          `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+           values ($1, $2, $3, $4, 1, $5, 1)`,
+          [endable(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
+        );
+      }
     });
 
     afterAll(async () => {
@@ -1452,6 +1519,8 @@ describe.skipIf(!up)(
             {
               agentId: ids.agent('A'),
               agentVersion: 1,
+              packageId: ids.pkg('A'),
+              packageVersion: 1,
             },
           ),
         ['not_found'],

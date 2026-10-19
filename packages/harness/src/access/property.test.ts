@@ -138,6 +138,9 @@ function checkInvariant(out: Entitled, input: TurnInput) {
     agentId: e.agentId,
     endedAt: null,
     agentVersion: agent.version,
+    // Task 3.16: and pinned to exactly the entitlement's package version.
+    packageId: e.packageId,
+    packageVersion: e.packageVersion,
   });
 }
 

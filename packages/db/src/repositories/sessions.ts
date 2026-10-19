@@ -3,7 +3,14 @@ import { LIMITS } from '@edmate/contracts';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { agents, agentVersions, sessions } from '../schema/index.js';
+import {
+  agents,
+  agentVersions,
+  learnerProfiles,
+  packages,
+  packageVersions,
+  sessions,
+} from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { iso } from './map.js';
@@ -16,6 +23,12 @@ export interface SessionRow {
   teacherId: string;
   agentId: string;
   agentVersion: number;
+  /**
+   * The package version the session's entitlement resolved to when it was created (task 3.16).
+   * Null only on a session that had already ended before migration 0009.
+   */
+  packageId: string | null;
+  packageVersion: number | null;
   helpState: unknown;
   summary: string | null;
   endedAt: string | null;
@@ -52,21 +65,32 @@ function helpStateJson(value: unknown, method: string): string {
   return json;
 }
 
-const NewSession = z.strictObject({ agentId: IdSchema, agentVersion: z.int().min(0) });
+const NewSession = z.strictObject({
+  agentId: IdSchema,
+  agentVersion: z.int().min(0),
+  packageId: IdSchema,
+  packageVersion: z.int().min(0),
+});
 
 export function sessionsRepo(db: Db) {
   return {
     /**
-     * Starts a session for the scope's student with one of the scope's teacher's agent versions.
-     * Another teacher's agent, or a version that doesn't exist, is `not_found`.
+     * Starts a session for the scope's student with one of the scope's teacher's agent versions,
+     * pinned to the package version the caller's entitlement resolved to just before (task 3.16).
+     * Another teacher's agent or package, a package of another agent, or a version that doesn't
+     * exist, is `not_found`.
      */
     async create(
       scope: StudentScope,
-      input: { agentId: string; agentVersion: number },
+      input: { agentId: string; agentVersion: number; packageId: string; packageVersion: number },
     ): Promise<{ id: string }> {
       const method = 'sessions.create';
       const { studentId, teacherId } = studentScope(scope, method);
-      const { agentId, agentVersion } = parseArg(NewSession, input, method);
+      const { agentId, agentVersion, packageId, packageVersion } = parseArg(
+        NewSession,
+        input,
+        method,
+      );
       const id = randomUUID();
       const result = await translateWrite(method, () =>
         db.execute(
@@ -78,13 +102,21 @@ export function sessionsRepo(db: Db) {
               [sessions.teacherId, sql`${agents.teacherId}`],
               [sessions.agentId, sql`${agents.id}`],
               [sessions.agentVersion, sql`${agentVersions.version}`],
+              [sessions.packageId, sql`${packageVersions.packageId}`],
+              [sessions.packageVersion, sql`${packageVersions.version}`],
             ],
             sql`from ${agentVersions} join ${agents} on ${agents.id} = ${agentVersions.agentId}
+                join ${packages} on ${packages.agentId} = ${agents.id}
+                join ${packageVersions} on ${packageVersions.packageId} = ${packages.id}
                 where ${and(
                   eq(agents.id, agentId),
                   eq(agents.teacherId, teacherId),
                   eq(agentVersions.teacherId, teacherId),
                   eq(agentVersions.version, agentVersion),
+                  eq(packages.id, packageId),
+                  eq(packages.teacherId, teacherId),
+                  eq(packageVersions.teacherId, teacherId),
+                  eq(packageVersions.version, packageVersion),
                 )}`,
           ),
         ),
@@ -111,6 +143,50 @@ export function sessionsRepo(db: Db) {
       if (written(result) !== 1) throw new RepositoryError('not_found', method);
     },
 
+    /**
+     * Task 3.16: the scope's entitlement no longer names the package version this session is
+     * pinned to. In one transaction, ends the session if it is still open and, only when this
+     * call is the one that ended it, clears the pair's `learner_profiles.last_summary` (no error
+     * if there is no profile row). So a retried or stale turn on an already-ended session is a
+     * no-op that can never wipe a summary written since under a new session; `ended` says which.
+     *
+     * The scope must come from the entitlement, never from the client. A session that is missing
+     * or another student's or teacher's is `not_found` and nothing is written.
+     *
+     * help_state is kept on purpose: an ended session can't be loaded for a turn (TurnConfigStore
+     * fails closed on it), and deleting session data is the retention job's work.
+     */
+    async endOnPackageChange(scope: StudentScope, sessionId: string): Promise<{ ended: boolean }> {
+      const method = 'sessions.endOnPackageChange';
+      const sc = studentScope(scope, method);
+      const id = parseArg(IdSchema, sessionId, method);
+      return db.transaction(async (tx) => {
+        const closed = await tx
+          .update(sessions)
+          .set({ endedAt: sql`now()` })
+          .where(and(ownSession(id, sc), isNull(sessions.endedAt)));
+        if (written(closed) === 1) {
+          await tx
+            .update(learnerProfiles)
+            .set({ lastSummary: null })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
+          return { ended: true };
+        }
+        const [own] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(ownSession(id, sc))
+          .limit(1);
+        if (!own) throw new RepositoryError('not_found', method);
+        return { ended: false };
+      });
+    },
+
     /** The scope's session, or null if it is missing or another student's or teacher's. */
     async get(scope: StudentScope, sessionId: string): Promise<SessionRow | null> {
       const method = 'sessions.get';
@@ -123,6 +199,8 @@ export function sessionsRepo(db: Db) {
           teacherId: sessions.teacherId,
           agentId: sessions.agentId,
           agentVersion: sessions.agentVersion,
+          packageId: sessions.packageId,
+          packageVersion: sessions.packageVersion,
           helpState: sessions.helpState,
           summary: sessions.summary,
           endedAt: sessions.endedAt,

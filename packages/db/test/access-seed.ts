@@ -5,7 +5,8 @@
 // - pkg_a has v1 (mod_a1) and v2 (mod_a1, mod_a2); pv_a (v1) is what the seed's subscriptions use.
 // - agt_a_draft (draft) with pkg_a_draft; agt_b_susp (suspended).
 // - Sessions: ses_1a_ended (ended), ses_1a_draft (another agent), ses_preview_a (teacher A
-//   previewing agt_a, pinned v2), ses_eval_a (eval student, v2).
+//   previewing agt_a, pinned v2), ses_eval_a (eval student, v2). Each session's package pin
+//   (task 3.16) is what its entitlement resolves to here: pkg_a v2 for preview and eval.
 // - Subscriptions: 1A active, 2A paused, 1B ended, 2B active.
 import { demoLocalePack, localePackMinimal } from '@edmate/contracts/fixtures';
 import { eq } from 'drizzle-orm';
@@ -104,6 +105,8 @@ export async function seedAccess(db: Db): Promise<void> {
       teacherId: A,
       agentId: ids.agent('A'),
       agentVersion: 1,
+      packageId: ids.pkg('A'),
+      packageVersion: 1,
       endedAt: new Date('2026-10-17T09:00:00Z'),
     },
     {
@@ -112,14 +115,26 @@ export async function seedAccess(db: Db): Promise<void> {
       teacherId: A,
       agentId: 'agt_a_draft',
       agentVersion: 1,
+      packageId: 'pkg_a_draft',
+      packageVersion: 1,
     },
-    { id: 'ses_preview_a', studentId: A, teacherId: A, agentId: ids.agent('A'), agentVersion: 2 },
+    {
+      id: 'ses_preview_a',
+      studentId: A,
+      teacherId: A,
+      agentId: ids.agent('A'),
+      agentVersion: 2,
+      packageId: ids.pkg('A'),
+      packageVersion: 2,
+    },
     {
       id: 'ses_preview_a_draft',
       studentId: A,
       teacherId: A,
       agentId: 'agt_a_draft',
       agentVersion: 1,
+      packageId: 'pkg_a_draft',
+      packageVersion: 1,
     },
     {
       id: 'ses_eval_a',
@@ -127,6 +142,8 @@ export async function seedAccess(db: Db): Promise<void> {
       teacherId: A,
       agentId: ids.agent('A'),
       agentVersion: 2,
+      packageId: ids.pkg('A'),
+      packageVersion: 2,
     },
   ]);
 

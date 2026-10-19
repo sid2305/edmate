@@ -140,6 +140,9 @@ export async function seed(db: Db): Promise<void> {
       teacherId: tid,
       agentId: ids.agent(t),
       agentVersion: 1,
+      // Task 3.16: pinned to what sub_<pair> resolves to (pkg_<teacher> v1).
+      packageId: ids.pkg(t),
+      packageVersion: 1,
       summary: `[${p}] summary`,
     });
     await db.insert(s.messages).values([

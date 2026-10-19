@@ -1,5 +1,5 @@
 import { MessageSchema, type Message } from '@edmate/contracts';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { messages, sessions } from '../schema/index.js';
@@ -41,10 +41,10 @@ export function messagesRepo(db: Db) {
     },
 
     /**
-     * Appends a message to the scope's session; another scope's session is `not_found`. The id is
-     * the caller's (the TranscriptStore port passes a whole Message) and ids are unique across all
-     * sessions, so a duplicate id is also `not_found`: it can't tell anyone that the id exists in
-     * someone else's session.
+     * Appends a message to the scope's own **open** session; another scope's session, or an ended
+     * one, is `not_found`. The id is the caller's (the TranscriptStore port passes a whole Message)
+     * and ids are unique across all sessions, so a duplicate id is also `not_found`: it can't tell
+     * anyone that the id exists in someone else's session.
      */
     async append(scope: StudentScope, sessionId: string, m: Message): Promise<void> {
       const method = 'messages.append';
@@ -70,7 +70,7 @@ export function messagesRepo(db: Db) {
                 ],
                 [messages.createdAt, sql`${msg.createdAt}::timestamptz`],
               ],
-              sql`from ${sessions} where ${ownSession(id, sc)}`,
+              sql`from ${sessions} where ${and(ownSession(id, sc), isNull(sessions.endedAt))}`,
             ),
           ),
         'not_found',
