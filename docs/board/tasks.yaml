@@ -523,9 +523,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: running
   branch: m3/3.7-orchestrator
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '3.8'
   milestone: M3
   title: '`meter` and `commit` via the worker queue'
