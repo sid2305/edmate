@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Spec text aligned with the 13+ age decision · decided by team lead · risk: low
+Decided: the PRD's pilot row and "MVP out" list, and the build plan's out-of-scope line and task 1.7, now say 13+ (13–17 with parental consent where the market requires it), matching the human's decision of 18 Oct 2026 and board task 1.7. Found by the 4.0a safety review.
+Why: four lines still said 18+, contradicting the decided open question.
+Alternatives: leave the stale text.
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · Per-turn cost ceiling · decided by team lead · risk: medium
 Decided: A turn stops when its model cost passes a provisional 0.10 USD (configurable); a turn on a model with no price aborts rather than running unmetered. Billing context comes from the entitlement, never the request.
 Why: The spec requires a per-turn ceiling but sets no number; this is a placeholder until the cost data in 7.6.
