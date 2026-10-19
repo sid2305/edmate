@@ -42,7 +42,7 @@ Snapshot cases: `skill coach`, `investing with a market disclaimer`, `investing 
 Composed prompt excerpt (paste from the snapshot):
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill explain > systemPrompt" (the full frame and safety preamble as the model sees them), plus "investing with a market disclaimer" and "investing without a market disclaimer (falls back to generic)".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -62,7 +62,7 @@ Snapshot cases: `skill explain`
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill explain > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -83,7 +83,7 @@ Snapshot cases: `skill coach`, `coach rung 0` to `coach rung 4`
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill coach > systemPrompt" and "coach rung 0" through "coach rung 4".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -102,7 +102,7 @@ Snapshot cases: `skill practice`
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill practice > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -122,7 +122,7 @@ Snapshot cases: `skill feedback`
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill feedback > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -144,7 +144,7 @@ Snapshot cases: `skill mock_interview`, `mock_interview with persona template "I
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill mock_interview > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -164,7 +164,7 @@ Snapshot cases: `skill revision`
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill revision > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -186,7 +186,7 @@ Snapshot cases: `mode locked (generic reply)`, `mode locked (name_package reply)
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mode locked (generic reply)", "mode locked (name_package reply)", "mode ask_teacher", "mode redirect (off_topic)", "mode distress", "mode distress (mid mock-interview, persona set)" and "mode fallback".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -218,7 +218,7 @@ Adversarial inputs (hand to 4.9/5.8 as eval cases; expected behaviour in bracket
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Interviewer\" > systemPrompt".
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
@@ -250,7 +250,7 @@ Adversarial inputs (hand to 4.9/5.8 as eval cases):
 Composed prompt excerpt:
 
 ```
-<placeholder: composed prompt excerpt>
+Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Viva examiner\" > systemPrompt", and "mode distress (mid mock-interview, persona set)" to see the role drop.
 ```
 
 Sign-off: approved by ______ — ______ (expected: sid2305)
