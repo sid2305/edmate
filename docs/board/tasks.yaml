@@ -623,9 +623,9 @@ tasks:
   accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.16-sessions-follow-package
+  model: plan:sonnet
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -666,7 +666,8 @@ tasks:
   model: plan:sonnet build:opus-5.5/medium
 - id: 4.0c
   milestone: M4
-  title: 'Suite validator follow-ups from the 4.0b review: the loader returns file/case pairs (no re-listing or `as` cast), `pending` matched case-insensitively, a suite that fails to load says so instead of "no cases", and the reviewer rule on by default (EDMATE_ALLOW_PENDING=1 to opt out)'
+  title: 'Suite validator follow-ups from the 4.0b review: the loader returns file/case pairs (no re-listing or `as` cast), `pending` matched case-insensitively, a suite that fails to load says so instead
+    of "no cases", and the reviewer rule on by default (EDMATE_ALLOW_PENDING=1 to opt out)'
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
@@ -680,7 +681,7 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.1-guard-framework
   model: plan:sonnet build:opus-5.5/medium
@@ -693,10 +694,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.2-pii-scrub
+  model: plan:sonnet
 - id: '4.3'
   milestone: M4
   title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'
