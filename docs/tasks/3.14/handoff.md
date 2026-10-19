@@ -157,3 +157,10 @@ $ git diff --stat
   since it leaves an avoidable (if currently unlikely) collision path.
 - Reversible: yes — an internal key-naming detail behind `TurnCounter`/`TurnLimits`; no external
   contract depends on the exact Redis key shape.
+
+### 19 Oct 2026 · 3.14 One documented cast for the Redis Lua command · decided by team lead (typescript review) · risk: low
+Decided: `packages/queue/src/turnLimits.ts` keeps a single commented cast to probe and define the custom Lua command on the ioredis client.
+Why: ioredis has no typed generics for defineCommand; the cast is isolated and tested.
+Alternatives: call `eval` with the script text each time (no cached script).
+Reversible: yes.
+
