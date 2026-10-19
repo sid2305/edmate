@@ -157,7 +157,13 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
       outcome: 'replied',
       next: {
         rung: 2,
-        help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: [CANARY] },
+        help: {
+          stuckTurns: 1,
+          attemptLogged: true,
+          pendingCheck: false,
+          answerKey: [CANARY],
+          lockedStopped: false,
+        },
       },
       replyText: 'What do you notice about the denominators?',
     };

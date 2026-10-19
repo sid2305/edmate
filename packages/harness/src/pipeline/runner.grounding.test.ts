@@ -55,6 +55,8 @@ interface Turn {
   mainFails?: boolean;
   /** A shared TeacherQuestion store across turns. */
   store?: ReturnType<typeof memoryTeacherQuestionStore>;
+  /** buildContext could not read the stored help state (4.6b: no help state is saved). */
+  unreadableHelp?: boolean;
 }
 
 async function turn(o: Turn) {
@@ -84,6 +86,7 @@ async function turn(o: Turn) {
         lockedHit: false,
         helpRung: 0,
         helpState: help,
+        ...(o.unreadableHelp === true ? { helpStateUnreadable: true } : {}),
       }),
     decide: {
       run: () =>
@@ -108,6 +111,7 @@ async function turn(o: Turn) {
     commit: steps.commits[0],
     judged: t.judged,
     savedAsks: saved === undefined ? undefined : (parseSessionHelp(saved).help.groundingAsks ?? 0),
+    savedHelp: saved,
   };
 }
 
@@ -242,6 +246,32 @@ describe('runner + grounding', () => {
     });
     expect(r.store.opened).toHaveLength(1);
     expect(r.savedAsks).toBe(1);
+  });
+
+  it('with an unreadable help state (4.6b drops next), a grounding escalation still opens its question but saves no help state', async () => {
+    for (const storeFails of [false, true]) {
+      const r = await turn({
+        reply: ['Python 4 makes // exact.'],
+        judge: 'ungrounded',
+        realCommit: true,
+        unreadableHelp: true,
+        storeFails,
+      });
+      // Live open, then (only when it failed) commit's fallback open.
+      expect(r.store.opened).toHaveLength(storeFails ? 2 : 1);
+      expect(r.savedAsks).toBeUndefined();
+    }
+  });
+
+  it('a saved help state keeps both the grounding count and 4.6b’s stop flag', async () => {
+    const r = await turn({
+      reply: ['Python 4 makes // exact.'],
+      judge: 'ungrounded',
+      realCommit: true,
+      groundingAsks: 1,
+    });
+    expect(r.savedAsks).toBe(2);
+    expect(r.savedHelp).toMatchObject({ groundingAsks: 2, lockedStopped: false });
   });
 
   it('the count rides through a failed turn even when decide rebuilds the help state (fix round 1)', async () => {

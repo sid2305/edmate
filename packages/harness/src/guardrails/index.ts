@@ -71,6 +71,7 @@ export {
   lockedIndex,
   type LockedToken,
   lockedTokens,
+  type MarkupReading,
   shingles,
   stringLeaves,
 } from './lockedMatch.js';

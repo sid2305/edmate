@@ -10,6 +10,199 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · Distress detection drops the game-talk exemption · decided by human (B-18) · risk: high
+Decided: every hard distress phrase stays hard even when a game word is nearby; game talk such as "killed myself in Fortnite" will sometimes page on-call, and that is accepted. The other findings from 4.3's third re-check (more "pills ready" phrasings, the code-word window) follow the usual rule: fixed in the PR only if CRITICAL or HIGH, otherwise a follow-up task.
+Why: three fix rounds could not make a game exemption that never softened real ideation next to a game word ("I keep thinking about suicide during the match"); a false page costs far less than a missed disclosure.
+Alternatives: a fourth narrow round with a stricter exemption; merge with the exemption and fix it later.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · Eight new eval cases signed off (grounding and locked) · decided by human (B-19) · risk: high
+Decided: the 5 grounding cases from the 4.7 safety review and the 3 locked cases from the 4.6b safety review are approved, with the human as reviewer (reviewed_by: sid2305).
+Why: they cover the review's attacks (wrong-answer confirmation, laundered claims, judge injection, uncovered neighbours; HTML attributes, tags inside words, look-alike letters).
+Alternatives: approve some; change a case.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.6b No short-phrase flash: a passing batch's last ~7 tokens stay held until the next batch passes or the attempt ends · decided by tdd-guide (4.6 review finding) · risk: high
+Decided: `lockedStream.check()` releases a passing batch minus its carryover (same `carryStart` rule as before), and that held tail is checked again with the next batch; a hit discards the whole thing, held tail included. `release()` shows it once at a clean end.
+Why: the 4.6 review found up to 7 locked tokens could flash before a later replace; holding them back until they are re-checked with more text (or the attempt ends cleanly) means a span that trips later is never shown, not even in part.
+Alternatives: keep the 4.6 behaviour (accepted known miss); a prefix-query port (an oracle, ruled out in ADR-0007).
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6b Batch: one `leakCheck` call per batch of sentences, not one per sentence · decided by tdd-guide (4.6 review finding) · risk: medium
+Decided: `check(sentences)` joins every sentence it is given (plus the held-back carryover) into one combined text and makes one call.
+Why: the 4.6 design made one port call per sentence; a long reply arriving as many sentences in one model chunk (e.g. a 300-line code answer) could then need as many slow round trips in series, risking the attempt budget. A span crossing sentences inside one batch is still one contiguous run in the joined text, so batching needs no extra carryover logic of its own.
+Alternatives: keep one call per sentence; cap the number of sentences per call (adds complexity for no safety benefit, since the batch is still checked as one string either way).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b Session-wide stop after the first locked hit or failed check, via a new sticky `HelpState.lockedStopped` field · decided by lead (task brief, ADR-0007 §8) and tdd-guide (where the flag lives and how it is threaded) · risk: high
+Decided: add `lockedStopped: boolean` to the harness-internal `HelpState` (not a contracts change: it rides in the existing opaque `sessions.help_state` blob `SessionStateStore` already saves, the same path `answerKey` and the help ladder use). The ladder (`pedagogy/ladder.ts`) carries it through every branch untouched. `runner.ts` sets it true on the saved `next` when a turn's `GenerateResult.locked` is set, and reads the session's existing value from `built.helpState.lockedStopped` to pass into `generate` as `lockedStopped`, which `createGenerate` turns into `lockedStream`'s `holdAll` option: every later turn in the session holds its whole reply until the attempt ends cleanly, the same path a non-streamed reply already takes, instead of streaming sentence by sentence.
+Why: ADR-0007 §8 (as written at 4.6) said the stop position leaks about log2(N+1) bits *per turn*; stopping all per-sentence streaming for the rest of the session after the first hit bounds that to log2(N+1) bits once, then 1 bit per turn (whether that turn's reply was replaced) — the ADR text is corrected to say this.
+Alternatives: a new contracts field or port for session state (unnecessary: the existing opaque blob already round-trips harness-internal state across turns); reset the flag after some number of turns (no textual basis in the ADR for when that would be safe, so left out); carry it in `TurnContext` (ADR-0005 keeps `TurnContext` free of anything beyond what the model, events and traces need — this is harness/session bookkeeping only).
+Reversible: yes, with safety-reviewer sign-off (no ADR needed: the field lives entirely inside the harness's own opaque blob).
+
+---
+
+### 19 Oct 2026 · 4.6b Folding: HTML tags and entities and a small confusables table, all length-preserving · decided by tdd-guide (4.6 review finding) · risk: medium
+Decided: `stripHtmlTags` only matches a real tag shape (`<\/?[a-zA-Z][-a-zA-Z0-9]*(?:\s[^<>]*)?\/?>`), not a bare `<[^>]*>`, after a first attempt with the bare form broke the fixture suite by swallowing a demo teacher's own `while count > 0:` / `while count < 5:` code as a "tag" spanning from one comparison operator to a `>` paragraphs later. `decodeHtmlEntities` and `foldConfusables` are both one-for-one, same-length transforms (padding decoded entities with `\p{Cf}`), so token `start` offsets (`carryStart`'s callers slice the original text by them) stay correct.
+Why: the 4.6 review found HTML and homoglyph spans as known misses. A confusables table had to be written from scratch: no shared one exists yet (4.3's distress branch, which might have had one, is unmerged and in fact has none either); it is written for reuse once a later guard needs it.
+Alternatives: route confusable folding through the shared `guardrails/textFold.ts` (risked changing behaviour for every other guard that already uses it — piiPatterns, answerLeak, numbers — which is out of scope here); an exhaustive Unicode confusables table (a known-miss list is honest about what a small table leaves out instead).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b "Case phrase streamed" measured as a 2+-token contiguous run from the locked span, not any shared token · decided by tdd-guide (fixture test design) · risk: low
+Decided: `lockedFixtures.test.ts`'s per-case test counts a leak as a contiguous bigram (or longer) from the case's own `span` appearing in what streamed, not any single token in common with it.
+Why: a single coincidental shared word (e.g. "line", used in a synthetic test frame like "Rubric line 1: " and also, separately, a real word inside a case's locked YAML span) is not locked material leaking; the fixture's job is to catch the actual phrase, not flag ordinary vocabulary overlap.
+Alternatives: 0 tokens of any kind (too strict: an unrelated, 1-token filler word can legitimately release when a check straddles the span's own internal sentence break, since the check genuinely found no 8+-token locked match yet); 8+-token-only (too loose: it was already the pre-existing check and misses the "0 tokens of the case phrase" bar this task sets).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b virtualClock `drive()` flushes until quiet, capped at 50 extra passes, instead of trusting one fixed-size flush · decided by tdd-guide (4.6 review finding) · risk: low
+Decided: on a still-pending promise with no timer due, `drive()` spends up to `QUIET_FLUSH_PASSES` (50) more passes of `FLUSH_TURNS` (2,000) microtask turns each before it calls it a deadlock, instead of deciding after exactly one pass. A regression test (400 single-sentence model chunks in one round, no tool call or timer between them) reproduced a real `virtualClock.drive: deadlock` against the single-pass version and now passes.
+Why: the 4.6 review called the fixed 2,000 a magic number; a true "flush until quiet" (detecting microtask-queue quiescence directly) has no public hook to observe from outside the engine, so this is the practical, capped approximation the review's own wording allowed ("capped").
+Alternatives: raise `FLUSH_TURNS` itself again (same magic-number problem, just a bigger one, as the regression test shows); instrument a quiescence signal into the pipeline's own code for tests to use (adds test-only hooks to production code, against the `tdd-workflow` skill's "don't test implementation details").
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b `ports.ts:39` tightened to `candidates: readonly string[]` · decided by tdd-guide (4.6 review finding) · risk: high
+Decided: `RetrievalIndex.leakCheck`'s first parameter is `readonly string[]`, matching the build plan's Core contracts block, `test/spec-types.ts` and the ADR text. A pure type tightening: every caller already passed an array it never mutates, and the in-memory adapter only reads it.
+Why: the 4.6 review noted the port never needed to mutate its input, so a mutable array was unnecessarily permissive, matching the existing style of other read-only port parameters.
+Alternatives: leave it `string[]` (what the review flagged); a shared type alias for the `scope` shape too (left out: out of scope for this one-line tightening, and the existing inline shape matches `search`'s).
+Reversible: yes, by another ADR (a contracts change, even a type-only one, per build plan rule 2); this PR carries architect, security-reviewer and typescript-reviewer for it.
+
+---
+
+### 19 Oct 2026 · 4.6b Markup is read three ways and no reading removes text in all of them · decided by tdd-guide (fix round 1, typescript-reviewer CRITICAL; lead brief) · risk: high
+Decided: `stripHtmlTags` (which blanked everything from a tag name to the next `>`, so `<x data="...prose...">` hid the prose) is replaced by `foldMarkup` with three readings, all tried like the two invisible-character readings: `text` (nothing removed), `values` (only markup syntax padded: `<`, `</`, tag name, attribute names, `=`, quotes, `/>`, `>`, comment delimiters; quoted and bare values and comment bodies stay text) and `rendered` (whole tags and comments padded, as a browser shows the page). Markup is padded with zero-width spaces (`\p{Cf}`), so `lo<b></b>op`, `<b>lo</b>op` and `lo<!---->op` fold to `loop`. A hand-written scanner reads tags (a `>` inside quotes does not end a tag; a `<` anywhere ends the attempt), so it is linear; folding stays length-preserving. `shingles`, `lockedCandidates` and `carryStart` use every distinct reading (`carryStart` takes the earliest start).
+Why: the lead's brief asked for the `values` reading. On its own it misses two attacks the reviews named: prose written as bare attribute names (`<x the loop repeats ...>`, which the student sees raw), and filler hidden in attributes between visible words (`<span title="note. ok">`, the html-attr-split eval case, where a rendering client shows only the words). `text` catches the first and `rendered` the second; together no wrapper hides text from every reading.
+Alternatives: `values` only (the brief; misses both attacks above); no markup handling at all (misses in-word tags); a real HTML parser (not allowed in the harness, rule 3).
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6b Under holdAll the reply is checked once, at release(), never per batch · decided by lead (fix round 1 brief, typescript-reviewer HIGH) · risk: medium
+Decided: with `holdAll`, `check()` only appends to the held text; `release()` (now async) makes the reply's one `leakCheck` call on the whole reply and shows it only if it passes (a hit or failed check trips as before).
+Why: every per-batch call re-sent the whole reply so far (quadratic), which could time out and turn a clean reply into the safe reply.
+Alternatives: keep per-batch calls but trim the held text (pointless: nothing streams under holdAll anyway).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b The runner owns the stop flag: loaded OR tripped this turn, on every saved help state · decided by lead (fix round 1 brief, safety findings 1 and 2) and tdd-guide (mechanics) · risk: high
+Decided: the runner records a trip at turn level from every source: the stream (`onLockedTrip`, told at once, so a trip on an attempt that then fails or is cancelled still counts), a tool output failed as `locked`, `GenerateResult.locked`, and any `lockedLeak` guard trace that is not ok (a hit or a failed check) in the post guard. `finish()` forces `next.help.lockedStopped = loaded || tripped` on every record that saves a help state (replied, error, cancelled), whatever decide or a skill returned (a correct practice answer's reset, decide's fallback). A post-guard escalate after a locked trip saves the loaded rung and help state untouched plus the flag (the ladder does not move); with no trip an escalation still saves nothing, as before. The ladder still carries the flag too.
+Why: the 4.6b flag was saved only on the replied path when the stream tripped, and several paths reset it to false, so the session-wide stop of ADR-0007's amendment could be undone.
+Alternatives: patch each reset site (skills.ts, fallbackContext, decide's fallback) separately: easy to miss the next one; save decide's `next` on a post-guard escalate (would move the ladder on an escalation).
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6b An unloadable help state runs holdAll and saves no help state · decided by lead (fix round 1 brief, LEAD DECISION) · risk: high
+Decided: when buildContext fails or times out, the context falls back, or a stored blob is there but fails to parse (`helpStateUnreadable`, from `loadSessionHelp`), the turn holds its whole reply and its commit carries no `next`, so the stored state stays as it was. Nothing stored yet (no value, or the column default `{}`) is a fresh session, not unreadable.
+Why: the stored blob may hold `lockedStopped: true`; saving the fallback state would write false over it.
+Alternatives: save the fallback state (clears the flag); treat `{}` as unreadable too (every new session would hold every reply and never save its help state).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b The stop flag stays per session, bounded by the daily message limit · decided by lead (fix round 1 brief, LEAD DECISION) · risk: high
+Decided: `lockedStopped` lives in the session's help state, not per student. ADR-0007 gets a dated amendment saying so: sessions are per student, so the positional leak is about log2(N+1) bits per session, and the effective cap is the daily message limit times about log2(N+1) bits.
+Why: a per-student flag needs a new store; the daily limit already bounds it.
+Alternatives: a per-student flag (new store or port).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b `HelpState.lockedStopped` is optional (absent = false) · decided by lead (fix round 1 brief) · risk: medium
+Decided: `z.boolean().exactOptional()`; `parseSessionHelp` keeps it absent when the blob has none.
+Why: a blob saved before 4.6b now parses and keeps its rung instead of resetting the student to rung 0.
+Alternatives: a required field (the 4.6b behaviour: every live session's ladder resets once).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b The held-back text never starts inside unfinished markup · decided by tdd-guide (fix round 1, safety finding 3) · risk: medium
+Decided: when the checked text ends inside an unfinished tag, comment or entity (`unfinishedMarkupStart`, on the raw and the entity-decoded text), the held-back text starts at the earlier of the carryover and 7 tokens before that `<` or `&`. This covers a sentence-gate cap cut too, since the rule looks at the end of whatever was checked.
+Why: the rest of the tag may arrive later and change how the text before it reads (a tag that closes later is padded away in the rendered reading), so the post guard could find a span the stream had already shown part of. Starting exactly at the `<` (the brief's wording) was not enough: the 7 tokens before it must be checked again with what follows the tag.
+Alternatives: start the held text at the `<` (lets up to 7 locked tokens before the tag stream).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6b The three new safety eval cases wait outside the suite for sign-off · decided by tdd-guide (fix round 1) · risk: medium
+Decided: the three cases are in `docs/tasks/4.6/pending-cases/` with `reviewed_by: pending`, not in `evals/suites/locked/`. They passed the offline locked fixture gate when included (47/47; see the fix-round evidence), but the strict suite rule (`suites.test.ts`: no committed case may say `reviewed_by: pending`) fails CI with them in. The fixture gate instead gained three forms that run the same attacks (empty tags inside words, `<span title="note. ok">` between words, Cyrillic look-alikes) across all 34 seeded cases.
+Why: the brief asked for `reviewed_by: pending` and a green run with nothing skipped; both can't hold. Putting a reviewer's name on them would claim a review that has not happened.
+Alternatives: commit them pending with CI red; set `EDMATE_ALLOW_PENDING=1` (a skip).
+Reversible: yes: once signed off, move them into `evals/suites/locked/`, set `reviewed_by`, and add their SPANS (listed in the fix-round section) and counts (37 cases, 42 steps, 34 by phrase) to the gate.
+
+---
+
+### 19 Oct 2026 · 4.2b — refuse attachments now, design the real pipeline as a follow-up
+Decided: every turn carrying an `attachments` entry is refused at the scrub step, before anything
+about it is read, until a real extract-and-scrub (OCR/vision) pipeline exists. The refusal reuses
+4.2's existing fail-closed mechanics (`ScrubFailedError`, `guard_blocked`); the raw-text distress
+check still runs first and still escalates.
+Why: no OCR/vision pipeline exists anywhere in the repo; photo upload is explicit P1 (MVP out) per
+the PRD and build plan. Building the real pipeline now would need a new storage-fetch port, a new
+OCR/vision port or a `ModelRequest` content-block change (either way a `packages/contracts` ADR
+reviewed by architect, security-reviewer and typescript-reviewer), and real/fixture OCR output wired
+through `packages/evals` — materially bigger than a guard task and building infrastructure for a
+deferred feature.
+Alternatives: build the real OCR/vision pipeline now (rejected — out of scope, needs an ADR, a board
+follow-up should carry it when photo upload is scheduled).
+Reversible: yes — this is a stopgap guard, not a contract or schema change; a later task can replace
+the refusal with real extraction without touching this decision.
+Risk: medium.
+
+---
+
+### 19 Oct 2026 · 4.2b — no injectable FallbackReplies.attachmentRefused hook yet
+Decided: `ATTACHMENT_REFUSED_REPLY` is a fixed exported English constant, not plumbed through an
+injectable `FallbackReplies` hook.
+Why: nothing in the runner currently reads any such hook for a `guard_blocked` turn — the wire
+`TurnEvent`'s `error` variant has no text field at all, so an injectable surface would be unused
+plumbing today.
+Alternatives: add the hook now for consistency with `limitReached`/`lockedReply` (rejected — no
+caller, no localisation need yet).
+Reversible: yes.
+Risk: low.
+
+---
+
+### 19 Oct 2026 · 4.2b — the missing client-visible text on guard_blocked turns stays a separate,
+cross-cutting fix
+Decided: 4.2b does not invent a wire-delivery mechanism for guard-blocked reply text (the same
+pre-existing gap `DEFAULT_LIMIT_REACHED_REPLY` already has, and every future `guard_blocked` case,
+e.g. 4.4's moderation/jailbreak blocks, will have too).
+Why: that is a `TurnEventSchema`/`apps/web` composition concern, not a guard task's job; the lead
+flagged it as 9.4 scope.
+Alternatives: add a message field to the wire `error` event now (rejected — needs its own ADR and
+contracts change, bigger than this task).
+Reversible: yes.
+Risk: low.
+
+---
+
+### 19 Oct 2026 · 4.2b — PII smuggled inside `skillPayload` (e.g. base64 image data) stays out of
+scope
+Decided: accepted as a known, pre-existing gap, not addressed by this task.
+Why: this task is scoped to the `attachments` field; `skillPayload` is still scrubbed by the
+existing pattern-based text scrub, which cannot parse binary-encoded image data. Not new to 4.2b.
+Alternatives: none evaluated — explicitly out of scope per the lead's revisions.
+Reversible: n/a (no code change made for this).
+Risk: low (noted for awareness, not a blocking item).
+
+---
+
 ### 19 Oct 2026 · Repeated jailbreak strikes: stricter checks and a trust-team notice, no pause · decided by human (B-12) · risk: high
 Decided: after 3 strikes in one session, the rest of that session gets stricter checks and the trust team gets one notice. The student is not paused, locked out or punished. Built as task 4.4e.
 Why: repeated attempts are a signal worth a human look, but a 13+ learner poking at the rules should not lose access.

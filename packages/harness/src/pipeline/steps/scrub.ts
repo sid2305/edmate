@@ -1,8 +1,12 @@
 // Step 3a, the PII scrub (task 4.2): runs the scrub-phase guard chain (piiScrub) over the input
 // text and over every string in the skill payload, before anything else sees them. The runner
 // threads the result into every later step, the model and CommitRecord (history), never the raw
-// input. Transcripts (2.7) arrive as `input.text`, so they are scrubbed here too; text inside
-// images is task 4.2b.
+// input. Transcripts (2.7) arrive as `input.text`, so they are scrubbed here too.
+//
+// Task 4.2b: any turn carrying an attachment is refused outright, before the guard chain or the
+// skill-payload walk even starts — not even its bytes or storage key are read. No OCR/vision
+// pipeline exists yet (photo upload is P1 in the PRD); this is the safe stopgap until a real
+// extract-and-scrub pipeline is designed and built for that task (board task 4.2b design note).
 //
 // Fail closed: any chain outcome but `ok` (a failure, a block, a rewrite the second pass did not
 // accept, an escalate) throws ScrubFailedError with ids and an error name only, never a message,
@@ -24,6 +28,16 @@ const registry = new GuardRegistry<PiiScrubCtx>('scrub');
 registry.register(createPiiScrubGuard());
 
 const payloadShape = (): ScrubFailedError => new ScrubFailedError({ guardCause: 'payload_shape' });
+
+/**
+ * 4.2b's fixed, friendly English reply for an attachment-refused turn. Not yet wired to any
+ * client-visible channel: the wire `TurnEvent`'s `error` variant carries no text field (the same
+ * pre-existing gap `DEFAULT_LIMIT_REACHED_REPLY` has); exported for whichever later task wires
+ * guard-blocked replies to the stream.
+ */
+export const ATTACHMENT_REFUSED_REPLY =
+  "I can't look at photos or files yet, only text. Please type out the question (or what the " +
+  "image shows) and I'll help from there.";
 
 function failureOf(r: Exclude<GuardChainResult, { outcome: 'ok' }>): ScrubFailureDetail {
   switch (r.outcome) {
@@ -48,6 +62,11 @@ export function createScrub(
   guards: readonly Guard<PiiScrubCtx>[] = registry.ordered(),
 ): Steps['scrub'] {
   return async (env: StepEnv, e): Promise<Scrubbed> => {
+    // 4.2b: any attachment is refused before anything about it — not even its bytes or storage
+    // key — is read. No OCR/vision pipeline exists yet; this is the safe stopgap until one does.
+    if (env.input.attachments !== undefined && env.input.attachments.length > 0) {
+      throw new ScrubFailedError({ guardCause: 'attachment' });
+    }
     const ctx: PiiScrubCtx = { locale: e.locale };
     const opts = {
       phase: 'scrub' as const,

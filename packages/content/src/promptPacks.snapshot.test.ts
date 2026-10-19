@@ -92,6 +92,7 @@ const help: HelpState = {
   stuckTurns: 0,
   attemptLogged: false,
   pendingCheck: false,
+  lockedStopped: false,
   answerKey: ['5/6'],
 };
 

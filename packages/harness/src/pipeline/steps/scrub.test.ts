@@ -2,6 +2,7 @@
 import { type GuardResult, LIMITS, type LocalePack, type TurnInput } from '@edmate/contracts';
 import {
   demoAgentConfig,
+  demoAttachment,
   demoEntitlementSubscription,
   demoLocalePack,
   demoPackagePaid,
@@ -22,7 +23,12 @@ import { ScrubFailedError } from '../errors.js';
 import { ScrubbedSchema } from '../results.js';
 import type { Entitled, StepEnv } from '../types.js';
 import { defaultSteps } from './index.js';
-import { createScrub, SCRUB_GUARD_TIMEOUT_MS, scrub } from './scrub.js';
+import {
+  ATTACHMENT_REFUSED_REPLY,
+  createScrub,
+  SCRUB_GUARD_TIMEOUT_MS,
+  scrub,
+} from './scrub.js';
 
 const PHONE = '90000 11111';
 const entitled = (locale: LocalePack = indiaLocalePackWithPii): Entitled => ({
@@ -501,5 +507,88 @@ describe('scrub: every non-ok outcome fails closed with ids and an error name on
     const { env, drive } = setup(withText(`call ${PHONE}`));
     const e = await failure(drive(scrub(env, entitled(bad))));
     expect(e.cause).toEqual({ guardCause: 'error', errorName: 'PiiPatternError' });
+  });
+});
+
+describe('scrub: an attachment is refused, not scrubbed (task 4.2b)', () => {
+  // No OCR/vision pipeline exists yet (board task 4.2b design note): every attachment is refused
+  // before anything about it — not even its bytes or storage key — is read. This is the safe
+  // stopgap until a real extract-and-scrub pipeline is built for photo upload (P1).
+  it('a single attachment is refused before the guard chain or payload walk runs', async () => {
+    const spy = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', { ok: true });
+    const { env, drive } = setup({ ...demoTurnInput, attachments: [demoAttachment] });
+    const e = await failure(drive(createScrub([spy])(env, entitled())));
+    expect(e.detail).toEqual({ guardCause: 'attachment' });
+    expect(spy.calls).toEqual([]);
+  });
+
+  it('two attachments (at the schema cap) are refused the same way', async () => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      attachments: [demoAttachment, { ...demoAttachment, storageKey: 'test/uploads/att_02.png' }],
+    });
+    expect((await failure(drive(scrub(env, entitled())))).detail).toEqual({
+      guardCause: 'attachment',
+    });
+  });
+
+  it('an empty attachments array is not a refusal (regression against an over-eager check)', async () => {
+    const { env, drive } = setup({ ...demoTurnInput, attachments: [] });
+    expect(await drive(scrub(env, entitled()))).toEqual({
+      text: demoTurnInput.text,
+      guards: [{ name: 'piiScrub', ok: true }],
+    });
+  });
+
+  it('a PII-bearing text and skillPayload alongside an attachment are still refused outright', async () => {
+    const spy = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', { ok: true });
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      text: `my number is ${PHONE}`,
+      skillPayload: { phone: PHONE },
+      attachments: [demoAttachment],
+    });
+    const e = await failure(drive(createScrub([spy])(env, entitled())));
+    expect(e.detail).toEqual({ guardCause: 'attachment' });
+    expect(spy.calls).toEqual([]);
+  });
+
+  // Labels are illustrative only (via storageKey, test documentation value): no OCR exists to
+  // tell these cases apart today, so all four are refused identically before any extraction is
+  // even attempted. A follow-up task building the real extract-and-scrub pipeline must re-test
+  // these for real once OCR/vision exists.
+  it.each([
+    ['an ID-card photo', 'test/uploads/id-card-fixture.png'],
+    ['a rotated/split-text photo', 'test/uploads/rotated-split-text-fixture.png'],
+    ['a no-text image', 'test/uploads/no-text-fixture.png'],
+    ['a "slow OCR" fixture', 'test/uploads/slow-ocr-fixture.png'],
+  ] as const)('adversarial fixture label: %s', async (_label, storageKey) => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      attachments: [{ ...demoAttachment, storageKey }],
+    });
+    expect((await failure(drive(scrub(env, entitled())))).detail).toEqual({
+      guardCause: 'attachment',
+    });
+  });
+
+  it('the thrown error never shows the text, skillPayload or any attachment field', async () => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      text: `my number is ${PHONE}`,
+      skillPayload: { phone: PHONE },
+      attachments: [demoAttachment],
+    });
+    const e = await failure(drive(scrub(env, entitled())));
+    const s = shown(e);
+    expect(s).not.toContain(PHONE);
+    expect(s).not.toContain(demoTurnInput.text);
+    expect(s).not.toContain(demoAttachment.storageKey);
+    expect(s).not.toContain(demoAttachment.mime);
+  });
+
+  it('ATTACHMENT_REFUSED_REPLY is friendly, English, names no ids or codes', () => {
+    expect(ATTACHMENT_REFUSED_REPLY).not.toMatch(/error|guard_blocked|attachment_refused/i);
+    expect(ATTACHMENT_REFUSED_REPLY).toMatch(/photo|image/i);
   });
 });

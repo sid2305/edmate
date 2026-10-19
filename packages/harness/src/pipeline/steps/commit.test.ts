@@ -91,7 +91,7 @@ function record(o: Partial<CommitRecord> = {}): CommitRecord {
     },
     next: {
       rung: 2,
-      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: [CANARY] },
+      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: [CANARY], lockedStopped: false },
     },
     replyText: 'What do you notice about the denominators?',
     ...o,
@@ -135,6 +135,7 @@ describe('commit', () => {
           attemptLogged: true,
           pendingCheck: false,
           answerKey: [CANARY],
+          lockedStopped: false,
         },
       },
     ]);
@@ -193,7 +194,7 @@ describe('commit', () => {
         record({
           next: {
             rung: 0,
-            help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [big] },
+            help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [big], lockedStopped: false },
           },
         }),
       ),

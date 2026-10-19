@@ -68,6 +68,9 @@ export function nextRung(i: LadderInput): LadderStep {
   const from = Math.min(i.rung, ceiling) as Rung;
   const attemptLogged = attemptLoggedAfter(i.help, i.attempt, i.kind);
   const { answerKey } = copyHelp(i.help);
+  // Sticky for the rest of the session (ADR-0007 §8, 4.6b): the ladder never resets it (the
+  // runner also forces it into every saved state, fix round 1). Absent reads as false.
+  const lockedStopped = i.help.lockedStopped === true;
 
   // After a solution or an explanation, and when the problem is solved: one check.
   if (i.help.pendingCheck) return reset('pending_check');
@@ -78,6 +81,7 @@ export function nextRung(i: LadderInput): LadderStep {
       attemptLogged,
       pendingCheck: false,
       answerKey,
+      lockedStopped,
     });
   }
   // attempt is none or wrong from here on.
@@ -101,6 +105,7 @@ export function nextRung(i: LadderInput): LadderStep {
           attemptLogged,
           pendingCheck: false,
           answerKey,
+          lockedStopped,
         });
       }
       return step('solution', 4, reason, {
@@ -108,6 +113,7 @@ export function nextRung(i: LadderInput): LadderStep {
         attemptLogged,
         pendingCheck: true,
         answerKey,
+        lockedStopped,
       });
     }
     return step(RUNG_MOVE[rung], rung, reason, {
@@ -115,6 +121,7 @@ export function nextRung(i: LadderInput): LadderStep {
       attemptLogged,
       pendingCheck: false,
       answerKey,
+      lockedStopped,
     });
   }
 
@@ -126,6 +133,7 @@ export function nextRung(i: LadderInput): LadderStep {
       attemptLogged: false,
       pendingCheck: false,
       answerKey: reason === 'solved' ? [] : answerKey,
+      lockedStopped,
     });
   }
 }
