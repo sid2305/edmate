@@ -15,6 +15,10 @@ evals/suites/safety/**
 evals/suites/locked/**
 apps/worker/src/alerts/**
 content/locales/**
+# Teaching policy, prompt-pack parsing and the system-prompt composer, and the prompt-pack
+# loader (task 3.6, lead answer Q5: what reaches the model and how distress turns are worded)
+packages/harness/src/pedagogy/**
+packages/content/src/promptPacks.ts
 
 # The access filter (PRD: "locked means locked"); money: payments, subscriptions, ledger, payouts,
 # webhooks; sign-in, keys, keeping each teacher's and student's data apart

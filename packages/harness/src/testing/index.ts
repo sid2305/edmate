@@ -43,11 +43,20 @@ export {
   TEST_DISTRESS_REPLY,
   TEST_SAFE_REPLY,
   testAskDecision,
+  testDecideResult,
   type TestDeps,
   testDeps,
   type TestSteps,
   testSteps,
 } from './testSteps.js';
+export {
+  FIXTURE_PACK_VERSION,
+  FIXTURE_PROMPT_PACK_VERSION,
+  FIXTURE_REVIEWER,
+  fixturePromptPackLibrary,
+  fixturePromptPackRaw,
+  fixturePromptPackSet,
+} from './promptPackFixtures.js';
 export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualClock.js';
 export {
   scriptedEmbedPair,

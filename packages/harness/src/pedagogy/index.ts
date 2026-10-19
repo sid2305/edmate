@@ -1,10 +1,23 @@
-// Pedagogy: the teaching policy for `decide` (help ladder, skill rules, coverage, budgets).
+// Pedagogy: the teaching policy for `decide` (help ladder, skill rules, coverage, budgets), the
+// prompt packs and the system-prompt composer.
 export {
   MAX_OUTPUT_TOKENS,
   type Move,
   maxOutputTokensFor,
   SKILL_OUTPUT_TOKENS,
 } from './budgets.js';
+export {
+  type ComposeInput,
+  type ComposeMode,
+  composeMode,
+  type Composed,
+  composeSystemPrompt,
+  DATA_CLOSE,
+  DATA_OPEN,
+  LockedMaterialError,
+  PromptPackMismatchError,
+  replyLanguage,
+} from './compose.js';
 export { coverageGate, DEFAULT_COVERAGE_THRESHOLD, isCovered } from './coverage.js';
 export {
   type HelpState,
@@ -39,3 +52,31 @@ export {
   type PolicyTool,
 } from './policy.js';
 export { selectSkill, type SkillReason, type SkillStep } from './skills.js';
+export { buildModelRequest, type ModelRequestInput, promptCacheKey } from './modelRequest.js';
+export {
+  createPromptPackLibrary,
+  FRAME_SECTIONS,
+  type FrameSection,
+  MODE_PACKS,
+  type ModePackName,
+  PACK_KINDS,
+  type PackKind,
+  type PackName,
+  packKindOf,
+  parsePromptPackSet,
+  placeholdersOf,
+  type PromptPack,
+  PromptPackError,
+  type PromptPackIssue,
+  type PromptPackLibrary,
+  type PromptPackRef,
+  type PromptPackSet,
+  type RawPromptPackSet,
+  renderTemplate,
+  REQUIRED_PACKS,
+  resolvePromptPackSet,
+  SKILL_PACKS,
+  type SkillPackName,
+  type Slots,
+  UnknownPromptPackVersionError,
+} from './promptPacks.js';

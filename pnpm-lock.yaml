@@ -335,6 +335,9 @@ importers:
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
       js-yaml:
         specifier: 5.5.0
         version: 5.5.0

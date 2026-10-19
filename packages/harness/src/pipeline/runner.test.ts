@@ -1,5 +1,6 @@
 import {
   type Message,
+  type ModelRequest,
   type ProfileStore,
   type RetrievalIndex,
   type TranscriptStore,
@@ -11,6 +12,7 @@ import {
 } from '@edmate/contracts';
 import {
   demoChunk,
+  demoChunkScored,
   demoLearnerProfile,
   demoPedagogyDecision,
   demoTurnInput,
@@ -20,11 +22,26 @@ import {
 import { describe, expect, it } from 'vitest';
 import { driveEvents, driveTurn } from '../testing/driveTurn.js';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from '../testing/memoryRetrieval.js';
-import { testDeps, testSteps } from '../testing/testSteps.js';
+import { buildModelRequest } from '../pedagogy/modelRequest.js';
+import { resolvePromptPackSet } from '../pedagogy/promptPacks.js';
+import { scriptedStreamText } from '../testing/gatewayFixtures.js';
+import {
+  FIXTURE_PROMPT_PACK_VERSION,
+  fixturePromptPackSet,
+} from '../testing/promptPackFixtures.js';
+import {
+  type StepOverrides,
+  testAskDecision,
+  testDecideResult,
+  testDeps,
+  testSteps,
+} from '../testing/testSteps.js';
 import { InvalidEventError, StepNotImplementedError } from './errors.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES } from './spec.js';
+import type { BuiltContext } from './types.js';
 import { buildContext } from './steps/buildContext.js';
+import { decide } from './steps/decide.js';
 import { defaultSteps } from './steps/index.js';
 
 function starts(log: { step: string; phase: string }[]): string[] {
@@ -286,7 +303,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4)', async () => {
+  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -300,14 +317,12 @@ describe('defaultSteps (stubs)', () => {
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
       () => defaultSteps.escalate(env, anyArg, undefined),
-      () => defaultSteps.decide.run(env, anyArg),
       () => defaultSteps.generate(env, anyArg, () => undefined),
       () => defaultSteps.postGuard(env, anyArg),
       () => defaultSteps.meter(env, anyArg),
       () => defaultSteps.commit(env, anyArg),
     ];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
-    expect(() => defaultSteps.decide.fallback(anyArg)).toThrow(StepNotImplementedError);
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
       intent: 'on_task',
       attempt: 'none',
@@ -380,9 +395,9 @@ describe('runTurn with the real buildContext (3.4)', () => {
       entitle: async (env) => ({ ...(await happy.entitle(env)), helpState: stored }),
       buildContext,
       decide: {
-        run: (_env, ctx) => {
+        run: (_env, { ctx }) => {
           seen.push(ctx);
-          return Promise.resolve(demoPedagogyDecision);
+          return Promise.resolve(testDecideResult(demoPedagogyDecision));
         },
       },
     });
@@ -451,5 +466,190 @@ describe('runTurn with the real buildContext (3.4)', () => {
     expect(events.at(-1)?.type).toBe('done');
     expect(seen[0]).toMatchObject({ retrieved: [], helpRung: 0 });
     expect(result.trace?.steps.find((s) => s.name === 'buildContext')?.outcome).toBe('fallback');
+  });
+});
+
+describe('runTurn with the real decide (3.6)', () => {
+  const ANSWER_KEY = 'ANSWER_KEY_3_6_MARKER';
+  const CANARY = 'CANARY_LOCKED_MODULE_5e7f';
+  const stored = {
+    v: 1,
+    rung: 1,
+    stuckTurns: 1,
+    attemptLogged: false,
+    pendingCheck: false,
+    answerKey: [ANSWER_KEY],
+  };
+
+  function setup(
+    o: {
+      built?: Partial<BuiltContext>;
+      promptPackVersion?: string;
+      decide?: StepOverrides['decide'];
+    } = {},
+  ) {
+    const requests: ModelRequest[] = [];
+    const t = testDeps({
+      script: {
+        stream: [
+          {
+            match: (req) => {
+              requests.push(req);
+              return true;
+            },
+            steps: scriptedStreamText.steps,
+          },
+        ],
+      },
+    });
+    const happy = testSteps();
+    const steps = testSteps({
+      entitle: async (env) => {
+        const e = await happy.entitle(env);
+        return {
+          ...e,
+          agent: {
+            ...e.agent,
+            promptPackVersion: o.promptPackVersion ?? FIXTURE_PROMPT_PACK_VERSION,
+          },
+          helpState: stored,
+        };
+      },
+      buildContext: async (env, e) => ({
+        ...(await happy.buildContext(env, e)),
+        retrieved: [demoChunkScored],
+        helpRung: 1,
+        helpState: {
+          stuckTurns: 1,
+          attemptLogged: false,
+          pendingCheck: false,
+          answerKey: [ANSWER_KEY],
+        },
+        ...o.built,
+      }),
+      decide: { ...decide, ...o.decide },
+      // A generate that builds its request the way 3.7 is expected to.
+      async generate(env, { ctx, decision }, emit) {
+        const set = resolvePromptPackSet(env.deps.promptPacks, ctx.agent.promptPackVersion);
+        let draft = '';
+        for await (const c of env.deps.gateway.stream(
+          buildModelRequest({ ctx, decision, input: env.input, set }),
+        )) {
+          if (c.type === 'text') {
+            draft += c.text;
+            emit({ type: 'token', text: c.text });
+          }
+        }
+        return { draft, usage: [] };
+      },
+    });
+    return { t, steps, requests };
+  }
+
+  it('the help state reaches the policy; next and promptPack land on CommitRecord', async () => {
+    const { t, steps, requests } = setup();
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    const rec = steps.commits[0];
+    // stuckTurns 1 + another turn with no attempt → climb from rung 1 to 2.
+    expect(rec?.decision).toMatchObject({ move: 'hint', rung: 2, mustNotReveal: [ANSWER_KEY] });
+    expect(rec?.next).toEqual({
+      rung: 2,
+      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY] },
+    });
+    expect(rec?.promptPack).toEqual({
+      set: FIXTURE_PROMPT_PACK_VERSION,
+      packs: { safety: '0.1.0', coach: '0.1.0', frame: '0.1.0' },
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.system).toBe(rec?.decision?.systemPrompt);
+    expect(result.trace?.move).toBe('hint');
+    expect(result.trace?.steps.find((s) => s.name === 'decide')?.outcome).toBe('ok');
+    // The answer key and `next` stay server-side: never in an event or the trace.
+    const out = JSON.stringify([events, result.trace]);
+    expect(out).not.toContain(ANSWER_KEY);
+    expect(out).not.toContain('stuckTurns');
+  });
+
+  it('a locked-module chunk with lockedHit → the turn runs; the canary reaches no model, commit or trace', async () => {
+    const { t, steps, requests } = setup({
+      built: {
+        retrieved: [{ ...demoChunk, moduleId: 'mod_test_04', text: CANARY }],
+        lockedHit: true,
+      },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(requests.length).toBeGreaterThan(0);
+    for (const r of requests) expect(JSON.stringify(r)).not.toContain(CANARY);
+    expect(steps.commits[0]?.decision?.systemPrompt).not.toContain(CANARY);
+    expect(JSON.stringify(steps.commits[0]?.decision)).not.toContain(CANARY);
+    expect(JSON.stringify([events, result.trace])).not.toContain(CANARY);
+  });
+
+  it('lockedHit with no allowed retrieval → move locked; no locked module id or title', async () => {
+    const { t, steps, requests } = setup({ built: { retrieved: [], lockedHit: true } });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(result.trace?.move).toBe('locked');
+    const system = requests[0]?.system ?? '';
+    expect(system).toContain(fixturePromptPackSet.packs.locked.body);
+    expect(system).not.toContain('mod_test_04');
+    expect(steps.commits[0]?.promptPack?.packs).toHaveProperty('locked');
+  });
+
+  it('an unknown prompt-pack version → provider_error; nothing reaches the gateway', async () => {
+    const { t, steps, requests } = setup({ promptPackVersion: '9.9.9' });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events).toEqual([{ type: 'error', code: 'provider_error', retryable: true }]);
+    expect(requests).toEqual([]);
+    expect(result.trace?.steps.find((s) => s.name === 'decide')?.outcome).toBe('failed');
+    expect(steps.commits[0]).toMatchObject({ outcome: 'error' });
+    expect(steps.commits[0]?.decision).toBeUndefined();
+  });
+
+  it('run fails → the real fallback (`ask`, fallback pack, no material); the turn replies', async () => {
+    const { t, steps, requests } = setup({
+      decide: { run: () => Promise.reject(new Error('decide failed')) },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(result.trace?.steps.find((s) => s.name === 'decide')?.outcome).toBe('fallback');
+    expect(steps.commits[0]?.decision?.move).toBe('ask');
+    expect(requests[0]?.system).toContain(fixturePromptPackSet.packs.fallback.body);
+    expect(requests[0]?.system).not.toContain(demoChunkScored.text);
+    expect(steps.log.find((l) => l.step === 'decide.fallback')?.at).toBeTypeOf('number');
+  });
+
+  it('a fallback that returns redirect outside distress → provider_error', async () => {
+    const { t, steps } = setup({
+      decide: {
+        run: () => Promise.reject(new Error('decide failed')),
+        fallback: () => testDecideResult({ ...testAskDecision, move: 'redirect' }),
+      },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events).toEqual([{ type: 'error', code: 'provider_error', retryable: true }]);
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'Error: decide.fallback returned move "redirect"',
+    ]);
   });
 });

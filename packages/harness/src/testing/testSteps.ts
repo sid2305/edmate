@@ -13,7 +13,13 @@ import {
 import type { ModelGateway, PedagogyDecision, Usage } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
-import type { CommitRecord, PipelineDeps, StepEnv, Steps } from '../pipeline/types.js';
+import type {
+  CommitRecord,
+  DecideResult,
+  PipelineDeps,
+  StepEnv,
+  Steps,
+} from '../pipeline/types.js';
 import { sequentialIds, type SequentialIds } from './ids.js';
 import {
   type MemoryAlertSink,
@@ -25,6 +31,7 @@ import {
   unusedPort,
 } from './memoryPorts.js';
 import { scriptedStreamText } from './gatewayFixtures.js';
+import { fixturePromptPackLibrary } from './promptPackFixtures.js';
 import { type GatewayScript, ScriptedGateway } from './scriptedGateway.js';
 import { type VirtualClock, virtualClock } from './virtualClock.js';
 
@@ -38,8 +45,8 @@ export type LoggedStep =
 export interface StepLogEntry {
   step: LoggedStep;
   phase: 'start' | 'end' | 'fail';
-  /** Virtual time; `null` for decide.fallback, which gets no env. */
-  at: number | null;
+  /** Virtual time. */
+  at: number;
   /** generate's attempt, when the step is generate. */
   attempt?: 'primary' | 'fallback';
   /** The input text the step saw (synthetic fixtures only). */
@@ -63,6 +70,21 @@ export const testAskDecision: PedagogyDecision = {
   rung: 0,
   mustNotReveal: [],
 };
+
+/** A DecideResult around `decision`: help state unchanged, no sources, a test pack ref. */
+export function testDecideResult(
+  decision: PedagogyDecision,
+  o: Partial<Omit<DecideResult, 'decision'>> = {},
+): DecideResult {
+  return {
+    decision,
+    next: { rung: decision.rung, help: copyHelp(INITIAL_HELP_STATE) },
+    reason: 'step',
+    promptPack: { set: 'test', packs: {} },
+    sources: [],
+    ...o,
+  };
+}
 
 /** Synthetic fallback texts for `FallbackReplies`. */
 export const TEST_SAFE_REPLY = 'Let us try that a different way.';
@@ -102,8 +124,8 @@ function happySteps(commits: CommitRecord[]): Steps {
       }),
     escalate: () => Promise.resolve({ replyText: TEST_CARING_REPLY }),
     decide: {
-      run: () => Promise.resolve(demoPedagogyDecision),
-      fallback: () => testAskDecision,
+      run: () => Promise.resolve(testDecideResult(demoPedagogyDecision)),
+      fallback: () => testDecideResult(testAskDecision),
     },
     async generate(env, { decision }, emit) {
       let draft = '';
@@ -197,9 +219,9 @@ export function testSteps(overrides: StepOverrides = {}): TestSteps {
     escalate: logged(log, 'escalate', s.escalate),
     decide: {
       run: logged(log, 'decide', decideO?.run ?? h.decide.run),
-      fallback: (ctx) => {
-        log.push({ step: 'decide.fallback', phase: 'start', at: null });
-        return fallback(ctx);
+      fallback: (env, x) => {
+        log.push({ step: 'decide.fallback', phase: 'start', at: env.deps.clock.now() });
+        return fallback(env, x);
       },
     },
     generate: logged(log, 'generate', s.generate),
@@ -223,8 +245,8 @@ export interface TestDeps {
 
 /**
  * Dependencies on a virtual clock with sequential ids, a scripted gateway (default: one text
- * stream), in-memory trace/usage/alert sinks, `unusedPort` stores, source `subscription` and
- * fresh in-memory limits.
+ * stream), in-memory trace/usage/alert sinks, `unusedPort` stores, source `subscription`,
+ * fresh in-memory limits and the fixture prompt-pack library.
  */
 export function testDeps(
   opts: {
@@ -264,6 +286,7 @@ export function testDeps(
       distress: () => TEST_DISTRESS_REPLY,
     },
     distressCheck: () => false,
+    promptPacks: fixturePromptPackLibrary,
     ...opts.overrides,
   };
   return {

@@ -28,6 +28,7 @@ export {
   type StepName,
   type StepSpec,
 } from './spec.js';
+export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
 export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
 export { defaultSteps } from './steps/index.js';
@@ -36,6 +37,8 @@ export type {
   BackgroundTask,
   BuiltContext,
   CommitRecord,
+  DecideInput,
+  DecideResult,
   Emit,
   Entitled,
   EscalateResult,
