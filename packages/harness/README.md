@@ -33,6 +33,16 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`) and returns a 
 - Parses the session's raw help state (on `Entitled`, from `TurnConfigStore.load`, ADR-0005) with `parseSessionHelp`; anything invalid is rung 0 and `INITIAL_HELP_STATE`. The parsed `helpState` (with `answerKey`) stays out of `TurnContext`, events and traces; 3.6/3.8 thread it into decide and commit (`serializeSessionHelp`).
 - **Testing:** `memoryRetrieval({ chunks, probe? })` and `retrievalWorld()` (allowed, locked and other-teacher chunks; out-of-scope text carries `OUT_OF_SCOPE_TEXT`).
 
+## Guardrails (task 4.1, `src/guardrails`)
+
+- **Phases and order:** `GUARD_ORDER` lists every guard per phase in the build plan's guard-table order: `scrub` (`piiScrub`), `pre` (`distressDetect`, `moderationIn`, `jailbreak`), `post` (`answerLeak`, `lockedLeak`, `grounding`, `adviceGuard`, `personaBoundary`, `tone`). That list decides run order; registration order never does.
+- **Guard:** `{ name, phase, run(text, ctx, cancel) → { result: GuardResult, usage } }`. A factory closes over what the guard needs; `Ctx` is phase-specific and owned by each guard task.
+- **Registry:** `new GuardRegistry<Ctx>(phase)`. `register` throws (`GuardRegistryError`) for an undeclared, duplicate, wrong-phase or malformed guard. `ordered()` returns the registered guards in declared order and skips ones not built yet; `missing()` lists those (4.9 adds the completeness test).
+- **Chain:** `runGuardChain(registry.ordered(), text, ctx, { phase, clock, timeoutMs, cancel?, onGuardOutcome? })` never rejects. `rewrite` replaces the text and the chain goes on with it; `block` and `escalate` stop it (`escalate` carries the alert). It fails closed with `outcome: 'block'` and a `failure` (`undeclared`, `out_of_order`, `error`, `invalid_result`, `timeout`, `cancelled`) when a guard throws, returns something that fails `GuardResultSchema`/`UsageSchema`, runs past its own `timeoutMs` slice on the injected clock, the step's cancel token has fired, or the list is not in declared order. `failure.error` is the raw thrown value: never trace it. The trace entries are `GuardTrace` (`{ name, ok, action? }`), never reason or text.
+- **Safety-event seam:** `onGuardOutcome({ name, phase, outcome })` fires once per guard that ran; a throw in it is ignored. Persistence (`safety_events`) waits for its ADR (lead answer Q1).
+- **Wiring:** the `scrub`, `preGuard` and `postGuard` step stubs still fail closed. Each guard task (4.2 scrub, 4.3 pre, 4.5 post) wires its own phase when it lands that phase's first guard.
+- **Testing:** `fakeGuard(name, phase, resultOrFn, { usage?, spy? })` from `@edmate/harness/testing`.
+
 ## Replacing a stub
 
 Every step lives in its own file under `src/pipeline/steps/`. Until its task lands, a step throws `StepNotImplementedError`, so the runner applies its failure policy (admit, entitle and preGuard fail closed). To build a step, replace the body in its file and keep the `Steps['<name>']` type; `defaultSteps` picks it up.

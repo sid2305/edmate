@@ -2,6 +2,12 @@
 export * from '@edmate/contracts/fixtures';
 export { type Clock, type ManualClock, manualClock } from './clock.js';
 export { driveEvents, driveTurn, type TimedEvent } from './driveTurn.js';
+export {
+  type FakeGuard,
+  type FakeGuardBehaviour,
+  type FakeGuardOptions,
+  fakeGuard,
+} from './guardFixtures.js';
 export { type SequentialIds, sequentialIds } from './ids.js';
 export {
   type AccessOptions,
