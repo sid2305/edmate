@@ -10,6 +10,118 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Pilot language: English only, with a Hindi/Hinglish safety net · decided by you · risk: high
+Decided: the agent teaches and replies only in English in both pilot markets (en-US, en-IN). No new Hindi or Hinglish teaching, prompt-pack or non-safety eval work. Safety guards still recognise Hindi and Hinglish input (distress keywords in romanised and Devanagari script, Devanagari-digit phone numbers and IDs), and the safety and locked seed cases in those languages stay. The existing non-safety Hinglish and Devanagari cases (leak, advice, persona, grounding) are frozen, not deleted. This replaces the language part of the 18 Oct pilot-market decision; the markets are unchanged.
+Why: focus. Indian students will still type Hinglish, so safety must catch it.
+Alternatives: English only everywhere (drop the safety net); English and the US only.
+Reversible: yes; Hindi locale content can be added later.
+
+---
+
+### 18 Oct 2026 · 4.0c "Suite failed to load" is reported alongside the load-error line, not instead of it · decided by tdd-guide · risk: low
+Decided: when a suite's load throws, `validateSuites` still pushes the `"<suite>: <load error message>"` problem (per-file, naming the real cause) *and*, for each affected guard under `requireAllGuards`, a second `"<guard>: suite failed to load"` line — not a replacement of the first.
+Why: the review finding was about a guard folder being reported as merely "empty" when the real cause (a load error) was knowable; dropping the load-error line would lose that cause, and a reader scanning guard-level problems still needs the per-guard line to know which guard is affected.
+Alternatives: fold the guard-level line into the load-error line (one line that names both the suite and the guard); only emit the guard-level line and drop the per-suite load error.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0c loadCasesWithFiles is exported alongside loadCasesFromDir · decided by tdd-guide · risk: low
+Decided: `loader.ts` exports `loadCasesWithFiles` (and its `LoadedCaseFile` type) publicly from `index.ts`, not just internally to `suites.ts`.
+Why: every other loader export is already public, and any future caller needing a case paired with its file (not just `suites.ts`) should reach for this instead of re-deriving the pairing itself.
+Alternatives: keep it package-internal (export only from `loader.js`, not `index.ts`) until a second caller exists.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The guard chain fails closed on every failure · decided by lead (plan) and tdd-guide (details) · risk: high
+Decided: a throw, a result that fails `GuardResultSchema`/`UsageSchema`, a guard past its own time slice (or a non-positive slice), a step cancelled before or during a guard, an empty list, an undeclared or wrong-phase guard, and a list out of declared order all end the chain non-ok (`outcome: 'failed'` with a `failure` cause, fix round 1); later guards never run and the chain never throws.
+Why: guards protect students; any doubt must stop the reply, and the calling step's own fail-closed policy still applies on top.
+Alternatives: skip a broken guard and continue; let errors propagate to the step.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.1 A rewrite is verified by a second pass of every guard · decided by lead (safety review, fix round 1) · risk: high
+Decided: when any guard rewrote, the whole phase runs once more on the final text; there any rewrite or block becomes `block` with cause `rewrite_unverified`, a failure is `failed`, and an escalate still escalates (it is stronger than block and must not lose its alert).
+Why: a later guard's rewrite (grounding, adviceGuard, tone) could put back what an earlier guard (answerLeak) removed; the build plan says "rewrite once; else safe reply".
+Alternatives: single pass; re-run only the guards before the rewriting one; loop until stable.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.1 Framework failures get their own `failed` outcome · decided by lead (silent-failure review, fix round 1) · risk: medium
+Decided: `GuardChainResult` is `ok` | `block` (`cause: 'verdict' | 'rewrite_unverified'`) | `escalate` | `failed` (`failure: { name, cause, errorName? }`); `failed` is non-ok and callers treat it like block; only `ok` and `escalate` carry `text`; the trace action is `failed` and the event carries `cause`.
+Why: 4.3 needs to tell "a guard said no" from "the guards broke" to keep the distress keyword fallback; a block must not carry text a caller could send.
+Alternatives: one `block` outcome with an optional failure field.
+Reversible: Yes, before 4.2-4.5 build on it.
+
+---
+
+### 18 Oct 2026 · 4.1 Failures keep only an error name, never the raw error · decided by lead (security/silent-failure review, fix round 1) · risk: low
+Decided: `failure.errorName` is the `Error#name` or `typeof` (capped at 100); undeclared names show as `(undeclared)` in the trace and events.
+Why: a thrown value or a guard name can quote unscrubbed input or model output.
+Alternatives: keep the raw error for the caller.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The step's cancel token cancels the in-flight guard · decided by tdd-guide (fix round 1) · risk: low
+Decided: each guard's token is linked to its own slice and to `opts.cancel`; on a step cancel the chain stops waiting at once and fails with `cancelled`. `timeout.ts` is unchanged (the link is built inside the chain).
+Why: a cancelled step should not keep a guard (and its model call) running for the rest of its slice.
+Alternatives: document that only the slice cancels the guard.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Each guard gets its own time slice on the injected clock · decided by tdd-guide · risk: low
+Decided: `runGuardChain` runs each guard under `runWithTimeout(…, opts.timeoutMs, opts.clock)`; the slice is per guard, not shared; the caller picks the number.
+Why: the plan's fail-closed acceptance names a guard past "its own slice"; reusing 3.1's helper keeps tests on the virtual clock with no wall-clock waits.
+Alternatives: one budget for the whole chain; rely only on the step timeout.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The chain re-checks the guard list it is given · decided by tdd-guide · risk: low
+Decided: besides the registry's wiring-time checks, `runGuardChain` fails closed (`failed`) before running anything when a guard is undeclared, of another phase, duplicated or out of declared order.
+Why: "unknown guard means block" must hold even for a list not built by the registry (an eval wrapper, a test, a later refactor).
+Alternatives: trust `registry.ordered()`; sort the list silently.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 A throwing `onGuardOutcome` observer is ignored · decided by tdd-guide · risk: low
+Decided: an exception from the observer is caught and does not change the outcome or make the chain throw.
+Why: the hook is for logging; a logging fault must not turn a passed or blocked guard into something else, and the chain must never throw.
+Alternatives: treat an observer throw as a fail-closed block.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q1 Safety-event seam is a no-op hook only · decided by lead · risk: low
+Decided: 4.1 ships only `onGuardOutcome({ name, phase, outcome })` with no text and no persistence; the first guard task that writes a `safety_events` row (likely 4.4) raises the `SafetyEventSink` ADR.
+Why: no contracts port exists for it, and nothing needs persistence yet.
+Alternatives: add a port now (contracts change, ADR).
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q2 The scrub/preGuard/postGuard stubs stay as they are · decided by lead · risk: low
+Decided: 4.1 does not wire the step stubs; they keep failing closed. Each guard task wires its own phase (4.2 scrub, 4.3 pre, 4.5 post).
+Why: an empty registry would turn today's fail-closed stub into an always-ok pass-through with no real checks.
+Alternatives: wire empty registries now.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q3 Registry completeness test goes into 4.9 · decided by lead · risk: low
+Decided: `ordered()` skips declared guards not built yet; 4.9 adds the test `ordered().length === GUARD_ORDER[phase].length` for every phase (`missing()` added here to help).
+Why: every phase is intentionally partial until M4 ends; a runtime throw now would be too strict.
+Alternatives: throw at run time on a missing guard.
+Reversible: Yes.
+
+---
+
 ### 18 Oct 2026 · Agent-system efficiency review · decided by team lead (the human asked for the review) · risk: medium
 Decided: safety-path tasks get a safety-reviewer pass on the plan before the build; board and log commits are batched with the next real commit; planners get a scoped reading list; short mechanical fix rounds go to a fresh sonnet builder instead of resuming a long builder; big tasks split into sub-PRs. Tooling fixes are board task 0.13.
 Why: 33 tasks in: the lead was the serial bottleneck (141 of 177 main commits docs-only, and 17 of the last 30 main CI runs cancelled by the next push), nearly every risky PR needed a fix round for issues visible at plan time, and planners and resumed agents were the largest token costs.

@@ -231,3 +231,11 @@ the existing ADR-0004 pattern and the task's own wording.
 - The migration must not lose data: existing sessions get the package pin backfilled from their entitlement where one exists, or are ended. Log which.
 - Reviewers: security-reviewer (opus, required), database-reviewer (sonnet), typescript-reviewer (sonnet). risk: high entry.
 - Builder: tdd-guide on opus when a builder slot frees up.
+
+## Plan revisions from the security plan review (18 Oct 2026; these override the Design section)
+
+- **Design point 1, migration (was CRITICAL):** don't use the 0007-style "stop if rows exist" guard. For each open session, resolve the student's live entitlement for that teacher and agent. If it matches, backfill `package_id`/`package_version`. If there is none or it doesn't match, set `ended_at` and clear that student and teacher's `last_summary` (the same effect as `endOnPackageChange`). Ended sessions get no pin and stay ended. The migration reports counts per path: backfilled, ended, or already ended. The handoff logs which path was used in tests.
+- **Design point 4, `endOnPackageChange` (was HIGH):** clear `last_summary` only when step (a)'s UPDATE actually moved this session from open to ended (affected rows > 0), in the same transaction. A retried or stale turn against an already-ended session must never wipe a newer summary. Test: end once, write a new summary under a new session, call again, and the summary survives.
+- **Tests (MEDIUM):** add a migration test that seeds sessions and entitlements before 0009, runs the migration, and checks each row was backfilled, or ended with its summary cleared.
+- **help_state (LOW):** an ended session keeps its `help_state` on purpose. `turnConfigStoreFor.load` already fails closed on an ended session, so it can't be reached, and deleting it is the retention job's work. Say so in a code comment.
+- **Scope (LOW):** `endOnPackageChange` takes the scope derived from the entitlement (teacherId, studentId), never a client-supplied value. The isolation-grid test covers a cross-tenant call.

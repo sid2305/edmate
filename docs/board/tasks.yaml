@@ -554,7 +554,8 @@ tasks:
 - id: '3.10'
   milestone: M3
   title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
-  accept: '`edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts.'
+  accept: '`edmate content validate` fails on missing fields; an unknown market falls back to the default pack and still raises safety alerts; PII patterns are validated at load with the `gu` flags and
+    a safe-regex check; the real IN pack passes 4.2''s PII pipeline test (UPI included).'
   deps:
   - '2.6'
   - '3.6'
@@ -623,9 +624,9 @@ tasks:
   accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
-  status: todo
+  status: running
   branch: m3/3.16-sessions-follow-package
-  model: plan:sonnet
+  model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -637,7 +638,8 @@ tasks:
   model: null
 - id: '0.11'
   milestone: M7
-  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md'
+  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md.
+    Also the English-only pilot decision (18 Oct 2026): eval-author, pedagogy-author and the locale-context skill write English only, except safety cases, which keep Hindi/Hinglish input'
   accept: No agent file tells reviewers to require human approval; safety-reviewer still writes findings the lead turns into safety-review.md.
   deps:
   - '0.7'
@@ -683,7 +685,7 @@ tasks:
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
-  status: running
+  status: done
   branch: m4/4.0c-validator-followups
   model: build:sonnet
 - id: 4.0d
@@ -692,9 +694,9 @@ tasks:
   accept: the new cases validate and are signed off on a review sheet like 4.0's.
   deps:
   - '4.0'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.0d-coverage-gaps
+  model: build:sonnet
 - id: '4.1'
   milestone: M4
   title: Guard framework and registry
@@ -702,7 +704,7 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: review
+  status: done
   risk: risky
   branch: m4/4.1-guard-framework
   model: plan:sonnet build:opus-5.5/medium
@@ -715,10 +717,19 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
   branch: m4/4.2-pii-scrub
-  model: plan:sonnet
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.2b
+  milestone: M4
+  title: 'PII in images and attachments: text in a photo (e.g. an ID card) is scrubbed or the image is refused before any model sees it'
+  accept: an attachment with seeded PII never reaches a model unscrubbed; tests with fixture images.
+  deps:
+  - '4.2'
+  status: todo
+  branch: null
+  model: null
 - id: '4.3'
   milestone: M4
   title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'
@@ -728,8 +739,27 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
+  branch: m4/4.3-distress
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.2c
+  milestone: M4
+  title: 'PII pattern hardening from the 4.2 safety review: keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out single-turn numbers; Aadhaar Verhoeff
+    instead of the years exception; constant-digit over-scrub; the 6 proposed eval cases'
+  accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
+  deps:
+  - '4.2'
+  status: todo
+  branch: null
+  model: null
+- id: 4.3b
+  milestone: M4
+  title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
+  accept: the retract-joke case passes turn 2; a scrub failure on a distress message replies with the pack helplines.
+  deps:
+  - '4.3'
+  status: todo
   branch: null
   model: null
 - id: '4.4'

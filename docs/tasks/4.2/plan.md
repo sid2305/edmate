@@ -156,3 +156,19 @@ Out of bounds:
 - Q4: agreed: CVV and expiry are redacted only next to a detected card number.
 - Build on 4.1 after it merges (it is in its fix round: `failure.error` becomes `errorName`, a new `failed` outcome, and a second verification pass after a rewrite). Report the failure cause through `TurnRunResult.background`, ids and error name only.
 - Reviewers: safety-reviewer (opus), typescript-reviewer (sonnet), silent-failure-hunter (sonnet). risk: high entry.
+- From 4.1's safety re-review: the chain re-runs every guard on rewritten text, so `piiScrub` must return `ok` on its own output. Placeholders such as `[phone]`, `[email]` and `[name]` must match no PII pattern. Acceptance line, with a test: scrubbing a message twice equals scrubbing it once, and the second pass returns ok.
+
+## Plan revisions from the safety plan review (18 Oct 2026; these override the Design section)
+
+1. **Unicode digits (HIGH).** Match on a same-length copy of the text, with every BMP decimal digit (Devanagari, fullwidth, Bengali, …) folded to ASCII and zero-width characters (U+200B–200D, U+2060, U+FEFF, U+00AD) treated as separators. Use `(?<!\p{Nd})`/`(?!\p{Nd})` instead of `\b`. Locale patterns also run on the folded copy. Redact the same spans in the original.
+2. **Locale patterns fail closed (HIGH).** Compile with exactly `'gu'`. A pattern that doesn't compile makes the guard throw, so the chain returns `failed` and the turn blocks (with a test). Never skip a pattern, and never add `i`.
+3. **The post-4.1 API (HIGH).** `scrub.ts` handles all four outcomes. `ok` returns the text. `failed`, `block` (including `rewrite_unverified`) and `escalate` all fail closed by throwing with cause `{ guardCause, errorName }`. No error message, since messages can echo text.
+4. **No bypass (HIGH).** Scrub every string inside `skillPayload` as well as `input.text`, with a test. Decision to log: transcripts (2.7) become `input.text` before scrub. Text in images is board task 4.2b.
+5. **Multi-turn proof (HIGH).** The pipeline test uses an in-memory message store fed from turn 1's `CommitRecord.input`, so turn 2's captured request carries history. Assert that turn-1 PII is absent from it. The small-tier probe reads `env.input` the way preGuard and route do.
+6. **Phone shapes (MEDIUM).** Explicit group shapes: 10 contiguous, 5-5, 3-3-4, 4-3-3, optional +CC or 0, separators space . - ( ) or zero-width, plus single spaced digits. Near-miss: a space-separated marks list.
+7. **Over-scrub in teaching (MEDIUM).** Card candidates must pass Luhn. A bare unseparated 10-digit number counts only through the market pattern (IN `[6-9]\d{9}`) or a nearby phone keyword. Near-misses: 2147483647, 1700000000, 9223372036854775807, 10**15, "2023 2024 2025".
+8. **OTP (MEDIUM).** A window of about 30 characters around the keywords: OTP, ओटीपी, code, कोड, pin, पिन, verification code. Devanagari-digit OTPs are covered through item 1.
+9. **Card context (MEDIUM).** Cover "CVV: 123", "cvc 123", "123 cvv", "expiry 12/2029", "valid thru 12-29", and a bare MM/YY right after the card. Without a card, nothing is redacted.
+10. **Own name (MEDIUM).** Drop "this is". Add "myself", "main … hoon" and "call me". Allow lowercase and Devanagari names after the strong phrases (my name is / mera naam / मेरा नाम). Redact later repeats of the captured tokens in the same message. Near-misses: "I'm Ready", "I'm Done", "I am Learning Python". This is a stopgap until a stored-name exact match exists.
+11. **Email/UPI (MEDIUM).** Also catch "[at]", "(at)" and the fullwidth ＠. UPI comes from the locale pack (3.10 must pass this same test with the real IN pack).
+12. **ReDoS (LOW).** Note it for 3.10's pack review (a safe-regex check at load). The idempotence test also runs the locale patterns over the placeholders.

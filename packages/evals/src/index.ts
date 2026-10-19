@@ -24,7 +24,12 @@ export {
   resolveJudgeModel,
   type JudgeModelConfig,
 } from './judgeModel.js';
-export { CaseLoadError, loadCasesFromDir } from './loader.js';
+export {
+  CaseLoadError,
+  loadCasesFromDir,
+  loadCasesWithFiles,
+  type LoadedCaseFile,
+} from './loader.js';
 export {
   fileRecorder,
   FixtureReadError,
