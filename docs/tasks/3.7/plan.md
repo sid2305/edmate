@@ -153,3 +153,4 @@ Size: about 900 source lines and 1,300 test lines, which is over rule 9's 600-li
 - Q6: the SSE route handler is deferred to 9.4.
 - Build after 3.8 merges; branch from that main. Scripted gateway only (no real models before 4.5).
 - Reviewers: typescript-reviewer, silent-failure-hunter, security-reviewer, safety-reviewer (opus); risk: high entry.
+- Q7 (from 3.8's review, deferred LOW): the orchestrator is the first caller of the pipeline runner, so it logs every `TurnRunResult.background` failure (task, error name and message, ids only, never turn text), with a test.

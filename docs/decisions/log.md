@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 0.12 Explicit CI timeouts for heavy tests · decided by build-error-resolver · risk: low
+Decided: the three CI-flaky tests get named per-test timeouts (30 s for the 2,000-iteration access property test, 20 s for the two next-auth cold-import tests); Vitest's global timeout, iteration counts and per-test fresh imports stay as they were.
+Why: CI runners took 5.1–5.8 s against the 5 s default, a load problem, not a logic bug; a global bump would hide real hangs.
+Alternatives: raise the global testTimeout; cut iterations; share one import in beforeAll (breaks the per-test fresh module the auth tests rely on).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 0.12 Test-only edits in the access and auth risky paths · decided by team lead · risk: high
+Decided: 0.12 touches `packages/harness/src/access/property.test.ts` and `apps/web/src/auth/*.test.ts` only to add timeouts; no assertion, input or import changes, checked by security-reviewer.
+Why: these paths are risky (access filter, sign-in), so even a test-only change gets the required reviewer.
+Alternatives: none.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · Spec text aligned with the 13+ age decision · decided by team lead · risk: low
+Decided: the PRD's pilot row and "MVP out" list, and the build plan's out-of-scope line and task 1.7, now say 13+ (13–17 with parental consent where the market requires it), matching the human's decision of 18 Oct 2026 and board task 1.7. Found by the 4.0a safety review.
+Why: four lines still said 18+, contradicting the decided open question.
+Alternatives: leave the stale text.
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · Per-turn cost ceiling · decided by team lead · risk: medium
 Decided: A turn stops when its model cost passes a provisional 0.10 USD (configurable); a turn on a model with no price aborts rather than running unmetered. Billing context comes from the entitlement, never the request.
 Why: The spec requires a per-turn ceiling but sets no number; this is a placeholder until the cost data in 7.6.
