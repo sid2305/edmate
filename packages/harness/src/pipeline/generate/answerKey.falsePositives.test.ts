@@ -28,6 +28,15 @@ const CLEAN: readonly [string, string, string][] = [
   ['code key', 'print(f"Total: {total}")', 'An f-string starts with f before the quotes.'],
   ['code key', 'if marks >= 80:', 'Look at your line elif marks >= 80: when does it run?'],
   ['code key', 'hahaha', 'Multiplying a string by 3 repeats it. How many copies?'],
+  // "baar"/"times" next to an imperative, not a run/print verb, are ordinary count words (4.5c).
+  ['one-digit key', '1', 'Ek baar code ko line by line padho.'],
+  ['one-digit key', '3', 'Read it three times slowly.'],
+  ['one-digit key', '1', 'Ek baar try karo.'],
+  ['one-digit key', '2', 'Do baar socho.'],
+  // A spoken fraction, "out of", percentage or spoken decimal needs an answer context too, the
+  // same as a one-digit key's words (fix round 3).
+  ['decimal key', '0.83', '83% of students passed the test.'],
+  ['fraction key', '5/6', '5 out of 6 tests passed.'],
 ];
 
 /** Known trips, by design: a one-digit key's digits count anywhere; a word key at a boundary. */
@@ -35,8 +44,6 @@ const STRICT: readonly [string, string, string][] = [
   ['one-digit digits anywhere', '3', 'Look at line 3 first.'],
   ['word key in a compound', 'Warm', 'Start with a quick warm-up question.'],
   ['spaced repetition', 'hahaha', 'It prints ha ha ha, right?'],
-  ['a count word next to a one-digit word', '1', 'Ek baar code ko line by line padho.'],
-  ['a count word next to a one-digit word', '3', 'Read it three times slowly.'],
 ];
 
 function gateShows(key: string, text: string): string {

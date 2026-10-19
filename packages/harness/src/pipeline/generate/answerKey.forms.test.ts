@@ -168,6 +168,38 @@ describe('compileAnswerKeys: tailStart', () => {
   });
 });
 
+describe('compileAnswerKeys: no own-code exemption when options are offered as code (4.5c)', () => {
+  const twoOptions = 'if s.upper() == "Y":\n    print(s)\nif s.lower() == "Y":\n    print(s)';
+
+  it.each(['Keep s.lower()', 'Pick s.lower() here', 's.lower() wala lagao'])(
+    '%s trips: the student offered both as code options, not just quoted one',
+    (text) => {
+      expect(leaks(['s.lower()'], text, twoOptions)).toBe(true);
+    },
+  );
+
+  it('a single quoted line of the student’s own code, with no alternative, stays exempt', () => {
+    const single = 'if s.lower() == "Y":\n    print(s)';
+    expect(leaks(['s.lower()'], 'Your line calls s.lower() there.', single)).toBe(false);
+  });
+
+  it('still trips when an earlier, unrelated mention of the key is in prose, not code', () => {
+    const mixed = `Is .lower() the fix?\n${twoOptions.replace('s.lower()', '.lower()').replace('s.upper()', '.upper()')}`;
+    expect(leaks(['.lower()'], 'Keep .lower()', mixed)).toBe(true);
+  });
+
+  it('a repeated, identical code line is not "two options": still exempt', () => {
+    const repeated = 'if s.lower() == "Y":\n    print(s)\nif s.lower() == "Y":\n    print(s)';
+    expect(leaks(['s.lower()'], 'Your line calls s.lower() there.', repeated)).toBe(false);
+  });
+
+  it('a trailing comment does not hide two offered options (fix round 3)', () => {
+    const commented =
+      'if s.lower() == "Y": # maybe this\n    print(s)\nif s.upper() == "Y": # or this\n    print(s)';
+    expect(leaks(['s.lower()'], 'Keep s.lower()', commented)).toBe(true);
+  });
+});
+
 describe('revealsAnswerKey (shared by skill payloads, tool outputs and sources)', () => {
   it('uses the full matcher on every leaf and on the JSON', () => {
     expect(revealsAnswerKey({ hint: 'MTY=' }, ['16'])).toBe(true);

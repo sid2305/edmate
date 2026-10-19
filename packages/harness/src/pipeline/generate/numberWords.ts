@@ -3,7 +3,9 @@
 // (mathjs is arithmetic, not number names). Words are looked up after `foldWord`, so spelling
 // variants that differ only by nukta or chandrabindu (हज़ार / हजार, पाँच / पांच) are one entry.
 // Hindi in Latin letters covers 0-99 (21-99 transliterated from the Devanagari table, fix round
-// 1), and its many spellings (chaubees / chaubis / chobis) are matched through `latinFold`.
+// 1), and its many spellings (chaubees / chaubis / chobis) are matched through `latinFold`. Fix
+// round 2 (4.5c) adds spellings `latinFold` folds to a different value than the table's own
+// (baiyaalis / byalis / beyalis for 42, unatees for 29): listed explicitly, never guessed.
 
 /** A small number (0-99) or a scale word (hundred and up). */
 export type NumberWord = { kind: 'small'; value: number } | { kind: 'scale'; value: number };
@@ -89,11 +91,12 @@ const HI_LATIN: Record<string, number> = {
 const HI_LATIN_21_99 =
   '21 ikkees ikkis ekkis;22 baees bais baais;23 teyees teyis teis;24 chaubees chaubis chobis;' +
   '25 pachchees pachees pachis pachchis;26 chhabbees chhabbis chabbis;27 sattaees sattais;' +
-  '28 atthaees atthais athais;29 untees untis;31 iktees ikattis ikatees iktis ikattees;' +
+  '28 atthaees atthais athais;29 untees untis unatees;31 iktees ikattis ikatees iktis ikattees;' +
   '32 battees battis;33 taintees taintis tetis;34 chauntees chauntis chautis chontis;' +
   '35 paintees paintis pentis;36 chhattees chhattis chattis;37 saintees saintis sentis;' +
   '38 adtees artees adtis artis;39 untaalees untalis;41 iktaalees iktalis;' +
-  '42 bayaalees bayalis;43 taintaalees taintalis tetalis;44 chavaalees chawalis chauvalis;' +
+  '42 bayaalees bayalis baiyaalis byalis beyalis;' +
+  '43 taintaalees taintalis tetalis;44 chavaalees chawalis chauvalis;' +
   '45 paintaalees paintalis;46 chhiyaalees chhiyalis;47 saintaalees saintalis;' +
   '48 adtaalees adtalis artalis;49 unchaas unchas;51 ikyaavan ikyavan;52 baavan bavan;' +
   '53 tirpan tirepan;54 chauvan chauwan;55 pachpan pachapan;56 chhappan chhapan;' +

@@ -12,3 +12,6 @@ Still open:
 - `CommitRecord.escalatedText` must stay out of model history and teacher views (4.5c).
 
 Findings are in review.md.
+
+## 4.5c — APPROVE
+Hinglish filler ("ek baar try karo") no longer trips one-digit keys, while real counts ("teen baar chalega", in either word order) still do. Picking between two code lines the student offered is caught, even with comments. Percent and fraction forms count only in an answer context. Escalation text never reaches later turns (an end-to-end test).
