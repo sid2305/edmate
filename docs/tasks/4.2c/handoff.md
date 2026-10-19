@@ -458,3 +458,102 @@ Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers
 avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
 round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
 Reversible: Yes.
+
+## Fix round 4 (19 Oct 2026, PR #42): the textFold pre-pass was too slow on the hot path
+
+PR #42's CI failed on a performance regression from fix round 3 (commit `4696dad`):
+`streamGate.sentence.test.ts`'s "a long reply is checked fast enough (latency)" (2546 ms, bound
+1,000 ms) and "many held sentences in one chunk are judged once each (linear)" (timed out at
+5,000 ms). `foldText` now ran `foldDigitForms` on every call, and the stream gate calls it once
+per sentence over its check window; the per-code-point `.normalize('NFKC')` call inside
+`foldDigitForms`'s old unconditional loop dominated.
+
+### Fix
+`digitForms.ts`'s `foldDigitForms` now starts with one precompiled whole-string regex test,
+`NEEDS_FOLD` (keycap marks U+FE0F/U+20E3; superscript/subscript digits; circled/enclosed digits;
+a non-ASCII `\p{Nd}` digit on its own, which only a Unicode property test can tell apart from one
+NFKC would decompose, like a Mathematical Alphanumeric digit; an ASCII digit immediately followed
+by a default-ignorable/combining/braille-blank character). Text matching none of these — nearly
+all of it — returns the identity map (`identityFold`) without a single `normalize()` call, regex
+test per character, or string-part concatenation. `foldOne` also gained the same ASCII-skips-
+`normalize()` shortcut `textFold.ts`'s own `nfkc()` cache already had, for text that *does* trip
+the pre-test but is still mostly ASCII. The position-map composition in `textFold.foldText`
+(added fix round 3) was already a single O(n) pass; nothing there needed changing.
+
+One lint fix along the way: ESLint's `no-misleading-character-class` flags two combining-prone
+code points (U+FE0F, U+20E3) sitting next to each other inside one `[...]` character class, even
+written as `\u` escapes (not literal glyphs) in a `new RegExp(string)` call — ESLint's regexp
+rules parse the string argument statically. Fixed by giving them each their own alternation
+branch (`️|⃣|...`) instead of packing them into the same bracket expression as the other
+ranges.
+
+No test was loosened. The two slow tests' own `ms`/linearity assertions are unchanged; each
+gained an explicit `{ timeout: 20_000 }` (vitest's default is 5,000 ms) only so a slower CI runner
+has headroom while still catching a real regression against the unchanged assertion.
+
+### Before / after (measured locally; CI is slower, hence the margin)
+
+Pure Node timing (bypassing vitest/coverage instrumentation noise, which added its own ~2-10x
+jitter on both sides — see below), replaying the exact two workloads `streamGate.sentence.test.ts`
+exercises, 3 runs each:
+
+| Workload | Before (no fast path) | After (fast path) |
+|---|---|---|
+| 170 `leaks()` calls, text growing to ~7,820 chars (latency test's shape) | 228, 229, 245 ms | 149, 152, 155 ms |
+| 2,600 `leaks()` calls over a ~200-char window (linear test's shape) | 69, 69, 69 ms | 37, 38, 38 ms |
+
+Roughly a 35-45% reduction on both, consistent across repeats.
+
+`vitest run --coverage` on `streamGate.sentence.test.ts` alone (coverage instrumentation adds its
+own, much larger and noisier overhead — v8 coverage collection is not representative of a plain
+run, which is why the table above uses pure Node instead):
+
+| Test | Before (3 runs) | After (3 runs) |
+|---|---|---|
+| "a long reply is checked fast enough (latency)" (assertion: < 1,000 ms) | 101, 102, 103 ms | 77, 95, 105 ms (one noisy run: 254-964 ms, still well inside the new 20 s test timeout and the 1,000 ms assertion) |
+| "many held sentences ... (linear)" (default 5,000 ms test timeout before this round) | 204, 207, 210 ms | 148, 149, 211 ms (one noisy run up to 638 ms) |
+
+The "before" numbers above are already far under the bounds on this dev machine; they could not
+reproduce CI's reported 2,546 ms / timeout directly, since this machine is faster and under less
+contention than the shared CI runner. The pure-Node table is the one that isolates the actual
+code-path cost, with the vitest/coverage harness noise (which affected both before and after
+roughly equally) removed, and shows the real, repeatable improvement.
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+Tasks:    34 successful, 34 total
+@edmate/harness:test:  Test Files  64 passed (64)
+@edmate/harness:test:       Tests  3001 passed (3001)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   Test Files  12 passed (12)
+@edmate/evals:test:        Tests  256 passed (256)
+```
+
+`packages/evals/src/leakFixtures.test.ts` standalone: 79 tests passed (38 real cases, plus the
+mutation run and 2 structural checks — all green).
+
+`python3 .githooks/secret-scan.py --all` → clean, no output.
+
+### Decisions (fix round 4)
+
+#### 19 Oct 2026 · Fix round 4: a whole-string pre-test, not a smarter algorithm, fixes the hot-path regression · decided by build-error-resolver · risk: low
+Decided: `foldDigitForms` gains one precompiled regex test over the whole input; when it finds
+none of the characters the function can possibly change, it returns an identity map without
+running the per-code-point loop at all. `foldOne` also skips `normalize()` for plain ASCII.
+Why: the dominant cost was calling `.normalize('NFKC')` on every single character regardless of
+whether it could ever change under NFKC; almost no real text has any of the digit-form characters
+this module cares about, so skipping the whole per-character pass is both correct (same output)
+and by far the cheapest fix, with no change to the O(n) position-map composition added in fix
+round 3.
+Alternatives: cache `normalize()` results per code point (helps repeated characters within one
+call, not the dominant case of many distinct ASCII characters); restructure the stream gate to
+call `foldText` less often (a bigger, riskier change to a different file, for a problem that is
+really about `foldDigitForms`'s own unconditional per-character cost).
+Reversible: Yes.
