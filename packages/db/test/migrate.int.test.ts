@@ -105,6 +105,70 @@ describe.skipIf(!up)(
       expect((await inspect()).applied).toBe(before);
     });
 
+    // Task 3.16b: 0009's FK and both CHECKs are added NOT VALID, then validated by
+    // runPostMigrateSteps outside drizzle's migration transaction; the index is built the same
+    // way with CREATE INDEX CONCURRENTLY. migrateDatabase() above already ran this twice
+    // ('apply cleanly' then 're-running is a no-op'), so both assertions also cover "runs twice,
+    // still correct" for the post-migrate step itself.
+    it('validates the three 0009 constraints and builds the package-pin index outside the migration transaction', async () => {
+      await admin(async (c) => {
+        const cons = await c.query<{ conname: string; convalidated: boolean }>(
+          `select conname, convalidated from pg_constraint where conrelid = 'sessions'::regclass
+             and conname in ('sessions_package_version_fk', 'sessions_package_pin_complete', 'sessions_open_has_package')`,
+        );
+        expect(cons.rows).toHaveLength(3);
+        for (const row of cons.rows) {
+          expect(row.convalidated, row.conname).toBe(true);
+        }
+
+        const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+          `select indisvalid, indisready from pg_index
+             where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+        );
+        expect(idx.rows).toHaveLength(1);
+        expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+      }, TEST_URL);
+    });
+
+    it('rejects a session that violates the 0009 package-pin constraints', async () => {
+      await admin(async (c) => {
+        // Self-contained fixture: a teacher, acting as its own student, and that teacher's agent.
+        await c.query(
+          `insert into users (id, name, locale, market, role)
+             values ('usr_3_16b_fixture', 'T', 'en', 'test', 'teacher')`,
+        );
+        await c.query(
+          `insert into agents (id, teacher_id) values ('agt_3_16b_fixture', 'usr_3_16b_fixture')`,
+        );
+        const teacherId = 'usr_3_16b_fixture';
+        const agentId = 'agt_3_16b_fixture';
+        // sessions_open_has_package: an open session (ended_at null) needs a pin.
+        await expect(
+          c.query(
+            `insert into sessions (id, student_id, teacher_id, agent_id, agent_version)
+             values ('ses_violates_open_has_package', $1, $1, $2, 1)`,
+            [teacherId, agentId],
+          ),
+        ).rejects.toThrow(/sessions_open_has_package/);
+        // sessions_package_pin_complete: both-or-neither.
+        await expect(
+          c.query(
+            `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, ended_at)
+             values ('ses_violates_pin_complete', $1, $1, $2, 1, 'pkg_missing', now())`,
+            [teacherId, agentId],
+          ),
+        ).rejects.toThrow(/sessions_package_pin_complete/);
+        // sessions_package_version_fk: the pin must name a real package version.
+        await expect(
+          c.query(
+            `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+             values ('ses_violates_fk', $1, $1, $2, 1, 'pkg_missing', 1)`,
+            [teacherId, agentId],
+          ),
+        ).rejects.toThrow(/sessions_package_version_fk/);
+      }, TEST_URL);
+    });
+
     it('store and read rows: vector embedding, generated tsvector, scoped keys', async () => {
       const { db, close } = createDb({ DATABASE_URL: TEST_URL });
       try {

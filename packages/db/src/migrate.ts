@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import type pg from 'pg';
 import { createDb } from './client.js';
 
 /**
@@ -17,13 +18,84 @@ export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..'
 export const MIGRATE_POOL_OPTIONS = { max: 1, statement_timeout: false } as const;
 
 /**
+ * A lock-heavy step that can't run inside drizzle's migration transaction (task 3.16b: drizzle
+ * 0.45's migrator runs every pending migration file in one transaction, so a `VALIDATE CONSTRAINT`
+ * or `CREATE INDEX CONCURRENTLY` written into a migration file is still taken under that
+ * transaction's ACCESS EXCLUSIVE lock for the file's own `ALTER TABLE ... ADD CONSTRAINT`). Each
+ * step runs as its own autocommit statement, after drizzle's migrate() has committed, so the
+ * table is only briefly locked to add the constraint or index, not for the validation scan or the
+ * index build.
+ */
+export type PostMigrateStep =
+  | { readonly kind: 'validateConstraint'; readonly table: string; readonly constraint: string }
+  | { readonly kind: 'concurrentIndex'; readonly indexName: string; readonly sql: string };
+
+/**
+ * Migration 0009 (task 3.16) adds `sessions_package_version_fk`, `sessions_package_pin_complete`
+ * and `sessions_open_has_package` as `NOT VALID` and `sessions_package_id_package_version_idx` as
+ * a schema-only index (task 3.16b); this is what makes them valid and built, outside any
+ * transaction. Append here, don't edit past entries: migrations are forward-only and this list is
+ * replayed, idempotently, on every migrateDatabase() call.
+ */
+export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
+  { kind: 'validateConstraint', table: 'sessions', constraint: 'sessions_package_version_fk' },
+  { kind: 'validateConstraint', table: 'sessions', constraint: 'sessions_package_pin_complete' },
+  { kind: 'validateConstraint', table: 'sessions', constraint: 'sessions_open_has_package' },
+  {
+    kind: 'concurrentIndex',
+    indexName: 'sessions_package_id_package_version_idx',
+    sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "sessions_package_id_package_version_idx" ON "sessions" USING btree ("package_id","package_version")`,
+  },
+];
+
+/** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */
+async function isConstraintValidated(
+  client: pg.Pool,
+  table: string,
+  constraint: string,
+): Promise<boolean> {
+  const { rows } = await client.query<{ convalidated: boolean }>(
+    `select convalidated from pg_constraint where conname = $1 and conrelid = $2::regclass`,
+    [constraint, table],
+  );
+  // No row: the constraint doesn't exist (an older database, or a migration not yet applied).
+  // Treated as "nothing to validate" rather than an error, so a partial/old database doesn't
+  // fail; VALIDATE CONSTRAINT would fail on a missing constraint anyway.
+  return rows[0]?.convalidated ?? true;
+}
+
+/**
+ * Runs every `PostMigrateStep` once drizzle's migrate() has committed. Each step is its own
+ * statement with no surrounding transaction (node-postgres autocommits a bare `.query()`), and
+ * every step is idempotent: a `VALIDATE CONSTRAINT` already satisfied is skipped, and
+ * `CREATE INDEX CONCURRENTLY IF NOT EXISTS` is a no-op on a second run.
+ */
+export async function runPostMigrateSteps(
+  client: pg.Pool,
+  steps: readonly PostMigrateStep[] = POST_MIGRATE_STEPS,
+): Promise<void> {
+  for (const step of steps) {
+    if (step.kind === 'validateConstraint') {
+      if (await isConstraintValidated(client, step.table, step.constraint)) continue;
+      await client.query(
+        `ALTER TABLE "${step.table}" VALIDATE CONSTRAINT "${step.constraint}"`,
+      );
+    } else {
+      await client.query(step.sql);
+    }
+  }
+}
+
+/**
  * Applies every pending migration in MIGRATIONS_DIR (forward-only; already-applied ones are
- * skipped, tracked in drizzle.__drizzle_migrations), then closes the connection.
+ * skipped, tracked in drizzle.__drizzle_migrations), then runs the post-migrate steps (task
+ * 3.16b), then closes the connection.
  */
 export async function migrateDatabase(url: string): Promise<void> {
-  const { db, close } = createDb({ DATABASE_URL: url }, MIGRATE_POOL_OPTIONS);
+  const { db, pool, close } = createDb({ DATABASE_URL: url }, MIGRATE_POOL_OPTIONS);
   try {
     await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+    await runPostMigrateSteps(pool);
   } finally {
     await close();
   }

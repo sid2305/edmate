@@ -52,13 +52,13 @@ BEGIN
 
 	RAISE NOTICE 'sessions package pin (3.16): % backfilled, % ended, % already ended', backfilled, ended, already_ended;
 END $$;--> statement-breakpoint
--- NOT VALID + a separate VALIDATE CONSTRAINT: each still takes ACCESS EXCLUSIVE to add, but only
--- briefly (no full-table scan under the lock); the scan runs under VALIDATE CONSTRAINT, which only
--- needs a SHARE UPDATE EXCLUSIVE lock, so reads and writes on "sessions" aren't blocked for long.
+-- NOT VALID: each ADD CONSTRAINT still takes ACCESS EXCLUSIVE, but only briefly (no full-table
+-- scan under the lock). Task 3.16b: drizzle 0.45 runs every pending migration file in one
+-- transaction, so a VALIDATE CONSTRAINT or CREATE INDEX CONCURRENTLY written here would still run
+-- under that same transaction's lock. Both run instead as autocommit steps after migrate()
+-- commits (packages/db/src/migrate.ts's runPostMigrateSteps), each under its own lighter lock
+-- (SHARE UPDATE EXCLUSIVE). The index is declared in src/schema/learning.ts so db:generate stays
+-- a no-op; it is built by the post-migrate step, not by this file.
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_version_fk" FOREIGN KEY ("package_id","package_version") REFERENCES "public"."package_versions"("package_id","version") ON DELETE no action ON UPDATE no action NOT VALID;--> statement-breakpoint
-CREATE INDEX "sessions_package_id_package_version_idx" ON "sessions" USING btree ("package_id","package_version");--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_pin_complete" CHECK (("sessions"."package_id" is null) = ("sessions"."package_version" is null)) NOT VALID;--> statement-breakpoint
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_open_has_package" CHECK ("sessions"."ended_at" is not null or "sessions"."package_id" is not null) NOT VALID;--> statement-breakpoint
-ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_package_version_fk";--> statement-breakpoint
-ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_package_pin_complete";--> statement-breakpoint
-ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_open_has_package";
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_open_has_package" CHECK ("sessions"."ended_at" is not null or "sessions"."package_id" is not null) NOT VALID;
