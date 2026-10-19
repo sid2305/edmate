@@ -9,4 +9,4 @@ Reviewers: code-reviewer (sonnet), typescript-reviewer (sonnet); human sign-off:
 - [LOW] [fixed] evals/suites/persona/persona-claim-teacher-name-*.yaml, persona-teacher-real-voice-en.yaml — invented teacher name; now the seeded "Demo Teacher".
 - [LOW] [deferred 4.0a] packages/evals/src/suites.ts:81 — `pending` match is case-sensitive. Compare lower-cased.
 - [LOW] [deferred 4.0a] packages/evals/src/suites.test.ts:22 — the reviewer rule is opt-in, so CI doesn't enforce it. Turn it on by default.
-- [LOW] [wontfix] packages/evals/src/suites.ts:130 — a suite that fails to load also reports its guard folders as empty; the real cause is already reported.
+- [LOW] [deferred 4.0a] packages/evals/src/suites.ts:130 — a suite that fails to load also reports its guard folders as empty (the real cause is reported too). Say "suite failed to load" instead.
