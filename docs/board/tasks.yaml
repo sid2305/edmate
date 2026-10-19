@@ -701,7 +701,7 @@ tasks:
   accept: An ask_teacher turn creates exactly one teacher question scoped to that teacher and student; evidence updates the learner profile idempotently; tests on real Postgres.
   deps:
   - '3.8'
-  status: review
+  status: done
   branch: m3/3.17-profile-evidence
   model: plan:sonnet planreview:sonnet(security) build:sonnet
 - id: '0.11'
