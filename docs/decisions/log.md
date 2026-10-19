@@ -10,6 +10,246 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
+Decided: `generate` now uses the sentence gate by default and `postGuard` runs the post-phase chain with answerLeak; no real-model turn may run before this merges. Reviewed by safety-reviewer (required), with security-reviewer, typescript-reviewer and silent-failure-hunter.
+Why: this task is the gate before any real-model turn; the fixtures show 0 leaks for numeric and encoded forms, and the mutation run shows the test bites.
+Alternatives: keep the pass-through default and rely on the final check only (the student would see the leak stream in before the replace).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The student's own code may be quoted back only when it is clearly code, and never as a confirmation · decided by tdd-guide (narrowing lead revision 6; tightened in fix round 1 after the safety review) · risk: high
+Decided: a code-shaped key in the student's current message is allowed back only when it sits on a line that is clearly code (inside a ``` fence, indented, ending in a colon, or starting with a statement keyword or an assignment, and not ending in "?") or comes right after `elif`, `while` or `return`. Offering options never counts ("is it .upper() or .lower()?", backticked or not, "n % 2 == 1 or n % 2 == 0"); and/or/not/else/if count only on a clearly-code line. An apostrophe inside a word does not make a key code-shaped. Even an allowed quote is a leak in an answer or confirmation context (yes, right, correct, exactly, fix, use, solution, works, sahi, haan, bilkul, हाँ, सही within five words in the same sentence), and inside decoded base64. Plain words and numbers are never allowed back.
+Why: the first rule (any code word or backticks before the key) was beaten by offering options; echoing a proposed answer confirms it.
+Alternatives: exempt any code key the student typed (fails leak-co6-falseattempt-en); drop the exemption (false positives on the student's own buggy code).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 A withheld leak: the whole post chain judges everything the model wrote; only a checked rewrite or the hint is shown · decided by lead (revision 2) and tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: when generate reports `withheld`, or the full model text (`raw`) leaks, postGuard runs the post chain on `raw` instead of the shown draft. So the other post guards still see it (an escalate is forwarded), and answerLeak makes its one bounded small-tier rewrite of it, which every guard re-checks. Anything else (no rewrite, a failed or leaking rewrite, a block, a chain failure) gives `ANSWER_LEAK_SAFE_HINT`. With no `raw` kept, a withheld turn is always the hint.
+Why: skipping the chain hid escalates in withheld text, and a canned hint for every one-digit false positive teaches nothing.
+Alternatives: go straight to the hint without a chain run (the first version).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream gate checks a window measured in visible units, holds number-word tails, and works in linear time · decided by tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: each sentence is checked with the shown text from `reach` visible units back (whitespace and invisible units are walked over, not counted; then back to the start of a word) plus the new text. `reach` is 64 + 4 × the longest key, plus 512 when there is a number key. A tail that could start a key, a number, or a run of number words ("two thousand", "twenty") is held. Each unit is scanned for sentence ends once and each sentence judged once; sentences within the 200-unit cap are judged one by one, a longer stretch goes through the cap cut.
+Why: the first window counted spaces, so 700 spaces between "two thousand" and "sixteen" pushed the start out of it; and rescanning the buffer made one 400k chunk take 3.1 s.
+Alternatives: check all shown text every sentence (quadratic); cap the window in raw units (beaten by padding).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 More than a reply's maximum of model text trips the gate · decided by security-reviewer (fix round 1) and tdd-guide · risk: high
+Decided: once the text pushed in one attempt exceeds `LIMITS.modelTextMaxLength` (8000), the gate trips: the rest is withheld and the reply is the hint. generate keeps at most 8000 units of `raw`, and `GenerateResult.draft`/`raw` are capped at 8000 in the harness's own schema. The contracts `ModelChunkSchema` is unchanged.
+Why: bounded work on adversarial streams; no reply is longer than that anyway.
+Alternatives: cap each chunk in contracts (needs an ADR); let the gate judge any length (unbounded work).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Hindi in Latin letters covers 21-99, with spelling folding · decided by safety-reviewer (fix round 1) and tdd-guide (the fold) · risk: medium
+Decided: 21-99 are listed in Latin letters with common spellings, and words of five or more letters are also matched after a fold (doubled letters once, chh/chch as ch, au as o, ai as e, w as v, e as i), so chaubees, chaubis and chobis all read 24. A folded form that two values share is dropped, never guessed. They combine with hazaar/lakh ("chaubees hazaar" is 24000).
+Why: the safety review found 21-99 Hinglish answers went through.
+Alternatives: list every spelling by hand (never complete).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Count and confirmation words make an answer context for one-digit keys · decided by safety-reviewer (fix round 1) · risk: medium
+Decided: times, runs, run, baar, बार, chalega, chalegi, chalta, चलेगा, चलेगी, it's and its join the answer words (three words before, one after). "It runs three times", "It's three", "Loop teen baar chalega" and "तीन बार चलेगा" trip key 3. Known strict trips, pinned by test: "Ek baar code ko line by line padho" (key 1) and "Read it three times slowly" (key 3).
+Why: a count is how a loop answer is said.
+Alternatives: a wider window (more false positives).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Decimals, fractions and grouped thousands · decided by safety-reviewer (fix round 1) and tdd-guide (precision rule) · risk: medium
+Decided: a fraction key ("5/6") is its value; a decimal key matches mentions written to at least its precision that round to it (".83" and "0.833" for 0.83, a leading "." allowed); a fraction key matches decimals of 2+ places it rounds to ("0.83" for 5/6, not "0.8"); "24 000" with a space (no-break and narrow no-break spaces fold to a space) is 24000.
+Why: the same answer in another notation is still the answer.
+Alternatives: exact match only.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Short and padded base64 · decided by security-reviewer (fix round 1) and tdd-guide (contexts) · risk: medium
+Decided: a padded run is never treated as a plain word ("Mw==", "Mg=="); runs of 2-3 characters ("MTY", "Mw") are decoded near the word "base64" (within 40 characters), and, if not word-shaped, after an answer word or standing alone in a sentence. Every candidate counts toward the 256-run cap, skipped ones included.
+Why: "MTY" without padding is 16; "Mw==" is 3.
+Alternatives: decode every 2-3 character run (plain words decode to noise that trips one-digit keys).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A failed postGuard step is reported; a post guard's escalate text is saved on the CommitRecord · decided by silent-failure-hunter and safety-reviewer (fix round 1) · risk: medium
+Decided: when the postGuard step throws, times out or returns a malformed result, the runner reports `PostGuardStepFailed` (kind and error name only) before the safe reply. On a postGuard escalate, the chain's text goes on `CommitRecord.escalatedText` (never shown); commit does not persist it yet.
+Why: no step failure goes unreported; revision 13 says save the escalate text.
+Alternatives: keep the text on the step result only (the first version).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Six new leak cases, pending the human's sign-off · decided by lead (fix round 1) and tdd-guide (bank items) · risk: high
+Decided: six cases are added under `evals/suites/leak/` with `reviewed_by: pending`. The bank has no 21-99 item outside loops, no year and no 5/6, so the closest items are used: lo-q2 (55) for the 21-99 words and the padded-spaces cases, lo-q6 (3) for the count, vv-q5 (16) for short base64, and vv-q1 (7 / 2 = 3.5) for the decimal case, whose "starting with a dot" is dropped. lo-q6's key (3 in `range(3)`) and vv-q1's (7 / 2) also occur in their questions (5.6).
+Why: each review probe gets a fixture; the human signs cases off before merge.
+Alternatives: write new bank items (content work outside this task).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A post guard's escalate ends the turn as an escalation · decided by lead (revision 13) and tdd-guide (runner path) · risk: high
+Decided: postGuard returns `escalate` with the alert and the chain's text; the runner sends `replace ''`, then runs its existing escalate path (caring template from the escalate step, alert raised, outcome escalated). The chain's text stays on the step result only; it is never shown or stored.
+Why: the 4.1 safety review: save the escalate text but always reply with the caring template. No post guard escalates yet; this is the wiring for 4.8/4.9.
+Alternatives: store the chain's text on the CommitRecord (a new field nobody reads yet).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 postGuard owns the reply text for guard verdicts; the runner keeps its fallback for crashes · decided by tdd-guide (plan question) · risk: medium
+Decided: the step returns the hint when answerLeak was involved in a block or failure, else `fallbackReplies.safeReply`; the runner's own safe reply is used only when the step throws, times out or returns something malformed. The runner sends `replace ''` before every postGuard replacement, so skill events and sources clear too (revision 12).
+Why: one owner per case; a chain failure is reported (`PostGuardFailed`, guard name and cause only) instead of hidden behind a throw.
+Alternatives: always throw on a non-ok chain and let the runner pick the text.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Arithmetic uses a small built-in evaluator, not mathjs · decided by tdd-guide · risk: medium
+Decided: `print(8*2)` and `f"{5+3}"` are evaluated by a hand-written parser (numbers, `+ - * / // % ** × ÷`, parentheses; at most 64 units, 31 tokens, depth 8).
+Why: mathjs is not yet a dependency, and its `evaluate` over model text is a larger attack surface than a parser that can only add and multiply literals.
+Alternatives: add mathjs and walk only its number and operator nodes.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 How keys match: whole numbers, word-bounded text, answer context for one digit · decided by lead (revision 6) and tdd-guide (details) · risk: medium
+Decided: a key that is one number (digits, literal or number words) matches only as a whole number in any form; text keys match at word boundaries after folding (spaces and commas ignored), so `if marks >= 80:` does not match inside `elif marks >= 80:`. A one-digit key's digits count anywhere, but its words and arithmetic only in an answer context (an answer word up to three words before or right after, or the number alone in its sentence); inside decoded base64, its digits need that context too.
+Why: ordinary lesson text ("one step", "teen lines hain", "1 + 2") must pass; decoded noise ("j{0z") can hold stray digits.
+Alternatives: substring matching (false positives on 160, 2016 and `elif`).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 Base64 skips plain words and decodes only printable UTF-8 · decided by tdd-guide · risk: medium
+Decided: runs of 4+ base64/base64url characters (padded or not) are decoded once; lower-case or Capitalised words (also hyphenated) are skipped; only strict, printable UTF-8 is kept. Hex and reversed digits are not decoded (LOW extras, left out).
+Why: "together" decoded to printable noise containing a digit and tripped a one-digit key in the hint itself.
+Alternatives: require 8+ characters (misses `MTY=`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The rewrite is one small-tier call with a fixed instruction and no key · decided by lead (revision 11) and tdd-guide (shape) · risk: medium
+Decided: the rewrite sends the draft with a fixed English instruction (`REWRITE_SYSTEM`) on the small tier, at most 400 output tokens and 60% of the guard's time slice, after the turn's cost check. A failure, a tool call or a leaking result gives the hint.
+Why: the draft already holds the answer, so the key adds nothing; the matcher re-checks whatever comes back.
+Alternatives: send the key list so the model knows what to remove.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Post-guard time slices: (2 s − 200 ms) / (2 × guards) · decided by lead (revision 14) and tdd-guide (margin) · risk: low
+Decided: each post guard's slice is 900 ms with one guard and 150 ms with six; a six-guard chain that rewrites and uses almost every slice ends at 1 788 ms.
+Why: both passes of every guard fit inside the step's 2 s with a margin.
+Alternatives: an overall chain deadline.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Constraints for 5.6 (answer keys) · decided by lead (revision 6) and tdd-guide (the exception) · risk: medium
+Decided: no answer key may match its problem statement; each answer may have several keys (one per canonical phrasing, e.g. `n >= 1 and n <= 10` and `1 <= n <= 10`). Exception found: for "what does this print" items the printed output is in the question (co-q2's only key, `Warm`), so 5.6 must decide how to handle those (for example, count them only in an answer context).
+Why: a key in the problem statement makes the guard trip when the tutor quotes the problem.
+Alternatives: none chosen for the exception; it is left to 5.6.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream is read to the end after a trip · decided by tdd-guide · risk: low
+Decided: after the gate trips, the attempt keeps reading the model stream (showing nothing) until it ends.
+Why: usage arrives at the end of the stream; stopping early would lose metering.
+Alternatives: close the stream on a trip (faster hint, unmetered spend).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.16d The advisory-lock acquire/release pattern is factored into an exported `withMigrateLock` helper · decided by tdd-guide · risk: low
+Decided: `withMigrateLock(lockClient, key, fn, maxWaitMs?)` wraps `acquireMigrateLock` + `fn()` + a conditional `pg_advisory_unlock`, tracked by a `locked` flag set only after `acquireMigrateLock` returns; `migrateDatabase()` now calls it instead of inlining the same `try`/`finally`.
+Why: the review's finding (unlock only when the lock was actually taken) needs a unit test, and `migrateDatabase()` itself isn't unit-testable (it always opens a real `pg.Client`/pool against a URL); factoring the lock logic into a small function that takes an injectable client makes the "no unlock after a failed acquire" behaviour directly testable without touching `migrateDatabase()`'s signature or needing a real database.
+Alternatives: add a client-factory parameter to `migrateDatabase()` for test injection (keeps one function, but widens its public signature for a test-only need); test the behaviour only at the integration level (real Postgres, no quick unit coverage of the "connection already dead" branch).
+Reversible: yes; an internal implementation detail of `migrateDatabase()`.
+
+---
+
+### 19 Oct 2026 · 3.16d The post-migrate step timeout is set on the connection with `set_config`, not a plain `SET` · decided by tdd-guide · risk: low
+Decided: `migrateDatabase()` runs `select set_config('statement_timeout', $1, false)` (parameterized, session-level — the third argument `false` means "not transaction-local") on the post-migrate connection before `runPostMigrateSteps`, instead of string-building a `SET statement_timeout = <value>` statement.
+Why: Postgres's `SET` doesn't accept a bind parameter, so a literal value would have to be built with string interpolation even though `stepTimeoutMs()` already validates it is a safe positive integer; `set_config` takes the value as a normal parameterized argument, which is both simpler and avoids ever building SQL by concatenating a number into a string, as a matter of habit.
+Alternatives: `SET statement_timeout = ${n}` (works given the validation, but trains the eventual next reader/editor that string-built SQL is fine here); a second, dedicated pool just for the post-migrate steps with `statement_timeout` baked into its `pg.PoolConfig` (more connections and a second `close()` to manage, for no behavioural difference since the migrator pool is already `max: 1`).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16d Reproducing the blocked-`CREATE INDEX CONCURRENTLY` test needed an actively running blocker statement, not just an idle-in-transaction one · decided by tdd-guide (int test red run) · risk: low
+Decided: the integration test's blocking connection runs `BEGIN; select pg_sleep(2)` (not awaited; rolled back afterwards) and the test waits ~300 ms before calling the timed `migrateDatabase()`, rather than `BEGIN; select 1` with no delay.
+Why: the first attempt (`BEGIN; select 1`, no delay) did not reproduce a wait: `CREATE INDEX CONCURRENTLY` completed in a few milliseconds even though `pg_stat_activity` showed the blocker as `idle in transaction` at that instant, confirmed with debug logging before the fix; a manual `psql` reproduction with the same table and a `pg_sleep`-based blocker reliably blocked and timed out as the Postgres documentation describes. The exact reason for the gap wasn't tracked down further (not needed for the test itself), but a blocker with an in-flight statement and a short lead time reproduces the behaviour deterministically.
+Alternatives: keep polling `pg_stat_activity`/`pg_locks` until some specific lock or wait-event condition is observed before issuing the timed call (more precise, meaningfully more complex for a test); accept flakiness with the idle-in-transaction form.
+Reversible: yes; an internal detail of the test, not of `migrate.ts` itself.
+
+---
+
+### 19 Oct 2026 · 3.16d Accepted edge cases in the migration lock and its timeout test · decided by team lead · risk: low
+Decided: in `packages/db/src/migrate.ts`, a failure inside the locked section followed by a failed unlock reports the unlock error (both need a dead connection, and the lock is released when the session ends anyway); `packages/db/test/migrate.int.test.ts` keeps its fixed 300 ms lead before the timed call.
+Why: rare, and harmless to data; a fix would add code paths with no test value now.
+Alternatives: wrap the unlock in try/catch and rethrow the original; poll pg_stat_activity in the test.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16c The migration lock is polled with `pg_try_advisory_lock`, not held by blocking on `pg_advisory_lock` · decided by tdd-guide (red run) · risk: medium
+Decided: `migrateDatabase()` acquires `MIGRATE_LOCK_KEY` by polling `pg_try_advisory_lock` on its own dedicated connection every 50 ms (10-minute default give-up), instead of a single blocking `pg_advisory_lock` call.
+Why: the int test (two concurrent `migrateDatabase()` calls against a fresh database) hung forever with a blocking `pg_advisory_lock`: that call itself holds an open snapshot on its connection for the whole wait, and `CREATE INDEX CONCURRENTLY` (the post-migrate index steps) must wait out every transaction with an older snapshot, table or not — so the lock holder's own index build waited on the second caller's still-blocked lock request, which only clears once the first caller releases the lock after finishing the build: a self-deadlock, reproduced and confirmed with debug logging before the fix.
+Alternatives: a blocking lock on a separate, short-statement-timeout connection (still holds a snapshot for the timeout's duration); skipping `CREATE INDEX CONCURRENTLY` while any other session is active (defeats the point); moving the lock inside the same pool as the migration (ruled out separately — pool `max: 1` would deadlock against itself).
+Reversible: yes; an internal implementation detail of `migrateDatabase()`.
+
+---
+
+### 19 Oct 2026 · 3.16c A plain `CREATE INDEX CONCURRENTLY` lookup is schema-qualified with `to_regclass('public.' || $1)` · decided by tdd-guide (3.16b review deferral) · risk: low
+Decided: `isIndexInvalid()`'s lookup now resolves the index name with `to_regclass('public.' || $1)` instead of a bare `pg_class.relname = $1` match.
+Why: a bare name match could find a same-named index in another schema (a stray test schema, `drizzle`, or a future multi-schema layout) and wrongly skip or drop it; `to_regclass` with an explicit schema prefix only ever resolves the one in `public`.
+Alternatives: join `pg_namespace` and filter `nspname = 'public'` (same result, more verbose); leave it unqualified (the review's finding).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16c The open-session partial index is its own migration (0010), not folded into 0009 · decided by tdd-guide (3.16b review deferral) · risk: low
+Decided: `sessions_open_teacher_id_student_id_idx` is declared in `src/schema/learning.ts` the same schema-only way as 0009's package-pin index, but ships as its own generated-then-trimmed migration file (`0010_easy_maximus.sql`), because `db:generate` is not a no-op for a schema change with no matching not-yet-released migration to diff it into (0009's index was a no-op only because it was invented and declared together with 0009's new columns, before 0009 existed). The generated file's SQL was trimmed to a comment, same as 0009's hand-edit, so the index is still built only by the post-migrate step; the generated snapshot and journal entries were kept, which is what keeps `db:generate` a no-op again afterwards.
+Why: the task asked for whichever option keeps the journal consistent; trimming the generated file's SQL while keeping its snapshot/journal entries does that without inventing a parallel, undeclared index that `db:generate` would try to add on some future run.
+Alternatives: skip declaring the index in drizzle at all (keeps `db:generate` a no-op trivially, but then nothing stops a future `db:generate` from "discovering" it missing and adding a real, blocking `CREATE INDEX`); hand-write a fake empty migration/snapshot pair instead of using drizzle-kit's own output (more error-prone, diverges from 0009's precedent).
+Reversible: yes; a later migration can rename or rebuild it.
+
+---
+
+### 19 Oct 2026 · 3.11a Persona-template file layout: no front-matter-name/file-name match check · decided by tdd-guide · risk: low
+Decided: `readPersonaTemplateDir` validates `<id>@<semver>.yaml` (id is a free file-naming slug) and the persona's YAML body, but never checks the id against the persona's own `name` field, unlike `promptPacks.ts`'s pack-name/file-name check.
+Why: the persona's `name` is a role name shown to the model ("Interviewer"), not an identifier matching the file (`job-interview`); the two are different things by design (task scope: "Role names only"), so there is nothing correct to compare them against.
+Alternatives: add a separate `id`-style metadata field matching the filename (contracts' `Persona.id` already exists for this and is left as-is, not re-purposed as a file-name key); require the filename's slug to kebab-case-match `name` (would force role names like "job-interview" instead of "Interviewer").
+Reversible: yes — a match check can be added later without changing the schema shape.
+
+---
+
+### 19 Oct 2026 · 3.11a `packages/content/src/personaTemplates.ts` added to the safety-reviewer risk-paths group · decided by tdd-guide, per the 3.11 plan's lead answers · risk: high
+Decided: `.claude/skills/merge-gate/risk-paths.txt` now lists `packages/content/src/personaTemplates.ts` under the same safety-reviewer block as `packages/content/src/promptPacks.ts` (3.6 precedent), so this PR and every future edit to the persona-template loader needs safety-reviewer sign-off.
+Why: build plan rule 6 (risky paths need a named reviewer); the loader governs what shape of persona content can ever reach the composer's `persona` section, which is safety-reviewed content behaviour.
+Alternatives: leave it out of risk-paths.txt and rely on `packages/content/src/promptPacks.ts`'s existing coverage of the directory it reads from (doesn't cover this new file).
+Reversible: yes (a later task could narrow or remove the line), but not without a fresh safety-reviewer judgment.
+
+---
+
+### 19 Oct 2026 · 3.11a No real pack or persona prose in this PR · decided by tdd-guide, per the 3.11 plan's split · risk: low
+Decided: this PR ships only the loader, schema, fixtures (under `packages/content/test/fixtures/`) and tests; `content/prompt-packs/` and `content/skills/` stay empty until 3.11b, and `noFixtureProse.test.ts` passes trivially until then.
+Why: the task brief and the 3.11 plan's "Lead answers and plan revisions" section split 3.11 into code (3.11a, this PR) and content (3.11b, `pedagogy-author` on opus, safety-reviewer first, then human sign-off per row).
+Alternatives: none — this was given, not decided.
+Reversible: n/a.
+
+---
+
 ### 19 Oct 2026 · 3.16b A post-migrate step runs lock-heavy statements as their own autocommit transactions after migrate() commits · decided by tdd-guide · risk: high
 Decided: `migrateDatabase()` calls drizzle's `migrate()` to apply pending migration files (unchanged), then calls a new `runPostMigrateSteps()` against the same single-connection pool, running each of 0009's three `VALIDATE CONSTRAINT`s (skipped if already valid) and its `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as separate, non-transactional statements. 0009's SQL file itself only adds the FK and two CHECKs as `NOT VALID` and no longer runs `CREATE INDEX`.
 Why: drizzle-orm 0.45 runs every pending migration file in one transaction (established in the 3.16 review and decision log), so neither a `VALIDATE CONSTRAINT` nor a `CREATE INDEX CONCURRENTLY` written into any migration file — this one or a new one — ever escapes that transaction's ACCESS EXCLUSIVE lock, and `CREATE INDEX CONCURRENTLY` is refused by Postgres inside a transaction block at all. A step that runs after the migrator's transaction has committed is the only way to get the lighter `SHARE UPDATE EXCLUSIVE` lock (validate) or no blocking lock at all (concurrent index) before `sessions` grows past pilot scale.

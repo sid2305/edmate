@@ -126,6 +126,21 @@ export class GenerateAttemptFailed extends HarnessError {
   }
 }
 
+/**
+ * The postGuard step failed (threw, timed out or returned a malformed result) and the runner sent
+ * the safe reply (4.5). Carries only the kind and the underlying error's name.
+ */
+export class PostGuardStepFailed extends HarnessError {
+  override readonly name = 'PostGuardStepFailed';
+
+  constructor(
+    readonly kind: 'error' | 'timeout' | 'invalid_result',
+    readonly causeName?: string,
+  ) {
+    super(`postGuard failed: ${kind}` + (causeName === undefined ? '' : ` (${causeName})`));
+  }
+}
+
 /** Usage for a model with no valid price: traced and reported, never metered as free. */
 export class UnpricedUsage extends HarnessError {
   override readonly name = 'UnpricedUsage';

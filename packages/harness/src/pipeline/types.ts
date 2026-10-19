@@ -123,7 +123,7 @@ export interface PipelineDeps {
   maxTurnCostMicroUsd?: number;
   /** The tool registry; default `noTools` (5.5 builds the real one). */
   tools?: ToolRegistry;
-  /** Builds generate's stream gate; default the pass-through (4.5 adds the sentence gate). */
+  /** Builds generate's stream gate; default the answer-leak sentence gate (4.5). */
   streamGate?: StreamGateFactory;
   /** Where `finished.background` failures are logged (ids and error name and message only). */
   log: TurnLog;
@@ -266,10 +266,20 @@ export interface EscalateResult {
 export interface GenerateResult {
   /** What the student was shown, all tool rounds joined. */
   draft: string;
+  /** Everything the model wrote, shown or not (4.5); postGuard checks it. Absent: the draft. */
+  raw?: string;
+  /** The stream gate withheld text as an answer leak (4.5): postGuard forces the hint. */
+  withheld?: boolean;
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
-  { result: 'ok' } | { result: 'replace'; text: string }
+  | { result: 'ok' }
+  | { result: 'replace'; text: string }
+  /**
+   * A post guard escalated (4.5 forwards it; later post guards may raise it). The runner replies
+   * with the caring template and raises `alert`; `text` (the chain's text) is kept, never shown.
+   */
+  | { result: 'escalate'; alert: SafetyAlert; text: string }
 );
 
 export type TurnOutcome = 'replied' | 'escalated' | 'blocked' | 'error';
@@ -298,6 +308,11 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
+   * (the student got the caring template). Server-side only; commit decides where it is kept.
+   */
+  escalatedText?: string;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when
@@ -341,7 +356,16 @@ export interface Steps {
   ): Promise<GenerateResult>;
   postGuard(
     env: StepEnv,
-    x: { ctx: TurnContext; decision: PedagogyDecision; draft: string },
+    x: {
+      ctx: TurnContext;
+      decision: PedagogyDecision;
+      /** What the student was shown. */
+      draft: string;
+      /** Everything the model wrote (GenerateResult.raw). */
+      raw?: string;
+      /** The stream gate withheld a leak (GenerateResult.withheld). */
+      withheld?: boolean;
+    },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;
   commit(env: StepEnv, record: CommitRecord): Promise<void>;

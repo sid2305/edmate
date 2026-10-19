@@ -3,6 +3,7 @@
 // entries are strict (no `reason` text), so no step can smuggle text into the trace (ADR-0003).
 import {
   AgentConfigSchema,
+  LIMITS,
   AttemptSchema,
   ChunkSchema,
   EntitlementSchema,
@@ -82,12 +83,21 @@ export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({
 });
 
 export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
-  draft: z.string(),
+  draft: z.string().max(LIMITS.modelTextMaxLength),
+  raw: z.string().max(LIMITS.modelTextMaxLength).exactOptional(),
+  withheld: z.boolean().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [
   z.strictObject({ result: z.literal('ok'), guards, usage }),
   z.strictObject({ result: z.literal('replace'), text: z.string(), guards, usage }),
+  z.strictObject({
+    result: z.literal('escalate'),
+    alert: SafetyAlertSchema,
+    text: z.string(),
+    guards,
+    usage,
+  }),
 ]);
 
 /** Every PolicyReason; the Record type makes the compiler reject a missing or extra one. */

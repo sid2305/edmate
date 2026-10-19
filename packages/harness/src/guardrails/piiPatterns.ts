@@ -6,7 +6,7 @@
 // (zero-width space/joiners, BOM, soft hyphen, bidi marks: \p{Cf}) either shown as a space (so
 // they act as a separator) or dropped (so they can't split a number). Each view keeps a map back
 // to the original, and the spans found in either are redacted in the original text, which is
-// otherwise kept byte for byte.
+// otherwise kept byte for byte. Digit and \p{Cf} handling is the shared textFold.ts (4.5).
 //
 // Scope (build plan § guard table): phone, email, card (plus CVV/expiry next to a card), OTP-like
 // numbers, the student's own name when they introduce themselves, and the locale pack's patterns.
@@ -18,6 +18,8 @@
 // fold/view block above, because 4.5 is moving that block to a shared helper on its own branch
 // (lead instruction, 19 Oct 2026).
 import { foldDigitForms } from './digitForms.js';
+
+import { digitValue, isDecimalDigit, isFormatChar } from './textFold.js';
 
 /** In priority order: on overlapping spans of equal length, the earlier category names the result. */
 export const PII_CATEGORIES = Object.freeze([
@@ -78,28 +80,12 @@ interface View {
   to: number[];
 }
 
-const ND = /^\p{Nd}$/u;
-const CF = /^\p{Cf}$/u;
 const ZS = /^\p{Zs}$/u;
 const DASHES = /^[‐-―−﹘﹣]$/u;
-const digitCache = new Map<number, number>();
-
-const isNd = (cp: number): boolean => ND.test(String.fromCodePoint(cp));
-
-/** The digit value of a \p{Nd} code point: Unicode keeps each digit set contiguous, 0 first. */
-function digitValue(cp: number): number {
-  const cached = digitCache.get(cp);
-  if (cached !== undefined) return cached;
-  let start = cp;
-  while (isNd(start - 1)) start--;
-  const v = (cp - start) % 10;
-  digitCache.set(cp, v);
-  return v;
-}
 
 function fold(ch: string, cp: number): string {
   if (cp >= 0x30 && cp <= 0x39) return ch;
-  if (ND.test(ch)) return String(digitValue(cp));
+  if (isDecimalDigit(ch)) return String(digitValue(cp));
   if (cp >= 0xff01 && cp <= 0xff5e) return String.fromCharCode(cp - 0xfee0);
   if (ZS.test(ch)) return ' ';
   if (DASHES.test(ch)) return '-';
@@ -115,7 +101,7 @@ function buildView(text: string, dropInvisible: boolean): View {
     const len = cp > 0xffff ? 2 : 1;
     const ch = text.slice(i, i + len);
     let out: string;
-    if (CF.test(ch)) {
+    if (isFormatChar(ch)) {
       if (dropInvisible) {
         i += len;
         continue;

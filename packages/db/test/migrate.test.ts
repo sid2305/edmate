@@ -2,8 +2,16 @@
 // Postgres (a missing constraint row, an already-validated constraint, a step that runs, and an
 // INVALID leftover index that must be dropped and rebuilt). Integration coverage against real
 // Postgres is in migrate.int.test.ts.
-import { describe, expect, it, vi } from 'vitest';
-import { POST_MIGRATE_STEPS, runPostMigrateSteps, type PostMigrateStep } from '../src/migrate.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  acquireMigrateLock,
+  DEFAULT_STEP_TIMEOUT_MS,
+  POST_MIGRATE_STEPS,
+  runPostMigrateSteps,
+  stepTimeoutMs,
+  withMigrateLock,
+  type PostMigrateStep,
+} from '../src/migrate.js';
 
 interface FakeClient {
   query: ReturnType<typeof vi.fn>;
@@ -86,6 +94,30 @@ describe('runPostMigrateSteps', () => {
     expect(client.query.mock.calls.some((c) => String(c[0]).includes('DROP INDEX'))).toBe(false);
   });
 
+  it('qualifies the index lookup to the public schema with to_regclass(format(...)), not string concatenation', async () => {
+    const client = fakeClient([true]);
+    const steps: PostMigrateStep[] = [
+      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+    ];
+    await runPostMigrateSteps(client as never, steps);
+    const lookup = String(client.query.mock.calls[0]?.[0]);
+    expect(lookup).toMatch(/to_regclass\(format\('%I\.%I', 'public', \$1::text\)\)/);
+    expect(client.query.mock.calls[0]?.[1]).toEqual(['an_idx']);
+  });
+
+  it('passes a mixed-case index name through as a plain parameter, for format(%I) to quote', async () => {
+    const client = fakeClient([true]);
+    const steps: PostMigrateStep[] = [
+      {
+        kind: 'concurrentIndex',
+        indexName: 'MixedCaseIdx',
+        sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "MixedCaseIdx" ON "t" ("c")',
+      },
+    ];
+    await runPostMigrateSteps(client as never, steps);
+    expect(client.query.mock.calls[0]?.[1]).toEqual(['MixedCaseIdx']);
+  });
+
   it('drops and rebuilds an INVALID leftover index (a failed or killed earlier build)', async () => {
     const client = fakeClient([false]);
     const steps: PostMigrateStep[] = [
@@ -100,7 +132,7 @@ describe('runPostMigrateSteps', () => {
     );
   });
 
-  it('the default step list runs the three 0009 VALIDATEs and the package-pin index', () => {
+  it('the default step list runs the three 0009 VALIDATEs and the package-pin and open-session indexes', () => {
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(3);
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'concurrentIndex')).toEqual([
       {
@@ -108,6 +140,124 @@ describe('runPostMigrateSteps', () => {
         indexName: 'sessions_package_id_package_version_idx',
         sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
       },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'sessions_open_teacher_id_student_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"ended_at" is null/,
+        ),
+      },
     ]);
+  });
+});
+
+describe('acquireMigrateLock', () => {
+  it('returns immediately when pg_try_advisory_lock reports true on the first poll', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: true }] });
+    await acquireMigrateLock({ query } as never, 1n);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toMatch(/pg_try_advisory_lock/);
+    expect(query.mock.calls[0]?.[1]).toEqual([1n]);
+  });
+
+  it('polls until pg_try_advisory_lock reports true', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ locked: false }] })
+      .mockResolvedValueOnce({ rows: [{ locked: false }] })
+      .mockResolvedValueOnce({ rows: [{ locked: true }] });
+    await acquireMigrateLock({ query } as never, 1n, 10_000);
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives up and throws once maxWaitMs elapses with the lock still held elsewhere', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: false }] });
+    await expect(acquireMigrateLock({ query } as never, 1n, 0)).rejects.toThrow(
+      /timed out after 0ms waiting for the migration lock/,
+    );
+  });
+});
+
+describe('withMigrateLock', () => {
+  it('acquires, runs fn, and unlocks on success', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: true }] });
+    const fn = vi.fn().mockResolvedValue('ok');
+    const result = await withMigrateLock({ query } as never, 1n, fn);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]?.[0]).toMatch(/pg_try_advisory_lock/);
+    expect(query.mock.calls[1]?.[0]).toMatch(/pg_advisory_unlock/);
+    expect(query.mock.calls[1]?.[1]).toEqual([1n]);
+  });
+
+  it('unlocks even when fn throws, and still propagates fn\'s error', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: true }] });
+    const fn = vi.fn().mockRejectedValue(new Error('fn failed'));
+    await expect(withMigrateLock({ query } as never, 1n, fn)).rejects.toThrow('fn failed');
+    expect(query.mock.calls.some((c) => String(c[0]).includes('pg_advisory_unlock'))).toBe(true);
+  });
+
+  it('does not call pg_advisory_unlock when acquiring the lock itself failed (task 3.16d review deferral)', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: false }] });
+    const fn = vi.fn();
+    await expect(withMigrateLock({ query } as never, 1n, fn, 0)).rejects.toThrow(
+      /timed out after 0ms waiting for the migration lock/,
+    );
+    expect(fn).not.toHaveBeenCalled();
+    expect(query.mock.calls.some((c) => String(c[0]).includes('pg_advisory_unlock'))).toBe(false);
+  });
+
+  it('does not mask the acquire failure with an unlock call, even when the connection is already dead', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('connection terminated'));
+    const fn = vi.fn();
+    await expect(withMigrateLock({ query } as never, 1n, fn)).rejects.toThrow(
+      'connection terminated',
+    );
+    expect(fn).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('stepTimeoutMs', () => {
+  const ENV_KEY = 'EDMATE_MIGRATE_STEP_TIMEOUT_MS';
+  const original = process.env[ENV_KEY];
+
+  afterEach(() => {
+    if (original === undefined) delete process.env[ENV_KEY];
+    else process.env[ENV_KEY] = original;
+  });
+
+  it('defaults to 15 minutes when nothing is set', () => {
+    delete process.env[ENV_KEY];
+    expect(stepTimeoutMs()).toBe(DEFAULT_STEP_TIMEOUT_MS);
+    expect(DEFAULT_STEP_TIMEOUT_MS).toBe(15 * 60_000);
+  });
+
+  it('options.stepTimeoutMs wins over the env var', () => {
+    process.env[ENV_KEY] = '1000';
+    expect(stepTimeoutMs({ stepTimeoutMs: 42 })).toBe(42);
+  });
+
+  it('falls back to the env var when options is empty', () => {
+    process.env[ENV_KEY] = '1234';
+    expect(stepTimeoutMs({})).toBe(1234);
+  });
+
+  it('treats an empty env var as unset', () => {
+    process.env[ENV_KEY] = '';
+    expect(stepTimeoutMs({})).toBe(DEFAULT_STEP_TIMEOUT_MS);
+  });
+
+  it('throws on a non-numeric env var', () => {
+    process.env[ENV_KEY] = 'not-a-number';
+    expect(() => stepTimeoutMs({})).toThrow(/positive whole number/);
+  });
+
+  it('throws on a zero or negative env var', () => {
+    process.env[ENV_KEY] = '0';
+    expect(() => stepTimeoutMs({})).toThrow(/positive whole number/);
+    process.env[ENV_KEY] = '-5';
+    expect(() => stepTimeoutMs({})).toThrow(/positive whole number/);
   });
 });

@@ -317,7 +317,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8)', async () => {
+  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8; postGuard: 4.5)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -331,7 +331,6 @@ describe('defaultSteps (stubs)', () => {
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
       () => defaultSteps.escalate(env, anyArg, undefined),
-      () => defaultSteps.postGuard(env, anyArg),
     ];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
