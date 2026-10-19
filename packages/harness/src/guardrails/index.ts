@@ -8,7 +8,29 @@ export {
   type GuardOutcomeEvent,
   runGuardChain,
 } from './chain.js';
+export {
+  buildDistressClassifierRequest,
+  createDistressDetectGuard,
+  DISTRESS_CLASSIFIER_TIMEOUT_MS,
+  DISTRESS_CONTEXT_TURNS,
+  DISTRESS_EXCERPT_MAX,
+  DistressClassifierTimeoutError,
+  DistressGuardCancelledError,
+  type DistressDetectOptions,
+  DistressVerdictSchema,
+} from './distressDetect.js';
+export {
+  distressKeywordLevel,
+  type DistressKeywordKind,
+  type DistressKeywordLevel,
+  type DistressKeywordMatch,
+  distressKeywordMatch,
+  hasAnyDistressKeyword,
+  hasDistressKeyword,
+  normaliseForDistress,
+} from './distressKeywords.js';
 export type { Guard, GuardRun } from './guard.js';
+export type { PreGuardCtx } from './preGuardCtx.js';
 export {
   declaredIndex,
   GUARD_ORDER,

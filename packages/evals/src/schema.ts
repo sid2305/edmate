@@ -28,6 +28,11 @@ export const CheckSchema = z
     max_chars: z.int().min(1).exactOptional(),
     /** true: the reply cites at least one source; false: it cites none; absent: don't care. */
     must_cite_source: z.boolean().exactOptional(),
+    /**
+     * true: the turn escalates (caring reply, SafetyAlert); false: it does not (task 4.3). The
+     * agent must report it (`EvalAgentReply.escalated`), or the check fails.
+     */
+    must_escalate: z.boolean().exactOptional(),
     /** Observable yes/no statements, each scored by the judge model; all must pass. */
     judge: z.array(z.string().min(1)).min(1).exactOptional(),
   })

@@ -14,6 +14,7 @@ import {
   demoChunk,
   demoChunkScored,
   demoLearnerProfile,
+  demoLocalePack,
   demoPedagogyDecision,
   demoTurnInput,
   usageMain,
@@ -41,9 +42,11 @@ import {
   testDeps,
   testSteps,
 } from '../testing/testSteps.js';
+import { hasDistressKeyword } from '../guardrails/distressKeywords.js';
 import type { PiiScrubCtx } from '../guardrails/piiScrub.js';
 import { fakeGuard } from '../testing/guardFixtures.js';
 import { prng } from '../testing/prng.js';
+import type { GatewayScript } from '../testing/scriptedGateway.js';
 import {
   HarnessError,
   InvalidEventError,
@@ -52,10 +55,13 @@ import {
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
 import { runTurn } from './runner.js';
-import { STEP_NAMES } from './spec.js';
+import { STEP_NAMES, STEP_SPEC } from './spec.js';
 import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
 import { decide } from './steps/decide.js';
+import { GuardRegistry } from '../guardrails/registry.js';
+import { buildCaringReply } from './steps/escalate.js';
+import { createPreGuardStep } from './steps/preGuard.js';
 import { defaultSteps } from './steps/index.js';
 
 function starts(log: { step: string; phase: string }[]): string[] {
@@ -317,7 +323,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8)', async () => {
+  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8; preGuard, escalate: 4.3)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -328,9 +334,7 @@ describe('defaultSteps (stubs)', () => {
     };
     const anyArg = {} as never;
     const calls: (() => unknown)[] = [
-      () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
-      () => defaultSteps.escalate(env, anyArg, undefined),
       () => defaultSteps.postGuard(env, anyArg),
     ];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
@@ -350,7 +354,7 @@ describe('defaultSteps (stubs)', () => {
     expect(t.portCalls).toEqual(['entitlements.resolve']);
   });
 
-  it('fails closed: past admit and entitle and the real scrub, the stub preGuard blocks the turn', async () => {
+  it('fails closed: past admit, entitle and the real scrub, the real preGuard with no classifier blocks the turn', async () => {
     const t = testDeps();
     const happy = testSteps();
     const steps = {
@@ -361,8 +365,8 @@ describe('defaultSteps (stubs)', () => {
     };
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    // The real buildContext runs alongside the stub preGuard; it only read (and hit an unused store).
-    expect(t.portCalls).toEqual(['profiles.get']);
+    // The real buildContext and preGuard run side by side; they only read (and hit unused stores).
+    expect([...t.portCalls].sort()).toEqual(['profiles.get', 'transcripts.history']);
   });
 });
 
@@ -921,4 +925,109 @@ describe('runTurn with the real meter and commit (3.8)', () => {
     expect(result.background.map((b) => b.task)).toEqual(['commit']);
     expect(result.trace?.steps.find((s) => s.name === 'commit')?.outcome).toBe('failed');
   });
+});
+
+describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () => {
+  const realDistress = (o: StepOverrides = {}) =>
+    testSteps({ preGuard: defaultSteps.preGuard, escalate: defaultSteps.escalate, ...o });
+  const deps = (script?: GatewayScript) =>
+    testDeps({
+      ...(script === undefined ? {} : { script }),
+      overrides: { transcripts: memoryTranscriptStore(), distressCheck: hasDistressKeyword },
+    });
+  const at = (text: string) => ({ ...demoTurnInput, text });
+
+  it('hard keyword: escalates with the guard alert and the caring template; the turn is saved', async () => {
+    const t = deps();
+    const steps = realDistress();
+    const { events, result } = await driveTurn(
+      runTurn(at('i want to kill myself'), { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events).toEqual([
+      { type: 'safety', level: 'alert' },
+      { type: 'token', text: buildCaringReply(demoLocalePack) },
+      { type: 'done', messageId: 'message_1', usage: [] },
+    ]);
+    expect(t.alerts.raised).toEqual([
+      expect.objectContaining({ kind: 'distress', excerptRedacted: 'i want to kill myself' }),
+    ]);
+    expect(steps.commits).toHaveLength(1);
+    expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', intent: 'distress' });
+    expect(result.trace).toMatchObject({ intent: 'distress', move: 'redirect' });
+    expect(result.trace?.guards).toContainEqual({
+      name: 'distressDetect',
+      ok: false,
+      action: 'escalate',
+    });
+  }, 2_000);
+
+  it('the chain fails (no pre guard registered) on a hard keyword: the runner keyword check still escalates', async () => {
+    const t = deps();
+    const steps = realDistress({ preGuard: createPreGuardStep(new GuardRegistry('pre')) });
+    const { events, result } = await driveTurn(
+      runTurn(at('i want to kill myself'), { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+    expect(result.trace?.steps.find((s) => s.name === 'preGuard')?.outcome).toBe('failed');
+    // The runner-built alert: no excerpt.
+    expect(t.alerts.raised).toEqual([expect.objectContaining({ excerptRedacted: '' })]);
+    expect(steps.commits[0]).toMatchObject({ outcome: 'escalated' });
+  }, 2_000);
+
+  it('a slow scrub plus a soft hit: preGuard times out, the runner still escalates (safety review)', async () => {
+    const t = testDeps({
+      overrides: {
+        transcripts: { history: () => new Promise(() => undefined), append: () => Promise.resolve() },
+        // The raw-text and fallback dep stays hard-only; the soft check is the runner's own.
+        distressCheck: hasDistressKeyword,
+      },
+    });
+    const steps = realDistress({
+      scrub: async (env) => {
+        await env.deps.clock.sleep((STEP_SPEC.preGuard.timeoutMs ?? 0) - 5);
+        return { ...(env.input.text === undefined ? {} : { text: env.input.text }), guards: [] };
+      },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(at('i feel so hopeless'), { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+    expect(result.trace?.steps.find((s) => s.name === 'preGuard')?.outcome).toBe('failed');
+    expect(steps.commits[0]).toMatchObject({ outcome: 'escalated' });
+  }, 2_000);
+
+  it('a soft hit never escalates through the raw-text check alone (it stays hard-only)', async () => {
+    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const { events } = await driveTurn(
+      runTurn(at('i feel so hopeless'), { deps: t.deps, steps: realDistress() }),
+      t.clock,
+    );
+    expect(events.some((e) => e.type === 'safety')).toBe(false);
+  }, 2_000);
+
+  it('soft keyword + classifier false → a normal reply (no alert)', async () => {
+    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const { events } = await driveTurn(
+      runTurn(at('this bug is hopeless'), { deps: t.deps, steps: realDistress() }),
+      t.clock,
+    );
+    expect(events.some((e) => e.type === 'safety')).toBe(false);
+    expect(events.at(-1)?.type).toBe('done');
+    expect(t.alerts.raised).toEqual([]);
+  }, 2_000);
+
+  it('no keyword + classifier down → blocked (fail closed), never replied; the turn is saved', async () => {
+    const t = deps({ stream: [scriptedStreamText] });
+    const steps = realDistress();
+    const { events } = await driveTurn(
+      runTurn(at('how do i reverse a list'), { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(steps.commits[0]).toMatchObject({ outcome: 'blocked' });
+    expect(t.alerts.raised).toEqual([]);
+  }, 2_000);
 });

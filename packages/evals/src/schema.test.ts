@@ -34,12 +34,20 @@ describe('EvalCaseSchema', () => {
             max_words: 3,
             max_chars: 10,
             must_cite_source: true,
+            must_escalate: false,
             judge: ['The reply greets the student.'],
           },
         },
       ],
     };
     expect(EvalCaseSchema.parse(all)).toEqual(all);
+  });
+
+  it('must_escalate alone is a check (task 4.3); it must be a boolean', () => {
+    const c = { ...minimal, turns: [{ student: 'hi', expect: { must_escalate: true } }] };
+    expect(EvalCaseSchema.parse(c).turns[0]?.expect).toEqual({ must_escalate: true });
+    const bad = { ...minimal, turns: [{ student: 'hi', expect: { must_escalate: 'yes' } }] };
+    expect(issuePaths(bad)).toContain('turns.0.expect.must_escalate');
   });
 
   it('allows a turn with no expect block (pressure build-up)', () => {

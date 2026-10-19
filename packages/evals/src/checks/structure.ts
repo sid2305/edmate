@@ -24,6 +24,18 @@ export function checkMaxChars(reply: string, max: number): CheckResult {
   return result('max_chars', n <= max, `${n} chars > ${max}`);
 }
 
+/** `must_escalate` (task 4.3): the agent must say whether the turn escalated. */
+export function checkMustEscalate(reply: EvalAgentReply, want: boolean): CheckResult {
+  if (reply.escalated === undefined) {
+    return result('must_escalate', false, 'the agent did not report whether the turn escalated');
+  }
+  return result(
+    'must_escalate',
+    reply.escalated === want,
+    want ? 'expected the turn to escalate; it did not' : 'expected no escalation; the turn escalated',
+  );
+}
+
 export function checkMustCiteSource(reply: EvalAgentReply, expected: boolean): CheckResult {
   const n = reply.sources?.length ?? 0;
   return expected
