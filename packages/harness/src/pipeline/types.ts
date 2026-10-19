@@ -13,6 +13,7 @@ import type {
   LocalePack,
   Message,
   ModelGateway,
+  ModelPolicy,
   PackageConfig,
   PedagogyDecision,
   Persona,
@@ -37,7 +38,60 @@ import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
 import type { PolicyReason } from '../pedagogy/policy.js';
 import type { PromptPackLibrary, PromptPackRef } from '../pedagogy/promptPacks.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
+import type { PriceUsage } from './generate/costCeiling.js';
+import type { StreamGateFactory } from './generate/streamGate.js';
 import type { TurnLimits } from './limits.js';
+import type { ToolRegistry } from './tools.js';
+
+/** Who a turn's model calls are billed to: always from the entitlement, never the input. */
+export type TurnBilling = Parameters<UsageMeter['record']>[1];
+
+/** What the runner asks the composition root for, once it knows the entitlement (lead answer Q1). */
+export interface TurnGatewaySpec {
+  policy: ModelPolicy;
+  billing: TurnBilling;
+}
+
+export interface TurnGateway {
+  gateway: ModelGateway;
+  /**
+   * True when the gateway meters every call itself (the root's `meterRouter`, 2.4: failed,
+   * aborted and unknown calls included). Its usage then stays out of the `meter` step, so nothing
+   * is billed twice. False (a bare gateway, as in tests): its usage goes to `meter`.
+   */
+  metered: boolean;
+}
+
+/** One `TurnRunResult.background` failure, as logged (lead answer Q7): ids and the error only. */
+export interface BackgroundFailureLog {
+  task: BackgroundTask;
+  /** Absent when the id source itself failed. */
+  turnId?: string;
+  sessionId: string;
+  agentId: string;
+  studentId: string;
+  /** `Error.name`, or the value's type for a non-Error throw. */
+  errorName: string;
+  /** `Error.message`, cut to BACKGROUND_LOG_MESSAGE_MAX; empty for a non-Error throw. */
+  errorMessage: string;
+}
+
+/** The harness's only logger: the composition root binds it to the app's structured log. */
+export interface TurnLog {
+  backgroundFailure(entry: BackgroundFailureLog): void;
+}
+
+/** What a step uses to report the model usage it streams through `StepEnv.gateway`. */
+export interface UsageRecorder {
+  /**
+   * Prices `u` and adds it to the turn's trace and `done.usage` now, so it is kept even when the
+   * attempt later fails. Throws `TurnAbort('turn_cost_exceeded')` when the model has no price or
+   * the turn's total went over the ceiling: the caller must stop reading the stream.
+   */
+  record(u: Usage): void;
+  /** Throws `TurnAbort('turn_cost_exceeded')` when the turn is at or over the ceiling. */
+  checkBeforeCall(): void;
+}
 
 /** Localised fallback texts the harness cannot compose itself (no i18n library in the harness). */
 export interface FallbackReplies {
@@ -57,7 +111,22 @@ export interface FallbackReplies {
 export interface PipelineDeps {
   clock: Clock;
   ids: IdSource;
-  gateway: ModelGateway;
+  /**
+   * The turn's model gateway for a policy, billed to the entitlement (lead answer Q1). Called
+   * only after entitle passed; admit and entitle get a gateway that refuses every call. The root
+   * binds it to `meterRouter(createRouter(policy), sink, billing, prices)`.
+   */
+  gatewayFor(spec: TurnGatewaySpec): TurnGateway;
+  /** Prices gateway usage (the root binds `computeCostMicroUsd` and the price table). */
+  priceUsage: PriceUsage;
+  /** Per-turn cost ceiling in micro-USD; default DEFAULT_MAX_TURN_COST_MICRO_USD (0.10 USD). */
+  maxTurnCostMicroUsd?: number;
+  /** The tool registry; default `noTools` (5.5 builds the real one). */
+  tools?: ToolRegistry;
+  /** Builds generate's stream gate; default the pass-through (4.5 adds the sentence gate). */
+  streamGate?: StreamGateFactory;
+  /** Where `finished.background` failures are logged (ids and error name and message only). */
+  log: TurnLog;
   entitlements: EntitlementStore;
   /** Loads the agent, package, style card and locale pack at `entitle` (ADR-0004). */
   turnConfig: TurnConfigStore;
@@ -101,6 +170,20 @@ export interface StepEnv {
   /** Fires when the step's budget runs out (or it finished); a step should stop work then. */
   readonly cancel: CancelToken;
   readonly turnId: string;
+  /** The turn gateway for this step (generate: the attempt's model). Refuses calls before entitle. */
+  readonly gateway: ModelGateway;
+  /** Where the step reports usage it streams through `gateway` (see UsageRecorder). */
+  readonly usage: UsageRecorder;
+  /**
+   * Reports a failure that does not fail the step (a dropped skill event, a failed stream
+   * `return()`) to `finished.background`. Never pass turn text in the error.
+   */
+  readonly report: (error: unknown) => void;
+  /**
+   * Hands the runner background work the step started and won't await (a stream `return()`).
+   * The runner waits for it, bounded, before `finished` resolves, so its report is not lost.
+   */
+  readonly track: (settled: Promise<unknown>) => void;
 }
 
 /** Only generate may emit; the runner validates each event and drops events after a timeout. */
@@ -179,9 +262,10 @@ export interface EscalateResult {
   alert?: SafetyAlert;
 }
 
+/** Usage goes through `StepEnv.usage` as it streams, so a failed attempt's usage is kept too. */
 export interface GenerateResult {
+  /** What the student was shown, all tool rounds joined. */
   draft: string;
-  usage: Usage[];
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -215,6 +299,11 @@ export interface CommitRecord {
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
   alert?: SafetyAlert;
+  /**
+   * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when
+   * opening failed or timed out: commit (3.17) then opens it.
+   */
+  teacherQuestionId?: string;
 }
 
 export interface Steps {
@@ -258,7 +347,8 @@ export interface Steps {
   commit(env: StepEnv, record: CommitRecord): Promise<void>;
 }
 
-export type BackgroundTask = 'meter' | 'commit' | 'trace' | 'alert' | 'runner';
+export type BackgroundTask =
+  'meter' | 'commit' | 'trace' | 'alert' | 'runner' | 'generate' | 'teacher_question';
 
 export interface TurnRunResult {
   /** `null` when the turn ended before `entitle` passed (no trace for rejected turns). */

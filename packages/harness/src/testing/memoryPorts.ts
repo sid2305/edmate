@@ -4,11 +4,14 @@ import type {
   Message,
   SafetyAlert,
   SessionStateStore,
+  TeacherQuestion,
+  TeacherQuestionStore,
   TraceSink,
   TranscriptStore,
   TurnTrace,
   UsageMeter,
 } from '@edmate/contracts';
+import type { BackgroundFailureLog, TurnLog } from '../pipeline/types.js';
 
 export interface MemoryTraceSink extends TraceSink {
   readonly records: TurnTrace[];
@@ -105,6 +108,55 @@ export function memoryAlertSink(opts: { failTimes?: number } = {}): MemoryAlertS
       }
       raised.push(a);
       return Promise.resolve();
+    },
+  };
+}
+
+export interface MemoryTeacherQuestionStore extends TeacherQuestionStore {
+  /** Every `open` request, in order. */
+  readonly opened: Parameters<TeacherQuestionStore['open']>[0][];
+  /** Every `findSimilar` call, in order. */
+  readonly searched: { teacherId: string; text: string }[];
+}
+
+/** Opens questions `tq_mem_<n>`; `similar` is what findSimilar returns; `fail` rejects `open`. */
+export function memoryTeacherQuestionStore(
+  opts: { similar?: TeacherQuestion[]; fail?: boolean; createdAt?: string } = {},
+): MemoryTeacherQuestionStore {
+  const opened: MemoryTeacherQuestionStore['opened'] = [];
+  const searched: MemoryTeacherQuestionStore['searched'] = [];
+  return {
+    opened,
+    searched,
+    findSimilar(teacherId, text) {
+      searched.push({ teacherId, text });
+      return Promise.resolve((opts.similar ?? []).map((q) => ({ ...q })));
+    },
+    open(q) {
+      opened.push({ ...q, similarIds: [...q.similarIds] });
+      if (opts.fail === true) return Promise.reject(new Error('teacher question store down'));
+      return Promise.resolve({
+        ...q,
+        id: `tq_mem_${opened.length}`,
+        status: 'open',
+        createdAt: opts.createdAt ?? '2026-10-17T10:00:00.000Z',
+      });
+    },
+  };
+}
+
+export interface MemoryTurnLog extends TurnLog {
+  readonly entries: BackgroundFailureLog[];
+}
+
+/** Keeps every logged background failure; `fail` makes each call throw (the runner must cope). */
+export function memoryTurnLog(opts: { fail?: boolean } = {}): MemoryTurnLog {
+  const entries: BackgroundFailureLog[] = [];
+  return {
+    entries,
+    backgroundFailure(entry) {
+      if (opts.fail === true) throw new Error('log down');
+      entries.push(entry);
     },
   };
 }

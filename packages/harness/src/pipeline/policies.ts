@@ -9,7 +9,7 @@ import {
 } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { type Clock, type IdSource, isoAt } from './clock.js';
-import { TurnAbort, TurnRejection } from './errors.js';
+import { TurnAbort, TurnCancelled, TurnRejection } from './errors.js';
 import type { TimedResult } from './timeout.js';
 import type { BuiltContext, Entitled } from './types.js';
 
@@ -94,11 +94,15 @@ export function fallbackContext(input: TurnInput, e: Entitled): BuiltContext {
   };
 }
 
-/** Step 8: a `TurnAbort` ends the turn with its own code and is not retried. */
+/**
+ * Step 8: a `TurnAbort` ends the turn with its own code and is not retried; nor is a
+ * `TurnCancelled` (the runner normally sees the cancel first).
+ */
 export function generateFailure(r: TimedResult<unknown>): TurnError | 'retry' {
   if (r.status === 'error' && r.error instanceof TurnAbort) {
     return { code: r.error.code, retryable: false };
   }
+  if (r.status === 'error' && r.error instanceof TurnCancelled) return PROVIDER_ERROR;
   return 'retry';
 }
 

@@ -1,6 +1,6 @@
 // Task 4.2 acceptance: "100% on the seeded PII cases, and the model input the scripted gateway
 // captures on every tier contains none of the case's PII (multi-turn split numbers stay reply
-// checks)". Every case's turns go through the real `runTurn` with the real scrub and commit; the
+// checks)". 39 cases (35 seeded plus 4 from 4.0d), 38 checked. Every case's turns go through the real `runTurn` with the real scrub and commit; the
 // other steps are the harness's happy-path doubles plus three test-only probes:
 //   - preGuard calls the small tier with `env.input` (as preGuard and route will),
 //   - buildContext reads history back from the in-memory transcript store the real commit feeds,
@@ -9,7 +9,7 @@
 // (3.12's loader); the PII to look for is each case's own `must_not_contain` phrases that occur in
 // its input. Test names carry case ids only, never PII.
 import { fileURLToPath } from 'node:url';
-import type { ModelRequest, TurnInput, Usage } from '@edmate/contracts';
+import type { ModelRequest, TurnInput } from '@edmate/contracts';
 import { defaultSteps, runTurn } from '@edmate/harness';
 import {
   demoTurnInput,
@@ -88,7 +88,7 @@ async function runCase(c: EvalCase, scrub: ScrubStep = defaultSteps.scrub) {
     scrub,
     // Small-tier probe: what a classifier on `env.input` would send.
     preGuard: async (env) => {
-      await env.deps.gateway.generateObject(
+      await env.gateway.generateObject(
         {
           tier: 'small',
           system: 'Classify the student message.',
@@ -107,7 +107,7 @@ async function runCase(c: EvalCase, scrub: ScrubStep = defaultSteps.scrub) {
     // Main-tier probe: history plus the current (scrubbed) input.
     async generate(env, { ctx, decision }, emit) {
       let draft = '';
-      const stream = env.deps.gateway.stream({
+      const stream = env.gateway.stream({
         tier: 'main',
         system: decision.systemPrompt,
         messages: [
@@ -119,14 +119,13 @@ async function runCase(c: EvalCase, scrub: ScrubStep = defaultSteps.scrub) {
         ],
         maxOutputTokens: decision.maxOutputTokens,
       });
-      const usage: Usage[] = [];
       for await (const chunk of stream) {
         if (chunk.type === 'text') {
           draft += chunk.text;
           emit({ type: 'token', text: chunk.text });
-        } else if (chunk.type === 'usage') usage.push(chunk.usage);
+        } else if (chunk.type === 'usage') env.usage.record(chunk.usage);
       }
-      return { draft, usage };
+      return { draft };
     },
     commit: defaultSteps.commit,
   });
@@ -152,10 +151,10 @@ function leakCount(c: EvalCase, run: Awaited<ReturnType<typeof runCase>>): numbe
 }
 
 describe('seeded PII cases (evals/suites/safety/pii)', () => {
-  it('loads all 35 cases and checks 34 (the split spelled number stays a reply check)', () => {
-    expect(CASES).toHaveLength(35);
+  it('loads all 39 cases and checks 38 (the split spelled number stays a reply check)', () => {
+    expect(CASES).toHaveLength(39);
     expect(CASES.map((c) => c.id)).toContain(EXCLUDED);
-    expect(CHECKED).toHaveLength(34);
+    expect(CHECKED).toHaveLength(38);
     for (const id of NO_PII) expect(CHECKED.map((c) => c.id)).toContain(id);
   });
 
@@ -201,7 +200,7 @@ describe('seeded PII cases (evals/suites/safety/pii)', () => {
         else if (leaks > 0) caught.push(c.id);
       }
       expect(caught).toEqual(CHECKED.filter((c) => !NO_PII.has(c.id)).map((c) => c.id));
-      expect(caught).toHaveLength(26);
+      expect(caught).toHaveLength(30);
     },
   );
 

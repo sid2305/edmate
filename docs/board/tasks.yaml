@@ -523,7 +523,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: running
+  status: done
   branch: m3/3.7-orchestrator
   model: plan:opus build:opus-5.5/medium
 - id: '3.8'
@@ -627,6 +627,16 @@ tasks:
   status: running
   branch: m3/3.16-sessions-follow-package
   model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
+- id: 3.16b
+  milestone: M7
+  title: 'Pre-pilot migration locking (from the 3.16 database review): move 0009''s VALIDATE CONSTRAINT statements to their own migration so the scan runs outside the ACCESS EXCLUSIVE transaction; build
+    the sessions package index CONCURRENTLY outside a transaction; a partial index on open sessions for the backfill'
+  accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
+  deps:
+  - '3.16'
+  status: todo
+  branch: null
+  model: null
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -638,7 +648,8 @@ tasks:
   model: null
 - id: '0.11'
   milestone: M7
-  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md'
+  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md.
+    Also the English-only pilot decision (18 Oct 2026): eval-author, pedagogy-author and the locale-context skill write English only, except safety cases, which keep Hindi/Hinglish input'
   accept: No agent file tells reviewers to require human approval; safety-reviewer still writes findings the lead turns into safety-review.md.
   deps:
   - '0.7'
@@ -684,7 +695,7 @@ tasks:
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
-  status: running
+  status: done
   branch: m4/4.0c-validator-followups
   model: build:sonnet
 - id: 4.0d
@@ -693,9 +704,9 @@ tasks:
   accept: the new cases validate and are signed off on a review sheet like 4.0's.
   deps:
   - '4.0'
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m4/4.0d-coverage-gaps
+  model: build:sonnet
 - id: '4.1'
   milestone: M4
   title: Guard framework and registry
@@ -738,8 +749,27 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
+  branch: m4/4.3-distress
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.2c
+  milestone: M4
+  title: 'PII pattern hardening from the 4.2 safety review: keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out single-turn numbers; Aadhaar Verhoeff
+    instead of the years exception; constant-digit over-scrub; the 6 proposed eval cases; PII-named payload keys redact only scalars directly under the key, with compound forms for name/card/pin (flashcards and file names keep their content); stop-list words khatam, barbaad, bekaar, nothing'
+  accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
+  deps:
+  - '4.2'
+  status: todo
+  branch: null
+  model: null
+- id: 4.3b
+  milestone: M4
+  title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
+  accept: the retract-joke case passes turn 2; a scrub failure on a distress message replies with the pack helplines.
+  deps:
+  - '4.3'
+  status: todo
   branch: null
   model: null
 - id: '4.4'
@@ -766,10 +796,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.5-answer-leak
+  model: plan:sonnet
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'

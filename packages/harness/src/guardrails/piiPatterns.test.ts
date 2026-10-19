@@ -329,9 +329,24 @@ describe('email', () => {
       ['[at]', 'mail riya [at] example.org now', `mail ${P.email} now`],
       ['(at) and (dot)', 'mail riya(at)example(dot)org now', `mail ${P.email} now`],
       ['multi-dot domain', 'x.y@example.org.uk', P.email],
+      [
+        'spelled out with "at" and "dot"',
+        'send it to priya dot student at example dot com okay',
+        `send it to ${P.email} okay`,
+      ],
+      ['spelled out, upper case', 'mail RIYA AT EXAMPLE DOT ORG now', `mail ${P.email} now`],
     ]),
   )('$label', ({ input, expected }) => {
     expect(scrub(input)).toBe(expected);
+  });
+
+  it.each([
+    ['good at maths', "I'm good at maths and bad at physics"],
+    ['meet at a time', 'meet at 5 near the gate'],
+    ['dot product', 'the dot product of a and b, then x dot y'],
+    ['at without a domain', 'look at this dot'],
+  ])('spelled-out near miss: %s', (_label, input) => {
+    expect(scrub(input)).toBe(input);
   });
 
   it('UPI ids come from the locale pack, not the generic email pattern', () => {
@@ -546,6 +561,8 @@ describe('scrubPii', () => {
       `OTP ${'1234 '.repeat(799)}`,
       '१'.repeat(4000),
       '\u200B9'.repeat(2000),
+      `x at ${'a dot '.repeat(660)}`,
+      'a dot '.repeat(330) + 'at ' + 'b dot '.repeat(330),
     ];
     const started = Date.now();
     for (const t of inputs) scrubPii(t, IN);

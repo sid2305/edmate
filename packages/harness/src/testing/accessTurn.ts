@@ -57,7 +57,7 @@ export function accessTurns(
   const turnConfig = memoryTurnConfigStore(world);
   const t = testDeps({
     overrides: {
-      gateway: unusedPort('gateway', modelCalls),
+      gatewayFor: () => ({ gateway: unusedPort('gateway', modelCalls), metered: false }),
       retrieval: unusedPort('retrieval', modelCalls),
       profiles: unusedPort('profiles', modelCalls),
       entitlements,

@@ -181,6 +181,15 @@ const OTP_NUMBER = /(?<!\d)\d{4,8}(?!\d)/g;
 
 const AT = String.raw`(?:@|\s?[\[({]at[\])}]\s?)`;
 const DOT = String.raw`(?:\.|\s?[\[({]dot[\])}]\s?)`;
+/**
+ * An address spelled out to dodge the plain pattern: "priya dot student at example dot com". The
+ * domain must end in " dot " plus a common top-level domain, so "good at maths" never matches.
+ */
+const W = String.raw`[\p{L}\p{N}_%+\-]+`;
+const EMAIL_SPELLED = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])${W}(?:\s+dot\s+${W})*\s+at\s+${W}(?:\s+dot\s+${W})*\s+dot\s+(?:com|org|net|in|co|edu|io|gov|info|me|uk)(?![\p{L}\p{N}])`,
+  'giu',
+);
 const EMAIL = new RegExp(
   String.raw`(?<![\p{L}\p{N}._%+\-])[\p{L}\p{N}][\p{L}\p{N}._%+\-]*${AT}[\p{L}\p{N}][\p{L}\p{N}\-]*(?:${DOT}[\p{L}\p{N}\-]+)*${DOT}\p{L}{2,}(?![\p{L}\p{N}])`,
   'giu',
@@ -425,7 +434,7 @@ function windowed(s: string, fixed: readonly PiiSpan[]): PiiSpan[] {
 }
 
 function emails(s: string): PiiSpan[] {
-  return ranges(EMAIL, s).map(([a, b]) => span(a, b, 'email'));
+  return [...ranges(EMAIL, s), ...ranges(EMAIL_SPELLED, s)].map(([a, b]) => span(a, b, 'email'));
 }
 
 function localeMatches(s: string, locale: readonly RegExp[]): PiiSpan[] {

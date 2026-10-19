@@ -7,6 +7,13 @@ export class EventQueue<T> implements AsyncIterable<T> {
   private closed = false;
   private detached = false;
   private iterated = false;
+  private readonly detachListeners: (() => void)[] = [];
+
+  /** Runs `fn` once when the consumer stops early (calls `return()` before the end). */
+  onDetach(fn: () => void): void {
+    if (this.detached) fn();
+    else this.detachListeners.push(fn);
+  }
 
   push(item: T): void {
     if (this.closed || this.detached) return;
@@ -45,10 +52,13 @@ export class EventQueue<T> implements AsyncIterable<T> {
           this.waiting = resolve;
         });
       },
-      // The consumer stopped early: drop later events; the turn itself runs to the end.
+      // The consumer stopped early: drop later events and tell the runner (it cancels generate);
+      // the turn itself still runs meter, commit and the trace.
       return: () => {
+        const first = !this.detached;
         this.detached = true;
         this.buffer.length = 0;
+        if (first) for (const fn of this.detachListeners.splice(0)) fn();
         return Promise.resolve({ value: undefined, done: true });
       },
     };

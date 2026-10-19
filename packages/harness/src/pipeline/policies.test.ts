@@ -48,7 +48,13 @@ async function run(
   const t = testDeps({
     ...(opts.script === undefined ? {} : { script: opts.script }),
     ...(opts.alerts === undefined ? {} : { alerts: opts.alerts }),
-    ...(opts.gateway === undefined ? {} : { overrides: { gateway: opts.gateway } }),
+    ...(opts.gateway === undefined
+      ? {}
+      : {
+          overrides: {
+            gatewayFor: () => ({ gateway: opts.gateway as ModelGateway, metered: false }),
+          },
+        }),
   });
   const steps = testSteps(overrides);
   const out = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
@@ -827,7 +833,7 @@ describe(`generate: ${policy('generate')}`, () => {
       generate: (_env, _x, emit) => {
         if (++n === 1) return boom();
         emit({ type: 'token', text: 'hi' });
-        return Promise.resolve({ draft: 'hi', usage: [] });
+        return Promise.resolve({ draft: 'hi' });
       },
     });
     expect(events.map((e) => e.type)).toEqual(['token', 'done']);
@@ -846,7 +852,7 @@ describe(`generate: ${policy('generate')}`, () => {
     const { events, result } = await run({
       generate: async (env) => {
         await env.deps.clock.sleep(++n === 1 ? 20_000 : 14_000);
-        return { draft: 'ok', usage: [] };
+        return { draft: 'ok' };
       },
     });
     expect(events.at(-1)?.type).toBe('done');

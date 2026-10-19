@@ -16,7 +16,7 @@ import type { PiiScrubCtx } from '../../guardrails/piiScrub.js';
 import { PII_PLACEHOLDERS as P } from '../../guardrails/piiPatterns.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
 import { indiaLocalePackWithPii } from '../../testing/piiLocaleFixtures.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource, type CancelToken } from '../clock.js';
 import { ScrubFailedError } from '../errors.js';
 import { ScrubbedSchema } from '../results.js';
@@ -35,7 +35,7 @@ const entitled = (locale: LocalePack = indiaLocalePackWithPii): Entitled => ({
 
 function setup(input: TurnInput, cancel: CancelToken = cancelSource().token) {
   const t = testDeps();
-  const env: StepEnv = { input, deps: t.deps, cancel, turnId: 'turn_x' };
+  const env: StepEnv = { input, deps: t.deps, cancel, turnId: 'turn_x', ...stepEnvExtras() };
   return { t, env, drive: <T>(p: Promise<T>) => t.clock.drive(p) };
 }
 

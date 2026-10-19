@@ -4,7 +4,7 @@
 import { LIMITS } from '@edmate/contracts';
 import { demoTurnInput } from '@edmate/contracts/fixtures';
 import { cancelSource, type CommitRecord, defaultSteps } from '@edmate/harness';
-import { testDeps } from '@edmate/harness/testing';
+import { stepEnvExtras, testDeps } from '@edmate/harness/testing';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
@@ -134,7 +134,13 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
       replyText: 'What do you notice about the denominators?',
     };
     await defaultSteps.commit(
-      { input: demoTurnInput, deps: t.deps, cancel: cancelSource().token, turnId: 'trn_canary' },
+      {
+        input: demoTurnInput,
+        deps: t.deps,
+        cancel: cancelSource().token,
+        turnId: 'trn_canary',
+        ...stepEnvExtras(),
+      },
       record,
     );
     await traceSinkFor(repos, own).record({

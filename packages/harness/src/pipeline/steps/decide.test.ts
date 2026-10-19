@@ -19,7 +19,8 @@ import {
   fixturePromptPackRaw,
   fixturePromptPackSet,
 } from '../../testing/promptPackFixtures.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { memoryToolRegistry, testTool } from '../../testing/memoryToolRegistry.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { DecideResultSchema } from '../results.js';
 import type { PipelineDeps, StepEnv } from '../types.js';
 import { decide } from './decide.js';
@@ -33,11 +34,32 @@ function env(input: TurnInput = demoTurnInput, deps: Partial<PipelineDeps> = {})
     deps: { ...testDeps().deps, ...deps },
     cancel: { cancelled: false, onCancel: () => undefined },
     turnId: 'turn_test',
+    ...stepEnvExtras(),
   };
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('decide.run: tools (3.7)', () => {
+  it('passes only the entitled registry tools to the policy; the fallback gets none', async () => {
+    const tools = memoryToolRegistry([
+      testTool({ name: 'calculator', skill: 'coach' }),
+      testTool({ name: 'interview.next', skill: 'mock_interview' }),
+    ]);
+    const e = env(demoTurnInput, { tools });
+    const x = { ctx: ctx(), help: helpWith({ stuckTurns: 1 }) };
+    const r = await decide.run(e, x);
+    expect(r.decision.move).toBe('hint');
+    expect(r.decision.tools).toEqual(['calculator']);
+    expect(decide.fallback(e, x).decision.tools).toEqual([]);
+  });
+
+  it('with no registry the decision names no tools', async () => {
+    const r = await decide.run(env(), { ctx: ctx(), help: helpWith({ stuckTurns: 1 }) });
+    expect(r.decision.tools).toEqual([]);
+  });
 });
 
 describe('decide.run', () => {

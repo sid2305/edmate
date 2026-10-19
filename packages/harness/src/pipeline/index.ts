@@ -1,3 +1,4 @@
+export { BACKGROUND_LOG_MESSAGE_MAX, backgroundLogEntry } from './backgroundLog.js';
 export {
   type Cancel,
   cancelSource,
@@ -6,16 +7,36 @@ export {
   type IdKind,
   type IdSource,
   isoAt,
+  linkCancel,
 } from './clock.js';
 export {
+  errorName,
+  GenerateAttemptFailed,
+  HarnessError,
   InvalidEventError,
   ScrubFailedError,
   type ScrubFailureCause,
   type ScrubFailureDetail,
+  UnpricedUsage,
   StepNotImplementedError,
   TurnAbort,
+  TurnCancelled,
   TurnRejection,
 } from './errors.js';
+export * from './generate/index.js';
+export { formatSseEvent } from './sse.js';
+export {
+  DuplicateToolError,
+  entitledTools,
+  noTools,
+  offeredTools,
+  policyTools,
+  type RegisteredTool,
+  type SkillPresentation,
+  type ToolRegistry,
+  toolSpec,
+} from './tools.js';
+export { billingFor, refusingGateway, turnPolicies } from './turnGateway.js';
 export {
   createTurnLimits,
   type SlidingWindow,
@@ -35,6 +56,8 @@ export {
   STEP_SPEC,
   type StepName,
   type StepSpec,
+  STREAM_CLOSE_SETTLE_MS,
+  TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
 export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
@@ -42,7 +65,13 @@ export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
 export { defaultSteps } from './steps/index.js';
 export { runWithTimeout, type TimedResult } from './timeout.js';
 export type {
+  BackgroundFailureLog,
   BackgroundTask,
+  TurnBilling,
+  TurnGateway,
+  TurnGatewaySpec,
+  TurnLog,
+  UsageRecorder,
   BuiltContext,
   CommitRecord,
   DecideInput,

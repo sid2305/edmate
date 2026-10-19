@@ -10,9 +10,10 @@ import {
   demoStyleCard,
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
-import type { ModelGateway, PedagogyDecision, Usage } from '@edmate/contracts';
+import type { PedagogyDecision } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
+import { refusingGateway } from '../pipeline/turnGateway.js';
 import type {
   CommitRecord,
   DecideResult,
@@ -26,6 +27,8 @@ import {
   memoryAlertSink,
   type MemoryTraceSink,
   memoryTraceSink,
+  type MemoryTurnLog,
+  memoryTurnLog,
   type MemoryUsageMeter,
   memoryUsageMeter,
   unusedPort,
@@ -33,6 +36,7 @@ import {
 import { scriptedStreamText } from './gatewayFixtures.js';
 import { fixturePromptPackLibrary } from './promptPackFixtures.js';
 import { type GatewayScript, ScriptedGateway } from './scriptedGateway.js';
+import { type SpyGateway, spyGateway } from './spyGateway.js';
 import { type VirtualClock, virtualClock } from './virtualClock.js';
 
 export type LoggedStep =
@@ -128,10 +132,10 @@ function happySteps(commits: CommitRecord[]): Steps {
       run: () => Promise.resolve(testDecideResult(demoPedagogyDecision)),
       fallback: () => testDecideResult(testAskDecision),
     },
+    // A minimal double; the real step is `defaultSteps.generate` (3.7).
     async generate(env, { decision }, emit) {
       let draft = '';
-      const usage: Usage[] = [];
-      const stream = env.deps.gateway.stream({
+      const stream = env.gateway.stream({
         tier: 'main',
         system: decision.systemPrompt,
         messages: [{ role: 'user', content: env.input.text ?? '' }],
@@ -143,10 +147,10 @@ function happySteps(commits: CommitRecord[]): Steps {
           draft += chunk.text;
           emit({ type: 'token', text: chunk.text });
         } else if (chunk.type === 'usage') {
-          usage.push(chunk.usage);
+          env.usage.record(chunk.usage);
         }
       }
-      return { draft, usage };
+      return { draft };
     },
     postGuard: () =>
       Promise.resolve({ result: 'ok', guards: [{ name: 'answerLeak', ok: true }], usage: [] }),
@@ -232,22 +236,45 @@ export function testSteps(overrides: StepOverrides = {}): TestSteps {
   };
 }
 
+/**
+ * The StepEnv fields a step tested on its own rarely needs (3.7): a gateway that refuses every
+ * call, a usage recorder that refuses usage, and a report that collects into `reported`.
+ */
+export function stepEnvExtras(
+  reported: unknown[] = [],
+): Pick<StepEnv, 'gateway' | 'usage' | 'report' | 'track'> {
+  return {
+    gateway: refusingGateway('this step test makes no model call'),
+    usage: {
+      record: () => {
+        throw new Error('this step test records no usage');
+      },
+      checkBeforeCall: () => undefined,
+    },
+    report: (e) => void reported.push(e),
+    track: () => undefined,
+  };
+}
+
 export interface TestDeps {
   deps: PipelineDeps;
   clock: VirtualClock;
   ids: SequentialIds;
-  gateway: ModelGateway;
+  /** The gateway `deps.gatewayFor` returns (a spy around the scripted gateway). */
+  gateway: SpyGateway;
   traces: MemoryTraceSink;
   usage: MemoryUsageMeter;
   alerts: MemoryAlertSink;
+  log: MemoryTurnLog;
   /** Calls to ports the happy path never uses (stores); should stay empty. */
   portCalls: string[];
 }
 
 /**
  * Dependencies on a virtual clock with sequential ids, a scripted gateway (default: one text
- * stream), in-memory trace/usage/alert sinks, `unusedPort` stores, source `subscription`,
- * fresh in-memory limits and the fixture prompt-pack library.
+ * stream) behind a spy that `gatewayFor` returns unmetered (so its usage goes to `meter`),
+ * usage priced at its own `costMicroUsd`, in-memory trace/usage/alert sinks and log,
+ * `unusedPort` stores, source `subscription`, fresh in-memory limits and the fixture prompt packs.
  */
 export function testDeps(
   opts: {
@@ -256,21 +283,27 @@ export function testDeps(
     traces?: MemoryTraceSink;
     usage?: MemoryUsageMeter;
     alerts?: MemoryAlertSink;
+    log?: MemoryTurnLog;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
   } = {},
 ): TestDeps {
   const clock = opts.clock ?? virtualClock();
   const ids = sequentialIds();
-  const gateway = new ScriptedGateway(opts.script ?? { stream: [scriptedStreamText] }, clock);
+  const gateway = spyGateway(
+    new ScriptedGateway(opts.script ?? { stream: [scriptedStreamText] }, clock),
+  );
   const traces = opts.traces ?? memoryTraceSink();
   const usage = opts.usage ?? memoryUsageMeter();
   const alerts = opts.alerts ?? memoryAlertSink();
+  const log = opts.log ?? memoryTurnLog();
   const portCalls: string[] = [];
   const deps: PipelineDeps = {
     clock,
     ids,
-    gateway,
+    gatewayFor: (spec) => gateway.gatewayFor(spec),
+    priceUsage: (u) => u.costMicroUsd,
+    log,
     entitlements: unusedPort('entitlements', portCalls),
     turnConfig: unusedPort('turnConfig', portCalls),
     entitlementSource: 'subscription',
@@ -291,14 +324,5 @@ export function testDeps(
     promptPacks: fixturePromptPackLibrary,
     ...opts.overrides,
   };
-  return {
-    deps,
-    clock,
-    ids,
-    gateway: deps.gateway,
-    traces,
-    usage,
-    alerts,
-    portCalls,
-  };
+  return { deps, clock, ids, gateway, traces, usage, alerts, log, portCalls };
 }

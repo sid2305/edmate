@@ -111,6 +111,34 @@ After row 8 below (bracketed-keyword fix): `turbo run typecheck lint test --filt
 | 7 LOW | Misleading `Promise.all` comment | Says what it does: each run keeps its own slice and the step's cancel token; the regex work still takes turns | `scrub.ts` |
 | 8 MEDIUM | Fix 1's `[` in the `PHONE_KEYWORDS`/`OTP_STRONG` lookbehind, meant to stop the placeholders acting as keywords, also stopped real bracketed keywords (`"[OTP] 482913 is your code"`, `"[phone] 5551234567"` reached the model unscrubbed) | Removed `[` from both lookbehinds; keyword-position collection now skips only the exact lowercase placeholder spans the scrub writes (`[phone]`, `[otp]`, matched case-sensitively against the surrounding brackets), so `[OTP]`/`[Phone]` still count as keywords but the scrub's own `[phone]`/`[otp]` output never does | `piiPatterns.test.ts` "bracketed keywords (fix round, MEDIUM regression)": `"[OTP] 482913 is your code"` and `"[Phone] 5551234567"` are scrubbed; scrubbing the `"[phone] 1234567890"` placeholder output again is a fixpoint. The 10/50/max-count convergence tests and "the maximum count at the cap" still pass |
 
+## Merge of origin/main (3.7 orchestrator, 4.0d cases) into the branch
+
+Conflicts were in `pipeline/runner.ts` (imports, and a helper block next to `withoutText`) and `pipeline/index.ts` (the error exports). Both sides were kept: 3.7's background log, `linkCancel`, `GenerateAttemptFailed`/`attemptFailure`, `UnpricedUsage` and the new exports, plus 4.2's `ScrubFailedError` exports, the scrub step, the raw-text `distressCheck` boolean (step 5 and the scrub-failure path) and `scrubFailure`.
+
+Follow-on changes:
+- `ScrubFailedError` now extends 3.7's `HarnessError`; its message is fixed text plus the cause code. New runner test: a scrub failure reaches `deps.log` with `errorName: 'ScrubFailedError'` and `errorMessage: 'scrub failed closed (error)'`, never the input.
+- Tests moved to 3.7's `StepEnv`: `stepEnvExtras()` in `scrub.test.ts`, `t.gateway.requests` in `runner.test.ts`, `env.gateway` and `env.usage` in the evals probes.
+- 4.0d added 4 PII cases on main. Three already passed (Aadhaar and OTP in Devanagari digits, a hyphenated phone). `safety-pii-email-spelled-out-en` ("priya dot student at example dot com") needed a spelled-out email pattern. The pipeline test now loads 39 cases and checks 38, all passing; the mutation check catches all 30 PII cases.
+
+Evidence:
+- Postgres and Redis up with `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis` (both healthy).
+- `turbo run typecheck lint test --filter=...@edmate/harness --force` → `Tasks: 34 successful, 34 total`. Nothing was skipped; the db and worker `*.int.test.ts` suites ran against the containers.
+
+| Package | Tests |
+|---|---|
+| harness | 2666 |
+| db | 401 |
+| gateway | 405 |
+| evals | 173 |
+| web | 132 |
+| content | 120 |
+| worker | 102 |
+| cli | 46 |
+| queue | 20 |
+
+- Coverage: `src/guardrails/**` is at 100/100/100/100. `runner.ts`'s one uncovered line (283) is 3.7's `report` callback.
+- Secret scan `--all` (absolute path): clean.
+
 ## Changes
 
 Created:
@@ -209,3 +237,15 @@ Decided: a payload key such as otp, pin, cvv, card, phone, mobile, email, name, 
 Why: a bare "482913" or "Riya" has no keyword of its own for the pattern scrub to find.
 Alternatives: scrub "key: value" text through the chain (needs a "name:" phrase that would hit code like `name = ...`).
 Reversible: Yes.
+
+### 19 Oct 2026 · 4.2 Scrub failures follow 3.7's HarnessError and background-log rules · decided by lead (merge) and tdd-guide · risk: low
+Decided: `ScrubFailedError` extends `HarnessError`. Its message (`scrub failed closed (<cause>)`) is fixed text, so the background log keeps it; the cause holds only a cause code and an error name. A foreign step error is still wrapped, never passed through.
+Why: 3.7 made "HarnessError message or name only" the rule for `finished.background`.
+Alternatives: keep a plain `Error`, which the log would reduce to its name.
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2 Spelled-out emails ("x dot y at example dot com") are scrubbed · decided by tdd-guide (merge with 4.0d's new case) · risk: medium
+Decided: a second email pattern matches words joined by " dot " and " at ", ending in " dot " plus a common top-level domain (com, org, net, in, co, edu, io, gov, info, me, uk). "good at maths", "meet at 5" and "x dot y" stay as written. A phrase like "look at google dot com" is redacted too.
+Why: 4.0d's `safety-pii-email-spelled-out-en`, merged on main, makes it part of "100% on the seeded PII cases".
+Alternatives: leave the case as a reply check like the spelled-out phone (needs the lead's call); a wider top-level-domain list.
+Reversible: Yes, but only with safety-reviewer sign-off.
