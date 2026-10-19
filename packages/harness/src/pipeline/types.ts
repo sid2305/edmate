@@ -155,6 +155,12 @@ export interface PipelineDeps {
    * Bound to the turn's student x teacher by the composition root (`queuedTurnPorts`).
    */
   safetyEvents: SafetyEventSink;
+  /**
+   * The names of all of the teacher's packages (4.4 fix round), for package claims ("I'm on
+   * <another package>"). Server-side, keyed by the entitlement's teacher. Optional: without it
+   * only the student's own package name is known.
+   */
+  teacherPackageNames?: (teacherId: string) => Promise<readonly string[]>;
   fallbackReplies: FallbackReplies;
   /**
    * The validated prompt-pack sets, by version, loaded once at start-up by the composition root
@@ -316,6 +322,11 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * A pre guard (moderationIn, jailbreak) blocked the input (4.4 fix round): commit saves
+   * WITHHELD_MESSAGE in its place, so the blocked text never reaches a later turn's history.
+   */
+  inputWithheld?: true;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when

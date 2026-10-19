@@ -3,14 +3,31 @@
 //
 // - Phrase-level patterns only (lead answer 9): a word like "kill", "bomb", "hate" or "nafrat" on
 //   its own never hits, so "kill my program", "I bombed my quiz" or "ValueError se nafrat" pass.
+// - Decisive rules block on their own; ambiguous rules only flag the message for the classifier
+//   (fix round HIGH 1), so everyday text that shares words with a rule ("write my test cases",
+//   "usne mujhe dhamki di") never costs the student a block or a safety event by rule.
+// - Coding context is exempt: gun or weapon words next to game words ("a gun game in unity"),
+//   "explicit content-type header", "threat model".
 // - Every table (English, romanised Hindi, Devanagari) runs on every message whatever `lang` is.
 // - The table also reads decoded payloads and the ROT13 and backwards readings (lead answer 5).
 // - Self-harm is told apart first (lead answer 1): harm aimed at the self returns `self_harm`,
-//   which moderationIn escalates through the distress path, never blocks.
+//   which moderationIn escalates through the distress path, never blocks. "cut myself some slack"
+//   is not harm (fix round MEDIUM 3).
 // - Sexual content with a minor marker in the message or the recent turns ("im 15", "14 year
 //   olds", "from my school") is `sexual_minors`.
 import type { SafetyEventCode } from '@edmate/contracts';
-import { anyForm, formsOf, gap, phrase, scanTexts, SELF } from './rulePhrases.js';
+import {
+  anyForm,
+  firstRuleHit,
+  formsOf,
+  gap,
+  phrase,
+  type Rule,
+  ruleFor,
+  type RuleHit,
+  scanTexts,
+  SELF,
+} from './rulePhrases.js';
 
 /** The moderation part of the safety-event codes. */
 export type ModerationCode = Exclude<SafetyEventCode, `jailbreak_${string}`>;
@@ -30,210 +47,225 @@ export const MODERATION_CODES = [
   'other_unsafe',
 ] as const satisfies readonly ModerationCode[];
 
-interface Rule {
-  code: ModerationCode;
-  re: RegExp;
-}
-const rule = (code: ModerationCode, src: string): Rule => ({ code, re: phrase(src) });
+const decisive = ruleFor<ModerationCode>(true);
+const ambiguous = ruleFor<ModerationCode>(false);
 
+const HARM_VERB = '(?:hurt|harm|injure|beat up|attack|poison|stab|punch|kill|murder)';
 const OTHER_PERSON =
   '(?:him|her|them|someone|somebody|a person|people|my (?:classmate|brother|sister|teacher|friend|' +
-  'neighbou?r|cousin|bully)|(?:the|that|this|a) (?:kid|boy|girl|guy|bully|teacher|classmate|man|woman))';
+  'neighbou?r|cousin|bully|roommate|room mate|flatmate|boss|dad|father|mom|mother|ex|boyfriend|' +
+  'girlfriend)|(?:the|that|this|a) (?:kid|boy|girl|guy|bully|teacher|classmate|man|woman))';
 const GROUP =
   '(?:religion|religions|caste|castes|community|communities|race|races|muslims?|hindus?|christians?|' +
   'sikhs?|jews?|dalits?|disabled|gay|gays|lgbt\\S*|black people|tribals?|minorities|minority)';
+/** Words that make weapon talk about code ("a gun game in unity"), not a weapon. */
+const GAME =
+  '(?:game|games|unity|godot|unreal|roblox|pygame|sprite|sprites|minecraft|fortnite|asset|assets|' +
+  'animation|simulator|simulation|level|mod|class|object|3d|player|enemy|enemies|shooter)';
+/** Nouns after "explicit", "adult" and so on that are about code or data, not content. */
+const NOT_CONTENT = '(?:type|types|header|headers|policy|rating|filter|filters|flag|warning|cast|conversion)';
+const SEX_ADJ = '(?:explicit|adult|erotic|sexual|sexy|dirty|nsfw|porn\\S*|xxx|smut\\S*|lewd|steamy)';
+const SEX_NOUN =
+  '(?:story|stories|content|roleplay|role play|fanfic|fan fiction|chat|scene|scenes|pics?|pictures?|' +
+  'images?|videos?|photos?|kahani|kahaniyan|kahaani|novel|poem)';
 
-const RULES: readonly Rule[] = [
+const RULES: readonly Rule<ModerationCode>[] = [
   // ---- Self-harm (escalated through distress, lead answer 1) ----------------------------------
-  rule(
+  decisive(
     'self_harm',
     `(?:blade|blades|knife|razor|compass|pills?|tablets?|poison|rope|weapon|gun)${gap(5)} ` +
-      `(?:on|against|for|to hurt|to harm|to cut) ${SELF}`,
+      `(?:on|against|to hurt|to harm|to cut) ${SELF}`,
   ),
-  rule('self_harm', `(?:hurt|harm|injure|cut|burn|poison|kill|starve|punish)${gap(1)} ${SELF}`),
-  rule(
+  decisive(
+    'self_harm',
+    `(?:hurt|harm|injure|cut|burn|poison|starve|punish) ${SELF}` +
+      '(?! (?:some|a|an|off|short|loose|free|slack|out|in|into|up|down|back|time)(?![\\p{L}]))',
+  ),
+  decisive(
     'self_harm',
     '(?:khud ?ko|apne aap ko|apne ap ko|khud par|khud pe)' +
       `${gap(1)} (?:chot|hurt|nuksan|nuksaan|harm|kaat|maar|zakhmi)`,
   ),
-  rule('self_harm', '(?:खुद|अपने आप|स्वयं) (?:को|पर) (?:चोट|नुकसान|हानि|काट|मार|घायल)'),
+  decisive('self_harm', '(?:खुद|अपने आप|स्वयं) (?:को|पर) (?:चोट|नुकसान|हानि|काट|मार|घायल)'),
 
   // ---- Sexual content (upgraded to sexual_minors with a minor marker) --------------------------
-  rule(
-    'sexual',
-    '(?:explicit|adult|erotic|sexual|sexy|dirty|nsfw|porn\\S*|xxx|smut\\S*|lewd|steamy|18)' +
-      `${gap(1)} (?:story|stories|content|roleplay|role play|fanfic|fan fiction|chat|scene|scenes|` +
-      'pics?|pictures?|images?|videos?|photos?|kahani|kahaniyan|kahaani|novel|poem)',
-  ),
-  rule('sexual', '(?:nude|nudes|naked|topless)(?: (?:pics?|photos?|images?|videos?|selfies?))?'),
-  rule('sexual', 'porn\\S*|sex (?:chat|story|video)|sexting'),
-  rule(
+  decisive('sexual', `${SEX_ADJ}${gap(1)} ${SEX_NOUN}(?! ${NOT_CONTENT}(?![\\p{L}]))`),
+  decisive('sexual', '(?:nude|nudes|naked|topless) (?:pics?|photos?|images?|videos?|selfies?)'),
+  decisive('sexual', 'sex (?:chat|story|video)|(?:have|having|had|has) sex'),
+  decisive(
     'sexual',
     '(?:you are|youre|ur|u r|be|act as|pretend to be|pretend youre|ban jao|bano)' +
       `${gap(1)} (?:my|meri|mera) (?:girlfriend|boyfriend|gf|bf|wife|husband|lover|crush|date|biwi)`,
   ),
-  rule(
+  decisive(
     'sexual',
     '(?:what|things) (?:we|you and i|u and me|you and me) (?:would|will|could|can|gonna) do ' +
       '(?:alone|together in (?:bed|my room)|in bed)',
   ),
-  rule('sexual', '(?:अश्लील|सेक्सी|गंदी) (?:कहानी|कहानियां|वीडियो|फोटो|बातें|बात)'),
-  rule('sexual', '(?:ashleel|ashlil|sexy|gandi) (?:kahani|kahaniyan|kahaani|video|photo|baatein)'),
+  decisive('sexual', '(?:अश्लील|सेक्सी|गंदी) (?:कहानी|कहानियां|वीडियो|फोटो|बातें|बात)'),
+  decisive('sexual', '(?:ashleel|ashlil|sexy|gandi) (?:kahani|kahaniyan|kahaani|video|photo|baatein)'),
+  ambiguous('sexual', 'nude|nudes|naked|porn\\S*|sexting'),
 
   // ---- Hate ---------------------------------------------------------------------------------------
-  rule(
+  decisive(
     'hate',
     '(?:caste|racial|racist|religious|ethnic|homophobic|transphobic|disability|ableist) ' +
       '(?:slurs?|insults?|jokes?|abuse|memes?|gaali\\S*)',
   ),
-  rule('hate', 'slurs? (?:for|about|against|to use|i can use|to call)'),
-  rule(
+  decisive('hate', 'slurs? (?:for|about|against|to use|i can use|to call)'),
+  decisive(
     'hate',
     `(?:insults?|jokes?|memes?|slurs?|abuse|hate speech)${gap(1)} (?:about|against|on|for) ` +
       `(?:people of |the |all )?(?:a |an |any |one |some |that |this )?` +
       `(?:particular |certain |specific |other |lower )?${GROUP}`,
   ),
-  rule(
+  decisive(
     'hate',
     `${GROUP}${gap(2)} (?:ke|ka|ki) (?:liye )?(?:gaali|gaaliyan|gaaliyon|galiyan|galiyon|gaaliya)`,
   ),
-  rule(
+  decisive(
     'hate',
     `(?:community|jaati|jati|dharam|dharm|mazhab|religion|caste)${gap(5)} ` +
       '(?:gaali|gaaliyan|gaaliyon|galiyan|galiyon|gaaliya)',
   ),
-  rule(
+  decisive(
     'hate',
     '(?:disabled|viklang|handicapped|apahij|andhe|langde|dalit|muslim|hindu)' +
       `${gap(2)} (?:ka|ki|ke) (?:mazaak|mazak|majak|mazaq)`,
   ),
-  rule(
-    'hate',
-    '(?:धर्म|जाति|मजहब|समुदाय|विकलांग|दलित)' + `${gap(3)} (?:का|की|के) (?:मजाक|गाली|गालियां)`,
-  ),
+  decisive('hate', '(?:धर्म|जाति|मजहब|समुदाय|विकलांग|दलित)' + `${gap(3)} (?:का|की|के) (?:मजाक|गाली|गालियां)`),
 
-  // ---- Harm to others ---------------------------------------------------------------------------
-  rule(
+  // ---- Harm to others -----------------------------------------------------------------------------
+  decisive('harm_to_others', `(?:way|ways|how) to ${HARM_VERB}${gap(1)} ${OTHER_PERSON}`),
+  decisive(
     'harm_to_others',
-    '(?:way|ways|how) to (?:hurt|harm|injure|beat up|attack|poison|stab|punch|kill|break the (?:arm|leg|nose) of)' +
-      `${gap(1)} ${OTHER_PERSON}`,
+    `(?:how (?:do|can|could|should) i|help me|tell me how to|teach me how to|show me how to) ` +
+      `${HARM_VERB}${gap(1)} ${OTHER_PERSON}`,
   ),
-  rule(
-    'harm_to_others',
-    '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)',
-  ),
-  rule(
+  decisive('harm_to_others', '(?:hurt|harm|injure|beat up) (?:him|her|them) (?:so bad|so badly|badly|really bad)'),
+  decisive(
     'harm_to_others',
     `(?:use|usko|unko|ladke ko|ladki ko|bande ko|teacher ko)${gap(4)} ` +
       '(?:hurt|chot|nuksan|nuksaan) (?:karna|karni|pahuchana|pahunchana|pahuchani|dena)',
   ),
-  rule(
+  decisive(
     'harm_to_others',
-    `(?:उसे|उसको|उन्हें|उनको|लडके को|लडकी को)${gap(3)} (?:चोट|नुकसान) (?:पहुंचा\\S*|पहुचा\\S*)`,
+    `(?:use|usko|unko|usse|tujhe|tumhe|ladke ko|ladki ko|teacher ko)${gap(4)} (?:maar|mar) ` +
+      '(?:dalunga|daalunga|dalungi|daalungi|dunga|doonga|dungi|dalenge|daalenge)',
   ),
+  decisive(
+    'harm_to_others',
+    `(?:उसे|उसको|उन्हें|उनको|तुझे|तुम्हें|लडके को|लडकी को)${gap(4)} (?:चोट|नुकसान) (?:पहुंचा\\S*|पहुचा\\S*)`,
+  ),
+  decisive(
+    'harm_to_others',
+    `(?:उसे|उसको|उन्हें|उनको|तुझे|तुम्हें|लडके को|लडकी को)${gap(4)} ` +
+      '(?:मार डालूंगा|मार डालूंगी|मार दूंगा|मार दूंगी|मार डालेंगे|मार डालूगा)',
+  ),
+  ambiguous('harm_to_others', '(?:maar|mar) (?:dalunga|daalunga|dalungi|daalungi)|मार (?:डालूंगा|डालूंगी)'),
 
   // ---- Weapons --------------------------------------------------------------------------------------
-  rule(
+  decisive(
     'weapons',
     `(?:make|build|making|building|create|assemble|bana|banana)${gap(3)} ` +
-      '(?:bomb|bombs|pipe bomb|explosive|explosives|ied|grenade|molotov|gun|pistol|katta)',
+      '(?:bomb|bombs|pipe bomb|explosive|explosives|ied|grenade|molotov|gun|pistol|katta|weapon)',
+    { unless: `(?:bomb|bombs|explosive|explosives|grenade|gun|guns|pistol|weapon|weapons)${gap(3)} ${GAME}` },
   ),
-  rule(
+  decisive(
     'weapons',
     `(?:bomb|bum|explosive|katta|desi katta|pistol|bandook|banduk)${gap(2)} ` +
       '(?:kaise|kese) (?:banaye|banaen|banau|banate|banta|bane)',
   ),
-  rule(
+  decisive(
+    'weapons',
+    '(?:bomb|bum|explosive|katta|pistol|bandook|banduk) (?:banane|banana|banaane) (?:ka|ki|ke) ' +
+      '(?:tarika|tareeka|tarike|vidhi|process|formula)',
+  ),
+  decisive('weapons', '(?:बम|विस्फोटक|बंदूक|कट्टा) (?:कैसे|किस तरह) (?:बनाते|बनाएं|बनाऊं|बनता|बनाया|बनाए)'),
+  decisive('weapons', '(?:बम|विस्फोटक|बंदूक|कट्टा) बनाने (?:का|की) (?:तरीका|विधि)'),
+  decisive(
     'weapons',
     `(?:sneak|smuggle|bring|carry|hide|take)${gap(2)} (?:a |my )?(?:knife|gun|weapon|blade|pistol)` +
       `${gap(2)} (?:into|to|in|at) (?:school|class|college)`,
   ),
-  rule(
+  decisive(
     'weapons',
     `(?:hathiyar|hathyar|chaku|chaaku|chaakoo|knife|gun|pistol|katta|bandook)${gap(4)} ` +
       '(?:chhupa|chupa|chhupake|chupake|le ja|le jaane|le jane|le jau)',
   ),
-  rule('weapons', '(?:हथियार|चाकू|बंदूक|बम)' + `${gap(4)} (?:छुपा|छिपा|ले जा|बना)`),
+  decisive('weapons', '(?:हथियार|चाकू|बंदूक|बम)' + `${gap(4)} (?:छुपा|छिपा|ले जा)`),
 
   // ---- Threats --------------------------------------------------------------------------------------
-  rule(
+  decisive(
     'threat',
     'threatening (?:message|msg|text|note|letter|dm|post|email|mail|voice note)|' +
-      `threat (?:message|letter|note)|(?:write|send|make)${gap(3)} (?:a )?threat`,
+      `threat (?:message|letter|note)|(?:write|send|make)${gap(3)} (?:a )?threat` +
+      '(?! (?:model|models|modeling|modelling|matrix|assessment|analysis|actor|actors|intelligence|' +
+      'vector|vectors|landscape|detection|hunting|report|level|surface)(?![\\p{L}]))',
   ),
-  rule('threat', 'dhamki\\S*|dhamkee|dhamaki'),
-  rule('threat', 'धमकी'),
+  decisive(
+    'threat',
+    'dhamki (?:wala|wali|bhara|bhari|de do|dedo|dena|bhej\\S*|likh\\S*)|' +
+      `(?:likh|bhej)\\S*${gap(2)} dhamki`,
+  ),
+  decisive('threat', `धमकी (?:भरा|भरी|वाला|वाली)|धमकी${gap(2)} (?:भेज|लिख|दे दो)`),
+  ambiguous('threat', 'dhamki\\S*|dhamkee|dhamaki|धमकी'),
 
   // ---- Harassment -----------------------------------------------------------------------------------
-  rule(
+  decisive(
     'harassment',
     '(?:mean|nasty|cruel|embarrassing|humiliating|insulting|savage|roast)' +
       ' (?:post|message|comment|caption|meme|tweet|story|joke|jokes|status|reel)' +
       `${gap(3)} (?:about|on|for|to) (?:a |the |this |that |my )?` +
       '(?:girl|boy|kid|classmate|friend|teacher|student|guy|person|him|her)',
   ),
-  rule(
-    'harassment',
-    'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)',
-  ),
-  rule(
+  decisive(
     'harassment',
     `(?:fake|morphed|edited|photoshopped)${gap(2)} (?:photo|pic|picture|image|video|nude|nudes)` +
       `${gap(4)} (?:of|about) (?:my |a |the |this |that )?` +
       '(?:teacher|classmate|friend|girl|boy|sir|maam|madam|principal|someone|him|her)',
   ),
-  rule('harassment', 'deepfake\\S*'),
-  rule(
-    'harassment',
-    `(?:fake|false|spread|spreading|start|starting)${gap(1)} (?:a )?rumou?rs?|rumou?rs? about`,
-  ),
-  rule(
-    'harassment',
-    '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)',
-  ),
-  rule('harassment', '(?:झूठी|झूठा|झूठे) (?:अफवाह|खबर)|अफवाह (?:फैला|वाला|वाली)'),
-  rule(
+  decisive('harassment', `(?:fake|false|spread|spreading|start|starting)${gap(1)} (?:a )?rumou?rs?`),
+  decisive('harassment', '(?:jhoothi|jhuthi|jhooti|jhuti) (?:afwah|afwaah|khabar)|afwah (?:faila|failao)'),
+  decisive('harassment', '(?:झूठी|झूठा|झूठे) (?:अफवाह|खबर)|अफवाह (?:फैला|वाला|वाली)'),
+  decisive(
     'harassment',
     `(?:classmate|dost|friend|ladki|ladke|ladka|teacher|bhai|behen)${gap(2)} (?:ka|ki|ke) ` +
       '(?:mazaak|mazak|majak|mazaq) (?:udaane|udane|udana|udao|uda)',
   ),
+  ambiguous('harassment', 'deepfake\\S*|rumou?rs? about'),
+  ambiguous('harassment', 'so (?:everyone|everybody|the whole class|they all|all of them) (?:laughs?|laugh at)'),
 
   // ---- Cheating -------------------------------------------------------------------------------------
-  rule(
-    'cheating',
-    `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`,
-  ),
-  rule(
-    'cheating',
-    '(?:write|do|take|solve|complete|finish) my (?:\\S+ ){0,3}(?:exam|test|assignment|quiz|paper)' +
-      '(?: answers?)?(?: for me)?(?! (?:topic|prep|syllabus|question|date))',
-  ),
-  rule('cheating', `pay you${gap(2)} (?:to|if you) (?:write|do|take|solve|complete)`),
-  rule(
+  decisive('cheating', `(?:submit|turn in|hand in|pass off)${gap(3)} (?:as|under) (?:mine|my own|my name)`),
+  decisive('cheating', `pay you${gap(2)} (?:to|if you) (?:write|do|take|solve|complete)`),
+  decisive('cheating', '(?:take|attend|sit|give|write|do) my (?:\\S+ ){0,2}(?:exam|test|quiz|paper) for me'),
+  decisive(
     'cheating',
     `(?:test|exam|paper|assignment|homework)${gap(2)} (?:de|likh|kar|bana|solve kar) ` +
       '(?:do|dena|dijiye|de) (?:mere|meri) (?:liye|jagah|badle)',
   ),
-  rule('cheating', 'answers? copy kar'),
-  rule('cheating', 'अपने नाम से (?:जमा|सबमिट)'),
-  rule(
+  decisive('cheating', 'answers? copy kar'),
+  decisive('cheating', 'अपने नाम से (?:जमा|सबमिट)'),
+  decisive('cheating', '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)'),
+  ambiguous(
     'cheating',
-    '(?:पूरा|पूरी|सारा) (?:असाइनमेंट|पेपर|होमवर्क|टेस्ट) (?:लिख|कर|बना) (?:दो|दीजिए|देना)',
+    '(?:write|do|solve|complete|finish) my (?:\\S+ ){0,3}(?:exam|test|assignment|quiz|paper)' +
+      '(?! (?:cases?|suite|suites|file|files|script|scripts|code|data|runner|plan|function|functions|' +
+      'topic|prep|syllabus|question|date)(?![\\p{L}]))',
   ),
 
   // ---- Extremism -------------------------------------------------------------------------------------
-  rule(
+  decisive(
     'extremism',
     `(?:join|joining|become|support|recruit\\S*)${gap(2)} (?:isis|al qaeda|alqaeda|taliban|jihadi\\S*|terrorists?)|` +
       `(?:plan|planning|carry out)${gap(2)} (?:terror|terrorist) attack`,
   ),
 
   // ---- Other unsafe -----------------------------------------------------------------------------------
-  rule(
-    'other_unsafe',
-    `(?:make|cook|buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`,
-  ),
-  rule(
+  decisive('other_unsafe', `(?:make|cook|synthesi[sz]e)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd)`),
+  ambiguous('other_unsafe', `(?:buy|get|order)${gap(2)} (?:meth|cocaine|heroin|mdma|lsd|charas|ganja|drugs)`),
+  ambiguous(
     'other_unsafe',
     `hack${gap(3)} (?:account|instagram|insta|email|whatsapp|portal|password|phone|facebook)`,
   ),
@@ -246,26 +278,29 @@ const MINOR = phrase(
     'bachch\\S*|बच्च\\S*|नाबालिग',
 );
 
-/** The first rule that hits any of `forms`, by table order. */
-function firstHit(forms: readonly string[]): ModerationCode | null {
-  for (const r of RULES) if (anyForm(forms, r.re)) return r.code;
-  return null;
-}
-
 /**
- * The moderation code a rule gives `text`, or null. `context` is the student's last few messages
- * (scrubbed), read only for a minor marker: a hit always comes from this message.
+ * The moderation rule hit for `text`, or null: decisive hits before ambiguous ones, the message
+ * before what an encoding hides. `context` is the student's last few messages (scrubbed), read
+ * only for a minor marker: a hit always comes from this message.
  */
 export function matchModeration(
   text: string,
   context: readonly string[] = [],
-): ModerationCode | null {
+): RuleHit<ModerationCode> | null {
   const s = scanTexts(text);
-  let code = firstHit(s.forms);
-  for (const h of s.hidden) code ??= firstHit(h.forms);
-  if (code !== 'sexual') return code;
-  const marked = [s.forms, ...s.hidden.map((h) => h.forms), ...context.map(formsOf)].some((f) =>
-    anyForm(f, MINOR),
-  );
-  return marked ? 'sexual_minors' : 'sexual';
+  const all = [s.forms, ...s.hidden.map((h) => h.forms)];
+  let hit: RuleHit<ModerationCode> | null = null;
+  for (const decisiveOnly of [true, false]) {
+    for (const forms of all) {
+      const h = firstRuleHit(RULES, forms);
+      if (h !== null && (h.decisive || !decisiveOnly)) {
+        hit = h;
+        break;
+      }
+    }
+    if (hit !== null) break;
+  }
+  if (hit?.code !== 'sexual') return hit;
+  const marked = [...all, ...context.map(formsOf)].some((f) => anyForm(f, MINOR));
+  return marked ? { ...hit, code: 'sexual_minors' } : hit;
 }

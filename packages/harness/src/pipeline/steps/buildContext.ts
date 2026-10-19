@@ -8,6 +8,7 @@ import type { Chunk, Entitlement } from '@edmate/contracts';
 import { parseSessionHelp } from '../../pedagogy/helpState.js';
 import { HarnessError } from '../errors.js';
 import type { Steps } from '../types.js';
+import { isWithheld } from '../policies.js';
 import { historyChars, historyTrim } from './historyTrim.js';
 import { retrievalQuery } from './retrievalQuery.js';
 
@@ -67,8 +68,10 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
   }
   if (cancel.cancelled) throw new Error('buildContext: cancelled');
 
-  const history = historyTrim(fetched, HISTORY_MAX_CHARS);
-  const q = retrievalQuery(input, fetched);
+  // Blocked student messages (saved as a placeholder, 4.4 fix round) never reach the model.
+  const kept = fetched.filter((m) => !isWithheld(m));
+  const history = historyTrim(kept, HISTORY_MAX_CHARS);
+  const q = retrievalQuery(input, kept);
   const [found, probe] = await Promise.all([
     q === ''
       ? Promise.resolve([])

@@ -13,10 +13,14 @@ import {
   buildModerationClassifierRequest,
   JailbreakVerdictSchema,
   ModerationVerdictSchema,
+  classifierAbout,
+  DEFAULT_MIN_AGE,
+  learnerMinAge,
   SafetyGuardCancelledError,
 } from './safetyClassifier.js';
 
 const T = 1_000;
+const ABOUT = { course: 'Course canary_course', minAge: 13 };
 
 function ctx(answer: unknown): PreGuardCtx {
   const gateway: ModelGateway = {
@@ -38,6 +42,7 @@ function ctx(answer: unknown): PreGuardCtx {
     turnId: 'trn_test_01',
     safetyEvents: memorySafetyEventSink(),
     packageNames: [],
+    currentPackageName: 'Free starter',
     blocks: new Map(),
   };
 }
@@ -46,7 +51,7 @@ describe('askClassifier', () => {
   it(
     'returns a valid answer',
     async () => {
-      const req = buildModerationClassifierRequest('hi', []);
+      const req = buildModerationClassifierRequest('hi', [], ABOUT);
       await expect(
         askClassifier(
           'moderationIn',
@@ -70,7 +75,7 @@ describe('askClassifier', () => {
           'jailbreak',
           ctx({ category: 'none' }),
           c.token,
-          buildJailbreakClassifierRequest('hi', []),
+          buildJailbreakClassifierRequest('hi', [], ABOUT),
           JailbreakVerdictSchema,
         ),
       ).rejects.toBeInstanceOf(SafetyGuardCancelledError);
@@ -94,13 +99,38 @@ describe('askClassifier', () => {
   it(
     'the requests are small-tier, temperature 0, with the text only as JSON data',
     () => {
-      const r = buildJailbreakClassifierRequest('canary_text', ['a', 'b', 'c', 'd']);
+      const r = buildJailbreakClassifierRequest('canary_text', ['a', 'b', 'c', 'd'], ABOUT);
       expect(r).toMatchObject({ tier: 'small', temperature: 0, maxOutputTokens: 20 });
       expect(r.system).not.toContain('canary_text');
       expect(JSON.parse(r.messages[0]?.content ?? '')).toEqual({
+        course: 'Course canary_course',
         earlier: ['b', 'c', 'd'],
         latest: 'canary_text',
       });
+      // The course is teacher text: it goes in the data, never the prompt.
+      expect(r.system).not.toContain('canary_course');
+      expect(r.system).not.toMatch(/programming/i);
+    },
+    T,
+  );
+
+  it(
+    'the minimum age comes from the locale pack; 13 when it is missing or odd (fix round MEDIUM 6)',
+    () => {
+      expect(DEFAULT_MIN_AGE).toBe(13);
+      expect(buildModerationClassifierRequest('x', [], { ...ABOUT, minAge: 16 }).system).toMatch(
+        /aged 16 or over/,
+      );
+      for (const odd of [undefined, 0, 2.5, 120, '13']) expect(learnerMinAge(odd)).toBe(13);
+      expect(learnerMinAge(18)).toBe(18);
+      const c = ctx({ category: 'none' });
+      expect(classifierAbout(c)).toEqual({
+        course: 'Free starter',
+        minAge: learnerMinAge(c.locale.compliance.minAge),
+      });
+      expect(buildModerationClassifierRequest('x', [], classifierAbout(c)).system).toMatch(
+        new RegExp(`aged ${learnerMinAge(c.locale.compliance.minAge)} or over`),
+      );
     },
     T,
   );

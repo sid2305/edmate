@@ -12,6 +12,7 @@ import { createModerationInGuard } from '../../guardrails/moderationIn.js';
 import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import { errorName, HarnessError } from '../errors.js';
+import { isWithheld } from '../policies.js';
 import { runWithTimeout } from '../timeout.js';
 import type { Entitled, PreGuardResult, StepEnv, Steps } from '../types.js';
 
@@ -62,10 +63,36 @@ export async function recentStudentTurns(env: StepEnv): Promise<string[]> {
         typeof m === 'object' &&
         m !== null &&
         (m as Message).role === 'student' &&
-        typeof (m as Message).text === 'string',
+        typeof (m as Message).text === 'string' &&
+        !isWithheld(m as Message),
     )
     .map((m) => m.text)
     .slice(-DISTRESS_CONTEXT_TURNS);
+}
+
+/**
+ * All of the teacher's package names (fix round MEDIUM 5), from `PipelineDeps.teacherPackageNames`
+ * (server-side, by the entitlement's teacher), plus the student's own. Best effort within
+ * HISTORY_TIMEOUT_MS: a missing dep gives the own name; a failed, slow or malformed read gives the
+ * own name too and is reported (cause and error name only).
+ */
+export async function teacherPackageNames(env: StepEnv, s: Entitled): Promise<string[]> {
+  const own = s.pkg.name;
+  const read = env.deps.teacherPackageNames;
+  if (read === undefined) return [own];
+  const r = await runWithTimeout(
+    () => read(s.entitlement.teacherId),
+    HISTORY_TIMEOUT_MS,
+    env.deps.clock,
+  );
+  if (r.status !== 'ok' || !Array.isArray(r.value)) {
+    const cause =
+      r.status === 'ok' ? 'malformed' : r.status === 'timeout' ? 'timeout' : errorName(r.error);
+    env.report(new HarnessError(`preGuard: package names unavailable (${cause})`));
+    return [own];
+  }
+  const names = (r.value as unknown[]).filter((n): n is string => typeof n === 'string');
+  return [...new Set([own, ...names])];
 }
 
 export function createPreGuardStep(
@@ -84,7 +111,8 @@ export function createPreGuardStep(
       recentStudentTurns: recentStudentTurns(env),
       turnId: env.turnId,
       safetyEvents: env.deps.safetyEvents,
-      packageNames: [s.pkg.name],
+      packageNames: teacherPackageNames(env, s),
+      currentPackageName: s.pkg.name,
       blocks: new Map<string, PreGuardBlock>(),
     };
     const chain = await runGuardChain(registry.ordered(), env.input.text ?? '', ctx, {

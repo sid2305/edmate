@@ -42,6 +42,7 @@ function ctxWith(
     turnId: 'trn_test_01',
     safetyEvents: memorySafetyEventSink(),
     packageNames: [],
+    currentPackageName: 'Free starter',
     blocks: new Map(),
   };
 }

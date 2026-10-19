@@ -49,6 +49,16 @@ export function entitledMismatch(e: Entitled, input: TurnInput): boolean {
 
 /** Step 3: a failed scrub or check blocks with a retryable `guard_blocked` (the safe message). */
 export const PRE_GUARD_FAILED: TurnError = { code: 'guard_blocked', retryable: true };
+/**
+ * What commit saves in place of a student message a pre guard blocked (moderationIn, jailbreak;
+ * 4.4 fix round). buildContext and preGuard drop it, so blocked text never reaches a later turn.
+ */
+export const WITHHELD_MESSAGE = '[message withheld]';
+
+/** Whether `m` is a withheld student message (see WITHHELD_MESSAGE). */
+export const isWithheld = (m: { role: string; text: string }): boolean =>
+  m.role === 'student' && m.text === WITHHELD_MESSAGE;
+
 /** Step 3: a guard decided to block. */
 export const PRE_GUARD_BLOCKED: TurnError = { code: 'guard_blocked', retryable: false };
 

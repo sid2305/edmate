@@ -689,7 +689,15 @@ class Turn {
     this.done();
     return this.finish(
       e,
-      { outcome: 'blocked', input, intent, replyText, ...(alert === undefined ? {} : { alert }) },
+      {
+        outcome: 'blocked',
+        input,
+        intent,
+        replyText,
+        // The blocked text is saved as a placeholder and kept out of later turns (4.4 fix round).
+        inputWithheld: true,
+        ...(alert === undefined ? {} : { alert }),
+      },
       intent,
       'redirect',
       delivered,

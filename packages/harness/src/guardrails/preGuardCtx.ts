@@ -44,8 +44,14 @@ export interface PreGuardCtx {
   turnId: string;
   /** Where moderationIn and jailbreak record a block (ADR-0006). Awaited: a throw fails the chain. */
   safetyEvents: SafetyEventSink;
-  /** The turn's package name(s), for "pretend I'm on <package>" claims (lead answer 9). */
-  packageNames: readonly string[];
+  /**
+   * All of the teacher's package names, from the server (fix round MEDIUM 5), for "pretend I'm
+   * on <package>" and "I'm on <another package>" claims. A promise when preGuard reads them
+   * concurrently; at least the student's own package name.
+   */
+  packageNames: readonly string[] | Promise<readonly string[]>;
+  /** The student's own package name: the course the classifier is told about; claiming it is no claim. */
+  currentPackageName: string;
   /** Filled by a blocking guard, keyed by guard name; read by preGuard for the reply. Per turn. */
   blocks: Map<string, PreGuardBlock>;
 }
