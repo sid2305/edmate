@@ -17,7 +17,8 @@ const CLEAN: readonly [string, string, string][] = [
   ['one-digit key', '3', 'Teen lines hain, pehli line dekho.'],
   ['one-digit key', '3', 'तीन लाइनें हैं, पहली लाइन देखो।'],
   ['one-digit key', '2', 'Do you want to try it yourself first?'],
-  ['one-digit key', '1', 'Ek baar code ko line by line padho.'],
+  ['one-digit key', '1', 'Pehle code ko line by line padho.'],
+  ['one-digit key', '3', 'Take it one step at a time and look at the loop.'],
   ['one-digit key', '0', 'Together we can debug it. Look at the loop first.'],
   ['word key', 'Warm', 'Is 25 greater than 30? What about 20? Check them in order.'],
   ['word key', 'Warm', 'The weather words are just labels; focus on the comparisons.'],
@@ -34,6 +35,8 @@ const STRICT: readonly [string, string, string][] = [
   ['one-digit digits anywhere', '3', 'Look at line 3 first.'],
   ['word key in a compound', 'Warm', 'Start with a quick warm-up question.'],
   ['spaced repetition', 'hahaha', 'It prints ha ha ha, right?'],
+  ['a count word next to a one-digit word', '1', 'Ek baar code ko line by line padho.'],
+  ['a count word next to a one-digit word', '3', 'Read it three times slowly.'],
 ];
 
 function gateShows(key: string, text: string): string {

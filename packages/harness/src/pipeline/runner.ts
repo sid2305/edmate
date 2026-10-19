@@ -31,6 +31,7 @@ import {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PostGuardStepFailed,
   ScrubFailedError,
   UnpricedUsage,
 } from './errors.js';
@@ -188,6 +189,8 @@ class Turn {
   private guardGateway: TurnGateway | null = null;
   /** Streamed text is on the student's screen and no `replace` cleared it yet. */
   private shown = false;
+  /** A post guard's escalate text (4.5): saved with the turn, never shown. */
+  private escalatedText: string | undefined;
 
   constructor(
     private readonly input: TurnInput,
@@ -835,22 +838,27 @@ class Turn {
       ...(gen.raw === undefined ? {} : { raw: gen.raw }),
       ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
     };
-    const p = check(
-      await this.timed(input, timeoutOf('postGuard'), (env) => this.steps.postGuard(env, x)),
-      PostGuardResultSchema,
+    const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
+      this.steps.postGuard(env, x),
     );
+    const p = check(raw, PostGuardResultSchema);
     if (p.ok) {
       this.trace.addGuards(p.value.guards);
       this.addReported(p.value.usage);
       this.trace.step('postGuard', p.ms, 'ok');
       if (p.value.result === 'ok') return draft;
       // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
-      if (p.value.result === 'escalate') return { alert: p.value.alert };
+      if (p.value.result === 'escalate') {
+        this.escalatedText = p.value.text;
+        return { alert: p.value.alert };
+      }
       this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
       return p.value.text;
     }
     this.trace.step('postGuard', p.ms, 'fallback');
+    // Reported like every other step failure: kind and error name only, never a message.
+    this.background.push({ task: 'runner', error: postGuardFailure(raw) });
     let safe = '';
     try {
       safe = this.deps.fallbackReplies.safeReply(input.lang);
@@ -883,6 +891,7 @@ class Turn {
       receivedAt: this.receivedAt,
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
+      ...(this.escalatedText === undefined ? {} : { escalatedText: this.escalatedText }),
     };
     // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
     const usage = this.meterable.map((u) => ({ ...u }));
@@ -951,6 +960,13 @@ class Turn {
 }
 
 /** What a failed generate attempt reports: the kind and the underlying error's name. */
+/** What a failed postGuard step reports: the kind and the underlying error's name. */
+function postGuardFailure(r: TimedResult<unknown>): PostGuardStepFailed {
+  if (r.status === 'timeout') return new PostGuardStepFailed('timeout');
+  if (r.status === 'error') return new PostGuardStepFailed('error', errorName(r.error));
+  return new PostGuardStepFailed('invalid_result');
+}
+
 function attemptFailure(
   attempt: 'primary' | 'fallback',
   raw: TimedResult<unknown>,

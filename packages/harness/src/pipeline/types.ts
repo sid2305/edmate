@@ -308,6 +308,11 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
+   * (the student got the caring template). Server-side only; commit decides where it is kept.
+   */
+  escalatedText?: string;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when

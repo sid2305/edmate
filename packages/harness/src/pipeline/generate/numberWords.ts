@@ -2,8 +2,8 @@
 // Devanagari (0-100), plus the scale words they combine with. Hand-written tables, no library
 // (mathjs is arithmetic, not number names). Words are looked up after `foldWord`, so spelling
 // variants that differ only by nukta or chandrabindu (हज़ार / हजार, पाँच / पांच) are one entry.
-// Hindi in Latin letters covers 0-19 and the tens (the plan's pilot scope); its irregular 21-99
-// names are not listed.
+// Hindi in Latin letters covers 0-99 (21-99 transliterated from the Devanagari table, fix round
+// 1), and its many spellings (chaubees / chaubis / chobis) are matched through `latinFold`.
 
 /** A small number (0-99) or a scale word (hundred and up). */
 export type NumberWord = { kind: 'small'; value: number } | { kind: 'scale'; value: number };
@@ -84,6 +84,29 @@ const HI_LATIN: Record<string, number> = {
   assi: 80,
   nabbe: 90,
 };
+
+/** Hindi 21-99 in Latin letters, a few common spellings each; the rest come from latinFold. */
+const HI_LATIN_21_99 =
+  '21 ikkees ikkis ekkis;22 baees bais baais;23 teyees teyis teis;24 chaubees chaubis chobis;' +
+  '25 pachchees pachees pachis pachchis;26 chhabbees chhabbis chabbis;27 sattaees sattais;' +
+  '28 atthaees atthais athais;29 untees untis;31 iktees ikattis ikatees iktis ikattees;' +
+  '32 battees battis;33 taintees taintis tetis;34 chauntees chauntis chautis chontis;' +
+  '35 paintees paintis pentis;36 chhattees chhattis chattis;37 saintees saintis sentis;' +
+  '38 adtees artees adtis artis;39 untaalees untalis;41 iktaalees iktalis;' +
+  '42 bayaalees bayalis;43 taintaalees taintalis tetalis;44 chavaalees chawalis chauvalis;' +
+  '45 paintaalees paintalis;46 chhiyaalees chhiyalis;47 saintaalees saintalis;' +
+  '48 adtaalees adtalis artalis;49 unchaas unchas;51 ikyaavan ikyavan;52 baavan bavan;' +
+  '53 tirpan tirepan;54 chauvan chauwan;55 pachpan pachapan;56 chhappan chhapan;' +
+  '57 sattaavan sattavan;58 atthaavan athavan;59 unsath;61 iksath;62 baasath basath;' +
+  '63 tirsath tresath;64 chaunsath chausath;65 painsath pensath;66 chhiyaasath chhiyasath;' +
+  '67 sadsath sarsath;68 adsath arsath;69 unhattar;71 ikhattar;72 bahattar;73 tihattar;' +
+  '74 chauhattar;75 pachhattar;76 chhihattar;77 sathattar satattar;78 athhattar athattar;' +
+  '79 unaasi unasi unyaasi;81 ikyaasi ikyasi;82 bayaasi bayasi;83 tiraasi tirasi;' +
+  '84 chauraasi chaurasi;85 pachaasi pachasi;86 chhiyaasi chhiyasi;87 sattaasi sattasi;' +
+  '88 atthaasi athasi;89 navaasi navasi;91 ikyaanave ikyanve;92 baanave banve;' +
+  '93 tiraanave tiranve;94 chauraanave chauranve;95 pachaanave pachanve;' +
+  '96 chhiyaanave chhiyanve;97 sattaanave sattanve;98 atthaanave athanve;' +
+  '99 ninyaanave ninyanve';
 
 /** 0-100 in Devanagari, already folded (no nukta, chandrabindu as anusvara). */
 const DEVA_LIST = [
@@ -218,6 +241,24 @@ const SCALES: Record<string, number> = {
   करोड: 10_000_000,
 };
 
+/**
+ * Folds a Hindi word in Latin letters to one spelling: doubled letters once, ch-ch as ch, chh as
+ * ch, au as o, ai as e, w as v, then e and ee as i ("chaubees", "chaubis", "chobis" all fold to
+ * "chobis"). Used only for words of LATIN_FOLD_MIN letters or more, so short English words ("no",
+ * "tin") are never read as numbers through it.
+ */
+export function latinFold(w: string): string {
+  return w
+    .replace(/chch/g, 'ch')
+    .replace(/chh/g, 'ch')
+    .replace(/au/g, 'o')
+    .replace(/ai/g, 'e')
+    .replace(/w/g, 'v')
+    .replace(/(.)\1+/g, '$1')
+    .replace(/e/g, 'i');
+}
+const LATIN_FOLD_MIN = 5;
+
 /** Folds a lower-cased word: drops the Devanagari nukta, chandrabindu becomes anusvara. */
 export function foldWord(w: string): string {
   return w.replace(/\u093C/g, '').replace(/\u0901/g, '\u0902');
@@ -228,11 +269,36 @@ EN_UNITS.forEach((w, i) => SMALL.set(w, i));
 for (const [w, v] of Object.entries(EN_TENS)) SMALL.set(w, v);
 for (const [w, v] of Object.entries(HI_LATIN)) SMALL.set(w, v);
 for (const [w, v] of DEVA_LIST) SMALL.set(foldWord(w), v);
+for (const group of HI_LATIN_21_99.split(';')) {
+  const [v, ...words] = group.split(' ');
+  for (const w of words) SMALL.set(w, Number(v));
+}
+/** Hindi-Latin spellings folded; a folded form two values share is dropped (never guessed). */
+const FOLDED = new Map<string, number>();
+const ambiguous = new Set<string>();
+for (const [w, v] of [
+  ...Object.entries(HI_LATIN),
+  ...HI_LATIN_21_99.split(';').flatMap((g) => {
+    const [n, ...ws] = g.split(' ');
+    return ws.map((x) => [x, Number(n)] as const);
+  }),
+]) {
+  if (w.length < LATIN_FOLD_MIN) continue;
+  const f = latinFold(w);
+  const had = FOLDED.get(f);
+  if (had !== undefined && had !== v) ambiguous.add(f);
+  FOLDED.set(f, v);
+}
+for (const f of ambiguous) FOLDED.delete(f);
+/** Folded spellings two values share (read as no number); exported for the table's test. */
+export const AMBIGUOUS_LATIN_FOLDS: ReadonlySet<string> = ambiguous;
 const SCALE_MAP = new Map(Object.entries(SCALES).map(([w, v]) => [foldWord(w), v]));
 
 /** The number word `w` (lower-cased, folded) names, if any. */
 export function numberWord(w: string): NumberWord | undefined {
-  const small = SMALL.get(w);
+  const small =
+    SMALL.get(w) ??
+    (w.length >= LATIN_FOLD_MIN && /^[a-z]+$/.test(w) ? FOLDED.get(latinFold(w)) : undefined);
   if (small !== undefined) return { kind: 'small', value: small };
   const scale = SCALE_MAP.get(w);
   return scale === undefined ? undefined : { kind: 'scale', value: scale };

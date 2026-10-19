@@ -154,7 +154,7 @@ describe('answer context', () => {
   it('is false in ordinary lesson text', () => {
     expect(ctxOf('Take one step at a time and look at the code.')).toEqual([false]);
     expect(ctxOf('Is it right? Now try three more examples on your own.')).toEqual([false]);
-    expect(ctxOf('Ek baar code ko line by line padho.')).toEqual([false]);
+    expect(ctxOf('Ek line pehle padho.')).toEqual([false]);
   });
 });
 

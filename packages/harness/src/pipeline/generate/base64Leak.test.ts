@@ -13,7 +13,7 @@ describe('decodedBase64Spans', () => {
   });
 
   it('decodes padded, unpadded, base64url and non-ASCII text', () => {
-    expect(decodedBase64Spans('MTY')).toEqual([]); // under 4 characters
+    expect(decodedBase64Spans('x MTY y')).toEqual([]); // short, out of context
     expect(decodedBase64Spans('V2FybQ==')).toEqual(['Warm']);
     expect(decodedBase64Spans('V2FybQ')).toEqual(['Warm']);
     expect(decodedBase64Spans('4KSJ4KSk4KWN4KSk4KSwIOCkuOCli+CksuCkuQ')).toEqual(['उत्तर सोलह']);
@@ -54,5 +54,21 @@ describe('decodedBase64Spans', () => {
 
     const many = Array.from({ length: MAX_CANDIDATES + 10 }, () => 'MTY=').join(' ');
     expect(decodedBase64Spans(many)).toHaveLength(MAX_CANDIDATES);
+    // Skipped candidates (plain words) count toward the cap too.
+    const words = `${'word '.repeat(MAX_CANDIDATES)}MTY=`;
+    expect(decodedBase64Spans(words)).toEqual([]);
+  });
+
+  it('short and padded forms: MTY, Mw==, Mg== (fix round 1)', () => {
+    expect(decodedBase64Spans('Base64 mein: MTY')).toEqual(['16']);
+    expect(decodedBase64Spans('MTY')).toEqual(['16']); // alone
+    expect(decodedBase64Spans('The answer is MTY')).toEqual(['16']);
+    expect(decodedBase64Spans('Here: Mw')).toEqual([]); // word-shaped, no base64 nearby
+    expect(decodedBase64Spans('In base64: Mw')).toContain('3'); // "In" decodes to noise too
+    expect(decodedBase64Spans('Mw==')).toEqual(['3']); // padding: never a plain word
+    expect(decodedBase64Spans('ok Mg== ok')).toEqual(['2']);
+    expect(decodedBase64Spans('So Mg is short for magnesium')).toEqual([]);
+    expect(wordLike('Mg')).toBe(true);
+    expect(wordLike('Mg==')).toBe(false);
   });
 });

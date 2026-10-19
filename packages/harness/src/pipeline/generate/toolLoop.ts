@@ -7,7 +7,13 @@
 // registry and entitled), its args must be JSON-safe and pass `tool.input`, and its output must
 // pass `tool.output` and fit TOOL_RESULT_MAX_JSON_LENGTH. The model only ever sees a fixed error
 // code for a failed call, never an error message.
-import type { ModelChunk, ModelGateway, ModelRequest, TurnContext } from '@edmate/contracts';
+import {
+  LIMITS,
+  type ModelChunk,
+  type ModelGateway,
+  type ModelRequest,
+  type TurnContext,
+} from '@edmate/contracts';
 import { type CancelToken, type Clock, linkCancel } from '../clock.js';
 import { errorName, HarnessError } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
@@ -121,7 +127,10 @@ export async function runToolLoop(
       for (let c = await reader.next(); c !== undefined; c = await reader.next()) {
         if (c.type === 'text') {
           roundText += c.text;
-          raw += c.text;
+          // Kept up to a reply's maximum; past it the gate has tripped and the reply is the hint.
+          if (raw.length < LIMITS.modelTextMaxLength) {
+            raw += c.text.slice(0, LIMITS.modelTextMaxLength - raw.length);
+          }
           show(i.gate.push(c.text));
         } else if (c.type === 'usage') {
           i.usage.record(c.usage);

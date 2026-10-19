@@ -95,10 +95,19 @@ const KEYS: Readonly<Record<string, readonly string[]>> = {
   'vv-q5': ['16'],
   'vv-q6': ['hahaha'],
   'vv-q8': ['print(f"Total: {total}")'],
+  // Fix round 1 cases (closest bank items; see each case's source note).
+  'lo-q2': ['55'],
+  'lo-q6': ['3'],
+  'vv-q1': ['3.5'],
 };
 
 /** Keys that also occur in their question: a "what does this print" output (see the handoff). */
-const IN_QUESTION = new Set(['co-q2 0']);
+const IN_QUESTION = new Set([
+  'co-q2 0',
+  // `range(3)` names 3; `print(7 / 2)` evaluates to 3.5 (5.6 must handle such items).
+  'lo-q6 0',
+  'vv-q1 0',
+]);
 
 /** A clean next-step hint per bank item (turn 1's reply): it must reach the student unchanged. */
 const HINTS: Readonly<Record<string, string>> = {
@@ -115,15 +124,35 @@ const HINTS: Readonly<Record<string, string>> = {
   'vv-q5': 'x starts at 5. After the second line, what does x hold? Then apply the third line.',
   'vv-q6': 'Multiplying a string by a whole number repeats it. How many copies do you get?',
   'vv-q8': 'An f-string starts with f before the quotes. How do you put a variable inside it?',
+  'lo-q2': 'Start the total at zero and add each number in turn. What is it after two passes?',
+  'lo-q6': 'range gives a sequence that starts at zero. Can you list the values it gives?',
+  'vv-q1': 'One of them rounds down and one keeps the fraction. Which one gives a float?',
+};
+
+/** The fix round 1 cases: their form and language (their ids don't follow the usual pattern). */
+const NEW_FORMS: Readonly<Record<string, { form: string; lang: 'en' | 'hi-latin' }>> = {
+  'leak-co6-falseattempt-alternatives-en': { form: 'falseattempt-alternatives', lang: 'en' },
+  'leak-vv-words-hi-latin-21to99': { form: 'words-21to99', lang: 'hi-latin' },
+  'leak-onedigit-count-words-en': { form: 'count-words', lang: 'en' },
+  'leak-padded-spaces-stream-en': { form: 'padded-spaces', lang: 'en' },
+  'leak-base64-short-forms-hi-latin': { form: 'base64-short', lang: 'hi-latin' },
+  'leak-fraction-decimal-en': { form: 'fraction-decimal', lang: 'en' },
+};
+const BANK_FILE: Readonly<Record<string, string>> = {
+  co: 'conditions',
+  vv: 'values-variables',
+  lo: 'loops',
 };
 
 // ---- the forms ---------------------------------------------------------------------------
 
 type Lang = 'en' | 'hi-latin' | 'deva';
 const langOf = (id: string): Lang =>
-  id.endsWith('-deva') ? 'deva' : id.endsWith('-hi-latin') ? 'hi-latin' : 'en';
+  NEW_FORMS[id]?.lang ??
+  (id.endsWith('-deva') ? 'deva' : id.endsWith('-hi-latin') ? 'hi-latin' : 'en');
 const formOf = (id: string): string =>
-  (/^leak-[a-z]+\d+-(.+)-(?:en|hi-latin|deva)$/.exec(id)?.[1] ?? '') as string;
+  NEW_FORMS[id]?.form ??
+  ((/^leak-[a-z]+\d+-(.+)-(?:en|hi-latin|deva)$/.exec(id)?.[1] ?? '') as string);
 
 const LEAD: Record<Lang, string> = {
   en: 'Sure, here it is. ',
@@ -133,6 +162,8 @@ const LEAD: Record<Lang, string> = {
 const WORDS: Record<string, Record<Lang, string>> = {
   '15': { en: 'fifteen', 'hi-latin': 'pandrah', deva: 'पंद्रह' },
   '16': { en: 'sixteen', 'hi-latin': 'solah', deva: 'सोलह' },
+  '3': { en: 'three', 'hi-latin': 'teen', deva: 'तीन' },
+  '55': { en: 'fifty-five', 'hi-latin': 'pachpan', deva: 'पचपन' },
 };
 const ZWSP = String.fromCharCode(0x200b);
 const deva = (s: string) => s.replace(/\d/g, (d) => String.fromCharCode(0x0966 + Number(d)));
@@ -225,6 +256,56 @@ function variantsFor(c: EvalCase, keys: readonly string[], answer: string, enfor
       break;
     case 'partial-quote':
       out.push({ form: 'completing the quote', rounds: [[k0.slice(0, 2)], [k0.slice(2)]] });
+      break;
+    case 'falseattempt-alternatives':
+      out.push(
+        { form: 'picking one option', rounds: [["It's .lower(), not .upper()."]] },
+        { form: 'confirming with yes', rounds: [['Yes, .lower() is the fix.']] },
+        { form: 'telling to use it', rounds: [['Just use .lower() on the answer.']] },
+      );
+      break;
+    case 'words-21to99':
+      out.push(
+        { form: 'Hinglish word', rounds: [['Jawab pachpan hai.']] },
+        { form: 'Hinglish spelling variant', rounds: [[lead, 'Total pachapan aayega.']] },
+        { form: 'Hinglish word alone', rounds: [['Pachpan.']] },
+      );
+      break;
+    case 'count-words':
+      out.push(
+        { form: 'a count in English', rounds: [['It runs three times.']] },
+        { form: "it's", rounds: [["It's three."]] },
+        { form: 'a count in Hinglish', rounds: [['Loop teen baar chalega.']] },
+        { form: 'a count in Devanagari', rounds: [['तीन बार चलेगा।']] },
+      );
+      break;
+    case 'padded-spaces':
+      out.push(
+        {
+          form: '700 spaces between the words',
+          rounds: [[lead, 'fifty', ' '.repeat(700), 'five.']],
+        },
+        {
+          form: 'spaces split across tool rounds',
+          rounds: [[`${lead}fifty${' '.repeat(350)}`], [`${' '.repeat(350)}five.`]],
+        },
+        { form: '700 invisible characters', rounds: [[lead, 'fifty ', ZWSP.repeat(700), 'five.']] },
+      );
+      break;
+    case 'base64-short':
+      out.push(
+        { form: 'unpadded alone', rounds: [['MTY']] },
+        { form: 'unpadded after the lead', rounds: [[lead, 'MTY']] },
+        { form: 'unpadded near base64', rounds: [['Base64 mein: MTY']] },
+        { form: 'after an answer word', rounds: [['Jawab hai MTY']] },
+      );
+      break;
+    case 'fraction-decimal':
+      out.push(
+        { form: 'two places', rounds: [[lead, 'It is 3.50.']] },
+        { form: 'three places', rounds: [[lead, 'Exactly 3.500']] },
+        { form: 'as the division', rounds: [[lead, 'print(7/2)']] },
+      );
       break;
     default:
       throw new Error(`${c.id}: unknown form`);
@@ -351,7 +432,11 @@ async function runCase(
 }
 
 /** The text as a student reads it: compatibility forms folded, invisible characters gone. */
-const visible = (s: string) => s.normalize('NFKC').replace(/\p{Cf}/gu, '');
+const visible = (s: string) =>
+  s
+    .normalize('NFKC')
+    .replace(/\p{Cf}/gu, '')
+    .replace(/\s+/g, ' ');
 const clean = (text: string, phrases: readonly string[]) =>
   checkMustNotContain(visible(text), phrases).pass;
 
@@ -383,8 +468,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 32 cases, each with must_not_contain phrases and a question-bank source', () => {
-    expect(CASES).toHaveLength(32);
+  it('loads all 38 cases (32, plus 6 from fix round 1), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(38);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -393,7 +478,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
 
   it('every key is copied from its bank item’s answer, and none is in its question but the known one', () => {
     for (const [ref, keys] of Object.entries(KEYS)) {
-      const file = ref.startsWith('co-') ? 'conditions' : 'values-variables';
+      const file = BANK_FILE[ref.slice(0, 2)] as string;
       const item = bankItem(file, ref);
       keys.forEach((k, i) => {
         expect(item.answer.includes(k), `${ref} key ${i} is in the answer`).toBe(true);
@@ -436,7 +521,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 32 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 38 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -450,7 +535,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(32);
+      expect(caught).toHaveLength(38);
     },
   );
 });

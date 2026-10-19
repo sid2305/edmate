@@ -134,7 +134,25 @@ describe('runner + answerLeak', () => {
       { type: 'done', messageId: 'message_1', usage: [] },
     ]);
     expect(JSON.stringify(events)).not.toContain('never shown');
-    expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', replyText: TEST_CARING_REPLY });
+    expect(steps.commits[0]).toMatchObject({
+      outcome: 'escalated',
+      replyText: TEST_CARING_REPLY,
+      escalatedText: 'never shown',
+    });
     expect(t.alerts.raised).toEqual([demoSafetyAlert]);
+  });
+
+  it('a postGuard step that throws is reported by kind and error name, then the safe reply', async () => {
+    const t = testDeps({ script: { stream: [main(say('Hello.'))] } });
+    const steps = testSteps({
+      entitle: fixtureEntitle,
+      generate: defaultSteps.generate,
+      postGuard: () => Promise.reject(new TypeError('quotes the reply: Hello.')),
+    });
+    const { result } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'PostGuardStepFailed: postGuard failed: error (TypeError)',
+    ]);
+    expect(steps.commits[0]).not.toHaveProperty('escalatedText');
   });
 });

@@ -4,7 +4,9 @@
 // Results, all built here (the runner only adds its own fallback when this step throws, times out
 // or returns something malformed):
 //   - the gate withheld a leak, or the full model text (`raw`, which includes anything held back)
-//     leaks: `replace` with ANSWER_LEAK_SAFE_HINT, no chain run;
+//     leaks: the chain runs on `raw` instead of the shown draft (fix round 1), so the other post
+//     guards still see it (an escalate is caught) and answerLeak gets its one bounded rewrite of
+//     it; anything but a rewrite every guard accepts gives ANSWER_LEAK_SAFE_HINT;
 //   - chain `ok`, text unchanged: `ok`; text rewritten: `replace` with the rewrite, so the student
 //     sees, and history keeps, only the checked text;
 //   - chain `escalate`: forwarded with its alert and text; the runner replies with the caring
@@ -127,15 +129,14 @@ export function createPostGuard(
       usage,
     });
 
-    // A leak the gate held back, or one in text the student never saw, still ends in the hint.
-    if (
+    // A leak the gate held back, or one in text the student never saw: the chain judges all the
+    // model wrote, and only a checked rewrite (or the hint) may reach the student.
+    const leaked =
       withheld === true ||
       (raw !== undefined &&
         raw !== draft &&
-        compileAnswerKeys(decision.mustNotReveal, own).leaks(raw))
-    ) {
-      return hint([{ name: 'answerLeak', ok: false, action: 'rewrite' }], []);
-    }
+        compileAnswerKeys(decision.mustNotReveal, own).leaks(raw));
+    const subject = leaked ? (raw ?? draft) : draft;
 
     const slice = postGuardSliceMs(guards.length);
     const x: PostGuardCtx = {
@@ -144,7 +145,7 @@ export function createPostGuard(
       ...own,
       rewrite: rewriter(env, Math.floor(slice * REWRITE_SHARE)),
     };
-    const r: GuardChainResult = await runGuardChain(guards, draft, x, {
+    const r: GuardChainResult = await runGuardChain(guards, subject, x, {
       phase: 'post',
       clock: env.deps.clock,
       timeoutMs: slice,
@@ -153,6 +154,8 @@ export function createPostGuard(
     const { guards: trace, usage } = r;
     switch (r.outcome) {
       case 'ok':
+        // A known leak that no guard rewrote is never shown: fail to the hint.
+        if (leaked && r.text === subject) return hint(trace, usage);
         return r.text === draft
           ? { result: 'ok', guards: trace, usage }
           : { result: 'replace', text: r.text, guards: trace, usage };
@@ -160,10 +163,14 @@ export function createPostGuard(
         return { result: 'escalate', alert: r.alert, text: r.text, guards: trace, usage };
       case 'failed':
         env.report(new PostGuardFailed(r.failure));
-        if (r.failure.name === 'answerLeak' || trace.some(answerLeakHit)) return hint(trace, usage);
+        if (leaked || r.failure.name === 'answerLeak' || trace.some(answerLeakHit)) {
+          return hint(trace, usage);
+        }
         break;
       case 'block':
-        if (r.blockedBy === 'answerLeak' || trace.some(answerLeakHit)) return hint(trace, usage);
+        if (leaked || r.blockedBy === 'answerLeak' || trace.some(answerLeakHit)) {
+          return hint(trace, usage);
+        }
         break;
     }
     const text = env.deps.fallbackReplies.safeReply(env.input.lang);

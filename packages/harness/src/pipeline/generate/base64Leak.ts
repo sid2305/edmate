@@ -4,7 +4,9 @@
 // the bytes are valid UTF-8 and printable text, so ordinary words that happen to be base64-shaped
 // give nothing; a run that reads as a plain word ("together", "Look", "well-known") is
 // not a candidate at all, since its decode would be noise (all-caps runs are still decoded:
-// "MTY=" is all caps). Work is bounded: a run longer than MAX_CANDIDATE_LENGTH (twice the longest reply)
+// "MTY=" is all caps; a padded run is never a word). Runs of 2-3 characters ("MTY", "Mw") are
+// decoded only near the word "base64", after an answer word, or standing alone in a sentence
+// (fix round 1). Work is bounded: a run longer than MAX_CANDIDATE_LENGTH (twice the longest reply)
 // is cut, and at most MAX_CANDIDATES runs are decoded per text. Pure code: the harness has no
 // atob or TextDecoder (build plan rule 3).
 
@@ -26,10 +28,8 @@ const WORD_PART = /^[A-Z]?[a-z]*$/;
 
 /** True when every hyphen- or underscore-separated part of the run is a plain word. */
 export function wordLike(run: string): boolean {
-  return run
-    .replace(/=+$/, '')
-    .split(/[-_]/)
-    .every((p) => WORD_PART.test(p));
+  if (/=$/.test(run)) return false;
+  return run.split(/[-_]/).every((p) => WORD_PART.test(p));
 }
 
 /** Printable: no control characters other than tab and newlines, no replacement character. */
@@ -98,15 +98,37 @@ export function decodeBase64Text(candidate: string): string | undefined {
   return text === undefined || text.trim() === '' || !printable(text) ? undefined : text;
 }
 
+const SHORT_NEAR = 40;
+const SHORT_CONTEXT = 24;
+
+/** Whether a short run at [start, end) sits where an encoded answer would, and why. */
+function shortRunContext(text: string, start: number, end: number): 'base64' | 'answer' | 'none' {
+  const near = text.slice(Math.max(0, start - SHORT_NEAR), end + SHORT_NEAR);
+  if (/base\s*-?\s*64/i.test(near)) return 'base64';
+  const before = text.slice(Math.max(0, start - SHORT_CONTEXT), start);
+  const after = text.slice(end, end + SHORT_CONTEXT);
+  if (/(?:\b(?:is|answer|jawab|hai|uttar|here)|[=:])[\s"'`]*$/i.test(before)) return 'answer';
+  const startsSentence = /(?:^|[.!?\n\u0964])[\s"'`]*$/.test(before);
+  const endsSentence = /^[\s"'`]*(?:[.!?\n\u0964]|$)/.test(after);
+  return startsSentence && endsSentence ? 'answer' : 'none';
+}
+
 /** The decoded text of every base64-looking run in `text` that decodes to printable UTF-8. */
 export function decodedBase64Spans(text: string): string[] {
   const out: string[] = [];
   let tried = 0;
   for (const m of text.matchAll(CANDIDATE)) {
-    if (tried >= MAX_CANDIDATES) break;
+    // Every candidate counts toward the cap, skipped ones included (bounded work).
+    if (tried++ >= MAX_CANDIDATES) break;
     const run = m[0].slice(0, MAX_CANDIDATE_LENGTH);
-    if (run.length < MIN_CANDIDATE_LENGTH || wordLike(run)) continue;
-    tried++;
+    const end = m.index + m[0].length;
+    if (run.length < MIN_CANDIDATE_LENGTH) {
+      // Near the word "base64" even a word-shaped short run ("Mw") is read.
+      const context = shortRunContext(text, m.index, end);
+      if (context === 'none' || (context === 'answer' && wordLike(run))) continue;
+    } else if (wordLike(run)) {
+      continue;
+    }
     const decoded = decodeBase64Text(run);
     if (decoded !== undefined) out.push(decoded);
   }

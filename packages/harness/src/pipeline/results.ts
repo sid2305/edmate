@@ -3,6 +3,7 @@
 // entries are strict (no `reason` text), so no step can smuggle text into the trace (ADR-0003).
 import {
   AgentConfigSchema,
+  LIMITS,
   AttemptSchema,
   ChunkSchema,
   EntitlementSchema,
@@ -82,8 +83,8 @@ export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({
 });
 
 export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
-  draft: z.string(),
-  raw: z.string().exactOptional(),
+  draft: z.string().max(LIMITS.modelTextMaxLength),
+  raw: z.string().max(LIMITS.modelTextMaxLength).exactOptional(),
   withheld: z.boolean().exactOptional(),
 });
 

@@ -88,15 +88,44 @@ describe('compileAnswerKeys: text keys', () => {
     expect(leaks(['marks >= 80'], 'marks >= 80', '')).toBe(true);
   });
 
-  it('only code the student wrote as code: in backticks or after a code word or symbol', () => {
-    const said = 'You can use .lower() here.';
-    expect(leaks(['.lower()'], said, 'is .lower() the fix?')).toBe(true);
-    expect(leaks(['.lower()'], said, 'I tried `x.lower()` already')).toBe(false); // their code
-    expect(leaks(['.lower()'], said, 'I tried `.lower()` already')).toBe(false);
-    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'my code: if n % 2 == 0 print')).toBe(false);
-    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'ok = (n % 2 == 0)')).toBe(false);
+  it('only code the student wrote as code: a code line, a ``` fence, or after elif/while/return', () => {
+    const quote = 'Your line calls .lower() on the answer first.';
+    const fence = 'my code:\n```\nif answer.lower() == "yes":\n```';
+    expect(leaks(['.lower()'], 'Your code calls .lower() there.', fence)).toBe(false);
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', '  if n % 2 == 0')).toBe(false); // indented
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'x = n % 2 == 0')).toBe(false); // assignment
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'check n % 2 == 0:')).toBe(false); // colon end
+    expect(leaks(['marks >= 80'], 'marks >= 80', 'Pass first, elif marks >= 80 next')).toBe(false);
+    // Not code: prose, a proposal, or no boundary.
+    expect(leaks(['.lower()'], quote, 'is .lower() the fix?')).toBe(true);
     expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'n % 2 == 0 is it?')).toBe(true);
     expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'nn % 2 == 0')).toBe(true);
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'my code: if n % 2 == 0 print')).toBe(true);
+  });
+
+  it('offering options never makes the answer the student’s own code (fix round probes)', () => {
+    const reply = 'It is .lower().';
+    expect(leaks(['.lower()'], reply, 'Is it .upper() or .lower()? Just say which one.')).toBe(
+      true,
+    );
+    expect(leaks(['.lower()'], reply, 'is it `.upper()` or `.lower()`?')).toBe(true);
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'n % 2 == 1 or n % 2 == 0?')).toBe(true);
+    expect(leaks(['n % 2 == 0'], 'n % 2 == 0', 'is it not n % 2 == 0')).toBe(true);
+    // An apostrophe inside a word does not make a key code-shaped.
+    expect(leaks(["it's False"], "it's False", "x = it's False")).toBe(true);
+  });
+
+  it('a quote of the student’s code in an answer or confirmation context is a leak', () => {
+    const own = 'if answer.lower() == "yes":';
+    expect(leaks(['.lower()'], 'Your line calls .lower() on the input.', own)).toBe(false);
+    expect(leaks(['.lower()'], 'Yes, .lower() is the fix.', own)).toBe(true);
+    expect(leaks(['.lower()'], 'Just use .lower() there.', own)).toBe(true);
+    expect(leaks(['.lower()'], 'Haan, .lower() sahi hai.', own)).toBe(true);
+    expect(leaks(['.lower()'], 'Yes. Your line calls .lower() too.', own)).toBe(false);
+    // Encoded, it is never a quote.
+    expect(leaks(['.lower()'], 'Lmxvd2VyKCk=', own)).toBe(true);
+    // A confirmation in the student's own line is not their code either.
+    expect(leaks(['.lower()'], 'You call .lower() there.', 'x = s.lower() is right?')).toBe(true);
   });
 
   it('ignores empty and non-string keys and empty text', () => {

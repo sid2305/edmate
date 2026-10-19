@@ -924,7 +924,7 @@ describe(`postGuard: ${policy('postGuard')}`, () => {
       t.clock,
     );
     expect(events.at(-2)).toEqual({ type: 'replace', text: '' });
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
+    expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']); // the step failure, then the text
   });
 });
 

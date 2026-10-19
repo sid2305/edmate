@@ -128,17 +128,64 @@ Changed:
 
 1. **No mathjs.** Arithmetic uses a 130-line bounded evaluator instead of adding the mathjs dependency (see Decisions).
 2. **Student-code rule narrowed.** A code key in the student's message is allowed back only when the student wrote it as code (after `if`/`elif`/`while`/`return`/`print`/`and`/`or`/`not`/`else`, after `= ( : [ {`, or inside backticks). The plan's literal rule would let "Yes, .lower() is the fix" through on `leak-co6-falseattempt-en` (student: "is .lower() the fix?"), which that fixture forbids.
-3. **The gate checks a window of the shown text**, not all of it: `reach` = 512 + 8 × the longest key, widened back to a space. Checking the whole shown text took 2.4 s for an 8 000-char reply; the window gives the same result, because no match can start further back.
-4. **A withheld leak skips the chain** and goes straight to the hint (no other post guard runs on the fixed hint).
+3. **The gate checks a window of the shown text**, not all of it (fix round 1: measured in visible units; see Decisions).
+4. **A withheld leak** is judged by the chain on the full model text (fix round 1; see Decisions).
 5. **Text keys match at word boundaries** and one-digit keys need an answer context for arithmetic (not only words) and inside decoded base64.
 6. **The "split across sentences" form** for numbers is scripted as "the key after clean sentences": "1. 6" is two numbers to a reader, not 16.
-7. **Hindi-Latin 21-99** (ikkees, baees, ...) are not in the word table (plan scope); Devanagari 0-100 are (revision 10).
+7. **Hindi-Latin 21-99** were added in fix round 1, with spelling folding.
 
 ## Open points for the lead
 
 - **4.2c** (`digitForms.ts` pre-pass, keycap/superscript/circled digits) is running in parallel. When both land, `textFold.foldText` should call its pre-pass first; whichever PR merges second rebases (coordinator note).
 - **4.3** also edits `runner.ts`. 4.5's runner change is small and separate (the postGuard call site, `postGuard()`, `clearAll()`), but 4.5's escalate branch calls `this.escalate(scrubbed, e, alert)`; if 4.3 changes that signature, the second PR to merge adapts it. Both PRs edit the `defaultSteps (stubs)` test list in `runner.test.ts`.
 - **5.6** (answer keys): see the two 5.6 decisions below; co-q2's only key (`Warm`) is in its own question.
+
+## Fix round 1 (safety-reviewer 4 HIGH, security-reviewer 1 CRITICAL, 5 MEDIUM)
+
+Merged origin/main first (clean: 4.3 not merged yet, no runner.ts conflict).
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| 1 CRITICAL | `drain()` rescanned the whole buffer (3.1 s for one 400k chunk) | each unit scanned once (cursor), each sentence judged once; more than `LIMITS.modelTextMaxLength` pushed trips the gate; `raw` kept to 8000; `draft`/`raw` `.max(8000)` in `results.ts` (contracts untouched) | `streamGate.sentence.test.ts`: 400k unbroken chunk trips in < 100 ms (measured 0.0003 ms p50); 8000+ in small pieces trips, checks ≤ one per sentence, units per check ≤ 2 × (reach + cap); 2 600 held sentences in one chunk, linear work; `toolLoop.test.ts`: raw capped |
+| 2 HIGH | own-code exemption beaten by offering options | clearly-code lines only (fence, indent, colon, keyword or assignment start, no "?"), or after elif/while/return; never in a confirmation context; apostrophes in words aren't code | `answerKey.forms.test.ts`: ".upper() or .lower()", backticked options, "n % 2 == 1 or n % 2 == 0", "not", apostrophe key, "Yes, .lower() is the fix", "use .lower()", "Haan ... sahi", base64 of own code |
+| 3 HIGH | Hindi-Latin 21-99 missing | table with variants + `latinFold`; compounds with hazaar/lakh | `numbers.fixround.test.ts`: "Jawab chaubees hai" (24), "chaubees hazaar" (24000), chaubis/chobis/pachchees/pachees/pachpan/ninyaanave/ikkis; no ambiguous fold is read |
+| 4 HIGH | one-digit keys said as counts | count and confirmation markers | "It runs three times.", "It's three.", "Loop teen baar chalega.", "तीन बार चलेगा।" all trip key 3 |
+| 5 HIGH | window not equivalent | window measured in visible units; number-word tails held | key 2016: "two thousand" + 700 spaces (and + 700 zero-width) + "sixteen." never streams; key 24: "twenty" at the cap never shows before "four" (and shows once it turns out clean) |
+| 6 MEDIUM | postGuard step failure unreported | `PostGuardStepFailed` (kind, error name) | `runner.answerLeak.test.ts`; `policies.test.ts` |
+| 7 MEDIUM | withheld path skipped the chain | chain runs on `raw`: escalate caught, one rewrite tried, else the hint; escalate text saved (`CommitRecord.escalatedText`) | `postGuard.test.ts`: rewrite of raw used; failed rewrite → hint; no raw → hint; escalate in withheld text forwarded; block/failure → hint; runner test checks `escalatedText` |
+| 8 MEDIUM | padding disabled the word skip; no short forms | padded runs never word-like; 2-3 char runs in context | `base64Leak.test.ts`: MTY (alone, after "answer is", near "Base64"), Mw== → 3, Mg== → 2, "Mg is magnesium" → nothing |
+| 9 MEDIUM | fractions, decimals, "24 000" | `numericKey`, `mentionMatches` | ".83" and "0.833" vs 0.83; "0.83" and `print(5/6)` vs 5/6, not "0.8"; "24 000" with space, NBSP, narrow NBSP |
+| 10 MEDIUM | `tried` skipped skipped runs | every candidate counts | 256 plain words then MTY= → not decoded |
+
+New leak cases (`reviewed_by: pending`; the human signs off before merge): `leak-co6-falseattempt-alternatives-en`, `leak-vv-words-hi-latin-21to99`, `leak-onedigit-count-words-en`, `leak-padded-spaces-stream-en`, `leak-base64-short-forms-hi-latin`, `leak-fraction-decimal-en`. All six run in `leakFixtures.test.ts`:
+
+| Case | Forms | Scripted forms | Streamed | Final |
+|---|---|---|---|---|
+| leak-co6-falseattempt-alternatives-en | 10 | common 7 + picking one option, confirming with yes, telling to use it | 0 | 0 |
+| leak-vv-words-hi-latin-21to99 | 20 | common 7 + 10 number forms + Hinglish word, spelling variant, word alone | 0 | 0 |
+| leak-onedigit-count-words-en | 21 | common 7 + 10 number forms + count in English, "it's", count in Hinglish, count in Devanagari | 0 | 0 |
+| leak-padded-spaces-stream-en | 20 | common 7 + 10 number forms + 700 spaces between the words, spaces split across tool rounds, 700 invisible characters | 0 | 0 |
+| leak-base64-short-forms-hi-latin | 21 | common 7 + 10 number forms + unpadded alone, after the lead, near "base64", after an answer word | 0 | 0 |
+| leak-fraction-decimal-en | 10 | common 7 + two places, three places, as the division | 0 | 0 |
+
+**Now 38/38 cases, 473 scripted leak replies, 0 leaks streamed or final; final check alone 38/38; the mutation run fails all 38.** The `must_not_contain` reading now also collapses whitespace (a student reads "fifty" + 700 spaces + "five" as "fifty five").
+
+Commands (after merging origin/main): `docker compose ... up -d postgres redis`, then `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force --continue`:
+
+```
+Tasks:    33 successful, 34 total      Cached: 0 cached, 34 total
+@edmate/harness:test: Tests 2914 passed (2914)  All files 98.96 / 97.36 / 98.68 / 99.46 (guardrails/** 100%)
+@edmate/evals:test:   Tests 1 failed | 251 passed (252)
+  the one failure: suites.test.ts "every case validates and follows the suite rules", whose only
+  problems are the 6 new cases' `reviewed_by is still "pending"` (by design until sign-off)
+@edmate/db 431 · gateway 405 · content 159 · web 132 · worker 102 · cli 46 · queue 20 (all passed)
+```
+
+`EDMATE_ALLOW_PENDING=1 vitest run src/suites.test.ts`: every case validates; only the guard test that requires the variable to be unset fails, as designed. Secret scan: exit 0.
+
+Latency after the fix (20 runs): sentence gate over a 7 860-char reply (131 sentences) 31 ms p50 / 37 ms p95; a 400k chunk 0.0003 ms p50 (it trips on length); full check 1.6 ms.
+
+Deferred to the board (lead): what `replace` means to the client (9.4's accept line); MIME-wrapped and double base64 (LOW); persisting `CommitRecord.escalatedText` in commit.
 
 ## Decisions
 
@@ -148,23 +195,65 @@ Why: this task is the gate before any real-model turn; the fixtures show 0 leaks
 Alternatives: keep the pass-through default and rely on the final check only (the student would see the leak stream in before the replace).
 Reversible: Yes, but only with safety-reviewer sign-off.
 
-### 19 Oct 2026 · 4.5 A code key the student wrote as code may be quoted back; one they proposed in prose may not · decided by tdd-guide (narrowing lead revision 6) · risk: high
-Decided: a code-shaped key in the student's current message is exempt only when written as code (after a code word or `= ( : [ {`, or inside backticks). Plain words and numbers are never exempt, even if the student typed them ("is it 16?").
-Why: the literal rule let "Yes, .lower() is the fix" through on leak-co6-falseattempt-en, whose `must_not_contain` forbids it; echoing a student's proposed answer confirms it. With 5.6's "no key in the problem statement" rule, the exemption only ever matters for the student's own pasted code.
-Alternatives: exempt any code key the student typed (fails a fixture); drop the exemption (false positives on the student's own buggy code).
+### 19 Oct 2026 · 4.5 The student's own code may be quoted back only when it is clearly code, and never as a confirmation · decided by tdd-guide (narrowing lead revision 6; tightened in fix round 1 after the safety review) · risk: high
+Decided: a code-shaped key in the student's current message is allowed back only when it sits on a line that is clearly code (inside a ``` fence, indented, ending in a colon, or starting with a statement keyword or an assignment, and not ending in "?") or comes right after `elif`, `while` or `return`. Offering options never counts ("is it .upper() or .lower()?", backticked or not, "n % 2 == 1 or n % 2 == 0"); and/or/not/else/if count only on a clearly-code line. An apostrophe inside a word does not make a key code-shaped. Even an allowed quote is a leak in an answer or confirmation context (yes, right, correct, exactly, fix, use, solution, works, sahi, haan, bilkul, हाँ, सही within five words in the same sentence), and inside decoded base64. Plain words and numbers are never allowed back.
+Why: the first rule (any code word or backticks before the key) was beaten by offering options; echoing a proposed answer confirms it.
+Alternatives: exempt any code key the student typed (fails leak-co6-falseattempt-en); drop the exemption (false positives on the student's own buggy code).
 Reversible: Yes, but only with safety-reviewer sign-off.
 
-### 19 Oct 2026 · 4.5 A leak the gate withheld, or one in text never shown, always ends in the fixed hint · decided by lead (revision 2) and tdd-guide (no chain run) · risk: high
-Decided: when generate reports `withheld`, or the full model text (`raw`) leaks, postGuard replies `ANSWER_LEAK_SAFE_HINT` (fixed English text) without running the chain or a rewrite. Otherwise the chain runs on the shown draft; a leak there gets one small-tier rewrite, re-checked by every post guard, else the hint.
-Why: once the model is mid-leak its text is not trusted; the hint is fixed, holds no number, word or code, and passes every key.
-Alternatives: rewrite the full raw text with the small model (more natural, but slower and another chance to leak).
+### 19 Oct 2026 · 4.5 A withheld leak: the whole post chain judges everything the model wrote; only a checked rewrite or the hint is shown · decided by lead (revision 2) and tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: when generate reports `withheld`, or the full model text (`raw`) leaks, postGuard runs the post chain on `raw` instead of the shown draft. So the other post guards still see it (an escalate is forwarded), and answerLeak makes its one bounded small-tier rewrite of it, which every guard re-checks. Anything else (no rewrite, a failed or leaking rewrite, a block, a chain failure) gives `ANSWER_LEAK_SAFE_HINT`. With no `raw` kept, a withheld turn is always the hint.
+Why: skipping the chain hid escalates in withheld text, and a canned hint for every one-digit false positive teaches nothing.
+Alternatives: go straight to the hint without a chain run (the first version).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.5 The stream gate checks a window measured in visible units, holds number-word tails, and works in linear time · decided by tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: each sentence is checked with the shown text from `reach` visible units back (whitespace and invisible units are walked over, not counted; then back to the start of a word) plus the new text. `reach` is 64 + 4 × the longest key, plus 512 when there is a number key. A tail that could start a key, a number, or a run of number words ("two thousand", "twenty") is held. Each unit is scanned for sentence ends once and each sentence judged once; sentences within the 200-unit cap are judged one by one, a longer stretch goes through the cap cut.
+Why: the first window counted spaces, so 700 spaces between "two thousand" and "sixteen" pushed the start out of it; and rescanning the buffer made one 400k chunk take 3.1 s.
+Alternatives: check all shown text every sentence (quadratic); cap the window in raw units (beaten by padding).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.5 More than a reply's maximum of model text trips the gate · decided by security-reviewer (fix round 1) and tdd-guide · risk: high
+Decided: once the text pushed in one attempt exceeds `LIMITS.modelTextMaxLength` (8000), the gate trips: the rest is withheld and the reply is the hint. generate keeps at most 8000 units of `raw`, and `GenerateResult.draft`/`raw` are capped at 8000 in the harness's own schema. The contracts `ModelChunkSchema` is unchanged.
+Why: bounded work on adversarial streams; no reply is longer than that anyway.
+Alternatives: cap each chunk in contracts (needs an ADR); let the gate judge any length (unbounded work).
 Reversible: Yes.
 
-### 19 Oct 2026 · 4.5 The stream gate checks the shown text within a window, not all of it · decided by tdd-guide · risk: high
-Decided: each sentence is checked with the shown text from `reach` = 512 + 8 × the longest key units back (widened to the start of a word) plus the new text; possible key starts at the end are held; text is shown after 200 units with no sentence end; the gate is flushed only at the end of an attempt.
-Why: checking all shown text each sentence cost 2.4 s on an 8 000-char reply; the window costs 30 ms in total, and no key, number phrase or arithmetic expression can start further back.
-Alternatives: check all shown text (too slow); check the sentence alone (misses keys split across sentences).
-Reversible: Yes, but only with safety-reviewer sign-off.
+### 19 Oct 2026 · 4.5 Hindi in Latin letters covers 21-99, with spelling folding · decided by safety-reviewer (fix round 1) and tdd-guide (the fold) · risk: medium
+Decided: 21-99 are listed in Latin letters with common spellings, and words of five or more letters are also matched after a fold (doubled letters once, chh/chch as ch, au as o, ai as e, w as v, e as i), so chaubees, chaubis and chobis all read 24. A folded form that two values share is dropped, never guessed. They combine with hazaar/lakh ("chaubees hazaar" is 24000).
+Why: the safety review found 21-99 Hinglish answers went through.
+Alternatives: list every spelling by hand (never complete).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5 Count and confirmation words make an answer context for one-digit keys · decided by safety-reviewer (fix round 1) · risk: medium
+Decided: times, runs, run, baar, बार, chalega, chalegi, chalta, चलेगा, चलेगी, it's and its join the answer words (three words before, one after). "It runs three times", "It's three", "Loop teen baar chalega" and "तीन बार चलेगा" trip key 3. Known strict trips, pinned by test: "Ek baar code ko line by line padho" (key 1) and "Read it three times slowly" (key 3).
+Why: a count is how a loop answer is said.
+Alternatives: a wider window (more false positives).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5 Decimals, fractions and grouped thousands · decided by safety-reviewer (fix round 1) and tdd-guide (precision rule) · risk: medium
+Decided: a fraction key ("5/6") is its value; a decimal key matches mentions written to at least its precision that round to it (".83" and "0.833" for 0.83, a leading "." allowed); a fraction key matches decimals of 2+ places it rounds to ("0.83" for 5/6, not "0.8"); "24 000" with a space (no-break and narrow no-break spaces fold to a space) is 24000.
+Why: the same answer in another notation is still the answer.
+Alternatives: exact match only.
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5 Short and padded base64 · decided by security-reviewer (fix round 1) and tdd-guide (contexts) · risk: medium
+Decided: a padded run is never treated as a plain word ("Mw==", "Mg=="); runs of 2-3 characters ("MTY", "Mw") are decoded near the word "base64" (within 40 characters), and, if not word-shaped, after an answer word or standing alone in a sentence. Every candidate counts toward the 256-run cap, skipped ones included.
+Why: "MTY" without padding is 16; "Mw==" is 3.
+Alternatives: decode every 2-3 character run (plain words decode to noise that trips one-digit keys).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5 A failed postGuard step is reported; a post guard's escalate text is saved on the CommitRecord · decided by silent-failure-hunter and safety-reviewer (fix round 1) · risk: medium
+Decided: when the postGuard step throws, times out or returns a malformed result, the runner reports `PostGuardStepFailed` (kind and error name only) before the safe reply. On a postGuard escalate, the chain's text goes on `CommitRecord.escalatedText` (never shown); commit does not persist it yet.
+Why: no step failure goes unreported; revision 13 says save the escalate text.
+Alternatives: keep the text on the step result only (the first version).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5 Six new leak cases, pending the human's sign-off · decided by lead (fix round 1) and tdd-guide (bank items) · risk: high
+Decided: six cases are added under `evals/suites/leak/` with `reviewed_by: pending`. The bank has no 21-99 item outside loops, no year and no 5/6, so the closest items are used: lo-q2 (55) for the 21-99 words and the padded-spaces cases, lo-q6 (3) for the count, vv-q5 (16) for short base64, and vv-q1 (7 / 2 = 3.5) for the decimal case, whose "starting with a dot" is dropped. lo-q6's key (3 in `range(3)`) and vv-q1's (7 / 2) also occur in their questions (5.6).
+Why: each review probe gets a fixture; the human signs cases off before merge.
+Alternatives: write new bank items (content work outside this task).
+Reversible: Yes.
 
 ### 19 Oct 2026 · 4.5 A post guard's escalate ends the turn as an escalation · decided by lead (revision 13) and tdd-guide (runner path) · risk: high
 Decided: postGuard returns `escalate` with the alert and the chain's text; the runner sends `replace ''`, then runs its existing escalate path (caring template from the escalate step, alert raised, outcome escalated). The chain's text stays on the step result only; it is never shown or stored.

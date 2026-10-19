@@ -10,11 +10,16 @@
 //     "x.lower()" do not end one); the text after the last end waits for more;
 //   - a tail that could be the start of a key ("n % 2" before "== 0") is held until it is known;
 //   - text with no sentence end is shown once CAP units are buffered (cut at a space where it can),
-//     so unbroken text can't stall the reply; a possible key start is still held back;
+//     so unbroken text can't stall the reply; a possible key start (a key's first part, a number,
+//     a run of number words) is still held back;
+//   - each unit is scanned for sentence ends once, and each sentence judged once, with only the
+//     shown text within reach in front (reach counts no whitespace or invisible units), so work
+//     stays linear; more than LIMITS.modelTextMaxLength pushed trips the gate (fix round 1);
 //   - held text is checked and shown only by `flush()`, which the tool loop calls once, at the end
 //     of the attempt, never between tool rounds.
 // `passThroughGate` shows every piece as it comes (tests that need exact chunks use it).
-import type { PedagogyDecision, TurnContext } from '@edmate/contracts';
+import { LIMITS, type PedagogyDecision, type TurnContext } from '@edmate/contracts';
+import { isFormatChar } from '../../guardrails/textFold.js';
 import { type AnswerKeyMatcher, compileAnswerKeys } from './answerKey.js';
 
 export interface StreamGate {
@@ -47,24 +52,6 @@ export const SENTENCE_GATE_CAP = 200;
 const ENDS = new Set(['.', '!', '?', '。', '।']);
 const SPACE = /\s/;
 
-/** Ends of the complete sentences in `buf`, ascending; with `final`, the end of `buf` too. */
-function sentenceEnds(buf: string, final: boolean): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < buf.length; i++) {
-    const ch = buf.charAt(i);
-    if (ch === '\n') {
-      out.push(i + 1);
-    } else if (ENDS.has(ch) && SPACE.test(buf.charAt(i + 1))) {
-      let j = i + 1;
-      while (j < buf.length && SPACE.test(buf.charAt(j)) && buf.charAt(j) !== '\n') j++;
-      out.push(j);
-      i = j - 1;
-    }
-  }
-  if (final && out.at(-1) !== buf.length) out.push(buf.length);
-  return out;
-}
-
 /** Where to cut unbroken text at the cap: after the last space, else at the cap (whole code points). */
 function capCut(buf: string, cap: number): number {
   const head = buf.slice(0, cap);
@@ -74,11 +61,21 @@ function capCut(buf: string, cap: number): number {
   return hi >= 0xd800 && hi <= 0xdbff ? cap - 1 : cap;
 }
 
-/** Where the checked window of the shown text starts: `reach` back, then back to a space. */
+/**
+ * Where the checked window of the shown text starts: `reach` units back, counting only units
+ * that are neither whitespace nor invisible (so padding can't push a key's start out of the
+ * window), then back to the start of that word.
+ */
 function windowStart(released: string, reach: number): number {
-  if (released.length <= reach) return 0;
-  const space = released.slice(0, released.length - reach + 1).search(/\s\S*$/);
-  return space < 0 ? 0 : space;
+  let i = released.length;
+  let counted = 0;
+  while (i > 0 && counted < reach) {
+    i--;
+    const c = released.charAt(i);
+    if (!SPACE.test(c) && !isFormatChar(c)) counted++;
+  }
+  while (i > 0 && !SPACE.test(released.charAt(i - 1))) i--;
+  return i;
 }
 
 /** The gate over one matcher; with no keys it shows every piece as it comes. */
@@ -86,25 +83,52 @@ export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE
   if (keys.empty) return { push: (t) => (t === '' ? [] : [t]), flush: () => [], tripped: false };
   let released = '';
   let buf = '';
+  /** Units of `buf` already scanned for sentence ends (never rescanned). */
+  let scanned = 0;
+  /** Sentence ends found in `buf` and not yet judged, ascending. */
+  let ends: number[] = [];
+  let pushed = 0;
   let tripped = false;
+
+  const trip = () => {
+    tripped = true;
+    buf = '';
+    ends = [];
+    scanned = 0;
+  };
+
+  /** Finds the sentence ends in the new part of `buf`. */
+  const scan = () => {
+    let i = scanned;
+    for (; i < buf.length; i++) {
+      const ch = buf.charAt(i);
+      if (ch === '\n') {
+        ends.push(i + 1);
+      } else if (ENDS.has(ch)) {
+        // Whether it ends a sentence depends on the next unit: wait for it.
+        if (i + 1 >= buf.length) break;
+        if (SPACE.test(buf.charAt(i + 1))) {
+          ends.push(i + 2);
+          i++;
+        }
+      }
+    }
+    scanned = i;
+  };
 
   const drain = (final: boolean): string[] => {
     const out: string[] = [];
     const release = (n: number) => {
-      if (n <= 0) return;
       const piece = buf.slice(0, n);
       buf = buf.slice(n);
       released += piece;
+      scanned -= n;
+      ends = ends.filter((e) => e > n).map((e) => e - n);
       out.push(piece);
-    };
-    const trip = () => {
-      tripped = true;
-      buf = '';
     };
     /**
      * How much of the first `end` units may be shown; -1 when they leak. Checked with the shown
-     * text in front, from `keys.reach` back (widened to the start of a word, so a base64 run or a
-     * number is never cut): a match can't start earlier than that.
+     * text in front, from windowStart: a match can't start earlier than that.
      */
     const safeUpTo = (end: number, atFinalEnd: boolean): number => {
       const from = windowStart(released, keys.reach);
@@ -114,28 +138,48 @@ export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE
       const tail = keys.tailStart(whole);
       return tail < 0 ? end : Math.max(0, tail - (released.length - from));
     };
-
-    while (!tripped && buf !== '') {
-      let best = 0;
-      for (const end of sentenceEnds(buf, final)) {
-        const ok = safeUpTo(end, final && end === buf.length);
-        if (ok < 0) {
-          release(best);
-          trip();
-          return out;
-        }
-        if (ok === end) best = end;
+    /** Judges one sentence end: shown, held (its tail may start a key) or a leak. */
+    const judge = (end: number): boolean => {
+      const ok = safeUpTo(end, false);
+      if (ok < 0) {
+        trip();
+        return false;
       }
-      if (best === 0 && buf.length >= cap) {
+      if (ok === end) release(end);
+      return true;
+    };
+
+    scan();
+    while (!tripped && buf !== '') {
+      const end = ends[0];
+      // Sentences within the cap are judged one by one, each with only the held text before it.
+      if (end !== undefined && end <= cap) {
+        ends.shift();
+        if (!judge(end)) break;
+        continue;
+      }
+      if (buf.length >= cap) {
         const ok = safeUpTo(capCut(buf, cap), false);
         if (ok < 0) {
           trip();
-          return out;
+          break;
         }
-        best = ok;
+        if (ok > 0) {
+          release(ok);
+          continue;
+        }
       }
-      if (best === 0) break;
-      release(best);
+      // A long sentence whose head can't be shown: judge it whole.
+      if (end !== undefined) {
+        ends.shift();
+        if (!judge(end)) break;
+        continue;
+      }
+      break;
+    }
+    if (final && !tripped && buf !== '') {
+      if (safeUpTo(buf.length, true) < 0) trip();
+      else release(buf.length);
     }
     return out;
   };
@@ -143,6 +187,12 @@ export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE
   return {
     push(text) {
       if (tripped || text === '') return [];
+      pushed += text.length;
+      // More than a reply may hold: never judged piece by piece (bounded work), never shown.
+      if (pushed > LIMITS.modelTextMaxLength) {
+        trip();
+        return [];
+      }
       buf += text;
       return drain(false);
     },

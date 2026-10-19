@@ -1,7 +1,8 @@
 // Task 4.5: the sentence gate. Keys are synthetic ("16", "Warm", "n % 2 == 0").
 import { demoPedagogyDecision, demoTurnContext } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
-import { compileAnswerKeys } from './answerKey.js';
+import { type AnswerKeyMatcher, compileAnswerKeys } from './answerKey.js';
+import { LIMITS } from '@edmate/contracts';
 import {
   answerLeakStreamGate,
   SENTENCE_GATE_CAP,
@@ -155,7 +156,7 @@ describe('sentenceGate: leaks', () => {
 
   it('releases the clean sentences before a leak in the same push', () => {
     const g = gate(['16']);
-    expect(g.push('One. Two. x is 16. ')).toEqual(['One. Two. ']);
+    expect(g.push('One. Two. x is 16. ')).toEqual(['One. ', 'Two. ']);
     expect(g.tripped).toBe(true);
   });
 
@@ -186,5 +187,97 @@ describe('sentenceGate: leaks', () => {
     expect(r.shown.length).toBe(sentence.length * 170);
     expect(ms).toBeLessThan(1_000);
     expect(SENTENCE_GATE_CAP).toBe(200);
+  });
+});
+
+describe('sentenceGate: fix round 1', () => {
+  it('a 400k unbroken chunk trips at once, well under 100 ms', () => {
+    const g = gate(['16']);
+    const t0 = Date.now();
+    expect(g.push('a'.repeat(400_000))).toEqual([]);
+    expect(Date.now() - t0).toBeLessThan(100);
+    expect(g.tripped).toBe(true);
+    expect(g.flush()).toEqual([]);
+  });
+
+  /** The matcher for `keys`, counting the units every check reads (work, not wall time). */
+  function counting(keys: string[]) {
+    const m = compileAnswerKeys(keys);
+    const work = { checks: 0, units: 0 };
+    const wrapped: AnswerKeyMatcher = {
+      empty: m.empty,
+      reach: m.reach,
+      leaks: (t) => {
+        work.checks++;
+        work.units += t.length;
+        return m.leaks(t);
+      },
+      tailStart: (t) => {
+        work.units += t.length;
+        return m.tailStart(t);
+      },
+    };
+    return { g: sentenceGate(wrapped), work, reach: m.reach };
+  }
+
+  it('more than LIMITS.modelTextMaxLength pushed in small pieces trips too; work stays linear', () => {
+    const { g, work, reach } = counting(['16']);
+    const shown: string[] = [];
+    let pushed = 0;
+    for (let i = 0; i < 1_000 && !g.tripped; i++) {
+      shown.push(...g.push('Trace it. '));
+      pushed += 10;
+    }
+    expect(g.tripped).toBe(true);
+    expect(shown.join('').length).toBeLessThanOrEqual(LIMITS.modelTextMaxLength);
+    // Each sentence is checked once, with at most the window and the cap in front.
+    expect(work.checks).toBeLessThanOrEqual(pushed / 10);
+    expect(work.units / work.checks).toBeLessThanOrEqual(2 * (reach + SENTENCE_GATE_CAP));
+  });
+
+  it('many held sentences in one chunk are judged once each (linear)', () => {
+    const { g, work, reach } = counting(['.lower()']);
+    const text = 'a. '.repeat(2_600);
+    const r = [...g.push(text), ...g.flush()].join('');
+    expect(r).toBe(text);
+    expect(work.checks).toBeLessThanOrEqual(2_600 + 100);
+    expect(work.units).toBeLessThanOrEqual(work.checks * 2 * (2 * reach + SENTENCE_GATE_CAP));
+  });
+
+  it('whitespace padding never pushes a number phrase out of the window (key 2016)', () => {
+    const g = gate(['2016']);
+    const shown = [
+      ...g.push('So: two thousand'),
+      ...g.push(' '.repeat(700)),
+      ...g.push('sixteen.'),
+      ...g.push(' Done. '),
+      ...g.flush(),
+    ].join('');
+    expect(shown).not.toMatch(/two|thousand|sixteen/);
+    expect(g.tripped).toBe(true);
+  });
+
+  it('invisible padding counts for nothing either', () => {
+    const g = gate(['2016']);
+    const shown = [
+      ...g.push('So: two thousand'),
+      ...g.push('\u200B'.repeat(700)),
+      ...g.push(' sixteen. More. '),
+      ...g.flush(),
+    ].join('');
+    expect(shown).not.toMatch(/two|sixteen/);
+    expect(g.tripped).toBe(true);
+  });
+
+  it('a number word at the cap is held: "twenty" never shows before "four"', () => {
+    const g = gate(['24']);
+    const filler = 'x'.repeat(190);
+    const shown = [...g.push(`${filler} twenty `), ...g.push('four.'), ...g.flush()].join('');
+    expect(shown).not.toContain('twenty');
+    expect(g.tripped).toBe(true);
+    // Clean continuation: the held word is shown once it is known not to be the key.
+    const g2 = gate(['24']);
+    const shown2 = [...g2.push(`${filler} twenty `), ...g2.push('apples. ')].join('');
+    expect(shown2).toContain('twenty apples');
   });
 });

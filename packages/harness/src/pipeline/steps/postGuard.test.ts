@@ -135,18 +135,72 @@ describe('postGuard: answerLeak', () => {
     expect(s.reported.map((e) => (e as Error).name)).toEqual(['TurnAbort']);
   });
 
-  it('a leak the stream gate withheld forces the hint without running the chain', async () => {
+  it('a withheld leak: the chain judges the full model text, and its one rewrite of it is used', async () => {
+    const s = setup([[say('Good question. Look at the last line again.'), used]]);
+    const r = await s.run('Good question. ', { raw: 'Good question. It is 16.', withheld: true });
+    expect(r).toEqual({
+      result: 'replace',
+      text: 'Good question. Look at the last line again.',
+      guards: leakTrace,
+      usage: [usageSmall],
+    });
+    expect(s.spy.requests[0]?.messages).toEqual([
+      { role: 'user', content: 'Good question. It is 16.' },
+    ]);
+  });
+
+  it('a withheld leak whose rewrite fails gives the hint', async () => {
     const s = setup();
     expect(
       await s.run('Good question. ', { raw: 'Good question. It is 16.', withheld: true }),
-    ).toEqual(hint([{ name: 'answerLeak', ok: false, action: 'rewrite' }]));
-    expect(s.spy.requests).toEqual([]);
+    ).toEqual(hint(leakTrace));
+    expect(s.reported.map((e) => (e as Error).name)).toEqual(['ScriptedGatewayError']);
+  });
+
+  it('a withheld leak no guard rewrites (no raw kept) still gives the hint', async () => {
+    const s = setup();
+    expect(await s.run('Good question. ', { withheld: true })).toEqual(
+      hint([{ name: 'answerLeak', ok: true }]),
+    );
+  });
+
+  it('a withheld leak still reaches the other post guards: an escalate is caught', async () => {
+    const s = setup();
+    const step = createPostGuard([
+      fakeGuard<PostGuardCtx>('answerLeak', 'post', () => ({ ok: true })),
+      fakeGuard<PostGuardCtx>('tone', 'post', (text) =>
+        text.includes('hurt')
+          ? { ok: false, action: 'escalate', alert: demoSafetyAlert }
+          : { ok: true },
+      ),
+    ]);
+    const r = await s.run(
+      'Fine. ',
+      { raw: 'Fine. I want to hurt myself, 16.', withheld: true },
+      step,
+    );
+    expect(r).toMatchObject({ result: 'escalate', alert: demoSafetyAlert });
+    // A failure or block on a known leak is the hint, whoever blocked.
+    const blocking = createPostGuard([
+      fakeGuard<PostGuardCtx>('tone', 'post', () => ({ ok: false, action: 'block', reason: 'x' })),
+    ]);
+    expect(await s.run('Fine. ', { raw: 'Fine. 16.', withheld: true }, blocking)).toMatchObject({
+      text: ANSWER_LEAK_SAFE_HINT,
+    });
+    const failing = createPostGuard([
+      fakeGuard<PostGuardCtx>('tone', 'post', () => {
+        throw new Error('boom');
+      }),
+    ]);
+    expect(await s.run('Fine. ', { raw: 'Fine. 16.', withheld: true }, failing)).toMatchObject({
+      text: ANSWER_LEAK_SAFE_HINT,
+    });
   });
 
   it('checks the full model text, not only the shown draft', async () => {
     const s = setup();
     expect(await s.run('Good question. ', { raw: 'Good question. It is 16.' })).toEqual(
-      hint([{ name: 'answerLeak', ok: false, action: 'rewrite' }]),
+      hint(leakTrace),
     );
     // Clean full text: the chain runs on the draft as usual.
     expect(await s.run('Good. ', { raw: 'Good. Try again.', withheld: false })).toMatchObject({

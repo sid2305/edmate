@@ -1,4 +1,4 @@
-import type { ModelChunk, ModelRequest, Usage } from '@edmate/contracts';
+import { LIMITS, type ModelChunk, type ModelRequest, type Usage } from '@edmate/contracts';
 import { turnContextFull, usageMain } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -125,6 +125,13 @@ describe('runToolLoop: rounds', () => {
     expect(s.spy.requests[0]?.tools?.map((t) => t.name)).toEqual(['calculator']);
     expect(s.spy.requests[0]?.messages).toEqual(base.messages);
     expect(s.checks).toBe(1);
+  });
+
+  it('raw keeps at most one reply of model text (fix round 1)', async () => {
+    const s = setup([[say('a'.repeat(LIMITS.modelTextMaxLength - 10)), say('b'.repeat(50)), used]]);
+    const out = await s.run();
+    expect(out.raw).toHaveLength(LIMITS.modelTextMaxLength);
+    expect(out.raw.endsWith('b'.repeat(10))).toBe(true);
   });
 
   it('no tools offered: the request has no tools field', async () => {
