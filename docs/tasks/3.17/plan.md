@@ -196,3 +196,10 @@ profiles regardless of this task. Log it `risk: high` and ask the lead to schedu
 task instead of blocking this one.
 
 **READY**
+
+## Lead answers (19 Oct 2026, after the security plan review: READY TO BUILD)
+
+- DPDP and minors: agreed, it's out of scope here. Board task 6.0b now exists (the DPDP gate for learner memory, before any India pilot); log the gap risk: high, pointing at 6.0b.
+- Idempotency: the content-hash id must use the event's ORIGINAL timestamp, never one re-stamped on retry. Say so in a code comment and in the handoff. The queue job id and the repository's per-event id use ONE shared serialisation function (fixed field order and encoding), with a test that both produce the same id.
+- Reviewers: security-reviewer (repositories) and database-reviewer (the migration), both sonnet. risk: high entries for the TeacherQuestion dedup index and the DPDP gap.
+- Build: tdd-guide on sonnet.
