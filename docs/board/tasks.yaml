@@ -603,7 +603,7 @@ tasks:
   accept: an agent config with hi is rejected with a clear message; tests.
   deps:
   - '3.11'
-  status: running
+  status: review
   branch: m3/3.11c-english-only-agents
   model: build:sonnet
 - id: 3.11d
@@ -916,9 +916,9 @@ tasks:
   accept: tests for each probe in the 4.5 re-review; no new false positives on the existing negative list.
   deps:
   - '4.5'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.5c-answerleak-followups
+  model: build:sonnet
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'
