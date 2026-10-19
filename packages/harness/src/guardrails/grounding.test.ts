@@ -252,6 +252,40 @@ describe('grounding: Rule C (numbers recomputed)', () => {
 
 describe('grounding: false premises (lead answer 5)', () => {
   const premise = (studentText: string) => x({ studentText });
+  const correction = {
+    result: {
+      ok: false,
+      action: 'rewrite',
+      text: PREMISE_CORRECTION_REPLY,
+      reason: 'false_premise',
+    },
+    usage: [],
+  };
+
+  it.each([
+    // The safety review's three probes (fix round 1, HIGH 1).
+    ['6 - 3 is 2, right?', 'Yes, 6 - 3 is 2. Well done!'],
+    ['so 2 * 1 = 3 right', 'Correct, 2 * 1 = 3.'],
+    ['7 // 2 is 4, right?', 'Yes, exactly right, well done! That is step 3 in your notes.'],
+    // The expression repeated with no claim, and an operand that equals the right value.
+    ['7 // 2 is 4, right?', 'Hmm, 7 // 2 rounds down, as your notes say [1].'],
+    ['6 - 3 is 2, right?', 'Think about 6 - 3 again: 3 is what you start with?'],
+  ])('student %j, reply %j: the correction prompt, no judge call', async (studentText, reply) => {
+    const { j, judge } = judgeOf(GROUNDED);
+    expect(await run(reply, { ...premise(studentText), judge })).toEqual(correction);
+    expect(j.calls).toEqual([]);
+  });
+
+  it('a reply that states the right value for the same expression, or says it outside any sum, goes on', async () => {
+    for (const reply of ['Not quite: 6 - 3 is 3 [1].', 'Not quite, the answer is three.']) {
+      const { j, judge } = judgeOf(GROUNDED);
+      expect(await run(reply, { ...premise('6 - 3 is 2, right?'), judge }), reply).toEqual({
+        result: { ok: true },
+        usage: [usageSmall],
+      });
+      expect(j.calls).toHaveLength(1);
+    }
+  });
 
   it('a wrong number in the student’s message the reply does not correct: the WHOLE reply becomes the correction prompt', async () => {
     for (const studentText of [
@@ -319,14 +353,36 @@ describe('grounding: Rule D (the judge)', () => {
     expect(await run('Python 4 will make // exact.', x({ judge }))).toEqual(fallback([usageSmall]));
   });
 
-  it('fails closed: no judge, a failed call, or a throw is "not grounded"', async () => {
-    expect(await run('Floor division rounds down.', x())).toEqual(fallback());
+  it('fails closed on an outage (no judge, no answer, a throw): the safe reply, code judge_unavailable (fix round 1)', async () => {
+    const unavailable = (text: string, usage: Usage[] = []) => ({
+      result: { ok: false, action: 'rewrite', text, reason: 'judge_unavailable' },
+      usage,
+    });
+    const safe = { safeReply: 'SAFE REPLY' };
+    expect(await run('Floor division rounds down.', x(safe))).toEqual(unavailable('SAFE REPLY'));
     const failed = judgeOf(() => ({ text: undefined, usage: [usageSmall] })).judge;
-    expect(await run('Floor division rounds down.', x({ judge: failed }))).toEqual(
-      fallback([usageSmall]),
+    expect(await run('Floor division rounds down.', x({ ...safe, judge: failed }))).toEqual(
+      unavailable('SAFE REPLY', [usageSmall]),
     );
     const throwing = judgeOf(() => Promise.reject(new Error('down'))).judge;
-    expect(await run('Floor division rounds down.', x({ judge: throwing }))).toEqual(fallback());
+    expect(await run('Floor division rounds down.', x({ ...safe, judge: throwing }))).toEqual(
+      unavailable('SAFE REPLY'),
+    );
+    // No safe reply given: the answerLeak hint, never the "not covered" text.
+    expect(await run('Floor division rounds down.', x())).toEqual(
+      unavailable(ANSWER_LEAK_SAFE_HINT),
+    );
+    // The safe reply itself passes as a fixed text.
+    expect(await run('SAFE REPLY', x(safe))).toEqual({ result: { ok: true }, usage: [] });
+  });
+
+  it('a judge that DID answer, but not with the strict verdict, is "not grounded"', async () => {
+    for (const text of ['', 'yes', '{"grounded":"true"}', 'x'.repeat(500)]) {
+      const { judge } = judgeOf(text);
+      expect(await run('Floor division rounds down.', x({ judge, safeReply: 'S' })), text).toEqual(
+        fallback([usageSmall]),
+      );
+    }
   });
 });
 
@@ -377,6 +433,10 @@ describe('the judge request (lead answer 6)', () => {
     for (const exempt of ['encouragement', 'questions back', "student's own", 'not covered']) {
       expect(GROUNDING_JUDGE_SYSTEM).toContain(exempt);
     }
+    // Fix round 1 (safety MEDIUM 4): a claim taken from the student still needs the material.
+    expect(GROUNDING_JUDGE_SYSTEM).toContain(
+      "A claim taken from the student's message still needs support from the material",
+    );
     expect(GROUNDING_JUDGE_SYSTEM).toContain('{"grounded": true}');
   });
 

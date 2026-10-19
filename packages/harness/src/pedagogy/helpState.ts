@@ -68,6 +68,15 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
 }
 
 /**
+ * `next` with the session's grounding escalation count set to `asks` (task 4.7): decide's ladder
+ * may rebuild the help state without it. Unchanged when `asks` is 0.
+ */
+export function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp {
+  if (asks === 0) return next;
+  return { ...next, help: { ...next.help, groundingAsks: asks } };
+}
+
+/**
  * The value to save (3.8). Throws on an invalid state or one over
  * `LIMITS.helpStateMaxJsonLength`, so a bad state is never written.
  */

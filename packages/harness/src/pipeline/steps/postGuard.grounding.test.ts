@@ -173,6 +173,7 @@ describe('postGuard: grounding', () => {
       result: 'replace',
       text: ASK,
       escalateToTeacher: true,
+      groundingRewrote: true,
       guards: trace([{ ok: false, action: 'rewrite' }, { ok: true }]),
       usage: [usageSmall],
     });
@@ -184,6 +185,7 @@ describe('postGuard: grounding', () => {
     expect(await s.run('Yes, that is right!')).toEqual({
       result: 'replace',
       text: PREMISE_CORRECTION_REPLY,
+      groundingRewrote: true,
       guards: trace([{ ok: false, action: 'rewrite' }, { ok: true }]),
       usage: [],
     });
@@ -207,16 +209,17 @@ describe('postGuard: grounding', () => {
     expect(JSON.stringify(r)).not.toContain('42');
   });
 
-  it('fails closed to the ask-teacher reply when the judge times out, inside the step budget', async () => {
+  it('a judge that times out fails closed to the SAFE reply: no teacher, a code-only report (fix round 1)', async () => {
     const s = setup({ judge: 'grounded', judgeDelayMs: 60_000 });
     const t0 = s.clock.now();
-    expect(await s.run('Floor division rounds down [1].')).toMatchObject({
-      result: 'replace',
-      text: ASK,
-      escalateToTeacher: true,
-    });
+    const r = await s.run('Floor division rounds down [1].');
+    expect(r).toMatchObject({ result: 'replace', text: TEST_SAFE_REPLY, groundingRewrote: true });
+    expect(r).not.toHaveProperty('escalateToTeacher');
     expect(s.clock.now() - t0).toBeLessThan(BUDGET);
     expect(s.clock.now() - t0).toBeLessThanOrEqual(GROUNDING_JUDGE_TIMEOUT_MS + 1);
+    expect(s.reported.map(String)).toEqual([
+      'GroundingJudgeUnavailable: grounding judge unavailable: sent the safe reply',
+    ]);
   });
 
   it('fails closed when the judge call errors (reported) or the turn is at its cost ceiling', async () => {
@@ -224,23 +227,39 @@ describe('postGuard: grounding', () => {
       judge: 'script',
       rewrites: [[say('{"grounded":'), { type: 'error', code: 'provider_error' }]],
     });
-    expect(await failing.run('Floor division rounds down [1].')).toMatchObject({ text: ASK });
-    expect(failing.reported.map((e) => (e as Error).name)).toEqual(['ScriptedProviderError']);
+    const out = await failing.run('Floor division rounds down [1].');
+    expect(out).toMatchObject({ text: TEST_SAFE_REPLY });
+    expect(out).not.toHaveProperty('escalateToTeacher');
+    expect(failing.reported.map((e) => (e as Error).name)).toEqual([
+      'ScriptedProviderError',
+      'GroundingJudgeUnavailable',
+    ]);
 
     const broke = setup({ overBudget: true });
-    expect(await broke.run('Floor division rounds down [1].')).toMatchObject({ text: ASK });
+    expect(await broke.run('Floor division rounds down [1].')).toMatchObject({
+      text: TEST_SAFE_REPLY,
+    });
     expect(broke.judged).toEqual([]);
-    expect(broke.reported.map((e) => (e as Error).name)).toEqual(['TurnAbort']);
+    expect(broke.reported.map((e) => (e as Error).name)).toEqual([
+      'TurnAbort',
+      'GroundingJudgeUnavailable',
+    ]);
   });
 
-  it('a judge that answers anything but the strict verdict, or calls a tool, fails closed', async () => {
+  it('a judge that answers anything but the strict verdict is "not grounded"; one that calls a tool gave no answer', async () => {
     const chatty = setup({ judge: () => 'Looks grounded to me! {"grounded": true}' });
-    expect(await chatty.run('Floor division rounds down [1].')).toMatchObject({ text: ASK });
+    expect(await chatty.run('Floor division rounds down [1].')).toMatchObject({
+      text: ASK,
+      escalateToTeacher: true,
+    });
+    expect(chatty.reported).toEqual([]);
     const tool = setup({
       judge: 'script',
       rewrites: [[{ type: 'tool_call', id: 'c1', name: 'calculator', args: {} }, used]],
     });
-    expect(await tool.run('Floor division rounds down [1].')).toMatchObject({ text: ASK });
+    expect(await tool.run('Floor division rounds down [1].')).toMatchObject({
+      text: TEST_SAFE_REPLY,
+    });
   });
 
   it('uses the locale’s ask-teacher reply; an empty, oversized or failing one gives the built-in one', async () => {

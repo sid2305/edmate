@@ -304,6 +304,11 @@ export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
        * the turn's TeacherQuestion if decide had not, within the per-session cap.
        */
       escalateToTeacher?: true;
+      /**
+       * grounding replaced the reply (any reason; 4.7 fix round 1). With text already streamed,
+       * the runner flags it in the trace (code only) so 7.x can size the streamed window.
+       */
+      groundingRewrote?: true;
     }
   /**
    * A post guard escalated (4.5 forwards it; later post guards may raise it). The runner replies
@@ -393,6 +398,8 @@ export interface Steps {
       /** decide's numbered sources, for the `sources` event. */
       sources: SourceRef[];
       attempt: 'primary' | 'fallback';
+      /** decide.fallback chose the decision (4.7 fix round 1): generate holds the reply. */
+      fromFallback?: true;
     },
     emit: Emit,
   ): Promise<GenerateResult>;

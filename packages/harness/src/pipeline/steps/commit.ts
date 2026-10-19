@@ -2,25 +2,30 @@
 // 1. The scrubbed student message (when the scrub passed and the input had text), timestamped
 //    when the turn started, with an id drawn here once (a worker retry replays the same job).
 // 2. The agent's reply (when the student was shown one), with the `done` event's message id.
-// 3. The session's next help state (when decide produced one), via SessionStateStore only.
-// 4. Learner-profile evidence (when the turn produced any — task 3.17), via `profiles.applyEvidence`.
-// 5. The TeacherQuestion for an `ask_teacher` turn, or one the grounding guard escalated (4.7,
-//    `escalateToTeacher`), as a fallback, when the live (3.7) attempt left `teacherQuestionId`
-//    unset (its own open timed out or failed) — never a second question when it is already set
-//    (`teacherQuestion.ts`'s shared, idempotent open).
+// 3. A grounding escalation's TeacherQuestion (4.7, `escalateToTeacher`) when the live attempt
+//    left `teacherQuestionId` unset, BEFORE the help state is saved: only an open that succeeds
+//    counts toward the session's cap (fix round 1). When it fails too, the escalation is lost:
+//    the step finishes the rest, then fails with GroundingEscalationLost (error name only).
+// 4. The session's next help state (when decide produced one), via SessionStateStore only.
+// 5. Learner-profile evidence (when the turn produced any — task 3.17), via `profiles.applyEvidence`.
+// 6. The TeacherQuestion for an `ask_teacher` turn, as a fallback, when the live (3.7) attempt
+//    left `teacherQuestionId` unset (its own open timed out or failed) — never a second question
+//    when it is already set (`teacherQuestion.ts`'s shared, idempotent open).
 //
 // The answer key lives in `record.next` and in `record.decision` (systemPrompt, mustNotReveal);
 // it goes to saveHelpState and nowhere else (ADR-0005): messages, evidence and the TeacherQuestion
 // carry only `input.text` (scrubbed) and `replyText` — never the answer key or locked text. In
 // production the ports are queue-backed (@edmate/queue): this resolves once the jobs are
 // enqueued, never on the database write.
-import { serializeSessionHelp } from '../../pedagogy/helpState.js';
+import { serializeSessionHelp, withGroundingAsks } from '../../pedagogy/helpState.js';
+import { errorName, GroundingEscalationLost } from '../errors.js';
 import { openTeacherQuestion } from '../teacherQuestion.js';
 import type { Steps } from '../types.js';
 
 export const commit: Steps['commit'] = async (env, record) => {
   const { transcripts, sessionState, profiles, teacherQuestions, ids } = env.deps;
   const text = record.input?.text;
+  const asks = text !== undefined && text.trim() !== '' && record.teacherQuestionId === undefined;
   if (text !== undefined) {
     await transcripts.append(record.sessionId, {
       id: ids.next('message'),
@@ -37,18 +42,24 @@ export const commit: Steps['commit'] = async (env, record) => {
       createdAt: record.createdAt,
     });
   }
-  if (record.next !== undefined) {
-    await sessionState.saveHelpState(record.sessionId, serializeSessionHelp(record.next));
+  let next = record.next;
+  let lost: GroundingEscalationLost | undefined;
+  if (asks && record.escalateToTeacher === true && record.decision?.move !== 'ask_teacher') {
+    try {
+      await openTeacherQuestion(teacherQuestions, record.entitled.entitlement, text);
+      if (next !== undefined) next = withGroundingAsks(next, (next.help.groundingAsks ?? 0) + 1);
+    } catch (error) {
+      lost = new GroundingEscalationLost(errorName(error));
+    }
+  }
+  if (next !== undefined) {
+    await sessionState.saveHelpState(record.sessionId, serializeSessionHelp(next));
   }
   if (record.evidence !== undefined && record.evidence.length > 0) {
     await profiles.applyEvidence(record.evidence);
   }
-  if (
-    (record.decision?.move === 'ask_teacher' || record.escalateToTeacher === true) &&
-    record.teacherQuestionId === undefined &&
-    text !== undefined &&
-    text.trim() !== ''
-  ) {
+  if (asks && record.decision?.move === 'ask_teacher') {
     await openTeacherQuestion(teacherQuestions, record.entitled.entitlement, text);
   }
+  if (lost !== undefined) throw lost;
 };

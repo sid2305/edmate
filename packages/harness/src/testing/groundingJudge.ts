@@ -4,10 +4,11 @@
 // `overlapJudge` is non-circular (lead answer 7): its verdict follows from the request it gets,
 // never from the test's expectation. It reads the delimited blocks grounding sends (material, the
 // student's message, the reply) and says grounded only when every claim sentence of the reply
-// shares most of its content words with a material chunk or the student's message. The rubric's
-// exemptions are mirrored: questions back, encouragement, and saying something is not covered or
-// has gone to the teacher need no support; agreeing with the student ("yes", "haan") is a claim
-// that the material alone must support.
+// shares most of its content words with the material. The student's words are never support (fix
+// round 1, safety MEDIUM 4: a claim taken from the student's message still needs the material).
+// The rubric's exemptions are mirrored: questions back, encouragement, and saying something is
+// not covered or has gone to the teacher need no support; agreeing with the student ("yes",
+// "haan") is a claim like any other.
 import type { ModelChunk, ModelGateway, ModelRequest } from '@edmate/contracts';
 import { usageSmall } from '@edmate/contracts/fixtures';
 import { GROUNDING_JUDGE_SYSTEM } from '../guardrails/grounding.js';
@@ -80,11 +81,10 @@ function supported(sentence: string, support: Set<string>): boolean {
 /** The non-circular fake judge's decision: true when every claim sentence is supported. */
 export function overlapGrounded(input: JudgeInput): boolean {
   const material = new Set(input.chunks.flatMap(words));
-  const both = new Set([...material, ...words(input.studentText)]);
   return sentences(input.reply).every((s) => {
     if (AGREE.test(s)) return supported(s.replace(AGREE, ''), material);
     if (s.endsWith('?') || CHEER.test(s) || META.test(s)) return true;
-    return supported(s, both);
+    return supported(s, material);
   });
 }
 

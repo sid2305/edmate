@@ -3,7 +3,12 @@
 // surgically. Pairing is strict (lead answer 9): only "expr is/=/== N" and the same few connector
 // words; anything looser is left to the judge.
 import { describe, expect, it } from 'vitest';
-import { arithmeticClaims, correctArithmeticClaims } from './numbers.js';
+import {
+  arithmeticClaims,
+  arithmeticExpressions,
+  correctArithmeticClaims,
+  statedNumbers,
+} from './numbers.js';
 
 const wrong = (text: string) => arithmeticClaims(text).filter((c) => !c.correct);
 
@@ -91,5 +96,27 @@ describe('correctArithmeticClaims', () => {
       text: 'Nothing to fix here.',
       fixed: 0,
     });
+  });
+});
+
+describe('fix round 1: expressions and stated numbers (task 4.7, safety HIGH 1)', () => {
+  it('each claim carries its expression, spaces dropped', () => {
+    expect(arithmeticClaims('6 - 3 is 2, and 7  //  2 = 3').map((c) => c.expr)).toEqual([
+      '6-3',
+      '7//2',
+    ]);
+  });
+
+  it('lists every arithmetic expression, claimed or not', () => {
+    expect(arithmeticExpressions('Yes, 6 - 3 rounds to 2, and 2 * 1 = 3.')).toEqual(['6-3', '2*1']);
+    expect(arithmeticExpressions('No maths here, step 3.')).toEqual([]);
+  });
+
+  it('stated numbers leave out every number inside an arithmetic expression', () => {
+    expect([...statedNumbers('Yes, 6 - 3 is 2. Well done!')]).toEqual(['2']);
+    expect([...statedNumbers('Correct, 2 * 1 = 3.')]).toEqual(['3']);
+    expect([...statedNumbers('That is step 3 in your notes.')]).toEqual(['3']);
+    expect(statedNumbers('Not quite: it is three.').has('3')).toBe(true);
+    expect(statedNumbers('7 // 2').size).toBe(0);
   });
 });

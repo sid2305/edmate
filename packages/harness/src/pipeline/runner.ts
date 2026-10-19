@@ -28,7 +28,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
-import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
+import { type HelpState, withGroundingAsks } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -102,6 +102,12 @@ import type {
 } from './types.js';
 
 export { LAST_RESORT_DISTRESS_REPLY };
+
+/**
+ * The trace action (on a `grounding` guard entry) marking a reply grounding replaced after the
+ * student had seen it stream in (task 4.7 fix round 1). A code, never text.
+ */
+export const STREAMED_REPLACED = 'replaced_streamed';
 
 export interface RunTurnOptions {
   deps: PipelineDeps;
@@ -187,6 +193,8 @@ class Turn {
   private shown = false;
   /** A post guard's escalate text (4.5): saved with the turn, never shown. */
   private escalatedText: string | undefined;
+  /** decide.fallback chose the decision: generate holds the reply (4.7 fix round 1). */
+  private decideFellBack = false;
 
   constructor(
     private readonly input: TurnInput,
@@ -493,12 +501,15 @@ class Turn {
       );
     }
     const { decision } = decided;
+    // The session's grounding escalation count rides along on every path that saves the help
+    // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
+    const asked = built.helpState.groundingAsks ?? 0;
     const base = {
       input: scrubbed,
       intent,
       context: ctx,
       decision,
-      next: decided.next,
+      next: withGroundingAsks(decided.next, asked),
       promptPack: decided.promptPack,
     };
 
@@ -526,8 +537,9 @@ class Turn {
     const { replyText } = post;
 
     // grounding sent an ungrounded reply to the teacher (4.7): one question per turn (none when
-    // decide already asked), within the session's cap.
-    const asked = built.helpState.groundingAsks ?? 0;
+    // decide already asked), within the session's cap. Only a question that was opened counts
+    // (fix round 1): a failed live open leaves the count to commit, which counts its own fallback
+    // open only if it succeeds.
     const escalating =
       post.escalateToTeacher &&
       decision.move !== 'ask_teacher' &&
@@ -541,7 +553,10 @@ class Turn {
       e,
       {
         ...base,
-        next: withGroundingAsks(decided.next, asked + (escalating ? 1 : 0)),
+        next: withGroundingAsks(
+          decided.next,
+          asked + (escalating && questionId !== undefined ? 1 : 0),
+        ),
         outcome: 'replied',
         replyText,
         ...(questionId === undefined ? {} : { teacherQuestionId: questionId }),
@@ -751,6 +766,7 @@ class Turn {
         throw new HarnessError(`decide.fallback returned move "${move}"`);
       }
       this.trace.step('decide', d.ms, 'fallback');
+      this.decideFellBack = true;
       return fb;
     } catch (error) {
       this.background.push({ task: 'runner', error });
@@ -781,7 +797,13 @@ class Turn {
           const tg = buildTurnGateway(this.deps, policy, this.billing as TurnBilling);
           return this.steps.generate(
             this.env(input, cancel, tg, 'generate'),
-            { ctx, decision, sources, attempt },
+            {
+              ctx,
+              decision,
+              sources,
+              attempt,
+              ...(this.decideFellBack ? { fromFallback: true as const } : {}),
+            },
             this.emitter(cancel, state),
           );
         },
@@ -846,6 +868,11 @@ class Turn {
       if (p.value.result === 'escalate') {
         this.escalatedText = p.value.text;
         return { alert: p.value.alert };
+      }
+      // grounding replaced text the student had already seen stream in: flagged in the trace,
+      // code only, so 7.x can size that window (4.7 fix round 1).
+      if (p.value.groundingRewrote === true && this.shown) {
+        this.trace.addGuards([{ name: 'grounding', ok: false, action: STREAMED_REPLACED }]);
       }
       this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
@@ -952,15 +979,6 @@ class Turn {
       this.background.push({ task: name, error });
     }
   }
-}
-
-/**
- * The help state to save with the session's grounding escalation count carried over (decide's
- * ladder may rebuild the state without it). Unchanged when the count is 0 (task 4.7).
- */
-function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp {
-  if (asks === 0) return next;
-  return { ...next, help: { ...next.help, groundingAsks: asks } };
 }
 
 /** What a failed postGuard step reports: the kind and the underlying error's name. */

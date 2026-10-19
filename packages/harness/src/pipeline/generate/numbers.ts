@@ -534,6 +534,28 @@ export interface ArithmeticClaim {
   /** `computed` as text, sign kept: what a fix writes. */
   computedText: string;
   correct: boolean;
+  /** The expression as folded text with spaces dropped ("7//2"), to match it across texts. */
+  expr: string;
+}
+
+const exprKey = (s: string): string => s.replace(/\s+/g, '');
+
+/** Every arithmetic expression in `text` (claimed or not), as `ArithmeticClaim.expr` keys. */
+export function arithmeticExpressions(text: string): string[] {
+  const s = foldForNumbers(text);
+  return arithmeticSpans(s).map((a) => exprKey(s.slice(a.start, a.end)));
+}
+
+/**
+ * The numbers `text` states outside any arithmetic expression (fix round 1, task 4.7): the
+ * operands of "6 - 3 is 2" are not statements, so this reads only "2".
+ */
+export function statedNumbers(text: string): Set<string> {
+  let s = foldForNumbers(text);
+  for (const a of arithmeticSpans(s)) {
+    s = s.slice(0, a.start) + ' '.repeat(a.end - a.start) + s.slice(a.end);
+  }
+  return numbersMentioned(s);
 }
 
 /**
@@ -582,6 +604,7 @@ export function arithmeticClaims(text: string): ArithmeticClaim[] {
       computed: span.value,
       computedText,
       correct: claimHolds(`${sign === '' ? '' : '-'}${digits}`, span.value),
+      expr: exprKey(expr),
     });
   }
   return out;

@@ -52,7 +52,7 @@ import { askTeacherReplyText, GROUNDING_REASONS } from '../../guardrails/groundi
 import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
-import { HarnessError } from '../errors.js';
+import { GroundingJudgeUnavailable, HarnessError } from '../errors.js';
 import { compileAnswerKeys } from '../generate/answerKey.js';
 import { StreamReader } from '../generate/streamReader.js';
 import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
@@ -222,20 +222,29 @@ export function askTeacherReplyFor(env: StepEnv): string {
   return askTeacherReplyText();
 }
 
-/** The safe and distress replies: every post guard passes them as they are (lead answer 3). */
-function fixedTextsFor(env: StepEnv, ctx: TurnContext): string[] {
-  const out = [LAST_RESORT_DISTRESS_REPLY];
+/** A locale text, when it is usable; a throw is reported and gives none. */
+function localeText(env: StepEnv, get: () => unknown): string | undefined {
+  try {
+    const text = get();
+    return usable(text) ? text : undefined;
+  } catch (error) {
+    env.report(error);
+    return undefined;
+  }
+}
+
+/**
+ * The safe reply (grounding's reply when its judge is unavailable) and the fixed texts every post
+ * guard passes as they are: the safe and distress replies (lead answer 3).
+ */
+function fixedTextsFor(env: StepEnv, ctx: TurnContext): { safe?: string; texts: string[] } {
   const { safeReply, distress } = env.deps.fallbackReplies;
   const lang = env.input.lang;
-  for (const get of [() => safeReply(lang), () => distress(lang, ctx.locale)]) {
-    try {
-      const text: unknown = get();
-      if (usable(text)) out.push(text);
-    } catch (error) {
-      env.report(error);
-    }
-  }
-  return out;
+  const safe = localeText(env, () => safeReply(lang));
+  const care = localeText(env, () => distress(lang, ctx.locale));
+  const texts = [LAST_RESORT_DISTRESS_REPLY];
+  for (const t of [safe, care]) if (t !== undefined) texts.push(t);
+  return safe === undefined ? { texts } : { safe, texts };
 }
 
 /** Wraps grounding so the step reads its reason code (never its text) for the escalation. */
@@ -314,6 +323,7 @@ export function createPostGuard(
     const share = (name: string, part: number): number =>
       Math.floor((slices.get(name) ?? 0) * part);
     const reasons: string[] = [];
+    const fixed = fixedTextsFor(env, ctx);
     const x: PostGuardCtx = {
       ctx,
       decision,
@@ -326,7 +336,8 @@ export function createPostGuard(
         Math.min(GROUNDING_JUDGE_TIMEOUT_MS, share('grounding', JUDGE_SHARE)),
       ),
       askTeacherReply: askTeacherReplyFor(env),
-      fixedTexts: fixedTextsFor(env, ctx),
+      fixedTexts: fixed.texts,
+      ...(fixed.safe === undefined ? {} : { safeReply: fixed.safe }),
     };
     const r: GuardChainResult = await runGuardChain(
       guards.map((g) => watched(g, reasons)),
@@ -336,6 +347,10 @@ export function createPostGuard(
     );
     const { guards: trace, usage } = r;
     if (trace.some(lockedLeakHit)) env.report(new LockedLeakDetected('reply'));
+    // A metric, code only: the judge gave no answer and the turn got the safe reply.
+    if (reasons.includes(GROUNDING_REASONS.judgeUnavailable)) {
+      env.report(new GroundingJudgeUnavailable());
+    }
     switch (r.outcome) {
       case 'ok': {
         // A known leak that no guard rewrote is never shown: fail to the hint.
@@ -346,6 +361,7 @@ export function createPostGuard(
           result: 'replace',
           text: r.text,
           ...(escalate ? { escalateToTeacher: true as const } : {}),
+          ...(reasons.length > 0 ? { groundingRewrote: true as const } : {}),
           guards: trace,
           usage,
         };

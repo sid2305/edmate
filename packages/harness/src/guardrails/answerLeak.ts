@@ -72,6 +72,11 @@ export interface PostGuardCtx {
   readonly askTeacherReply?: string;
   /** Fixed texts every post guard passes as they are: the safe and distress replies (4.7). */
   readonly fixedTexts?: readonly string[];
+  /**
+   * The locale's safe reply: grounding sends it when its judge is unavailable (4.7 fix round 1).
+   * Absent: ANSWER_LEAK_SAFE_HINT.
+   */
+  readonly safeReply?: string;
 }
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };

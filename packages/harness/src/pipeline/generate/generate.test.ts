@@ -113,9 +113,9 @@ function setup(
     events,
     reported,
     recorded,
-    run: () =>
+    run: (extra: { fromFallback?: true } = {}) =>
       clock.drive(
-        generate(env, { ctx: c, decision: d, sources, attempt: 'primary' }, (e) => {
+        generate(env, { ctx: c, decision: d, sources, attempt: 'primary', ...extra }, (e) => {
           // The runner's emitter rejects what fails the schema; so does this one.
           events.push(TurnEventSchema.parse(e));
         }),
@@ -254,11 +254,26 @@ describe('holdsReply (4.7, lead answer 13)', () => {
     expect(holdsReply(at(0.65), 'explain', 0.6)).toBe(true);
   });
 
-  it('streams turns with no scored chunk, and redirect or locked turns', () => {
-    expect(holdsReply(at(), 'explain')).toBe(false);
+  it('streams teaching turns whose chunks are all unscored, and redirect or locked turns', () => {
     expect(holdsReply(at(undefined), 'check')).toBe(false);
     expect(holdsReply(at(0.1), 'redirect')).toBe(false);
     expect(holdsReply(at(0.1), 'locked')).toBe(false);
+    expect(holdsReply(at(), 'redirect')).toBe(false);
+  });
+
+  it('holds a teaching turn with nothing retrieved, or one decide.fallback chose (fix round 1)', () => {
+    expect(holdsReply(at(), 'explain')).toBe(true);
+    expect(holdsReply(at(), 'ask')).toBe(true);
+    expect(holdsReply(at(0.9), 'ask', undefined, true)).toBe(true);
+    expect(holdsReply(at(undefined), 'ask', undefined, true)).toBe(true);
+    expect(holdsReply(at(0.9), 'redirect', undefined, true)).toBe(false);
+  });
+
+  it('a decide.fallback turn is held by the step (fromFallback)', async () => {
+    const s = setup([[say('What have you tried?'), used]], { decision: { move: 'ask' } });
+    const r = await s.run({ fromFallback: true });
+    expect(r).toMatchObject({ held: true });
+    expect(types(s.events)).toEqual([]);
   });
 
   it('no sources event when nothing is cited, or only out-of-range numbers', async () => {

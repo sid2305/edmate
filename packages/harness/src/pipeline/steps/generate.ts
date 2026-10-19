@@ -61,16 +61,19 @@ const TEACHING_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
 /**
  * Whether the reply is held, not streamed, until postGuard passes it (task 4.7, lead answer 13):
  * an ask_teacher turn, or a teaching turn whose best scored chunk is under the coverage threshold
- * plus HOLD_MARGIN, where grounding is most likely to replace the reply. A turn with no scored
- * chunk streams as before (decide sends uncovered turns to ask_teacher).
+ * plus HOLD_MARGIN, where grounding is most likely to replace the reply. Fix round 1: also a
+ * teaching turn with nothing retrieved, or one decide.fallback chose (`fromFallback`), since that
+ * path never ran the coverage gate. A teaching turn whose chunks are all unscored still streams.
  */
 export function holdsReply(
   ctx: Pick<TurnContext, 'retrieved'>,
   move: PedagogyDecision['move'],
   threshold: number = DEFAULT_COVERAGE_THRESHOLD,
+  fromFallback = false,
 ): boolean {
   if (move === 'ask_teacher') return true;
   if (!TEACHING_MOVES.has(move)) return false;
+  if (fromFallback || ctx.retrieved.length === 0) return true;
   const scores = ctx.retrieved.flatMap((c) => (c.score === undefined ? [] : [c.score]));
   return scores.length > 0 && Math.max(...scores) < threshold + HOLD_MARGIN;
 }
@@ -92,7 +95,7 @@ export interface GenerateOptions {
 /** The generate step; `opts` exists for tests that swap the locked check. */
 export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
   const lockedCheckOf = opts.lockedCheck ?? lockedCheckFor;
-  return async (env, { ctx, decision, sources }, emit) => {
+  return async (env, { ctx, decision, sources, fromFallback }, emit) => {
     const { deps } = env;
     // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
     env.usage.checkBeforeCall();
@@ -105,7 +108,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     );
 
     const lockedCheck = lockedCheckOf(env, ctx);
-    const held = holdsReply(ctx, decision.move);
+    const held = holdsReply(ctx, decision.move, undefined, fromFallback === true);
 
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     const { draft, raw, locked } = await runToolLoop({

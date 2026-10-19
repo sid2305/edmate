@@ -11,13 +11,18 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { askTeacherReplyText } from '../guardrails/grounding.js';
-import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
+import { copyHelp, INITIAL_HELP_STATE, parseSessionHelp } from '../pedagogy/helpState.js';
 import { driveTurn } from '../testing/driveTurn.js';
 import { type JudgeVerdict } from '../testing/groundingJudge.js';
-import { memoryTeacherQuestionStore } from '../testing/memoryPorts.js';
+import {
+  memorySessionStateStore,
+  memoryTeacherQuestionStore,
+  memoryTranscriptStore,
+} from '../testing/memoryPorts.js';
+import type { StreamStep } from '../testing/scriptedGateway.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import { testDecideResult, testDeps, testSteps } from '../testing/testSteps.js';
-import { runTurn } from './runner.js';
+import { runTurn, STREAMED_REPLACED } from './runner.js';
 import { GROUNDING_ASKS_PER_SESSION } from './spec.js';
 import { defaultSteps } from './steps/index.js';
 import type { Steps } from './types.js';
@@ -42,18 +47,32 @@ interface Turn {
   score?: number;
   groundingAsks?: number;
   storeFails?: boolean;
+  /** The real commit step, with in-memory stores (fix round 1). */
+  realCommit?: boolean;
+  /** decide's `next` rebuilds the help state without the count, as the ladder does. */
+  decideDropsAsks?: boolean;
+  /** Both generate attempts fail. */
+  mainFails?: boolean;
+  /** A shared TeacherQuestion store across turns. */
+  store?: ReturnType<typeof memoryTeacherQuestionStore>;
 }
 
 async function turn(o: Turn) {
-  const store = memoryTeacherQuestionStore(o.storeFails === true ? { fail: true } : {});
+  const store = o.store ?? memoryTeacherQuestionStore(o.storeFails === true ? { fail: true } : {});
+  const sessionState = memorySessionStateStore();
+  const main = o.mainFails === true ? [fail, fail] : [[...o.reply.map(say), used]];
   const t = testDeps({
-    script: { stream: [{ match: (r) => r.tier === 'main', steps: [...o.reply.map(say), used] }] },
+    script: { stream: main.map((steps) => ({ match: (r) => r.tier === 'main', steps })) },
     judge: o.judge,
-    overrides: { teacherQuestions: store },
+    overrides: {
+      teacherQuestions: store,
+      ...(o.realCommit === true ? { sessionState, transcripts: memoryTranscriptStore() } : {}),
+    },
   });
   const help = copyHelp(INITIAL_HELP_STATE);
   if (o.groundingAsks !== undefined) help.groundingAsks = o.groundingAsks;
   const decision = o.decision ?? explain;
+  const nextHelp = o.decideDropsAsks === true ? copyHelp(INITIAL_HELP_STATE) : help;
   const steps = testSteps({
     entitle: fixtureEntitle,
     scrub: () => Promise.resolve({ text: SCRUBBED, guards: [] }),
@@ -71,17 +90,28 @@ async function turn(o: Turn) {
         Promise.resolve(
           testDecideResult(decision, {
             sources: [demoChunkScored.source],
-            next: { rung: decision.rung, help },
+            next: { rung: decision.rung, help: nextHelp },
           }),
         ),
     },
     generate: defaultSteps.generate,
     postGuard: defaultSteps.postGuard,
+    ...(o.realCommit === true ? { commit: defaultSteps.commit } : {}),
   });
   const input: TurnInput = { ...demoTurnInput, text: 'What does // do? Ask me@example.com.' };
   const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
-  return { events, result, store, commit: steps.commits[0], judged: t.judged };
+  const saved = sessionState.saved.at(-1)?.helpState;
+  return {
+    events,
+    result,
+    store,
+    commit: steps.commits[0],
+    judged: t.judged,
+    savedAsks: saved === undefined ? undefined : (parseSessionHelp(saved).help.groundingAsks ?? 0),
+  };
 }
+
+const fail = [{ type: 'error', code: 'provider_error' }] satisfies StreamStep[];
 
 const types = (events: TurnEvent[]) => events.map((e) => e.type);
 /** What the student saw stream in before any replace. */
@@ -160,7 +190,7 @@ describe('runner + grounding', () => {
     expect(last.commit?.next?.help.groundingAsks).toBe(GROUNDING_ASKS_PER_SESSION);
   });
 
-  it('a failing store: no event, the turn still replies; commit is told to open it', async () => {
+  it('a failing store: no event, the turn still replies; commit is told to open it, uncounted', async () => {
     const r = await turn({
       reply: ['Python 4 makes // exact.'],
       judge: 'ungrounded',
@@ -171,6 +201,78 @@ describe('runner + grounding', () => {
     expect(r.result.background.map((b) => b.task)).toEqual(['teacher_question']);
     expect(r.commit).toMatchObject({ escalateToTeacher: true, replyText: ASK });
     expect(r.commit).not.toHaveProperty('teacherQuestionId');
+    // Not counted: no question was opened (fix round 1).
+    expect(r.commit?.next?.help).not.toHaveProperty('groundingAsks');
+  });
+
+  it('three turns whose live and fallback opens all fail leave the count at 0; a later turn still tries (fix round 1)', async () => {
+    const store = memoryTeacherQuestionStore({ fail: true });
+    let asks = 0;
+    for (let i = 0; i < 3; i++) {
+      const r = await turn({
+        reply: ['Python 4 makes // exact.'],
+        judge: 'ungrounded',
+        store,
+        groundingAsks: asks,
+        realCommit: true,
+      });
+      expect(r.savedAsks).toBe(0);
+      expect(r.result.background.map((b) => String(b.error))).toContain(
+        'GroundingEscalationLost: grounding escalation lost: no TeacherQuestion opened (Error)',
+      );
+      asks = r.savedAsks ?? -1;
+    }
+    // Each turn tried twice (live, then commit's fallback); the fourth still tries.
+    expect(store.opened).toHaveLength(6);
+    await turn({
+      reply: ['Python 4 makes // exact.'],
+      judge: 'ungrounded',
+      store,
+      groundingAsks: asks,
+      realCommit: true,
+    });
+    expect(store.opened).toHaveLength(8);
+  });
+
+  it('a successful open is counted once, by the runner; commit opens nothing more (fix round 1)', async () => {
+    const r = await turn({
+      reply: ['Python 4 makes // exact.'],
+      judge: 'ungrounded',
+      realCommit: true,
+    });
+    expect(r.store.opened).toHaveLength(1);
+    expect(r.savedAsks).toBe(1);
+  });
+
+  it('the count rides through a failed turn even when decide rebuilds the help state (fix round 1)', async () => {
+    const r = await turn({
+      reply: [],
+      judge: 'grounded',
+      mainFails: true,
+      groundingAsks: 2,
+      decideDropsAsks: true,
+    });
+    expect(r.events.at(-1)?.type).toBe('error');
+    expect(r.commit?.next?.help.groundingAsks).toBe(2);
+    const ok = await turn({
+      reply: ['Floor division rounds down [1].'],
+      judge: 'grounded',
+      groundingAsks: 2,
+      decideDropsAsks: true,
+    });
+    expect(ok.commit?.next?.help.groundingAsks).toBe(2);
+  });
+
+  it('a streamed reply grounding replaced is flagged in the trace, code only; a held one is not (fix round 1)', async () => {
+    const flag = { name: 'grounding', ok: false, action: STREAMED_REPLACED };
+    const shown = await turn({ reply: ['Python 4 makes // exact.'], judge: 'ungrounded' });
+    expect(shown.result.trace?.guards).toContainEqual(flag);
+    const held = await turn({
+      reply: ['Python 4 makes // exact.'],
+      judge: 'ungrounded',
+      score: 0.55,
+    });
+    expect(held.result.trace?.guards).not.toContainEqual(flag);
   });
 
   it('a turn near the coverage threshold is held: nothing streams until postGuard passes it', async () => {

@@ -96,6 +96,7 @@ export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminated
     result: z.literal('replace'),
     text: z.string(),
     escalateToTeacher: z.literal(true).exactOptional(),
+    groundingRewrote: z.literal(true).exactOptional(),
     guards,
     usage,
   }),
