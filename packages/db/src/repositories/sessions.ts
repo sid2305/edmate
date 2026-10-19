@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { LIMITS } from '@edmate/contracts';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { agents, agentVersions, sessions } from '../schema/index.js';
@@ -32,6 +33,24 @@ export const ownSession = (sessionId: string, scope: StudentScope) =>
     eq(sessions.studentId, scope.studentId),
     eq(sessions.teacherId, scope.teacherId),
   );
+
+/**
+ * The stored help state as JSON text, or `invalid`: not serialisable (circular, BigInt, a bare
+ * `undefined`) or over `LIMITS.helpStateMaxJsonLength` UTF-16 units (ADR-0005). Checked before
+ * any SQL, so an oversized value is never written.
+ */
+function helpStateJson(value: unknown, method: string): string {
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(value);
+  } catch {
+    throw new RepositoryError('invalid', method);
+  }
+  if (json === undefined || json.length > LIMITS.helpStateMaxJsonLength) {
+    throw new RepositoryError('invalid', method);
+  }
+  return json;
+}
 
 const NewSession = z.strictObject({ agentId: IdSchema, agentVersion: z.int().min(0) });
 
@@ -72,6 +91,24 @@ export function sessionsRepo(db: Db) {
       );
       if (written(result) !== 1) throw new RepositoryError('not_found', method);
       return { id };
+    },
+
+    /**
+     * Saves the help state of the scope's own **open** session (ADR-0005; last write wins). A
+     * missing, ended, or another student's or teacher's session is `not_found`; a value that is
+     * not serialisable or is over `LIMITS.helpStateMaxJsonLength` is `invalid` and nothing is
+     * written. The value holds the answer key: this column is the only place it is stored.
+     */
+    async saveHelpState(scope: StudentScope, sessionId: string, helpState: unknown): Promise<void> {
+      const method = 'sessions.saveHelpState';
+      const sc = studentScope(scope, method);
+      const id = parseArg(IdSchema, sessionId, method);
+      const json = helpStateJson(helpState, method);
+      const result = await db
+        .update(sessions)
+        .set({ helpState: sql`${json}::jsonb` })
+        .where(and(ownSession(id, sc), isNull(sessions.endedAt)));
+      if (written(result) !== 1) throw new RepositoryError('not_found', method);
     },
 
     /** The scope's session, or null if it is missing or another student's or teacher's. */

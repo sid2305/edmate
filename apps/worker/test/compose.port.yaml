@@ -1,0 +1,11 @@
+# Test-only Compose override (task 3.8): publishes the local stack's Redis on 127.0.0.1 so the
+# @edmate/worker integration tests can reach it from the host. Nothing else changes. Use it with
+# packages/db/test/compose.port.yaml (the worker tests also need Postgres):
+#
+#   docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml \
+#     -f apps/worker/test/compose.port.yaml up -d postgres redis
+#   docker compose -f docker/compose.yaml stop postgres redis
+services:
+  redis:
+    ports:
+      - '127.0.0.1:${EDMATE_REDIS_TEST_PORT:-56379}:6379'

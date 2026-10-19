@@ -276,6 +276,12 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1152.0
         version: 3.1152.0
+      '@edmate/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@edmate/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
       bullmq:
         specifier: 6.3.16
         version: 6.3.16(ioredis@6.0.0)(pg@8.23.1)
@@ -286,15 +292,27 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
       '@vitest/coverage-v8':
         specifier: 5.0.5
         version: 5.0.5(vitest@5.0.5)
       eslint:
         specifier: 10.13.0
         version: 10.13.0
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -553,6 +571,40 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+
+  packages/queue:
+    dependencies:
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      bullmq:
+        specifier: 6.3.16
+        version: 6.3.16(ioredis@6.0.0)(pg@8.23.1)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@edmate/config':
+        specifier: workspace:*
+        version: link:../config
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      '@vitest/coverage-v8':
+        specifier: 5.0.5
+        version: 5.0.5(vitest@5.0.5)
+      eslint:
+        specifier: 10.13.0
+        version: 10.13.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@22.20.5)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(tsx@4.23.15))
 
   packages/ui:
     devDependencies:

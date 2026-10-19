@@ -70,7 +70,7 @@ export {
   SYSTEM_ACTOR_PREFIX,
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
-export type { TurnTraceInput, TurnTraceRow } from './turn-traces.js';
+export type { TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,
   COST_ALARM_PAUSE_ACTION,
@@ -85,6 +85,7 @@ export type {
   UsageEntry,
   UsageRow,
   UsageSource,
+  UsageSinceScope,
   UsageStatus,
   UsageTotals,
   TeacherUsageTotals,
@@ -92,6 +93,8 @@ export type {
 export {
   type EntitlementStoreOptions,
   entitlementStoreFor,
+  sessionStateStoreFor,
+  traceSinkFor,
   transcriptStoreFor,
   turnConfigStoreFor,
   type TurnConfigStoreOptions,
