@@ -4,8 +4,8 @@
 import {
   type Intent,
   type PedagogyDecision,
-  PedagogyDecisionSchema,
   type SafetyAlert,
+  type SourceRef,
   type TurnContext,
   TurnContextSchema,
   type TurnEvent,
@@ -14,6 +14,7 @@ import {
   type TurnTrace,
 } from '@edmate/contracts';
 import type { z } from 'zod';
+import type { HelpState } from '../pedagogy/helpState.js';
 import { cancelSource, type CancelToken, isoAt } from './clock.js';
 import { InvalidEventError } from './errors.js';
 import { EventQueue } from './events.js';
@@ -32,6 +33,7 @@ import {
 } from './policies.js';
 import {
   BuiltContextSchema,
+  DecideResultSchema,
   EntitledSchema,
   EscalateResultSchema,
   GenerateResultSchema,
@@ -53,6 +55,7 @@ import { TraceBuilder } from './trace.js';
 import type {
   BuiltContext,
   CommitRecord,
+  DecideResult,
   Emit,
   Entitled,
   PipelineDeps,
@@ -285,19 +288,21 @@ class Turn {
 
     // Assemble the TurnContext; its refine (retrieved ⊆ allowed, same teacher, ids match) is the
     // last check before decide. A failure is treated as a buildContext failure.
-    let ctx = assemble(e, bc.ok ? bc.value : fallbackContext(scrubbed, e), intent, attempt);
+    let built = bc.ok ? bc.value : fallbackContext(scrubbed, e);
+    let ctx = assemble(e, built, intent, attempt);
     if (ctx === null && bc.ok) {
       this.trace.outcome('buildContext', 'fallback');
-      ctx = assemble(e, fallbackContext(scrubbed, e), intent, attempt);
+      built = fallbackContext(scrubbed, e);
+      ctx = assemble(e, built, intent, attempt);
     }
     if (ctx === null) {
       this.endWithError({ code: 'no_access', retryable: false });
       return this.finish(e, { outcome: 'error', input: scrubbed, intent }, intent, 'redirect');
     }
 
-    // 7. decide; fall back to `ask`.
-    const decision = await this.decide(scrubbed, ctx);
-    if (decision === null) {
+    // 7. decide with the help state that came with this context; fall back to `ask`.
+    const decided = await this.decide(scrubbed, ctx, built.helpState);
+    if (decided === null) {
       this.endWithError(PROVIDER_ERROR);
       return this.finish(
         e,
@@ -306,10 +311,18 @@ class Turn {
         'redirect',
       );
     }
-    const base = { input: scrubbed, intent, context: ctx, decision };
+    const { decision } = decided;
+    const base = {
+      input: scrubbed,
+      intent,
+      context: ctx,
+      decision,
+      next: decided.next,
+      promptPack: decided.promptPack,
+    };
 
     // 8. generate: one retry; a TurnAbort is final.
-    const gen = await this.generate(scrubbed, ctx, decision);
+    const gen = await this.generate(scrubbed, ctx, decision, decided.sources);
     if ('code' in gen) {
       this.endWithError(gen);
       return this.finish(e, { ...base, outcome: 'error' }, intent, decision.move);
@@ -470,18 +483,29 @@ class Turn {
     }
   }
 
-  private async decide(input: TurnInput, ctx: TurnContext): Promise<PedagogyDecision | null> {
+  private async decide(
+    input: TurnInput,
+    ctx: TurnContext,
+    help: HelpState,
+  ): Promise<DecideResult | null> {
+    const x = { ctx, help };
     const d = check(
-      await this.timed(input, timeoutOf('decide'), (env) => this.steps.decide.run(env, ctx)),
-      PedagogyDecisionSchema,
+      await this.timed(input, timeoutOf('decide'), (env) => this.steps.decide.run(env, x)),
+      DecideResultSchema,
     );
     if (d.ok) {
       this.trace.step('decide', d.ms, 'ok');
       return d.value;
     }
     try {
-      const fb = PedagogyDecisionSchema.parse(this.steps.decide.fallback(ctx));
-      if (fb.move !== 'ask') throw new Error(`decide.fallback returned move "${fb.move}"`);
+      const fb = DecideResultSchema.parse(
+        this.steps.decide.fallback(this.env(input, cancelSource().token), x),
+      );
+      // `ask`; `redirect` only for distress (3.5's fallback never asks a distressed student).
+      const move = fb.decision.move;
+      if (move !== 'ask' && !(move === 'redirect' && ctx.intent === 'distress')) {
+        throw new Error(`decide.fallback returned move "${move}"`);
+      }
       this.trace.step('decide', d.ms, 'fallback');
       return fb;
     } catch (error) {
@@ -495,12 +519,17 @@ class Turn {
     input: TurnInput,
     ctx: TurnContext,
     decision: PedagogyDecision,
+    sources: SourceRef[],
   ): Promise<{ draft: string } | TurnError> {
     let ms = 0;
     for (const attempt of ['primary', 'fallback'] as const) {
       const state = { tokens: 0, invalid: false };
       const raw = await this.timed(input, timeoutOf('generate'), (env) =>
-        this.steps.generate(env, { ctx, decision, attempt }, this.emitter(env.cancel, state)),
+        this.steps.generate(
+          env,
+          { ctx, decision, sources, attempt },
+          this.emitter(env.cancel, state),
+        ),
       );
       ms += raw.ms;
       const g = check(raw, GenerateResultSchema);
@@ -631,7 +660,7 @@ function assemble(
   attempt: TurnContext['attempt'],
 ): TurnContext | null {
   // The help state (raw on Entitled, parsed on BuiltContext) holds `answerKey`: it never enters
-  // TurnContext, which goes to the model, events and traces (ADR-0005). 3.6 passes it to decide.
+  // TurnContext, which goes to the model, events and traces (ADR-0005). It goes to decide apart.
   const raw: Record<string, unknown> = { ...e, ...b, intent, attempt };
   delete raw.helpState;
   const parsed = TurnContextSchema.safeParse(raw);

@@ -1,0 +1,240 @@
+// The system-prompt composer (build plan § Teaching engine › Prompt packs). Order:
+//   safety preamble → skill or mode pack (→ persona) → style card → locale pack → decision block
+//   (move, rung, "do not say" list) → retrieved material with sources → learner summary.
+// Optional sections are left out when they have nothing to show. Pure and deterministic.
+//
+// All prose comes from the pinned prompt-pack set; this file renders only data (ids, numbers,
+// helpline lines, numbered sources) into the pack's placeholders. No country fact lives here.
+//
+// Locked material (ADR-0003): every retrieved chunk is checked against the entitlement before
+// anything is rendered; one outside it throws LockedMaterialError, whose message names no text.
+import type { AgentConfig, Chunk, Lang, SourceRef, TurnContext } from '@edmate/contracts';
+import type { PolicyResult } from './policy.js';
+import {
+  type FrameSection,
+  type ModePackName,
+  type PromptPackRef,
+  type PromptPackSet,
+  renderTemplate,
+  SKILL_PACKS,
+  type SkillPackName,
+} from './promptPacks.js';
+
+/** A retrieved chunk outside the entitlement reached the composer. Never carries chunk text. */
+export class LockedMaterialError extends Error {
+  override readonly name = 'LockedMaterialError';
+}
+
+/** The set handed in is not the one the agent pins. */
+export class PromptPackMismatchError extends Error {
+  override readonly name = 'PromptPackMismatchError';
+}
+
+export type ComposeMode = ModePackName | SkillPackName;
+
+export interface ComposeInput {
+  ctx: TurnContext;
+  policy: PolicyResult;
+  /** The student's language for this turn (`TurnInput.lang`). */
+  lang: Lang;
+  /** Must be the set `ctx.agent.promptPackVersion` pins. */
+  set: PromptPackSet;
+}
+
+export interface Composed {
+  systemPrompt: string;
+  /** Lines up with the `[n]` numbers in the material section (for the `sources` event). */
+  sources: SourceRef[];
+  promptPack: PromptPackRef;
+  mode: ComposeMode;
+}
+
+/**
+ * Which pack carries the turn. Distress is told apart by `reason`, so a distressed student never
+ * gets the off-topic redirect wording.
+ */
+export function composeMode(p: Pick<PolicyResult, 'move' | 'reason' | 'skill'>): ComposeMode {
+  if (p.reason === 'distress') return 'distress';
+  if (p.move === 'redirect') return 'redirect';
+  if (p.move === 'locked') return 'locked';
+  if (p.move === 'ask_teacher') return 'ask_teacher';
+  if (p.reason === 'fallback') return 'fallback';
+  const skill = SKILL_PACKS.find((s) => s === p.skill);
+  if (skill === undefined) {
+    throw new Error(`no prompt pack for move "${p.move}" with skill "${p.skill ?? 'none'}"`);
+  }
+  return skill;
+}
+
+/** Modes that may show the teacher's material. `ask_teacher` keeps it to help with what is covered. */
+function showsMaterial(mode: ComposeMode): boolean {
+  return mode === 'ask_teacher' || (SKILL_PACKS as readonly string[]).includes(mode);
+}
+
+/** The student's language when the agent allows it, else the agent's first language. */
+export function replyLanguage(lang: Lang, agent: Pick<AgentConfig, 'languages'>): Lang {
+  return agent.languages.includes(lang) ? lang : (agent.languages[0] ?? lang);
+}
+
+/** The fixed delimiters around data blocks (material, style card, learner summary). */
+export const DATA_OPEN = '<<<';
+export const DATA_CLOSE = '>>>';
+
+/** Breaks any run of 3+ `<` or `>` in data, so data can never close its own delimiter. */
+function neutralise(text: string): string {
+  return text.replace(/<{3,}|>{3,}/g, (m) => m.split('').join(' '));
+}
+
+function fenced(text: string): string {
+  return `${DATA_OPEN}\n${neutralise(text)}\n${DATA_CLOSE}`;
+}
+
+/** One line of data: whitespace collapsed (no line breaks to fake a new section). */
+function inline(text: string): string {
+  return neutralise(text).replace(/\s+/g, ' ').trim();
+}
+
+function checkScope(ctx: TurnContext): void {
+  const e = ctx.entitlement;
+  const allowed = new Set(e.allowedModuleIds);
+  ctx.retrieved.forEach((c, i) => {
+    if (c.teacherId !== e.teacherId || !allowed.has(c.moduleId)) {
+      throw new LockedMaterialError(`retrieved[${String(i)}] is outside the entitlement`);
+    }
+  });
+}
+
+function moveSection(p: PolicyResult): FrameSection {
+  if (p.move === 'hint') return p.rung >= 2 ? 'move-hint-2' : 'move-hint-1';
+  return `move-${p.move}` as const;
+}
+
+function materialBlock(chunks: readonly Chunk[]): string {
+  return chunks
+    .map((c, i) => {
+      const s = c.source;
+      return `[${String(i + 1)}] ${inline(s.title)} · ${inline(s.locator)} · ${s.kind}\n${fenced(c.text)}`;
+    })
+    .join('\n\n');
+}
+
+export function composeSystemPrompt(i: ComposeInput): Composed {
+  const { ctx, policy, set } = i;
+  if (set.version !== ctx.agent.promptPackVersion) {
+    throw new PromptPackMismatchError(
+      `prompt-pack set ${set.version} is not the agent's ${ctx.agent.promptPackVersion}`,
+    );
+  }
+  checkScope(ctx);
+  const mode = composeMode(policy);
+  const f = set.frame;
+  const distress = mode === 'distress';
+  const teaching = (SKILL_PACKS as readonly string[]).includes(mode);
+  const chunks = showsMaterial(mode) ? ctx.retrieved : [];
+  const parts: string[] = [set.packs.safety.body];
+
+  let modeText = set.packs[mode].body;
+  if (mode === 'locked') {
+    // Only the student's own package name; never a locked module's id, title or text.
+    const reply =
+      ctx.pkg.lockedReply === 'name_package'
+        ? renderTemplate(f['locked-name-package'], { package_name: inline(ctx.pkg.name) })
+        : f['locked-generic'];
+    modeText = `${modeText}\n\n${reply}`;
+  }
+  parts.push(modeText);
+
+  if (mode === 'mock_interview' && ctx.persona !== undefined) {
+    const p = ctx.persona;
+    parts.push(
+      renderTemplate(f.persona, {
+        persona_name: inline(p.name),
+        persona_style: fenced(p.style),
+        persona_must_not: fenced(p.mustNot.join('; ')),
+        persona_end_after: String(p.endAfterQuestions),
+      }),
+    );
+  }
+
+  // A distress reply carries no teaching voice: no style card, no learner summary.
+  if (!distress) {
+    parts.push(
+      renderTemplate(f.style, {
+        style_card: fenced(ctx.styleCard.text),
+        mistake_tags: ctx.styleCard.mistakeTags.map(inline).join(', '),
+      }),
+    );
+  }
+
+  const helplines = ctx.locale.helplines;
+  parts.push(
+    renderTemplate(f.locale, {
+      reply_language: replyLanguage(i.lang, ctx.agent),
+      currency_code: ctx.locale.currency.code,
+      currency_format: inline(ctx.locale.currency.format),
+      helplines:
+        helplines.length === 0
+          ? f['no-helplines']
+          : helplines
+              .map((h) => `- ${inline(h.name)}: ${inline(h.number)} (${inline(h.kind)})`)
+              .join('\n'),
+    }),
+  );
+
+  const subject = ctx.agent.regulatedSubject;
+  if (!distress && subject !== undefined) {
+    const own = ctx.locale.regulatedDisclaimers[subject];
+    parts.push(
+      renderTemplate(f.disclaimer, {
+        disclaimer: own === undefined ? f['generic-disclaimer'] : inline(own),
+      }),
+    );
+  }
+
+  // Distress gets no move name and no skills list: nothing that reads as a lesson.
+  parts.push(
+    distress
+      ? renderTemplate(f['decision-distress'], { move_instruction: f['move-distress'] })
+      : renderTemplate(f.decision, {
+          move: policy.move,
+          rung: String(policy.rung),
+          skills: ctx.entitlement.skills.join(', '),
+          move_instruction: f[moveSection(policy)],
+        }),
+  );
+  // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and
+  // only on teaching turns: a closed mode (locked, ask_teacher, redirect, distress, fallback)
+  // never discusses the problem, so it gets no answer key at all. postGuard still receives
+  // `mustNotReveal` on the decision.
+  if (teaching && policy.mustNotReveal.length > 0) {
+    parts.push(
+      renderTemplate(f['do-not-say'], {
+        do_not_say: policy.mustNotReveal.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
+      }),
+    );
+  }
+  if (policy.tools.length > 0) {
+    parts.push(renderTemplate(f.tools, { tools: policy.tools.map(inline).join(', ') }));
+  }
+  if (chunks.length > 0) {
+    parts.push(renderTemplate(f.material, { sources: materialBlock(chunks) }));
+  }
+  const summary = ctx.profile.lastSummary;
+  if (!distress && summary !== undefined && summary.trim() !== '') {
+    parts.push(renderTemplate(f.learner, { last_summary: fenced(summary) }));
+  }
+
+  return {
+    systemPrompt: parts.join('\n\n'),
+    sources: chunks.map((c) => ({ ...c.source })),
+    promptPack: {
+      set: set.version,
+      packs: {
+        safety: set.packs.safety.version,
+        [mode]: set.packs[mode].version,
+        frame: set.packs.frame.version,
+      },
+    },
+    mode,
+  };
+}

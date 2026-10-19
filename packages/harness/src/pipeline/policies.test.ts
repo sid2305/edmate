@@ -20,6 +20,7 @@ import {
   TEST_DISTRESS_REPLY,
   TEST_SAFE_REPLY,
   testAskDecision,
+  testDecideResult,
   testDeps,
   testSteps,
 } from '../testing/testSteps.js';
@@ -690,10 +691,10 @@ describe(`buildContext: ${policy('buildContext')}`, () => {
       decide: {
         run: (
           _env: StepEnv,
-          ctx: { retrieved: unknown[]; lockedHit: boolean; history: unknown[] },
+          x: { ctx: { retrieved: unknown[]; lockedHit: boolean; history: unknown[] } },
         ) => {
-          seen.push(ctx);
-          return Promise.resolve(testAskDecision);
+          seen.push(x.ctx);
+          return Promise.resolve(testDecideResult(testAskDecision));
         },
       },
     };
@@ -775,7 +776,10 @@ describe(`decide: ${policy('decide')}`, () => {
 
   it('a fallback that is not `ask` → provider_error', async () => {
     const { events, result } = await run({
-      decide: { run: boom, fallback: () => ({ ...testAskDecision, move: 'solution' }) },
+      decide: {
+        run: boom,
+        fallback: () => testDecideResult({ ...testAskDecision, move: 'solution' }),
+      },
     });
     expect(events).toEqual([{ type: 'error', code: 'provider_error', retryable: true }]);
     expect(outcomeOf(result, 'decide')).toBe('failed');

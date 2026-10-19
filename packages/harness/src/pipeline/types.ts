@@ -19,6 +19,7 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SourceRef,
   StyleCard,
   TeacherQuestionStore,
   TraceSink,
@@ -31,7 +32,9 @@ import type {
   Usage,
   UsageMeter,
 } from '@edmate/contracts';
-import type { HelpState } from '../pedagogy/helpState.js';
+import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
+import type { PolicyReason } from '../pedagogy/policy.js';
+import type { PromptPackLibrary, PromptPackRef } from '../pedagogy/promptPacks.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { TurnLimits } from './limits.js';
 
@@ -72,6 +75,11 @@ export interface PipelineDeps {
   traces: TraceSink;
   alerts: AlertSink;
   fallbackReplies: FallbackReplies;
+  /**
+   * The validated prompt-pack sets, by version, loaded once at start-up by the composition root
+   * (`@edmate/content` reads the files). decide uses the set `agent.promptPackVersion` pins.
+   */
+  promptPacks: PromptPackLibrary;
   /**
    * Last-line distress keyword check on the scrubbed text, used only when `route.onFailure`
    * itself fails ("distress keywords still escalate"). True escalates the turn.
@@ -132,9 +140,27 @@ export interface BuiltContext {
   helpRung: TurnContext['helpRung'];
   /**
    * The rest of the parsed help state (ADR-0005). Kept out of TurnContext (it holds `answerKey`);
-   * 3.6/3.8 thread it into decide and commit.
+   * the runner passes it to decide, and decide's `next` goes to commit.
    */
   helpState: HelpState;
+}
+
+/** What decide works from: the context plus the parsed help state (kept out of TurnContext). */
+export interface DecideInput {
+  ctx: TurnContext;
+  help: HelpState;
+}
+
+/** decide's result. Server-side only: `next` and the do-not-say list hold the answer key. */
+export interface DecideResult {
+  decision: PedagogyDecision;
+  /** The help state to save after the turn (commit, 3.8). */
+  next: SessionHelp;
+  reason: PolicyReason;
+  /** The prompt-pack set and pack versions the system prompt used (lead answer Q1). */
+  promptPack: PromptPackRef;
+  /** In the order of the `[n]` numbers in the system prompt (for generate's `sources` event). */
+  sources: SourceRef[];
 }
 
 export interface EscalateResult {
@@ -167,6 +193,10 @@ export interface CommitRecord {
   intent?: Intent;
   context?: TurnContext;
   decision?: PedagogyDecision;
+  /** The session's help state after this turn, for commit (3.8) to save. Holds `answerKey`. */
+  next?: SessionHelp;
+  /** The prompt-pack set and pack versions the system prompt used. */
+  promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
   alert?: SafetyAlert;
@@ -187,13 +217,22 @@ export interface Steps {
   buildContext(env: StepEnv, s: Entitled): Promise<BuiltContext>;
   escalate(env: StepEnv, s: Entitled, alert: SafetyAlert | undefined): Promise<EscalateResult>;
   decide: {
-    run(env: StepEnv, ctx: TurnContext): Promise<PedagogyDecision>;
-    /** Must return move `ask`; anything else ends the turn with an error. */
-    fallback(ctx: TurnContext): PedagogyDecision;
+    run(env: StepEnv, x: DecideInput): Promise<DecideResult>;
+    /**
+     * Synchronous. Must return move `ask` (or `redirect` for a distress context); anything else
+     * ends the turn with an error.
+     */
+    fallback(env: StepEnv, x: DecideInput): DecideResult;
   };
   generate(
     env: StepEnv,
-    x: { ctx: TurnContext; decision: PedagogyDecision; attempt: 'primary' | 'fallback' },
+    x: {
+      ctx: TurnContext;
+      decision: PedagogyDecision;
+      /** decide's numbered sources, for the `sources` event. */
+      sources: SourceRef[];
+      attempt: 'primary' | 'fallback';
+    },
     emit: Emit,
   ): Promise<GenerateResult>;
   postGuard(

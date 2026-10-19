@@ -11,8 +11,10 @@ import {
   LocalePackSchema,
   MessageSchema,
   PackageConfigSchema,
+  PedagogyDecisionSchema,
   PersonaSchema,
   SafetyAlertSchema,
+  SourceRefSchema,
   StyleCardSchema,
   TurnContextSchema,
   TurnTraceSchema,
@@ -20,8 +22,10 @@ import {
 } from '@edmate/contracts';
 import { z } from 'zod';
 import { HelpStateSchema } from '../pedagogy/helpState.js';
+import type { PolicyReason } from '../pedagogy/policy.js';
 import type {
   BuiltContext,
+  DecideResult,
   Entitled,
   EscalateResult,
   GenerateResult,
@@ -85,3 +89,38 @@ export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminated
   z.strictObject({ result: z.literal('ok'), guards, usage }),
   z.strictObject({ result: z.literal('replace'), text: z.string(), guards, usage }),
 ]);
+
+/** Every PolicyReason; the Record type makes the compiler reject a missing or extra one. */
+const POLICY_REASONS: Record<PolicyReason, true> = {
+  explain: true,
+  explain_check: true,
+  practice_item: true,
+  feedback: true,
+  mock_interview: true,
+  revision: true,
+  skill_not_built: true,
+  no_persona: true,
+  pending_check: true,
+  solved: true,
+  step: true,
+  climb: true,
+  at_ceiling: true,
+  solution_gated: true,
+  no_progress_once: true,
+  distress: true,
+  skill_not_entitled: true,
+  off_topic: true,
+  misuse: true,
+  meta: true,
+  locked_module: true,
+  not_covered: true,
+  fallback: true,
+};
+
+export const DecideResultSchema: z.ZodType<DecideResult> = z.strictObject({
+  decision: PedagogyDecisionSchema,
+  next: z.strictObject({ rung: TurnContextSchema.shape.helpRung, help: HelpStateSchema }),
+  reason: z.enum(Object.keys(POLICY_REASONS) as [PolicyReason, ...PolicyReason[]]),
+  promptPack: z.strictObject({ set: z.string().min(1), packs: z.record(z.string(), z.string()) }),
+  sources: z.array(SourceRefSchema),
+});
