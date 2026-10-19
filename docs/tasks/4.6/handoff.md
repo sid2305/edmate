@@ -186,3 +186,16 @@ Decided: hits are reported by name only: `LockedLeakDetected(stream|reply)`, `To
 Why: 4.4 has not merged.
 Alternatives: wait for 4.4.
 Reversible: yes; wire to the sink in 4.4 or a follow-up.
+
+### 19 Oct 2026 · 4.6 A locked-check outage gives the generic safe reply · decided by team lead (security review) · risk: low
+Decided: when the full-reply leakCheck fails (timeout or error) rather than hits, `packages/harness/src/pipeline/steps/postGuard.ts` sends the generic safe reply, as the stream path already does.
+Why: an outage is not evidence of a locked request, so naming the package would mislead.
+Alternatives: send the locked reply on any failure.
+Reversible: yes.
+
+### 19 Oct 2026 · 4.6 Build-plan guard table updated for ADR-0007 · decided by team lead (architect review) · risk: high
+Decided: the build plan's guard table now lists lockedLeak before answerLeak, with whole-reply replacement and the per-sentence stream check.
+Why: the spec must match the accepted ADR; a reader of the table alone would build the wrong order and action.
+Alternatives: leave the table stale.
+Reversible: only by another ADR.
+
