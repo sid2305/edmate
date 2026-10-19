@@ -13,3 +13,7 @@ safety-reviewer confirmed that the snapshots cover a persona dropping on distres
 ## Findings
 - [MEDIUM] [deferred 3.11b] packages/content/src/personaTemplates.ts:24 — style, mustNot and name have no size caps, and name isn't checked to be a role name (not "teacher" or "human"). Add caps and a name guard in the loader.
 - [LOW] [deferred 3.11b] packages/content/src/personaTemplates.ts:42 — `reviewed_by: pending` validates. Reject pending when loading for real pack use.
+
+
+## 3.11b (PR #44) — APPROVE (safety); human sign-off pending
+Reviewer: safety-reviewer (opus), prose and re-verification. See safety-review.md for the findings. Content tests 159/159; 23 composed-prompt snapshots regenerated.
