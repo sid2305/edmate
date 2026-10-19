@@ -335,7 +335,7 @@ tasks:
   - '1.1'
   - '1.8'
   - M0
-  status: review
+  status: done
   branch: m1/1.5-seed
   model: plan:sonnet build:opus-5.5/medium review:sonnet(db)
 - id: '1.6'
@@ -547,6 +547,7 @@ tasks:
   - '2.6'
   - '3.7'
   - M0
+  - '4.5'
   status: todo
   branch: null
   model: null

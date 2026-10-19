@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · No real-model turns before the answer-leak guard · decided by team lead (safety-reviewer's advice) · risk: high
+Decided: The composer keeps the answer key in the model's do-not-say list, but only on teaching moves (fix in 3.6). No turn runs against a real model until the answer-leak guard (4.5) is merged and tested (numbers in other forms, translation, base64, role-play): task 3.9, the first real-model CLI chat, now depends on 4.5.
+Why: A hash can't let the model check an answer and a paraphrase still gives it away; the real protection is the post-guard.
+Alternatives: Remove the answer key from the prompt (the model then can't recognise a correct answer).
+Reversible: Yes.
+
+### 18 Oct 2026 · 1.5 Demo seed ids, rows and subscription split · decided by builder (tdd-guide), lead answers Q1, Q2 · risk: low
+Decided: fixed ids (`demo-teacher`, `demo-teacher-profile`, `demo-agent`, `demo-agent-v1`, `demo-style-card-v1`, `demo-package-{free,paid}`, `demo-package-{free,paid}-v1`, `demo-student-01..20`, `demo-subscription-01..20`); course and module ids are taken from `course.yaml`. Students 01–05 free active, 06–10 paid active, 11–15 paid paused, 16–20 ended (16–18 paid, 19–20 free). Live subscriptions end 2099-12-31; ended ones and `ageConfirmedAt` use a fixed 2026-01-01 time. No consent rows. Teacher `Demo Teacher`, `demo-teacher@example.invalid`, market `global`; profile slug `demo-teacher`, subject and bio from `course.yaml`, verification left at the default `pending`.
+Why: fixed ids plus a fixed clock make re-runs byte-identical; the lead accepted 5/5/5/5 and attestation-only ages.
+Alternatives: random ids looked up by email; a periodEnd computed from the current date.
+Reversible: yes (code only).
+
+### 18 Oct 2026 · 1.5 Seeded AgentConfig uses provisional policy and prompt pack 1.0.0 · decided by lead (answer Q4) · risk: low
+Decided: Anthropic for both tiers (same models as the gateway's `DEFAULT_MODEL_POLICY`), no fallback, `promptPackVersion: '1.0.0'`, `languages: ['en']`; copied into `seed.ts` (db doesn't depend on gateway) and marked PROVISIONAL.
+Why: the lead's answer; 7.6 settles the model mix and 3.11 publishes the prompt pack.
+Alternatives: add a gateway dependency to db to import the constant.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.5 Seed is insert-only and reports drift instead of fixing it · decided by builder (tdd-guide) · risk: low
+Decided: one transaction; `ON CONFLICT (id) DO NOTHING` on every table; no updates or deletes. If a stored style card or agent/package config no longer matches the content, the seed warns (`seed: warning: existing row differs from content, left as is: <table> <id>`) and still exits 0. A conflict on anything other than the id (for example a seed email another user already has) fails the whole run and writes nothing.
+Why: idempotent with no destructive SQL, and a stale demo db is visible instead of silently kept.
+Alternatives: upsert and overwrite (breaks the "versions are immutable" rule); stay silent.
+Reversible: yes.
+
+### 18 Oct 2026 · 1.5 Root `seed` script is a plain pnpm chain · decided by lead (answer Q3) · risk: low
+Decided: `"seed": "pnpm --filter \"@edmate/db...\" run build && pnpm --filter @edmate/db run db:seed"`; no turbo task. `EDMATE_SEED_CONTENT_DIR` overrides the content tree.
+Why: matches the build-then-run pattern of `db:migrate` and `db:grant-role`.
+Alternatives: a turbo `seed` task.
+Reversible: yes.
+
 ### 18 Oct 2026 · 2.7 New `openai` provider key for Whisper and the platform embedding model · decided by builder · risk: high
 Decided: `PROVIDER_KEYS.openai` reads `EDMATE_OPENAI_API_KEY`, loaded through 2.1's `loadProviderKeys`. Both the Whisper transcriber and the embedding adapter take `KeysFor<'openai'>`. The key is revealed only in `src/adapters/openai.ts` and `src/adapters/openai-compatible.ts`, and the base URL is always passed. A test checks that `OPENAI_API_KEY`/`OPENAI_BASE_URL` are never read.
 Why: both services live on api.openai.com under one OpenAI account. Keeping them off `openai-compatible` keeps that key free for OpenRouter or a self-hosted chat server.
