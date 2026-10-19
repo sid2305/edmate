@@ -4,6 +4,8 @@ import {
   type EntitlementStore,
   type LocalePack,
   type PackageConfig,
+  type SessionStateStore,
+  type TraceSink,
   type TranscriptStore,
   type TurnConfigStore,
   type UsageMeter,
@@ -25,6 +27,29 @@ export function transcriptStoreFor(repos: Repositories, scope: StudentScope): Tr
     history: (sessionId, limit) => repos.messages.history(bound, sessionId, limit),
     append: (sessionId, m) => repos.messages.append(bound, sessionId, m),
   };
+}
+
+/**
+ * SessionStateStore (ADR-0005) for one student x teacher, built per turn like the transcript
+ * store. Writes only that student's own open session; anything else is `not_found`. The
+ * repository refuses a value over `LIMITS.helpStateMaxJsonLength` (or not serialisable) as
+ * `invalid` before writing, whatever the caller checked.
+ */
+export function sessionStateStoreFor(repos: Repositories, scope: StudentScope): SessionStateStore {
+  const bound = studentScope(scope, 'sessionStateStoreFor');
+  return {
+    saveHelpState: (sessionId, helpState) =>
+      repos.sessions.saveHelpState(bound, sessionId, helpState),
+  };
+}
+
+/**
+ * TraceSink for one student x teacher: stores the whole TurnTrace on `trace.sessionId`, which
+ * must be the scope's session (else `not_found`). One trace per turn (`invalid` on a second).
+ */
+export function traceSinkFor(repos: Repositories, scope: StudentScope): TraceSink {
+  const bound = studentScope(scope, 'traceSinkFor');
+  return { record: (t) => repos.turnTraces.insert(bound, t) };
 }
 
 /**

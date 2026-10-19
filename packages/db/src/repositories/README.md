@@ -37,10 +37,18 @@ Isolation between teachers and between students is enforced here, not by Postgre
     `messages.append` reports a duplicate (caller-chosen, globally unique) message id as
     `not_found`, so ids in other sessions can't be probed.
 
-11. **One public read.** `agents.owner({ agentId })` is the only method without a teacher or
-    student scope (task 3.2): it returns `{ teacherId }` for a `live` agent and nothing for a
-    draft, suspended or missing one, because which teacher owns a live agent is public on teacher
-    pages. Its argument is parsed like a scope (`scope` error before any SQL).
+11. **Two reads without a teacher or student scope.** `agents.owner({ agentId })` (task 3.2)
+    returns `{ teacherId }` for a `live` agent and nothing for a draft, suspended or missing one,
+    because which teacher owns a live agent is public on teacher pages.
+    `usageLedger.teacherIdsWithUsageSince({ since })` (task 3.8) is a system read for the
+    scheduled cost alarm: the sorted ids of teachers with non-eval usage since a date, and nothing
+    else (no student, package or figure). Both arguments are parsed like a scope (`scope` error
+    before any SQL). Only server jobs call the second; no route exposes it.
+
+12. **Help state** (ADR-0005, task 3.8). `sessions.saveHelpState` writes `help_state` of the
+    scope's own open session only (`ended_at IS NULL` in the same UPDATE; else `not_found`), and
+    refuses a value over `LIMITS.helpStateMaxJsonLength` or not serialisable (`invalid`) before
+    any SQL. It holds the answer key: no other method writes it, and no message or trace does.
 
 ## Audit log (task 1.6)
 

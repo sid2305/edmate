@@ -6,7 +6,7 @@
 // fails `tsc`; a runtime check also compares the methods on createRepositories(db) with CASES.
 // Every case runs over the whole grid: every actor scope x every target in the seed.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { EvidenceEvent, LearnerProfile, Message } from '@edmate/contracts';
+import { type EvidenceEvent, type LearnerProfile, LIMITS, type Message } from '@edmate/contracts';
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
@@ -158,6 +158,7 @@ function auditOwners(rows: AuditRow[], kind: 'teacher' | 'student'): string[] {
 
 /** Over the 10 000-character cap on a serialised before/after. */
 const BIG = { blob: 'x'.repeat(10_001) };
+const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   'agents.get': {
@@ -362,6 +363,40 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (x: { studentId: string; teacherId: string; summary: string | null } | null) =>
       x ? [pairOfIds(x.studentId, x.teacherId), ...markers(x.summary ?? '')] : [],
   },
+  // Task 3.8 (ADR-0005): the only write of the answer key; scope and open session in the WHERE.
+  'sessions.saveHelpState': {
+    scope: 'student',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const value = { v: 1, marker: `[${actor}] help ${uid('h')}` };
+      await r.sessions.saveHelpState(scope, ids.session(target), value);
+      return value;
+    },
+    verify: async (r, actor, value) => {
+      for (const p of PAIRS) {
+        const row = await r.sessions.get(sScope(p), ids.session(actor));
+        if (p === actor) expect(row?.helpState).toEqual(value);
+        else expect(row, `${p} reads ${actor}'s session`).toBeNull();
+      }
+    },
+    mismatches: (a) => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      const save = (v: unknown) => (r: Repos) =>
+        r.sessions.saveHelpState(sScope(a), ids.session(a), v);
+      return [
+        ['a value over LIMITS.helpStateMaxJsonLength', save(BIG_HELP), 'invalid'],
+        ['a value that is not serialisable', save(circular), 'invalid'],
+        ['undefined', save(undefined), 'invalid'],
+        ['a BigInt', save({ n: BigInt(1) }), 'invalid'],
+        [
+          'a session id that is not an id',
+          (r) => r.sessions.saveHelpState(sScope(a), 'ses not an id', {}),
+          'invalid',
+        ],
+      ];
+    },
+  },
   'messages.history': {
     scope: 'student',
     op: 'read',
@@ -417,12 +452,18 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: (r, scope, actor, target) =>
-      r.turnTraces.insert(scope, ids.session(target), {
+      r.turnTraces.insert(scope, {
+        turnId: uid('trn_new'),
+        sessionId: ids.session(target),
+        agentVersion: 1,
+        packageVersion: 1,
         steps: [{ name: `[${actor}] new`, ms: 1, outcome: 'ok' }],
-        model: 'scripted',
-        inputTokens: 1,
-        outputTokens: 1,
-        costMicroUsd: 0,
+        intent: 'on_task',
+        move: 'hint',
+        guards: [],
+        usage: [
+          { model: 'scripted', tier: 'main', inputTokens: 1, outputTokens: 1, costMicroUsd: 0 },
+        ],
       }),
     verify: async (r, actor) => {
       for (const p of PAIRS) {
@@ -431,20 +472,43 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         expect(mine, `${p} sees ${actor}'s trace`).toBe(p === actor);
       }
     },
-    mismatches: (a) => [
-      [
-        'negative tokens',
-        (r) =>
-          r.turnTraces.insert(sScope(a), ids.session(a), {
-            steps: [],
-            model: 'scripted',
-            inputTokens: -1,
-            outputTokens: 0,
-            costMicroUsd: 0,
-          }),
-        'invalid',
-      ],
-    ],
+    mismatches: (a) => {
+      const trace = (o: object) => ({
+        turnId: uid('trn_bad'),
+        sessionId: ids.session(a),
+        agentVersion: 1,
+        packageVersion: 1,
+        steps: [],
+        intent: 'on_task' as const,
+        move: 'hint' as const,
+        guards: [],
+        usage: [],
+        ...o,
+      });
+      const big = { model: 'm', tier: 'main', inputTokens: 2_000_000_000, outputTokens: 0, costMicroUsd: 0 };
+      return [
+        [
+          'negative tokens',
+          (r) =>
+            r.turnTraces.insert(
+              sScope(a),
+              trace({ usage: [{ ...big, inputTokens: -1 }] }) as never,
+            ),
+          'invalid',
+        ],
+        [
+          'summed tokens past the integer column',
+          (r) => r.turnTraces.insert(sScope(a), trace({ usage: [big, big] }) as never),
+          'invalid',
+        ],
+        [
+          'a second trace for the same turn',
+          (r) =>
+            r.turnTraces.insert(sScope(a), trace({ turnId: `trn_${a.toLowerCase()}_seed` }) as never),
+          'invalid',
+        ],
+      ];
+    },
   },
   'turnTraces.listForSession': {
     scope: 'student',
@@ -1022,6 +1086,32 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     // Exact sums, eval exclusion and the date bound are checked in cost-alarm.int.test.ts.
     owners: (x: { teacherId: string; calls: number }) =>
       x.calls > 0 ? [teacherOfId(x.teacherId)] : [],
+  },
+  // Task 3.8: the scheduled cost alarm's teacher list. A system read across teachers (README
+  // rule 11): teacher ids only, nothing about students, packages or figures.
+  'usageLedger.teacherIdsWithUsageSince': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const all = await r.usageLedger.teacherIdsWithUsageSince({ since: '2000-01-01T00:00:00Z' });
+      expect(all).toEqual(TEACHERS.map(teacherId).sort());
+      expect(
+        await r.usageLedger.teacherIdsWithUsageSince({ since: '2999-01-01T00:00:00Z' }),
+      ).toEqual([]);
+      const bad = [
+        {},
+        { since: 'yesterday' },
+        { since: '2000-01-01T00:00:00Z', teacherId: teacherId('A') },
+      ];
+      for (const scope of bad) {
+        await expectFailsClosed(
+          () => r.usageLedger.teacherIdsWithUsageSince(scope as never),
+          ['scope'],
+          `bad scope ${JSON.stringify(scope)}`,
+        );
+      }
+      return 2 + bad.length;
+    },
   },
 };
 

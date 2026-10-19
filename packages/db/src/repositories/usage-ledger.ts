@@ -29,6 +29,11 @@ export type UnmeteredReason = 'no_usage_reported' | `unpriced_model:${string}`;
 
 /** A priced call (its Usage has the real cost). */
 export interface UsageEntry {
+  /**
+   * The row id. Optional: a fresh one is drawn when absent. The worker queue (task 3.8) passes an
+   * id derived from the turn and the call's index, so a retried job can tell it already wrote.
+   */
+  id?: string;
   turnId: string;
   source: UsageSource;
   usage: Usage;
@@ -36,6 +41,8 @@ export interface UsageEntry {
 
 /** A call whose usage is unknown, or known but unpriced. */
 export interface UnmeteredEntry {
+  /** As UsageEntry.id. */
+  id?: string;
   turnId: string;
   source: UsageSource;
   tier: Usage['tier'];
@@ -94,18 +101,24 @@ export interface TeacherUsageTotals extends Omit<UsageTotals, 'studentId'> {
 /** An ISO 8601 timestamp with a time (a bare date is ambiguous across time zones). */
 const Since = z.iso.datetime({ offset: true });
 
+/** The system scope of `teacherIdsWithUsageSince`: a window start, parsed like a scope. */
+const SinceScope = z.strictObject({ since: Since });
+export type UsageSinceScope = z.infer<typeof SinceScope>;
+
 const Model = UsageSchema.shape.model.min(1).max(200);
 const Source = EntitlementSchema.shape.source;
 const Tier = UsageSchema.shape.tier;
 const Count = UsageSchema.shape.inputTokens;
 
 const Entry = z.strictObject({
+  id: IdSchema.optional(),
   turnId: IdSchema,
   source: Source,
   usage: z.strictObject({ ...UsageSchema.shape, model: Model }),
 });
 
 const Unknown = z.strictObject({
+  id: IdSchema.optional(),
   turnId: IdSchema,
   source: Source,
   tier: Tier,
@@ -115,6 +128,7 @@ const Unknown = z.strictObject({
 });
 const Unpriced = z
   .strictObject({
+    id: IdSchema.optional(),
     turnId: IdSchema,
     source: Source,
     tier: Tier,
@@ -181,9 +195,13 @@ function exact(value: string, method: string): number {
 }
 
 /** The columns every write sets, ownership taken from the package row the scope owns. */
-function ownedValues(sc: StudentScope, turnId: string, source: UsageSource) {
+function ownedValues(
+  sc: StudentScope,
+  e: { id?: string | undefined; turnId: string; source: UsageSource },
+) {
+  const { turnId, source } = e;
   return [
-    [usageLedger.id, sql`${randomUUID()}::text`],
+    [usageLedger.id, sql`${e.id ?? randomUUID()}::text`],
     [usageLedger.teacherId, sql`${packages.teacherId}`],
     [usageLedger.packageId, sql`${packages.id}`],
     [usageLedger.studentId, sql`${sc.studentId}::text`],
@@ -244,7 +262,7 @@ export function usageLedgerRepo(db: Db) {
       const pkg = parseArg(IdSchema, packageId, method);
       const e = parseArg(Entry, entry, method);
       await insertOwned(method, sc, pkg, [
-        ...ownedValues(sc, e.turnId, e.source),
+        ...ownedValues(sc, e),
         [usageLedger.status, sql`'recorded'::usage_status`],
         [usageLedger.model, sql`${e.usage.model}::text`],
         [usageLedger.tier, sql`${e.usage.tier}::model_tier`],
@@ -266,7 +284,7 @@ export function usageLedgerRepo(db: Db) {
       const e = parseArg(Unmetered, entry, method);
       const unpriced = 'tokens' in e;
       await insertOwned(method, sc, pkg, [
-        ...ownedValues(sc, e.turnId, e.source),
+        ...ownedValues(sc, e),
         [
           usageLedger.status,
           unpriced ? sql`'unpriced'::usage_status` : sql`'unknown'::usage_status`,
@@ -340,6 +358,25 @@ export function usageLedgerRepo(db: Db) {
         ne(usageLedger.source, 'eval'),
       );
       return { ...sc, since: from.toISOString(), ...(await totals(method, where)) };
+    },
+
+    /**
+     * The ids of every teacher with a non-eval row since `scope.since` (inclusive), sorted: the
+     * teachers the scheduled cost alarm checks (task 3.8). A system read across teachers, like
+     * `agents.owner`: it returns teacher ids and nothing else (no student, package or figure).
+     */
+    async teacherIdsWithUsageSince(scope: UsageSinceScope): Promise<string[]> {
+      const method = 'usageLedger.teacherIdsWithUsageSince';
+      const r = SinceScope.safeParse(scope);
+      if (!r.success) throw new RepositoryError('scope', method);
+      const rows = await db
+        .selectDistinct({ teacherId: usageLedger.teacherId })
+        .from(usageLedger)
+        .where(
+          and(gte(usageLedger.createdAt, new Date(r.data.since)), ne(usageLedger.source, 'eval')),
+        )
+        .orderBy(asc(usageLedger.teacherId));
+      return rows.map((x) => x.teacherId);
     },
   };
 }

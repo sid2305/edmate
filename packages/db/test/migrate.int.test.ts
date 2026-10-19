@@ -279,6 +279,32 @@ describe.skipIf(!up)(
       }, TEST_URL);
     });
 
+    it('0007 stops when turn_traces already has rows (task 3.8)', async () => {
+      const sql = migrationSql().find((f) => f.file === '0007_turn_trace_fields.sql')!.sql;
+      const [guard] = sql.split('--> statement-breakpoint');
+      await admin(async (c) => {
+        // The guard passes on the migrated database (no traces stored yet).
+        expect(
+          (await c.query<{ n: string }>('select count(*)::text as n from turn_traces')).rows[0]?.n,
+        ).toBe('0');
+        await c.query(guard!);
+        await c.query('BEGIN');
+        try {
+          // No session exists here; skip the foreign key for this rolled-back row only.
+          await c.query('SET LOCAL session_replication_role = replica');
+          await c.query(
+            `insert into turn_traces (id, session_id, steps, model, input_tokens, output_tokens,
+               cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage)
+             values ('tt_guard', 'ses_guard', '[]', '', 0, 0, 0, 'trn_guard', 0, 0, 'on_task',
+               'hint', '[]', '[]')`,
+          );
+          await expect(c.query(guard!)).rejects.toThrow(/turn_traces has rows/);
+        } finally {
+          await c.query('ROLLBACK');
+        }
+      }, TEST_URL);
+    });
+
     it('tear down (drop the test schemas) and apply again from scratch', async () => {
       await admin(
         (c) =>
