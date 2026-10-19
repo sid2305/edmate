@@ -69,6 +69,8 @@ export const sessions = pgTable(
       columns: [t.packageId, t.packageVersion],
       foreignColumns: [packageVersions.packageId, packageVersions.version],
     }),
+    // Declared here so `db:generate` stays a no-op; built by the post-migrate step
+    // (packages/db/src/migrate.ts, task 3.16b) with CREATE INDEX CONCURRENTLY, not by 0009's SQL.
     index('sessions_package_id_package_version_idx').on(t.packageId, t.packageVersion),
     check(
       'sessions_package_pin_complete',
