@@ -18,6 +18,8 @@ const guard = createAnswerLeakGuard();
 const ctxFor = (keys: string[], o: Partial<PostGuardCtx> = {}): PostGuardCtx => ({
   ctx: demoTurnContext,
   decision: { ...demoPedagogyDecision, mustNotReveal: keys },
+  lockedCheck: () => Promise.resolve(false),
+  lockedReply: 'LOCKED REPLY',
   ...o,
 });
 const run = (text: string, x: PostGuardCtx) => guard.run(text, x, token);
@@ -32,7 +34,7 @@ describe('answerLeak', () => {
   it('is the post phase’s registered answerLeak guard', () => {
     expect(guard.name).toBe('answerLeak');
     expect(guard.phase).toBe('post');
-    expect(postGuards.ordered().map((g) => g.name)).toEqual(['answerLeak']);
+    expect(postGuards.ordered().map((g) => g.name)).toEqual(['lockedLeak', 'answerLeak']);
   });
 
   it('a clean draft is ok, with no usage', async () => {
@@ -132,7 +134,9 @@ describe('answerLeak', () => {
     );
     expect(r).toMatchObject({ outcome: 'ok', text: 'Look at the last line.' });
     expect(r.guards).toEqual([
+      { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: false, action: 'rewrite' },
+      { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
     ]);
   });

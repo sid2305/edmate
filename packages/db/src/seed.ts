@@ -10,7 +10,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { inArray } from 'drizzle-orm';
-import { loadDemoTeacherContent, type DemoTeacherContent } from '@edmate/content';
+import { checkPilotLanguages, loadDemoTeacherContent, type DemoTeacherContent } from '@edmate/content';
 import {
   AgentConfigSchema,
   PackageConfigSchema,
@@ -125,6 +125,11 @@ export function buildDemoSeed(content: DemoTeacherContent): DemoSeed {
     languages: ['en'],
     modelPolicy: MODEL_POLICY,
   });
+  // Pilot policy (3.11c, 18 Oct 2026 decision): reject before writing, not just by convention.
+  const pilotIssues = checkPilotLanguages(agentConfig.languages);
+  if (pilotIssues.length > 0) {
+    throw new Error(`seed agent config: ${pilotIssues.join('; ')}`);
+  }
   const pkgConfig = (id: string, draft: DemoTeacherContent['packages']['free']): PackageConfig => {
     const unknown = draft.moduleIds.filter((m) => !moduleIds.has(m));
     if (unknown.length > 0) {

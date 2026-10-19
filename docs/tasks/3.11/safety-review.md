@@ -28,3 +28,6 @@ The pack is not pinned for real-model turns until the 4.x guards merge and the f
 - [LOW] [fixed] content/prompt-packs/safety@1.0.0.md:25 — the language rule is country-neutral.
 - [LOW] [fixed] content/skills/mock_interview/viva@1.0.0.yaml:20 — "flirtatious" and the banned topics added.
 - [LOW] [deferred 3.11d] packages/harness/src/pedagogy/modelRequest.ts:45 — teacher turns in a non-assistant wrapper; neutralise the note in student input; a real-pack model-request snapshot.
+
+## 3.11c — APPROVE
+Reviewer: safety-reviewer (sonnet). Pilot agents reply in English: validation rejects other languages, and the harness clamps the reply language to English with a background warning. Distress replies and helplines are unchanged.

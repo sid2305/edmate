@@ -16,6 +16,7 @@ export {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PilotLanguageClamped,
   ScrubFailedError,
   type ScrubFailureCause,
   type ScrubFailureDetail,
@@ -64,7 +65,8 @@ export {
 export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
 export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
-export { SourceDropped } from './steps/generate.js';
+export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
+export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
 export {
   createPostGuard,
   POST_GUARD_MARGIN_MS,

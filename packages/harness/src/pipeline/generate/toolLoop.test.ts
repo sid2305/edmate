@@ -8,6 +8,9 @@ import { spyGateway } from '../../testing/spyGateway.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort, TurnCancelled } from '../errors.js';
+import type { LockedCheck } from '../../guardrails/answerLeak.js';
+import { LockedCheckFailed, LockedLeakDetected } from '../../guardrails/lockedLeak.js';
+import { lockedIndex } from '../../guardrails/lockedMatch.js';
 import type { RegisteredTool } from '../tools.js';
 import type { UsageRecorder } from '../types.js';
 import { passThroughGate } from './streamGate.js';
@@ -43,7 +46,12 @@ const calculator = testTool({
 
 function setup(
   streams: StreamStep[][],
-  o: { tools?: RegisteredTool[]; recorder?: Partial<UsageRecorder>; mustNotReveal?: string[] } = {},
+  o: {
+    tools?: RegisteredTool[];
+    recorder?: Partial<UsageRecorder>;
+    mustNotReveal?: string[];
+    lockedCheck?: LockedCheck;
+  } = {},
 ) {
   const clock = virtualClock();
   const spy = spyGateway(
@@ -74,10 +82,11 @@ function setup(
     },
     gate: passThroughGate({ ctx: turnContextFull, decision: { ...demoDecision } }),
     show: (t: string) => void shown.push(t),
-    onToolOutput: (r: RegisteredTool, output: unknown) =>
+    onToolOutput: (r: RegisteredTool, output: unknown): void | Promise<void> =>
       void outputs.push({ name: r.tool.name, output }),
     report: (e: unknown) => void reported.push(e),
     mustNotReveal: o.mustNotReveal ?? [],
+    lockedCheck: o.lockedCheck ?? (() => Promise.resolve(false)),
     track: (p: Promise<unknown>) => void tracked.push(p),
   };
   return {
@@ -119,7 +128,8 @@ describe('runToolLoop: rounds', () => {
       raw: 'Think about denominators.',
       toolRounds: 0,
     });
-    expect(s.shown).toEqual(['Think about ', 'denominators.']);
+    // Shown a sentence at a time, once the locked check passed it (4.6).
+    expect(s.shown).toEqual(['Think about denominators.']);
     expect(s.recorded).toEqual([usageMain]);
     expect(s.spy.requests).toHaveLength(1);
     expect(s.spy.requests[0]?.tools?.map((t) => t.name)).toEqual(['calculator']);
@@ -191,7 +201,8 @@ describe('runToolLoop: rounds', () => {
     ]);
     await expect(s.run()).rejects.toBeInstanceOf(ToolCallNotOfferedError);
     expect(s.registry.runs).toHaveLength(3);
-    expect(s.shown).toEqual(['x']);
+    // "x" never reached a sentence end, so it was never checked and never shown (4.6).
+    expect(s.shown).toEqual([]);
     expect(s.spy.returns).toBe(1);
   });
 
@@ -376,7 +387,8 @@ describe('runToolLoop: cost and cancel', () => {
       },
     });
     await expect(s.run()).rejects.toBeInstanceOf(TurnAbort);
-    expect(s.shown).toEqual(['a']);
+    // Held for its sentence end, then the attempt stopped: never shown (4.6).
+    expect(s.shown).toEqual([]);
     expect(s.spy.returns).toBe(1);
   });
 
@@ -530,4 +542,152 @@ describe('runToolLoop: fix round (answer key, reports, order, close tracking)', 
     expect(s.tracked).toHaveLength(1);
     await expect(s.tracked[0]).resolves.toBeUndefined();
   });
+});
+
+describe('runToolLoop: locked material (4.6)', () => {
+  const MATERIAL = 'alpha beta gamma delta epsilon zeta eta theta iota';
+  const index = lockedIndex([MATERIAL], []);
+  const byIndex: LockedCheck = (texts) => Promise.resolve(index.hits(texts));
+  const reasons = (r: unknown[]) =>
+    r.filter((e): e is ToolFailed => e instanceof ToolFailed).map((e) => [e.reason, e.causeName]);
+  const toolWith = (output: unknown) =>
+    testTool({ ...calculator.tool, output: z.unknown(), run: () => Promise.resolve(output) });
+
+  it('a tool output holding a locked span fails as `locked`; the model never sees it', async () => {
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      { tools: [toolWith({ note: `Here: ${MATERIAL}` })], lockedCheck: byIndex },
+    );
+    await s.run();
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(JSON.stringify(s.spy.requests)).not.toContain('alpha beta');
+    expect(s.outputs).toEqual([]);
+    expect(reasons(s.reported)).toEqual([['locked', undefined]]);
+  }, 5_000);
+
+  it('checks each string leaf and the leaves joined, never only the JSON text', async () => {
+    const seen: (readonly string[])[] = [];
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      {
+        tools: [toolWith({ lines: ['alpha beta gamma delta', 'epsilon zeta eta theta'] })],
+        lockedCheck: (texts) => {
+          seen.push(texts);
+          return byIndex(texts);
+        },
+      },
+    );
+    await s.run();
+    expect(seen[0]).toEqual([
+      'lines',
+      'alpha beta gamma delta',
+      'epsilon zeta eta theta',
+      'lines alpha beta gamma delta epsilon zeta eta theta',
+    ]);
+    expect(reasons(s.reported)).toEqual([['locked', undefined]]);
+  }, 5_000);
+
+  it('a check that rejects fails the call closed, reported by error name only', async () => {
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      {
+        tools: [toolWith({ value: 'fine' })],
+        lockedCheck: (texts) =>
+          texts.length > 1
+            ? Promise.reject(new LockedCheckFailed('timeout'))
+            : Promise.resolve(false),
+      },
+    );
+    const out = await s.run();
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(reasons(s.reported)).toEqual([['locked', 'LockedCheckFailed']]);
+    expect(out.locked).toBeUndefined();
+  }, 5_000);
+
+  it('a cancel during the output check still throws only TurnCancelled', async () => {
+    const holder: { cancel?: () => void } = {};
+    const s = setup([[call('c1'), used]], {
+      tools: [toolWith({ value: 'fine' })],
+      lockedCheck: (texts) => {
+        if (texts.length > 1) {
+          holder.cancel?.();
+          return new Promise(() => undefined);
+        }
+        return Promise.resolve(false);
+      },
+    });
+    holder.cancel = () => s.cancel.cancel();
+    await expect(s.run()).rejects.toBeInstanceOf(TurnCancelled);
+  }, 5_000);
+
+  it('streamed text holding a locked span is withheld from that sentence on', async () => {
+    const s = setup(
+      [[say('Good question. '), say(`Here it is: ${MATERIAL}. `), say('Bye.'), used]],
+      {
+        lockedCheck: byIndex,
+      },
+    );
+    const out = await s.run();
+    expect(s.shown).toEqual(['Good question. ']);
+    expect(out).toMatchObject({ draft: 'Good question. ', locked: 'hit' });
+    expect(out.raw).toContain(MATERIAL);
+    expect(s.reported.some((e) => e instanceof LockedLeakDetected)).toBe(true);
+  }, 5_000);
+
+  it('a span split across tool rounds is still caught (the check is not reset per round)', async () => {
+    const s = setup(
+      [
+        [say('alpha beta gamma delta '), call('c1'), used],
+        [say('epsilon zeta eta theta.'), used],
+      ],
+      { lockedCheck: byIndex },
+    );
+    const out = await s.run();
+    expect(out.locked).toBe('hit');
+    expect(out.draft).not.toContain('theta');
+  }, 5_000);
+
+  it('a failed stream check withholds and the result says `failed`', async () => {
+    const s = setup([[say('Hello there. '), used]], {
+      lockedCheck: () => Promise.reject(new LockedCheckFailed('error', 'Error')),
+    });
+    const out = await s.run();
+    expect(s.shown).toEqual([]);
+    expect(out.locked).toBe('failed');
+  }, 5_000);
+
+  it('waits for an async onToolOutput before the next call', async () => {
+    const order: string[] = [];
+    const s = setup([
+      [call('c1'), used],
+      [say('ok'), used],
+    ]);
+    s.input.onToolOutput = async () => {
+      await Promise.resolve();
+      order.push('output handled');
+    };
+    const req = s.spy.stream.bind(s.spy);
+    s.input.gateway = {
+      ...s.spy,
+      stream: (r) => {
+        order.push('model called');
+        return req(r);
+      },
+    };
+    await s.run();
+    expect(order).toEqual(['model called', 'output handled', 'model called']);
+  }, 5_000);
 });

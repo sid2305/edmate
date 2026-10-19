@@ -649,6 +649,81 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  'learnerProfiles.applyMastery': {
+    scope: 'student',
+    op: 'write',
+    // Unlike `save`, applyMastery's payload names no target at all: every call always writes
+    // the authenticated scope's own row (a topic id is content, not a row selector), so there is
+    // no "actor writes toward target" to test here (owns: () => true skips that grid; the topic-
+    // ownership check is covered by `mismatches` below instead).
+    owns: () => true,
+    attempt: async (r, scope, _actor, target) => {
+      const p = (((++counter % 83) + 1) / 100) as number;
+      await r.learnerProfiles.applyMastery(scope, {
+        [ids.topic(teacherOf(target))]: { p, n: 1, updatedAt: '2026-10-19T10:00:00.000Z' },
+      });
+      return { topicId: ids.topic(teacherOf(target)), p };
+    },
+    verify: async (r, actor, result) => {
+      const { topicId, p } = result as { topicId: string; p: number };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mastery[topicId]?.p === p,
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a topic that does not exist',
+        (r) =>
+          r.learnerProfiles.applyMastery(sScope(a), {
+            top_nowhere: { p: 0.5, n: 1, updatedAt: '2026-10-19T10:00:00.000Z' },
+          }),
+        'scope',
+      ],
+      [
+        'a mastery entry that fails the contract',
+        (r) =>
+          r.learnerProfiles.applyMastery(sScope(a), {
+            [ids.topic(teacherOf(a))]: { p: 1.5, n: 1, updatedAt: '2026-10-19T10:00:00.000Z' },
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'learnerProfiles.applyEvidenceMastery': {
+    scope: 'student',
+    op: 'write',
+    // Same shape as applyMastery above: the payload names no target row, only topic ids as
+    // content, so there is no "actor writes toward target" to test (owns: () => true skips that
+    // grid; topic ownership is covered by `mismatches` below).
+    owns: () => true,
+    attempt: async (r, scope, _actor, target) => {
+      const ts = new Date(Date.UTC(2026, 9, 19, 14, 0, ++counter)).toISOString();
+      await r.learnerProfiles.applyEvidenceMastery(scope, [
+        { topicId: ids.topic(teacherOf(target)), correct: true, ts },
+      ]);
+      return { topicId: ids.topic(teacherOf(target)), ts };
+    },
+    verify: async (r, actor, result) => {
+      const { topicId, ts } = result as { topicId: string; ts: string };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mastery[topicId]?.updatedAt === ts,
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a topic that does not exist',
+        (r) =>
+          r.learnerProfiles.applyEvidenceMastery(sScope(a), [
+            { topicId: 'top_nowhere', correct: true, ts: '2026-10-19T14:00:00.000Z' },
+          ]),
+        'scope',
+      ],
+    ],
+  },
   'evidenceEvents.append': {
     scope: 'student',
     op: 'write',

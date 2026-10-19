@@ -10,6 +10,241 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.14 No ADR; Redis over Postgres; harness-owned `TurnCounter` · decided by lead (plan's Q1–Q3) · risk: low
+- Decided: `TurnCounter`/`TurnLimits` stay harness-owned types (no contracts port, no ADR);
+  `packages/queue` depends on `@edmate/harness` as a production dependency to consume them,
+  exactly as `packages/content` already does; the durable adapter is built on Redis with an exact
+  sliding-window-log (ZSET), not Postgres or an approximate bucket counter.
+- Why: Redis is already deployed and already a `packages/queue` dependency; one atomic Lua `EVAL`
+  matches the existing sliding-window-log semantics with a single round trip well under the 50 ms
+  step budget; `appendonly yes` (see `docker/compose.yaml`) already gives restart durability.
+  Promoting `TurnCounter` to a contracts port would only matter if a second, non-harness-dependent
+  package needed to implement it — nothing today does.
+- Alternatives: a contracts port (ADR-0008); Postgres with row locks/`SELECT ... FOR UPDATE`; an
+  approximate fixed-bucket counter instead of the exact log.
+- Reversible: yes — both the port-vs-type question and Redis-vs-Postgres sit behind the unchanged
+  `TurnCounter` interface; swapping either later needs no `admit.ts`/`entitle.ts` change.
+
+---
+
+### 19 Oct 2026 · 3.14 Stale board "ADR-0005" reference · decided by builder (flagged by plan) · risk: low
+- Decided: the board's task 3.14 title line's "ADR-0005" mention is stale (ADR-0005 belongs to
+  3.15); no ADR is created for 3.14.
+- Why: ADR-0005 was assigned to 3.15 (Transcriber + session help state) after 3.14 was written onto
+  the board; the lead's answer confirms no ADR is needed here regardless of numbering.
+- Alternatives: renumber and use ADR-0008 for this task (the plan's fallback if the lead preferred
+  a contracts port); not taken, since the lead agreed no ADR is needed at all.
+- Reversible: yes — a future task can still add a contracts port with its own ADR if a second
+  package ever needs to implement `TurnCounter` without a harness dependency.
+
+---
+
+### 19 Oct 2026 · 3.14 Separate key sub-namespace for rate vs. messages · decided by builder · risk: low
+- Decided: `redisTurnLimits` gives its `rate` and `messages` counters distinct key sub-namespaces
+  (`${prefix}:rate:*`, `${prefix}:messages:*`) instead of one shared namespace.
+- Why: `admit`'s rate key (`studentId`) and `entitle`'s message key (`studentId:packageId`) are
+  unlikely to collide by convention alone, but the plan's own spec doesn't rule out a caller or
+  future use reusing the same raw string for both; a cheap, explicit sub-namespace removes the
+  possibility entirely rather than relying on callers to always differ.
+- Alternatives: the plan's literal single-prefix sketch (`${prefix}:${key}` for both); not taken,
+  since it leaves an avoidable (if currently unlikely) collision path.
+- Reversible: yes — an internal key-naming detail behind `TurnCounter`/`TurnLimits`; no external
+  contract depends on the exact Redis key shape.
+
+---
+
+### 19 Oct 2026 · 3.14 One documented cast for the Redis Lua command · decided by team lead (typescript review) · risk: low
+Decided: `packages/queue/src/turnLimits.ts` keeps a single commented cast to probe and define the custom Lua command on the ioredis client.
+Why: ioredis has no typed generics for defineCommand; the cast is isolated and tested.
+Alternatives: call `eval` with the script text each time (no cached script).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 ADR-0007: `RetrievalIndex.leakCheck` returns one boolean for a batch, over the complement scope, failing closed · decided by lead (plan answers, after safety-reviewer and architect plan reviews) and tdd-guide (ADR text) · risk: high
+Decided: add `leakCheck(candidates: string[], scope: { teacherId; allowedModuleIds }): Promise<{ hit: boolean }>` to contracts. Locked means every chunk of the teacher outside the allowed modules, and spans also in allowed chunks are ignored. The adapter fails closed and never logs candidates, with a latency SLO (p95 ≤ 50 ms, p99 ≤ 100 ms), a cache keyed by package version plus the teacher's material revision, and a residual oracle of one bit per turn bounded by the message limit.
+Why: locked text must never enter the harness or a model (ADR-0003). Spans, scores or counts would make the port an oracle that reads locked text out.
+Alternatives: return matched spans (architect proposal); `{ hit, score }` like `probe`; fetch locked text or hashed shingles into the harness.
+Reversible: yes, by a new ADR, reviewed by architect, security-reviewer and typescript-reviewer.
+
+---
+
+### 19 Oct 2026 · 4.6 lockedLeak runs before answerLeak in the post chain · decided by lead (plan answer 2) · risk: high
+Decided: `GUARD_ORDER.post` is now `lockedLeak, answerLeak, grounding, adviceGuard, personaBoundary, tone`, a departure from the build plan's table order. A test shows the answer rewriter never receives a locked span.
+Why: answerLeak's rewrite sends the draft to a small model; a locked span must be gone before then.
+Alternatives: keep the table order and strip locked text inside answerLeak's rewrite path.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Any locked hit replaces the whole reply with the locked reply; no surgical strip · decided by lead (plan answer 3) · risk: high
+Decided: on a hit in the post chain or the stream, the student gets the locked reply. It is the built-in English reply or the locale's `FallbackReplies.lockedReply`, and names only the student's own package when the teacher chose `name_package`. The guard accepts that text without a check, so it is idempotent by construction.
+Why: cutting spans out leaves fragments and needs spans from the port (an oracle). A fixed reply is safe and simple.
+Alternatives: strip matched spans and recheck in a bounded loop (original plan).
+Reversible: yes, with safety-reviewer sign-off and an ADR if the port would have to return spans.
+
+---
+
+### 19 Oct 2026 · 4.6 Every streamed sentence waits for a locked check, with a 7-token carryover · decided by lead (plan answer 1) and tdd-guide (seam placement, partial-word rule) · risk: high
+Decided: text the answer gate releases is cut into sentences by the same rules. Each sentence is shown only after `leakCheck` passes it, together with the last 7 shown tokens (8 when the shown text ends inside a word). A hit, a failed check or too much text withholds the rest of the attempt. Fragments with no sentence end are not shown until checked.
+Why: build plan line 316 requires locked n-grams to be checked before sending. The carryover catches spans across sentences, chunks and tool rounds.
+Alternatives: post-only checking, where locked text would stream and then be replaced; one check per chunk, which means too many port calls.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Up to 7 locked tokens can stream before the hit; accepted as a known miss for now · decided by tdd-guide (finding, for safety-reviewer) · risk: high
+Decided: no hold-back beyond the carryover. In the fixture run, 89 of 351 forms showed a short case phrase (always fewer than 8 locked tokens) before the replace. None showed 8+ tokens, and every final reply is the locked reply.
+Why: knowing that a shown sentence starts a locked span needs a prefix query, which is a finer oracle than ADR-0007 allows.
+Alternatives: delay each sentence until 7 more tokens arrive (slower streaming, and it still can't tell); a prefix-query port (new ADR, an oracle risk).
+Reversible: yes; safety-reviewer to decide whether this needs a follow-up task.
+
+---
+
+### 19 Oct 2026 · 4.6 The student's own words: only their own 8-token windows are left out · decided by tdd-guide (narrowing lead answer 4's false-positive rule) · risk: high
+Decided: the harness drops from the candidates only the 8-token windows that appear in the student's (scrubbed) message. A window mixing the student's quote with new words is still checked.
+Why: cutting out the student's tokens would let "echo my quote plus 7 more locked tokens" pass, the partial-quote attack. Tests show both the false positive and the attack.
+Alternatives: cut covered tokens out (my first version, caught in testing); no student exception (quoting back a student's paste would be replaced).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Fail-closed outcomes per call site · decided by lead (plan answer 5) and tdd-guide (reply choice) · risk: medium
+Decided: `lockedCheck` is required everywhere. On a rejection or timeout: the tool loop gives `failed('locked')`, skillEvent gives `drop('locked')`, the stream withholds and postGuard then sends the safe reply (or the hint if an answer also leaked), and the post chain fails and sends the safe reply. A real hit gives the locked reply.
+Why: telling a student "that's not in your package" when the index was only slow would mislead them; the safe reply is neutral.
+Alternatives: treat every failure as a hit and send the locked reply.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Harness timeout 150 ms per check; checks of under 8 tokens skip the call · decided by tdd-guide · risk: medium
+Decided: `LOCKED_CHECK_TIMEOUT_MS = 150`, the per-guard slice once all six post guards exist. No port call is made when no candidate has 8 tokens. Candidates are folded token spans, with base64 decoded once (plan Q3).
+Why: keeps latency bounded and fails closed. Short text can't hold a leak.
+Alternatives: use the post slice only; always call.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Skill-only locked cases and one framed leak · decided by tdd-guide · risk: medium
+Decided: `skill-feedback-en`, `skill-feedback-hi-latin` and `skill-revision-allowed-module-en` lock a skill and name no locked module file. Their leaks quote locked functions or loops material. The first and third fail unguarded only through `must_contain` (the locked reply). `skill-feedback-hi-latin`'s phrases ("rubric line", "marks:") appear in no content file, so its leak puts "Rubric line 1: " before a verbatim locked rubric span.
+Why: the lead asked that every case fail under both mutations. For these cases lockedLeak is a backstop; the main protection is decide's locked move and the skill registry.
+Alternatives: exclude these three from the mutation count.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Test virtual clock flushes 2,000 microtask turns, up from 200 · decided by tdd-guide · risk: low
+Decided: raise `FLUSH_TURNS` in `testing/virtualClock.ts`.
+Why: a long reply now awaits one check per sentence at a single virtual instant. At 200 turns the clock wrongly fired a 15 s attempt timeout or reported a deadlock (4.5's leak suite showed it). Production code is unaffected.
+Alternatives: add delays to every scripted stream.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Locked hits go to background reports until 4.4's SafetyEventSink exists · decided by lead (task brief) · risk: low
+Decided: hits are reported by name only: `LockedLeakDetected(stream|reply)`, `ToolFailed(…, 'locked')` and `SkillEventDropped(…, 'locked')`. None carries any text.
+Why: 4.4 has not merged.
+Alternatives: wait for 4.4.
+Reversible: yes; wire to the sink in 4.4 or a follow-up.
+
+---
+
+### 19 Oct 2026 · 4.6 A locked-check outage gives the generic safe reply · decided by team lead (security review) · risk: low
+Decided: when the full-reply leakCheck fails (timeout or error) rather than hits, `packages/harness/src/pipeline/steps/postGuard.ts` sends the generic safe reply, as the stream path already does.
+Why: an outage is not evidence of a locked request, so naming the package would mislead.
+Alternatives: send the locked reply on any failure.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Build-plan guard table updated for ADR-0007 · decided by team lead (architect review) · risk: high
+Decided: the build plan's guard table now lists lockedLeak before answerLeak, with whole-reply replacement and the per-sentence stream check.
+Why: the spec must match the accepted ADR; a reader of the table alone would build the wrong order and action.
+Alternatives: leave the table stale.
+Reversible: only by another ADR.
+
+---
+
+### 19 Oct 2026 · 3.17 fix round · Duplicate `teacher_questions` rows are dismissed, not left open and not deleted · decided by build-error-resolver (fix round) · risk: medium, reversible
+Decided: 0011's dedup cleanup sets every open duplicate but the oldest to `status = 'dismissed'` (append-only, no deletes), so the new unique index can always be created even against data seeded before it existed.
+Why: the review's instruction was explicit ("close duplicates... never delete rows"); `dismissed` is the only terminal status besides `answered` in `teacher_question_status`, and a duplicate asked only because of the pre-fix race was never actually answered.
+Alternatives: delete the duplicate rows (violates "never delete"); leave them open and make the index `CREATE UNIQUE INDEX CONCURRENTLY` with a pre-check that refuses to proceed on conflict (adds an operational step with no clear owner, and still needs some resolution of the conflicting rows first).
+Reversible: Yes — a later migration could re-open a dismissed duplicate if that ever mattered (none of this pilot's history needs it).
+
+---
+
+### 19 Oct 2026 · 3.17 No locale/age (DPDP) gate on learner-profile writes yet · decided by lead (pre-build) · risk: high
+Decided: ship 3.17 without a locale/age gate on `applyEvidence` or `get`; the gap is tracked by board task 6.0b (the DPDP gate for learner memory), which must land before any India pilot.
+Why: `ProfileStore` has no market/age parameter — adding one here is a contracts change needing an ADR, disproportionate to a plumbing task with no real evidence producer yet (route/3.3, the practice skill/5.6 and the topic map/6.1 are all still `todo`); `buildContext` already reads whatever is in `learner_profiles` for every session today, independent of this task, so this task's write path does not newly expose anything an India 13–17 session doesn't already carry.
+Alternatives: add a market/age check to `ProfileStore` now (contracts ADR); block 3.17 until 6.0b lands.
+Reversible: Yes — 6.0b can add the gate without touching this task's write path.
+
+---
+
+### 19 Oct 2026 · 3.17 TeacherQuestion open-dedup via a new partial unique index + insert-or-return-existing · decided by lead (plan) and tdd-guide (the `md5(text)` expression, found while writing the migration) · risk: high
+Decided: migration 0011 adds a partial unique index on `teacher_questions (teacher_id, student_id, agent_id, md5(text)) WHERE status = 'open'`; `teacherQuestionsRepo.open()` becomes insert-or-return-existing on that key, so the live (3.7) attempt and commit's (3.17) fallback — which can both try to open "the same" question for one turn, since a timed-out live attempt may still land — converge on one row instead of raising a duplicate. A plain (non-`CONCURRENTLY`) migration, unlike 3.16's session-pin indexes: `teacher_questions` is small and low-write.
+Why: without this, an `ask_teacher` turn whose live open timed out (but still landed) would get a second, duplicate question from commit's fallback.
+Alternatives: dedup in application code only (a read-then-write race window); index on raw `text` (would exceed btree's row-size limit for a long question); `CREATE INDEX CONCURRENTLY` via a post-migrate step (disproportionate for a small, low-write table).
+Reversible: Only with a new migration and a review of any `open()` callers relying on the current raw-insert behaviour.
+
+---
+
+### 19 Oct 2026 · 3.17 Evidence idempotency: content-hash id over the original timestamp, one shared function · decided by lead (answer) · risk: medium
+Decided: `evidenceEventId` (in `packages/queue`) hashes `studentId|teacherId|topicId|correct|source|weight|ts` with a fixed field order and encoding (`JSON.stringify` of a fixed-key array); `ts` must be the event's *original* timestamp, documented with a code comment at the one place it is computed (`queues.ts`) and at every call site (`profileStore.ts`'s producer, `processors.ts`'s worker). The same function is used for the BullMQ job id (`jobId.evidence`) and the row id `evidenceEventsRepo.append` writes, so a replayed job and the first attempt agree on one id. A test (`adapters.test.ts`, "jobId.evidence and the producer both derive from this one function") asserts the two call sites produce the same id for the same event.
+Why: a retry must hash to the same id as the first attempt, or dedup breaks; one shared function (not two copies) removes the chance of the hash algorithm drifting between the producer and the processor.
+Alternatives: a per-event id chosen by the caller (loses the "replay reproduces the same id" property unless the caller is also deterministic); separate hash functions in `@edmate/queue` and `@edmate/db` (duplication risk).
+Reversible: Yes — changing the hash's field order or encoding is a one-file change, though it invalidates in-flight job ids across a deploy.
+
+---
+
+### 19 Oct 2026 · 3.17 `profileStoreFor.applyMastery`'s write path closes the 3.16 "last_summary clobbered" finding structurally · decided by lead (plan) · risk: medium, reversible
+Decided: `learnerProfilesRepo.applyMastery`'s `SET` list only ever names `mastery` and `updated_at`; `mistakes` and `last_summary` are never in the statement, so this write path cannot clobber `last_summary` no matter what calls it. `learnerProfiles.save()`'s own semantics (and any session-open/package-pin check on it) are unchanged — closing this specific write path does not close the finding for `save()` in general, which is still 6.4's job (`EvidenceEvent` has no `sessionId` to check against).
+Why: evidence should never erase a student's last-session summary.
+Alternatives: give `applyMastery` a `save()`-style full-row overwrite (reintroduces the risk); add a session check here anyway (no session id available on `EvidenceEvent`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.17 `TeacherQuestionStore.findSimilar` always returns `[]` for now · decided by tdd-guide (build-time finding, logged for the lead) · risk: medium
+Decided: `teacherQuestionStoreFor.findSimilar` returns `[]` unconditionally (still scope-checked). No embeddings-backed similarity search exists yet in this codebase; building one is out of this task's scope (a RAG/embeddings task) and not in the plan's file list.
+Why: shipping plumbing, not an invented heuristic — matches the task's own stated approach for evidence extraction.
+Alternatives: a naive text-similarity heuristic (e.g. trigram overlap) now; block this task on the embeddings task.
+Reversible: Yes — a later task can replace the body without changing the port's shape.
+
+---
+
+### 19 Oct 2026 · 3.17 New-profile default: `lang: 'en'`, empty mastery/mistakes · decided by tdd-guide (plan's own recommendation) · risk: low
+Decided: `profileStoreFor.get`/`applyMastery` default a never-seen (student, teacher) pair to `lang: 'en'` (the pilot is English-only today).
+Why: `ProfileStore.get` has no `lang` parameter (unlike `fallbackContext`'s `input.lang`), so some default is needed; English matches the current pilot.
+Alternatives: default to the entitlement's market's locale (no market available at this port's level); throw instead of defaulting (breaks `buildContext`, which calls this every turn).
+Reversible: Yes, once locale work lands.
+
+---
+
+### 19 Oct 2026 · 3.11c Pilot-policy validation lives in `packages/content`, called from the one real construction site · decided by tdd-guide · risk: medium
+Decided: `checkPilotLanguages`/`PILOT_LANGUAGES` (18 Oct 2026 English-only decision) are added to `@edmate/content`, not to `packages/contracts` (a contracts change needs an ADR, and `AgentConfigSchema.languages` must stay general per the task). The content package's own `validateContentDir`/CONTENT_RULES are untouched because no content-tree file carries `languages` yet (no agent config field exists in the teacher content layout; it is built only by `packages/db/src/seed.ts`, the one real `AgentConfigSchema.parse` call with live `languages` data today). `seed.ts` calls `checkPilotLanguages(agentConfig.languages)` right after parsing and throws a clear message if it ever fails; it cannot fail today because the seed's `languages` is a hardcoded `['en']`, so this is forward defence, not a reachable branch (db's coverage threshold is 80%, not 100%, so this is allowed).
+Why: grepping `AgentConfigSchema` across `packages/content`, `packages/db` and `apps/cli` (task instruction) found no teacher-facing publish path with a `languages` field yet — `edmate content validate` validates course/style-card/package/licence files only. Putting the check where the real data flows, and exporting it from content so a future studio/publish path (and apps/cli) can reuse the same function, seemed better than inventing an unused content-tree field.
+Alternatives: add a no-op `ContentRule` for a `languages` field that doesn't exist yet (speculative); put the function directly in `packages/db` (then a future `apps/cli`/content publish path would need to depend on `@edmate/db` to reuse it, the wrong dependency direction).
+Reversible: yes — the function can move or be called from new sites without changing its shape.
+
+---
+
+### 19 Oct 2026 · 3.11c The harness clamp lives in `replyLanguage`/`composeSystemPrompt`; the warning is reported from `decide`, not from `compose.ts` · decided by tdd-guide · risk: high
+Decided: `compose.ts` gains its own `PILOT_LANGUAGES` constant (the harness may import only contracts, zod, mathjs and its own modules, so it cannot import `@edmate/content`'s copy) and clamps `replyLanguage` to `'en'` whenever `agent.languages` is not exactly `['en']`, regardless of the student's requested language or what the agent config otherwise claims to allow. `composeSystemPrompt` stays pure and now also returns `languageClamped: boolean` on `Composed`. `decide.ts` (which already holds a `StepEnv` with `.report`) reports a `PilotLanguageClamped` (a `HarnessError` with fixed, content-free text) to `finished.background` when `languageClamped` is true, exactly like every other background-only failure in the pipeline (ids and error name only, never agent or student text). This touches `packages/harness/src/pedagogy/**`, a risk-paths group requiring safety-reviewer sign-off.
+Why: the task calls for "a narrow input clamp... where the language is picked" plus a background-only warning; `replyLanguage` is literally where the language is picked, and `decide` is the first place downstream that already has a reporting channel, so no new plumbing (a new `BackgroundTask` variant, a logger param on `compose.ts`) was needed to keep `compose.ts` pure.
+Alternatives: thread a logger or callback into `composeSystemPrompt` itself (breaks purity, a `prompt-pack behaviour is frozen` file the task said to touch narrowly); add a new `BackgroundTask` union member for this (unneeded — the existing default `'runner'` task plus the error's own `name` already identifies it uniquely in the background log).
+Reversible: yes, but only with safety-reviewer sign-off (risk-paths rule).
+
+---
+
+### 19 Oct 2026 · 3.11c Existing demoAgentConfig-based tests updated for the new clamp, not left to describe stale behaviour · decided by tdd-guide · risk: low
+Decided: `compose.test.ts`'s locale-pack test, `decide.test.ts`'s "uses the input language" test, and `turn.integration.test.ts`'s turn-config loader were updated: the fixture `demoAgentConfig` carries `languages: ['en', 'hi']` (the contracts fixture is general on purpose and was not touched), so turns built from it are now clamped to English; the integration test's loader was given `languages: ['en']` instead, since that test is about turn flow, not language policy, and its `expect(result.background).toEqual([])` assertion predates this task.
+Why: task instruction 3 ("the harness clamp falls back to en") is a behaviour change from the pre-task state, so the old assertions (`replyLanguage('hi', {...})` returning `'hi'`) described exactly the gap this task closes; updating them in place (TDD red→green) rather than leaving them failing or weakening the clamp was the only option that keeps both the policy and the test suite honest.
+Alternatives: give `compose.snapshot.test.ts`'s `demoAgentConfig`-based cases a non-pilot-compliant agent too (unnecessary — every snapshot case requests `lang: 'en'`, which the clamp also resolves to `'en'`, so no snapshot changed).
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 4.2c fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
 Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
 ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped

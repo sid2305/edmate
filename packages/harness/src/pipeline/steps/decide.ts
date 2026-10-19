@@ -6,12 +6,15 @@ import type { TurnContext } from '@edmate/contracts';
 import { composeSystemPrompt } from '../../pedagogy/compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from '../../pedagogy/policy.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
+import { PilotLanguageClamped } from '../errors.js';
 import { noTools, policyTools } from '../tools.js';
 import type { DecideResult, StepEnv, Steps } from '../types.js';
 
 function decided(env: StepEnv, ctx: TurnContext, policy: PolicyResult): DecideResult {
   const set = resolvePromptPackSet(env.deps.promptPacks, ctx.agent.promptPackVersion);
   const c = composeSystemPrompt({ ctx, policy, lang: env.input.lang, set });
+  // Defence in depth (pilot policy): never let the turn fail over this, only report it.
+  if (c.languageClamped) env.report(new PilotLanguageClamped());
   return {
     decision: {
       move: policy.move,

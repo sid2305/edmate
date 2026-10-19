@@ -9,7 +9,13 @@
 // BullMQ refuses `:` in a custom job id, so the parts are joined with `.` (contracts ids never
 // contain one).
 import { createHash } from 'node:crypto';
-import { EntitlementSchema, MessageSchema, TurnTraceSchema, UsageSchema } from '@edmate/contracts';
+import {
+  EntitlementSchema,
+  EvidenceEventSchema,
+  MessageSchema,
+  TurnTraceSchema,
+  UsageSchema,
+} from '@edmate/contracts';
 import type { JobsOptions } from 'bullmq';
 import { z } from 'zod';
 
@@ -23,6 +29,7 @@ export const JOB = {
   message: 'message.append',
   helpState: 'session.help_state',
   trace: 'trace.record',
+  evidence: 'evidence.apply',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -62,6 +69,7 @@ export const jobId = {
   message: (messageId: string) => `${messageId}.message`,
   helpState: (sessionId: string, writeId: string) => `${sessionId}.help.${writeId}`,
   trace: (turnId: string) => `${turnId}.trace`,
+  evidence: (eventId: string) => `${eventId}.evidence`,
 };
 
 /**
@@ -71,6 +79,36 @@ export const jobId = {
  */
 export function usageRowId(turnId: string, index: number): string {
   return `ul_${createHash('sha256').update(`${turnId}\u0000${index}`).digest('hex').slice(0, 40)}`;
+}
+
+/**
+ * Content-hash id for one `EvidenceEvent` (task 3.17, lead answer): the queue job id
+ * (`jobId.evidence`) and the row id `evidenceEventsRepo.append`'s worker processor writes both
+ * come from this ONE function over a fixed field order, so a replayed job and the attempt that
+ * first wrote the row land on the same id — that identity is what makes the write idempotent (see
+ * `apps/worker/src/commit/processors.ts`'s `evidence.apply` branch). `e.ts` must be the event's
+ * *original* timestamp, never one re-stamped on retry: hashing a fresh timestamp on every attempt
+ * would give every retry its own id and defeat the dedup entirely.
+ */
+export function evidenceEventId(e: {
+  studentId: string;
+  teacherId: string;
+  topicId: string;
+  correct: boolean;
+  source: string;
+  weight: number;
+  ts: string;
+}): string {
+  const key = JSON.stringify([
+    e.studentId,
+    e.teacherId,
+    e.topicId,
+    e.correct,
+    e.source,
+    e.weight,
+    e.ts,
+  ]);
+  return `ev_${createHash('sha256').update(key).digest('hex').slice(0, 40)}`;
 }
 
 const Id = MessageSchema.shape.id;
@@ -122,6 +160,10 @@ export type HelpStateJob = z.infer<typeof HelpStateJobSchema>;
 
 export const TraceJobSchema = z.strictObject({ scope: Scope, trace: TurnTraceSchema });
 export type TraceJob = z.infer<typeof TraceJobSchema>;
+
+/** One evidence event per job (so its job id and `evidenceEventsRepo.append`'s row id agree). */
+export const EvidenceJobSchema = z.strictObject({ scope: Scope, event: EvidenceEventSchema });
+export type EvidenceJob = z.infer<typeof EvidenceJobSchema>;
 
 /** The scope a producer is bound to, checked like the db adapters check theirs. */
 export function bindScope(scope: JobScope, adapter: string): JobScope {
