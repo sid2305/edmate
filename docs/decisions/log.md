@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.14 No ADR; Redis over Postgres; harness-owned `TurnCounter` · decided by lead (plan's Q1–Q3) · risk: low
+- Decided: `TurnCounter`/`TurnLimits` stay harness-owned types (no contracts port, no ADR);
+  `packages/queue` depends on `@edmate/harness` as a production dependency to consume them,
+  exactly as `packages/content` already does; the durable adapter is built on Redis with an exact
+  sliding-window-log (ZSET), not Postgres or an approximate bucket counter.
+- Why: Redis is already deployed and already a `packages/queue` dependency; one atomic Lua `EVAL`
+  matches the existing sliding-window-log semantics with a single round trip well under the 50 ms
+  step budget; `appendonly yes` (see `docker/compose.yaml`) already gives restart durability.
+  Promoting `TurnCounter` to a contracts port would only matter if a second, non-harness-dependent
+  package needed to implement it — nothing today does.
+- Alternatives: a contracts port (ADR-0008); Postgres with row locks/`SELECT ... FOR UPDATE`; an
+  approximate fixed-bucket counter instead of the exact log.
+- Reversible: yes — both the port-vs-type question and Redis-vs-Postgres sit behind the unchanged
+  `TurnCounter` interface; swapping either later needs no `admit.ts`/`entitle.ts` change.
+
+---
+
+### 19 Oct 2026 · 3.14 Stale board "ADR-0005" reference · decided by builder (flagged by plan) · risk: low
+- Decided: the board's task 3.14 title line's "ADR-0005" mention is stale (ADR-0005 belongs to
+  3.15); no ADR is created for 3.14.
+- Why: ADR-0005 was assigned to 3.15 (Transcriber + session help state) after 3.14 was written onto
+  the board; the lead's answer confirms no ADR is needed here regardless of numbering.
+- Alternatives: renumber and use ADR-0008 for this task (the plan's fallback if the lead preferred
+  a contracts port); not taken, since the lead agreed no ADR is needed at all.
+- Reversible: yes — a future task can still add a contracts port with its own ADR if a second
+  package ever needs to implement `TurnCounter` without a harness dependency.
+
+---
+
+### 19 Oct 2026 · 3.14 Separate key sub-namespace for rate vs. messages · decided by builder · risk: low
+- Decided: `redisTurnLimits` gives its `rate` and `messages` counters distinct key sub-namespaces
+  (`${prefix}:rate:*`, `${prefix}:messages:*`) instead of one shared namespace.
+- Why: `admit`'s rate key (`studentId`) and `entitle`'s message key (`studentId:packageId`) are
+  unlikely to collide by convention alone, but the plan's own spec doesn't rule out a caller or
+  future use reusing the same raw string for both; a cheap, explicit sub-namespace removes the
+  possibility entirely rather than relying on callers to always differ.
+- Alternatives: the plan's literal single-prefix sketch (`${prefix}:${key}` for both); not taken,
+  since it leaves an avoidable (if currently unlikely) collision path.
+- Reversible: yes — an internal key-naming detail behind `TurnCounter`/`TurnLimits`; no external
+  contract depends on the exact Redis key shape.
+
+---
+
+### 19 Oct 2026 · 3.14 One documented cast for the Redis Lua command · decided by team lead (typescript review) · risk: low
+Decided: `packages/queue/src/turnLimits.ts` keeps a single commented cast to probe and define the custom Lua command on the ioredis client.
+Why: ioredis has no typed generics for defineCommand; the cast is isolated and tested.
+Alternatives: call `eval` with the script text each time (no cached script).
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 4.6 ADR-0007: `RetrievalIndex.leakCheck` returns one boolean for a batch, over the complement scope, failing closed · decided by lead (plan answers, after safety-reviewer and architect plan reviews) and tdd-guide (ADR text) · risk: high
 Decided: add `leakCheck(candidates: string[], scope: { teacherId; allowedModuleIds }): Promise<{ hit: boolean }>` to contracts. Locked means every chunk of the teacher outside the allowed modules, and spans also in allowed chunks are ignored. The adapter fails closed and never logs candidates, with a latency SLO (p95 ≤ 50 ms, p99 ≤ 100 ms), a cache keyed by package version plus the teacher's material revision, and a residual oracle of one bit per turn bounded by the message limit.
 Why: locked text must never enter the harness or a model (ADR-0003). Spans, scores or counts would make the port an oracle that reads locked text out.

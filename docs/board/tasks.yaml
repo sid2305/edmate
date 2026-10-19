@@ -643,7 +643,7 @@ tasks:
   accept: Daily message limits survive a restart and hold across web processes; tests prove it against real Postgres or Redis.
   deps:
   - '3.2'
-  status: review
+  status: done
   branch: m7/3.14-durable-counters
   model: plan:sonnet build:sonnet
 - id: '3.15'
