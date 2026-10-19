@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · Repeated jailbreak strikes: stricter checks and a trust-team notice, no pause · decided by human (B-12) · risk: high
+Decided: after 3 strikes in one session, the rest of that session gets stricter checks and the trust team gets one notice. The student is not paused, locked out or punished. Built as task 4.4e.
+Why: repeated attempts are a signal worth a human look, but a 13+ learner poking at the rules should not lose access.
+Alternatives: pause the session after N strikes; count only, with no consequence.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · Distress alerts go by SMS to the on-call phone with email backup · decided by human (B-13) · risk: high
+Decided: a distress alert is an SMS to the on-call phone plus an email backup (e.g. Twilio and Resend), re-paging every 15 minutes until someone acknowledges it. Revisit a paging service once there is a real on-call rota. Built in task 4.3c, behind a notifier port.
+Why: the pilot needs a real person reached within minutes, without the cost and setup of a paging service for a one-person rota.
+Alternatives: a paging service (PagerDuty or Opsgenie); email only; a chat app alert.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · Crisis replies stay in English for the pilot · decided by human (B-14) · risk: high
+Decided: a distressed student who writes in Hindi or Hinglish is still detected (the safety net), but the caring reply and helpline text stay in English for now. Decide after the pilot whether crisis replies follow the student's language.
+Why: the pilot is English-only; a translated crisis reply needs human-verified wording and helplines first.
+Alternatives: a Hindi crisis reply now; mirror the student's language.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 gets one more narrow fix round · decided by human (B-16) · risk: high
+Decided: a third fix round on distress detection, limited to the HIGH (the game-talk exemption must never downgrade first-person intent or abuse) and the two MEDIUMs (coding text paging on-call; "I have the pills ready" relying on the classifier), then a re-check.
+Why: rounds 1 and 2 fixed what they targeted; the remaining fix is small and well-defined, and the keyword approach is working.
+Alternatives: only the HIGH now, MEDIUMs later; stop and rethink the keyword approach.
+Reversible: Yes.
+
+---
+
 ### 19 Oct 2026 · 4.5c "baar"/"times" are weak markers: a run verb next to them, never an imperative · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
 Decided: `numbers.ts` drops "baar"/"times"/"बार" from the always-on answer-word set and instead checks the token right next to them: it counts only when a run/print verb (chalega, chalegi, chalti, chalta, runs, prints, print, executes, execute, loops, loop, चलेगा, चलेगी, छपेगा) is adjacent, never when an imperative (karo, padho, socho, dekho, try, read, likho) is — the imperative check wins over a run verb on the other side, so "do baar chalega, socho" still never counts. "Ek baar try karo" and "Do baar socho" (an imperative right next to the count word) no longer trip a one-digit key; "Loop teen baar chalega" and "It runs three times" (a run verb right next to it, or a run-verb marker elsewhere in the sentence) still do.
 Why: a bare count word ("ek baar", "do baar", "X times") is ordinary lesson Hinglish; only a verb that names the code running or printing turns it into an answer.
