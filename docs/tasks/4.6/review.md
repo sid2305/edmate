@@ -40,7 +40,7 @@ The seven 4.6 deferrals were built. Architect and security approved first time; 
 - [MEDIUM] [fixed] docs/adr/0007-locked-leak-check-port.md:38 — §8 rewritten in place and overstated; original kept with a dated amendment (per-session bound: daily limit × about log2(N+1) bits; no 2+-token run streams; once per batch). (architect, safety-reviewer)
 - [MEDIUM] [fixed] packages/harness/src/pedagogy/helpState.ts:24 — lockedStopped was required, so every older stored state reset to rung 0; now optional.
 - [MEDIUM] [deferred 4.6c] lockedMatch.ts:43 — markdown emphasis inside words (l**o**p) is not caught.
-- [MEDIUM] [deferred] helpState.ts — the help-state blob is one flat strict object that several tasks extend; give new fields defaults on read and consider per-feature namespaces before 3.11d. (architect)
+- [MEDIUM] [deferred 3.11d] packages/harness/src/pedagogy/helpState.ts:1 — the help-state blob is one flat strict object that several tasks extend; give new fields defaults on read and consider per-feature namespaces before 3.11d. (architect)
 - [LOW] [fixed] lockedMatch.ts:16 — confusables table extended; known-miss list extended.
 - [LOW] [deferred 4.6c] lockedMatch.ts:93 — parser and browser disagree on some tag shapes; known misses, and the chat never renders raw model HTML (9.4).
 - [LOW] [deferred 4.6c] runner.ts:873 — a failed or timed-out post-guard step does not count as a trip.
