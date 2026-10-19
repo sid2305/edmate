@@ -78,7 +78,13 @@ export function onJobFailed(deps: FailedHandlerDeps) {
         removeOnComplete: false,
         removeOnFail: false,
       });
-      deps.log({ level: 'error', event: 'job.dead_lettered', ...ids, deadLetterQueue: DEAD_LETTER_QUEUE, error: err });
+      deps.log({
+        level: 'error',
+        event: 'job.dead_lettered',
+        ...ids,
+        deadLetterQueue: DEAD_LETTER_QUEUE,
+        error: err,
+      });
     } catch (dlqError) {
       deps.log({
         level: 'error',

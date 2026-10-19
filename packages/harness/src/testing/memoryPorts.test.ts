@@ -1,9 +1,5 @@
 import type { Message, ModelGateway } from '@edmate/contracts';
-import {
-  demoSafetyAlert,
-  demoTurnTrace,
-  usageMain,
-} from '@edmate/contracts/fixtures';
+import { demoSafetyAlert, demoTurnTrace, usageMain } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { EventQueue } from '../pipeline/events.js';
 import {
@@ -95,8 +91,8 @@ describe('EventQueue', () => {
     const s = memorySessionStateStore();
     await s.saveHelpState('ses_1', { v: 1 });
     expect(s.saved).toEqual([{ sessionId: 'ses_1', helpState: { v: 1 } }]);
-    await expect(memorySessionStateStore({ fail: true }).saveHelpState('ses_1', {})).rejects.toThrow(
-      'down',
-    );
+    await expect(
+      memorySessionStateStore({ fail: true }).saveHelpState('ses_1', {}),
+    ).rejects.toThrow('down');
   });
 });

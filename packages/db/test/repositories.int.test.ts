@@ -485,7 +485,13 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         usage: [],
         ...o,
       });
-      const big = { model: 'm', tier: 'main', inputTokens: 2_000_000_000, outputTokens: 0, costMicroUsd: 0 };
+      const big = {
+        model: 'm',
+        tier: 'main',
+        inputTokens: 2_000_000_000,
+        outputTokens: 0,
+        costMicroUsd: 0,
+      };
       return [
         [
           'negative tokens',
@@ -504,7 +510,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         [
           'a second trace for the same turn',
           (r) =>
-            r.turnTraces.insert(sScope(a), trace({ turnId: `trn_${a.toLowerCase()}_seed` }) as never),
+            r.turnTraces.insert(
+              sScope(a),
+              trace({ turnId: `trn_${a.toLowerCase()}_seed` }) as never,
+            ),
           'invalid',
         ],
       ];

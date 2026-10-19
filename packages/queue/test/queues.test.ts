@@ -28,7 +28,9 @@ describe('createTurnQueues', () => {
 
   it('takes a key prefix', async () => {
     const queues = createTurnQueues(new FakeRedis() as never, { prefix: 'edmate-test' });
-    expect((queues.meter as unknown as { opts: { prefix: string } }).opts.prefix).toBe('edmate-test');
+    expect((queues.meter as unknown as { opts: { prefix: string } }).opts.prefix).toBe(
+      'edmate-test',
+    );
     await queues.close();
   });
 });

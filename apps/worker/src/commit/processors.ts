@@ -93,7 +93,8 @@ export function meterProcessor(repos: Repositories): (job: TurnJob) => Promise<J
       const id = usageRowId(d.turnId, d.index);
       return once(
         job.name,
-        async () => (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
+        async () =>
+          (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
         () =>
           repos.usageLedger.record(d.scope, d.packageId, {
             id,
@@ -108,7 +109,8 @@ export function meterProcessor(repos: Repositories): (job: TurnJob) => Promise<J
       const id = usageRowId(d.turnId, d.index);
       return once(
         job.name,
-        async () => (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
+        async () =>
+          (await repos.usageLedger.listForTurn(d.scope, d.turnId)).some((r) => r.id === id),
         () =>
           repos.usageLedger.recordUnmetered(d.scope, d.packageId, {
             id,

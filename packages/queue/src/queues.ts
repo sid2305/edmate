@@ -9,12 +9,7 @@
 // BullMQ refuses `:` in a custom job id, so the parts are joined with `.` (contracts ids never
 // contain one).
 import { createHash } from 'node:crypto';
-import {
-  EntitlementSchema,
-  MessageSchema,
-  TurnTraceSchema,
-  UsageSchema,
-} from '@edmate/contracts';
+import { EntitlementSchema, MessageSchema, TurnTraceSchema, UsageSchema } from '@edmate/contracts';
 import type { JobsOptions } from 'bullmq';
 import { z } from 'zod';
 
@@ -90,7 +85,10 @@ export type UsageJob = z.infer<typeof UsageJobSchema>;
 export const UnmeteredJobSchema = z.strictObject({
   ...Billing,
   tier: UsageSchema.shape.tier,
-  reason: z.union([z.literal('no_usage_reported'), z.templateLiteral(['unpriced_model:', z.string()])]),
+  reason: z.union([
+    z.literal('no_usage_reported'),
+    z.templateLiteral(['unpriced_model:', z.string()]),
+  ]),
   model: z.string().min(1).optional(),
   tokens: z
     .strictObject({

@@ -35,10 +35,23 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # Redis for @edmate/worker's turn-queue integration test (task 3.8): the image
+      # tag docker/compose.yaml uses, pinned by digest. No password: only this job reaches it.
+      redis:
+        image: redis:7.4.6-alpine@sha256:3b73847e72874be07e6657b129a94761662b79bc0f679273757d4218573b2a98
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       # @edmate/db's integration tests fail (not skip) in CI when this database is unreachable.
       TEST_DATABASE_URL: postgres://edmate:edmate-ci@localhost:5432/edmate
+      # @edmate/worker's integration test fails (not skips) in CI when Redis is unreachable.
+      TEST_REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

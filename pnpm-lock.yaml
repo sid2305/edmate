@@ -295,6 +295,9 @@ importers:
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

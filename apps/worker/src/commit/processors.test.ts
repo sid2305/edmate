@@ -5,7 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { commitProcessor, meterProcessor, PermanentJobError } from './processors.js';
 
 const scope = { studentId: 'stu_1', teacherId: 'tch_a' };
-const usage = { model: 'm', tier: 'main', inputTokens: 1, outputTokens: 2, costMicroUsd: 3 } as const;
+const usage = {
+  model: 'm',
+  tier: 'main',
+  inputTokens: 1,
+  outputTokens: 2,
+  costMicroUsd: 3,
+} as const;
 const message: Message = {
   id: 'msg_1',
   role: 'agent',
@@ -47,7 +53,8 @@ function memoryRepos(fail: Partial<Record<string, unknown>> = {}) {
       },
       record: (_s: unknown, _p: string, e: { id: string; turnId: string }) => {
         check('record');
-        if (ledger.some((r) => r.id === e.id)) throw new RepositoryError('invalid', 'usageLedger.record');
+        if (ledger.some((r) => r.id === e.id))
+          throw new RepositoryError('invalid', 'usageLedger.record');
         ledger.push({ id: e.id, turnId: e.turnId });
         return Promise.resolve();
       },
@@ -115,7 +122,10 @@ describe('meterProcessor', () => {
     const w = memoryRepos();
     const run = meterProcessor(w.repos);
     const base = { scope, packageId: 'pkg_a', turnId: 'turn_2', source: 'eval', tier: 'small' };
-    const unknown = { name: JOB.unmetered, data: { ...base, index: 0, reason: 'no_usage_reported' } };
+    const unknown = {
+      name: JOB.unmetered,
+      data: { ...base, index: 0, reason: 'no_usage_reported' },
+    };
     const unpriced = {
       name: JOB.unmetered,
       data: {
@@ -141,7 +151,9 @@ describe('meterProcessor', () => {
         ...w.repos.usageLedger,
         // First check: not there yet; after the failed insert: there.
         listForTurn: () =>
-          Promise.resolve(listed++ === 0 ? [] : [{ id: usageRowId('turn_1', 0), turnId: 'turn_1' }]),
+          Promise.resolve(
+            listed++ === 0 ? [] : [{ id: usageRowId('turn_1', 0), turnId: 'turn_1' }],
+          ),
         record: () => Promise.reject(new RepositoryError('invalid', 'usageLedger.record')),
       },
     } as unknown as Repositories;
@@ -150,7 +162,9 @@ describe('meterProcessor', () => {
 
   it('a db outage is retryable; scope, not_found, invalid and integrity are permanent', async () => {
     const down = new RepositoryError('failed', 'usageLedger.record');
-    await expect(meterProcessor(memoryRepos({ record: down }).repos)(usageJob())).rejects.toBe(down);
+    await expect(meterProcessor(memoryRepos({ record: down }).repos)(usageJob())).rejects.toBe(
+      down,
+    );
     for (const kind of ['scope', 'not_found', 'invalid', 'integrity'] as const) {
       const w = memoryRepos({ record: new RepositoryError(kind, 'usageLedger.record') });
       await expect(meterProcessor(w.repos)(usageJob())).rejects.toBeInstanceOf(PermanentJobError);
@@ -179,7 +193,10 @@ describe('meterProcessor', () => {
 
   it('a malformed payload or an unknown job name is permanent and names no payload text', async () => {
     const run = meterProcessor(memoryRepos().repos);
-    const bad = { name: JOB.usage, data: { ...usageJob().data, index: -1, secret: 'student text' } };
+    const bad = {
+      name: JOB.usage,
+      data: { ...usageJob().data, index: -1, secret: 'student text' },
+    };
     const e = await run(bad).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(PermanentJobError);
     expect((e as Error).message).toBe('usage.record: invalid job payload');
@@ -204,7 +221,9 @@ describe('commitProcessor', () => {
     const w = memoryRepos({ append: new RepositoryError('not_found', 'messages.append') });
     await expect(commitProcessor(w.repos)(messageJob)).rejects.toBeInstanceOf(PermanentJobError);
     const down = new RepositoryError('failed', 'messages.append');
-    await expect(commitProcessor(memoryRepos({ append: down }).repos)(messageJob)).rejects.toBe(down);
+    await expect(commitProcessor(memoryRepos({ append: down }).repos)(messageJob)).rejects.toBe(
+      down,
+    );
   });
 
   it('saves the help state (last write wins: running it twice is harmless)', async () => {

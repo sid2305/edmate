@@ -45,7 +45,11 @@ describe('isFinal', () => {
 
 describe('deadLetterData', () => {
   it('drops the help state value (the answer key) and keeps everything else', () => {
-    const data = { scope: { studentId: 's' }, sessionId: 'ses_1', helpState: { answerKey: [CANARY] } };
+    const data = {
+      scope: { studentId: 's' },
+      sessionId: 'ses_1',
+      helpState: { answerKey: [CANARY] },
+    };
     const kept = deadLetterData(JOB.helpState, data);
     expect(JSON.stringify(kept)).not.toContain(CANARY);
     expect(kept).toEqual({ scope: { studentId: 's' }, sessionId: 'ses_1', helpStateDropped: true });
@@ -88,7 +92,11 @@ describe('onJobFailed', () => {
           failedAt: NOW.toISOString(),
           data: job().data,
         },
-        opts: { jobId: 'edmate-turn-commit.msg_1.message', removeOnComplete: false, removeOnFail: false },
+        opts: {
+          jobId: 'edmate-turn-commit.msg_1.message',
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
       },
     ]);
     expect(w.lines.map((l) => [l.level, l.event])).toEqual([['error', 'job.dead_lettered']]);

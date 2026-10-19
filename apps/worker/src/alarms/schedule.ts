@@ -121,7 +121,12 @@ export function createCostAlarmWorker(o: CostAlarmWorkerOptions): Worker {
     void failed(j, error);
   });
   worker.on('error', (error) => {
-    o.deps.log({ level: 'error', event: 'worker.error', queue: COST_ALARM_QUEUE, error: describeError(error) });
+    o.deps.log({
+      level: 'error',
+      event: 'worker.error',
+      queue: COST_ALARM_QUEUE,
+      error: describeError(error),
+    });
   });
   return worker;
 }

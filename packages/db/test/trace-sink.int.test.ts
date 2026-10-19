@@ -116,7 +116,9 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
 
   it('a stored trace whose jsonb no longer parses is an integrity error, never returned', async () => {
     await traceSinkFor(repos, own).record(trace({ turnId: 'trn_corrupt' }));
-    await raw.query(`update turn_traces set guards = '"nope"'::jsonb where turn_id = 'trn_corrupt'`);
+    await raw.query(
+      `update turn_traces set guards = '"nope"'::jsonb where turn_id = 'trn_corrupt'`,
+    );
     expect(await kind(repos.turnTraces.listForSession(own, ids.session('1A')))).toBe('integrity');
     await raw.query(`delete from turn_traces where turn_id = 'trn_corrupt'`);
   });

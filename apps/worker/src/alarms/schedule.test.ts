@@ -146,7 +146,14 @@ describe('createCostAlarmWorker', () => {
       expect(worker.isRunning()).toBe(false);
       worker.emit(
         'failed',
-        { id: 'j1', name: COST_ALARM_JOB, queueName: COST_ALARM_QUEUE, data: {}, attemptsMade: 3, opts: { attempts: 3 } } as never,
+        {
+          id: 'j1',
+          name: COST_ALARM_JOB,
+          queueName: COST_ALARM_QUEUE,
+          data: {},
+          attemptsMade: 3,
+          opts: { attempts: 3 },
+        } as never,
         new Error('db down'),
         'active',
       );

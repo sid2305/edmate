@@ -131,7 +131,12 @@ describe('queuedUsageMeter', () => {
       /not this meter/,
     );
     await expect(
-      m.recordUnmetered({ ...ctx, teacherId: 'tch_other', tier: 'main', reason: 'no_usage_reported' }),
+      m.recordUnmetered({
+        ...ctx,
+        teacherId: 'tch_other',
+        tier: 'main',
+        reason: 'no_usage_reported',
+      }),
     ).rejects.toThrow(/not this meter/);
     expect(q.added).toEqual([]);
     expect(() => queuedUsageMeter(q, { studentId: '', teacherId: 'tch' })).toThrow(/invalid scope/);
@@ -141,9 +146,9 @@ describe('queuedUsageMeter', () => {
     await expect(
       queuedUsageMeter(fakeQueue(), scope).record({ ...usageMain, inputTokens: -1 }, ctx),
     ).rejects.toThrow();
-    await expect(queuedUsageMeter(fakeQueue({ fail: true }), scope).record(usageMain, ctx)).rejects.toThrow(
-      'redis down',
-    );
+    await expect(
+      queuedUsageMeter(fakeQueue({ fail: true }), scope).record(usageMain, ctx),
+    ).rejects.toThrow('redis down');
   });
 
   it('keeps counters for at most MAX_TRACKED_TURNS turns (oldest dropped)', async () => {
@@ -235,7 +240,9 @@ describe('queuedSessionStateStore', () => {
   });
 
   it('a bad session id or a failed add rejects', async () => {
-    await expect(queuedSessionStateStore(fakeQueue(), scope).saveHelpState('bad id!', {})).rejects.toThrow();
+    await expect(
+      queuedSessionStateStore(fakeQueue(), scope).saveHelpState('bad id!', {}),
+    ).rejects.toThrow();
     await expect(
       queuedSessionStateStore(fakeQueue({ fail: true }), scope).saveHelpState('ses_1', {}),
     ).rejects.toThrow('redis down');
@@ -260,9 +267,9 @@ describe('queuedTraceSink', () => {
     await expect(
       queuedTraceSink(fakeQueue(), scope).record({ ...demoTurnTrace, turnId: 'bad id!' }),
     ).rejects.toThrow();
-    await expect(queuedTraceSink(fakeQueue({ fail: true }), scope).record(demoTurnTrace)).rejects.toThrow(
-      'redis down',
-    );
+    await expect(
+      queuedTraceSink(fakeQueue({ fail: true }), scope).record(demoTurnTrace),
+    ).rejects.toThrow('redis down');
   });
 });
 

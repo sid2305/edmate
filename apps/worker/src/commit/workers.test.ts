@@ -26,9 +26,9 @@ describe('permanentToUnrecoverable', () => {
     const ok = permanentToUnrecoverable(() => Promise.resolve('written'));
     expect(await ok({ name: 'x', data: {} })).toBe('written');
     const down = new Error('db down');
-    await expect(permanentToUnrecoverable(() => Promise.reject(down))({ name: 'x', data: {} })).rejects.toBe(
-      down,
-    );
+    await expect(
+      permanentToUnrecoverable(() => Promise.reject(down))({ name: 'x', data: {} }),
+    ).rejects.toBe(down);
     const e = await permanentToUnrecoverable(() =>
       Promise.reject(new PermanentJobError('message.append: invalid job payload')),
     )({ name: 'x', data: {} }).catch((x: unknown) => x);
@@ -57,7 +57,14 @@ describe('createTurnWorkers', () => {
       expect(commit.opts.prefix).toBe('edmate-test');
       commit.emit(
         'failed',
-        { id: 'm.message', name: 'message.append', queueName: COMMIT_QUEUE, data: {}, attemptsMade: 5, opts: { attempts: 5 } } as never,
+        {
+          id: 'm.message',
+          name: 'message.append',
+          queueName: COMMIT_QUEUE,
+          data: {},
+          attemptsMade: 5,
+          opts: { attempts: 5 },
+        } as never,
         new Error('db down'),
         'active',
       );

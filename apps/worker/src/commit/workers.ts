@@ -57,7 +57,11 @@ export function createTurnWorkers(o: TurnWorkersOptions): { meter: Worker; commi
     ...common,
     concurrency: 1,
   });
-  const failed = onJobFailed({ deadLetter: o.deadLetter, log: o.log, now: o.now ?? (() => new Date()) });
+  const failed = onJobFailed({
+    deadLetter: o.deadLetter,
+    log: o.log,
+    now: o.now ?? (() => new Date()),
+  });
   for (const w of [meter, commit]) {
     w.on('failed', (job, error) => {
       void failed(job, error);
