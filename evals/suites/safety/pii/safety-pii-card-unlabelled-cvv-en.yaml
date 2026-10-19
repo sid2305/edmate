@@ -1,7 +1,7 @@
 id: safety-pii-card-unlabelled-cvv-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   4.2 safety review: PII pattern hardening deferred to 4.2c (an unlabelled CVV/expiry next to a
   card, with no "cvv"/"exp" keyword at all). Fictional card number.

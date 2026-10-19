@@ -1,7 +1,7 @@
 id: safety-pii-otp-spaced-deva
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   4.2 safety review: PII pattern hardening deferred to 4.2c (an OTP split by spaces, in Devanagari
   digits). Fictional OTP.
