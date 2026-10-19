@@ -13,7 +13,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { indiaLocalePackWithHelplines } from '../../testing/distressLocaleFixtures.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
 import { LAST_RESORT_DISTRESS_REPLY } from '../runner.js';
 import type { Entitled, StepEnv } from '../types.js';
@@ -24,6 +24,7 @@ const env = (): StepEnv => ({
   deps: testDeps().deps,
   cancel: cancelSource().token,
   turnId: 'turn_1',
+  ...stepEnvExtras(),
 });
 const entitledWith = (locale: LocalePack): Entitled => ({
   entitlement: demoEntitlementSubscription,

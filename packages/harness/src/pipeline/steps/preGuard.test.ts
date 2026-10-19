@@ -16,7 +16,7 @@ import { GuardRegistry } from '../../guardrails/registry.js';
 import type { PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
 import { memoryTranscriptStore } from '../../testing/memoryPorts.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
 import type { Entitled, PipelineDeps, StepEnv } from '../types.js';
 import {
@@ -40,7 +40,14 @@ function envWith(text: string | undefined, overrides: Partial<PipelineDeps> = {}
   const input = { ...demoTurnInput };
   if (text === undefined) delete (input as { text?: string }).text;
   else input.text = text;
-  const env: StepEnv = { input, deps: t.deps, cancel: cancelSource().token, turnId: 'turn_1' };
+  const env: StepEnv = {
+    input,
+    deps: t.deps,
+    cancel: cancelSource().token,
+    turnId: 'turn_1',
+    ...stepEnvExtras(),
+    gateway: t.gateway,
+  };
   return { env, t };
 }
 
@@ -70,6 +77,8 @@ describe('preGuard (default registry: distressDetect)', () => {
       deps: t.deps,
       cancel: cancelSource().token,
       turnId: 'turn_1',
+      ...stepEnvExtras(),
+      gateway: t.gateway,
     };
     const r = await preGuard(env, entitled);
     expect(r).toEqual({ result: 'ok', guards: [{ name: 'distressDetect', ok: true }], usage: [] });
@@ -196,6 +205,7 @@ describe('recentStudentTurns', () => {
       deps: { ...t.deps, transcripts: slow },
       cancel: cancelSource().token,
       turnId: 'turn_1',
+      ...stepEnvExtras(),
     };
     expect(await t.clock.drive(recentStudentTurns(env))).toEqual([]);
   }, 1_000);

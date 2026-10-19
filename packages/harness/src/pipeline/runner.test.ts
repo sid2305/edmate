@@ -352,7 +352,7 @@ describe('defaultSteps (stubs)', () => {
     expect(t.portCalls).toEqual(['entitlements.resolve']);
   });
 
-  it('fails closed: past admit and entitle and the real scrub, the stub preGuard blocks the turn', async () => {
+  it('fails closed: past admit, entitle and the real scrub, the real preGuard with no classifier blocks the turn', async () => {
     const t = testDeps();
     const happy = testSteps();
     const steps = {
@@ -363,8 +363,8 @@ describe('defaultSteps (stubs)', () => {
     };
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    // The real buildContext runs alongside the stub preGuard; it only read (and hit an unused store).
-    expect(t.portCalls).toEqual(['profiles.get']);
+    // The real buildContext and preGuard run side by side; they only read (and hit unused stores).
+    expect([...t.portCalls].sort()).toEqual(['profiles.get', 'transcripts.history']);
   });
 });
 

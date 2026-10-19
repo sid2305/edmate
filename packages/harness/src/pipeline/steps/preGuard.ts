@@ -62,7 +62,7 @@ export function createPreGuardStep(
       entitlement: s.entitlement,
       sessionId: env.input.sessionId,
       lang: env.input.lang,
-      gateway: env.deps.gateway,
+      gateway: env.gateway,
       ids: env.deps.ids,
       clock: env.deps.clock,
       recentStudentTurns: await recentStudentTurns(env),
