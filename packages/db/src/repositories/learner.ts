@@ -7,6 +7,7 @@ import {
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
+import { foldMastery } from '../mastery.js';
 import { evidenceEvents, learnerProfiles, topics } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { toLearnerProfile } from './map.js';
@@ -109,6 +110,74 @@ export function learnerProfilesRepo(db: Db) {
                 updatedAt: sql`now()`,
               },
             });
+        }),
+      );
+    },
+
+    /**
+     * Review fix round (3.17): folds `events` (already deduplicated and topic-scoped by the only
+     * caller, `profileStoreFor.applyEvidence`) into the scope's mastery under a row lock, so two
+     * concurrent calls for the same pair can never both read the same prior mastery and clobber
+     * each other (a lost update) — unlike computing the fold in application code from a plain
+     * `get()` and merging it back with `applyMastery` (the previous shape of this path). The scope
+     * and topic-ownership checks stay inside the same transaction as the lock and the fold:
+     * - a default row (lang `en`, empty mastery/mistakes) is inserted first if none exists yet
+     *   (`ON CONFLICT DO NOTHING`, so a second concurrent caller never errors on it);
+     * - the row is then locked (`SELECT ... FOR UPDATE`), so a second concurrent caller's own
+     *   insert-or-lock blocks until the first transaction commits;
+     * - the fold reads only that locked value, and the `UPDATE` replaces `mastery` wholesale with
+     *   the fold's result (which already carries every untouched topic forward unchanged), still
+     *   never touching `mistakes` or `last_summary`.
+     * An empty `events` is a no-op.
+     */
+    async applyEvidenceMastery(
+      scope: StudentScope,
+      events: readonly { topicId: string; correct: boolean; ts: string }[],
+    ): Promise<void> {
+      const method = 'learnerProfiles.applyEvidenceMastery';
+      const sc = studentScope(scope, method);
+      if (events.length === 0) return;
+      const topicIds = [...new Set(events.map((e) => e.topicId))];
+      await translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const owned = await tx
+            .select({ id: topics.id })
+            .from(topics)
+            .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
+            .for('key share');
+          if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
+
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({ mastery: learnerProfiles.mastery })
+            .from(learnerProfiles)
+            .where(
+              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+            )
+            .for('update');
+
+          const next = foldMastery(locked!.mastery, events);
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mastery: next, updatedAt: sql`now()` })
+            .where(
+              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+            );
         }),
       );
     },

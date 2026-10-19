@@ -15,7 +15,6 @@ import {
   type TurnConfigStore,
   type UsageMeter,
 } from '@edmate/contracts';
-import { foldMastery } from '../mastery.js';
 import { RepositoryError } from './errors.js';
 import type { Repositories } from './index.js';
 import { studentScope, type StudentScope } from './scope.js';
@@ -71,8 +70,14 @@ function defaultProfile(scope: StudentScope): LearnerProfile {
  *
  * `applyEvidence` never calls `learnerProfiles.save()` (so `last_summary` is never touched here;
  * see `learnerProfilesRepo.applyMastery`'s doc comment): it appends the evidence (idempotent by
- * content-hash id — `evidenceEventsRepo.append`), folds BKT only over the events that append
- * actually wrote (a replay then changes mastery zero times, not once more), and merges the result.
+ * content-hash id — `evidenceEventsRepo.append`) and folds BKT only over the events that append
+ * actually wrote (a replay then changes mastery zero times, not once more).
+ *
+ * The fold itself runs inside `learnerProfiles.applyEvidenceMastery`, under a row lock (review fix
+ * round, 3.17): two concurrent calls here for the same pair each read the same `applied` list (if
+ * their events truly are concurrent and distinct), but the lock means only one of them folds BKT
+ * from a given prior mastery value at a time, so neither clobbers the other's update (no lost
+ * update — see that method's doc comment).
  */
 export function profileStoreFor(repos: Repositories, scope: StudentScope): ProfileStore {
   const bound = studentScope(scope, 'profileStoreFor');
@@ -95,9 +100,7 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
       if (events.length > 0) {
         const applied = await repos.evidenceEvents.append(bound, events);
         if (applied.length > 0) {
-          const current = await repos.learnerProfiles.get(bound);
-          const patch = foldMastery(current?.mastery ?? {}, applied);
-          await repos.learnerProfiles.applyMastery(bound, patch);
+          await repos.learnerProfiles.applyEvidenceMastery(bound, applied);
         }
       }
       const profile = await repos.learnerProfiles.get(bound);

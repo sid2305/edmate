@@ -54,6 +54,31 @@ describe('applyBkt', () => {
     expect(applyBkt(undefined, true, 'x', k).p).toBeCloseTo(1, 10);
     expect(applyBkt(undefined, false, 'x', k).p).toBeCloseTo(0, 10);
   });
+
+  // Review fix round (3.17): a NaN or out-of-range BktParams (or a computation that yields NaN)
+  // throws instead of silently falling back to pInit — a silent fallback would score a buggy
+  // caller's events as if the student had no prior knowledge at all, with no sign anything was
+  // wrong.
+  it('throws when a BktParams field is NaN', () => {
+    const k = { ...BKT_DEFAULTS, pInit: Number.NaN };
+    expect(() => applyBkt(undefined, true, 'x', k)).toThrow(/pInit/);
+  });
+
+  it('throws when a BktParams field is out of [0, 1]', () => {
+    const k = { ...BKT_DEFAULTS, pSlip: 1.5 };
+    expect(() => applyBkt(undefined, true, 'x', k)).toThrow(/pSlip/);
+  });
+
+  it('throws when the prior mastery entry carries a non-finite p', () => {
+    const prior = { p: Number.NaN, n: 1, updatedAt: 'x' };
+    expect(() => applyBkt(prior, true, 'x')).toThrow(/prior/);
+  });
+
+  it('throws rather than silently defaulting when the update itself computes to NaN', () => {
+    // pBefore 0 with pGuess 0 and pSlip 0: the posterior is 0/0 on a correct answer.
+    const k = { pInit: 0, pLearn: 0.15, pSlip: 0, pGuess: 0 };
+    expect(() => applyBkt(undefined, true, 'x', k)).toThrow(/finite/);
+  });
 });
 
 describe('BKT_DEFAULTS', () => {

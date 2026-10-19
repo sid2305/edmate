@@ -17,8 +17,28 @@ export const BKT_DEFAULTS: BktParams = { pInit: 0.2, pLearn: 0.15, pSlip: 0.1, p
 /** One topic's mastery entry, as stored on `LearnerProfile.mastery[topicId]`. */
 export type MasteryEntry = LearnerProfile['mastery'][string];
 
-function clamp01(p: number): number {
-  if (!Number.isFinite(p)) return BKT_DEFAULTS.pInit;
+/**
+ * Review fix round (3.17): a NaN or out-of-range probability throws instead of silently falling
+ * back to `pInit` — a silent fallback would score a buggy caller's events as if the student had
+ * no prior knowledge at all, with no sign anything was wrong.
+ */
+function assertFiniteProb(p: number, label: string): void {
+  if (!Number.isFinite(p) || p < 0 || p > 1) {
+    throw new RangeError(`BKT: ${label} must be a finite number in [0, 1] (got ${p})`);
+  }
+}
+
+function assertBktParams(k: BktParams): void {
+  assertFiniteProb(k.pInit, 'pInit');
+  assertFiniteProb(k.pLearn, 'pLearn');
+  assertFiniteProb(k.pSlip, 'pSlip');
+  assertFiniteProb(k.pGuess, 'pGuess');
+}
+
+function clamp01(p: number, label: string): number {
+  if (!Number.isFinite(p)) {
+    throw new RangeError(`BKT: computed ${label} is not finite (got ${p})`);
+  }
   return Math.min(1, Math.max(0, p));
 }
 
@@ -37,13 +57,17 @@ export function applyBkt(
   ts: string,
   k: BktParams = BKT_DEFAULTS,
 ): MasteryEntry {
+  assertBktParams(k);
+  if (prior !== undefined && !Number.isFinite(prior.p)) {
+    throw new RangeError(`BKT: prior.p is not finite (got ${prior.p})`);
+  }
   const pBefore = prior?.p ?? k.pInit;
   const n = (prior?.n ?? 0) + 1;
   const pObs = correct
     ? (pBefore * (1 - k.pSlip)) / (pBefore * (1 - k.pSlip) + (1 - pBefore) * k.pGuess)
     : (pBefore * k.pSlip) / (pBefore * k.pSlip + (1 - pBefore) * (1 - k.pGuess));
   const p = pObs + (1 - pObs) * k.pLearn;
-  return { p: clamp01(p), n, updatedAt: ts };
+  return { p: clamp01(p, 'p'), n, updatedAt: ts };
 }
 
 /**

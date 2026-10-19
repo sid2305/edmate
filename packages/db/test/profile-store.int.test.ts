@@ -5,7 +5,7 @@ import { type EvidenceEvent } from '@edmate/contracts';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
-import { foldMastery } from '../src/mastery.js';
+import { applyBkt, foldMastery } from '../src/mastery.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   createRepositories,
@@ -199,6 +199,52 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       ]);
       expect(after.lang).toBe('en');
       expect(after.mastery[topicId]!.n).toBe(1);
+    },
+    15_000,
+  );
+
+  it(
+    // Review fix round (3.17): applyEvidence used to read the profile, fold BKT in app code and
+    // merge the result back — two concurrent calls for the same pair and topic could both read the
+    // same prior mastery and the second would clobber the first's update (a lost update). It now
+    // locks the row and folds inside one transaction (learnerProfiles.applyEvidenceMastery), so
+    // running the same 10 events concurrently gives exactly the result of applying them one by one.
+    'applyEvidence under concurrency: 10 identical events on one topic give the deterministic sequential result',
+    async () => {
+      const fresh = { studentId: 'stu_concurrent_evidence', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${fresh.studentId}, 'Concurrent', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, fresh);
+      const events = Array.from({ length: 10 }, (_, i) =>
+        event({
+          ...fresh,
+          ts: new Date(Date.UTC(2026, 9, 19, 14, 0, i)).toISOString(),
+        }),
+      );
+
+      await Promise.all(events.map((e) => store.applyEvidence([e])));
+
+      const after = await store.get(fresh.studentId, fresh.teacherId);
+      expect(after.mastery[topicId]!.n).toBe(10);
+
+      // The sequential reference: all 10 events are identical (same `correct`), so applying BKT
+      // 10 times in any order composes the same function 10 times over — the expected `p` does
+      // not depend on which concurrent call happened to run first.
+      let expected: ReturnType<typeof applyBkt> | undefined;
+      for (const e of events) expected = applyBkt(expected, e.correct, e.ts);
+      expect(after.mastery[topicId]!.p).toBeCloseTo(expected!.p, 12);
+    },
+    20_000,
+  );
+
+  it(
+    'learnerProfiles.applyEvidenceMastery with no events is a no-op that writes nothing',
+    async () => {
+      const before = await repos.learnerProfiles.get(own);
+      await repos.learnerProfiles.applyEvidenceMastery(own, []);
+      expect(await repos.learnerProfiles.get(own)).toEqual(before);
     },
     15_000,
   );

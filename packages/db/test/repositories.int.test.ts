@@ -691,6 +691,39 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  'learnerProfiles.applyEvidenceMastery': {
+    scope: 'student',
+    op: 'write',
+    // Same shape as applyMastery above: the payload names no target row, only topic ids as
+    // content, so there is no "actor writes toward target" to test (owns: () => true skips that
+    // grid; topic ownership is covered by `mismatches` below).
+    owns: () => true,
+    attempt: async (r, scope, _actor, target) => {
+      const ts = new Date(Date.UTC(2026, 9, 19, 14, 0, ++counter)).toISOString();
+      await r.learnerProfiles.applyEvidenceMastery(scope, [
+        { topicId: ids.topic(teacherOf(target)), correct: true, ts },
+      ]);
+      return { topicId: ids.topic(teacherOf(target)), ts };
+    },
+    verify: async (r, actor, result) => {
+      const { topicId, ts } = result as { topicId: string; ts: string };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mastery[topicId]?.updatedAt === ts,
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a topic that does not exist',
+        (r) =>
+          r.learnerProfiles.applyEvidenceMastery(sScope(a), [
+            { topicId: 'top_nowhere', correct: true, ts: '2026-10-19T14:00:00.000Z' },
+          ]),
+        'scope',
+      ],
+    ],
+  },
   'evidenceEvents.append': {
     scope: 'student',
     op: 'write',

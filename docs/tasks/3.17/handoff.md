@@ -114,6 +114,29 @@ Why: `ProfileStore.get` has no `lang` parameter (unlike `fallbackContext`'s `inp
 Alternatives: default to the entitlement's market's locale (no market available at this port's level); throw instead of defaulting (breaks `buildContext`, which calls this every turn).
 Reversible: Yes, once locale work lands.
 
+## Fix round 1
+
+All three review findings are fixed. Tests were written first and failed before the fix (the
+lost-update race was reproduced against the pre-fix code: a direct revert-and-rerun showed the
+concurrency test landing on `n == 2` instead of `n == 10`, then passing again once restored).
+
+| # | Finding | Fix | Evidence |
+|---|---|---|---|
+| 1 | database: `profileStoreFor.applyEvidence` lost-update race (HIGH) | New `learnerProfiles.applyEvidenceMastery(scope, events)`: in one transaction, inserts the default row if missing (`ON CONFLICT DO NOTHING`), locks it (`SELECT ... FOR UPDATE`), folds BKT from the locked value, then `UPDATE`s `mastery` wholesale (never touching `mistakes`/`last_summary`). `profileStoreFor.applyEvidence` (ports.ts) now calls this instead of `get` + app-code `foldMastery` + `applyMastery`. `learnerProfiles.applyMastery` itself is unchanged (still used directly by other callers/tests). | `profile-store.int.test.ts` "applyEvidence under concurrency: 10 identical events on one topic give the deterministic sequential result" — 10 concurrent single-event `applyEvidence` calls on a fresh pair give `n == 10` and `p` equal to applying the 10 events sequentially through `applyBkt` (all 10 events are identical, so the expected `p` does not depend on race order). Also: a new isolation-grid case `learnerProfiles.applyEvidenceMastery` in `repositories.int.test.ts`, and a no-op test for an empty event list. |
+| 2 | database: migration 0011 could fail to create its unique index on pre-existing duplicate open rows (MEDIUM) | 0011 now closes duplicates before the `CREATE UNIQUE INDEX`: a `WITH ranked AS (... row_number() ... PARTITION BY teacher_id, student_id, agent_id, md5(text) ...) UPDATE teacher_questions SET status = 'dismissed' WHERE id IN (...rn > 1)`, keeping the oldest open row per key. No row is deleted. `dismissed` (not a new status) is used — it is this enum's other terminal value besides `answered`, and a duplicate was never answered. | New `teacher-question-dedup-migration.int.test.ts`: seeds 3 open duplicates + 1 answered duplicate + 1 open non-duplicate before 0011, migrates, and asserts the oldest stays `open`, the two newer ones are `dismissed`, the answered row and the non-duplicate are untouched, and every row is still there (no deletes). `schema.test.ts`'s "migrations are create-only" suite is updated (`REVIEWED_UPDATES` now also lists 0011's one `UPDATE` on `teacher_questions`). |
+| 3 | database: `mastery.ts`'s `clamp01` silently fell back to `pInit` on NaN instead of surfacing a bad `BktParams` or prior (LOW) | `applyBkt` now throws `RangeError` when a `BktParams` field is not a finite number in `[0, 1]`, when the prior mastery entry's `p` is not finite, or when the computed posterior/next `p` itself is not finite (e.g. a 0/0 edge case from otherwise-valid params) — never silently defaults. | `mastery.test.ts`: 4 new tests (NaN `pInit`, out-of-range `pSlip`, non-finite prior `p`, a valid-params-but-NaN-result edge case), all asserting the specific `throw`. |
+
+Gates, with Postgres and Redis up (`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis`):
+`corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --force` → `Tasks: 14 successful, 14 total`, `@edmate/db:test` 491 passed (27 files), coverage `src/repositories/**` 100% statements/functions/lines, 99.32% branches (threshold 90%). Secret scan (`python3 .githooks/secret-scan.py --all`) clean.
+
+## Decisions (fix round 1)
+
+### 19 Oct 2026 · 3.17 fix round · Duplicate `teacher_questions` rows are dismissed, not left open and not deleted · decided by build-error-resolver (fix round) · risk: medium, reversible
+Decided: 0011's dedup cleanup sets every open duplicate but the oldest to `status = 'dismissed'` (append-only, no deletes), so the new unique index can always be created even against data seeded before it existed.
+Why: the review's instruction was explicit ("close duplicates... never delete rows"); `dismissed` is the only terminal status besides `answered` in `teacher_question_status`, and a duplicate asked only because of the pre-fix race was never actually answered.
+Alternatives: delete the duplicate rows (violates "never delete"); leave them open and make the index `CREATE UNIQUE INDEX CONCURRENTLY` with a pre-check that refuses to proceed on conflict (adds an operational step with no clear owner, and still needs some resolution of the conflicting rows first).
+Reversible: Yes — a later migration could re-open a dismissed duplicate if that ever mattered (none of this pilot's history needs it).
+
 ## Open follow-up for the lead
 
 6.0b (DPDP gate) should land before any India pilot ships learner-memory writes (see the first decision above) — already tracked on the board; flagging again here as the task's one item needing attention beyond this PR.
