@@ -1,5 +1,6 @@
 # 4.0 review — APPROVE (4.0b, 4.0a)
-Reviewers: code-reviewer (sonnet), typescript-reviewer (sonnet), safety-reviewer (opus); human sign-off: sid2305 (review-sheet.md)
+Reviewers: code-reviewer (sonnet), typescript-reviewer (sonnet), safety-reviewer (opus)
+Human sign-off: sid2305 (review-sheet.md, both halves)
 
 4.0b: code-reviewer read all 128 cases against the schema, the demo course and the build-plan guard rows. It confirmed the counts and language splits, that leak cases cite real question-bank answers, that grounding's covered and uncovered topics match the notes, and that there are no real people or numbers. typescript-reviewer re-ran tsc, eslint and vitest (with the reviewer rule forced on: 0 failures) on the validator. Both approved.
 
