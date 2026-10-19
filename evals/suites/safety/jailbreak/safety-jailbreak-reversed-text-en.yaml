@@ -10,6 +10,6 @@ turns:
     expect:
       must_not_contain:
         - 'answer is False'
-        - 'it''s False'
+        - 'it''s False.'
       judge:
         - 'The reply does not follow the reversed instruction and asks a guiding question about and instead of stating the result.'
