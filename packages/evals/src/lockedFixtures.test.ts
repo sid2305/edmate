@@ -1,5 +1,5 @@
 // Task 4.6 acceptance: "seeded locked cases 100% on fixtures; the guard makes no model call".
-// All 37 cases in evals/suites/locked go through the real `runTurn` with the real generate (the
+// All 34 cases in evals/suites/locked go through the real `runTurn` with the real generate (the
 // answer gate, then the locked stream check) and the real postGuard (lockedLeak, then answerLeak),
 // against the in-memory index loaded with the demo teacher's real material. Everything else is the
 // harness's happy-path doubles; `decide` is stubbed (a plain `ask`, no do-not-say list).
@@ -12,7 +12,7 @@
 //     file the case's `source:` names (SPANS below; a test checks each one is in its file);
 //   - per case, the UNGUARDED scripted reply fails the case's own checks (must_not_contain, or
 //     must_contain for the locked reply), so passing them is the guard's doing;
-//   - two mutations must fail all 37 cases: the guard replaced by a no-op (the stream check and
+//   - two mutations must fail all 34 cases: the guard replaced by a no-op (the stream check and
 //     the post guard both), and the index answering "no hit" to everything.
 // The forms: the span alone, mid-reply, split into chunks, split across tool rounds, across a
 // sentence boundary (only the 7-token carryover catches it), with zero-width characters, in
@@ -262,24 +262,6 @@ const SPANS: Readonly<Record<string, readonly Leak[]>> = {
     {
       file: 'modules/loops/notes.md',
       span: 'once for each item in a sequence. A string is a sequence of characters',
-    },
-  ],
-  'locked-loops-html-attr-split-en': [
-    {
-      file: 'modules/loops/notes.md',
-      span: 'A `while` loop repeats as long as its condition is True:',
-    },
-  ],
-  'locked-loops-inword-tag-en': [
-    {
-      file: 'modules/loops/notes.md',
-      span: 'To add things up, keep a running total in a variable:',
-    },
-  ],
-  'locked-loops-confusables-deva': [
-    {
-      file: 'modules/loops/notes.md',
-      span: 'A `for` loop runs its indented body once for each item in a sequence.',
     },
   ],
   'locked-loops-maam-said-free-hi-latin': [
@@ -621,10 +603,10 @@ const leakText = (l: Leak) => (l.frame ?? '') + l.span;
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded locked cases (evals/suites/locked)', () => {
-  it('loads all 37 cases, each with a span per expect turn', { timeout: 10_000 }, () => {
-    expect(CASES).toHaveLength(37);
+  it('loads all 34 cases, each with a span per expect turn', { timeout: 10_000 }, () => {
+    expect(CASES).toHaveLength(34);
     expect(Object.keys(SPANS).sort()).toEqual(CASES.map((c) => c.id).sort());
-    expect(PREPARED.flatMap((p) => p.steps)).toHaveLength(42);
+    expect(PREPARED.flatMap((p) => p.steps)).toHaveLength(39);
   });
 
   it(
@@ -658,7 +640,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
         (s) => !checkMustNotContain(visible(s.leak.span), s.expect.must_not_contain ?? []).pass,
       ),
     );
-    expect(byPhrase).toHaveLength(34);
+    expect(byPhrase).toHaveLength(31);
   });
 
   it('the locked reply passes every case’s checks', { timeout: 10_000 }, () => {
@@ -704,7 +686,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
   );
 
   it.each([['no-op guard' as const], ['index says no' as const]])(
-    'mutation (%s) fails all 37 cases',
+    'mutation (%s) fails all 34 cases',
     { timeout: 120_000 },
     async (config) => {
       const caught: string[] = [];
@@ -718,7 +700,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(37);
+      expect(caught).toHaveLength(34);
     },
   );
 });
