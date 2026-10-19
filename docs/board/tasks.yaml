@@ -623,9 +623,9 @@ tasks:
   accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
-  status: todo
+  status: running
   branch: m3/3.16-sessions-follow-package
-  model: plan:sonnet
+  model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'

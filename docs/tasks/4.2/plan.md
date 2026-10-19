@@ -156,3 +156,4 @@ Out of bounds:
 - Q4: agreed: CVV and expiry are redacted only next to a detected card number.
 - Build on 4.1 after it merges (it is in its fix round: `failure.error` becomes `errorName`, a new `failed` outcome, and a second verification pass after a rewrite). Report the failure cause through `TurnRunResult.background`, ids and error name only.
 - Reviewers: safety-reviewer (opus), typescript-reviewer (sonnet), silent-failure-hunter (sonnet). risk: high entry.
+- From 4.1's safety re-review: the chain re-runs every guard on rewritten text, so `piiScrub` must return `ok` on its own output. Placeholders such as `[phone]`, `[email]` and `[name]` must match no PII pattern. Acceptance line, with a test: scrubbing a message twice equals scrubbing it once, and the second pass returns ok.
