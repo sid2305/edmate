@@ -10,6 +10,110 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 4.2 What the scrub removes, and that it fails closed · decided by lead (plan answers, safety plan review) and tdd-guide (details) · risk: high
+Decided: `piiScrub` rewrites phone numbers (group shapes, +CC, spaced digits, a bare 10-digit number only next to a phone keyword or through the market pattern), emails (also [at]/(at)/＠), Luhn-valid cards (CVV/expiry only next to one), OTP-like codes near an OTP keyword, the student's own name after an introduction phrase, and every locale-pack pattern, on a digit-folded copy, in the text and every skill-payload string; addresses are out of scope. A locale pattern that does not compile with exactly 'gu', a scrub that does not settle, and every non-ok chain outcome block the turn with only a cause and error name reported.
+Why: the model, traces and history must never see a student's contact or ID data, and a broken scrub must stop the turn rather than let raw text through.
+Alternatives: skip a bad pattern; add the i flag; any-number matching; redact CVV/dates on their own.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.2 Transcripts become input text before the scrub · decided by lead (safety plan review) · risk: high
+Decided: transcripts (2.7) reach the pipeline as `input.text`, so the same scrub runs on them before any model call; text inside images is a separate task (4.2b).
+Why: one scrub path means no input route can skip it.
+Alternatives: a separate transcript scrub; scrub transcripts only at storage.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.2 Scrub failures are reported on `finished.background` · decided by lead (4.1 silent-failure review) and tdd-guide (shape) · risk: medium
+Decided: the runner pushes every scrub failure (thrown, timed out, bad result, or a lost text/payload) as a `ScrubFailedError` whose cause is `{ guardCause, errorName? }`; the raw step error is never pushed.
+Why: a broken scrub was silently dropped before; errors can quote the input.
+Alternatives: push the raw error; add a field to `GuardOutcomeEvent` (a 4.1 frozen file).
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.2 The skill payload is scrubbed string by string, numbers included · decided by tdd-guide · risk: medium
+Decided: the payload is normalised to JSON data, every distinct string, key and number-as-text runs through the chain once (concurrently), a PII-shaped number comes back as its placeholder string, and colliding keys, depth over 64 or non-JSON data fail closed.
+Why: a phone sent as a number or a key would otherwise bypass the scrub.
+Alternatives: scrub only string values; join all strings into one chain run.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.2 Weak "code" and "कोड" count as OTP keywords only right before the number · decided by tdd-guide · risk: low
+Decided: strong keywords (OTP, ओटीपी, pin, पिन, verification/login code, one-time password) mark a 4-8 digit number within 30 characters either side; "code"/"कोड" only when the number follows with at most a connector (is, :, hai, aaya, mila); "code = 1234" is left alone.
+Why: "code" is everywhere in programming lessons; a 30-character window around it would redact ordinary numbers.
+Alternatives: treat "code" like OTP.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.2 Name detection is a conservative phrase list · decided by lead (Q2) and tdd-guide (list) · risk: low
+Decided: strong phrases (my name is, my name's, mera naam, मेरा नाम) take any-script words, weak ones (I'm, I am, myself, call me, main … hoon) only Title-Case words; up to three words, stopping at a stop list ("Ready", "Done", "Learning", hai, है, …); repeats of a captured word in the same message are redacted too; "this is" is dropped.
+Why: the seeded cases need it and over-redacting ordinary words hurts teaching; a stored-name exact match replaces it later.
+Alternatives: redact every Title-Case word after any phrase; wait for stored names.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.2 Locale PII patterns are a harness test fixture until 3.10 · decided by lead (Q3) · risk: low
+Decided: `indiaLocalePackWithPii` (Aadhaar-like with a three-years exception, PAN either case, UPI without a dot in the provider, Indian mobile) lives in `packages/harness/src/testing/`; no contracts edit.
+Why: 3.10 owns the real locale files and loader; the guard reads whatever pack it gets.
+Alternatives: edit `demoLocalePack` in contracts (needs an ADR).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2 The distress keyword check runs on the raw text before the scrub · decided by lead (safety review, fix round 1) and tdd-guide (seam) · risk: high
+Decided: the runner calls the injected `PipelineDeps.distressCheck` on the raw input before the scrub. Only its boolean is kept, and it is ORed into the step-5 escalate decision (and reused if the scrub fails). A throw is reported without the text. The seam is the existing dep, which 4.3 fills; no new port.
+Why: the scrub could redact words a distress check needs ("I'm Feeling Suicidal"); a distressed student must always get the caring reply.
+Alternatives: run the check only on scrubbed text; a new keyword-only function in the harness.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.2 Keyword-window numbers are decided in one pass, measured after redaction · decided by tdd-guide (fix round 1) · risk: medium
+Decided: bare 10-digit phones and OTP-like numbers count when a keyword is within 30 characters of the text as it will read after redaction. The set grows in memory until stable, and placeholders never count as keywords. The rescan loop stays as a guard against packs that match their own placeholder.
+Why: a long list of numbers after one keyword never settled in four rounds, so a benign turn failed closed.
+Alternatives: a round bound derived from the text length; chaining each number to the previous one (redacts whole lists).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.2 The name stop list covers feelings, states, languages and common adjectives · decided by lead (safety review) and tdd-guide (words) · risk: medium
+Decided: words like feeling, suicidal, depressed, alone, akela, marna, chahta, hindi, indian, medium, bad and weak (about 150 in all) end a name capture, so "I'm Feeling Suicidal" stays as written.
+Why: the name heuristic must never delete what a distress check or the teacher reads.
+Alternatives: drop the weak phrases ("I'm", "I am") entirely.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2 Values under PII-named payload keys are redacted whole · decided by lead (review) and tdd-guide (key list) · risk: low
+Decided: a payload key such as otp, pin, cvv, card, phone, mobile, email, name, aadhaar, pan or upi (with optional my/student/first/... before and number/no/id/... after, ignoring case and separators) has every non-empty string or number under it replaced by the category placeholder.
+Why: a bare "482913" or "Riya" has no keyword of its own for the pattern scrub to find.
+Alternatives: scrub "key: value" text through the chain (needs a "name:" phrase that would hit code like `name = ...`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2 Scrub failures follow 3.7's HarnessError and background-log rules · decided by lead (merge) and tdd-guide · risk: low
+Decided: `ScrubFailedError` extends `HarnessError`. Its message (`scrub failed closed (<cause>)`) is fixed text, so the background log keeps it; the cause holds only a cause code and an error name. A foreign step error is still wrapped, never passed through.
+Why: 3.7 made "HarnessError message or name only" the rule for `finished.background`.
+Alternatives: keep a plain `Error`, which the log would reduce to its name.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2 Spelled-out emails ("x dot y at example dot com") are scrubbed · decided by tdd-guide (merge with 4.0d's new case) · risk: medium
+Decided: a second email pattern matches words joined by " dot " and " at ", ending in " dot " plus a common top-level domain (com, org, net, in, co, edu, io, gov, info, me, uk). "good at maths", "meet at 5" and "x dot y" stay as written. A phrase like "look at google dot com" is redacted too.
+Why: 4.0d's `safety-pii-email-spelled-out-en`, merged on main, makes it part of "100% on the seeded PII cases".
+Alternatives: leave the case as a reply check like the spelled-out phone (needs the lead's call); a wider top-level-domain list.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
 ### 18 Oct 2026 · 3.16 Any package or version change ends the session, and the summary is cleared only by the call that ended it · decided by team lead (plan decision 1 and security plan review) · risk: high
 Decided: `turnConfigStoreFor.load` ends the session (and the db clears the pair's `last_summary`) whenever the entitlement's package or version differs from the session's pin, by any source; the clear happens in the same transaction and only if that UPDATE moved the session from open to ended.
 Why: earlier history, sources and summary of a lapsed package must never reach the model, and a retried or stale turn must never wipe a newer session's summary.

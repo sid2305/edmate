@@ -31,6 +31,7 @@ import {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  ScrubFailedError,
   UnpricedUsage,
 } from './errors.js';
 import { EventQueue } from './events.js';
@@ -80,6 +81,7 @@ import type {
   Emit,
   Entitled,
   PipelineDeps,
+  Scrubbed,
   StepEnv,
   Steps,
   TurnBilling,
@@ -381,16 +383,23 @@ class Turn {
     this.trace.step('entitle', ent.ms, 'ok');
     this.startBilling(e);
 
+    // In-process keyword check on the raw text, before the scrub can redact any word it needs
+    // (no model call). Only the boolean is kept: the raw text is never stored, traced or reported.
+    // A hit escalates at step 5 (or right away if the scrub fails).
+    const rawDistress = this.distressHit(input, 'raw');
+
     // 3a. Regex PII scrub, first; its time counts against step 3's one budget.
     const budget = timeoutOf('preGuard');
-    const sc = check(await this.timed(input, budget, (env) => steps.scrub(env, e)), ScrubbedSchema);
-    const scrubbed = sc.ok ? applyScrub(input, sc.value.text) : null;
+    const scRaw = await this.timed(input, budget, (env) => steps.scrub(env, e));
+    const sc = check(scRaw, ScrubbedSchema);
+    const scrubbed = sc.ok ? applyScrub(input, sc.value) : null;
     if (scrubbed !== null) this.safeInput = scrubbed;
     if (!sc.ok || scrubbed === null) {
       this.trace.step('preGuard', sc.ms, 'failed');
-      // In-process keyword check on the raw text (no model call; the text is never stored,
-      // traced or reported). A hit escalates without running any step on the raw text.
-      if (this.distressHit(input, 'raw')) {
+      // Reported, never dropped: a failed scrub is a guard bug or outage. Ids and names only.
+      this.background.push({ task: 'runner', error: scrubFailure(scRaw) });
+      // A raw-text keyword hit escalates without running any step on the raw text.
+      if (rawDistress) {
         return this.sendEscalation(e, null, this.buildAlert(input, e, undefined), {
           replyText: LAST_RESORT_DISTRESS_REPLY,
           outcome: 'fallback',
@@ -434,10 +443,12 @@ class Turn {
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
-    // A failed preGuard means no classifier verdict: the keyword check still runs.
+    // A failed preGuard means no classifier verdict: the keyword check still runs. A hit on the
+    // raw text (before the scrub) always counts.
     if (
       preAlert !== undefined ||
       intent === 'distress' ||
+      rawDistress ||
       (!pg.ok && this.distressHit(scrubbed, 'scrubbed'))
     ) {
       return this.escalate(scrubbed, e, preAlert);
@@ -925,16 +936,37 @@ function attemptFailure(
   return new GenerateAttemptFailed(attempt, state.invalid ? 'invalid_event' : 'invalid_result');
 }
 
+/** The input without anything the scrub must see first (text and skill payload). */
 function withoutText(input: TurnInput): TurnInput {
   const rest = { ...input };
   delete rest.text;
+  delete rest.skillPayload;
   return rest;
 }
 
-/** The scrubbed input, or `null` when the scrub lost or invented the text. */
-function applyScrub(input: TurnInput, text: string | undefined): TurnInput | null {
-  if (input.text === undefined) return text === undefined ? input : null;
-  return text === undefined ? null : { ...input, text };
+/** The scrubbed input, or `null` when the scrub lost or invented the text or the payload. */
+function applyScrub(input: TurnInput, s: Scrubbed): TurnInput | null {
+  if ((input.text === undefined) !== (s.text === undefined)) return null;
+  if ((input.skillPayload === undefined) !== (s.skillPayload === undefined)) return null;
+  return {
+    ...withoutText(input),
+    ...(s.text === undefined ? {} : { text: s.text }),
+    ...(s.skillPayload === undefined ? {} : { skillPayload: s.skillPayload }),
+  };
+}
+
+const NAME_CAP = 100;
+
+/** What `finished.background` gets for a failed scrub: a cause and an error name, no text. */
+function scrubFailure(r: TimedResult<Scrubbed>): ScrubFailedError {
+  if (r.status === 'timeout') return new ScrubFailedError({ guardCause: 'step_timeout' });
+  if (r.status === 'ok') return new ScrubFailedError({ guardCause: 'step_invalid_result' });
+  if (r.error instanceof ScrubFailedError) return r.error;
+  const name = r.error instanceof Error ? r.error.name : typeof r.error;
+  return new ScrubFailedError({
+    guardCause: 'step_error',
+    errorName: typeof name === 'string' ? name.slice(0, NAME_CAP) : 'Error',
+  });
 }
 
 function assemble(

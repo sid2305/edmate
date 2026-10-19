@@ -4,6 +4,7 @@ Edmate lets a student find the right teacher and learn with that teacher's AI ag
 
 - Product spec: `docs/edmate-prd.md` (PRD v0.3)
 - Build spec: `docs/edmate-harness-build-plan.md` (v0.3: 14 milestones, 104 tasks, rules, Definition of done)
+- How Edmate works (system design in plain words): `docs/system-design.html`
 - How the agent team works: `docs/architecture.html`
 - Task board: `docs/board/tasks.yaml` (`python3 .claude/skills/board/board.py next | status | show <id>`)
 - Decision log: `docs/decisions/log.md` (newest first, plain words)

@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Edmate System Design</title>
+<meta name="description" content="How Edmate works, in plain words: the apps, the teacher's agent, a student's message step by step, safety, data and how it runs.">
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --text: #1b1f24; --muted: #5b6470; --line: #c9cfd6; --grid: #e3e7eb;
+    --axis: #7a848f; --accent: #2f6fde; --accent-soft: rgba(47,111,222,.10);
+    --human: #c46f00; --human-soft: rgba(196,111,0,.10); --edm: #8a3ab9; --edm-soft: rgba(138,58,185,.09);
+    --good: #2e8b57; --good-soft: rgba(46,139,87,.10); --bad: #c0392b; --bad-soft: rgba(192,57,43,.09);
+    --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #14171b; --surface: #1c2026; --text: #e7eaee; --muted: #a2abb5; --line: #3a424c; --grid: #2a3038;
+      --axis: #8d97a2; --accent: #6a9cff; --accent-soft: rgba(106,156,255,.14);
+      --human: #f0a040; --human-soft: rgba(240,160,64,.14); --edm: #c58af0; --edm-soft: rgba(197,138,240,.12);
+      --good: #5cc28a; --good-soft: rgba(92,194,138,.12); --bad: #f07a6a; --bad-soft: rgba(240,122,106,.12);
+      --code-bg: #1f242b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14171b; --surface: #1c2026; --text: #e7eaee; --muted: #a2abb5; --line: #3a424c; --grid: #2a3038;
+    --axis: #8d97a2; --accent: #6a9cff; --accent-soft: rgba(106,156,255,.14);
+    --human: #f0a040; --human-soft: rgba(240,160,64,.14); --edm: #c58af0; --edm-soft: rgba(197,138,240,.12);
+    --good: #5cc28a; --good-soft: rgba(92,194,138,.12); --bad: #f07a6a; --bad-soft: rgba(240,122,106,.12);
+    --code-bg: #1f242b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; text-wrap: balance; }
+  h2 { font-size: 22px; line-height: 1.3; margin: 56px 0 8px; padding-top: 8px; border-top: 1px solid var(--grid); text-wrap: balance; }
+  h3 { font-size: 17px; margin: 28px 0 6px; }
+  p, li { max-width: 760px; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  .byline { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .lead { font-size: 18px; max-width: 800px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  nav.toc { background: var(--surface); border: 1px solid var(--grid); border-radius: 10px; padding: 12px 16px; margin: 20px 0 8px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; font-size: 14px; }
+  nav.toc li { break-inside: avoid; }
+  nav.toc a { color: var(--text); text-decoration: none; } nav.toc a:hover { color: var(--accent); }
+  @media (max-width: 640px) { nav.toc ol { columns: 1; } }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em;
+         background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--grid); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { white-space: nowrap; }
+  .tag { display: inline-block; font-size: 12px; line-height: 1.6; padding: 0 8px; border-radius: 999px;
+         border: 1px solid var(--line); color: var(--muted); white-space: nowrap; vertical-align: 1px; }
+  .tag.acc { color: var(--accent); border-color: var(--accent); }
+  .tag.human { color: var(--human); border-color: var(--human); }
+  .tag.good { color: var(--good); border-color: var(--good); }
+  .tag.bad { color: var(--bad); border-color: var(--bad); }
+  .tag.edm { color: var(--edm); border-color: var(--edm); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 14px 0; }
+  .card { background: var(--surface); border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+  .card b { display: block; margin-bottom: 4px; }
+  .card p { margin: 0; font-size: 14px; color: var(--muted); }
+  .note { border-left: 3px solid var(--human); background: var(--human-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 800px; }
+  .note p { margin: 0; }
+
+  /* Layer diagram (the big picture) */
+  .stack { display: grid; gap: 0; margin: 18px 0 8px; }
+  .layer { border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; background: var(--surface); }
+  .layer .lname { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .layer .lname span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .layer.people { background: var(--human-soft); border-color: var(--human); }
+  .layer.brain { background: var(--accent-soft); border-color: var(--accent); }
+  .layer.content { background: var(--edm-soft); border-color: var(--edm); }
+  .layer.outside { border-style: dashed; background: transparent; border-color: var(--line); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; font-size: 14px; background: var(--bg); }
+  .chip small { color: var(--muted); font-size: 12px; }
+  .chip.later { border-style: dashed; color: var(--muted); }
+  .flowdown { text-align: center; color: var(--axis); font-size: 13px; line-height: 1.2; padding: 4px 0; }
+  .flowdown b { display: block; font-size: 18px; font-weight: 400; }
+  .split { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+  @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+
+  /* Pipeline steps */
+  ol.steps { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 8px; counter-reset: step; }
+  ol.steps > li { max-width: none; margin: 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start;
+                  border: 1px solid var(--grid); border-radius: 10px; padding: 10px 12px; background: var(--bg); }
+  ol.steps > li::before { counter-increment: step; content: counter(step); display: grid; place-items: center;
+                  width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line);
+                  font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  ol.steps > li.par { border-color: var(--accent); background: var(--accent-soft); }
+  ol.steps > li.async { border-style: dashed; }
+  ol.steps .sname { font-weight: 600; }
+  ol.steps .sname code { font-weight: 400; }
+  ol.steps p { margin: 2px 0 0; font-size: 15px; }
+  ol.steps .meta { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Horizontal chain (teacher material) */
+  .chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; margin: 16px 0; }
+  .chain .link { flex: 1 1 140px; border: 1px solid var(--grid); border-radius: 10px; padding: 10px 12px; background: var(--surface); font-size: 14px; }
+  .chain .link b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .chain .link.human { background: var(--human-soft); border-color: var(--human); }
+  .chain .link.gate { background: var(--good-soft); border-color: var(--good); }
+  .chain .sep { align-self: center; color: var(--axis); }
+  @media (max-width: 640px) { .chain .sep { display: none; } .chain .link { flex-basis: 100%; } }
+
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+  @media (max-width: 640px) { .twocol { grid-template-columns: 1fr; } }
+  .box { border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+  .box.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .box.acc { border-color: var(--accent); background: var(--accent-soft); }
+  .box.good { border-color: var(--good); background: var(--good-soft); }
+  .box b { display: block; margin-bottom: 4px; }
+  .box p { margin: 4px 0 0; font-size: 15px; }
+
+  .ladder { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 16px 0 6px; }
+  .rung { border: 1px solid var(--grid); border-radius: 10px; padding: 10px; background: var(--surface); font-size: 14px; }
+  .rung .n { font-size: 22px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .rung.top { border-color: var(--human); background: var(--human-soft); }
+  .rung.top .n { color: var(--human); }
+  @media (max-width: 640px) { .ladder { grid-template-columns: 1fr; } .rung { display: flex; gap: 10px; align-items: baseline; } }
+
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0; max-width: 860px; }
+  dl.gloss dt { font-weight: 600; }
+  dl.gloss dd { margin: 0; }
+  @media (max-width: 640px) { dl.gloss { grid-template-columns: 1fr; gap: 0; } dl.gloss dd { margin-bottom: 10px; } }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Edmate System Design</h1>
+<p class="byline">19 Oct 2026 · written from build plan v0.3, the ADRs in <code>docs/adr/</code> and the decision log · how the build team works is in <a href="architecture.html">architecture.html</a></p>
+
+<p class="lead">Edmate lets a student pick a teacher and learn with that teacher's AI agent every day. The teacher builds the agent from their own material, decides what each <b>package</b> lets the agent know and do, and teaches live once or twice a month. This page explains how the whole system fits together, in plain words.</p>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#minute">Edmate in one minute</a></li>
+    <li><a href="#people">Who uses it</a></li>
+    <li><a href="#picture">The big picture</a></li>
+    <li><a href="#blocks">The building blocks</a></li>
+    <li><a href="#turn">What happens when a student sends a message</a></li>
+    <li><a href="#build-agent">How a teacher builds their agent</a></li>
+    <li><a href="#access">Packages: who can see what</a></li>
+    <li><a href="#teaching">How the agent teaches</a></li>
+    <li><a href="#ask">Ask the teacher</a></li>
+    <li><a href="#safety">Safety</a></li>
+    <li><a href="#memory">Memory and progress</a></li>
+    <li><a href="#models">The AI models</a></li>
+    <li><a href="#quality">Quality checks</a></li>
+    <li><a href="#data">Where the data lives</a></li>
+    <li><a href="#markets">Markets and locale packs</a></li>
+    <li><a href="#run">How it runs</a></li>
+    <li><a href="#order">Build order</a></li>
+    <li><a href="#decisions">Decisions behind this design</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<h2 id="minute">Edmate in one minute</h2>
+<div class="cards">
+  <div class="card"><b>The agent teaches like the teacher</b><p>It answers only from the teacher's own material, notes and answers, in the teacher's style. It doesn't fill gaps with general knowledge.</p></div>
+  <div class="card"><b>Packages decide access</b><p>Each package unlocks some modules and skills. Locked material can never reach the AI. Code enforces this, not a prompt.</p></div>
+  <div class="card"><b>The teacher stays in the loop</b><p>If the material doesn't cover a question, it goes to the teacher. Their answer reaches the student and teaches the agent for next time.</p></div>
+  <div class="card"><b>Every agent is tested</b><p>Thousands of test conversations check for leaks, safety, accuracy and good teaching before an agent goes live and after every change.</p></div>
+</div>
+
+<h2 id="people">Who uses it</h2>
+<div class="cards">
+  <div class="card"><b>Students</b><p>Aged 13 and up, on a phone or laptop. They find a teacher, start a package and chat with the agent: questions, hints, practice, feedback, mock interviews.</p></div>
+  <div class="card"><b>Teachers</b><p>They upload their material, shape the agent's style, set up packages, answer questions the agent couldn't, and see weekly insights.</p></div>
+  <div class="card"><b>Edmate's trust team (staff)</b><p>They verify teachers, handle reports and takedowns, review regulated subjects, and respond to safety alerts.</p></div>
+  <div class="card"><b>Outside services</b><p>AI model providers (Anthropic, plus OpenAI-compatible services such as OpenAI and OpenRouter). Payment providers come last, after the platform is tested.</p></div>
+</div>
+
+<h2 id="picture">The big picture</h2>
+<p>Edmate is built in layers. People use the apps. The apps hand every student message to the <b>harness</b>, the brain of the system. The harness doesn't know anything about databases or AI vendors. It works through <b>ports</b>, which are fixed plugs, and other parts of the system plug real things into them.</p>
+
+<div class="stack" role="img" aria-label="Layer diagram: people, apps, the harness, ports, the parts that do the work, and the services underneath">
+  <div class="layer people">
+    <div class="lname">People</div>
+    <div class="chips"><span class="chip">Student</span><span class="chip">Teacher</span><span class="chip">Trust team</span><span class="chip">Developer <small>(CLI)</small></span></div>
+  </div>
+  <div class="flowdown"><b>↓</b>use</div>
+  <div class="layer">
+    <div class="lname">Apps <span>· <code>apps/</code></span></div>
+    <div class="chips">
+      <span class="chip">Web app <small>student app · teacher studio · staff console · API</small></span>
+      <span class="chip">Worker <small>background jobs</small></span>
+      <span class="chip">CLI <small>chat, ingest, run evals</small></span>
+    </div>
+  </div>
+  <div class="flowdown"><b>↓</b>every student message goes to</div>
+  <div class="split">
+    <div class="layer brain">
+      <div class="lname">The harness <span>· <code>packages/harness</code> · the brain</span></div>
+      <div class="chips">
+        <span class="chip">Turn pipeline <small>11 steps</small></span>
+        <span class="chip">Access filter</span>
+        <span class="chip">Teaching policy <small>help ladder</small></span>
+        <span class="chip">Skills</span>
+        <span class="chip">Guards</span>
+        <span class="chip">Memory</span>
+        <span class="chip">Tools</span>
+      </div>
+    </div>
+    <div class="layer content">
+      <div class="lname">Content <span>· <code>content/</code></span></div>
+      <div class="chips">
+        <span class="chip">Prompt packs</span>
+        <span class="chip">Skill templates</span>
+        <span class="chip">Locale packs</span>
+        <span class="chip">Demo course</span>
+      </div>
+    </div>
+  </div>
+  <div class="flowdown"><b>↓</b>talks only through ports (plugs)</div>
+  <div class="layer">
+    <div class="lname">Ports</div>
+    <div class="chips">
+      <span class="chip">Model gateway</span><span class="chip">Retrieval index</span><span class="chip">Entitlements</span><span class="chip">Turn config</span>
+      <span class="chip">Session state</span><span class="chip">Transcripts</span><span class="chip">Learner profile</span><span class="chip">Corrections</span>
+      <span class="chip">Teacher questions</span><span class="chip">Usage meter</span><span class="chip">Traces</span><span class="chip">Alerts</span><span class="chip">Transcriber</span>
+    </div>
+  </div>
+  <div class="flowdown"><b>↓</b>plugged in by</div>
+  <div class="layer">
+    <div class="lname">Parts that do the work <span>· <code>packages/</code></span></div>
+    <div class="chips">
+      <span class="chip">db <small>tables and scoped queries</small></span>
+      <span class="chip">gateway <small>AI models</small></span>
+      <span class="chip">ingest <small>reads uploads</small></span>
+      <span class="chip">evals <small>test runner</small></span>
+      <span class="chip later">payments <small>built last</small></span>
+    </div>
+  </div>
+  <div class="flowdown"><b>↓</b>run on</div>
+  <div class="layer outside">
+    <div class="lname">Underneath</div>
+    <div class="chips">
+      <span class="chip">PostgreSQL + pgvector</span><span class="chip">Redis queue</span><span class="chip">File storage <small>(S3-style)</small></span>
+      <span class="chip">Caddy <small>web front door</small></span><span class="chip">AI providers <small>outside</small></span>
+    </div>
+  </div>
+</div>
+<p class="muted small">Every part shares one dictionary of data shapes, <code>packages/contracts</code>. Changing it needs a written decision record (an ADR) and three reviewers.</p>
+
+<h3>Why it's built this way</h3>
+<ul>
+  <li><b>The brain stays clean.</b> The harness can't import the database, the web framework or an AI vendor's code (a hook blocks it). Tests can plug in fake parts, so the whole teaching engine runs in tests with no real AI calls and no cost.</li>
+  <li><b>Vendors are swappable.</b> Changing an AI provider, a transcription service or a payment provider means writing a new plug, not changing the brain.</li>
+  <li><b>One language, one box.</b> Everything is TypeScript, and everything runs with Docker Compose on one server. That's simple to run, cheap, and easy for an open-source contributor to start.</li>
+</ul>
+
+<h2 id="blocks">The building blocks</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Part</th><th>Folder</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Web app</td><td><code>apps/web</code></td><td>One Next.js app for the student app, the teacher studio, the staff console, the public teacher pages and the API. Phone first (360 px wide and up).</td></tr>
+    <tr><td>Worker</td><td><code>apps/worker</code></td><td>Runs slow jobs in the background from a queue: reading uploads, transcription, weekly insights, evals, safety alerts, deleting old data.</td></tr>
+    <tr><td>CLI</td><td><code>apps/cli</code></td><td>The <code>edmate</code> command: chat with an agent on a package, load a folder of material, run evals. It proves the harness works before any web screen exists.</td></tr>
+    <tr><td>Contracts</td><td><code>packages/contracts</code></td><td>The shared dictionary: every data shape (a message, a package, an entitlement, a turn event) and every port, checked with Zod.</td></tr>
+    <tr><td>Harness</td><td><code>packages/harness</code></td><td>The brain: the 11-step turn pipeline, the access filter, the teaching rules, skills, guards, memory updates and tools.</td></tr>
+    <tr><td>Gateway</td><td><code>packages/gateway</code></td><td>Talks to the AI models: holds the keys, picks the model, falls back when a provider fails, and counts tokens and cost.</td></tr>
+    <tr><td>Ingest</td><td><code>packages/ingest</code></td><td>Turns uploads into searchable text: reads PDFs, slides and documents, transcribes video, drafts the course outline, cuts text into chunks.</td></tr>
+    <tr><td>Database</td><td><code>packages/db</code></td><td>The tables (Drizzle on Postgres) and the only code that reads or writes them. Every query is scoped to one teacher or one student.</td></tr>
+    <tr><td>Evals</td><td><code>packages/evals</code></td><td>Runs scripted test conversations against an agent and scores them, with a judge model for the subjective cases.</td></tr>
+    <tr><td>UI</td><td><code>packages/ui</code></td><td>Shared screen parts: chat, package cards, practice and interview screens.</td></tr>
+    <tr><td>Payments</td><td><code>packages/payments</code></td><td><span class="tag">built last</span> Payment providers, the subscription states and a simple ledger.</td></tr>
+    <tr><td>Content</td><td><code>content/</code></td><td>Platform prompt packs (how each mode and skill behaves), skill and persona templates, one locale pack per market, and an open-licensed demo course used in tests.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="turn">What happens when a student sends a message</h2>
+<p>Every message, which the code calls a <b>turn</b>, goes through the same 11 steps in the harness. Rules run first. A small, cheap AI model is used only when the rules can't decide. The blue steps run at the same time, so the checks add at most about 0.6 seconds before the agent starts answering.</p>
+
+<ol class="steps">
+  <li><div><div class="sname">Let it in <code>admit</code></div><p>Is this a signed-in student? Not too many messages a minute (10 max)? Not too long (4,000 characters max)?</p></div></li>
+  <li><div><div class="sname">Check access <code>entitle</code></div><p>The server works out which package the student has. It never trusts a package sent by the browser. Paused or ended packages are refused, and so is a student over the daily message limit (20 in a rolling 24 hours by default). Then it loads the agent, the package, the teacher's style card and the market's locale pack.</p><div class="meta"><span class="tag bad">fails closed</span></div></div></li>
+  <li class="par"><div><div class="sname">Check the message <code>preGuard</code></div><p>Remove personal details (phone numbers, emails, ID numbers) first, then check for harmful content and attempts to trick the agent.</p><div class="meta"><span class="tag acc">runs alongside 4 and 6</span><span class="tag bad">fails closed</span></div></div></li>
+  <li class="par"><div><div class="sname">Understand it <code>route</code></div><p>What does the student want (on task, asking for the answer, off topic, distress)? Have they tried the problem, and was the attempt right, partly right or wrong?</p><div class="meta"><span class="tag acc">runs alongside 3 and 6</span></div></div></li>
+  <li><div><div class="sname">Care first <code>escalate</code></div><p>If the student seems to be in distress: a caring reply with helplines for their market, an alert to the trust team, and skip straight to step 11.</p></div></li>
+  <li class="par"><div><div class="sname">Gather what's needed <code>buildContext</code></div><p>The student's memory and last-session summary, recent messages, and a search of <b>only the modules this package allows</b> (the teacher's own answers rank first). A separate check says whether the question matches a <i>locked</i> module, without ever reading its text.</p><div class="meta"><span class="tag acc">search runs alongside 3 and 4</span></div></div></li>
+  <li><div><div class="sname">Decide how to teach <code>decide</code></div><p>Code rules, not the AI, pick the move: ask a question, give a hint, show a worked example, explain, give the solution, check understanding, say it's locked, or ask the teacher. They also pick what the agent must not reveal, which tools it can use and how long the reply may be.</p></div></li>
+  <li><div><div class="sname">Write the reply <code>generate</code></div><p>The main AI model writes the reply, streamed word by word, citing the teacher's sources. It can call tools (up to 3 rounds). It stops if the turn costs too much, and tries the backup model once if the provider fails.</p></div></li>
+  <li><div><div class="sname">Check the reply <code>postGuard</code></div><p>Did it give away the answer too early? Leak locked material? Say something the teacher's material doesn't support? Give personal investment, medical or legal advice? Break character? If so, rewrite it once, or fall back to a safe reply.</p></div></li>
+  <li class="async"><div><div class="sname">Count the cost <code>meter</code></div><p>Record the tokens and cost of every AI call against the teacher, package and student.</p><div class="meta"><span class="tag">background</span></div></div></li>
+  <li class="async"><div><div class="sname">Save and learn <code>commit</code></div><p>Save the messages, open a question to the teacher if needed, update what the agent knows about the student, and write a trace of every step.</p><div class="meta"><span class="tag">background</span></div></div></li>
+</ol>
+
+<p><b>Speed targets:</b> the harness itself adds under 0.5 seconds (95% of turns, measured with a fake model), and the first word reaches the student within 2 seconds (95% of turns, with real models).</p>
+
+<h3>What the student's screen receives</h3>
+<p>The reply arrives as a live stream (Server-Sent Events). Alongside the words come small structured events: the <b>sources</b> used, the current <b>hint level</b>, a <b>locked</b> notice naming the package that unlocks it, a <b>question sent to the teacher</b>, <b>skill</b> data such as a practice item or interview state, a <b>safety</b> notice, and a <b>replace</b> event if the final check rewrote the reply. Each reply is checked in sentence-sized pieces as it streams, then checked again as a whole before it's marked done.</p>
+
+<h2 id="build-agent">How a teacher builds their agent</h2>
+<p>One teacher has one course and one agent in the MVP. Building it is a pipeline. The teacher does the orange steps; the system does the rest in the background and shows live progress.</p>
+<div class="chain">
+  <div class="link human"><b>Upload</b>PDFs, slides, documents, links, videos. The teacher confirms they own the rights.</div><span class="sep">→</span>
+  <div class="link"><b>Read</b>Text is pulled out with page, slide or heading. Videos are transcribed with timestamps.</div><span class="sep">→</span>
+  <div class="link"><b>Outline</b>The AI drafts modules and topics linked to the source.</div><span class="sep">→</span>
+  <div class="link human"><b>Edit outline</b>The teacher reorders, renames, merges and splits. Every edit is versioned.</div><span class="sep">→</span>
+  <div class="link"><b>Index</b>Text is cut into chunks tagged by module, then indexed for meaning and keywords.</div><span class="sep">→</span>
+  <div class="link human"><b>Style card</b>About 10 interview questions and 3 sample explanations become a 300-word card of the teacher's voice and common mistakes.</div><span class="sep">→</span>
+  <div class="link human"><b>Test and correct</b>The teacher chats as a student on each package. Every correction becomes a teacher note and a permanent test.</div><span class="sep">→</span>
+  <div class="link gate"><b>Quality gate, then publish</b>All test suites must pass before the agent and profile page go live.</div>
+</div>
+<p class="small muted">Each document moves through <code>uploaded → parsed → transcribed → chunked → embedded → ready</code> (or <code>failed</code>). Deleting a document takes it out of the agent's search within 1 minute.</p>
+
+<h2 id="access">Packages: who can see what</h2>
+<p>A package is what a student starts: which modules the agent may use, which skills it may offer, how much help it gives, a daily message limit, live classes, a price and an optional trial. The <b>access filter</b> makes sure locked material can't reach the AI. That's built into the code, not left to instructions (ADR-0003).</p>
+
+<div class="twocol">
+  <div class="box bad"><b>Locked</b><p>The answer is in the teacher's material, but in a module this package doesn't include. The agent says so and can name the package that unlocks it. It never sees the locked text.</p></div>
+  <div class="box acc"><b>Not covered</b><p>Nothing in the teacher's material answers it. The agent says so plainly and sends the question to the teacher. It doesn't guess.</p></div>
+</div>
+
+<ul>
+  <li><b>The server decides access.</b> Access is worked out on the server from the student's subscription, a teacher's preview, or an eval run. Anything the browser claims is ignored.</li>
+  <li><b>The search can't skip the filter.</b> The search function demands the list of allowed modules, and the database applies it before ranking results. No search without the filter exists anywhere in the code.</li>
+  <li><b>Locked checks don't read the text.</b> A separate check only answers yes or no: "does this match a locked module?" Even the leak check on replies is plain code comparing word sequences, not an AI call.</li>
+  <li><b>Skills are filtered too.</b> The agent only gets the tools for skills its package includes.</li>
+  <li><b>Changes apply on the next message.</b> Access is read fresh every turn, so an upgrade, pause or end takes effect immediately.</li>
+  <li><b>What counts as a leak:</b> any run of 8 or more words from a locked chunk, or any fact that only locked chunks contain. The target is zero leaks, tested with 200+ attack conversations.</li>
+</ul>
+<div class="note"><p><b>Until payments are built,</b> starting a paid package creates an active subscription with no charge. Everything else about access works exactly the same, so payments only add how a subscription gets paid for (decided 18 Oct 2026).</p></div>
+
+<h2 id="teaching">How the agent teaches</h2>
+<p>Code and content decide how to teach. The AI carries out a move that the rules already chose, guided by a prompt pack and the teacher's style card.</p>
+
+<h3>The help ladder</h3>
+<p>Each problem starts at rung 0. The agent climbs one rung when the student asks for a hint, pushes for the answer, or gets stuck twice. It goes back to asking questions when the student makes progress. Each package sets the highest rung.</p>
+<div class="ladder">
+  <div class="rung"><div class="n">0</div>Ask a guiding question</div>
+  <div class="rung"><div class="n">1</div>A nudge</div>
+  <div class="rung"><div class="n">2</div>A hint about the idea</div>
+  <div class="rung"><div class="n">3</div>A worked example of a similar problem</div>
+  <div class="rung top"><div class="n">4</div>The solution, then one check question</div>
+</div>
+<p class="small muted">Rung 4 only happens if the package allows final answers, either always or only after the student has tried. If a package never allows final answers, rung 3 is the top.</p>
+
+<h3>Skills</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Skill</th><th>What the agent does</th></tr></thead>
+  <tbody>
+    <tr><td>Explain</td><td>Explains in 150 words or fewer unless asked for more, cites sources, and ends with one question to check understanding.</td></tr>
+    <tr><td>Coach</td><td>One question per reply and never the answer below rung 4.</td></tr>
+    <tr><td>Practice</td><td>Questions from the teacher's question bank, or new ones at the right level. Answer keys stay on the server.</td></tr>
+    <tr><td>Feedback</td><td>Scores the student's work against a rubric and points to the rubric line. It never rewrites the work for them.</td></tr>
+    <tr><td>Mock interview</td><td>Plays an interviewer or examiner from a persona template and the teacher's notes. <code>/pause</code> steps out for coaching, and it ends with a debrief.</td></tr>
+    <tr><td>Revision</td><td>Notes and flashcards from allowed modules only, with sources.</td></tr>
+    <tr><td>Study plan</td><td><span class="tag">later</span> Weekly goals that adjust to progress.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>What the AI is told, in order</h3>
+<p>Safety rules → how this skill works → the teacher's style card → the market's rules → the chosen move and the "don't say" list → the teacher's material with sources → a short summary of the student. All the platform prompts carry one version number. Changing any of them bumps the version and must pass the teaching, leak and locked tests.</p>
+
+<h2 id="ask">Ask the teacher</h2>
+<p>When the material doesn't cover a question, the teacher answers it and the agent learns from it.</p>
+<ol>
+  <li>The agent says plainly: <i>"That isn't covered in your teacher's material yet. I've sent your question to them; their answer will appear here."</i> It still helps with any parts that are covered.</li>
+  <li>A question opens in the teacher's inbox. Similar questions from different students are grouped, so the teacher answers once. The teacher doesn't see who asked.</li>
+  <li>The teacher answers and picks the module it belongs to. The module decides which packages can use the answer.</li>
+  <li>The answer appears in each student's chat thread as a message from the teacher, with a notification.</li>
+  <li>The answer becomes a <b>teacher note</b> (ranked first in future searches) and a permanent test case.</li>
+  <li>Unanswered questions feed the queue for the next live class and the weekly insights.</li>
+</ol>
+
+<h2 id="safety">Safety</h2>
+<p>Safety is a set of small, separate checks called <b>guards</b>. Cheap rules run first, and a small AI model is used only when the rules can't tell. If a check breaks, it fails closed: the student gets a safe reply, never an unchecked one.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Guard</th><th>When</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Personal details</td><td>before</td><td>Removes phone numbers, emails, card numbers, one-time codes, national ID patterns from the locale pack, and the student's own name, before any AI sees the message.</td></tr>
+    <tr><td>Distress</td><td>before</td><td>Keywords in each supported language and script, then a classifier. Sends a caring reply with local helplines and alerts the trust team.</td></tr>
+    <tr><td>Harmful content</td><td>before</td><td>The AI provider's moderation where available, a local classifier otherwise. Blocks and redirects.</td></tr>
+    <tr><td>Tricks</td><td>before</td><td>Catches attempts to override the agent, including "pretend I'm on another package". Repeat attempts count against the student.</td></tr>
+    <tr><td>Answer leak</td><td>after</td><td>Stops the agent giving away an answer it was told to hold back.</td></tr>
+    <tr><td>Locked leak</td><td>after</td><td>Plain code that compares the reply with the locked modules' text.</td></tr>
+    <tr><td>Grounding</td><td>after</td><td>Every claim must be backed by the teacher's material or notes, and numbers are recalculated. If not, the reply is rewritten or the question goes to the teacher.</td></tr>
+    <tr><td>Advice</td><td>after</td><td>No personal investment, medical or legal advice. Rewrites to concept-level teaching with a disclaimer. This matters for the personal-finance pilot courses.</td></tr>
+    <tr><td>Persona</td><td>after</td><td>Keeps interview and viva characters inside their "must not" list.</td></tr>
+    <tr><td>Tone</td><td>after</td><td>No companion behaviour. The agent never claims to be human or to be the teacher.</td></tr>
+  </tbody>
+</table></div>
+<p><b>Alerts:</b> a safety alert goes to the trust team's inbox and email and is retried until delivered. If nobody acknowledges it within 15 minutes, it escalates to the on-call lead.</p>
+<p><b>Languages:</b> the agent teaches in English in both pilot markets. The safety checks still understand Hindi and Hinglish, in Devanagari and in Latin script, because students will type that way.</p>
+
+<h2 id="memory">Memory and progress</h2>
+<ul>
+  <li><b>One memory per student per teacher.</b> What a student does with one teacher doesn't carry over to another.</li>
+  <li><b>Mastery per topic:</b> a probability that the student knows each topic. It's updated only from scored evidence (check questions, practice items, rubric feedback), never from chatting.</li>
+  <li><b>Mistakes:</b> tagged only from the teacher's list of common mistakes, plus new tags the teacher approves.</li>
+  <li><b>Session summary:</b> 60 words or fewer at the end of each session, which the agent reads next time.</li>
+  <li><b>The student is in control:</b> they can view, reset and export what the agent remembers, and every change is logged.</li>
+</ul>
+
+<h2 id="models">The AI models</h2>
+<ul>
+  <li><b>Edmate holds the keys.</b> Students and teachers never bring their own. Keys come from the server's environment, are hidden in logs and errors, and are never stored in the database or sent by any API. Only provider plans that don't train on our data are used.</li>
+  <li><b>Two connectors:</b> Anthropic (Claude) as the main one, and an OpenAI-compatible one that also covers OpenRouter. OpenAI's Whisper does transcription and <code>text-embedding-3-small</code> does search embeddings. One embedding model serves the whole platform.</li>
+  <li><b>Two tiers:</b> a <i>small</i> model for quick checks and a <i>main</i> model for replies, with a per-agent override and a backup model when a provider errors, times out or rate-limits. A model that fails the safety, leak or locked tests can't be selected. Which model each tier uses is decided after the cost and quality data from task 7.6.</li>
+  <li><b>Cost controls:</b> the small model only when rules can't decide; a reply-length cap per move; a cost ceiling per message; cached prompts; history summarised after 20 messages; a daily message limit per package; a monthly cost alarm per teacher.</li>
+  <li><b>Metering:</b> every AI call writes a usage row (teacher, package, student, model, tokens, cost in US dollars). Teacher previews are billed to the teacher, test runs to Edmate.</li>
+</ul>
+
+<h2 id="quality">Quality checks</h2>
+<p>Evals are scripted test conversations with expected behaviour. They run in two places. In <b>CI</b>, on every code change, recorded model replies are replayed, so there's no cost and no keys. As a <b>publish gate</b>, real models run on every agent before it goes live and after every change to its material, packages or style card.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Suite</th><th>Checks</th><th>Live bar</th></tr></thead>
+  <tbody>
+    <tr><td>Leak</td><td>The agent holds back answers under pressure, fake role claims and mixed languages</td><td>98%+</td></tr>
+    <tr><td>Locked</td><td>Attempts to pull out other packages' material or skills</td><td><b>0 leaks</b></td></tr>
+    <tr><td>Safety</td><td>Distress, harmful requests, tricks, personal details</td><td>100% distress, 99%+ rest</td></tr>
+    <tr><td>Accuracy</td><td>Answers match the teacher's material; uncovered questions go to the teacher</td><td>99%+</td></tr>
+    <tr><td>Persona</td><td>Mock interview and viva characters stay in role</td><td>97%+</td></tr>
+    <tr><td>Teaching</td><td>One question at a time, hints before answers, sources cited</td><td>4 out of 5 average</td></tr>
+    <tr><td>Advice</td><td>No personal investment, medical or legal advice</td><td>99%+</td></tr>
+  </tbody>
+</table></div>
+<p>Each agent also gets its own tests, built at publish from the teacher's question bank, every correction, and locked-content attacks built from its own packages. A fixed mid-tier judge model scores the subjective cases, and humans double-check 10% each release. Every live agent shows a public <b>teaching scorecard</b> from its latest gate run.</p>
+
+<h2 id="data">Where the data lives</h2>
+<p>Everything is in one PostgreSQL database. Search vectors live in the same database (pgvector), and files live in S3-style storage reached only through short-lived signed links.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Group</th><th>Holds</th></tr></thead>
+  <tbody>
+    <tr><td>People</td><td>Users (student, teacher, staff), teacher profiles, consents (privacy notice, age, rights declarations)</td></tr>
+    <tr><td>Course</td><td>Courses, modules, topics, documents and their chunks with search vectors, style cards</td></tr>
+    <tr><td>Agents and packages</td><td>Agent and package settings, stored as versions that never change once saved</td></tr>
+    <tr><td>Learning</td><td>Sessions, messages, learner profiles, evidence for mastery</td></tr>
+    <tr><td>Teacher loop</td><td>Teacher questions and answers, corrections</td></tr>
+    <tr><td>Quality and cost</td><td>Eval runs and results, turn traces, the usage ledger</td></tr>
+    <tr><td>Live and insights</td><td>Live classes (a Meet or Zoom link), pre-class questions, weekly insights</td></tr>
+    <tr><td>Trust</td><td>Reports, takedowns, safety events, the audit log of every staff, config and memory change</td></tr>
+    <tr><td>Money <span class="tag">later</span></td><td>Subscriptions, payments, a double-entry ledger, payouts, invoices, webhook events</td></tr>
+  </tbody>
+</table></div>
+<h3>Privacy rules built into the data</h3>
+<ul>
+  <li>Every teacher-owned row carries the teacher's id, and every student row the student's id. The query code refuses to run without the right scope, so one teacher can't read another's data.</li>
+  <li>The harness only sees pseudonymous ids. Student names never go to an AI model.</li>
+  <li>Teachers see aggregated insights (groups of 5 or more). They see a student's conversation only if that student chooses to share it.</li>
+  <li>Traces and logs never contain keys or names. A retention job deletes old data, and students can export or delete everything.</li>
+  <li>The repo is public, so a secret scanner blocks keys and personal data at every edit, commit and CI run.</li>
+</ul>
+
+<h2 id="markets">Markets and locale packs</h2>
+<p>Nothing country-specific is hard-coded. Each market has a <b>locale pack</b> (<code>content/locales/&lt;market&gt;.yaml</code>) with its languages, timezone, currency format, helplines, privacy law, minimum age, data region, grievance contact, payment methods, disclaimers for regulated subjects, and patterns for local ID numbers. Helplines and compliance details are checked by a human.</p>
+<div class="cards">
+  <div class="card"><b>Pilot markets</b><p>The US and India (en-US and en-IN), teaching in English.</p></div>
+  <div class="card"><b>Ages</b><p>13 and up. In India, 13 to 17-year-olds need verifiable parental consent under DPDP. No under-13 learners.</p></div>
+  <div class="card"><b>Pilot subjects</b><p>Specific practical skills, such as personal finance, Marketing 101 and starting a side hustle.</p></div>
+</div>
+
+<h2 id="run">How it runs</h2>
+<p>The whole system is six containers in Docker Compose on one server, in one US cloud region for the pilot. An India region can be added later if speed or data rules need it.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Container</th><th>Job</th></tr></thead>
+  <tbody>
+    <tr><td>caddy</td><td>The front door: HTTPS and routing to the web app</td></tr>
+    <tr><td>web</td><td>The Next.js app and API. Runs the harness for each turn and streams the reply.</td></tr>
+    <tr><td>worker</td><td>Background jobs from the Redis queue</td></tr>
+    <tr><td>postgres</td><td>The database, with pgvector for search</td></tr>
+    <tr><td>redis</td><td>The job queue and cache</td></tr>
+    <tr><td>minio</td><td>File storage locally, swapped for an S3 bucket in the cloud</td></tr>
+  </tbody>
+</table></div>
+<p>The goal for the deploy guide is a fresh server running the demo in under 30 minutes, with backups and a tested restore.</p>
+
+<h2 id="order">Build order</h2>
+<p>The brain comes first, proven through the CLI and tests, before any screens. Payments come last, after the platform works end to end and the agents are good. Live status is on the board (<code>python3 .claude/skills/board/board.py status</code>).</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Milestone</th><th>What it delivers</th></tr></thead>
+  <tbody>
+    <tr><td>M0</td><td>Foundations: repo, contracts, CI, dev container</td></tr>
+    <tr><td>M1</td><td>Data, accounts and sign-in</td></tr>
+    <tr><td>M2</td><td>Model gateway: keys, connectors, routing, metering</td></tr>
+    <tr><td>M3</td><td>Harness core: the 11-step pipeline and the eval runner</td></tr>
+    <tr><td>M4</td><td>Guardrails and safety</td></tr>
+    <tr><td>M5</td><td>Knowledge, the access filter and skills</td></tr>
+    <tr><td>M6</td><td>Learner memory and progress</td></tr>
+    <tr><td>M7</td><td>Evals and the quality gate</td></tr>
+    <tr><td><b>Exit gate</b></td><td>The demo agent passes every suite on 2+ providers with 0 locked leaks. The CLI demo shows a locked question refused, then answered after an upgrade, and an uncovered question answered by the teacher and reused.</td></tr>
+    <tr><td>M8</td><td>Teacher studio</td></tr>
+    <tr><td>M9</td><td>Student app</td></tr>
+    <tr><td>M11</td><td>Live classes and insights</td></tr>
+    <tr><td>M12</td><td>Trust and safety console</td></tr>
+    <tr><td>M13</td><td>Hardening: accessibility, load test, security review, privacy jobs, cost dashboard, deploy</td></tr>
+    <tr><td>M10</td><td><span class="tag">last</span> Payments and payouts, then the pilot readiness checklist</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="decisions">Decisions behind this design</h2>
+<p>The full list, with reasons and alternatives, is in <code>docs/decisions/log.md</code>. These are the ones that shape the system most.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Decision</th><th>What was decided</th></tr></thead>
+  <tbody>
+    <tr><td>Grounding</td><td>Teacher's material only. Uncovered questions go to the teacher.</td></tr>
+    <tr><td>Access filter</td><td>Locked material is kept from every model by code, not prompts (ADR-0003)</td></tr>
+    <tr><td>Ports and adapters</td><td>The harness talks to everything through fixed plugs (ADR-0002, 0004, 0005)</td></tr>
+    <tr><td>Main AI provider</td><td>Anthropic, plus an OpenAI-compatible connector</td></tr>
+    <tr><td>Transcription and search</td><td>OpenAI Whisper and text-embedding-3-small</td></tr>
+    <tr><td>Moderation</td><td>Provider moderation where available, a local classifier otherwise</td></tr>
+    <tr><td>Judge model</td><td>One mid-tier model, pinned per release</td></tr>
+    <tr><td>Live classes</td><td>The teacher's Meet or Zoom link</td></tr>
+    <tr><td>Hosting</td><td>One US region for the pilot</td></tr>
+    <tr><td>Payments</td><td>Last. Later: Razorpay in India, a merchant of record in the US, full refund in the first 7 days.</td></tr>
+    <tr><td>Licence</td><td>Code is MIT and open source. Teachers own their content.</td></tr>
+  </tbody>
+</table></div>
+<p class="muted small">Still open, and not blocking current work: Edmate's revenue share and floor price, the default model for each tier (both after task 7.6's data), and Edmate's legal form.</p>
+
+<h2 id="glossary">Glossary</h2>
+<dl class="gloss">
+  <dt>Agent</dt><dd>The teacher's AI tutor, built from their material and style.</dd>
+  <dt>Package</dt><dd>What a student starts: the modules and skills the agent may use, help limits, a daily limit, live classes and a price.</dd>
+  <dt>Entitlement</dt><dd>The server's answer to "what may this student use right now?", worked out fresh on every message.</dd>
+  <dt>Module</dt><dd>A part of the teacher's course. Access is granted module by module.</dd>
+  <dt>Chunk</dt><dd>A short piece of the teacher's material, a transcript or a teacher note, with its source (page, slide, heading or timestamp).</dd>
+  <dt>Teacher note</dt><dd>A teacher's answer or correction, saved as a chunk that ranks first in searches.</dd>
+  <dt>Style card</dt><dd>A 300-word summary of how the teacher explains, what they stress and the mistakes they watch for.</dd>
+  <dt>Prompt pack</dt><dd>Edmate's platform instructions for each mode and skill, versioned together.</dd>
+  <dt>Locale pack</dt><dd>One file per market: language, helplines, privacy law, age rules, currency, local ID patterns.</dd>
+  <dt>Turn</dt><dd>One student message and the agent's reply, run through the 11-step pipeline.</dd>
+  <dt>Harness</dt><dd>The brain of the system. It runs turns and holds the teaching, access and safety logic.</dd>
+  <dt>Port</dt><dd>A fixed plug the harness uses to reach the outside (database, AI models, alerts). Tests plug in fakes.</dd>
+  <dt>Guard</dt><dd>A small safety check that runs before or after the AI writes.</dd>
+  <dt>Help ladder</dt><dd>The five levels of help, from a question (0) to the full solution (4).</dd>
+  <dt>Eval</dt><dd>A scripted test conversation with an expected behaviour.</dd>
+  <dt>Quality gate</dt><dd>The set of evals an agent must pass before it goes live.</dd>
+  <dt>ADR</dt><dd>Architecture decision record: a short document in <code>docs/adr/</code> that records a hard-to-reverse choice.</dd>
+</dl>
+
+</main>
+</body>
+</html>

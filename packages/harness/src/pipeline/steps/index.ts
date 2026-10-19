@@ -10,8 +10,9 @@ import { escalate } from './escalate.js';
 import { generate } from './generate.js';
 import { meter } from './meter.js';
 import { postGuard } from './postGuard.js';
-import { preGuard, scrub } from './preGuard.js';
+import { preGuard } from './preGuard.js';
 import { route } from './route.js';
+import { scrub } from './scrub.js';
 
 export const defaultSteps: Steps = {
   admit,

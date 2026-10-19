@@ -578,6 +578,33 @@ tasks:
   risk: risky
   branch: null
   model: null
+- id: 3.11a
+  milestone: M3
+  title: 'Prompt packs v1.0.0, code half: persona-template schema and loader, risk-paths line, snapshot tests of the real set (distress drops persona, investing disclaimers, locked replies), a no-fixture-text test'
+  accept: 'loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.'
+  deps:
+  - '3.6'
+  status: todo
+  branch: null
+  model: null
+- id: 3.11b
+  milestone: M3
+  title: 'Prompt packs v1.0.0, content half: frame, safety preamble, 6 skill packs, 5 mode packs, 2 persona templates (English only), safety-reviewed, then signed off per row by the human'
+  accept: 'packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.'
+  deps:
+  - 3.11a
+  status: todo
+  branch: null
+  model: null
+- id: 3.11c
+  milestone: M3
+  title: 'Pin pilot agents to English: agent config validation rejects languages other than [en] while the pilot is English-only (from the 3.11 plan review)'
+  accept: 'an agent config with hi is rejected with a clear message; tests.'
+  deps:
+  - '3.11'
+  status: todo
+  branch: null
+  model: null
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
@@ -629,12 +656,12 @@ tasks:
   model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
 - id: 3.16b
   milestone: M7
-  title: 'Pre-pilot migration locking (from the 3.16 database review): move 0009''s VALIDATE CONSTRAINT statements to their own migration so the scan runs outside the ACCESS EXCLUSIVE transaction; build
-    the sessions package index CONCURRENTLY outside a transaction; a partial index on open sessions for the backfill'
+  title: 'Pre-pilot migration locking (from the 3.16 database review): run 0009''s VALIDATE CONSTRAINT statements and the sessions package index CONCURRENTLY in a post-migrate step outside drizzle''s single
+    migration transaction; a partial index on open sessions for the backfill is still open'
   accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
   deps:
   - '3.16'
-  status: running
+  status: review
   branch: m7/3.16b-migration-locking
   model: build:sonnet
 - id: '3.17'
@@ -727,7 +754,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.2-pii-scrub
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -761,9 +788,9 @@ tasks:
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.2c-pii-hardening
+  model: build:sonnet
 - id: 4.3b
   milestone: M4
   title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
@@ -797,10 +824,19 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: planning
+  status: running
   risk: risky
   branch: m4/4.5-answer-leak
-  model: plan:sonnet
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.5b
+  milestone: M4
+  title: 'answerLeak paraphrase and non-numeric keys (from the 4.5 plan review): a judge pass (small model, recorded fixtures) for paraphrased answers and word or code answer keys'
+  accept: leak cases with word or code keys and a paraphrased answer are caught on recorded fixtures; the judge rubric lines run in replay.
+  deps:
+  - '4.5'
+  status: todo
+  branch: null
+  model: null
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'

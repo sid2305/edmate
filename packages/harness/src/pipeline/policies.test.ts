@@ -299,7 +299,8 @@ describe(`route: ${policy('route')}`, () => {
           t.clock,
         );
         expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
-        expect(seen).toEqual([demoTurnInput.text]);
+        // Once on the raw text before the scrub (4.2), once in route's fallback.
+        expect(seen).toEqual([demoTurnInput.text, demoTurnInput.text]);
         expect(t.alerts.raised).toHaveLength(1);
         expect(result.trace?.intent).toBe('distress');
         expect(outcomeOf(result, 'route')).toBe('fallback');
@@ -329,7 +330,8 @@ describe(`route: ${policy('route')}`, () => {
       expect(events.at(-1)?.type).toBe('done');
       expect(result.trace?.intent).toBe('on_task');
       expect(outcomeOf(result, 'route')).toBe('failed');
-      expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']);
+      // The raw-text check before the scrub (4.2), onFailure, then the check in the fallback.
+      expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner', 'runner']);
     });
   });
 });
@@ -654,8 +656,9 @@ describe('distress keyword check when step 3 fails', () => {
       t.clock,
     );
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
-    expect(String(result.background[0]?.error)).not.toContain(RAW);
+    // The scrub failure itself (4.2), then the check's failure; neither quotes the raw text.
+    expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']);
+    for (const b of result.background) expect(String(b.error)).not.toContain(RAW);
   });
 
   it.each([
@@ -678,14 +681,26 @@ describe('distress keyword check when step 3 fails', () => {
     expect(result.trace?.intent).toBe('distress');
   });
 
-  it('preGuard ok: the check is not consulted', async () => {
+  it('preGuard ok: the check runs once, on the raw text before the scrub (4.2), and a hit escalates', async () => {
     const { t, seen } = checkDeps(() => true);
     const { events } = await driveTurn(
       runTurn(demoTurnInput, { deps: t.deps, steps: testSteps() }),
       t.clock,
     );
+    expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
     expect(events.at(-1)?.type).toBe('done');
-    expect(seen).toEqual([]);
+    expect(seen).toEqual([RAW]);
+  });
+
+  it('preGuard ok and no hit: the check runs once and the turn replies', async () => {
+    const { t, seen } = checkDeps(() => false);
+    const { events } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps: testSteps() }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(t.alerts.raised).toEqual([]);
+    expect(seen).toEqual([RAW]);
   });
 });
 
