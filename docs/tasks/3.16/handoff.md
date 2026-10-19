@@ -127,3 +127,10 @@ Decided: `sessions_package_version_fk`, `sessions_package_pin_complete` and `ses
 Why: minimise how long `sessions` is unavailable for reads and writes while 0009 runs, without changing the schema or the backfill.
 Alternatives: leave the FK and CHECKs as plain `ADD CONSTRAINT` (longer lock); move the index to its own non-transactional migration.
 Reversible: yes; a later migration can re-order or re-validate.
+
+### 19 Oct 2026 · 3.16 Migration lock duration accepted for the pilot · decided by team lead · risk: medium
+Decided: 0009's constraints are validated inside drizzle's migration transaction. drizzle 0.45 runs every pending migration in one transaction, so a split file wouldn't shorten the ACCESS EXCLUSIVE lock. At pilot scale (about 500 students) the `sessions` scan takes milliseconds, so the finding is re-rated from HIGH to MEDIUM, and 3.16b adds a VALIDATE path outside the migrator before the table grows.
+Why: the reviewer's HIGH assumed a large production table, which doesn't exist; a correct fix needs migration tooling, not a file split.
+Alternatives: a second migrate() run; an ops script with autocommit; switching migrators.
+Reversible: yes.
+
