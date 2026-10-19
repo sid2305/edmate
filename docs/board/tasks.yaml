@@ -819,7 +819,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: running
   risk: risky
   branch: m4/4.3-distress
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -845,8 +845,9 @@ tasks:
   model: null
 - id: 4.3c
   milestone: M7
-  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page
-    forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
+  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier per B-13 (SMS to the on-call phone plus email backup, e.g. Twilio and Resend, behind a notifier port; re-page every 15 min until
+    acked), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm
+    on the classifier failure rate'
   accept: a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.
   deps:
   - '4.3'
@@ -953,6 +954,18 @@ tasks:
   accept: each phrase is a unit test (hit or negative) and a pending held-out case; no regression on the existing negatives.
   deps:
   - '4.4'
+  status: todo
+  branch: null
+  model: null
+- id: 4.4e
+  milestone: M4
+  title: 'Strike consequence (human decision B-12): after 3 strikes in a session, later messages in that session get stricter checks (ambiguous jailbreak and moderation hits block instead of only flagging;
+    the classifier runs on every message) and one trust-team notice goes out through the alert path; no pause, lockout or punishment, and the student sees no change in tone'
+  accept: a session with 3 strikes blocks the next ambiguous-only hit and sends exactly one trust-team notice; a session with 2 strikes behaves as today; the count resets with a new session; no student
+    text in the notice.
+  deps:
+  - '4.4'
+  - '4.3'
   status: todo
   branch: null
   model: null
