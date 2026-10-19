@@ -594,7 +594,7 @@ tasks:
   accept: packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.
   deps:
   - 3.11a
-  status: running
+  status: done
   branch: m3/3.11b-prompt-pack-content
   model: build:opus-5.5/medium
 - id: 3.11c

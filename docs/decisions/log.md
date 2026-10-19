@@ -10,6 +10,22 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
+Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
+Why: the model's instructions are the last line of defence when a guard misses.
+Alternatives: keep the fixture packs; ship without a human signature.
+Reversible: yes (a new pack version).
+
+---
+
+### 19 Oct 2026 · 3.11b Conversation-side markers removed · decided by team lead (safety review) · risk: medium
+Decided: the teacher-label, generic-disclaimer, no-helplines and empty-turn sections carry no `[[…]]` marker, because their text reaches the conversation or is passed on. The teacher note reads "(Platform note: the teacher wrote this reply.)". System-prompt section markers stay.
+Why: a marker in conversation text teaches the model to write `[[`, which the jailbreak cases forbid, and lets a student forge the teacher's voice.
+Alternatives: keep every marker.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
 Decided: `generate` now uses the sentence gate by default and `postGuard` runs the post-phase chain with answerLeak; no real-model turn may run before this merges. Reviewed by safety-reviewer (required), with security-reviewer, typescript-reviewer and silent-failure-hunter.
 Why: this task is the gate before any real-model turn; the fixtures show 0 leaks for numeric and encoded forms, and the mutation run shows the test bites.
