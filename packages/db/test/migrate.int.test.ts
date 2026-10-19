@@ -9,10 +9,11 @@
 // database named in the URL beyond CREATE/DROP DATABASE.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
+import pg from 'pg';
 import { demoPackageFree } from '@edmate/contracts/fixtures';
 import { createDb } from '../src/client.js';
 import { runMigrateCli } from '../src/cli.js';
-import { migrateDatabase } from '../src/migrate.js';
+import { migrateDatabase, runPostMigrateSteps, type PostMigrateStep } from '../src/migrate.js';
 import * as s from '../src/schema/index.js';
 import { DATA_MODEL_TABLES, latestSnapshot, migrationSql } from './helpers.js';
 import {
@@ -89,6 +90,131 @@ describe.skipIf(!up)(
       await dropDatabase(dbName);
     });
 
+    // Task 3.16c: migrateDatabase() takes a session-level advisory lock around drizzle's migrate()
+    // and the post-migrate steps, so two overlapping runs (two app instances starting at once)
+    // serialize instead of racing drizzle's migrations-table insert or the post-migrate index
+    // build/drop.
+    it('two concurrent migrateDatabase() calls against a fresh database both resolve, and the second finds the index valid and skips the drop', async () => {
+      const concurrentDbName = throwawayName();
+      const concurrentUrl = urlFor(concurrentDbName);
+      await createDatabase(concurrentDbName);
+      try {
+        await Promise.all([migrateDatabase(concurrentUrl), migrateDatabase(concurrentUrl)]);
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index
+               where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+
+          const cons = await c.query<{ conname: string; convalidated: boolean }>(
+            `select conname, convalidated from pg_constraint where conrelid = 'sessions'::regclass
+               and conname in ('sessions_package_version_fk', 'sessions_package_pin_complete', 'sessions_open_has_package')`,
+          );
+          expect(cons.rows).toHaveLength(3);
+          for (const row of cons.rows) {
+            expect(row.convalidated, row.conname).toBe(true);
+          }
+        }, concurrentUrl);
+      } finally {
+        await dropDatabase(concurrentDbName);
+      }
+    });
+
+    // Task 3.16d (3.16c review deferral (a)): isIndexInvalid schema-qualifies with
+    // to_regclass(format('%I.%I', 'public', $1)) instead of string concatenation, so a mixed-case
+    // index name (needs double-quoting to resolve) is looked up correctly rather than silently
+    // matching nothing.
+    it('runs post-migrate steps against a mixed-case index name, quoted correctly by format(%I.%I)', async () => {
+      const name = throwawayName();
+      const url = urlFor(name);
+      await createDatabase(name);
+      try {
+        await admin((c) => c.query('create table "T" (id int)'), url);
+        const steps: PostMigrateStep[] = [
+          {
+            kind: 'concurrentIndex',
+            indexName: 'MixedCaseIdx',
+            sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "MixedCaseIdx" ON "T" ("id")',
+          },
+        ];
+        const { pool, close } = createDb({ DATABASE_URL: url });
+        try {
+          await runPostMigrateSteps(pool, steps);
+          // Re-run: isIndexInvalid must find the existing, valid, mixed-case index and skip the
+          // drop, proving the lookup actually resolved it rather than matching nothing.
+          await runPostMigrateSteps(pool, steps);
+        } finally {
+          await close();
+        }
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean }>(
+            `select indisvalid from pg_index where indexrelid = '"MixedCaseIdx"'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]?.indisvalid).toBe(true);
+        }, url);
+      } finally {
+        await dropDatabase(name);
+      }
+    });
+
+    // Task 3.16d (3.16c review deferral (b)): CREATE/DROP INDEX CONCURRENTLY must wait out any
+    // transaction holding an older snapshot, whether or not it touches the indexed table; a
+    // forgotten idle-in-transaction session elsewhere can otherwise hang a post-migrate step
+    // forever. migrateDatabase bounds this with a per-run statement_timeout.
+    it('a bounded step timeout fails the step when a stray open transaction blocks it, and a re-run after it ends rebuilds the index valid', async () => {
+      const name = throwawayName();
+      const url = urlFor(name);
+      await createDatabase(name);
+      try {
+        await migrateDatabase(url);
+        // Simulate what a killed concurrent build leaves behind: the index exists, but is
+        // INVALID, so the next post-migrate run must DROP and CREATE it again (real waiting work,
+        // not a short-circuited IF NOT EXISTS no-op).
+        await admin(
+          (c) =>
+            c.query(
+              `update pg_index set indisvalid = false
+                 where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+            ),
+          url,
+        );
+
+        // `CREATE INDEX CONCURRENTLY` must wait out every transaction whose snapshot predates it,
+        // not just ones using this table; a held, actively running statement (not merely an idle
+        // one) reliably reproduces that wait. Not awaited: it blocks until rolled back below.
+        const blocker = new pg.Client({ connectionString: url });
+        await blocker.connect();
+        await blocker.query('BEGIN');
+        const blockerQuery = blocker.query('select pg_sleep(2)');
+        blockerQuery.catch(() => undefined);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        try {
+          await expect(migrateDatabase(url, { stepTimeoutMs: 200 })).rejects.toThrow(
+            /canceling statement due to statement timeout/,
+          );
+        } finally {
+          await blocker.query('ROLLBACK');
+          await blockerQuery.catch(() => undefined);
+          await blocker.end();
+        }
+
+        await migrateDatabase(url);
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index
+               where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+        }, url);
+      } finally {
+        await dropDatabase(name);
+      }
+    });
+
     it('apply cleanly to an empty database', async () => {
       await migrateDatabase(TEST_URL);
       const got = await expectFullSchema();
@@ -110,7 +236,7 @@ describe.skipIf(!up)(
     // way with CREATE INDEX CONCURRENTLY. migrateDatabase() above already ran this twice
     // ('apply cleanly' then 're-running is a no-op'), so both assertions also cover "runs twice,
     // still correct" for the post-migrate step itself.
-    it('validates the three 0009 constraints and builds the package-pin index outside the migration transaction', async () => {
+    it('validates the three 0009 constraints and builds the package-pin and open-session indexes outside the migration transaction', async () => {
       await admin(async (c) => {
         const cons = await c.query<{ conname: string; convalidated: boolean }>(
           `select conname, convalidated from pg_constraint where conrelid = 'sessions'::regclass
@@ -121,12 +247,24 @@ describe.skipIf(!up)(
           expect(row.convalidated, row.conname).toBe(true);
         }
 
-        const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
-          `select indisvalid, indisready from pg_index
-             where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+        for (const indexName of [
+          'sessions_package_id_package_version_idx',
+          'sessions_open_teacher_id_student_id_idx',
+        ]) {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index where indexrelid = $1::regclass`,
+            [indexName],
+          );
+          expect(idx.rows, indexName).toHaveLength(1);
+          expect(idx.rows[0], indexName).toMatchObject({ indisvalid: true, indisready: true });
+        }
+
+        // Partial: only rows for an open session (ended_at is null) land in the index predicate.
+        const pred = await c.query<{ indpred: string }>(
+          `select pg_get_expr(indpred, indrelid) as indpred from pg_index
+             where indexrelid = 'sessions_open_teacher_id_student_id_idx'::regclass`,
         );
-        expect(idx.rows).toHaveLength(1);
-        expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+        expect(pred.rows[0]?.indpred).toMatch(/ended_at.*IS NULL/i);
       }, TEST_URL);
     });
 

@@ -72,6 +72,13 @@ export const sessions = pgTable(
     // Declared here so `db:generate` stays a no-op; built by the post-migrate step
     // (packages/db/src/migrate.ts, task 3.16b) with CREATE INDEX CONCURRENTLY, not by 0009's SQL.
     index('sessions_package_id_package_version_idx').on(t.packageId, t.packageVersion),
+    // A partial index on open sessions, for the lookups the 3.16b migration review flagged
+    // (task 3.16c): same pattern as the package-pin index above, declared here so `db:generate`
+    // stays a no-op; built by the post-migrate step with CREATE INDEX CONCURRENTLY, not by SQL in
+    // a migration file.
+    index('sessions_open_teacher_id_student_id_idx')
+      .on(t.teacherId, t.studentId)
+      .where(sql`${t.endedAt} is null`),
     check(
       'sessions_package_pin_complete',
       sql`(${t.packageId} is null) = (${t.packageVersion} is null)`,
