@@ -185,7 +185,9 @@ describe('sentenceGate: leaks', () => {
     ); // ~8000 characters
     const ms = Date.now() - t0;
     expect(r.shown.length).toBe(sentence.length * 170);
-    expect(ms).toBeLessThan(1_000);
+    // A gross-regression guard only: linear work is proven by the work-counting tests below.
+    // CI runners with coverage took 1.2–1.9 s here (0.15 s locally), so a 1 s wall-clock bound flaked.
+    expect(ms).toBeLessThan(5_000);
     expect(SENTENCE_GATE_CAP).toBe(200);
   });
 });
