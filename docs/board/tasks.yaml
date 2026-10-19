@@ -655,8 +655,11 @@ tasks:
   model: build:sonnet
 - id: '0.13'
   milestone: M7
-  title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
-  accept: 'one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead skill states the new rules.'
+  title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and
+    parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead
+    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
+  accept: one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead
+    skill states the new rules.
   deps:
   - '0.7'
   status: todo
@@ -680,9 +683,9 @@ tasks:
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.0c-validator-followups
+  model: build:sonnet
 - id: 4.0d
   milestone: M4
   title: 'Seed-suite coverage gaps from the 4.0a safety review: khudkushi and a Hinglish companion-reliance distress case; hyphenated phones, dot/at emails, Aadhaar and OTP in Devanagari digits'
