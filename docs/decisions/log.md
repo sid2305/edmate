@@ -10,6 +10,110 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.6 ADR-0007: `RetrievalIndex.leakCheck` returns one boolean for a batch, over the complement scope, failing closed · decided by lead (plan answers, after safety-reviewer and architect plan reviews) and tdd-guide (ADR text) · risk: high
+Decided: add `leakCheck(candidates: string[], scope: { teacherId; allowedModuleIds }): Promise<{ hit: boolean }>` to contracts. Locked means every chunk of the teacher outside the allowed modules, and spans also in allowed chunks are ignored. The adapter fails closed and never logs candidates, with a latency SLO (p95 ≤ 50 ms, p99 ≤ 100 ms), a cache keyed by package version plus the teacher's material revision, and a residual oracle of one bit per turn bounded by the message limit.
+Why: locked text must never enter the harness or a model (ADR-0003). Spans, scores or counts would make the port an oracle that reads locked text out.
+Alternatives: return matched spans (architect proposal); `{ hit, score }` like `probe`; fetch locked text or hashed shingles into the harness.
+Reversible: yes, by a new ADR, reviewed by architect, security-reviewer and typescript-reviewer.
+
+---
+
+### 19 Oct 2026 · 4.6 lockedLeak runs before answerLeak in the post chain · decided by lead (plan answer 2) · risk: high
+Decided: `GUARD_ORDER.post` is now `lockedLeak, answerLeak, grounding, adviceGuard, personaBoundary, tone`, a departure from the build plan's table order. A test shows the answer rewriter never receives a locked span.
+Why: answerLeak's rewrite sends the draft to a small model; a locked span must be gone before then.
+Alternatives: keep the table order and strip locked text inside answerLeak's rewrite path.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Any locked hit replaces the whole reply with the locked reply; no surgical strip · decided by lead (plan answer 3) · risk: high
+Decided: on a hit in the post chain or the stream, the student gets the locked reply. It is the built-in English reply or the locale's `FallbackReplies.lockedReply`, and names only the student's own package when the teacher chose `name_package`. The guard accepts that text without a check, so it is idempotent by construction.
+Why: cutting spans out leaves fragments and needs spans from the port (an oracle). A fixed reply is safe and simple.
+Alternatives: strip matched spans and recheck in a bounded loop (original plan).
+Reversible: yes, with safety-reviewer sign-off and an ADR if the port would have to return spans.
+
+---
+
+### 19 Oct 2026 · 4.6 Every streamed sentence waits for a locked check, with a 7-token carryover · decided by lead (plan answer 1) and tdd-guide (seam placement, partial-word rule) · risk: high
+Decided: text the answer gate releases is cut into sentences by the same rules. Each sentence is shown only after `leakCheck` passes it, together with the last 7 shown tokens (8 when the shown text ends inside a word). A hit, a failed check or too much text withholds the rest of the attempt. Fragments with no sentence end are not shown until checked.
+Why: build plan line 316 requires locked n-grams to be checked before sending. The carryover catches spans across sentences, chunks and tool rounds.
+Alternatives: post-only checking, where locked text would stream and then be replaced; one check per chunk, which means too many port calls.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Up to 7 locked tokens can stream before the hit; accepted as a known miss for now · decided by tdd-guide (finding, for safety-reviewer) · risk: high
+Decided: no hold-back beyond the carryover. In the fixture run, 89 of 351 forms showed a short case phrase (always fewer than 8 locked tokens) before the replace. None showed 8+ tokens, and every final reply is the locked reply.
+Why: knowing that a shown sentence starts a locked span needs a prefix query, which is a finer oracle than ADR-0007 allows.
+Alternatives: delay each sentence until 7 more tokens arrive (slower streaming, and it still can't tell); a prefix-query port (new ADR, an oracle risk).
+Reversible: yes; safety-reviewer to decide whether this needs a follow-up task.
+
+---
+
+### 19 Oct 2026 · 4.6 The student's own words: only their own 8-token windows are left out · decided by tdd-guide (narrowing lead answer 4's false-positive rule) · risk: high
+Decided: the harness drops from the candidates only the 8-token windows that appear in the student's (scrubbed) message. A window mixing the student's quote with new words is still checked.
+Why: cutting out the student's tokens would let "echo my quote plus 7 more locked tokens" pass, the partial-quote attack. Tests show both the false positive and the attack.
+Alternatives: cut covered tokens out (my first version, caught in testing); no student exception (quoting back a student's paste would be replaced).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Fail-closed outcomes per call site · decided by lead (plan answer 5) and tdd-guide (reply choice) · risk: medium
+Decided: `lockedCheck` is required everywhere. On a rejection or timeout: the tool loop gives `failed('locked')`, skillEvent gives `drop('locked')`, the stream withholds and postGuard then sends the safe reply (or the hint if an answer also leaked), and the post chain fails and sends the safe reply. A real hit gives the locked reply.
+Why: telling a student "that's not in your package" when the index was only slow would mislead them; the safe reply is neutral.
+Alternatives: treat every failure as a hit and send the locked reply.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Harness timeout 150 ms per check; checks of under 8 tokens skip the call · decided by tdd-guide · risk: medium
+Decided: `LOCKED_CHECK_TIMEOUT_MS = 150`, the per-guard slice once all six post guards exist. No port call is made when no candidate has 8 tokens. Candidates are folded token spans, with base64 decoded once (plan Q3).
+Why: keeps latency bounded and fails closed. Short text can't hold a leak.
+Alternatives: use the post slice only; always call.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Skill-only locked cases and one framed leak · decided by tdd-guide · risk: medium
+Decided: `skill-feedback-en`, `skill-feedback-hi-latin` and `skill-revision-allowed-module-en` lock a skill and name no locked module file. Their leaks quote locked functions or loops material. The first and third fail unguarded only through `must_contain` (the locked reply). `skill-feedback-hi-latin`'s phrases ("rubric line", "marks:") appear in no content file, so its leak puts "Rubric line 1: " before a verbatim locked rubric span.
+Why: the lead asked that every case fail under both mutations. For these cases lockedLeak is a backstop; the main protection is decide's locked move and the skill registry.
+Alternatives: exclude these three from the mutation count.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Test virtual clock flushes 2,000 microtask turns, up from 200 · decided by tdd-guide · risk: low
+Decided: raise `FLUSH_TURNS` in `testing/virtualClock.ts`.
+Why: a long reply now awaits one check per sentence at a single virtual instant. At 200 turns the clock wrongly fired a 15 s attempt timeout or reported a deadlock (4.5's leak suite showed it). Production code is unaffected.
+Alternatives: add delays to every scripted stream.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Locked hits go to background reports until 4.4's SafetyEventSink exists · decided by lead (task brief) · risk: low
+Decided: hits are reported by name only: `LockedLeakDetected(stream|reply)`, `ToolFailed(…, 'locked')` and `SkillEventDropped(…, 'locked')`. None carries any text.
+Why: 4.4 has not merged.
+Alternatives: wait for 4.4.
+Reversible: yes; wire to the sink in 4.4 or a follow-up.
+
+---
+
+### 19 Oct 2026 · 4.6 A locked-check outage gives the generic safe reply · decided by team lead (security review) · risk: low
+Decided: when the full-reply leakCheck fails (timeout or error) rather than hits, `packages/harness/src/pipeline/steps/postGuard.ts` sends the generic safe reply, as the stream path already does.
+Why: an outage is not evidence of a locked request, so naming the package would mislead.
+Alternatives: send the locked reply on any failure.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Build-plan guard table updated for ADR-0007 · decided by team lead (architect review) · risk: high
+Decided: the build plan's guard table now lists lockedLeak before answerLeak, with whole-reply replacement and the per-sentence stream check.
+Why: the spec must match the accepted ADR; a reader of the table alone would build the wrong order and action.
+Alternatives: leave the table stale.
+Reversible: only by another ADR.
+
+---
+
 ### 19 Oct 2026 · 3.17 fix round · Duplicate `teacher_questions` rows are dismissed, not left open and not deleted · decided by build-error-resolver (fix round) · risk: medium, reversible
 Decided: 0011's dedup cleanup sets every open duplicate but the oldest to `status = 'dismissed'` (append-only, no deletes), so the new unique index can always be created even against data seeded before it existed.
 Why: the review's instruction was explicit ("close duplicates... never delete rows"); `dismissed` is the only terminal status besides `answered` in `teacher_question_status`, and a duplicate asked only because of the pre-fix race was never actually answered.
