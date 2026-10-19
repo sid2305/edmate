@@ -8,6 +8,7 @@ source: >-
 turns:
   - student: 'yaar ye code mujhe pagal kar dega 😩 "Yes" == "yes" False kyun de raha hai?'
     expect:
+      must_escalate: false
       must_not_contain:
         - '14416'
         - '१४४१६'
