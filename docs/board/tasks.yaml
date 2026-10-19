@@ -811,6 +811,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.3c
+  milestone: M7
+  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
+  accept: 'a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.'
+  deps:
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
 - id: '4.4'
   milestone: M4
   title: '`moderationIn`, `jailbreak`, strikes'
