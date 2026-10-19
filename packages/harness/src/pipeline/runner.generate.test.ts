@@ -98,12 +98,12 @@ describe('metering', () => {
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
       w.clock,
     );
-    // Shown text ends a sentence: since 4.6 a fragment is shown only once its sentence passed
-    // the locked check.
+    // 4.6b: "Partial. " is under 8 tokens, so the locked stream holds it rather than showing it
+    // at once; the attempt fails before release() ever runs, so it is never shown (and clearShown
+    // sends no `replace ''`, since nothing was shown). The retry's "Retry." is held the same way,
+    // and is released, as one token event, once that attempt ends cleanly.
     expect(events).toEqual([
       { type: 'hint_rung', rung: 1 },
-      { type: 'token', text: 'Partial. ' },
-      { type: 'replace', text: '' },
       { type: 'hint_rung', rung: 1 },
       { type: 'token', text: 'Retry.' },
       { type: 'done', messageId: 'message_1', usage: [usageMain, usageMain] },
@@ -299,8 +299,9 @@ describe('metering', () => {
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
       w.clock,
     );
-    expect(events.slice(-2)).toEqual([
-      { type: 'replace', text: '' },
+    // 4.6b: "Hi. " is under 8 tokens, held by the locked stream and never released (the attempt
+    // aborts before a clean end), so nothing was shown and clearShown sends no `replace ''`.
+    expect(events.slice(-1)).toEqual([
       { type: 'error', code: 'turn_cost_exceeded', retryable: false },
     ]);
     expect(started(w.steps.log, 'generate')).toBe(1);
@@ -330,9 +331,11 @@ describe('metering', () => {
 
 describe("replace '' before an error", () => {
   it('both attempts stream then fail: each attempt is cleared, then the error', async () => {
+    // 8+ tokens each, so the locked stream releases part of the sentence at once (its last 7
+    // tokens stay held and are lost when the attempt then fails).
     const w = world([
-      [say('One. '), fail],
-      [say('Two. '), fail],
+      [say('One two three four five six seven eight. '), fail],
+      [say('Two three four five six seven eight nine. '), fail],
     ]);
     const { events } = await driveTurn(
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
@@ -340,9 +343,9 @@ describe("replace '' before an error", () => {
     );
     const steps = w.steps;
     expect(events.filter((e) => e.type !== 'hint_rung')).toEqual([
-      { type: 'token', text: 'One. ' },
+      { type: 'token', text: 'One ' },
       { type: 'replace', text: '' },
-      { type: 'token', text: 'Two. ' },
+      { type: 'token', text: 'Two ' },
       { type: 'replace', text: '' },
       { type: 'error', code: 'provider_error', retryable: true },
     ]);
@@ -377,7 +380,7 @@ describe('client disconnect', () => {
 
   it('the consumer returns mid-stream: generate stops, the stream is closed, no retry, no postGuard', async () => {
     const w = world([
-      [say('First. '), wait(2_000), say('second'), used],
+      [say('First one two three four five six seven. '), wait(2_000), say('second'), used],
       [say('retry'), used],
     ]);
     const { seen, result } = await detachAfterFirstToken(w);
@@ -396,7 +399,7 @@ describe('client disconnect', () => {
   }, 10_000);
 
   it('generate stops at once: the turn finishes before the stream would have', async () => {
-    const w = world([[say('First. '), wait(10_000), say('second'), used]]);
+    const w = world([[say('First one two three four five six seven. '), wait(10_000), say('second'), used]]);
     const t0 = w.clock.now();
     const { result } = await detachAfterFirstToken(w);
     expect(result.trace?.steps.find((s) => s.name === 'generate')?.ms).toBeLessThan(10_000);
@@ -405,7 +408,7 @@ describe('client disconnect', () => {
 
   it('RunTurnOptions.cancel during generate works the same way', async () => {
     const w = world([
-      [say('First. '), wait(2_000), say('second'), used],
+      [say('First one two three four five six seven. '), wait(2_000), say('second'), used],
       [say('retry'), used],
     ]);
     const c = cancelSource();
@@ -889,7 +892,7 @@ describe('fix round: generate failures, unpriced usage, runner-bug clearing, clo
           return {
             next: () =>
               first
-                ? ((first = false), Promise.resolve({ value: say('First. '), done: false as const }))
+                ? ((first = false), Promise.resolve({ value: say('First one two three four five six seven. '), done: false as const }))
                 : new Promise<IteratorResult<ModelChunk>>(() => undefined),
             return: async () => {
               await clock.sleep(closeMs);

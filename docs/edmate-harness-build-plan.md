@@ -267,7 +267,7 @@ interface RetrievalIndex {
   // Code-only: says whether locked modules match, never returns their text.
   probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
   // Code-only: true when any candidate shares an 8+ token span with this teacher's material outside allowedModuleIds; never text, spans or counts (ADR-0007).
-  leakCheck(candidates: string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
+  leakCheck(candidates: readonly string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
 }
 interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
 interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)
@@ -422,7 +422,7 @@ Guards are small, independent `Guard` objects: cheap rules first, then a small-m
 | `distressDetect` | pre | Keywords per supported language (from the locale pack, incl. romanised scripts), then a classifier | `escalate`: caring template + helplines from the student's locale pack + alert to the trust team |
 | `moderationIn` | pre | Provider moderation where available; else classifier with a fixed taxonomy | `block` with redirect; log `safety_event` |
 | `jailbreak` | pre | Patterns + classifier for prompt injection, including "pretend I'm on another package" | `block`; strikes per student |
-| `lockedLeak` | post (runs before `answerLeak`, so no locked span reaches a rewriter; ADR-0007) | Code only: n-gram overlap with the teacher's locked modules (leak = 8+ token span), checked per sentence while streaming and on the full reply via `RetrievalIndex.leakCheck` | `replace` the whole reply with the locked reply (no surgical strip; ADR-0007) |
+| `lockedLeak` | post (runs before `answerLeak`, so no locked span reaches a rewriter; ADR-0007) | Code only: n-gram overlap with the teacher's locked modules (leak = 8+ token span), checked per batch of sentences while streaming (once per reply after a session's first locked hit; ADR-0007 amendment, 4.6b) and on the full reply via `RetrievalIndex.leakCheck` | `replace` the whole reply with the locked reply (no surgical strip; ADR-0007) |
 | `answerLeak` | post | Numbers and words vs `mustNotReveal`; fuzzy match; judge for paraphrase | `rewrite` once, then safe hint |
 | `grounding` | post | Claims must be supported by retrieved material or teacher notes; numbers recomputed | `rewrite` with corrections, or switch to `ask_teacher` |
 | `adviceGuard` | post | Regulated subjects: personal investment, medical or legal advice | `rewrite` to concept-level teaching + disclaimer |

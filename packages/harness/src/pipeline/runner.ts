@@ -22,7 +22,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
-import type { HelpState } from '../pedagogy/helpState.js';
+import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -188,6 +188,15 @@ class Turn {
   private shown = false;
   /** A post guard's escalate text (4.5): saved with the turn, never shown. */
   private escalatedText: string | undefined;
+  /**
+   * The session's locked stop flag as loaded (ADR-0007 §8, 4.6b fix round 1). `null` when the
+   * help state could not be loaded (buildContext failed or timed out, the context fell back, or
+   * a stored blob could not be read): the turn then holds its whole reply and saves no help state,
+   * so a stored `true` is never overwritten with `false`.
+   */
+  private loadedStop: boolean | null = false;
+  /** A locked hit or failed locked check anywhere in this turn: any attempt, or the post guard. */
+  private lockedTrip = false;
 
   constructor(
     private readonly input: TurnInput,
@@ -471,12 +480,15 @@ class Turn {
     // Assemble the TurnContext; its refine (retrieved ⊆ allowed, same teacher, ids match) is the
     // last check before decide. A failure is treated as a buildContext failure.
     let built = bc.ok ? bc.value : fallbackContext(scrubbed, e);
+    let helpLoaded = bc.ok && built.helpStateUnreadable !== true;
     let ctx = assemble(e, built, intent, attempt);
     if (ctx === null && bc.ok) {
       this.trace.outcome('buildContext', 'fallback');
       built = fallbackContext(scrubbed, e);
+      helpLoaded = false;
       ctx = assemble(e, built, intent, attempt);
     }
+    this.loadedStop = helpLoaded ? built.helpState.lockedStopped === true : null;
     if (ctx === null) {
       this.endWithError({ code: 'no_access', retryable: false });
       return this.finish(e, { outcome: 'error', input: scrubbed, intent }, intent, 'redirect');
@@ -505,7 +517,16 @@ class Turn {
 
     // 8. generate: one retry on the fallback model; a TurnAbort or a cancel is final. Text the
     // student saw is cleared before the error, so unguarded partial text never stays on screen.
-    const gen = await this.generate(scrubbed, ctx, decision, decided.sources);
+    // ADR-0007 §8 (4.6b): a session that already stopped streaming (an earlier turn's locked
+    // hit or failed check), or whose flag could not be loaded, holds this turn's whole reply.
+    const gen = await this.generate(
+      scrubbed,
+      ctx,
+      decision,
+      decided.sources,
+      this.loadedStop !== false,
+    );
+    if (gen !== CANCELLED && !('code' in gen) && gen.locked !== undefined) this.lockedTrip = true;
     if (gen === CANCELLED || 'code' in gen) {
       this.clearShown();
       this.endWithError(gen === CANCELLED ? PROVIDER_ERROR : gen);
@@ -522,10 +543,14 @@ class Turn {
     const post = await this.postGuard(scrubbed, ctx, decision, gen);
     if (typeof post !== 'string') {
       this.clearAll();
-      return this.escalate(scrubbed, e, post.alert);
+      // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
+      // the flag in finish(). Without one, an escalation saves no help state, as before.
+      const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
+      return this.escalate(scrubbed, e, post.alert, keep);
     }
     const replyText = post;
     this.done();
+    // ADR-0007 §8 (4.6b): finish() sets the session's stop flag on `next`.
     return this.finish(
       e,
       {
@@ -594,6 +619,7 @@ class Turn {
     input: TurnInput,
     e: Entitled,
     preAlert: SafetyAlert | undefined,
+    next?: SessionHelp,
   ): Promise<TurnRunResult> {
     const es = check(
       await this.timed(input, timeoutOf('escalate'), (env) =>
@@ -621,19 +647,21 @@ class Turn {
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
     }
-    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms });
+    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms }, next);
   }
 
   /**
    * The end of every escalated turn: dispatch the alert (if one could be built), record escalate
    * (`failed` when the alert could not be built first time), send safety + reply + done, save.
-   * `commitInput` is null when the scrub failed, so the raw text is never stored.
+   * `commitInput` is null when the scrub failed, so the raw text is never stored. `next` is the
+   * help state to save, only after a locked trip (4.6b fix round 1).
    */
   private sendEscalation(
     e: Entitled,
     commitInput: TurnInput | null,
     built: { alert: SafetyAlert | null; failed: boolean },
     reply: { replyText: string; outcome: 'ok' | 'fallback' | 'failed'; ms: number },
+    next?: SessionHelp,
   ): Promise<TurnRunResult> {
     const delivered = built.alert === null ? undefined : this.deliverAlert(built.alert);
     this.trace.step('escalate', reply.ms, built.failed ? 'failed' : reply.outcome);
@@ -648,6 +676,7 @@ class Turn {
         intent: 'distress',
         replyText: reply.replyText,
         ...(built.alert === null ? {} : { alert: built.alert }),
+        ...(next === undefined ? {} : { next }),
       },
       'distress',
       'redirect',
@@ -748,6 +777,7 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
+    lockedStopped: boolean,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
@@ -765,7 +795,16 @@ class Turn {
           const tg = buildTurnGateway(this.deps, policy, this.billing as TurnBilling);
           return this.steps.generate(
             this.env(input, cancel, tg, 'generate'),
-            { ctx, decision, sources, attempt },
+            {
+              ctx,
+              decision,
+              sources,
+              attempt,
+              lockedStopped,
+              onLockedTrip: () => {
+                this.lockedTrip = true;
+              },
+            },
             this.emitter(cancel, state),
           );
         },
@@ -819,6 +858,8 @@ class Turn {
       this.trace.addGuards(p.value.guards);
       this.addReported(p.value.usage);
       this.trace.step('postGuard', p.ms, 'ok');
+      // A locked hit or failed locked check the post guard found counts as a trip (4.6b fix 1).
+      if (p.value.guards.some((g) => g.name === 'lockedLeak' && !g.ok)) this.lockedTrip = true;
       if (p.value.result === 'ok') return draft;
       // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
       if (p.value.result === 'escalate') {
@@ -856,7 +897,7 @@ class Turn {
     alertDelivered?: Promise<void>,
   ): Promise<TurnRunResult> {
     const record: CommitRecord = {
-      ...rec,
+      ...this.withStopFlag(rec),
       turnId: this.turnId,
       // The original input's session id: set even when the scrub failed and `input` is null.
       sessionId: this.input.sessionId,
@@ -894,6 +935,23 @@ class Turn {
     if (alertDelivered !== undefined) await alertDelivered;
     await this.settlePending();
     return { trace, background: this.background };
+  }
+
+  /**
+   * The runner owns the session's locked stop flag (ADR-0007 §8, 4.6b fix round 1): every help
+   * state it saves gets `loaded || tripped this turn`, whatever decide or a skill returned (a
+   * correct practice answer, decide's fallback). When the help state could not be loaded, none is
+   * saved at all, so a stored `true` is never overwritten.
+   */
+  private withStopFlag<R extends { next?: SessionHelp }>(rec: R): R {
+    if (rec.next === undefined) return rec;
+    if (this.loadedStop === null) {
+      const out = { ...rec };
+      delete out.next;
+      return out;
+    }
+    const lockedStopped = this.loadedStop || this.lockedTrip;
+    return { ...rec, next: { ...rec.next, help: { ...rec.next.help, lockedStopped } } };
   }
 
   /**

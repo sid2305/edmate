@@ -396,3 +396,25 @@ describe('exhaustive grid', () => {
     expect(cases).toBe(4 * 3 * 5 * 6 * 2 * 2);
   });
 });
+
+describe('lockedStopped (ADR-0007 §8, 4.6b): sticky for the rest of the session', () => {
+  it.each([
+    ['partial attempt', { attempt: 'partial' } as const],
+    ['correct attempt (reset)', { attempt: 'correct' } as const],
+    ['a hint_request climb', { kind: 'hint_request' } as const],
+    [
+      'solution gated (never)',
+      { pkg: NEVER4, kind: 'hint_request', help: helpWith({ stuckTurns: 1 }) } as const,
+    ],
+    ['no progress once', {}],
+    ['pending_check reset', { help: helpWith({ pendingCheck: true }) } as const],
+  ])('%s: carries lockedStopped true through, untouched', (_label, o) => {
+    const given = (o as { help?: HelpState }).help;
+    const i = input({ ...o, help: helpWith({ ...given, lockedStopped: true }) });
+    expect(nextRung(i).next.help.lockedStopped).toBe(true);
+  });
+
+  it('stays false when it started false', () => {
+    expect(nextRung(input()).next.help.lockedStopped).toBe(false);
+  });
+});

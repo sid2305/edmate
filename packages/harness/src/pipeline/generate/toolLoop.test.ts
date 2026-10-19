@@ -51,6 +51,7 @@ function setup(
     recorder?: Partial<UsageRecorder>;
     mustNotReveal?: string[];
     lockedCheck?: LockedCheck;
+    holdAll?: boolean;
   } = {},
 ) {
   const clock = virtualClock();
@@ -87,6 +88,7 @@ function setup(
     report: (e: unknown) => void reported.push(e),
     mustNotReveal: o.mustNotReveal ?? [],
     lockedCheck: o.lockedCheck ?? (() => Promise.resolve(false)),
+    ...(o.holdAll === undefined ? {} : { holdAll: o.holdAll }),
     track: (p: Promise<unknown>) => void tracked.push(p),
   };
   return {
@@ -641,10 +643,90 @@ describe('runToolLoop: locked material (4.6)', () => {
       },
     );
     const out = await s.run();
-    expect(s.shown).toEqual(['Good question. ']);
-    expect(out).toMatchObject({ draft: 'Good question. ', locked: 'hit' });
+    // 4.6b: the clean sentence before the hit is held back (not shown) too, since it had not yet
+    // been released when the batch holding the locked span tripped.
+    expect(s.shown).toEqual([]);
+    expect(out).toMatchObject({ draft: '', locked: 'hit' });
     expect(out.raw).toContain(MATERIAL);
     expect(s.reported.some((e) => e instanceof LockedLeakDetected)).toBe(true);
+  }, 5_000);
+
+  it('holdAll (4.6b, ADR-0007 §8): a clean reply streams nothing until the attempt ends', async () => {
+    const s = setup([[say('Good question. '), say('Nothing locked here. '), used]], {
+      lockedCheck: byIndex,
+      holdAll: true,
+    });
+    const out = await s.run();
+    // Nothing shown piece by piece: the whole reply arrives at once, at the clean end.
+    expect(s.shown).toEqual(['Good question. Nothing locked here. ']);
+    expect(out).toMatchObject({ draft: 'Good question. Nothing locked here. ' });
+    expect(out.locked).toBeUndefined();
+  }, 5_000);
+
+  it('holdAll still trips on a hit, with nothing shown', async () => {
+    const s = setup(
+      [[say('Good question. '), say(`Here it is: ${MATERIAL}. `), say('Bye.'), used]],
+      { lockedCheck: byIndex, holdAll: true },
+    );
+    const out = await s.run();
+    expect(s.shown).toEqual([]);
+    expect(out).toMatchObject({ draft: '', locked: 'hit' });
+  }, 5_000);
+
+  it('onLocked (4.6b fix round 1) is told of a stream trip, even if the attempt then fails', async () => {
+    let told = 0;
+    const s = setup(
+      [[say(`Here it is: ${MATERIAL}. `), say('Bye. '), { type: 'error', code: 'provider_error' }]],
+      { lockedCheck: byIndex },
+    );
+    const input = { ...s.input, onLocked: () => void told++ };
+    // The provider errors after the trip: the attempt fails, but the trip was already told.
+    await expect(s.clock.drive(runToolLoop(input))).rejects.toBeDefined();
+    expect(told).toBe(1);
+  }, 5_000);
+
+  it('onLocked is told of a locked hit or failed check on a tool output', async () => {
+    for (const lockedCheck of [
+      ((texts) => Promise.resolve(texts.length > 1)) as LockedCheck,
+      ((texts) =>
+        texts.length > 1 ? Promise.reject(new Error('down')) : Promise.resolve(false)) as LockedCheck,
+    ]) {
+      let told = 0;
+      const s = setup(
+        [
+          [call('c1'), used],
+          [say('ok'), used],
+        ],
+        { tools: [toolWith({ value: 'fine' })], lockedCheck },
+      );
+      await s.clock.drive(runToolLoop({ ...s.input, onLocked: () => void told++ }));
+      expect(told).toBe(1);
+    }
+  }, 5_000);
+
+  it('onLocked is never called for a clean reply', async () => {
+    let told = 0;
+    const s = setup([[say('Nothing locked here at all, just words. '), used]], {
+      lockedCheck: byIndex,
+    });
+    await s.clock.drive(runToolLoop({ ...s.input, onLocked: () => void told++ }));
+    expect(told).toBe(0);
+  }, 5_000);
+
+  it('holdAll checks a long multi-chunk reply once, at the end (4.6b fix round 1)', async () => {
+    let calls = 0;
+    const pieces = Array.from({ length: 50 }, (_, i) => say(`Clean sentence ${i} here. `));
+    const s = setup([[...pieces, used]], {
+      lockedCheck: (texts) => {
+        calls++;
+        return byIndex(texts);
+      },
+      holdAll: true,
+    });
+    const out = await s.run();
+    expect(calls).toBe(1);
+    expect(s.shown).toHaveLength(1);
+    expect(out.locked).toBeUndefined();
   }, 5_000);
 
   it('a span split across tool rounds is still caught (the check is not reset per round)', async () => {
@@ -668,6 +750,24 @@ describe('runToolLoop: locked material (4.6)', () => {
     expect(s.shown).toEqual([]);
     expect(out.locked).toBe('failed');
   }, 5_000);
+
+  // 4.6b (virtualClock.ts FLUSH_TURNS, a magic number the 4.6 review flagged): rather than
+  // guess at "flush until quiet" for a generic virtual clock, this pins the worst case that
+  // motivated raising it in the first place — one streamed sentence (and so one awaited
+  // lockedCheck call) per model chunk, many chunks in a single round, with no tool call or
+  // real timer to force a flush in between. If FLUSH_TURNS is ever too low for this shape of
+  // reply, `clock.drive` rejects with "deadlock" instead of resolving, and this test fails.
+  it('many single-sentence chunks in one round: the virtual clock still settles (worst case)', async () => {
+    const CHUNKS = 400;
+    const steps = [
+      ...Array.from({ length: CHUNKS }, (_, i) => say(`word${String(i)}. `)),
+      used,
+    ];
+    const s = setup([steps], { lockedCheck: () => Promise.resolve(false) });
+    const out = await s.run();
+    expect(out.locked).toBeUndefined();
+    expect(s.shown.join('')).toBe(steps.filter((c) => c.type === 'text').map((c) => c.text).join(''));
+  }, 10_000);
 
   it('waits for an async onToolOutput before the next call', async () => {
     const order: string[] = [];

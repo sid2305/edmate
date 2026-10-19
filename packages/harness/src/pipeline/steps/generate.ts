@@ -62,7 +62,7 @@ export interface GenerateOptions {
 /** The generate step; `opts` exists for tests that swap the locked check. */
 export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
   const lockedCheckOf = opts.lockedCheck ?? lockedCheckFor;
-  return async (env, { ctx, decision, sources }, emit) => {
+  return async (env, { ctx, decision, sources, lockedStopped, onLockedTrip }, emit) => {
     const { deps } = env;
     // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
     env.usage.checkBeforeCall();
@@ -95,6 +95,8 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       report: env.report,
       mustNotReveal: decision.mustNotReveal,
       lockedCheck,
+      holdAll: lockedStopped === true,
+      ...(onLockedTrip === undefined ? {} : { onLocked: onLockedTrip }),
       track: env.track,
     });
 

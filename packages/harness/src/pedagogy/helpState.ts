@@ -14,6 +14,15 @@ export const HelpStateSchema = z.strictObject({
   pendingCheck: z.boolean(),
   /** The current problem's answer; goes to `mustNotReveal`. Filled by 5.6. */
   answerKey: z.array(z.string()),
+  /**
+   * Set once a turn has a locked hit or failed locked check anywhere (ADR-0007 §8, 4.6b). Stays
+   * true for the rest of the session: every later turn's reply is held whole and checked once,
+   * instead of streaming sentence by sentence (`generate.ts` reads it). The runner owns it: it
+   * forces `loaded || tripped this turn` into every help state it saves, whatever decide or a
+   * skill returned (fix round 1). Optional, absent = false, so a blob saved before 4.6b still
+   * parses and keeps its rung. Harness-internal only: never a contracts change.
+   */
+  lockedStopped: z.boolean().exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -22,6 +31,7 @@ export const INITIAL_HELP_STATE: Readonly<HelpState> = Object.freeze({
   attemptLogged: false,
   pendingCheck: false,
   answerKey: Object.freeze([]) as unknown as string[],
+  lockedStopped: false,
 });
 
 /** A fresh copy, so a result never aliases (possibly frozen) input state. */
@@ -56,8 +66,43 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey } = r.data;
-  return { rung, help: copyHelp({ stuckTurns, attemptLogged, pendingCheck, answerKey }) };
+  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped } = r.data;
+  return {
+    rung,
+    help: copyHelp({
+      stuckTurns,
+      attemptLogged,
+      pendingCheck,
+      answerKey,
+      ...(lockedStopped === undefined ? {} : { lockedStopped }),
+    }),
+  };
+}
+
+/** Nothing stored yet: no value, or the column's default `{}`. */
+function nothingStored(raw: unknown): boolean {
+  if (raw === undefined || raw === null) return true;
+  try {
+    return typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `parseSessionHelp`, plus whether a stored blob was there but could not be read (4.6b fix round
+ * 1). An unreadable blob may hold `lockedStopped: true`, so the runner then holds the whole reply
+ * and does not save over it (never false over a stored true). Nothing stored yet (no value, or the
+ * column default `{}`) is readable: a fresh session.
+ */
+export function loadSessionHelp(raw: unknown): SessionHelp & { unreadable: boolean } {
+  let ok: boolean;
+  try {
+    ok = SessionHelpSchema.safeParse(raw).success;
+  } catch {
+    ok = false;
+  }
+  return { ...parseSessionHelp(raw), unreadable: !ok && !nothingStored(raw) };
 }
 
 /**
