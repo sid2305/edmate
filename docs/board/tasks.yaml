@@ -578,6 +578,34 @@ tasks:
   risk: risky
   branch: null
   model: null
+- id: 3.11a
+  milestone: M3
+  title: 'Prompt packs v1.0.0, code half: persona-template schema and loader, risk-paths line, snapshot tests of the real set (distress drops persona, investing disclaimers, locked replies), a no-fixture-text
+    test'
+  accept: loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.
+  deps:
+  - '3.6'
+  status: done
+  branch: m3/3.11a-prompt-pack-code
+  model: build:sonnet
+- id: 3.11b
+  milestone: M3
+  title: 'Prompt packs v1.0.0, content half: frame, safety preamble, 6 skill packs, 5 mode packs, 2 persona templates (English only), safety-reviewed, then signed off per row by the human'
+  accept: packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.
+  deps:
+  - 3.11a
+  status: running
+  branch: m3/3.11b-prompt-pack-content
+  model: build:opus-5.5/medium
+- id: 3.11c
+  milestone: M3
+  title: 'Pin pilot agents to English: agent config validation rejects languages other than [en] while the pilot is English-only (from the 3.11 plan review)'
+  accept: an agent config with hi is rejected with a clear message; tests.
+  deps:
+  - '3.11'
+  status: todo
+  branch: null
+  model: null
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
@@ -629,13 +657,23 @@ tasks:
   model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
 - id: 3.16b
   milestone: M7
-  title: 'Pre-pilot migration locking (from the 3.16 database review): move 0009''s VALIDATE CONSTRAINT statements to their own migration so the scan runs outside the ACCESS EXCLUSIVE transaction; build
-    the sessions package index CONCURRENTLY outside a transaction; a partial index on open sessions for the backfill'
+  title: 'Pre-pilot migration locking (from the 3.16 database review): run 0009''s VALIDATE CONSTRAINT statements and the sessions package index CONCURRENTLY in a post-migrate step outside drizzle''s single
+    migration transaction; a partial index on open sessions for the backfill is still open'
   accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
   deps:
   - '3.16'
-  status: running
+  status: done
   branch: m7/3.16b-migration-locking
+  model: build:sonnet
+- id: 3.16c
+  milestone: M7
+  title: 'Migration hardening follow-ups (3.16b review): an advisory lock around migrateDatabase(), so overlapping runs cannot drop a healthy in-progress concurrent index; a schema-qualified index lookup;
+    a partial index on open sessions for the 0009 backfill'
+  accept: two overlapping migrateDatabase() runs leave the index valid (int test); the lookup uses to_regclass or pg_namespace.
+  deps:
+  - 3.16b
+  status: running
+  branch: m7/3.16c-migration-hardening
   model: build:sonnet
 - id: '3.17'
   milestone: M3
@@ -669,7 +707,8 @@ tasks:
   milestone: M7
   title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and
     parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead
-    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
+    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy; the merge gate maps lettered sub-tasks (m4/4.0c-…) to their own docs/tasks/<id>/ (today it drops the
+    letter and reads the parent task''s docs, which 4.0c, 4.0d and 3.11a hit)'
   accept: one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead
     skill states the new rules.
   deps:
@@ -749,7 +788,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.3-distress
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -761,13 +800,23 @@ tasks:
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
-  status: todo
-  branch: null
-  model: null
+  status: review
+  branch: m4/4.2c-pii-hardening
+  model: build:sonnet
 - id: 4.3b
   milestone: M4
   title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
   accept: the retract-joke case passes turn 2; a scrub failure on a distress message replies with the pack helplines.
+  deps:
+  - '4.3'
+  status: todo
+  branch: null
+  model: null
+- id: 4.3c
+  milestone: M7
+  title: 'Pilot gates for safety alerts (4.3 safety review): a real notifier (vendor per human decision B-13), an ack path (CLI first), an alert-age or summarise policy so false positives do not re-page
+    forever, guard_blocked UI text that carries the "someone you trust / helpline" line, and an ops alarm on the classifier failure rate'
+  accept: a distress alert reaches a real person in a sandbox test and stops re-paging when acked; a classifier outage raises an ops alarm; the blocked-turn message includes the helpline line.
   deps:
   - '4.3'
   status: todo
@@ -797,7 +846,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.5-answer-leak
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
