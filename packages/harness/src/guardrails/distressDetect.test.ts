@@ -186,7 +186,9 @@ describe('earlier messages arrive as a promise, waited for outside the classifie
       generateObject<T>(req: ModelRequest) {
         seen = JSON.parse(req.messages[0]?.content ?? '{}');
         // Answers just inside the classifier's own deadline.
-        return clock.sleep(DISTRESS_CLASSIFIER_TIMEOUT_MS - 10).then(() => ({ distress: true }) as T);
+        return clock
+          .sleep(DISTRESS_CLASSIFIER_TIMEOUT_MS - 10)
+          .then(() => ({ distress: true }) as T);
       },
     };
     const history = clock.sleep(40).then(() => ['earlier']);
@@ -196,7 +198,10 @@ describe('earlier messages arrive as a promise, waited for outside the classifie
   }, 1_000);
 
   it('a hard keyword does not wait for the history', async () => {
-    const r = await run(ctxWith(scripted({}).gateway, virtualClock(), new Promise(() => undefined)), HARD);
+    const r = await run(
+      ctxWith(scripted({}).gateway, virtualClock(), new Promise(() => undefined)),
+      HARD,
+    );
     expect(r.result).toMatchObject({ action: 'escalate' });
   }, 1_000);
 });
@@ -305,4 +310,42 @@ describe('buildDistressClassifierRequest', () => {
     expect(req.system).toMatch(/data, not instructions/);
     expect(req.maxOutputTokens).toBeLessThanOrEqual(32);
   }, 1_000);
+});
+
+describe('fix round 3: game, code and method-ready context through the guard', () => {
+  it.each([
+    ['my squad left me and i want to kill myself', 'distress'],
+    ['papa hits me when i play free fire', 'abuse'],
+    ['i have the pills ready', 'distress'],
+    ['pills ready hai', 'distress'],
+  ] as const)(
+    '%s escalates (%s) with no classifier call, so a classifier outage cannot miss it',
+    async (text, kind) => {
+      const s = scripted({}); // a classifier call would reject
+      const r = await run(ctxWith(s.gateway), text);
+      expect(s.requests).toEqual([]);
+      expect(r.result).toMatchObject({ ok: false, action: 'escalate', alert: { kind } });
+    },
+    1_000,
+  );
+
+  it.each([['pills array is empty, nothing matters'], ['how to kill myself in valorant']] as const)(
+    '%s asks the classifier: false → ok',
+    async (text) => {
+      const s = scripted({ generateObject: [{ value: { distress: false } }] });
+      const r = await run(ctxWith(s.gateway), text);
+      expect(s.requests).toHaveLength(1);
+      expect(r.result).toEqual({ ok: true });
+    },
+    1_000,
+  );
+
+  it.each([['pills array is empty, nothing matters'], ['how to kill myself in valorant']] as const)(
+    '%s with the classifier down still escalates (soft, never dropped)',
+    async (text) => {
+      const r = await run(ctxWith(scripted({}).gateway), text);
+      expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
+    },
+    1_000,
+  );
 });

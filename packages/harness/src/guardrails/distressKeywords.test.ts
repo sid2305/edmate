@@ -307,7 +307,11 @@ describe('soft keywords', () => {
   }, 1_000);
 
   it('vaguer forms are soft', () => {
-    for (const text of ['tomorrow i wont be here', 'jeene ka dil nahi karta', 'he killed himself']) {
+    for (const text of [
+      'tomorrow i wont be here',
+      'jeene ka dil nahi karta',
+      'he killed himself',
+    ]) {
       expect(distressKeywordLevel(text)).toBe('soft');
     }
   }, 1_000);
@@ -318,6 +322,135 @@ describe('soft keywords', () => {
       kind: 'abuse',
     });
   }, 1_000);
+});
+
+describe('game talk (fix round 3): only game-shaped phrases are softened', () => {
+  it.each([
+    // The two sentences from the safety re-check.
+    ['my squad left me and i want to kill myself', 'distress'],
+    ['papa hits me when i play free fire', 'abuse'],
+    // First-person intent next to the phrase, with a game word nearby or even tied to it.
+    ['i lost every match today and im going to kill myself', 'distress'],
+    ['i want to kill myself in fortnite and in real life', 'distress'],
+    ['after this minecraft session i will end my life', 'distress'],
+    ['i wanna die, even roblox is boring now', 'distress'],
+    ['free fire mein bhi haar gaya, main marna chahta hoon', 'distress'],
+    ['bgmi khelte khelte socha, khud ko khatam kar dunga', 'distress'],
+    ['killmyself after this pubg match', 'distress'],
+    // Abuse or harm by someone else, with a game nearby.
+    ['my dad beats me if i play valorant', 'abuse'],
+    ['papa maarte hai jab main pubg khelta hoon', 'abuse'],
+    ['my uncle touches me when we play roblox together', 'abuse'],
+    ['पापा मारते हैं जब मैं गेम खेलता हूं', 'abuse'],
+  ] as const)(
+    '%s → hard (%s)',
+    (text, kind) => {
+      expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
+    },
+    1_000,
+  );
+
+  it.each([
+    ['how to kill myself in valorant'],
+    ['i keep killing myself in fortnite with my own grenades'],
+    ['how do i kill myself in minecraft faster to respawn'],
+    ['minecraft mein khud ko maar diya galti se'],
+    ['in this round i keep ending my life to respawn faster'],
+    ['killmyself in roblox again lol'],
+  ] as const)(
+    'game-shaped %s → soft (the classifier decides)',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('soft');
+    },
+    1_000,
+  );
+
+  it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
+    'plain game talk %s → none',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('none');
+    },
+    1_000,
+  );
+
+  it('a game method plus another soft phrase in the game is not a combination', () => {
+    expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('soft');
+  }, 1_000);
+});
+
+describe('code talk (fix round 3): a soft hit next to code goes to the classifier', () => {
+  it.each([
+    ['pills array is empty, nothing matters'],
+    ['my pills_list is null so nothing matters after that line'],
+    ['the blade variable is undefined, no point running it'],
+    ['noose function returns null, nothing matters'],
+  ] as const)(
+    '%s → soft, never hard and never dropped',
+    (text) => {
+      const m = distressKeywordMatch(text);
+      expect(m.level).toBe('soft');
+      expect(m.softHits).toBeGreaterThanOrEqual(1);
+    },
+    1_000,
+  );
+
+  it('the same phrases without code still combine to hard', () => {
+    expect(distressKeywordLevel('i have pills. nothing matters')).toBe('hard');
+  }, 1_000);
+
+  it.each([
+    ['my list of reasons is empty, i want to kill myself'],
+    ['the array is null and i have the pills ready'],
+    ['function broke again, im going to jump off the roof'],
+  ] as const)(
+    'a hard phrase next to code stays hard: %s',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+    },
+    1_000,
+  );
+});
+
+describe('a method ready or saved up (fix round 3): hard', () => {
+  it.each([
+    ['i have the pills ready'],
+    ['ive got the rope ready'],
+    ['i have the blade ready for tonight'],
+    ['i have my sleeping pills ready'],
+    ['i kept the razor hidden away'],
+    ['ive been saving up pills for weeks'],
+    ['i saved up my meds'],
+    ['i have been stockpiling tablets'],
+    ['pills ready hai'],
+    ['goliyan ready kar li'],
+    ['rassi taiyaar hai'],
+    ['maine goliyan jama kar li hain'],
+    ['गोलियां तैयार हैं'],
+    ['मैंने गोलियां जमा कर ली हैं'],
+  ] as const)(
+    '%s → hard, with the classifier down too',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+      expect(hasDistressKeyword(text)).toBe(true);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['i have the pills for my cold'],
+    ['my code is ready'],
+    ['the pills array is ready'],
+    ['i have the rope ready for the experiment'],
+    ['dinner is ready, back in 10'],
+    ['i have my notes ready for the test'],
+    ['ready hai, next question do'],
+  ] as const)(
+    '%s → not hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).not.toBe('hard');
+    },
+    1_000,
+  );
 });
 
 describe('edge inputs', () => {

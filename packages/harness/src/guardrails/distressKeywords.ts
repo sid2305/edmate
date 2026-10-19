@@ -60,6 +60,8 @@ const kin =
 const romanKin =
   '(?:papa|papaa|pappa|daddy|dad|mummy|mumma|mummi|maa|mom|bhai|bhaiya|chacha|mama|mamu|uncle|' +
   'sautela|sauteli|dada|nana)';
+/** A self-harm method someone can hold (fix round 3: "have the pills ready"). */
+const METHOD_ITEM = '(?:pills|tablets|rope|noose|blade|blades|razor|razors|poison)';
 const devaKin = '(?:पापा|पिताजी|पिता|मम्मी|मां|भाई|चाचा|मामा|अंकल|रिश्तेदार|सौतेले|सौतेला)';
 
 const distress = (src: string): Entry => ({ re: phrase(src), kind: 'distress' });
@@ -67,10 +69,14 @@ const abuse = (src: string): Entry => ({ re: phrase(src), kind: 'abuse' });
 
 const HARD: readonly Entry[] = [
   // English: intent to die, a plan or a method, in the first person.
-  distress(`suicid(?:e|al) (?:thoughts|feelings|plan)|(?:feel|feeling|am|im|been|get|getting)(?: so| really| very)? suicidal`),
+  distress(
+    `suicid(?:e|al) (?:thoughts|feelings|plan)|(?:feel|feeling|am|im|been|get|getting)(?: so| really| very)? suicidal`,
+  ),
   distress('commit(?:ting)? suicide|unaliv\\S*'),
   distress(`kill(?:ing)? ${SELF}`),
-  distress('(?<![0-9] ?)kms(?! (?:per|an|a|away|from|to|of|left|run|walk|drive|ride|daily)(?!\\p{L}))'),
+  distress(
+    '(?<![0-9] ?)kms(?! (?:per|an|a|away|from|to|of|left|run|walk|drive|ride|daily)(?!\\p{L}))',
+  ),
   distress(`end(?:ing)? (?:it all|my life|my own life|${SELF})`),
   distress('end(?:ing)? (?:it|things|everything) (?:tonight|today|now|soon)'),
   distress(
@@ -85,12 +91,18 @@ const HARD: readonly Entry[] = [
     '(?:dont|do not|never|not) (?:want|wanna) (?:to )?' +
       '(?:live|be alive|exist|wake up|be here (?:any ?more|no more))',
   ),
-  distress('no (?:reason|point) (?:to|for|in|of) (?:live|living|life|being alive|go on|going on|keep going)'),
-  distress('(?:life|living|my life) (?:is not|isnt|aint|is no longer|not) worth (?:living|it)|not worth living'),
+  distress(
+    'no (?:reason|point) (?:to|for|in|of) (?:live|living|life|being alive|go on|going on|keep going)',
+  ),
+  distress(
+    '(?:life|living|my life) (?:is not|isnt|aint|is no longer|not) worth (?:living|it)|not worth living',
+  ),
   distress('better off (?:without|w/o|w/out|witout) me'),
   distress('better off if i (?:was|were|wasnt|werent) (?:gone|dead|here|around)'),
   distress('no point (?:in |to |of )?(?:me|my life|existing)'),
-  distress(`(?:made|make|making) (?:my|the|this|a) (?:final )?(?:decision|choice)${gap(8)} at peace`),
+  distress(
+    `(?:made|make|making) (?:my|the|this|a) (?:final )?(?:decision|choice)${gap(8)} at peace`,
+  ),
   distress(
     '(?:no one|nobody|noone) would (?:even )?(?:care|notice|miss me) if i ' +
       '(?:died|was gone|were gone|disappeared|wasnt here|was dead)',
@@ -102,12 +114,16 @@ const HARD: readonly Entry[] = [
   ),
   distress('(?:i|ive|i have)(?: been)? cut(?:ting)? again'),
   distress('cut(?:ting)? my (?:wrist|wrists|arm|arms|thigh|thighs|skin|leg|legs)'),
-  distress(`(?:i|im|ive|i have|i am|been|keep|started|start)(?: \\S+){0,2} self ?harm\\S*|hang(?:ing)? ${SELF}`),
+  distress(
+    `(?:i|im|ive|i have|i am|been|keep|started|start)(?: \\S+){0,2} self ?harm\\S*|hang(?:ing)? ${SELF}`,
+  ),
   distress(
     '(?:make|makes|making) (?:me|someone|somebody|a person|you|him|her|them|people) ' +
       '(?:never|not) wake up',
   ),
-  distress(`(?:take|swallow|drink|eat|consume|ingest)${gap(3)} to (?:die|never wake up|not wake up)`),
+  distress(
+    `(?:take|swallow|drink|eat|consume|ingest)${gap(3)} to (?:die|never wake up|not wake up)`,
+  ),
   distress(
     '(?:how|ways?|easiest way|best way|quickest way|painless way|fastest way) to ' +
       `(?:die|kill ${SELF}|end (?:it all|my life)|commit suicide)`,
@@ -117,7 +133,20 @@ const HARD: readonly Entry[] = [
       '(?:roof|bridge|building|terrace|balcony|cliff|window)',
   ),
   distress('(?:dont|do not) (?:even )?deserve (?:to )?(?:food|eat|live|be alive|exist)'),
-  distress(`(?:dont|do not|not) feel safe (?:with|around|by) ${SELF}|not safe (?:with|around) ${SELF}`),
+  distress(
+    `(?:dont|do not|not) feel safe (?:with|around|by) ${SELF}|not safe (?:with|around) ${SELF}`,
+  ),
+  // A method in hand and ready, or saved up (fix round 3): "i have the pills ready", "saved up
+  // pills". Not "i have the pills for my cold" (no readiness) or "ready for the experiment".
+  distress(
+    `(?:have|got|kept|keep|hid|hidden|stashed)(?: (?:the|my|some|all|all the|enough|a|those|these))?` +
+      `(?: sleeping)? ${METHOD_ITEM}(?: \\S+){0,2} (?:ready|set aside|hidden away|saved up)` +
+      '(?! for (?:the|my|a|our|this) (?:experiment|project|lab|class|trip|camp|game|practical|demo|show))',
+  ),
+  distress(
+    '(?:saved up|saving up|been saving|ive saved|i saved|stockpil\\S*|hoard\\S*)' +
+      '(?: (?:my|the|some|enough|all|all my|a lot of|lots of))?(?: sleeping)? (?:pills|tablets|meds|medicine|medication)',
+  ),
   // English: harm by someone else.
   abuse(`${kin}${gap(2)} (?:hits|beats|slaps|punches|kicks|chokes|abuses|hurts|touches) me`),
   abuse('(?:scared|afraid|frightened|terrified) (?:to go|of going) home'),
@@ -145,20 +174,28 @@ const HARD: readonly Entry[] = [
     `(?:jeena|jina|jeene|jine)(?: (?:ka|ki|ke|ko|mann|man|mn|hi|ab|mujhe|muje|aur|bhi|h|hai)){0,3} ${NOT}` +
       '(?! (?:de|deta|deti|aata|ata|aati|ati))',
   ),
-  distress(`(?:jeene|jine) (?:ki|ka) (?:ichha|iccha|ichchha|echha|chah|chaah|wajah|matlab|fayda|faida|reason)${gap(2)} ${NOT}`),
+  distress(
+    `(?:jeene|jine) (?:ki|ka) (?:ichha|iccha|ichchha|echha|chah|chaah|wajah|matlab|fayda|faida|reason)${gap(2)} ${NOT}`,
+  ),
   distress(
     `${NOT} (?:jee|ji) (?:sakta|sakti|skta|skti|paunga|paungi|paaunga|paaungi)|` +
       `(?:jee|ji) ${NOT} (?:sakta|sakti|skta|skti|paunga|paungi)`,
   ),
-  distress(`zinda ${NOT} (?:rehna|rahna|rehna hai|rahunga|rahungi)|zinda rehne ka (?:mann|man|dil) ${NOT}`),
+  distress(
+    `zinda ${NOT} (?:rehna|rahna|rehna hai|rahunga|rahungi)|zinda rehne ka (?:mann|man|dil) ${NOT}`,
+  ),
   distress(
     '(?:khud ?ko|apne aap ko|apne ap ko) ' +
       '(?:hurt|chot|nuksan|nuksaan|nukshan|harm|khatam|khtm|maar|mar|zakhmi|kaat)',
   ),
   distress(`(?:apni|khud ki|apni khud ki) jaan (?:le|de|lena|dena|leni|deni)`),
   distress(`(?:zehar|zeher|zahar|jahar|zehr)${gap(1)} (?:kha|khaa|pee|pi|pila)\\S*`),
-  distress(`(?:chhat|chat|chhath|chhatt|building|terrace|pul|bridge) (?:se|par se) (?:kood|kud|koodh|jump)\\S*`),
-  distress(`(?:neend|nind) (?:ki|wali) (?:goli|goliyan|goliyaan|golian|golia|tablet\\S*)${gap(2)} (?:kha|khaa|le)\\S*`),
+  distress(
+    `(?:chhat|chat|chhath|chhatt|building|terrace|pul|bridge) (?:se|par se) (?:kood|kud|koodh|jump)\\S*`,
+  ),
+  distress(
+    `(?:neend|nind) (?:ki|wali) (?:goli|goliyan|goliyaan|golian|golia|tablet\\S*)${gap(2)} (?:kha|khaa|le)\\S*`,
+  ),
   distress(
     'sab(?: kuch| kuchh)? (?:khatam|khtm) ' +
       '(?:karna|kar dena|kar du|kar dun|kar doon|kar dunga|kar dungi|kar lena|kar lu|kar lun)',
@@ -173,19 +210,33 @@ const HARD: readonly Entry[] = [
     'blade (?:chala|chalaya|chalayi|chalati|chalata|maara|mara|maari|lagaya)|' +
       'haath (?:pe|par) blade|(?:kalai|nas|nass)(?: \\S+){0,2} (?:kaat|kaata|kaati|kata|kati|cut)',
   ),
+  // A method ready or collected (fix round 3): "pills ready hai", "goliyan jama kar li".
+  distress(
+    '(?:pills|tablets|goliyan|goliyaan|golian|rope|rassi|blade|zehar|zeher|zahar|fanda) ' +
+      '(?:ready|taiyaar|taiyar|tayyar|tayaar)(?: (?:kar|kr))? (?:hai|hain|h|he|li|lee|rakhi|rakha|rakhe)',
+  ),
+  distress(
+    `(?:pills|tablets|goliyan|goliyaan|golian)${gap(1)} (?:jama|ikatthi|ikathi|ikkatthi|ikkathi) (?:kar|kr|ki)`,
+  ),
   abuse(
     `${romanKin}${gap(2)} (?:maarte|marte|maarta|marta|maarti|marti|peette|peetta|peetti|pitai karte) ` +
       '(?:hai|hain|h|he|hein)',
   ),
   abuse('(?:ghar|ghr) (?:jaane|jane|jaana|jana) (?:se|me|mein) (?:darr|dar) (?:lagta|lgta|lagti)'),
-  abuse('(?:galat|ganda|gande|gandi) (?:tarike|tareeke|tarah|jagah) (?:se )?(?:chhoo|chhu|chu|choo)\\S*'),
+  abuse(
+    '(?:galat|ganda|gande|gandi) (?:tarike|tareeke|tarah|jagah) (?:se )?(?:chhoo|chhu|chu|choo)\\S*',
+  ),
 
   // Devanagari (nukta dropped, chandrabindu mapped to anusvara by the normaliser).
-  distress('(?:आत्महत्या|आत्म हत्या|खुदकुशी|खुद कुशी|सुसाइड) (?:कर|करना|करने|करूं|करूंगा|करूंगी|करुंगा|करुंगी|कर लूं)'),
+  distress(
+    '(?:आत्महत्या|आत्म हत्या|खुदकुशी|खुद कुशी|सुसाइड) (?:कर|करना|करने|करूं|करूंगा|करूंगी|करुंगा|करुंगी|कर लूं)',
+  ),
   distress(`(?:आत्महत्या|खुदकुशी|सुसाइड) (?:के बारे में|का|की)${gap(1)} (?:सोच|ख्याल|विचार)`),
   distress('(?:खुद|अपने आप|अपने|स्वयं) को (?:चोट|नुकसान|नुक्सान|हानि|खत्म|मार|घायल|काट)'),
   distress('सब(?: कुछ)? खत्म कर (?:देना|दूं|दूंगा|दूंगी|लूं|लेना)'),
-  distress(`(?:जीना|जीने)(?: (?:का|की|के|को|मन|मूड|ही|अब|मुझे|और|भी|है|इच्छा)){0,3} ${DEVA_NOT}(?! (?:आता|आती|देता|देती))`),
+  distress(
+    `(?:जीना|जीने)(?: (?:का|की|के|को|मन|मूड|ही|अब|मुझे|और|भी|है|इच्छा)){0,3} ${DEVA_NOT}(?! (?:आता|आती|देता|देती))`,
+  ),
   distress('मर (?:जाना|जाऊं|जाऊंगा|जाऊंगी|जाउं|जाउंगा|जाउंगी|जाऊ|जाउ)|मरना (?:चाहता|चाहती|है)'),
   distress('मरने (?:का|की) (?:मन|इच्छा|दिल|ख्याल|इरादा)'),
   distress(`(?:जिंदा|जिन्दा) ${DEVA_NOT} (?:रहना|रहूंगा|रहूंगी)`),
@@ -193,6 +244,10 @@ const HARD: readonly Entry[] = [
   distress(`(?:जहर|ज़हर)${gap(1)} (?:खा|पी)`),
   distress(`(?:होने|रहने|मरने|जीने)(?: या न (?:होने|रहने))? से${gap(3)} (?:फर्क|फरक) ${DEVA_NOT}`),
   distress('(?:कलाई|नस)(?: \\S+){0,2} (?:काट|काटी|काटा|ब्लेड)'),
+  distress(
+    '(?:गोलियां|गोलियाँ|ब्लेड|रस्सी|जहर|फंदा) (?:तैयार|रेडी) (?:है|हैं|रखी|रखा|रखे|कर ली)|' +
+      `(?:गोलियां|गोलियाँ)${gap(1)} (?:जमा|इकट्ठी|इकठ्ठी) (?:कर|की)`,
+  ),
   abuse('(?:गलत|गंदे|गन्दे|गंदी) (?:तरीके|तरह|जगह) से (?:छूते|छूता|छूती|छुआ|छूआ|छुते|छुता)'),
   abuse(`${devaKin}${gap(2)} (?:मारते|पीटते|मारता|पीटता|मारती|पीटती)`),
   abuse('घर (?:जाने|जाना) से (?:डर|डरता|डरती)'),
@@ -216,7 +271,9 @@ const other = soft('other');
 
 const SOFT: readonly SoftEntry[] = [
   // Methods (rule a), as phrases: "jump to the next loop" or "a rope knot" are not methods.
-  method('noose|fanda|(?:bought|got|buy|get|have|found|brought) (?:a |some |the )?rope|rope (?:around|for)'),
+  method(
+    'noose|fanda|(?:bought|got|buy|get|have|found|brought) (?:a |some |the )?rope|rope (?:around|for)',
+  ),
   method('pills|tablets|(?:neend|nind) (?:ki|wali) gol\\S*|goliyan|goliyaan|गोलियां|गोलियाँ'),
   method('blade|razor|ब्लेड'),
   method('jump (?:off|from)|kood (?:ja|jau|jaun|jaunga|jaungi|jaaunga|jaaungi)|कूद'),
@@ -273,11 +330,94 @@ const SOFT: readonly SoftEntry[] = [
   other('जान दे (?:दूंगा|दूंगी|दूं|देना)'),
 ];
 
-/** A hard phrase about a game is ambiguous ("how to die in minecraft"): it counts as soft. */
-const GAME = phrase(
-  'minecraft|valorant|fortnite|roblox|pubg|bgmi|free ?fire|gta|among us|apex|overwatch|terraria|' +
-    'call of duty|squad|in (?:the |this |my |a )?game',
+// ---- context around a hit (fix round 3) -----------------------------------------------------
+//
+// Game talk: a hard self-harm phrase counts as soft only when it is game-shaped, that is tied to a
+// game within a few words ("killed myself in fortnite", "minecraft mein khud ko maar diya"). A
+// game word elsewhere in the message ("my squad left me", "when i play free fire") changes
+// nothing. Never downgraded: abuse phrases, and first-person intent next to the phrase ("i want
+// to", "i'm going to", "main ... chahta hoon", "... kar lunga").
+//
+// Code talk: a soft phrase next to a code word ("pills array is empty, nothing matters") does not
+// count towards the combination rules, so it goes to the classifier as an ordinary soft hit. It
+// is never dropped, and a hard phrase is never downgraded by code context.
+
+/** Words either side of a hit that are looked at for a game, intent or code tie. */
+const TIE_WORDS = 5;
+
+const GAME_WORDS =
+  '(?:minecraft|valorant|fortnite|roblox|pubg|bgmi|free ?fire|gta|among us|apex|overwatch|terraria|' +
+  'call of duty|game|games|match|round|level|lobby|ranked|server|multiplayer)';
+const GAME_DET = '(?:the |this |my |a |that |every |each |our |their )?';
+/** The words after a hit start with (up to two words, then) "in/on/during <game>". */
+const GAME_AFTER = new RegExp(
+  `^(?:\\S+ ){0,2}(?:in|on|during|inside|while playing) ${GAME_DET}${GAME_WORDS}(?![\\p{L}\\p{N}])`,
+  'u',
 );
+/** The words before a hit end with "in <game>" or "<game> mein" (then up to two words). */
+const GAME_BEFORE = new RegExp(
+  `(?:(?:^| )(?:in|on|during|inside) ${GAME_DET}${GAME_WORDS}|(?:^| )${GAME_WORDS} (?:mein|me|main|pe|par|में))` +
+    '(?: \\S+){0,2}$',
+  'u',
+);
+
+/** First-person intent in the words before a hit or in the hit itself. */
+const INTENT = phrase(
+  'want|wanna|wish|need to|going to|gonna|imma|ima|plan|planning|decided|ready to|will|ill|' +
+    'about to|trying to|tryna|gotta|have to|main|mai|mujhe|muje|chahta|chahti|chahte|chahiye|' +
+    '\\S+(?:unga|ungi|oonga|oongi)|मैं|मुझे|चाहता|चाहती|\\S*(?:ूंगा|ूंगी)',
+);
+/** Hindi intent often follows the phrase ("marna chahta hoon", "maar lunga"). */
+const INTENT_AFTER = new RegExp(
+  `^(?:\\S+ )?(?:chahta|chahti|chahte|chahiye|\\S+(?:unga|ungi|oonga|oongi)|चाहता|चाहती|\\S*(?:ूंगा|ूंगी))(?![\\p{L}\\p{M}\\p{N}])`,
+  'u',
+);
+/** A written-together phrase that carries its own intent ("iwanttodie", "gonnakillmyself"). */
+const COMPACT_INTENT =
+  /^(?:i|ill|iwill|igonna|gonna|wanna|iwanna|iwant)(?=\p{L})|wanttodie|wannadie/u;
+
+/** Code words (and identifiers, which normalise to them: `pills_array` → "pills array"). */
+const CODE = phrase(
+  'array|arrays|list|lists|null|undefined|nan|function|functions|func|var|variable|variables|const|' +
+    'string|strings|str|int|integer|dict|dictionary|object|objects|index|length|len|element|elements|' +
+    'field|fields|query|exception|print|stack|queue|pointer|bool|boolean|param|params|parameter|' +
+    'argument|arguments|args|tuple',
+);
+
+interface Around {
+  before: string;
+  hit: string;
+  after: string;
+}
+
+/** Every match of `re` in `form`, with up to TIE_WORDS words either side. */
+function around(re: RegExp, form: string): Around[] {
+  const out: Around[] = [];
+  const g = new RegExp(re.source, `${re.flags.replace('g', '')}g`);
+  for (const m of form.matchAll(g)) {
+    const start = m.index;
+    const end = start + m[0].length;
+    const before = form.slice(0, start).trim().split(' ').slice(-TIE_WORDS).join(' ');
+    const after = form.slice(end).trim().split(' ').slice(0, TIE_WORDS).join(' ');
+    out.push({ before, hit: m[0], after });
+  }
+  return out;
+}
+
+function intentNear(a: Around): boolean {
+  return INTENT.test(`${a.before} ${a.hit}`) || INTENT_AFTER.test(a.after);
+}
+
+function gameTied(a: Around): boolean {
+  return GAME_AFTER.test(a.after) || GAME_BEFORE.test(a.before);
+}
+
+function codeTied(a: Around): boolean {
+  return CODE.test(a.before) || CODE.test(a.after);
+}
+
+/** A hard self-harm hit is game talk when every occurrence is game-tied with no intent. */
+const gameTalk = (a: Around): boolean => gameTied(a) && !intentNear(a);
 
 /** Written-together phrases ("killmyself", "iwanttodie"), checked word by word. */
 const COMPACT = new RegExp(
@@ -301,11 +441,34 @@ const SPACED_SEPARATORS = `[\\s._*${cp(0xb7)}-]`;
 const CONFUSABLES: ReadonlyMap<string, string> = new Map(
   (
     [
-      [0x430, 'a'], [0x435, 'e'], [0x456, 'i'], [0x43e, 'o'], [0x441, 'c'], [0x440, 'p'],
-      [0x443, 'y'], [0x445, 'x'], [0x43a, 'k'], [0x455, 's'], [0x458, 'j'], [0x4cf, 'l'],
-      [0x410, 'A'], [0x415, 'E'], [0x406, 'I'], [0x41e, 'O'], [0x421, 'C'], [0x420, 'P'],
-      [0x425, 'X'], [0x41a, 'K'], [0x405, 'S'], [0x3bf, 'o'], [0x3b1, 'a'], [0x3b9, 'i'],
-      [0x3b5, 'e'], [0x3ba, 'k'], [0x39f, 'O'], [0x399, 'I'],
+      [0x430, 'a'],
+      [0x435, 'e'],
+      [0x456, 'i'],
+      [0x43e, 'o'],
+      [0x441, 'c'],
+      [0x440, 'p'],
+      [0x443, 'y'],
+      [0x445, 'x'],
+      [0x43a, 'k'],
+      [0x455, 's'],
+      [0x458, 'j'],
+      [0x4cf, 'l'],
+      [0x410, 'A'],
+      [0x415, 'E'],
+      [0x406, 'I'],
+      [0x41e, 'O'],
+      [0x421, 'C'],
+      [0x420, 'P'],
+      [0x425, 'X'],
+      [0x41a, 'K'],
+      [0x405, 'S'],
+      [0x3bf, 'o'],
+      [0x3b1, 'a'],
+      [0x3b9, 'i'],
+      [0x3b5, 'e'],
+      [0x3ba, 'k'],
+      [0x39f, 'O'],
+      [0x399, 'I'],
     ] as const
   ).map(([c, l]) => [cp(c), l]),
 );
@@ -335,7 +498,10 @@ function finish(raw: string): string {
     .replace(/(?<![\p{L}\p{N}])[$@](?=\p{L})/gu, (c) => LEET[c] as string);
   // Single Latin letters split by spaces, dots, dashes, underscores or stars: "k i l l" → "kill".
   t = t.replace(
-    new RegExp(`(?<![\\p{L}\\p{M}])[a-z](?:${SPACED_SEPARATORS}+[a-z](?![\\p{L}\\p{M}])){2,}`, 'gu'),
+    new RegExp(
+      `(?<![\\p{L}\\p{M}])[a-z](?:${SPACED_SEPARATORS}+[a-z](?![\\p{L}\\p{M}])){2,}`,
+      'gu',
+    ),
     (m) => m.replace(/[^a-z]/g, ''),
   );
   // Punctuation and symbols (emoji included) become spaces; "/" stays for "w/o".
@@ -386,19 +552,44 @@ export function normaliseForDistress(text: string): string[] {
 export function distressKeywordMatch(text: string): DistressKeywordMatch {
   const forms = normaliseForDistress(text);
   const hits = (re: RegExp) => forms.some((f) => re.test(f));
-  const hard = HARD.filter((e) => hits(e.re));
-  const compact = forms.some((f) => f.split(' ').some((w) => COMPACT.test(w)));
-  const game = hits(GAME);
+  /** True when every occurrence of `re` in every form satisfies `pred`. */
+  const everyHit = (re: RegExp, pred: (a: Around) => boolean) =>
+    forms.every((f) => around(re, f).every(pred));
+
+  // Hard phrases: abuse always counts; a self-harm phrase counts unless it is game talk.
+  const hardHit = HARD.filter((e) => hits(e.re));
+  const hard = hardHit.filter((e) => e.kind === 'abuse' || !everyHit(e.re, gameTalk));
+  let downgraded = hard.length < hardHit.length;
+
+  // Written-together phrases, word by word, with the same game-talk rule.
+  let compact = false;
+  for (const f of forms) {
+    const words = f.split(' ');
+    words.forEach((w, i) => {
+      if (!COMPACT.test(w)) return;
+      const a: Around = {
+        before: words.slice(Math.max(0, i - TIE_WORDS), i).join(' '),
+        hit: w,
+        after: words.slice(i + 1, i + 1 + TIE_WORDS).join(' '),
+      };
+      if (!COMPACT_INTENT.test(w) && gameTalk(a)) downgraded = true;
+      else compact = true;
+    });
+  }
+
   const softHit = SOFT.filter((e) => hits(e.re));
   let soft = softHit.length;
-  const has = (f: SoftFamily) => softHit.some((e) => e.family === f);
+  // For the combination rules a soft phrase counts only when it is not tied to code or a game
+  // (and a game tie with intent next to it still counts).
+  const counted = softHit.filter((e) => !everyHit(e.re, codeTied) && !everyHit(e.re, gameTalk));
+  const has = (f: SoftFamily) => counted.some((e) => e.family === f);
   // (a) a method plus any other soft phrase; (b) vanishing plus hopelessness.
-  const combination = (has('method') && soft >= 2) || (has('vanish') && has('hopeless'));
-  if (!game && (hard.length > 0 || compact || combination)) {
+  const combination = (has('method') && counted.length >= 2) || (has('vanish') && has('hopeless'));
+  if (hard.length > 0 || compact || combination) {
     const kind = hard.length > 0 && hard.every((e) => e.kind === 'abuse') ? 'abuse' : 'distress';
     return { level: 'hard', kind, softHits: soft };
   }
-  if (hard.length > 0 || compact) soft++;
+  if (downgraded) soft++;
   return { level: soft > 0 ? 'soft' : 'none', kind: 'distress', softHits: soft };
 }
 
