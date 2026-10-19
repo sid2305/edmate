@@ -623,7 +623,7 @@ tasks:
   accept: A student whose bigger package lapses keeps no access to its earlier module text through history, sources or summary; tests cover downgrade and version change.
   deps:
   - '3.4'
-  status: planning
+  status: todo
   branch: m3/3.16-sessions-follow-package
   model: plan:sonnet
 - id: '3.17'
@@ -703,7 +703,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: planning
+  status: todo
   risk: risky
   branch: m4/4.2-pii-scrub
   model: plan:sonnet
