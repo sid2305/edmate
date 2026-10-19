@@ -259,3 +259,27 @@ settles in the ADR, not an unclear spec or a product decision — the design dir
 async, text-never-crosses-the-port method on `RetrievalIndex`) is specific enough to start the ADR
 and the harness-side work in parallel. Flag Q1 and Q3 to the builder as explicit, non-blocking
 scope cuts, same posture 4.5 used.
+
+## Lead answers and plan revisions from the safety and architect plan reviews (19 Oct 2026; these override the plan)
+
+**Port, ADR-0007** (it extends ADR-0003; ADR-0006 belongs to 4.4). Lead decision, risk: high: the safety reviewer's oracle finding outweighs the architect's span proposal.
+```ts
+leakCheck(candidates: string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>
+```
+- It returns a single boolean for the whole batch: no spans, no score, no count. Scope is the complement: every chunk of this teacher that is NOT in the allowed modules, which covers unpackaged and draft modules. Shingles that also appear in allowed chunks are ignored.
+- The adapter checks the teacher owns the modules and never logs candidates. It must fail closed: a timeout, error or bad response counts as a hit.
+- The ADR names a latency SLO under the per-guard slice and a cache keyed by package version, and states that the residual oracle (1 bit per turn) is bounded by the message limit.
+- Architect, security-reviewer and typescript-reviewer review it.
+
+1. **Stream seam (CRITICAL).** Add a locked check to the stream gate: per sentence, carrying the last 7 tokens over so spans across sentences are caught. On a hit, error or timeout, withhold. This is the "answer and locked n-grams before sending" rule in build-plan line 316.
+2. **Order (HIGH).** In order.ts, `lockedLeak` runs BEFORE `answerLeak`, so no locked span ever reaches the answerLeak rewriter. Test that the rewriter never receives a locked span. Logged risk: high.
+3. **Action (HIGH, a deliberate departure from "rewrite without it").** On any hit, replace the WHOLE reply with the locked-move reply (naming only the student's own package, decision Q6). No surgical strip. Idempotent by construction. Each hit emits a strike or safety event with no text once 4.4's SafetyEventSink exists; until then, report it to background by name.
+4. **Fixtures (HIGH).** Per case, assert the UNGUARDED scripted reply fails `must_not_contain`. Both mutations (a no-op guard, and a port that always says false) must fail all 34 cases. Variants: the span mid-reply, split across chunks, across a sentence boundary, with zero-width, fullwidth and markdown. False-positive cases must pass unchanged (allowed-module text, the student's own quote).
+5. **Fail closed (MEDIUM).** `lockedCheck` is REQUIRED in PostGuardCtx, and tests pass `async () => false`. A rejection or timeout gives `failed('locked')` in the tool loop, `drop('locked')` in skillEvent, and chain `failed` → safe reply in the post guard; each has a test. runTool keeps its "throws only TurnCancelled" contract.
+6. **Tool and skill outputs (MEDIUM).** Check each string leaf plus the joined leaves, never only `JSON.stringify` (escaped newlines glue tokens together).
+7. **Known misses (MEDIUM),** stated in the file comment, with judge cases deferred to 4.5b: spans under 8 tokens, filler interleaved, reordered sentences, renamed variables in code, summaries, contractions, translation. `lockedLeak` is a verbatim backstop only.
+8. **History after a downgrade:** already handled. 3.16 (merged) ends the session on any package or version change and clears the summary, so earlier locked replies don't carry over. Say so in the plan; there's no new task.
+9. **Locale reply (LOW):** the locked reply comes from the locale or fallback reply (English for the pilot).
+
+- **Build:** tdd-guide on opus, AFTER 4.5 merges (it needs the post phase), branching from that main. The ADR comes first in the same PR.
+- **Reviewers:** safety-reviewer (opus), architect, security-reviewer and typescript-reviewer (ADR), silent-failure-hunter. risk: high.
