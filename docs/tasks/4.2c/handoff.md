@@ -371,3 +371,90 @@ positive it was added for); key only on the value's shape and ignore the parent 
 exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
 which is less targeted than keeping both conditions).
 Reversible: Yes.
+
+## Fix round 3 (19 Oct 2026, PR #42): merge main (4.5 answerLeak/textFold) onto this branch
+
+- **Branch:** `m4/4.2c-pii-hardening` (merge commit `1197f92`, no force-push)
+
+This branch (`fix-4.2c`) was fast-forwarded to `9490e38` (the human sign-off on the 6 eval cases,
+pushed directly to `origin/m4/4.2c-pii-hardening` by the lead) and then merged with `origin/main`
+(4.5, answerLeak live). The merge itself had **no textual conflicts**: 4.5's refactor of
+`piiPatterns.ts` (replacing its local digit/format helpers with imports from the new shared
+`textFold.ts`) landed in a different part of the file from every 4.2c fix-round change (the
+payload-key work in `scrub.ts`, and the `CODE_AFTER`/`NAME_REVERSED`/`SIGNOFF` additions near the
+end of `piiPatterns.ts`), so git's recursive merge combined both cleanly.
+
+### What still needed a real fix after the merge
+4.5's `textFold.foldText` (the shared fold entry point `answerKey.ts`/`numbers.ts` — and so
+`answerLeak` — call directly) did **not** run 4.2c's digit-form pre-pass (`digitForms.ts`:
+keycap sequences, superscript/circled digits, a mark dropped right after a digit). `piiPatterns.ts`
+already ran that pre-pass first (it calls `foldDigitForms` itself before building its own view), so
+`piiScrub` was unaffected, but `answerLeak`'s number/base64 matching was not getting the same
+folding a leaked answer written as, say, keycap digits would need to be caught.
+
+Fixed: `textFold.ts`'s `foldText` now runs `foldDigitForms(text)` first, then its own per-code-point
+NFKC/`\p{Cf}` fold over the result, composing the two position maps into one (each output unit's
+`at` index is the ORIGINAL text position, via `foldDigitForms`'s own `from` map) so every existing
+caller of `foldText` keeps working unchanged, just with the extra folding. `piiPatterns.ts` keeps
+its own explicit `foldDigitForms` → `buildView` chain (it needs per-span `from`/`to` pairs for its
+two-view redaction model, not `foldText`'s single-index `at`), so it is unaffected and was already
+first.
+
+New tests: `textFold.test.ts` "fix round (4.2c x 4.5): the digit-form pre-pass runs first" (3
+cases: a keycap sequence, a superscript/circled digit with its position map checked, a
+mark-dropped-after-a-digit case with its position map checked).
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+Tasks:    34 successful, 34 total
+@edmate/harness:test:  Test Files  64 passed (64)
+@edmate/harness:test:       Tests  3001 passed (3001)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |   (now also
+                       covers answerLeak.ts, postGuards.ts, textFold.ts, all 100%)
+@edmate/evals:test:   Test Files  12 passed (12)
+@edmate/evals:test:        Tests  256 passed (256)   (the 6 cases are reviewed_by: sid2305 now;
+                       nothing skipped, nothing pending)
+```
+
+`packages/evals/src/leakFixtures.test.ts` (run standalone to double check): **79 tests passed**,
+which is 38 real cases × (phrase/number/base64/streamed checks) plus the "mutation: a pass-through
+gate and a no-op answerLeak fail all 38 cases" check and 2 structural checks — the 38-case mutation
+run the lead asked about is in there and green.
+
+`python3 .githooks/secret-scan.py --all` → clean, no output.
+
+### Behaviour choices made during the merge (nothing the spec settled)
+
+- **`foldText` composes `foldDigitForms`'s span-based map down to a single index**, taking the
+  *start* of the original span each retained `digitForms` unit came from (`pre.from[i]`), since
+  `FoldedText.at` only ever tracked one index per unit, same as before this change. No caller reads
+  more precision than that today.
+- **`piiPatterns.ts` was left untouched beyond the merge itself** rather than rewired to call the
+  now-fixed `foldText`: it needs per-span `from`/`to` pairs for its two-view (drop vs. mark
+  invisible-as-space) redaction model, which `foldText`'s single-index `at` can't give it, and it
+  already ran the digit pre-pass first on its own. Rewiring it to share `foldText` internally is a
+  bigger refactor than this fix round and is better left to whoever next touches that file (likely
+  4.5's own follow-up, since it already moved the rest of this logic to `textFold.ts`).
+
+### Decisions (fix round 3)
+
+#### 19 Oct 2026 · Fix round 3: the digit-form pre-pass moves inside the shared `foldText`, not duplicated per caller · decided by build-error-resolver · risk: low
+Decided: `textFold.ts`'s `foldText` calls `digitForms.ts`'s `foldDigitForms` first, composing its
+span map into `foldText`'s single-index `at`; `piiPatterns.ts` keeps its own separate, already-first
+`foldDigitForms` → `buildView` chain rather than being rewired to share `foldText`.
+Why: this is the smallest change that gets every current and future caller of the shared
+`foldText` (today: `answerKey.ts`/`answerLeak`, `numbers.ts`) the same digit-form folding
+`piiScrub` already had, without touching `piiPatterns.ts`'s own (different-shaped) fold pipeline,
+which was already correct and is unrelated to this gap.
+Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers.ts` directly
+(repeats the same fix at every call site, the exact duplication `textFold.ts` was created to
+avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
+round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
+Reversible: Yes.

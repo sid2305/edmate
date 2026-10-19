@@ -35,4 +35,24 @@ describe('textFold', () => {
     expect(f.s).toBe('fi1⁄2');
     expect(f.at).toEqual([0, 0, 1, 1, 1]);
   });
+
+  describe('fix round (4.2c x 4.5): the digit-form pre-pass runs first', () => {
+    it('folds a keycap digit sequence before its own fold runs', () => {
+      expect(foldText('call 9️⃣8️⃣7️⃣ now').s).toBe('call 987 now');
+    });
+
+    it('folds a superscript/circled digit', () => {
+      const f = foldText('x ⑨ y');
+      expect(f.s).toBe('x 9 y');
+      expect(f.at).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('drops a mark that follows a digit, with a correct position map', () => {
+      // "9͏8" (CGJ between the digits) folds to "98"; the "8" still maps back to its own
+      // original index (2), not the dropped CGJ's.
+      const f = foldText('9͏8');
+      expect(f.s).toBe('98');
+      expect(f.at).toEqual([0, 2]);
+    });
+  });
 });
