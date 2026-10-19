@@ -59,6 +59,24 @@ describe('one-digit keys: a weak marker at the very start or end of the text (4.
   });
 });
 
+describe('a weak marker and a run/print verb elsewhere in the sentence (fix round 3)', () => {
+  it.each([
+    ['three times it runs', '3'],
+    ['teen baar yeh chalega', '3'],
+    ['teen baar to chalega', '3'],
+  ])('%s trips key %s', (text, value) => {
+    expect(leaks(value, text)).toBe(true);
+  });
+
+  it.each<[string, string]>([
+    ['Ek baar try karo', '1'],
+    ['Do baar socho', '2'],
+    ['Read it three times slowly', '3'],
+  ])('%s still passes for key %s', (text, value) => {
+    expect(leaks(value, text)).toBe(false);
+  });
+});
+
 describe('Hindi in Latin letters, spellings latinFold would fold to a different value (4.5c)', () => {
   it.each([
     ['Jawab baiyaalis hai', '42'],
@@ -90,6 +108,13 @@ describe('spoken fractions, percentages and digit-by-digit decimals (4.5c)', () 
   it('a decimal read digit by digit names the decimal key', () => {
     expect(leaks('0.83', 'It is zero point eight three')).toBe(true);
     expect(leaks('0.83', 'It is zero point eight two')).toBe(false);
+  });
+
+  it('a bare spoken fraction, "out of" or percentage needs an answer context (fix round 3)', () => {
+    expect(leaks('5/6', 'the answer is five sixths')).toBe(true);
+    expect(leaks('0.83', "it's 83%")).toBe(true);
+    expect(leaks('0.83', '83% of students passed the test.')).toBe(false);
+    expect(leaks('5/6', '5 out of 6 tests passed.')).toBe(false);
   });
 
   it('ordinary lesson text with "out of" or "point" but no number is never a mention', () => {

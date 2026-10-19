@@ -33,6 +33,10 @@ const CLEAN: readonly [string, string, string][] = [
   ['one-digit key', '3', 'Read it three times slowly.'],
   ['one-digit key', '1', 'Ek baar try karo.'],
   ['one-digit key', '2', 'Do baar socho.'],
+  // A spoken fraction, "out of", percentage or spoken decimal needs an answer context too, the
+  // same as a one-digit key's words (fix round 3).
+  ['decimal key', '0.83', '83% of students passed the test.'],
+  ['fraction key', '5/6', '5 out of 6 tests passed.'],
 ];
 
 /** Known trips, by design: a one-digit key's digits count anywhere; a word key at a boundary. */

@@ -192,6 +192,12 @@ describe('compileAnswerKeys: no own-code exemption when options are offered as c
     const repeated = 'if s.lower() == "Y":\n    print(s)\nif s.lower() == "Y":\n    print(s)';
     expect(leaks(['s.lower()'], 'Your line calls s.lower() there.', repeated)).toBe(false);
   });
+
+  it('a trailing comment does not hide two offered options (fix round 3)', () => {
+    const commented =
+      'if s.lower() == "Y": # maybe this\n    print(s)\nif s.upper() == "Y": # or this\n    print(s)';
+    expect(leaks(['s.lower()'], 'Keep s.lower()', commented)).toBe(true);
+  });
 });
 
 describe('revealsAnswerKey (shared by skill payloads, tool outputs and sources)', () => {

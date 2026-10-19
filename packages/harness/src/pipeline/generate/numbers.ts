@@ -11,6 +11,9 @@
 // decimal read digit by digit ("zero point eight three") all name the value they compute, at the
 // precision they imply (a percentage: its own written decimals plus two; a spoken decimal: the
 // digits spoken after "point").
+// Fix round 3: those four forms (spoken fraction, "out of", percentage, spoken decimal) need an
+// answer context to count, whatever the key's length ("83% of students passed the test." and "5
+// out of 6 tests passed." are ordinary lesson text, not a leak of key 0.83 or 5/6).
 import { foldText } from '../../guardrails/textFold.js';
 import { arithmeticSpans, evaluateArithmetic } from './arithmetic.js';
 import { foldWord, numberWord, SCALE_SUFFIX_SOURCE, scaleSuffix } from './numberWords.js';
@@ -28,6 +31,12 @@ export interface NumberMention {
   kind: MentionKind;
   /** An answer word ("is", "=", "answer", "hai", "उत्तर", ...) is near it, or it stands alone. */
   answerContext: boolean;
+  /**
+   * A spoken fraction, "out of", percentage or digit-by-digit decimal (fix round 3): these need
+   * an answer context whatever the key's length, the same as a one-digit key's words and
+   * arithmetic ("83% of students passed" and "5 out of 6 tests passed" are ordinary lesson text).
+   */
+  weak: boolean;
 }
 
 /** Larger values are not named exactly (no leak check needs them). */
@@ -199,10 +208,12 @@ const MARKERS = new Set(
   ].map(foldWord),
 );
 /**
- * "baar"/"times" ("do baar", "three times") are weak markers (4.5c): on their own they are
- * ordinary count words ("ek baar try karo", "read it three times"), so they count as an answer
- * word only when a run/print verb sits right next to them, and never when an imperative does
- * (that beats a run verb on the other side: "do baar chalega socho" still never counts).
+ * "baar"/"times" ("do baar", "three times") are weak markers (4.5c, fix round 3): on their own
+ * they are ordinary count words ("ek baar try karo", "read it three times"), so they count as an
+ * answer word only when a run/print verb sits anywhere from the marker to the end of its sentence
+ * ("three times it runs", "teen baar yeh chalega", not just right next to the marker), and never
+ * when an imperative sits right next to the marker or ends the sentence (that beats a run verb
+ * later in the sentence: "do baar chalega socho" still never counts).
  */
 const WEAK_MARKERS = new Set(['baar', 'times', 'बार'].map(foldWord));
 const RUN_VERBS = new Set(
@@ -258,10 +269,22 @@ function neighborWord(toks: readonly Token[], k: number, dir: -1 | 1): string | 
   return wordOf(toks[n] as Token);
 }
 
+/** The index of the last token of the sentence (by breakBefore boundaries) that holds token `k`. */
+function sentenceEnd(toks: readonly Token[], k: number): number {
+  let end = k;
+  while (end + 1 < toks.length && !(toks[end + 1] as Token).breakBefore) end++;
+  return end;
+}
+
 /**
  * Whether token `k` counts as an answer marker: a strong marker always does; a weak marker
- * ("baar", "times") only when a run/print verb sits right next to it, never when an imperative
- * does (see WEAK_MARKERS).
+ * ("baar", "times") only when a run/print verb sits anywhere from it to the end of the sentence
+ * ("three times it runs", "teen baar yeh chalega", not just right next to the marker), never when
+ * an imperative sits right next to the marker or ends the sentence (see WEAK_MARKERS). A word
+ * before the marker is never scanned for a run verb: a sentence can open with an instruction word
+ * that happens to spell the same as a run verb ("Loop teen baar. Chalega." — "Loop" here is the
+ * instruction, not a report that the code runs, and the run verb it does hold is in the next
+ * sentence).
  */
 function isAnswerMarker(toks: readonly Token[], k: number): boolean {
   const w = wordOf(toks[k] as Token);
@@ -272,7 +295,12 @@ function isAnswerMarker(toks: readonly Token[], k: number): boolean {
   if ((before !== undefined && IMPERATIVES.has(before)) || (after !== undefined && IMPERATIVES.has(after))) {
     return false;
   }
-  return (before !== undefined && RUN_VERBS.has(before)) || (after !== undefined && RUN_VERBS.has(after));
+  const end = sentenceEnd(toks, k);
+  if (IMPERATIVES.has(wordOf(toks[end] as Token))) return false;
+  for (let i = k + 1; i <= end; i++) {
+    if (RUN_VERBS.has(wordOf(toks[i] as Token))) return true;
+  }
+  return false;
 }
 
 /** Whether tokens [i, j] have an answer marker within the window, in the same sentence. */
@@ -316,6 +344,7 @@ function wordMentions(toks: readonly Token[], out: NumberMention[]): void {
       decimals: 0,
       kind: 'word',
       answerContext: inAnswerContext(toks, first, lastAt),
+      weak: false,
     });
     total = 0;
     current = 0;
@@ -364,13 +393,20 @@ export function numberMentions(text: string): NumberMention[] {
   const s = foldForNumbers(text);
   const toks = tokenize(s);
   const out: NumberMention[] = [];
-  const push = (n: number, decimals: number, kind: MentionKind, start: number, end: number) => {
+  const push = (
+    n: number,
+    decimals: number,
+    kind: MentionKind,
+    start: number,
+    end: number,
+    weak = false,
+  ) => {
     const value = canonicalNumber(n);
     if (value === undefined) return;
     const [i, j] = tokensOf(toks, start, end);
     const num = Math.abs(n);
     const d = Number.isInteger(num) ? 0 : decimals;
-    out.push({ value, num, decimals: d, kind, answerContext: inAnswerContext(toks, i, j) });
+    out.push({ value, num, decimals: d, kind, answerContext: inAnswerContext(toks, i, j), weak });
   };
   for (const m of s.matchAll(LITERAL)) {
     push(literalValue(m), literalDecimals(m), 'digits', m.index, m.index + m[0].length);
@@ -387,19 +423,19 @@ export function numberMentions(text: string): NumberMention[] {
     const num = smallWordValue(m[1] as string);
     const denom = DENOMINATOR_WORDS[m[2] as string];
     if (num === undefined || denom === undefined) continue;
-    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length);
+    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length, true);
   }
   for (const m of s.matchAll(OUT_OF)) {
     const num = smallWordValue(m[1] as string);
     const denom = smallWordValue(m[2] as string);
     if (num === undefined || denom === undefined || denom === 0) continue;
-    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length);
+    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length, true);
   }
   for (const m of s.matchAll(PERCENT)) {
     const text = m[1] as string;
     const dot = text.indexOf('.');
     const written = dot < 0 ? 0 : text.length - dot - 1;
-    push(Number(text) / 100, written + 2, 'digits', m.index, m.index + m[0].length);
+    push(Number(text) / 100, written + 2, 'digits', m.index, m.index + m[0].length, true);
   }
   for (const m of s.matchAll(SPOKEN_DECIMAL)) {
     const whole = smallWordValue(m[1] as string);
@@ -408,7 +444,7 @@ export function numberMentions(text: string): NumberMention[] {
     const digits = digitWords.map((w) => DIGIT_WORDS[w]);
     if (digits.some((d) => d === undefined)) continue;
     const value = whole + Number(`0.${digits.join('')}`);
-    push(value, digits.length, 'word', m.index, m.index + m[0].length);
+    push(value, digits.length, 'word', m.index, m.index + m[0].length, true);
   }
   wordMentions(toks, out);
   return out;

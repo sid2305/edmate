@@ -11,7 +11,10 @@
 //   - number keys ("16", "sixteen", "24,000"): as whole numbers in any form numbers.ts reads
 //     (digits in any script, literals, words in three scripts, arithmetic), never as substrings.
 //     A one-digit key counts in words or arithmetic only in an answer context ("the answer is
-//     three"), since "one step" or "1 + 2" are ordinary lesson text;
+//     three"), since "one step" or "1 + 2" are ordinary lesson text. A spoken fraction, "out of",
+//     percentage or digit-by-digit decimal (numbers.ts's "weak" mentions) need that same answer
+//     context whatever the key's length ("83% of students passed the test." is not a leak of
+//     0.83; "the answer is 83%" is);
 //   - either kind inside base64 (one decode level). Decoded noise can hold stray digits, so in
 //     decoded text a one-digit key counts only in an answer context (or standing alone).
 // A code-shaped key the student wrote as code in their own message may be quoted back: it is
@@ -101,18 +104,30 @@ function codeLines(raw: string): CodeLine[] {
   return out;
 }
 
+/** A trailing `# ...` or `// ...` comment, with the whitespace before it. */
+const TRAILING_COMMENT = /\s*(?:#|\/\/).*$/;
+
+/** `line` with a trailing comment and trailing whitespace dropped (fix round 3). */
+function dropTrailingComment(line: string): string {
+  return line.replace(TRAILING_COMMENT, '').replace(/\s+$/, '');
+}
+
 /**
  * Whether `a` and `b` are the same line except for a run that covers [ks, ke) (the key's span in
  * `a`): everything up to the key matches (`p >= ks`), everything from the key on matches
- * (`sa <= ke`), and the two lines are not in fact identical.
+ * (`sa <= ke`), and the two lines are not in fact identical. A trailing comment (fix round 3: "#
+ * maybe this" next to "# or this") and trailing whitespace are dropped first, since they are not
+ * part of the code the two lines offer.
  */
 function differsOnlyAroundKey(a: string, b: string, ks: number, ke: number): boolean {
-  if (a === b) return false;
+  const an = dropTrailingComment(a);
+  const bn = dropTrailingComment(b);
+  if (an === bn) return false;
   let p = 0;
-  while (p < a.length && p < b.length && a[p] === b[p]) p++;
-  let i = a.length - 1;
-  let j = b.length - 1;
-  while (i >= 0 && j >= 0 && a[i] === b[j]) {
+  while (p < an.length && p < bn.length && an[p] === bn[p]) p++;
+  let i = an.length - 1;
+  let j = bn.length - 1;
+  while (i >= 0 && j >= 0 && an[i] === bn[j]) {
     i--;
     j--;
   }
@@ -318,7 +333,9 @@ export function compileAnswerKeys(
       numbers.some(
         (k) =>
           mentionMatches(m, k) &&
-          (k.value.length > 1 || m.answerContext || (m.kind === 'digits' && !decoded)),
+          (m.weak
+            ? m.answerContext
+            : k.value.length > 1 || m.answerContext || (m.kind === 'digits' && !decoded)),
       ),
     );
   };

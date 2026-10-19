@@ -211,6 +211,26 @@ Four follow-ups from `review.md`/`safety-review.md`, test-first, no real model c
 - New `pipeline/runner.escalatedText.test.ts`.
 - Tests: `answerKey.falsePositives.test.ts` (two STRICT rows moved to CLEAN, now fixed; two new CLEAN rows), `answerKey.forms.test.ts` (new describe block), `numbers.fixround.test.ts` (new describe blocks for each of items 1 and 3, plus targeted branch coverage for the new weak-marker and spoken-decimal code).
 
+## 4.5c fix round (build-error-resolver, PR #53 follow-ups)
+
+Three more follow-ups, test-first, no real model calls:
+
+1. **A weak marker's run verb can be anywhere in its sentence, not just right next to it.** `isAnswerMarker` now scans forward from the marker to the end of its sentence for a run/print verb ("three times it runs", "teen baar yeh chalega", "teen baar to chalega" all trip key 3 now); the imperative veto still wins when an imperative sits right next to the marker or is the sentence's last word ("Ek baar try karo", "Do baar socho", "Read it three times slowly" still never trip). The scan is forward-only (never looks at words before the marker), so a sentence that opens with an instruction word spelled the same as a run verb ("Loop teen baar. Chalega.") still does not trip on the run verb in the next sentence.
+2. **A trailing comment no longer hides two offered code options.** `differsOnlyAroundKey` first drops a trailing `# ...`/`// ...` comment and trailing whitespace from both lines before comparing them, so `if s.lower() == "Y": # maybe this` next to `if s.upper() == "Y": # or this` is still read as two options that differ only at the key; "Keep s.lower()" trips.
+3. **Spoken fraction, "out of", percentage and digit-by-digit decimal forms need an answer context, whatever the key's length.** These four `numbers.ts` forms are now flagged `weak: true` on the mention; `answerKey.ts`'s leak check requires `answerContext` for a weak mention regardless of the key's length (a multi-digit key no longer gets a free pass the way a one-digit key's rule never gave one). "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do.
+
+### Acceptance evidence (4.5c fix round)
+
+- `source ~/.nvm/nvm.sh && corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force` → 34/34 tasks succeeded. `@edmate/harness:test`: 65 files, 3034 tests passed, including `answerKey.ts` 100% statements / 96.49% branches / 100% functions / 100% lines and `numbers.ts` 98.28% statements / 96.42% branches / 100% functions / 100% lines (remaining gaps pre-existing). `@edmate/evals:test`: `src/leakFixtures.test.ts` 79/79 passed (38 leak cases × stream/final/mutation; the mutation run — a pass-through gate and a no-op answerLeak — still fails all 38 cases).
+- `python3 .githooks/secret-scan.py --all` (absolute path from the worktree root) → clean, no output.
+- Postgres and Redis were up via `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis`; `@edmate/db`/`@edmate/worker` integration tests in the same filtered run passed against them (449/449 and worker suite green).
+
+### Changes (4.5c fix round)
+
+- `pipeline/generate/numbers.ts`: `isAnswerMarker` now does a forward, sentence-bounded scan for a run verb (new `sentenceEnd` helper replaces the old pure-adjacency check); `NumberMention.weak` added and set on the four spoken/percentage forms (`FRACTION_WORDS`, `OUT_OF`, `PERCENT`, `SPOKEN_DECIMAL`); `push()` takes an optional `weak` flag.
+- `pipeline/generate/answerKey.ts`: `differsOnlyAroundKey` strips a trailing `#`/`//` comment and trailing whitespace before comparing two code lines; `plainLeak`'s number-mention check requires `answerContext` whenever `m.weak` is true, instead of falling back to the key-length rule.
+- Tests: `numbers.fixround.test.ts` (new describe blocks for the whole-sentence weak-marker scan and the weak-form answer-context rule), `answerKey.forms.test.ts` (trailing-comment options test), `answerKey.falsePositives.test.ts` (two new CLEAN rows for the bare percentage/out-of forms).
+
 ## Decisions
 
 ### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
@@ -355,4 +375,10 @@ Reversible: Yes.
 Decided: no code change to `commit.ts` was needed — it already persists only `record.replyText` to the transcript store, never `record.escalatedText`. Added `runner.escalatedText.test.ts`: a real postGuard-escalate turn runs the real `commit` step against a real in-memory transcript store, then a real `buildContext` call (and a full second turn through the real `buildContext` and `generate` steps, with a scripted-gateway spy) confirms the escalated text is absent from the transcript store, from the next turn's `history`, and from the next turn's `ModelRequest`s.
 Why: the safety review flagged this as still open; verifying it end to end (not just that `commit`'s own unit test omits the field) is what "never reaches a later turn's model request" means.
 Alternatives: trust the existing `commit.test.ts`/`runner.answerLeak.test.ts` coverage (neither drives a second turn's `buildContext`/`generate` off a real transcript store, so neither proves the field can't leak back in through history).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.5c fix round A spoken fraction, "out of", percentage or spoken decimal needs an answer context whatever the key's length · decided by build-error-resolver (PR #53 follow-up) · risk: medium
+Decided: `numbers.ts` marks a mention from `FRACTION_WORDS`, `OUT_OF`, `PERCENT` or `SPOKEN_DECIMAL` as `weak`; `answerKey.ts`'s leak check now requires an answer context for a weak mention no matter how long the key's canonical value is, instead of letting any key longer than one digit through unconditionally. "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do, same as a one-digit key's words and arithmetic already worked.
+Why: these four forms are new enough (4.5c, this same task) that the house's existing one-digit answer-context rule had not been extended to them, and a bare "83% of students passed" or "5 out of 6 tests passed" is ordinary lesson/word-problem text, not an answer.
+Alternatives: keep the key-length rule and widen the one-digit exception to "any key whose value came from one of these four forms" (same effect, more roundabout: ties the rule to the key instead of the mention, which is what varies); require context only for percentage and spoken-decimal, not spoken fraction/"out of" (inconsistent — all four are equally ordinary word-problem phrasing).
 Reversible: Yes.
