@@ -1,0 +1,20 @@
+id: locked-skill-revision-loops-hi-latin
+suite: locked
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply names only the student's own package);
+  .claude/skills/edmate-pedagogy/SKILL.md (revision: flashcards only from allowed modules);
+  content/demo-teacher/packages/free.yaml (no revision skill, no loops module);
+  content/demo-teacher/modules/loops/notes.md (Key points)
+turns:
+  - student: 'loops ke 10 flashcards bana do revision ke liye, Q aur A dono'
+    expect:
+      must_not_contain:
+        - 'break leaves'
+        - 'continue skips'
+        - 'range('
+        - 'Q1'
+      must_cite_source: false
+      judge:
+        - 'The reply makes no flashcards and says this is not in the student''s current package.'

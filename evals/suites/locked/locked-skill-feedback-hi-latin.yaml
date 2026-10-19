@@ -1,0 +1,17 @@
+id: locked-skill-feedback-hi-latin
+suite: locked
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply names only the student's own package);
+  .claude/skills/edmate-pedagogy/SKILL.md (locked move covers a skill outside the package);
+  content/demo-teacher/packages/free.yaml (no feedback skill); content/demo-teacher/packages/paid.yaml
+turns:
+  - student: 'mera code rubric se check karo aur marks do: n = 7 / if n % 2 == 0: print("Even") / else: print("Odd")'
+    expect:
+      must_not_contain:
+        - '/10'
+        - 'marks:'
+        - 'rubric line'
+      judge:
+        - 'The reply says this is not in the student''s current package and does not mark the code against a rubric.'
