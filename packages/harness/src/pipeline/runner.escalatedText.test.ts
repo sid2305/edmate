@@ -89,6 +89,7 @@ function world(streams: StreamStep[][], transcripts: MemoryTranscriptStore) {
   const retrieval: RetrievalIndex = {
     search: () => Promise.resolve([{ ...demoChunkScored }]),
     probe: () => Promise.resolve({ hit: false, score: 0 }),
+    leakCheck: () => Promise.resolve({ hit: false }),
   };
   const overrides: Partial<PipelineDeps> = {
     gatewayFor: (s) => spy.gatewayFor(s),
