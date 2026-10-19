@@ -217,3 +217,85 @@ Decided: `safety-distress-name-heuristic-in-en`/`-hi-latin` live under `evals/su
 Why: the lead's correction said so explicitly; a live/reply check for these needs 4.3's distress-eval wiring, not this task.
 Alternatives: fold them into the PII pipeline test anyway (would assert nothing meaningful, since they carry no PII).
 Reversible: Yes.
+
+## Fix round (19 Oct 2026, PR #42)
+
+- **Branch:** `m4/4.2c-pii-hardening` (pushed from `fix-4.2c`, origin/main unchanged)
+
+### 1. [CRITICAL privacy regression] `scrub.ts`'s bare-key ambiguity rule over-blocked
+The 4.2c decision above ("`card`, `name` and `pin` alone no longer redact a payload value") was
+too wide: it blocked a bare key's *own* scalar value too, so `{"name":"Riya Sen"}`,
+`{"name":{"first":"Riya","last":"Sen"}}` and `{"pin":"411001"}` reached the model unredacted.
+Fixed: a bare `name`/`card`/`pin` key always redacts its own scalar value; the ambiguity now only
+gates (a) a bare "name" whose nearest enclosing key is file-shaped (`files`, `file`, `module`,
+`function`, `variable`, `class` — `{"files":[{"name":"main.py"}]}` stays), (b) a bare "name"'s
+object value, which now redacts only its own direct name-shaped subfields (`first`, `last`,
+`full`, `middle`), and (c) a bare "pin", which only redacts a value that is itself PIN/postcode
+shaped (numeric, 4-6 digits — `{"pin":13}` stays, `{"pin":"411001"}` redacts). `cardNumber` /
+`studentName` / `pinCode` (a prefix or suffix present) are unaffected, same as before.
+New/updated tests: `scrub.test.ts` "a bare 'name'/'card'/'pin' key redacts its own scalar value
+(fix round, CRITICAL)" (10 cases, including every case named in the fix-round instructions plus
+`{"studentName":"Riya"}`).
+
+### 2. [MEDIUM] `CODE_AFTER` now allows up to 3 filler words before "code"
+`piiPatterns.ts`: a small closed filler-word list (`the`, `a`, `an`, `your`, `my`, `security`,
+`verification`, 0-3 of them) may now sit between the number and "code" ("482913 is the
+verification code", "482913 is your code"). The number itself still has to be 4-8 digits, so the
+near-miss ("line 482 is the code that fails", a 3-digit number) is unaffected regardless.
+New tests: `piiPatterns.test.ts` "fix round item 2" (3 cases: 2 positive, 1 near-miss).
+
+### 3. [MEDIUM] Reversed Hinglish order and comma sign-offs now redact a name
+`piiPatterns.ts`: two new name shapes feed into `names()` — `NAME_REVERSED` ("Aarav mera naam
+hai": up to 3 Title-Case words captured directly ahead of the keyword, since `nameWords` only ever
+walks forward) and `SIGNOFF` ("Thanks, Aarav" / "Regards, Riya Sen": a required comma, then
+`nameWords`/`WORD_TITLE` as usual, so "Thanks, that worked" and "Regards to the teacher" — no
+comma at all — are near-misses by construction, not by a separate check).
+New tests: `piiPatterns.test.ts` "fix round item 3" (5 cases: 1 reversed-order, 2 sign-offs, 2
+near-misses).
+
+### Acceptance evidence
+
+`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f
+apps/worker/test/compose.port.yaml up -d postgres redis` (postgres/redis healthy), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+@edmate/harness:test:  Test Files  54 passed (54)
+@edmate/harness:test:       Tests  2747 passed (2747)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   src/suites.test.ts > evals/suites (real cases) > every case validates and
+                      follows the suite rules — FAILS, reporting exactly the 6 pre-existing
+                      `reviewed_by: pending` cases from the original 4.2c pass (unchanged by this
+                      fix round; awaiting human sign-off, see "Pending review" above)
+ Tasks:    6 successful, 21 total
+ Failed:   @edmate/evals#test
+```
+
+`src/guardrails` stays at 100% statements/branches/funcs/lines (`piiPatterns.ts`, `piiScrub.ts`,
+`chain.ts`, `digitForms.ts`, `order.ts`, `registry.ts` all 100%). `pipeline/steps/scrub.ts` (not a
+guardrails file) is 99.09%/98.85%, both pre-existing/unrelated to this change (a fail-closed
+`payloadShape()` branch in `rebuild`'s own string lookup, unreachable by construction since every
+collected string is scrubbed before `rebuild` runs).
+
+`python3 .githooks/secret-scan.py --all` → clean (no output, no PII/secrets in the diff; all
+fixture names in tests are fake, same convention as the rest of the file).
+
+### Decisions (fix round)
+
+#### 19 Oct 2026 · Fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
+Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
+ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped
+subfields (bare "name" only), and a PIN/postcode digit-length check (bare "pin" only) — so a bare
+key's own scalar value always redacts unless one of those three specifically says otherwise.
+Why: the original rule's comment claimed it only stopped cascading into unrelated *nested* keys,
+but the code actually blocked the key's own direct value too, which is the CRITICAL regression
+this round fixes; the three gates above are the narrowest change that satisfies every named case
+(including the new ones) without reopening the original flashcard/file-name/GPIO-pin false
+positives.
+Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin":9999}`-shaped
+over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
+original 4.2c false positives it was meant to fix).
+Reversible: Yes.

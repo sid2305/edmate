@@ -229,6 +229,7 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
     ['pan', { PAN: 'ABCDE' }, { PAN: P.id }],
     ['upi id', { 'upi-id': 'riya' }, { 'upi-id': P.id }],
     ['student name', { studentName: 'Riya Sen' }, { studentName: P.name }],
+    ['student name, one word (fix round)', { studentName: 'Riya' }, { studentName: P.name }],
     ['pin code (compound, not bare "pin")', { pinCode: '411001' }, { pinCode: P.otp }],
     [
       'an array is still the key’s own value',
@@ -257,19 +258,41 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
   });
 });
 
-describe('scrub: ambiguous key words need a compound form (4.2c item 7)', () => {
+describe('scrub: a bare "name"/"card"/"pin" key redacts its own scalar value (fix round, CRITICAL)', () => {
   const run = async (skillPayload: unknown) => {
     const { env, drive } = setup({ ...demoTurnInput, skillPayload });
     return drive(scrub(env, entitled()));
   };
 
+  // 4.2c item 7's "ambiguous, needs a compound form" rule let a bare "name"/"card"/"pin" key's
+  // own scalar value reach the model unredacted ({"name":"Riya Sen"} never redacted at all). The
+  // ambiguity only ever needs to stop a bare key's category spreading into an unrelated NESTED
+  // key, which a key-less nested object or array element already does on its own (see below); it
+  // must never block the key's own direct value.
   it.each([
-    ['bare "card" is a flashcard, not a payment card', { card: { front: 'What is a list?' } }],
-    ['bare "name" nested under an unrelated key is a file name', { files: [{ name: 'main.py' }] }],
-    ['bare "pin" is not a PIN code', { pin: 13 }],
-    ['bare "name" at the top level is left alone too', { name: 'Riya' }],
-  ] as const)('%s', async (_label, payload) => {
+    ['bare "name" at the top level', { name: 'Riya' }, { name: P.name }],
+    ['bare "name", a full name', { name: 'Riya Sen' }, { name: P.name }],
+    ['bare "pin", a 6-digit PIN string', { pin: '411001' }, { pin: P.otp }],
+    ['bare "pin", a 4-digit postcode-shaped string', { pin: '1100' }, { pin: P.otp }],
+    ['student name (prefixed, not bare)', { studentName: 'Riya' }, { studentName: P.name }],
+  ] as const)('%s', async (_label, payload, expected) => {
+    expect((await run(payload)).skillPayload).toEqual(expected);
+  });
+
+  it.each([
+    ['bare "card" with an object value is a flashcard, not a payment card', { card: { front: 'What is a list?' } }],
+    [
+      'bare "name" nested under a file-like key is a file name, not a person',
+      { files: [{ name: 'main.py' }] },
+    ],
+    ['bare "pin", a short number is not a PIN code', { pin: 13 }],
+  ] as const)('left alone: %s', async (_label, payload) => {
     expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('bare "name" with an object value redacts its direct name-like fields only', async () => {
+    const payload = { name: { first: 'Riya', last: 'Sen' } };
+    expect((await run(payload)).skillPayload).toEqual({ name: { first: P.name, last: P.name } });
   });
 
   it('an object value under a PII-named key does not propagate into its own unrelated keys', async () => {

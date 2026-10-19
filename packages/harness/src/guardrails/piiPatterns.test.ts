@@ -802,3 +802,39 @@ describe('4.2c item 8: constant and counting digit runs are not over-scrubbed', 
     expect(scrub('matrix 1 2 3 4 5 6 7 8 9')).toBe('matrix 1 2 3 4 5 6 7 8 9');
   });
 });
+
+describe('fix round item 2 (MEDIUM): up to 3 filler words between the number and "code"', () => {
+  it('"is the verification code" after the number', () => {
+    expect(scrub('482913 is the verification code')).toBe(`${P.otp} is the verification code`);
+  });
+
+  it('"is your code" after the number', () => {
+    expect(scrub('482913 is your code')).toBe(`${P.otp} is your code`);
+  });
+
+  it('near-miss: a 3-digit number ("line 482 is the code that fails") is never redacted', () => {
+    expect(scrub('line 482 is the code that fails')).toBe('line 482 is the code that fails');
+  });
+});
+
+describe('fix round item 3 (MEDIUM): reversed Hinglish order and comma sign-offs', () => {
+  it('reversed Hinglish order: "<Name> mera naam hai"', () => {
+    expect(scrub('Aarav mera naam hai')).toBe(`${P.name} mera naam hai`);
+  });
+
+  it('sign-off with a comma: "Thanks, Aarav"', () => {
+    expect(scrub('Thanks, Aarav')).toBe(`Thanks, ${P.name}`);
+  });
+
+  it('sign-off with a comma: "Regards, Riya Sen"', () => {
+    expect(scrub('Regards, Riya Sen')).toBe(`Regards, ${P.name} ${P.name}`);
+  });
+
+  it('near-miss: "Thanks, that worked" is never redacted', () => {
+    expect(scrub('Thanks, that worked')).toBe('Thanks, that worked');
+  });
+
+  it('near-miss: "Regards to the teacher" is never redacted', () => {
+    expect(scrub('Regards to the teacher')).toBe('Regards to the teacher');
+  });
+});

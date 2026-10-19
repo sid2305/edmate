@@ -246,8 +246,14 @@ const OTP_CODE = new RegExp(
   'gdiu',
 );
 /** Hardened (4.2c item 4): "code"/bheja/aaya/mila *after* the number too ("482913 code/bheja"). */
+/**
+ * Up to 3 filler words between the number and "code" (fix round item 2: "482913 is the
+ * verification code", "482913 is your code"). Kept to a small closed list, not any word, so a
+ * genuinely unrelated sentence never bridges the gap.
+ */
+const CODE_AFTER_FILLER = String.raw`(?:(?:the|a|an|your|my|security|verification)\s+){0,3}`;
 const CODE_AFTER = new RegExp(
-  String.raw`(?<!\d)(\d{4,8})\s*(?:is\s+)?(?:code|कोड|bheja|bhej\s+diya|aaya|aya|mila)(?![\p{L}\p{M}_])`,
+  String.raw`(?<!\d)(\d{4,8})\s*(?:is\s+)?${CODE_AFTER_FILLER}(?:code|कोड|bheja|bhej\s+diya|aaya|aya|mila)(?![\p{L}\p{M}_])`,
   'gdiu',
 );
 const OTP_NUMBER = /(?<!\d)\d{4,8}(?!\d)/g;
@@ -312,6 +318,27 @@ const NAME_MAIN = new RegExp(
 const NAME_MAIN_DEVA = new RegExp(
   String.raw`मैं(?=(?:[^\S\r\n]+[\p{L}\p{M}]+){1,3}[^\S\r\n]+(?:हूँ|हूं|हू)(?![\p{L}\p{M}]))`,
   'gu',
+);
+/** One Title-Case name word, for the reversed-order and sign-off shapes below. */
+const TITLE_WORD = String.raw`\p{Lu}[\p{Ll}\p{M}]*(?:['’-]\p{Lu}?[\p{Ll}\p{M}]+)*`;
+/**
+ * Reversed Hinglish order (fix round item 3): "Aarav mera naam hai" says the name *before* the
+ * strong phrase, not after it. Up to 3 Title-Case words, captured directly (not via `nameWords`,
+ * since those only ever walk forward from a keyword), immediately before "mera naam hai".
+ */
+const NAME_REVERSED = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(${TITLE_WORD})(?:[^\S\r\n]+(${TITLE_WORD}))?(?:[^\S\r\n]+(${TITLE_WORD}))?[^\S\r\n]+mera\s+(?:naam|nam|name)\s+hai(?![\p{L}\p{M}])`,
+  'gdu',
+);
+/**
+ * A comma sign-off (fix round item 3): "Thanks, Aarav", "Regards, Riya Sen". The comma is
+ * required, so "Regards to the teacher" (no comma at all) never matches; the word after it still
+ * has to be Title-Case (via `nameWords`/`WORD_TITLE`), so "Thanks, that worked" never matches
+ * either.
+ */
+const SIGNOFF = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?:thanks|thank\s+you|regards|best\s+regards|cheers|sincerely)\s*,`,
+  'giu',
 );
 /**
  * A leading copula right after a strong phrase ("mera naam hai Aarav", "मेरा नाम है आरव": hardened
@@ -645,6 +672,16 @@ function names(s: string): PiiSpan[] {
   for (const [, end] of ranges(NAME_WEAK, s)) words.push(...nameWords(s, end, WORD_TITLE));
   for (const [, end] of ranges(NAME_MAIN, s)) words.push(...nameWords(s, end, WORD_TITLE));
   for (const [, end] of ranges(NAME_MAIN_DEVA, s)) words.push(...nameWords(s, end, WORD_ANY));
+  // Reversed order (fix round item 3): the name words are captured directly by the match itself,
+  // in groups 1-3, not walked forward from a keyword's end.
+  for (const m of all(NAME_REVERSED, s)) {
+    const indices = m.indices as RegExpIndicesArray;
+    for (let g = 1; g <= 3; g++) {
+      const wordSpan = indices[g] as [number, number] | undefined;
+      if (wordSpan !== undefined) words.push(wordSpan);
+    }
+  }
+  for (const [, end] of ranges(SIGNOFF, s)) words.push(...nameWords(s, end, WORD_TITLE));
   // Later (and earlier) repeats of a captured word in the same message.
   const tokens = new Set(words.map(([a, b]) => s.slice(a, b)));
   for (const t of tokens) {

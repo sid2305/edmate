@@ -77,7 +77,7 @@ export function createScrub(
     if (payload !== undefined) {
       const scrubbed = new Map(list.map((s, i) => [s, (runs[i] as Run).text]));
       const state = { keyed: false };
-      out.skillPayload = rebuild(payload, scrubbed, state, undefined);
+      out.skillPayload = rebuild(payload, scrubbed, state, undefined, undefined);
       // One rewrite entry for the payload, not one per string.
       const rewrite = runs.find((r, i) => r.text !== list[i]);
       if (rewrite !== undefined) out.guards.push(...rewrite.guards);
@@ -115,14 +115,23 @@ function collect(v: unknown, into: Set<string>, depth: number): void {
  * A key that says its value is PII ("otp", "name", "phone_number", "studentName", "upi-id", ...):
  * the whole value is redacted, since a bare "482913" or "Riya" has no keyword of its own.
  *
- * Hardened (4.2c item 7): "card", "name" and "pin" are too generic to redact on their own — a
- * flashcard's "card", a file's "name", a map or GPIO "pin" all hold ordinary teaching content, not
- * PII. For these three only, a bare key (no prefix or suffix) is left to the pattern scrub
- * instead; `cardNumber`, `studentName`, `pinCode` and the like still redact, same as before.
+ * "card", "name" and "pin" are also ambiguous bare words — a flashcard's "card", a file's "name",
+ * a map or GPIO "pin" all hold ordinary teaching content, not PII — but (fix round, CRITICAL
+ * regression from 4.2c item 7) that ambiguity must never block a bare key's own direct scalar
+ * value: `{"name":"Riya Sen"}` is still a name. Three gates are narrower instead:
+ *  - a bare "name" whose nearest enclosing key is file-shaped (`files`, `file`, `module`,
+ *    `function`, `variable`, `class`) is left alone (`{"files":[{"name":"main.py"}]}`);
+ *  - a bare "name" whose value is itself an object only redacts that object's own direct
+ *    name-shaped fields (`first`, `last`, `full`, `middle`, ...), not every field in it
+ *    (`{"name":{"first":"Riya","last":"Sen"}}`, but a `nickname` sibling stays, same as any other
+ *    PII-named key's unrelated nested keys always have);
+ *  - a bare "pin" only redacts a value that is itself PIN/postcode-shaped: numeric, 4-6 digits
+ *    (`{"pin":13}` stays, `{"pin":"411001"}` redacts).
+ * `cardNumber`, `studentName`, `pinCode` and the like (a prefix or suffix present) are unaffected
+ * by any of this and always redact in full, same as before.
  */
 const PII_KEY =
   /^(my|student|parent|user|first|last|full|contact)?(otp|pin|cvv|cvc|card|phone|mobile|whatsapp|email|mail|name|aadhaar|aadhar|pan|upi)(number|no|num|id|address|code)?$/;
-const AMBIGUOUS_ALONE: ReadonlySet<string> = new Set(['card', 'name', 'pin']);
 const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
   otp: 'otp',
   pin: 'otp',
@@ -140,31 +149,81 @@ const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
   pan: 'id',
   upi: 'id',
 };
+/** A bare "name" under one of these keys (through any number of arrays) is a file, not a person. */
+const FILE_LIKE_PARENT: ReadonlySet<string> = new Set([
+  'files',
+  'file',
+  'module',
+  'function',
+  'variable',
+  'class',
+]);
+/** A bare "name" key's object value: only these direct fields are name-shaped on their own. */
+const NAME_SUBFIELDS: ReadonlySet<string> = new Set([
+  'first',
+  'last',
+  'full',
+  'middle',
+  'firstname',
+  'lastname',
+  'fullname',
+  'middlename',
+]);
+/** How `scrub.ts`'s normal `keyCategory` match combines with the bare-"pin" digit gate below. */
+type Under = PiiCategory | 'pinBare' | undefined;
 
-function keyCategory(key: string): PiiCategory | undefined {
-  const m = PII_KEY.exec(key.toLowerCase().replace(/[\s_.-]/g, ''));
+const normalizeKey = (key: string): string => key.toLowerCase().replace(/[\s_.-]/g, '');
+
+/**
+ * `enclosingKey` is the nearest key whose value directly contains this one (through any number of
+ * arrays), used only to tell a bare "name" apart from a file's own "name" field.
+ */
+function keyCategory(key: string, enclosingKey: string | undefined): Under {
+  const norm = normalizeKey(key);
+  const m = PII_KEY.exec(norm);
   if (m === null) return undefined;
   const [, prefix, core, suffix] = m;
-  if (AMBIGUOUS_ALONE.has(core as string) && prefix === undefined && suffix === undefined) {
-    return undefined;
+  const bare = prefix === undefined && suffix === undefined;
+  if (bare) {
+    if (core === 'name' && enclosingKey !== undefined && FILE_LIKE_PARENT.has(normalizeKey(enclosingKey))) {
+      return undefined;
+    }
+    if (core === 'pin') return 'pinBare';
   }
   return KEY_CATEGORY[core as string];
+}
+
+/**
+ * The placeholder a scalar `v` under category `under` redacts to, or `undefined` when it stays as
+ * is (either `under` doesn't apply to a scalar, or a bare "pin" value isn't PIN/postcode-shaped:
+ * numeric, 4-6 digits).
+ */
+function keyedPlaceholder(under: Under, v: unknown): string | undefined {
+  if (under === undefined) return undefined;
+  if (typeof v !== 'number' && !(typeof v === 'string' && v !== '')) return undefined;
+  if (under === 'pinBare') {
+    const digits = (typeof v === 'number' ? String(v) : v).replace(/\D/g, '');
+    return digits.length >= 4 && digits.length <= 6 ? PII_PLACEHOLDERS.otp : undefined;
+  }
+  return PII_PLACEHOLDERS[under];
 }
 
 function rebuild(
   v: unknown,
   scrubbed: ReadonlyMap<string, string>,
   state: { keyed: boolean },
-  under: PiiCategory | undefined,
+  under: Under,
+  enclosingKey: string | undefined,
 ): unknown {
   const of = (s: string): string => {
     const r = scrubbed.get(s);
     if (r === undefined) throw payloadShape();
     return r;
   };
-  if (under !== undefined && (typeof v === 'number' || (typeof v === 'string' && v !== ''))) {
+  const placeholder = keyedPlaceholder(under, v);
+  if (placeholder !== undefined) {
     state.keyed = true;
-    return PII_PLACEHOLDERS[under];
+    return placeholder;
   }
   if (typeof v === 'string') return of(v);
   if (typeof v === 'number') {
@@ -173,18 +232,24 @@ function rebuild(
     return of(s) === s ? v : of(s);
   }
   if (typeof v !== 'object' || v === null) return v;
-  // An array is still the key's own value (`studentName: ["Riya", "Sen"]`), so `under` carries
-  // on into it; an object is one more level of keying (`card: {front: ...}`), so a PII-named key
-  // only redacts its own direct scalar/array value, never descends into unrelated nested keys
-  // (hardened 4.2c item 7: `{"card":{"front":"..."}}`, `{"files":[{"name":"main.py"}]}`).
-  if (Array.isArray(v)) return v.map((x: unknown) => rebuild(x, scrubbed, state, under));
+  // An array is still the key's own value (`studentName: ["Riya", "Sen"]`), so `under` and
+  // `enclosingKey` carry on into it unchanged; an object is one more level of keying, so a
+  // PII-named key only redacts its own direct scalar/array value, never descends into unrelated
+  // nested keys (`{"studentName":{"nickname":"Riya"}}` leaves "nickname" alone) — except a bare
+  // "name" key's object value, whose own direct name-shaped fields (`first`, `last`, `full`, ...)
+  // still redact (`{"name":{"first":"Riya","last":"Sen"}}`).
+  if (Array.isArray(v)) {
+    return v.map((x: unknown) => rebuild(x, scrubbed, state, under, enclosingKey));
+  }
+  const nameFields = under === 'name' ? NAME_SUBFIELDS : undefined;
   const entries: [string, unknown][] = [];
   const keys = new Set<string>();
   for (const [k, x] of Object.entries(v)) {
     const key = of(k);
     if (keys.has(key)) throw payloadShape();
     keys.add(key);
-    entries.push([key, rebuild(x, scrubbed, state, keyCategory(k))]);
+    const forced = nameFields?.has(normalizeKey(k)) ? ('name' as const) : undefined;
+    entries.push([key, rebuild(x, scrubbed, state, forced ?? keyCategory(k, enclosingKey), k)]);
   }
   // fromEntries defines own keys, so a "__proto__" key never sets the prototype.
   return Object.fromEntries(entries);
