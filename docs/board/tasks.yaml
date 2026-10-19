@@ -603,9 +603,9 @@ tasks:
   accept: an agent config with hi is rejected with a clear message; tests.
   deps:
   - '3.11'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m3/3.11c-english-only-agents
+  model: build:sonnet
 - id: 3.11d
   milestone: M3
   title: 'Teacher-label hardening (3.11b safety review): teacher turns in the history go in a non-assistant wrapper; the teacher-note string is neutralised in student input; the server, not the model, counts
@@ -701,7 +701,7 @@ tasks:
   accept: An ask_teacher turn creates exactly one teacher question scoped to that teacher and student; evidence updates the learner profile idempotently; tests on real Postgres.
   deps:
   - '3.8'
-  status: running
+  status: review
   branch: m3/3.17-profile-evidence
   model: plan:sonnet planreview:sonnet(security) build:sonnet
 - id: '0.11'
@@ -869,8 +869,9 @@ tasks:
   model: null
 - id: 4.4c
   milestone: M4
-  title: 'Pre-guard follow-ups (4.4 safety review): run the moderation and jailbreak rule tables in the runner''s failed-chain path, as distress keywords already are, so a down distress classifier still raises misuse alerts for rule hits; a router distress label must not drop a misuse alert'
-  accept: 'with the distress classifier down, a harm_to_others rule hit still raises a misuse alert; tests.'
+  title: 'Pre-guard follow-ups (4.4 safety review): run the moderation and jailbreak rule tables in the runner''s failed-chain path, as distress keywords already are, so a down distress classifier still
+    raises misuse alerts for rule hits; a router distress label must not drop a misuse alert'
+  accept: with the distress classifier down, a harm_to_others rule hit still raises a misuse alert; tests.
   deps:
   - '4.4'
   status: todo
