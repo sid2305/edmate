@@ -87,8 +87,9 @@ export interface PipelineDeps {
    */
   promptPacks: PromptPackLibrary;
   /**
-   * Last-line distress keyword check on the scrubbed text, used only when `route.onFailure`
-   * itself fails ("distress keywords still escalate"). True escalates the turn.
+   * Last-line distress keyword check, used only when `route.onFailure` itself fails ("distress
+   * keywords still escalate"). True escalates the turn. Receives the raw, unscrubbed text on
+   * every turn: implementations must never log, store or send their input.
    */
   distressCheck(text: string, lang: Lang): boolean;
 }

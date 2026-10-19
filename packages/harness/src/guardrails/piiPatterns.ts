@@ -144,7 +144,7 @@ const PHONE_SPACED = new RegExp(
 );
 const BARE_TEN = /(?<![\d+])0?\d{10}(?!\d)/g;
 const PHONE_KEYWORDS = new RegExp(
-  String.raw`(?<![\p{L}\p{M}[])(?:phone|mobile|cell|whats\s?app|contact|call|text\s+me|sms|tel|ph|mob|(?:my|mera|meri|mere)\s+(?:number|no\.?|num))(?![\p{L}\p{M}])|फ़ोन|फोन|मोबाइल|मेरा\s+नंबर|कॉल|व्हाट्सएप`,
+  String.raw`(?<![\p{L}\p{M}])(?:phone|mobile|cell|whats\s?app|contact|call|text\s+me|sms|tel|ph|mob|(?:my|mera|meri|mere)\s+(?:number|no\.?|num))(?![\p{L}\p{M}])|फ़ोन|फोन|मोबाइल|मेरा\s+नंबर|कॉल|व्हाट्सएप`,
   'giu',
 );
 /** How far (in view characters) a keyword may sit from the number it marks. */
@@ -170,7 +170,7 @@ const EXPIRY = new RegExp(
 const BARE_EXPIRY = /[\s,;:]*(\d{1,2}\s*\/\s*\d{2,4})(?!\d)/dy;
 
 const OTP_STRONG = new RegExp(
-  String.raw`(?<![\p{L}\p{M}[])(?:otp|pin|passcode|(?:verification|login|sign[\s-]?in|access|auth|confirmation)\s+code|one[\s-]?time\s+(?:code|password|pin))(?![\p{L}\p{M}])|ओटीपी|पिन`,
+  String.raw`(?<![\p{L}\p{M}])(?:otp|pin|passcode|(?:verification|login|sign[\s-]?in|access|auth|confirmation)\s+code|one[\s-]?time\s+(?:code|password|pin))(?![\p{L}\p{M}])|ओटीपी|पिन`,
   'giu',
 );
 const OTP_CODE = new RegExp(
@@ -320,9 +320,23 @@ interface Candidate {
   keywords: readonly [number, number][];
 }
 
+/**
+ * True when `[start, end)` is exactly the bracketed text of a placeholder the scrub itself
+ * writes (e.g. the "phone" inside "[phone]"), matched case-sensitively so a real bracketed
+ * keyword like "[OTP]" or "[Phone]" still counts.
+ */
+function isOwnPlaceholder(s: string, start: number, end: number, placeholder: string): boolean {
+  return s.slice(start - 1, end + 1) === placeholder;
+}
+
+/** Keyword spans for `re`, minus any that are only the scrub's own placeholder bracket text. */
+function keywordRanges(re: RegExp, s: string, placeholder: string): [number, number][] {
+  return ranges(re, s).filter(([start, end]) => !isOwnPlaceholder(s, start, end, placeholder));
+}
+
 function candidates(s: string): Candidate[] {
-  const phoneKw = ranges(PHONE_KEYWORDS, s);
-  const otpKw = ranges(OTP_STRONG, s);
+  const phoneKw = keywordRanges(PHONE_KEYWORDS, s, PII_PLACEHOLDERS.phone);
+  const otpKw = keywordRanges(OTP_STRONG, s, PII_PLACEHOLDERS.otp);
   return [
     ...ranges(BARE_TEN, s).map(([start, end]) => ({
       start,

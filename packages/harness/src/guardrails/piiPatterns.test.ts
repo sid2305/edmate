@@ -53,6 +53,21 @@ describe('placeholders', () => {
   });
 });
 
+describe('bracketed keywords (fix round, MEDIUM regression)', () => {
+  it('a real bracketed keyword still pulls in the number next to it', () => {
+    expect(scrub('[OTP] 482913 is your code')).toBe(`[OTP] ${P.otp} is your code`);
+    expect(scrub('[Phone] 5551234567')).toBe(`[Phone] ${P.phone}`);
+  });
+
+  it('scrubbing a placeholder output again is a fixpoint (idempotence)', () => {
+    // "[phone]" is the exact placeholder the scrub writes: it is never a keyword, so the bare
+    // number next to it is left alone, and a second pass changes nothing.
+    const once = scrub('[phone] 1234567890');
+    expect(once).toBe('[phone] 1234567890');
+    expect(scrub(once)).toBe(once);
+  });
+});
+
 describe('phone', () => {
   it.each(
     each([
