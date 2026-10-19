@@ -638,7 +638,8 @@ tasks:
   model: null
 - id: '0.11'
   milestone: M7
-  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md'
+  title: 'Agent files: update safety-reviewer (and any reviewer still asking for a human sign-off or the old approval label) to the lead-approved merge policy; safety findings still get a safety-review.md.
+    Also the English-only pilot decision (18 Oct 2026): eval-author, pedagogy-author and the locale-context skill write English only, except safety cases, which keep Hindi/Hinglish input'
   accept: No agent file tells reviewers to require human approval; safety-reviewer still writes findings the lead turns into safety-review.md.
   deps:
   - '0.7'
@@ -684,7 +685,7 @@ tasks:
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
-  status: running
+  status: done
   branch: m4/4.0c-validator-followups
   model: build:sonnet
 - id: 4.0d
@@ -738,8 +739,27 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
+  branch: m4/4.3-distress
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.2c
+  milestone: M4
+  title: 'PII pattern hardening from the 4.2 safety review: keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out single-turn numbers; Aadhaar Verhoeff
+    instead of the years exception; constant-digit over-scrub; the 6 proposed eval cases'
+  accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
+  deps:
+  - '4.2'
+  status: todo
+  branch: null
+  model: null
+- id: 4.3b
+  milestone: M4
+  title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
+  accept: the retract-joke case passes turn 2; a scrub failure on a distress message replies with the pack helplines.
+  deps:
+  - '4.3'
+  status: todo
   branch: null
   model: null
 - id: '4.4'
