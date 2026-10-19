@@ -31,6 +31,24 @@ Direct check of the mechanism (via the new `migrate.int.test.ts` case): after `m
 A session that violates any of the three constraints is still rejected (NOT VALID only skips
 validating *existing* rows; new/updated rows are always checked).
 
+### 19 Oct 2026 fix round (database-reviewer, PR #39)
+
+[CRITICAL] `migrate.ts`'s `concurrentIndex` step ran `CREATE INDEX CONCURRENTLY IF NOT EXISTS`
+unconditionally. After a failed or killed concurrent build, Postgres leaves the index behind as
+INVALID, and `IF NOT EXISTS` would then skip it forever — the index exists, but is never usable
+and never revalidated. Fixed: before the CREATE, `isIndexInvalid()` looks the index up by name in
+`pg_class`/`pg_index`; if it exists and `indisvalid = false`, `DROP INDEX CONCURRENTLY IF EXISTS`
+runs first (still autocommit, still outside any transaction), then the CREATE.
+
+| Command | Result (trimmed) |
+|---|---|
+| Postgres + Redis up (`docker compose ... up -d postgres redis`) | running |
+| `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --force` | `Tasks: 14 successful, 14 total` |
+| db test | `Test Files 23 passed (23)` · `Tests 431 passed (431)` (+3 vs the first round) · `All files 99.89 / 99.21 / 99.66 / 100` · `migrate.ts 100 / 100 / 100 / 100` |
+| `test/migrate.test.ts` (new unit cases) | `skips the drop when the index already exists and is valid`, `drops and rebuilds an INVALID leftover index (a failed or killed earlier build)`, plus the existing `runs a concurrent-index step...` case updated to also check the `pg_index` lookup call |
+| `test/migrate.int.test.ts` (new int case) | `rebuilds an index left INVALID by a failed or killed earlier CREATE INDEX CONCURRENTLY`: forces `indisvalid = false` via `UPDATE pg_index` as superuser (the test DB role is superuser in the compose image), then runs `migrateDatabase()` again and asserts `indisvalid`/`indisready` are both `true` afterwards |
+| `python3 .githooks/secret-scan.py --all` | no output, exit 0 |
+
 ## Changes
 
 - `packages/db/src/migrate.ts`: a `PostMigrateStep` type and a fixed `POST_MIGRATE_STEPS` list
@@ -52,6 +70,10 @@ validating *existing* rows; new/updated rows are always checked).
 - `packages/db/test/migrate.test.ts` (new): unit tests for `runPostMigrateSteps`'s branches that
   don't need Postgres (already-valid skip, not-yet-valid run, missing constraint row, a
   concurrent-index step, the default list's shape).
+- Fix round: `packages/db/src/migrate.ts` gained `isIndexInvalid()`, checked before every
+  `concurrentIndex` step; if the index already exists and is INVALID, `DROP INDEX CONCURRENTLY IF
+  EXISTS` runs first. `packages/db/test/migrate.test.ts` and `packages/db/test/migrate.int.test.ts`
+  gained the drop-and-rebuild cases described above.
 
 ## Deviations
 
@@ -95,3 +117,9 @@ Decided: `packages/db/migrations/0009_session_package_pin.sql` had its `VALIDATE
 Why: 0009 has not been deployed anywhere yet (no pilot has run; confirmed in the 3.16 decision log), so there is no live database whose already-applied migration history this could break; editing it keeps the SQL honest about what actually runs (callers reading 0009 would otherwise see a `VALIDATE CONSTRAINT` that never executes, since the post-migrate step runs it instead).
 Alternatives: leave 0009 as the 3.16 fix round wrote it (misleading: the file would claim to validate inline but drizzle's transaction means that claim was already false before this task); add a 0010 migration that's a no-op for execution but documents the move.
 Reversible: yes, for as long as 0009 stays unreleased; once a real database has run it, a future change would need a new migration instead, which this task's rule (point 3 of the task description) already anticipates.
+
+### 19 Oct 2026 · 3.16b fix round: drop and rebuild an INVALID leftover index before CREATE INDEX CONCURRENTLY IF NOT EXISTS · decided by tdd-guide (database-reviewer finding) · risk: high
+Decided: the `concurrentIndex` post-migrate step now checks `pg_class`/`pg_index` for an existing index by name before running `CREATE INDEX CONCURRENTLY IF NOT EXISTS`. If the index exists and `indisvalid = false`, it runs `DROP INDEX CONCURRENTLY IF EXISTS` first (its own autocommit statement, still outside any transaction), then the CREATE.
+Why: a `CREATE INDEX CONCURRENTLY` that fails partway (a connection drop, a killed backend) leaves the index behind as INVALID rather than rolling it back; Postgres itself does not retry or revalidate it. `IF NOT EXISTS` alone would then see the index "already exists" on every future `migrateDatabase()` call and skip it forever, leaving the package-pin index permanently unusable and the 0009 fix effectively undone for queries that need it.
+Alternatives: always `DROP INDEX CONCURRENTLY IF EXISTS` before every CREATE, unconditionally (works, but needlessly rebuilds a healthy index on every migrate run on a database that may eventually be large); have an operator notice and fix it by hand (no test coverage of the common path, easy to miss); drop `IF NOT EXISTS` and let the CREATE fail loudly on a second run (breaks the "re-running is a no-op" contract this task also had to preserve).
+Reversible: yes — entirely inside `packages/db`; no port or contract change.

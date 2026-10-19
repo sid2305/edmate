@@ -65,10 +65,28 @@ async function isConstraintValidated(
 }
 
 /**
+ * True when an index with this name already exists but is INVALID (a `CREATE INDEX
+ * CONCURRENTLY` that failed or was killed partway leaves exactly this behind: the index exists,
+ * so a later `IF NOT EXISTS` silently keeps it, forever unused and never revalidated). No row
+ * (the index doesn't exist, or exists and is valid) is "nothing to fix".
+ */
+async function isIndexInvalid(client: pg.Pool, indexName: string): Promise<boolean> {
+  const { rows } = await client.query<{ indisvalid: boolean }>(
+    `select i.indisvalid from pg_class c
+       join pg_index i on i.indexrelid = c.oid
+       where c.relname = $1`,
+    [indexName],
+  );
+  return rows[0]?.indisvalid === false;
+}
+
+/**
  * Runs every `PostMigrateStep` once drizzle's migrate() has committed. Each step is its own
  * statement with no surrounding transaction (node-postgres autocommits a bare `.query()`), and
- * every step is idempotent: a `VALIDATE CONSTRAINT` already satisfied is skipped, and
- * `CREATE INDEX CONCURRENTLY IF NOT EXISTS` is a no-op on a second run.
+ * every step is idempotent: a `VALIDATE CONSTRAINT` already satisfied is skipped; an index left
+ * INVALID by an earlier failed or killed `CREATE INDEX CONCURRENTLY` is dropped and rebuilt (both
+ * steps still autocommit, outside any transaction); otherwise `CREATE INDEX CONCURRENTLY IF NOT
+ * EXISTS` is a no-op on a second run.
  */
 export async function runPostMigrateSteps(
   client: pg.Pool,
@@ -81,6 +99,9 @@ export async function runPostMigrateSteps(
         `ALTER TABLE "${step.table}" VALIDATE CONSTRAINT "${step.constraint}"`,
       );
     } else {
+      if (await isIndexInvalid(client, step.indexName)) {
+        await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${step.indexName}"`);
+      }
       await client.query(step.sql);
     }
   }

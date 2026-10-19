@@ -130,6 +130,37 @@ describe.skipIf(!up)(
       }, TEST_URL);
     });
 
+    it('rebuilds an index left INVALID by a failed or killed earlier CREATE INDEX CONCURRENTLY', async () => {
+      // Simulates what a killed concurrent build leaves behind: the index exists, but
+      // indisvalid = false. A later IF NOT EXISTS alone would keep it broken forever.
+      await admin(
+        (c) =>
+          c.query(
+            `update pg_index set indisvalid = false
+               where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+          ),
+        TEST_URL,
+      );
+      await admin(async (c) => {
+        const before = await c.query<{ indisvalid: boolean }>(
+          `select indisvalid from pg_index
+             where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+        );
+        expect(before.rows[0]?.indisvalid, 'forced INVALID').toBe(false);
+      }, TEST_URL);
+
+      await migrateDatabase(TEST_URL);
+
+      await admin(async (c) => {
+        const after = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+          `select indisvalid, indisready from pg_index
+             where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+        );
+        expect(after.rows).toHaveLength(1);
+        expect(after.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+      }, TEST_URL);
+    });
+
     it('rejects a session that violates the 0009 package-pin constraints', async () => {
       await admin(async (c) => {
         // Self-contained fixture: a teacher, acting as its own student, and that teacher's agent.
