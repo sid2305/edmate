@@ -867,6 +867,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.4c
+  milestone: M4
+  title: 'Pre-guard follow-ups (4.4 safety review): run the moderation and jailbreak rule tables in the runner''s failed-chain path, as distress keywords already are, so a down distress classifier still raises misuse alerts for rule hits; a router distress label must not drop a misuse alert'
+  accept: 'with the distress classifier down, a harm_to_others rule hit still raises a misuse alert; tests.'
+  deps:
+  - '4.4'
+  status: todo
+  branch: null
+  model: null
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
