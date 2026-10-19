@@ -160,7 +160,7 @@ describe('no hard keyword: the small-tier classifier decides', () => {
 });
 
 describe('several soft phrases: the classifier still decides (safety review)', () => {
-  const TWO_SOFT = 'i bought rope today. tomorrow i wont be here';
+  const TWO_SOFT = 'i feel hopeless. i cant do this anymore';
 
   it('two soft + classifier false → ok', async () => {
     const s = scripted({ generateObject: [{ value: { distress: false } }] });

@@ -53,8 +53,11 @@ const SEEDED_DISTRESS: readonly string[] = [
   'sach bolu toh ab jeene ki ichha nahi rahi',
 ];
 
-/** Seeded lines that are soft on purpose: the classifier decides, and its failure escalates. */
-const SEEDED_SOFT: readonly string[] = [
+/**
+ * Seeded lines made of soft phrases that a combination rule makes hard (lead decision, fix
+ * round 2): a method word plus another soft phrase; a first-person vanish phrase plus hopelessness.
+ */
+const SEEDED_COMBINATION: readonly string[] = [
   'whatever. doesnt matter. nothing matters, i just want to disappear',
   'i bought rope today. tomorrow i wont be here, thanks for the help with python',
 ];
@@ -171,7 +174,8 @@ describe('distressKeywordLevel: the 35 seeded distress cases', () => {
       expect(hasDistressKeyword(text, 'en')).toBe(true);
       expect(hasDistressKeyword(text, 'hi')).toBe(true);
     },
-    1_000,
+    // The first call compiles every table (slow under coverage instrumentation).
+    5_000,
   );
 
   it('there are 39 hard ones (35 seeded before, minus 1 now soft, plus 5 from the fix round)', () => {
@@ -179,12 +183,53 @@ describe('distressKeywordLevel: the 35 seeded distress cases', () => {
   }, 1_000);
 });
 
-describe('soft seeded lines: the classifier decides', () => {
-  it.each(SEEDED_SOFT.map((t) => [t] as const))(
-    '%s → soft, never hard',
+describe('combination rules (lead decision, fix round 2)', () => {
+  it.each(SEEDED_COMBINATION.map((t) => [t] as const))(
+    'seeded %s → hard by a combination',
     (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+      expect(hasDistressKeyword(text)).toBe(true);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['(a) method + another soft phrase', 'got a noose. i cant take it anymore'],
+    ['(a) Hinglish method + another soft phrase', 'zehar le aaya hu. thak gaya hu'],
+    ['(a) Devanagari method + another soft phrase', 'छत पर हूं, अब और नहीं सहा जाता'],
+    ['(b) vanish + hopelessness', 'no point anymore. i want to vanish'],
+    ['(b) Hinglish vanish + hopelessness', 'koi fayda nahi, bas gayab ho jaana hai'],
+    ['(b) Devanagari vanish + hopelessness', 'कोई फायदा नहीं, मुझे गायब हो जाना है'],
+  ] as const)(
+    '%s → hard',
+    (_rule, text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+    },
+    1_000,
+  );
+
+  it.each([
+    ['a method word alone', 'i bought rope today'],
+    ['a vanish phrase alone', 'i just want to disappear'],
+    ['a hopelessness phrase alone', 'nothing matters'],
+    ['two soft phrases with no method or vanish', 'i feel hopeless. i cant do this anymore'],
+  ] as const)(
+    '%s → soft (the classifier decides)',
+    (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('soft');
-      expect(hasDistressKeyword(text)).toBe(false);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['this recursion is hopeless, how do I end it'],
+    ['jump to the next loop iteration, nothing matters about the order'],
+    ["I want the error to disappear, there's no point running it again"],
+    ['tie the rope knot in the diagram'],
+  ] as const)(
+    'coding near-miss %s → never hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).not.toBe('hard');
     },
     1_000,
   );

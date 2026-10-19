@@ -13,8 +13,11 @@
 //   abuse disclosures. It escalates on its own.
 // - `soft`: ambiguous on its own: bare nouns ("suicide"), third person or past tense ("he killed
 //   himself", "wanted to die"), vague farewells ("tomorrow i wont be here"), and any hard phrase in
-//   a game context ("in minecraft"). distressDetect asks the classifier, also when several soft
-//   phrases hit; a classifier failure on a soft hit escalates (lead answer 3, safety review).
+//   a game context ("in minecraft"). distressDetect asks the classifier, also when two unrelated
+//   soft phrases hit; a classifier failure on a soft hit escalates (lead answer 3, safety review).
+// - Two combinations of soft phrases count as hard (lead decision, fix round 2): (a) a method
+//   phrase (rope or noose, pills, blade, jumping off, poison, a roof) plus any other soft phrase;
+//   (b) a first-person vanish phrase plus a hopelessness phrase.
 // - Phrases with letter-aware boundaries, so "skill", "diet", "kill -9", "die roll" or "loop
 //   khatam" never fire (lead answer 9).
 // Built in, not locale-pack data: LocalePack has no keyword field (plan Q1); 3.10 can move it.
@@ -195,50 +198,80 @@ const HARD: readonly Entry[] = [
   abuse('घर (?:जाने|जाना) से (?:डर|डरता|डरती)'),
 ];
 
-const SOFT: readonly RegExp[] = [
+/** Soft phrase families: `method` and `vanish`/`hopeless` drive the combination rules. */
+type SoftFamily = 'method' | 'vanish' | 'hopeless' | 'other';
+
+interface SoftEntry {
+  re: RegExp;
+  family: SoftFamily;
+}
+
+const soft =
+  (family: SoftFamily) =>
+  (src: string): SoftEntry => ({ re: phrase(src), family });
+const method = soft('method');
+const vanish = soft('vanish');
+const hopeless = soft('hopeless');
+const other = soft('other');
+
+const SOFT: readonly SoftEntry[] = [
+  // Methods (rule a), as phrases: "jump to the next loop" or "a rope knot" are not methods.
+  method('noose|fanda|(?:bought|got|buy|get|have|found|brought) (?:a |some |the )?rope|rope (?:around|for)'),
+  method('pills|tablets|(?:neend|nind) (?:ki|wali) gol\\S*|goliyan|goliyaan|गोलियां|गोलियाँ'),
+  method('blade|razor|ब्लेड'),
+  method('jump (?:off|from)|kood (?:ja|jau|jaun|jaunga|jaungi|jaaunga|jaaungi)|कूद'),
+  method('zehar|zeher|zahar|jahar|poison|जहर'),
+  method('(?:the|a|my|our) roof|rooftop|(?:chhat|chat) (?:se|par|pe|pr)|छत (?:से|पर|पे)'),
+  // First-person vanishing (rule b, with hopelessness).
+  vanish(
+    '(?:want|wanna|wish i could|wish to) (?:to )?(?:just )?(?:disappear|vanish)|' +
+      'gayab (?:ho jaana|ho jana|ho jaun|ho jaunga|ho jaungi|hona)|गायब हो (?:जाना|जाऊं|जाऊंगा|जाऊंगी)',
+  ),
+  // Hopelessness (rule b).
+  hopeless(
+    `nothing (?:really )?matters|no point|koi (?:fayda|faida) ${NOT}|` +
+      `kuch (?:bhi )?matter ${NOT} (?:karta|krta|karti)|कोई फायदा ${DEVA_NOT}`,
+  ),
   // English: bare nouns, third person and past tense, vaguer phrases.
-  'suicid\\S*|self ?harm\\S*|overdos(?:e|ing)',
-  '(?:killed|kills) (?:him|her|them)sel(?:f|ves)|(?:wanted|wants) to die',
-  '(?:cant|can not|cannot) (?:do|take|handle|bear) (?:this|it)(?: \\S+)? any ?mor(?:e)?',
-  'nothing (?:really )?matters',
-  'hopeless|worthless|useless at everything|im useless',
-  '(?:want|wanna|wish i could) (?:to )?(?:just )?disappear',
-  `(?:hate|hates) ${SELF}`,
-  'end it',
-  'no point (?:trying|in trying|anymore|any more)',
-  'pills|tablets',
-  '(?:never|not) wake up',
-  '(?:goodbye|bye) (?:forever|everyone)|this is goodbye',
-  'at peace with (?:it|this|my decision|dying)',
-  '(?:made|making) (?:my|the|a) (?:final )?decision',
-  '(?:wont|will not) need to (?:help|see|talk to) me',
-  `(?:tomorrow|tonight)${gap(1)} i (?:wont|will not) be (?:here|around|alive)|(?:wont|will not) be (?:here|around|alive) (?:tomorrow|tonight|anymore)`,
-  'noose|(?:bought|got|buy|get) (?:a |some )?rope',
-  'tired of (?:living|life|everything|being alive)',
-  '(?:give|giving|gave) up on (?:life|everything|myself)',
-  '(?:havent|have not|didnt) eaten (?:in|for) (?:\\S+ )?days',
-  '(?:nobody|no one|noone) (?:cares|would care|understands|loves) (?:about )?me',
-  'dont tell anyone|i dont matter|(?:im|i am) (?:a )?burden',
+  other('suicid\\S*|self ?harm\\S*|overdos(?:e|ing)'),
+  other('(?:killed|kills) (?:him|her|them)sel(?:f|ves)|(?:wanted|wants) to die'),
+  other('(?:cant|can not|cannot) (?:do|take|handle|bear) (?:this|it)(?: \\S+)? any ?mor(?:e)?'),
+  other('hopeless|worthless|useless at everything|im useless'),
+  other(`(?:hate|hates) ${SELF}`),
+  other('end it'),
+  other('(?:never|not) wake up'),
+  other('(?:goodbye|bye) (?:forever|everyone)|this is goodbye'),
+  other('at peace with (?:it|this|my decision|dying)'),
+  other('(?:made|making) (?:my|the|a) (?:final )?decision'),
+  other('(?:wont|will not) need to (?:help|see|talk to) me'),
+  other(
+    `(?:tomorrow|tonight)${gap(1)} i (?:wont|will not) be (?:here|around|alive)|` +
+      '(?:wont|will not) be (?:here|around|alive) (?:tomorrow|tonight|anymore)',
+  ),
+  other('tired of (?:living|life|everything|being alive)'),
+  other('(?:give|giving|gave) up on (?:life|everything|myself)'),
+  other('(?:havent|have not|didnt) eaten (?:in|for) (?:\\S+ )?days'),
+  other('(?:nobody|no one|noone) (?:cares|would care|understands|loves) (?:about )?me'),
+  other('dont tell anyone|i dont matter|(?:im|i am) (?:a )?burden'),
   // Romanised Hindi.
-  'aatmahatya|atmahatya|aatmhatya|atmhatya|khudkushi|khudkhushi',
-  '(?:thak|thk) (?:gaya|gya|gayi|gyi|gai) (?:hu|hoon|hun|h)',
-  `${NOT} (?:rahunga|rahungi|rahoonga|rahoongi)|(?:rahunga|rahungi) ${NOT}`,
-  'sab (?:bekaar|bekar|bakwas)',
-  `koi ${NOT} (?:samajhta|samjhta|samajhti)`,
-  `(?:bardasht|bardaasht|sahan|sehan) ${NOT} (?:hota|hoti|hoga|ho raha)`,
-  '(?:kisi ko|kisiko) (?:mat|na) (?:batana|bata|batao)',
-  'jaan (?:de dunga|de dungi|de du|dedu|dena)',
-  '(?:zindagi|life) se (?:tang|pareshan|thak)',
-  `(?:jeene|jine) ka dil ${NOT}|(?:jeena|jina) ${NOT} (?:aata|ata|aati)`,
-  '(?:neend|nind) (?:ki|wali) gol\\S*',
+  other('aatmahatya|atmahatya|aatmhatya|atmhatya|khudkushi|khudkhushi'),
+  other('(?:thak|thk) (?:gaya|gya|gayi|gyi|gai) (?:hu|hoon|hun|h)'),
+  other(`${NOT} (?:rahunga|rahungi|rahoonga|rahoongi)|(?:rahunga|rahungi) ${NOT}`),
+  other('sab (?:bekaar|bekar|bakwas)'),
+  other(`koi ${NOT} (?:samajhta|samjhta|samajhti)`),
+  other(`(?:bardasht|bardaasht|sahan|sehan) ${NOT} (?:hota|hoti|hoga|ho raha)`),
+  other('(?:kisi ko|kisiko) (?:mat|na) (?:batana|bata|batao)'),
+  other('jaan (?:de dunga|de dungi|de du|dedu|dena)'),
+  other('(?:zindagi|life) se (?:tang|pareshan|thak)'),
+  other(`(?:jeene|jine) ka dil ${NOT}|(?:jeena|jina) ${NOT} (?:aata|ata|aati)`),
   // Devanagari.
-  'आत्महत्या|खुदकुशी|सुसाइड',
-  `(?:सहा|सहन|बर्दाश्त) ${DEVA_NOT} (?:जाता|होता)|${DEVA_NOT} (?:सहा|सहन) (?:जाता|होता)`,
-  'थक (?:गया|गई|गयी) (?:हूं|हू)',
-  `कोई ${DEVA_NOT} समझता`,
-  'किसी को (?:मत|न) बताना',
-  'जान दे (?:दूंगा|दूंगी|दूं|देना)',
-].map(phrase);
+  other('आत्महत्या|खुदकुशी|सुसाइड'),
+  other(`(?:सहा|सहन|बर्दाश्त) ${DEVA_NOT} (?:जाता|होता)|${DEVA_NOT} (?:सहा|सहन) (?:जाता|होता)`),
+  other('थक (?:गया|गई|गयी) (?:हूं|हू)'),
+  other(`कोई ${DEVA_NOT} समझता`),
+  other('किसी को (?:मत|न) बताना'),
+  other('जान दे (?:दूंगा|दूंगी|दूं|देना)'),
+];
 
 /** A hard phrase about a game is ambiguous ("how to die in minecraft"): it counts as soft. */
 const GAME = phrase(
@@ -356,8 +389,12 @@ export function distressKeywordMatch(text: string): DistressKeywordMatch {
   const hard = HARD.filter((e) => hits(e.re));
   const compact = forms.some((f) => f.split(' ').some((w) => COMPACT.test(w)));
   const game = hits(GAME);
-  let soft = SOFT.filter(hits).length;
-  if (!game && (hard.length > 0 || compact)) {
+  const softHit = SOFT.filter((e) => hits(e.re));
+  let soft = softHit.length;
+  const has = (f: SoftFamily) => softHit.some((e) => e.family === f);
+  // (a) a method plus any other soft phrase; (b) vanishing plus hopelessness.
+  const combination = (has('method') && soft >= 2) || (has('vanish') && has('hopeless'));
+  if (!game && (hard.length > 0 || compact || combination)) {
     const kind = hard.length > 0 && hard.every((e) => e.kind === 'abuse') ? 'abuse' : 'distress';
     return { level: 'hard', kind, softHits: soft };
   }
