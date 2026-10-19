@@ -1,14 +1,27 @@
-import type { ModelGateway } from '@edmate/contracts';
-import { demoSafetyAlert, demoTurnTrace, usageMain } from '@edmate/contracts/fixtures';
+import type { Message, ModelGateway } from '@edmate/contracts';
+import {
+  demoSafetyAlert,
+  demoTurnTrace,
+  usageMain,
+} from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { EventQueue } from '../pipeline/events.js';
 import {
   memoryAlertSink,
+  memorySessionStateStore,
   memoryTraceSink,
+  memoryTranscriptStore,
   memoryUsageMeter,
   UnusedPortError,
   unusedPort,
 } from './memoryPorts.js';
+
+const demoMessageAgent: Message = {
+  id: 'msg_agent',
+  role: 'agent',
+  text: 'What do you notice?',
+  createdAt: '2026-10-18T10:00:00.000Z',
+};
 
 describe('memory ports', () => {
   it('unusedPort throws and records each call; it is not a thenable', async () => {
@@ -63,5 +76,27 @@ describe('EventQueue', () => {
     const pending = it.next();
     q.push(7);
     expect(await pending).toEqual({ value: 7, done: false });
+  });
+
+  it('memoryTranscriptStore appends per session and returns the newest `limit`, oldest first', async () => {
+    const t = memoryTranscriptStore();
+    const a = { ...demoMessageAgent, id: 'msg_a' };
+    const b = { ...demoMessageAgent, id: 'msg_b' };
+    await t.append('ses_1', a);
+    await t.append('ses_2', { ...demoMessageAgent, id: 'msg_other' });
+    await t.append('ses_1', b);
+    expect(await t.history('ses_1', 1)).toEqual([b]);
+    expect(await t.history('ses_1', 10)).toEqual([a, b]);
+    expect(t.appended).toHaveLength(3);
+    await expect(memoryTranscriptStore({ fail: true }).append('ses_1', a)).rejects.toThrow('down');
+  });
+
+  it('memorySessionStateStore records every save and can fail', async () => {
+    const s = memorySessionStateStore();
+    await s.saveHelpState('ses_1', { v: 1 });
+    expect(s.saved).toEqual([{ sessionId: 'ses_1', helpState: { v: 1 } }]);
+    await expect(memorySessionStateStore({ fail: true }).saveHelpState('ses_1', {})).rejects.toThrow(
+      'down',
+    );
   });
 });
