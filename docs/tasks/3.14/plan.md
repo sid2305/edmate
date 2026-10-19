@@ -95,3 +95,10 @@ Recommended reviewers even though no path is mandatory here (this is explicitly 
 - **Q3 Exact sliding log vs an approximate fixed-bucket counter.** Recommend keeping the **exact** sliding-window-log (ZSET) algorithm 3.2 already ships and tests, rather than switching to a cheaper approximate "two fixed buckets" counter — correctness parity with existing tests matters more here than the (small) extra Redis memory of up to `max` entries per key.
 
 Everything else in this task (key naming, Lua script shape, test file names) is an implementation detail for the builder, not a decision needing the human.
+
+## Lead answers (19 Oct 2026)
+
+- Q1, Q2 and Q3 agreed: harness-owned interfaces with no ADR; Redis over Postgres (one Lua EVAL, a sliding-window log, `now` passed in); exact sliding log. Failures propagate (policies.ts already fails closed to `rate_limited`). The window is rolling 24 h, not calendar days.
+- Fix the board's stale "ADR-0005" mention in the handoff (no ADR needed).
+- Tests run against real Redis (apps/worker/test/compose.port.yaml); include multi-process correctness (two clients racing at the limit) and an explicit per-test timeout. No wall-clock bounds tighter than 5 s.
+- Reviewers: typescript-reviewer and silent-failure-hunter (sonnet).
