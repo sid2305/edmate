@@ -6,6 +6,7 @@
 //   retry   generate's retry, "on the fallback model": `tiers.main` := `policy.fallback` (main
 //           again when the agent has no fallback).
 import type { Entitlement, ModelGateway, ModelPolicy } from '@edmate/contracts';
+import { HarnessError } from './errors.js';
 import type { PipelineDeps, TurnBilling, TurnGateway } from './types.js';
 
 export function billingFor(e: Entitlement, turnId: string): TurnBilling {
@@ -31,7 +32,7 @@ export function turnPolicies(p: ModelPolicy): {
 
 /** A gateway that refuses every call: before entitle, or when the turn gateway can't be built. */
 export function refusingGateway(reason: string): ModelGateway {
-  const refuse = () => new Error(`no model call: ${reason}`);
+  const refuse = () => new HarnessError(`no model call: ${reason}`);
   return {
     stream: () => {
       throw refuse();
@@ -55,7 +56,7 @@ export function buildTurnGateway(
     typeof g.embed !== 'function' ||
     typeof (tg as Partial<TurnGateway>).metered !== 'boolean'
   ) {
-    throw new Error('gatewayFor returned no usable gateway');
+    throw new HarnessError('gatewayFor returned no usable gateway');
   }
   return tg as TurnGateway;
 }

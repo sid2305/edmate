@@ -36,6 +36,7 @@ import { type StepOverrides, testDecideResult, testDeps, testSteps } from '../te
 import { virtualClock } from '../testing/virtualClock.js';
 import { BACKGROUND_LOG_MESSAGE_MAX } from './backgroundLog.js';
 import { cancelSource } from './clock.js';
+import { HarnessError } from './errors.js';
 import { runTurn } from './runner.js';
 import { defaultSteps } from './steps/index.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
@@ -224,7 +225,15 @@ describe('metering', () => {
       w.clock,
     );
     expect(events).toEqual([{ type: 'error', code: 'provider_error', retryable: true }]);
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
+    // The guards' gateway failure, then each generate attempt (by name only).
+    expect(result.background.map((b) => [b.task, String(b.error)])).toEqual([
+      ['runner', 'Error: router config broken'],
+      ['generate', 'GenerateAttemptFailed: generate primary attempt failed: error (Error)'],
+      ['generate', 'GenerateAttemptFailed: generate fallback attempt failed: error (Error)'],
+    ]);
+    expect(JSON.stringify(result.background.map((b) => String(b.error)).slice(1))).not.toContain(
+      'router config broken',
+    );
     expect(w.spy.requests).toEqual([]);
   });
 
@@ -268,6 +277,7 @@ describe('metering', () => {
     expect(w.spy.requests).toEqual([]);
     expect(result.background.map((b) => String(b.error))).toEqual([
       'Error: maxTurnCostMicroUsd is invalid; every model call is refused',
+      'GenerateAttemptFailed: generate primary attempt failed: error (TurnAbort)',
     ]);
   });
 
@@ -577,7 +587,7 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
 });
 
 describe('background failures are logged (lead answer Q7)', () => {
-  it('logs each failure with the task, the ids and the error name and message, never turn text', async () => {
+  it('logs each failure with the task, the ids and the error name; a foreign error gets no message', async () => {
     const log = memoryTurnLog();
     const w = world([[say('Hi.'), used]], {
       overrides: {
@@ -600,7 +610,7 @@ describe('background failures are logged (lead answer Q7)', () => {
         agentId: 'agt_test_01',
         studentId: 'stu_test_01',
         errorName: 'Error',
-        errorMessage: 'transcript store down',
+        errorMessage: '',
       },
     ]);
     const json = JSON.stringify(log.entries);
@@ -647,7 +657,7 @@ describe('background failures are logged (lead answer Q7)', () => {
         agentId: 'agt_test_01',
         studentId: 'stu_test_01',
         errorName: 'Error',
-        errorMessage: 'id source down',
+        errorMessage: '',
       },
     ]);
   });
@@ -658,13 +668,15 @@ describe('background failures are logged (lead answer Q7)', () => {
       overrides: { log },
       steps: {
         admit: () => Promise.resolve(),
-        commit: () => Promise.reject(new Error('x'.repeat(1_000))),
+        commit: () => Promise.reject(new HarnessError('x'.repeat(1_000))),
       },
     });
     const input = { ...demoTurnInput, sessionId: 'my phone is 555 0100' };
     await driveTurn(runTurn(input, { deps: w.t.deps, steps: w.steps }), w.clock);
     expect(log.entries[0]?.sessionId).toBe('invalid');
-    expect(log.entries[0]?.errorMessage).toHaveLength(BACKGROUND_LOG_MESSAGE_MAX);
+    expect(log.entries.find((e) => e.task === 'commit')?.errorMessage).toHaveLength(
+      BACKGROUND_LOG_MESSAGE_MAX,
+    );
   });
 
   it('a non-Error throw is logged by type, with no message', async () => {
@@ -695,4 +707,223 @@ describe('background failures are logged (lead answer Q7)', () => {
     await driveTurn(runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }), w.clock);
     expect(log.entries).toEqual([]);
   });
+
+  it("a harness error's message is logged (it holds no turn text)", async () => {
+    const log = memoryTurnLog();
+    const w = world(
+      [
+        [say('One '), fail],
+        [say('ok'), used],
+      ],
+      { overrides: { log } },
+    );
+    await driveTurn(runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }), w.clock);
+    expect(log.entries).toEqual([
+      expect.objectContaining({
+        task: 'generate',
+        errorName: 'GenerateAttemptFailed',
+        errorMessage: 'generate primary attempt failed: error (ScriptedProviderError)',
+      }),
+    ]);
+  });
+});
+
+describe('fix round: generate failures, unpriced usage, runner-bug clearing, close settling', () => {
+  it('a failed primary is reported by name only, then the retry succeeds', async () => {
+    const w = world([
+      [say('One '), fail],
+      [say('ok'), used],
+    ]);
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(result.background.map((b) => [b.task, String(b.error)])).toEqual([
+      [
+        'generate',
+        'GenerateAttemptFailed: generate primary attempt failed: error (ScriptedProviderError)',
+      ],
+    ]);
+  });
+
+  it('both attempts failing reports both; a timeout and an invalid result say so', async () => {
+    let n = 0;
+    const w = world([], {
+      steps: {
+        generate: async (env) => {
+          if (++n === 1) {
+            await env.deps.clock.sleep(20_000);
+            return { draft: 'late' };
+          }
+          return { draft: 5 } as unknown as { draft: string };
+        },
+      },
+    });
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.clock,
+    );
+    expect(events).toEqual([{ type: 'error', code: 'provider_error', retryable: true }]);
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'GenerateAttemptFailed: generate primary attempt failed: timeout',
+      'GenerateAttemptFailed: generate fallback attempt failed: invalid_result',
+    ]);
+  }, 10_000);
+
+  it('an invalid emitted event is reported as invalid_event', async () => {
+    let n = 0;
+    const w = world([], {
+      steps: {
+        generate: (_env, _x, emit) => {
+          if (++n === 1) {
+            try {
+              emit({ type: 'done', messageId: 'm_x', usage: [] });
+            } catch {
+              // the runner rejects it
+            }
+          }
+          return Promise.resolve({ draft: 'ok' });
+        },
+      },
+    });
+    const { result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.clock,
+    );
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'GenerateAttemptFailed: generate primary attempt failed: invalid_event',
+    ]);
+  });
+
+  it('unpriced usage stays in the trace, is never metered as free, and is reported as UnpricedUsage', async () => {
+    const w = world([[say('Hi '), used]], { overrides: { priceUsage: () => undefined } });
+    const { result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.clock,
+    );
+    expect(result.trace?.usage).toEqual([usageMain]);
+    expect(w.t.usage.rows).toEqual([]);
+    expect(result.background.map((b) => String(b.error))).toContain(
+      `UnpricedUsage: usage for an unpriced model: ${usageMain.model}`,
+    );
+  });
+
+  it("a runner bug after text was shown clears it with replace '' before the error", async () => {
+    const vc = virtualClock();
+    let boom = false;
+    const clock = {
+      now: () => {
+        if (boom) throw new Error('clock down');
+        return vc.now();
+      },
+      sleep: (ms: number, c?: Parameters<typeof vc.sleep>[1]) => vc.sleep(ms, c),
+    };
+    const t = testDeps({ clock: vc, overrides: { clock } });
+    const steps = testSteps({
+      generate: (_env, _x, emit) => {
+        emit({ type: 'token', text: 'Partial ' });
+        boom = true;
+        return Promise.resolve({ draft: 'Partial ' });
+      },
+    });
+    const run = runTurn(demoTurnInput, { deps: t.deps, steps });
+    const events: TurnEvent[] = [];
+    await vc.drive(
+      (async () => {
+        for await (const e of run.events) events.push(e);
+      })(),
+    );
+    expect(events).toEqual([
+      { type: 'token', text: 'Partial ' },
+      { type: 'replace', text: '' },
+      { type: 'error', code: 'provider_error', retryable: true },
+    ]);
+  });
+
+  it("a skill event shown before a retry is cleared by the retry's replace ''", async () => {
+    let n = 0;
+    const w = world([], {
+      steps: {
+        generate: (_env, _x, emit) => {
+          if (++n === 1) {
+            emit({ type: 'skill', skill: 'coach', payload: { item: 1 } });
+            return Promise.reject(new Error('provider down'));
+          }
+          emit({ type: 'token', text: 'ok' });
+          return Promise.resolve({ draft: 'ok' });
+        },
+      },
+    });
+    const { events } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.clock,
+    );
+    expect(events.map((e) => e.type)).toEqual(['skill', 'replace', 'token', 'done']);
+  });
+
+  function closingGateway(
+    clock: { sleep(ms: number): Promise<void> },
+    closeMs: number,
+    fails: boolean,
+  ) {
+    return {
+      stream: () => ({
+        [Symbol.asyncIterator]: () => {
+          let first = true;
+          return {
+            next: () =>
+              first
+                ? ((first = false), Promise.resolve({ value: say('First '), done: false as const }))
+                : new Promise<IteratorResult<ModelChunk>>(() => undefined),
+            return: async () => {
+              await clock.sleep(closeMs);
+              if (fails) throw new Error('close failed: SECRET_PROMPT');
+              return { value: undefined, done: true as const };
+            },
+          };
+        },
+      }),
+      generateObject: () => Promise.reject(new Error('unused')),
+      embed: () => Promise.reject(new Error('unused')),
+    };
+  }
+
+  async function cancelOnFirstToken(closeMs: number, fails: boolean) {
+    const clock = virtualClock();
+    const gw = closingGateway(clock, closeMs, fails);
+    const t = testDeps({
+      clock,
+      overrides: { gatewayFor: () => ({ gateway: gw, metered: false }) },
+    });
+    const c = cancelSource();
+    const steps = testSteps({
+      entitle: fixtureEntitle,
+      generate: (env, x, emit) =>
+        defaultSteps.generate(env, x, (e) => {
+          emit(e);
+          if (e.type === 'token') c.cancel();
+        }),
+    });
+    return driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps, cancel: c.token }), clock);
+  }
+
+  it('a stream close that fails late is in finished.background (name only), not lost', async () => {
+    const { result } = await cancelOnFirstToken(300, true);
+    const closes = result.background.filter((b) => String(b.error).startsWith('StreamCloseFailed'));
+    expect(closes.map((b) => String(b.error))).toEqual([
+      'StreamCloseFailed: closing the model stream failed (Error)',
+    ]);
+    expect(JSON.stringify(result.background.map((b) => String(b.error)))).not.toContain(
+      'SECRET_PROMPT',
+    );
+  });
+
+  it('a stream close that never settles holds finished back at most STREAM_CLOSE_SETTLE_MS', async () => {
+    const { result, timed } = await cancelOnFirstToken(60_000, false);
+    expect(result.background.map((b) => String(b.error))).toContain(
+      'Error: a model stream close did not settle in time',
+    );
+    expect(timed.length).toBeGreaterThan(0);
+  }, 10_000);
 });

@@ -97,6 +97,7 @@ function setup(
       checkBeforeCall: o.usage?.checkBeforeCall ?? (() => undefined),
     },
     report: (e) => void reported.push(e),
+    track: () => undefined,
   };
   const d = { ...decision, ...o.decision };
   const c = o.ctx ?? ctx;

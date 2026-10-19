@@ -241,7 +241,7 @@ export function testSteps(overrides: StepOverrides = {}): TestSteps {
  */
 export function stepEnvExtras(
   reported: unknown[] = [],
-): Pick<StepEnv, 'gateway' | 'usage' | 'report'> {
+): Pick<StepEnv, 'gateway' | 'usage' | 'report' | 'track'> {
   return {
     gateway: refusingGateway('this step test makes no model call'),
     usage: {
@@ -251,6 +251,7 @@ export function stepEnvExtras(
       checkBeforeCall: () => undefined,
     },
     report: (e) => void reported.push(e),
+    track: () => undefined,
   };
 }
 

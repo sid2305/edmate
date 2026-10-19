@@ -68,5 +68,11 @@ export const ALERT_RETRY_MAX_MS = 30_000;
  */
 export const TEACHER_QUESTION_TIMEOUT_MS = 500;
 
+/**
+ * How long `finished` waits for model stream closes (iterator `return()`) that generate started,
+ * so their failures are reported before the background log is written.
+ */
+export const STREAM_CLOSE_SETTLE_MS = 1_000;
+
 /** One `AlertSink.raise` attempt that hangs this long counts as failed and is retried. */
 export const ALERT_ATTEMPT_TIMEOUT_MS = 5_000;

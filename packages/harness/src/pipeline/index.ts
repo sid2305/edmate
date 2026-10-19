@@ -10,7 +10,11 @@ export {
   linkCancel,
 } from './clock.js';
 export {
+  errorName,
+  GenerateAttemptFailed,
+  HarnessError,
   InvalidEventError,
+  UnpricedUsage,
   StepNotImplementedError,
   TurnAbort,
   TurnCancelled,
@@ -49,6 +53,7 @@ export {
   STEP_SPEC,
   type StepName,
   type StepSpec,
+  STREAM_CLOSE_SETTLE_MS,
   TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
 export { DecideResultSchema } from './results.js';

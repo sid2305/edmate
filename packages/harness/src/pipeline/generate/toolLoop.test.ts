@@ -18,6 +18,7 @@ import {
   TOOL_RESULT_MAX_JSON_LENGTH,
   TOOL_TIMEOUT_MS,
   ToolCallNotOfferedError,
+  ToolFailed,
 } from './toolLoop.js';
 
 const base: ModelRequest = {
@@ -42,7 +43,7 @@ const calculator = testTool({
 
 function setup(
   streams: StreamStep[][],
-  o: { tools?: RegisteredTool[]; recorder?: Partial<UsageRecorder> } = {},
+  o: { tools?: RegisteredTool[]; recorder?: Partial<UsageRecorder>; mustNotReveal?: string[] } = {},
 ) {
   const clock = virtualClock();
   const spy = spyGateway(
@@ -53,6 +54,7 @@ function setup(
   const recorded: Usage[] = [];
   const outputs: { name: string; output: unknown }[] = [];
   const reported: unknown[] = [];
+  const tracked: Promise<unknown>[] = [];
   let checks = 0;
   const cancel = cancelSource();
   const input = {
@@ -75,6 +77,8 @@ function setup(
     onToolOutput: (r: RegisteredTool, output: unknown) =>
       void outputs.push({ name: r.tool.name, output }),
     report: (e: unknown) => void reported.push(e),
+    mustNotReveal: o.mustNotReveal ?? [],
+    track: (p: Promise<unknown>) => void tracked.push(p),
   };
   return {
     clock,
@@ -84,6 +88,7 @@ function setup(
     recorded,
     outputs,
     reported,
+    tracked,
     cancel,
     input,
     get checks() {
@@ -402,5 +407,112 @@ describe('runToolLoop: cost and cancel', () => {
       },
     };
     await expect(s.run()).rejects.toThrow('sync stream failure');
+  });
+});
+
+describe('runToolLoop: fix round (answer key, reports, order, close tracking)', () => {
+  const reportedTools = (r: unknown[]) =>
+    r
+      .filter((e): e is ToolFailed => e instanceof ToolFailed)
+      .map((e) => [e.tool, e.reason, e.causeName]);
+
+  it.each([
+    ['plain', { value: '5/6' }],
+    ['spaced and fullwidth', { value: '５ / ６' }],
+    ['zero-width split', { value: '5​/6' }],
+  ])(
+    'an output holding the answer key (%s) → failed and reported; it never reaches the model',
+    async (_n, output) => {
+      const leaky = testTool({
+        ...calculator.tool,
+        output: z.unknown(),
+        run: () => Promise.resolve(output),
+      });
+      const s = setup(
+        [
+          [call('c1'), used],
+          [say('ok'), used],
+        ],
+        { tools: [leaky], mustNotReveal: ['5/6'] },
+      );
+      await s.run();
+      expect(lastResults(s.spy.requests[1])).toEqual([
+        { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
+      ]);
+      expect(s.outputs).toEqual([]);
+      expect(reportedTools(s.reported)).toEqual([['calculator', 'answer_key', undefined]]);
+    },
+  );
+
+  it('a throwing tool is reported by error name only', async () => {
+    const throwing = testTool({
+      ...calculator.tool,
+      run: () => Promise.reject(new RangeError('SECRET_STUDENT_TEXT')),
+    });
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      { tools: [throwing] },
+    );
+    await s.run();
+    expect(reportedTools(s.reported)).toEqual([['calculator', 'failed', 'RangeError']]);
+    expect(JSON.stringify(s.reported.map(String))).not.toContain('SECRET_STUDENT_TEXT');
+  });
+
+  it('an output that fails tool.output is reported as invalid_output', async () => {
+    const bad = testTool({ ...calculator.tool, run: () => Promise.resolve({ value: 5 }) });
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      { tools: [bad] },
+    );
+    await s.run();
+    expect(reportedTools(s.reported)).toEqual([['calculator', 'invalid_output', undefined]]);
+  });
+
+  it('a timed-out tool is reported as timed_out', async () => {
+    const holder: { clock?: { sleep(ms: number): Promise<void> } } = {};
+    const slow = testTool({
+      ...calculator.tool,
+      run: async () => {
+        await holder.clock?.sleep(10_000);
+        return { value: 'late' };
+      },
+    });
+    const s = setup(
+      [
+        [call('c1'), used],
+        [say('ok'), used],
+      ],
+      { tools: [slow] },
+    );
+    holder.clock = s.clock;
+    await s.run();
+    expect(reportedTools(s.reported)).toEqual([['calculator', 'timed_out', undefined]]);
+  }, 10_000);
+
+  it('an unknown tool past the per-round cap is still not_available', async () => {
+    const calls = [
+      ...Array.from({ length: 4 }, (_, i) => call(`c${i}`)),
+      call('c4', 'shell.exec', {}),
+    ];
+    const s = setup([
+      [...calls, used],
+      [say('ok'), used],
+    ]);
+    await s.run();
+    const results = lastResults(s.spy.requests[1]) as { id: string; error?: string }[];
+    expect(results.at(-1)).toMatchObject({ id: 'c4', error: 'not_available' });
+  });
+
+  it('hands every early stream close to track, so the runner can wait for it', async () => {
+    const s = setup([[say('x'), call('c1'), used]], { tools: [] });
+    await expect(s.run()).rejects.toBeInstanceOf(ToolCallNotOfferedError);
+    expect(s.tracked).toHaveLength(1);
+    await expect(s.tracked[0]).resolves.toBeUndefined();
   });
 });

@@ -9,9 +9,11 @@
 // code for a failed call, never an error message.
 import type { ModelChunk, ModelGateway, ModelRequest, TurnContext } from '@edmate/contracts';
 import { type CancelToken, type Clock, linkCancel } from '../clock.js';
+import { errorName, HarnessError } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
 import { type RegisteredTool, toolSpec } from '../tools.js';
 import type { UsageRecorder } from '../types.js';
+import { revealsAnswerKey } from './answerKey.js';
 import type { StreamGate } from './streamGate.js';
 import { raceCancel, StreamReader } from './streamReader.js';
 import {
@@ -33,11 +35,28 @@ export const TOOL_TIMEOUT_MS = 3_000;
 export const TOOL_RESULT_MAX_JSON_LENGTH = 4_000;
 
 /** The model asked for a tool on a call that offered none. Names no tool (model-chosen text). */
-export class ToolCallNotOfferedError extends Error {
+export class ToolCallNotOfferedError extends HarnessError {
   override readonly name = 'ToolCallNotOfferedError';
 
   constructor() {
     super('the model called a tool on a call that offered no tools');
+  }
+}
+
+/** Why a tool call failed, as reported (the model sees only `failed` or `timed_out`). */
+export type ToolFailReason =
+  'failed' | 'timed_out' | 'invalid_output' | 'not_json' | 'too_large' | 'answer_key';
+
+/** A tool call failed. Names the tool, a fixed reason and the thrown error's name, never a message. */
+export class ToolFailed extends HarnessError {
+  override readonly name = 'ToolFailed';
+
+  constructor(
+    readonly tool: string,
+    readonly reason: ToolFailReason,
+    readonly causeName?: string,
+  ) {
+    super(`tool "${tool}" failed: ${reason}` + (causeName === undefined ? '' : ` (${causeName})`));
   }
 }
 
@@ -57,6 +76,10 @@ export interface ToolLoopInput {
   /** A tool ran and its output passed every check. */
   onToolOutput(entry: RegisteredTool, output: unknown): void;
   report(error: unknown): void;
+  /** The decision's do-not-say list: a tool output holding one is `failed`. */
+  mustNotReveal: readonly string[];
+  /** Background work (a stream close) the runner waits for before `finished`. */
+  track(settled: Promise<unknown>): void;
 }
 
 type ToolCallChunk = Extract<ModelChunk, { type: 'tool_call' }>;
@@ -84,7 +107,7 @@ export async function runToolLoop(
       messages: [...i.request.messages, ...extra],
       ...(withTools ? { tools: specs } : {}),
     };
-    const reader = new StreamReader(i.gateway.stream(req), i.cancel, i.report);
+    const reader = new StreamReader(i.gateway.stream(req), i.cancel, i.report, i.track);
     const calls: ToolCallChunk[] = [];
     let roundText = '';
     try {
@@ -117,13 +140,13 @@ export async function runToolLoop(
         ok: false,
         error,
       });
-      if (n >= MAX_TOOL_CALLS_PER_ROUND) {
-        results.push(fail('too_many_calls'));
-        continue;
-      }
       const entry = byName.get(c.name);
       if (entry === undefined) {
         results.push(fail('not_available'));
+        continue;
+      }
+      if (n >= MAX_TOOL_CALLS_PER_ROUND) {
+        results.push(fail('too_many_calls'));
         continue;
       }
       const parsed = args.ok ? entry.tool.input.safeParse(args.value) : undefined;
@@ -143,12 +166,21 @@ export async function runToolLoop(
   }
 }
 
-/** Runs one checked call; a fixed code on any failure. Throws only TurnCancelled. */
+/**
+ * Runs one checked call; a fixed code on any failure, reported first (ToolFailed, error name
+ * only). An output holding a do-not-say string is `failed`: it would hand the model the answer.
+ * Throws only TurnCancelled.
+ */
 async function runTool(
   entry: RegisteredTool,
   input: unknown,
   i: ToolLoopInput,
 ): Promise<{ value: unknown } | 'failed' | 'timed_out'> {
+  const name = entry.tool.name;
+  const failed = (reason: ToolFailReason, causeName?: string): 'failed' | 'timed_out' => {
+    i.report(new ToolFailed(name, reason, causeName));
+    return reason === 'timed_out' ? 'timed_out' : 'failed';
+  };
   const r = await raceCancel(
     runWithTimeout(
       (cancel) =>
@@ -161,11 +193,13 @@ async function runTool(
     ),
     i.cancel,
   );
-  if (r.status === 'timeout') return 'timed_out';
-  if (r.status === 'error') return 'failed';
+  if (r.status === 'timeout') return failed('timed_out');
+  if (r.status === 'error') return failed('failed', errorName(r.error));
   const checked = entry.tool.output.safeParse(r.value);
-  if (!checked.success) return 'failed';
+  if (!checked.success) return failed('invalid_output');
   const json = jsonSafe(checked.data);
-  if (!json.ok || json.json.length > TOOL_RESULT_MAX_JSON_LENGTH) return 'failed';
+  if (!json.ok) return failed('not_json');
+  if (json.json.length > TOOL_RESULT_MAX_JSON_LENGTH) return failed('too_large');
+  if (revealsAnswerKey(json.value, i.mustNotReveal)) return failed('answer_key');
   return { value: json.value };
 }

@@ -19,7 +19,7 @@
 | TeacherQuestion before `done` (Q3) | `runner.generate.test.ts` › `teacher_question`: findSimilar then open with the scrubbed text, so the raw text never appears; the event and `CommitRecord.teacherQuestionId` are set. A failure, a 500 ms timeout, another teacher's similar question or a question for someone else each mean no event, `done` still sent, and the failure reported. No text means no call. ✓ |
 | Background failures logged (Q7) | `runner.generate.test.ts` › `background failures are logged`: one entry per failure with the task, the ids, `errorName` and `errorMessage`, and never the input text. An invalid id is logged as `invalid`. The message is cut at 300 characters. A non-Error throw logs as its type with no message. A throwing logger doesn't break `finished`. A clean turn logs nothing. ✓ |
 | SSE encoder | `pipeline/sse.test.ts`: newlines stay on one data line; every event type round-trips; an invalid event throws. ✓ |
-| Gate: harness and its deps | `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --force` → `Tasks: 10 successful, 10 total`; harness `Tests 2260 passed (2260)` |
+| Gate: harness and its deps | `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --force` → `Tasks: 10 successful, 10 total`; harness `Tests 2260 passed (2260)` (2292 after fix round 1, below) |
 | Coverage | All files: 99.17 statements, 98.01 branches, 98.24 functions, 99.49 lines. `src/pipeline` 98.78 / **97.25 branches** / 98.43 / 99.61 (≥ 95% branches). `generate/*` 100% except `steps/generate.ts` (93.75% branches). `tools.ts`, `sse.ts` and `backgroundLog.ts` are 100%. |
 | Gate: dependents | `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness` → `Tasks: 34 successful, 34 total` (queue latency test green; the db and worker `*.int.test.ts` skip locally without Postgres and Redis, but they typecheck) |
 | Contracts untouched | `git diff origin/main -- packages/contracts \| wc -l` → `0` |
@@ -69,6 +69,26 @@
 - `pedagogyDecisionAskTeacher` isn't exported from the contracts fixtures, so the runner tests define an ask_teacher decision locally. Contracts are untouched.
 - Size: about 1,430 added non-test lines (source, testing helpers, README) and 2,400 test lines in one PR (the lead didn't split it into 3.7a and 3.7b).
 
+## Fix round 1 (reviews of PR #34)
+
+| Item | Fix | Evidence |
+|---|---|---|
+| 1 safety HIGH: tool output unfiltered | `runTool` checks the output with `revealsAnswerKey(decision.mustNotReveal)` and returns `failed` on a hit. `RegisteredTool` docs say tools must scope to `allowedModuleIds`, and that 4.5 adds the lockedLeak check here. | `toolLoop.test.ts` › output holding the answer key (plain, spaced + fullwidth, zero-width split) → `failed`, reported, never sent to the model |
+| 2 safety MEDIUM: raw substring check | New `generate/answerKey.ts` (`normaliseForMatch`, `revealsAnswerKey`): NFKC, lower case, strips whitespace, `\p{Z}`, commas and zero-width characters on both sides. Shared by skill events and tool outputs; 4.5 can reuse it. | `answerKey.test.ts` (12) covers 24,000, fullwidth, ZWSP, NBSP, spaced, case; `skillEvent.test.ts` has 4 more variants |
+| 3 silent CRITICAL: generate error dropped | Every failed attempt pushes `GenerateAttemptFailed(attempt, kind, errorName)` to `background` (task `generate`): on the retry path and on the final failure. Kinds: `error`, `timeout`, `invalid_result`, `invalid_event`. | `runner.generate.test.ts` › fix round: retry, both fail, timeout, invalid result, invalid event |
+| 4 silent HIGH: tool exception discarded | `runTool` reports `ToolFailed(tool, reason, errorName)` before returning `failed` or `timed_out`. Reasons: `failed`, `timed_out`, `invalid_output`, `not_json`, `too_large`, `answer_key`. | `toolLoop.test.ts` › throwing (name only, no message), invalid output, timed out |
+| 5 silent HIGH: unpriced recorded at $0 | `TurnCost.priceOne` reports whether the usage got a price. Unpriced usage stays in the trace, is kept out of `meterable`, and goes to `background` as `UnpricedUsage(model)`. | `runner.generate.test.ts` › unpriced: trace has it, meter rows empty, reported |
+| 6 safety MEDIUM: runner-bug error without `replace ''` | `endWithErrorIfOpen` pushes `replace ''` first when anything was shown. | test › runner bug after a token: `token, replace '', error` |
+| 7 safety MEDIUM + the lead's logging rule | New `HarnessError` base (the name stays `Error`) for every harness-written error. `backgroundLog` logs `errorName` always and `errorMessage` only for a `HarnessError`. Foreign errors (provider, port, store, tool) are logged by name only. Reports wrap foreign errors by name (`GenerateAttemptFailed`, `ToolFailed`, `StreamCloseFailed`, `SkillEventDropped` cause). | logging tests: a foreign commit error gets an empty message; a harness error's message is logged |
+| 8 TS MEDIUM: close() rejection after `finished` | `StepEnv.track(p)` (new): the reader hands each early `return()` to the runner, and `finish` waits for them, bounded by `STREAM_CLOSE_SETTLE_MS = 1,000` on the injected clock, before `finished` resolves. A timeout is reported. | `streamReader.test.ts` (tracked close settles); runner: a late-failing close is in `background` (name only); a never-settling close is reported and `finished` still resolves |
+| LOW: SkillEventDropped cause | `cause: { name }` from the caught error. | `skillEvent.test.ts` |
+| LOW: skill events in `shown` | A `skill` event sets `shown`, so a retry's or an error's `replace ''` also clears it. The client rule is in `sse.ts`. | test › skill, replace, token, done |
+| LOW: check order | `not_available` is checked before `too_many_calls`. | `toolLoop.test.ts` › unknown tool past the cap |
+
+Gate after the fix round: `turbo run typecheck lint test --filter=@edmate/harness... --force` → 10/10 tasks. Harness `Tests 2292 passed (2292)`. All files 99.14 / 98.06 / 98.08 / 99.44; `src/pipeline` branches 97.41%. New files 100%. `--filter=...@edmate/harness` → 34/34 tasks. Secret scan clean. Contracts untouched.
+
+Deferred by the lead (not done): `sources` checked against `ctx.retrieved`; the 9.4 client dropping text from turns without `done`.
+
 ## Decisions
 
 ### 18 Oct 2026 · 3.7 Tools offered and run only when entitled; skill payloads checked for the answer key; partial text cleared before an error · decided by tdd-guide (lead brief) · risk: high
@@ -114,7 +134,7 @@ Alternatives: a route now.
 Reversible: yes.
 
 ### 18 Oct 2026 · 3.7 Q7 sentence-gate seam, and every background failure logged · decided by lead · risk: medium
-Decided: text passes `deps.streamGate` (a pass-through now; 4.5 fills it). Every `finished.background` failure goes to `deps.log.backgroundFailure` with the task, the ids (only when valid ids, else `invalid`), `errorName` and `errorMessage` (cut at 300 characters, empty for a non-Error throw), never turn text. A throwing logger is swallowed.
+Decided: text passes `deps.streamGate` (a pass-through now; 4.5 fills it). Every `finished.background` failure goes to `deps.log.backgroundFailure` with the task, the ids (only when valid ids, else `invalid`), `errorName`, and `errorMessage` only for harness errors (cut at 300 characters; see the fix-round entry below), never turn text. A throwing logger is swallowed.
 Why: no silent background failures; no text in logs.
 Alternatives: leave logging to each caller.
 Reversible: yes.
@@ -135,4 +155,28 @@ Reversible: yes.
 Decided: `gatewayFor` returns `{ gateway, metered }` so that 3.8's meter step, the queue latency test and the worker test stay unchanged. Usage a step reports in its result is still metered by `meter`. Three test files outside the plan get a one-line `...stepEnvExtras()`: `access/property.test.ts` (a risky path) and two `packages/db` int tests.
 Why: keeps 3.8 green without double billing; keeps `StepEnv` strictly typed.
 Alternatives: make the new `StepEnv` fields optional; send no usage to `meter` (breaks the 3.8 tests).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.7 Tool outputs checked for the answer key; one normalised answer-key check · decided by lead (fix round, safety review) · risk: high
+Decided: a tool output that holds a do-not-say string, after NFKC folding and stripping whitespace, separators, commas and zero-width characters on both sides, is `failed` and never reaches the model. Skill payloads use the same shared `revealsAnswerKey`/`normaliseForMatch` (`generate/answerKey.ts`), which 4.5 reuses. Tools must scope to `allowedModuleIds`; 4.5 adds the lockedLeak check on tool outputs.
+Why: a tool result fed back to the model was an unfiltered path to the answer; formatting variants beat a raw substring match.
+Alternatives: wait for 4.5; check outputs with a raw substring.
+Reversible: yes. Known cost: a short key can over-match (for example "5/6" inside "15/60"), which fails closed.
+
+### 18 Oct 2026 · 3.7 Error logging: names always, messages only for harness errors · decided by lead (fix round, reconciling safety and silent-failure reviews) · risk: medium
+Decided: every harness-written error extends `HarnessError` (fixed text, codes and ids only), and the background log records its message. Any foreign error (provider, port, store, tool) is logged by name only. Reports the harness makes about foreign failures carry only the name: `GenerateAttemptFailed(attempt, kind, name)`, `ToolFailed(tool, reason, name)`, `StreamCloseFailed(name)`, and `SkillEventDropped` with a `{ name }` cause.
+Why: foreign messages can quote prompt or student text; names still say what failed.
+Alternatives: log all messages (leak risk); log no messages (loses the harness's own diagnostics).
+Reversible: yes.
+
+### 18 Oct 2026 · 3.7 Failed generate attempts, unpriced usage and stream closes are reported · decided by tdd-guide (fix round, silent-failure review) · risk: medium
+Decided: each failed generate attempt is reported (task `generate`) before the retry or the final error. Unpriced usage stays in the trace, stays out of the `meter` step and is reported as `UnpricedUsage(model)` (2.4's meter records it as unpriced). Early stream closes are handed to the runner through `StepEnv.track`, and `finished` waits for them for at most `STREAM_CLOSE_SETTLE_MS` (1,000 ms, injected clock); past that, a "did not settle" report is added and `finished` resolves.
+Why: no silent failure, no free-looking cost row, no report landing after the log.
+Alternatives: mark unpriced rows in the trace (no schema field for it); await closes without a bound.
+Reversible: yes.
+
+### 18 Oct 2026 · 3.7 `replace ''` also clears skill events and runner-bug errors · decided by lead (fix round, safety review) · risk: medium
+Decided: a shown `skill` event counts as shown, so the `replace ''` before a retry or an error also tells the client to drop skill events (rule written in `sse.ts` for 9.4). A runner bug that ends the stream sends `replace ''` before `error` when anything was shown.
+Why: unguarded content never stays on screen on any error path.
+Alternatives: a separate clear event (a contracts change).
 Reversible: yes.

@@ -1,7 +1,9 @@
-// Logs every `TurnRunResult.background` failure (task 3.7, lead answer Q7): the task, the ids and
-// the error's name and message only, never turn text. The ids come from the input before any
-// step checked them, so each is logged only when it is a valid id.
+// Logs every `TurnRunResult.background` failure (task 3.7, lead answer Q7): the task, the ids,
+// the error's name, and its message only for the harness's own errors (HarnessError); a foreign
+// error's message can quote prompt or student text. The ids come from the input before any step
+// checked them, so each is logged only when it is a valid id.
 import { EntitlementSchema } from '@edmate/contracts';
+import { errorName, HarnessError } from './errors.js';
 import type { BackgroundFailureLog, TurnLog, TurnRunResult } from './types.js';
 
 /** Error messages are cut to this many UTF-16 units. */
@@ -21,8 +23,9 @@ export function backgroundLogEntry(
     sessionId: safeId(ids.sessionId),
     agentId: safeId(ids.agentId),
     studentId: safeId(ids.studentId),
-    errorName: e instanceof Error ? e.name : typeof e,
-    errorMessage: e instanceof Error ? e.message.slice(0, BACKGROUND_LOG_MESSAGE_MAX) : '',
+    errorName: errorName(e),
+    // Foreign errors (provider, port, store, tool) can quote prompt or student text: name only.
+    errorMessage: e instanceof HarnessError ? e.message.slice(0, BACKGROUND_LOG_MESSAGE_MAX) : '',
   };
 }
 

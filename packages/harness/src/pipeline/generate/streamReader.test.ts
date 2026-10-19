@@ -2,7 +2,7 @@ import type { ModelChunk } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { cancelSource } from '../clock.js';
 import { TurnCancelled } from '../errors.js';
-import { InvalidChunkError, raceCancel, StreamReader } from './streamReader.js';
+import { InvalidChunkError, raceCancel, StreamCloseFailed, StreamReader } from './streamReader.js';
 
 /** A hand-driven async iterator: each next() waits until the test pushes or ends it. */
 function manualStream() {
@@ -93,15 +93,26 @@ describe('StreamReader', () => {
   it('swallows and reports a return() rejection', async () => {
     const m = manualStream();
     const reported: unknown[] = [];
-    m.failReturn(new Error('return failed'));
-    const r = new StreamReader(m.stream, cancelSource().token, (e) => reported.push(e));
+    m.failReturn(new Error('return failed: SECRET_PROMPT'));
+    const tracked: Promise<unknown>[] = [];
+    const r = new StreamReader(
+      m.stream,
+      cancelSource().token,
+      (e) => reported.push(e),
+      (p) => tracked.push(p),
+    );
     const pending = r.next();
     m.push(text('a'));
     await pending;
     r.close();
-    await flush();
+    // The close is handed over, and it settles (never rejects) once the report is in.
+    expect(tracked).toHaveLength(1);
+    await expect(tracked[0]).resolves.toBeUndefined();
     expect(m.returns).toBe(1);
-    expect(reported.map((e) => (e as Error).message)).toEqual(['return failed']);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toBeInstanceOf(StreamCloseFailed);
+    expect((reported[0] as StreamCloseFailed).causeName).toBe('Error');
+    expect(String(reported[0])).not.toContain('SECRET_PROMPT');
   });
 
   it('reports a return() that throws synchronously', async () => {

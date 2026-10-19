@@ -4,14 +4,23 @@
 // SDK adapter aborts the provider request when `return()` reaches it, which is at the next chunk.
 import { type ModelChunk, ModelChunkSchema } from '@edmate/contracts';
 import type { CancelToken } from '../clock.js';
-import { TurnCancelled } from '../errors.js';
+import { errorName, HarnessError, TurnCancelled } from '../errors.js';
 
 /** The gateway sent a chunk that fails ModelChunkSchema. Names no content. */
-export class InvalidChunkError extends Error {
+export class InvalidChunkError extends HarnessError {
   override readonly name = 'InvalidChunkError';
 
   constructor() {
     super('the model stream sent an invalid chunk');
+  }
+}
+
+/** The stream iterator's `return()` failed. Carries the error's name only. */
+export class StreamCloseFailed extends HarnessError {
+  override readonly name = 'StreamCloseFailed';
+
+  constructor(readonly causeName: string) {
+    super(`closing the model stream failed (${causeName})`);
   }
 }
 
@@ -34,6 +43,7 @@ export class StreamReader {
     stream: AsyncIterable<unknown>,
     private readonly cancel: CancelToken,
     private readonly report: (error: unknown) => void,
+    private readonly track: (settled: Promise<unknown>) => void = () => undefined,
   ) {
     this.iterator = stream[Symbol.asyncIterator]();
     cancel.onCancel(() => {
@@ -73,16 +83,25 @@ export class StreamReader {
   }
 
   /**
-   * Stops the stream early: calls the iterator's `return()` once, in the background, and reports
-   * a failure instead of throwing. Does nothing once the stream ended or was closed.
+   * Stops the stream early: calls the iterator's `return()` once, in the background. A failure is
+   * reported by error name only (StreamCloseFailed), never thrown. The close is handed to `track`
+   * so the runner can wait for it (bounded) before `finished` resolves. Does nothing once the
+   * stream ended or was closed.
    */
   close(): void {
     if (this.ended || this.closed) return;
     this.closed = true;
     const it = this.iterator;
     if (it.return === undefined) return;
-    Promise.resolve()
-      .then(() => it.return?.())
-      .catch((error: unknown) => this.report(error));
+    this.track(
+      Promise.resolve()
+        .then(() => it.return?.())
+        .then(
+          () => undefined,
+          (error: unknown) => {
+            this.report(new StreamCloseFailed(errorName(error)));
+          },
+        ),
+    );
   }
 }

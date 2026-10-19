@@ -49,6 +49,11 @@ export class TurnCost {
    * unknown, invalid or throwing price marks the turn unpriced and keeps the usage's own cost.
    */
   price(u: Usage): Usage {
+    return this.priceOne(u).usage;
+  }
+
+  /** As `price`, and says whether this usage got a valid price (unpriced is never metered). */
+  priceOne(u: Usage): { usage: Usage; priced: boolean } {
     let cost: number | undefined;
     try {
       cost = this.priceUsage(u);
@@ -58,10 +63,10 @@ export class TurnCost {
     if (!isCost(cost)) {
       this.sawUnpriced = true;
       this.total += u.costMicroUsd;
-      return { ...u };
+      return { usage: { ...u }, priced: false };
     }
     this.total += cost;
-    return { ...u, costMicroUsd: cost };
+    return { usage: { ...u, costMicroUsd: cost }, priced: true };
   }
 
   /** Usage a step reported in its result, at the cost the step gave it. */

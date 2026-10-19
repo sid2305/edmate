@@ -79,6 +79,36 @@ describe('skillEvent', () => {
     }
   });
 
+  it.each([
+    ['thousands comma', { a: 'it is 24,000' }],
+    ['fullwidth digits', { a: '２４０００' }],
+    ['zero-width split', { a: '24​000' }],
+    ['a number leaf', { a: 24000 }],
+  ])('a normalised answer key (%s) is still caught', (_n, payload) => {
+    dropped(
+      skillEvent(
+        withPresent(() => ({ skill: 'practice', payload })),
+        {},
+        turnContextFull,
+        ['24000'],
+      ),
+      'answer_key',
+    );
+  });
+
+  it('a throwing present keeps only the error name as cause', () => {
+    const r = skillEvent(
+      withPresent(() => {
+        throw new TypeError(`quotes ${KEY}`);
+      }),
+      {},
+      turnContextFull,
+      [],
+    );
+    expect((r as SkillEventDropped).cause).toEqual({ name: 'TypeError' });
+    expect(JSON.stringify((r as SkillEventDropped).cause)).not.toContain(KEY);
+  });
+
   it('an answer key with a quote is still caught (string leaves, not only JSON text)', () => {
     dropped(
       skillEvent(

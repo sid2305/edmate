@@ -4,6 +4,7 @@
 import type { Entitlement, Skill, Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
 import type { PolicyTool } from '../pedagogy/policy.js';
+import { HarnessError } from './errors.js';
 
 /** What a tool result shows the student as a `skill` event; written by the tool's author. */
 export interface SkillPresentation {
@@ -11,6 +12,12 @@ export interface SkillPresentation {
   payload: unknown;
 }
 
+/**
+ * A registry tool. Its `run` must scope every read to the entitlement's allowed modules
+ * (`ctx.entitlement.allowedModuleIds`), never locked or another teacher's material: its output
+ * goes back to the model. generate drops an output that holds a do-not-say string
+ * (`revealsAnswerKey`); 4.5 adds the lockedLeak n-gram check on outputs here as well.
+ */
 export interface RegisteredTool {
   tool: Tool<unknown, unknown>;
   /** Optional: turns a checked output into a `skill` event (5.5/M6). */
@@ -24,7 +31,7 @@ export interface ToolRegistry {
 export const noTools: ToolRegistry = { list: () => [] };
 
 /** Two registry tools share a name, so which one would run is ambiguous. Fails closed. */
-export class DuplicateToolError extends Error {
+export class DuplicateToolError extends HarnessError {
   override readonly name = 'DuplicateToolError';
 
   constructor(readonly tool: string) {

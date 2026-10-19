@@ -178,6 +178,11 @@ export interface StepEnv {
    * `return()`) to `finished.background`. Never pass turn text in the error.
    */
   readonly report: (error: unknown) => void;
+  /**
+   * Hands the runner background work the step started and won't await (a stream `return()`).
+   * The runner waits for it, bounded, before `finished` resolves, so its report is not lost.
+   */
+  readonly track: (settled: Promise<unknown>) => void;
 }
 
 /** Only generate may emit; the runner validates each event and drops events after a timeout. */

@@ -26,7 +26,13 @@ import { z } from 'zod';
 import type { HelpState } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
-import { InvalidEventError } from './errors.js';
+import {
+  errorName,
+  GenerateAttemptFailed,
+  HarnessError,
+  InvalidEventError,
+  UnpricedUsage,
+} from './errors.js';
 import { EventQueue } from './events.js';
 import { ceilingOf, TurnCost } from './generate/costCeiling.js';
 import {
@@ -60,6 +66,7 @@ import {
   ALERT_RETRY_START_MS,
   STEP_SPEC,
   type StepName,
+  STREAM_CLOSE_SETTLE_MS,
   TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
@@ -153,7 +160,7 @@ function check<T>(r: TimedResult<unknown>, schema: z.ZodType<T>): Checked<T> {
 
 function timeoutOf(name: StepName): number {
   const ms = STEP_SPEC[name].timeoutMs;
-  if (ms === null) throw new Error(`step ${name} has no timeout`);
+  if (ms === null) throw new HarnessError(`step ${name} has no timeout`);
   return ms;
 }
 
@@ -170,6 +177,8 @@ class Turn {
   private cost: TurnCost;
   /** Usage for the `meter` step: step-reported usage plus usage from unmetered gateways. */
   private readonly meterable: Usage[] = [];
+  /** Background work steps handed over (stream closes); settled, bounded, before `finished`. */
+  private readonly pending: Promise<void>[] = [];
   /** Who the turn's model calls are billed to; set after entitle, from the entitlement only. */
   private billing: TurnBilling | null = null;
   /** The gateway for preGuard, route and postGuard (the agent's full policy). */
@@ -196,7 +205,7 @@ class Turn {
   // ---- events -------------------------------------------------------------------------------
 
   private send(e: TurnEvent): void {
-    if (this.terminated) throw new Error(`event after the end of the turn: ${e.type}`);
+    if (this.terminated) throw new HarnessError(`event after the end of the turn: ${e.type}`);
     this.queue.push(TurnEventSchema.parse(e));
   }
 
@@ -213,6 +222,8 @@ class Turn {
   endWithErrorIfOpen(err: TurnError): void {
     if (this.terminated) return;
     this.terminated = true;
+    // Unguarded shown text never stays on screen, even when the runner itself failed.
+    if (this.shown) this.queue.push({ type: 'replace', text: '' });
     this.queue.push({ type: 'error', code: err.code, retryable: err.retryable });
     this.queue.close();
   }
@@ -230,7 +241,8 @@ class Turn {
         state.invalid = true;
         throw new InvalidEventError(parsed.success ? parsed.data.type : 'unparseable');
       }
-      if (parsed.data.type === 'token') this.shown = true;
+      // A `replace ''` also tells the client to drop skill events shown so far (sse.ts).
+      if (parsed.data.type === 'token' || parsed.data.type === 'skill') this.shown = true;
       this.queue.push(parsed.data);
     };
   }
@@ -260,19 +272,32 @@ class Turn {
       cancel,
       turnId: this.turnId,
       gateway: tg === null ? refusingGateway('before entitle') : tg.gateway,
-      usage: this.recorder(tg),
+      usage: this.recorder(tg, task),
       report: (error) => this.background.push({ task, error }),
+      track: (settled) => {
+        this.pending.push(
+          settled.then(
+            () => undefined,
+            () => undefined,
+          ),
+        );
+      },
     };
   }
 
-  /** Prices each usage as it arrives, keeps it (trace, `done`, meter if unmetered), checks the ceiling. */
-  private recorder(tg: TurnGateway | null): UsageRecorder {
+  /**
+   * Prices each usage as it arrives, keeps it (trace, `done`, meter if unmetered), checks the
+   * ceiling. Unpriced usage stays in the trace (its tokens are real) but is never metered as
+   * free: it is reported as UnpricedUsage instead (2.4's meter records it as unpriced).
+   */
+  private recorder(tg: TurnGateway | null, task: BackgroundTask): UsageRecorder {
     return {
       record: (u) => {
-        if (tg === null) throw new Error('no model usage before entitle');
-        const priced = this.cost.price(UsageSchema.parse(u));
-        this.trace.addUsage([priced]);
-        if (!tg.metered) this.meterable.push(priced);
+        if (tg === null) throw new HarnessError('no model usage before entitle');
+        const { usage, priced } = this.cost.priceOne(UsageSchema.parse(u));
+        this.trace.addUsage([usage]);
+        if (!priced) this.background.push({ task, error: new UnpricedUsage(usage.model) });
+        else if (!tg.metered) this.meterable.push(usage);
         this.cost.assertWithin();
       },
       checkBeforeCall: () => this.cost.assertRoomForCall(),
@@ -307,7 +332,7 @@ class Turn {
     if (!ceiling.valid) {
       this.background.push({
         task: 'runner',
-        error: new Error('maxTurnCostMicroUsd is invalid; every model call is refused'),
+        error: new HarnessError('maxTurnCostMicroUsd is invalid; every model call is refused'),
       });
     }
     this.cost = new TurnCost(this.deps.priceUsage, ceiling.value);
@@ -501,7 +526,9 @@ class Turn {
       async () => {
         const similar = SimilarQuestionsSchema.parse(await store.findSimilar(ent.teacherId, text));
         if (similar.some((q) => q.teacherId !== ent.teacherId)) {
-          throw new Error("TeacherQuestionStore.findSimilar returned another teacher's question");
+          throw new HarnessError(
+            "TeacherQuestionStore.findSimilar returned another teacher's question",
+          );
         }
         const q = TeacherQuestionSchema.parse(
           await store.open({
@@ -517,7 +544,7 @@ class Turn {
           q.agentId !== ent.agentId ||
           q.studentId !== ent.studentId
         ) {
-          throw new Error('TeacherQuestionStore.open returned a question for another turn');
+          throw new HarnessError('TeacherQuestionStore.open returned a question for another turn');
         }
         return q.id;
       },
@@ -527,7 +554,7 @@ class Turn {
     if (r.status === 'ok') return r.value;
     this.background.push({
       task: 'teacher_question',
-      error: r.status === 'error' ? r.error : new Error('TeacherQuestionStore timed out'),
+      error: r.status === 'error' ? r.error : new HarnessError('TeacherQuestionStore timed out'),
     });
     return undefined;
   }
@@ -587,7 +614,7 @@ class Turn {
     if (replyText === '') {
       this.background.push({
         task: 'runner',
-        error: new Error('no distress reply text; sent the last-resort reply'),
+        error: new HarnessError('no distress reply text; sent the last-resort reply'),
       });
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
@@ -656,7 +683,8 @@ class Turn {
     } catch (error) {
       this.background.push({
         task: 'runner',
-        error: kind === 'raw' ? new Error('distressCheck failed on the unscrubbed text') : error,
+        error:
+          kind === 'raw' ? new HarnessError('distressCheck failed on the unscrubbed text') : error,
       });
       return false;
     }
@@ -674,7 +702,7 @@ class Turn {
       if (r.status === 'ok') return;
       this.background.push({
         task: 'alert',
-        error: r.status === 'error' ? r.error : new Error('AlertSink.raise timed out'),
+        error: r.status === 'error' ? r.error : new HarnessError('AlertSink.raise timed out'),
       });
       await this.deps.clock.sleep(delay);
       delay = Math.min(delay * 2, ALERT_RETRY_MAX_MS);
@@ -702,7 +730,7 @@ class Turn {
       // `ask`; `redirect` only for distress (3.5's fallback never asks a distressed student).
       const move = fb.decision.move;
       if (move !== 'ask' && !(move === 'redirect' && ctx.intent === 'distress')) {
-        throw new Error(`decide.fallback returned move "${move}"`);
+        throw new HarnessError(`decide.fallback returned move "${move}"`);
       }
       this.trace.step('decide', d.ms, 'fallback');
       return fb;
@@ -752,6 +780,8 @@ class Turn {
         this.trace.step('generate', ms, attempt === 'primary' ? 'ok' : 'fallback');
         return { draft: g.value.draft };
       }
+      // Every failed attempt is reported, by kind and error name only (never a foreign message).
+      this.background.push({ task: 'generate', error: attemptFailure(attempt, raw, state) });
       const failure = generateFailure(raw);
       if (failure !== 'retry') {
         this.trace.step('generate', ms, 'failed');
@@ -843,7 +873,28 @@ class Turn {
       this.background.push({ task: 'trace', error });
     }
     if (alertDelivered !== undefined) await alertDelivered;
+    await this.settlePending();
     return { trace, background: this.background };
+  }
+
+  /**
+   * Waits for stream closes the steps handed over, so a late `return()` failure is in
+   * `background` before it is logged. Bounded: past STREAM_CLOSE_SETTLE_MS it is reported and
+   * `finished` resolves anyway.
+   */
+  private async settlePending(): Promise<void> {
+    if (this.pending.length === 0) return;
+    const r = await runWithTimeout(
+      () => Promise.all(this.pending),
+      STREAM_CLOSE_SETTLE_MS,
+      this.deps.clock,
+    );
+    if (r.status === 'timeout') {
+      this.background.push({
+        task: 'generate',
+        error: new HarnessError('a model stream close did not settle in time'),
+      });
+    }
   }
 
   /** meter and commit: no timeout, never block the reply; a failure is reported, not thrown. */
@@ -860,6 +911,18 @@ class Turn {
       this.background.push({ task: name, error });
     }
   }
+}
+
+/** What a failed generate attempt reports: the kind and the underlying error's name. */
+function attemptFailure(
+  attempt: 'primary' | 'fallback',
+  raw: TimedResult<unknown>,
+  state: { invalid: boolean },
+): GenerateAttemptFailed {
+  if (raw.status === 'timeout') return new GenerateAttemptFailed(attempt, 'timeout');
+  if (raw.status === 'error')
+    return new GenerateAttemptFailed(attempt, 'error', errorName(raw.error));
+  return new GenerateAttemptFailed(attempt, state.invalid ? 'invalid_event' : 'invalid_result');
 }
 
 function withoutText(input: TurnInput): TurnInput {

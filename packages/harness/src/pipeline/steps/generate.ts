@@ -57,6 +57,8 @@ export const generate: Steps['generate'] = async (env, { ctx, decision, sources 
       else if (e !== undefined) emit(e);
     },
     report: env.report,
+    mustNotReveal: decision.mustNotReveal,
+    track: env.track,
   });
 
   const cited = citedSources(draft, sources);
