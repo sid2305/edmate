@@ -580,8 +580,9 @@ tasks:
   model: null
 - id: 3.11a
   milestone: M3
-  title: 'Prompt packs v1.0.0, code half: persona-template schema and loader, risk-paths line, snapshot tests of the real set (distress drops persona, investing disclaimers, locked replies), a no-fixture-text test'
-  accept: 'loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.'
+  title: 'Prompt packs v1.0.0, code half: persona-template schema and loader, risk-paths line, snapshot tests of the real set (distress drops persona, investing disclaimers, locked replies), a no-fixture-text
+    test'
+  accept: loader validates; the snapshot cases in docs/tasks/3.11/plan.md revision 8 pass against fixture-shaped content until 3.11b lands.
   deps:
   - '3.6'
   status: todo
@@ -590,7 +591,7 @@ tasks:
 - id: 3.11b
   milestone: M3
   title: 'Prompt packs v1.0.0, content half: frame, safety preamble, 6 skill packs, 5 mode packs, 2 persona templates (English only), safety-reviewed, then signed off per row by the human'
-  accept: 'packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.'
+  accept: packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.
   deps:
   - 3.11a
   status: todo
@@ -599,7 +600,7 @@ tasks:
 - id: 3.11c
   milestone: M3
   title: 'Pin pilot agents to English: agent config validation rejects languages other than [en] while the pilot is English-only (from the 3.11 plan review)'
-  accept: 'an agent config with hi is rejected with a clear message; tests.'
+  accept: an agent config with hi is rejected with a clear message; tests.
   deps:
   - '3.11'
   status: todo
@@ -661,9 +662,19 @@ tasks:
   accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
   deps:
   - '3.16'
-  status: review
+  status: done
   branch: m7/3.16b-migration-locking
   model: build:sonnet
+- id: 3.16c
+  milestone: M7
+  title: 'Migration hardening follow-ups (3.16b review): an advisory lock around migrateDatabase(), so overlapping runs cannot drop a healthy in-progress concurrent index; a schema-qualified index lookup;
+    a partial index on open sessions for the 0009 backfill'
+  accept: two overlapping migrateDatabase() runs leave the index valid (int test); the lookup uses to_regclass or pg_namespace.
+  deps:
+  - 3.16b
+  status: todo
+  branch: null
+  model: null
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'

@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.16b A post-migrate step runs lock-heavy statements as their own autocommit transactions after migrate() commits · decided by tdd-guide · risk: high
+Decided: `migrateDatabase()` calls drizzle's `migrate()` to apply pending migration files (unchanged), then calls a new `runPostMigrateSteps()` against the same single-connection pool, running each of 0009's three `VALIDATE CONSTRAINT`s (skipped if already valid) and its `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as separate, non-transactional statements. 0009's SQL file itself only adds the FK and two CHECKs as `NOT VALID` and no longer runs `CREATE INDEX`.
+Why: drizzle-orm 0.45 runs every pending migration file in one transaction (established in the 3.16 review and decision log), so neither a `VALIDATE CONSTRAINT` nor a `CREATE INDEX CONCURRENTLY` written into any migration file — this one or a new one — ever escapes that transaction's ACCESS EXCLUSIVE lock, and `CREATE INDEX CONCURRENTLY` is refused by Postgres inside a transaction block at all. A step that runs after the migrator's transaction has committed is the only way to get the lighter `SHARE UPDATE EXCLUSIVE` lock (validate) or no blocking lock at all (concurrent index) before `sessions` grows past pilot scale.
+Alternatives: a second migration file (doesn't help, see above); a separate CLI command the operator runs by hand after `db:migrate` (more steps to forget, no test coverage of the common path); switching migrators (bigger change, out of scope); accepting the lock duration permanently (what 3.16 already decided to accept for the pilot; this task removes the need to keep accepting it as `sessions` grows).
+Reversible: yes — entirely inside `packages/db`; no port or contract change. The step list can be extended or retired in a later migration's own follow-up.
+
+---
+
+### 19 Oct 2026 · 3.16b 0009 is edited in place rather than fixed by a new migration file · decided by tdd-guide (per the task's framing) · risk: high
+Decided: `packages/db/migrations/0009_session_package_pin.sql` had its `VALIDATE CONSTRAINT` and `CREATE INDEX` statements removed outright, rather than being left as-is with a new migration file added after it.
+Why: 0009 has not been deployed anywhere yet (no pilot has run; confirmed in the 3.16 decision log), so there is no live database whose already-applied migration history this could break; editing it keeps the SQL honest about what actually runs (callers reading 0009 would otherwise see a `VALIDATE CONSTRAINT` that never executes, since the post-migrate step runs it instead).
+Alternatives: leave 0009 as the 3.16 fix round wrote it (misleading: the file would claim to validate inline but drizzle's transaction means that claim was already false before this task); add a 0010 migration that's a no-op for execution but documents the move.
+Reversible: yes, for as long as 0009 stays unreleased; once a real database has run it, a future change would need a new migration instead, which this task's rule (point 3 of the task description) already anticipates.
+
+---
+
+### 19 Oct 2026 · 3.16b fix round: drop and rebuild an INVALID leftover index before CREATE INDEX CONCURRENTLY IF NOT EXISTS · decided by tdd-guide (database-reviewer finding) · risk: high
+Decided: the `concurrentIndex` post-migrate step now checks `pg_class`/`pg_index` for an existing index by name before running `CREATE INDEX CONCURRENTLY IF NOT EXISTS`. If the index exists and `indisvalid = false`, it runs `DROP INDEX CONCURRENTLY IF EXISTS` first (its own autocommit statement, still outside any transaction), then the CREATE.
+Why: a `CREATE INDEX CONCURRENTLY` that fails partway (a connection drop, a killed backend) leaves the index behind as INVALID rather than rolling it back; Postgres itself does not retry or revalidate it. `IF NOT EXISTS` alone would then see the index "already exists" on every future `migrateDatabase()` call and skip it forever, leaving the package-pin index permanently unusable and the 0009 fix effectively undone for queries that need it.
+Alternatives: always `DROP INDEX CONCURRENTLY IF EXISTS` before every CREATE, unconditionally (works, but needlessly rebuilds a healthy index on every migrate run on a database that may eventually be large); have an operator notice and fix it by hand (no test coverage of the common path, easy to miss); drop `IF NOT EXISTS` and let the CREATE fail loudly on a second run (breaks the "re-running is a no-op" contract this task also had to preserve).
+Reversible: yes — entirely inside `packages/db`; no port or contract change.
+
+---
+
 ### 18 Oct 2026 · 4.2 What the scrub removes, and that it fails closed · decided by lead (plan answers, safety plan review) and tdd-guide (details) · risk: high
 Decided: `piiScrub` rewrites phone numbers (group shapes, +CC, spaced digits, a bare 10-digit number only next to a phone keyword or through the market pattern), emails (also [at]/(at)/＠), Luhn-valid cards (CVV/expiry only next to one), OTP-like codes near an OTP keyword, the student's own name after an introduction phrase, and every locale-pack pattern, on a digit-folded copy, in the text and every skill-payload string; addresses are out of scope. A locale pattern that does not compile with exactly 'gu', a scrub that does not settle, and every non-ok chain outcome block the turn with only a cause and error name reported.
 Why: the model, traces and history must never see a student's contact or ID data, and a broken scrub must stop the turn rather than let raw text through.
