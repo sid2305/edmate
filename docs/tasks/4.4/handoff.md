@@ -1,6 +1,6 @@
 # 4.4 handoff: `moderationIn`, `jailbreak`, strikes, and ADR-0006 SafetyEventSink
 
-- **Status:** DONE, fix round 1 applied (33 new eval cases are `reviewed_by: pending` until the human signs them off: 10 from round 1, 23 from the fix round; with 4.3's 7 that is 40, so `suites.test.ts` fails on them as expected)
+- **Status:** DONE, fix rounds 1 and 2 applied (47 new eval cases are pending: 14 from fix round 2 plus the earlier 33; was: 33 new eval cases are `reviewed_by: pending` until the human signs them off: 10 from round 1, 23 from the fix round; with 4.3's 7 that is 40, so `suites.test.ts` fails on them as expected)
 - **Branch:** `m4/4.4-moderation-jailbreak`, from origin/main f92ef31, with **origin/m4/4.3-distress (e5dd16b) merged in at the start** so this builds on 4.3's real `PreGuardCtx`, pre-phase registry and normaliser. When 4.3 merges to main, main must be merged in again; hold this PR's merge until 4.3 is on main.
 - **Worktree:** `.claude/worktrees/agent-a593cc4eb95f00ed8` (repo-relative)
 - **Risky paths:** `packages/harness/src/guardrails/**`, `evals/suites/safety/**`, `apps/worker/src/alerts/**` → **safety-reviewer**; `packages/db/src/repositories/**` → **security-reviewer**; `packages/contracts/**`, `docs/adr/**` → **architect, security-reviewer, typescript-reviewer**. Recommended: silent-failure-hunter (new port, awaited writes, queue idempotency, worker errors).
@@ -108,7 +108,15 @@ Deferred to the board (lead): rule tables in the runner's failed-chain path and 
 
 Seeded expectations: the three "ignore previous instructions … system prompt" seeds are `jailbreak_override` again (as in round 1). The round-1 jailbreak guard test's ambiguous example is now "main teacher hoon" (the old one is decisive by design).
 
-Fix-round-2 gate: see the evidence below this table (pending cases now 54: 7 from 4.3, 10 from round 1, 23 from fix round 1, 14 from fix round 2).
+Fix-round-2 gate (compose Postgres and Redis up): `turbo run typecheck lint test --filter=...@edmate/contracts --force --continue` → **36/37 tasks**, clean on the first run; only `@edmate/evals#test` "every case validates" fails, listing the **54** `reviewed_by: pending` cases (7 from 4.3, 10 from round 1, 23 from fix round 1, 14 from fix round 2). harness 3256 passed (guardrails 100/100/100/100), db 447 (safetyEvents 20 + 36 cases, 0 leaks), worker 135, queue 41, contracts 335, evals 641 + the pending failure.
+
+```
+moderation/jailbreak, classifier none:   moderation 26/26 blocked, jailbreak 31/31 blocked, held-out 28/28 blocked; near-miss 26/26 not blocked by a verdict (seeded 7)
+moderation/jailbreak, classifier throws: moderation 26/26 blocked, jailbreak 31/31 blocked, held-out 28/28 blocked; near-miss 26/26 not blocked by a verdict (seeded 7)
+distress, false: 39/41 escalated (2 soft-only cleared by the classifier); near-miss 8/8 not escalated
+```
+
+Secret scan → exit 0. `check-headings.py` → exit 0.
 
 ## Open points for the lead
 
