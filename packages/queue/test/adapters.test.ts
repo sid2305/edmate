@@ -1,5 +1,5 @@
 import { LIMITS, type Message } from '@edmate/contracts';
-import { demoTurnTrace, usageMain, usageSmall } from '@edmate/contracts/fixtures';
+import { demoSafetyAlert, demoTurnTrace, usageMain, usageSmall } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import {
   COMMIT_QUEUE,
@@ -276,10 +276,14 @@ describe('queuedTraceSink', () => {
 });
 
 describe('queuedTurnPorts', () => {
-  it('meter jobs go to the meter queue; everything else to the commit queue', async () => {
+  it('meter jobs go to the meter queue, alerts to the alert queue, the rest to commit', async () => {
     const meter = fakeQueue();
     const commit = fakeQueue();
-    const ports = queuedTurnPorts({ meter, commit }, scope, { history: () => Promise.resolve([]) });
+    const alert = fakeQueue();
+    const ports = queuedTurnPorts({ meter, commit, alert }, scope, {
+      history: () => Promise.resolve([]),
+    });
+    await ports.alerts.raise(demoSafetyAlert);
     await ports.usage.record(usageMain, ctx);
     await ports.transcripts.append('ses_1', message);
     await ports.sessionState.saveHelpState('ses_1', {});
@@ -290,5 +294,18 @@ describe('queuedTurnPorts', () => {
       'session.help_state',
       'trace.record',
     ]);
+    expect(alert.added.map((j) => j.name)).toEqual(['alert.escalate_check', 'alert.raise']);
+  });
+
+  it('passes the alert options through (a shorter escalation delay)', async () => {
+    const alert = fakeQueue();
+    const ports = queuedTurnPorts(
+      { meter: fakeQueue(), commit: fakeQueue(), alert },
+      scope,
+      { history: () => Promise.resolve([]) },
+      { escalateAfterMs: 25 },
+    );
+    await ports.alerts.raise(demoSafetyAlert);
+    expect(alert.added[0]?.opts.delay).toBe(25);
   });
 });
