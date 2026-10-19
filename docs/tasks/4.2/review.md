@@ -28,4 +28,5 @@ Reviewer: safety-reviewer (sonnet): the build (1 CRITICAL), fix round 1 (CRITICA
 - [MEDIUM] [fixed] packages/harness/src/guardrails/piiPatterns.ts:248 — filler words between an OTP and "code".
 - [MEDIUM] [fixed] packages/harness/src/guardrails/piiPatterns.ts:196 — reversed Hinglish and Devanagari name order, and sign-offs with a comma.
 - [MEDIUM] [wontfix] packages/harness/src/pipeline/steps/scrub.ts:153 — a lowercase single-token name under a file-shaped key ({"module":{"name":"riya"}}) still passes. It can't be told apart from an identifier by shape; accepted and logged in the 4.2c decision.
+- Merge with main (4.5): textFold.foldText now runs 4.2c's digit-form pre-pass first, so answerLeak also folds keycap, superscript and circled digits (3 tests). The lead reviewed this small, protective addition; leakFixtures 38/38 and the mutation run still pass.
 - [LOW] [deferred 3.10] packages/harness/src/testing/piiLocaleFixtures.ts:12 — Aadhaar Verhoeff, with the real IN pack.
