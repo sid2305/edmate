@@ -829,7 +829,7 @@ tasks:
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
-  status: review
+  status: done
   branch: m4/4.2c-pii-hardening
   model: build:sonnet
 - id: 4.3b
