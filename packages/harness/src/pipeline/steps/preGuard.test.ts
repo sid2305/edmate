@@ -40,15 +40,16 @@ function envWith(text: string | undefined, overrides: Partial<PipelineDeps> = {}
   const input = { ...demoTurnInput };
   if (text === undefined) delete (input as { text?: string }).text;
   else input.text = text;
+  const reported: unknown[] = [];
   const env: StepEnv = {
     input,
     deps: t.deps,
     cancel: cancelSource().token,
     turnId: 'turn_1',
-    ...stepEnvExtras(),
+    ...stepEnvExtras(reported),
     gateway: t.gateway,
   };
-  return { env, t };
+  return { env, t, reported };
 }
 
 function msg(id: string, role: Message['role'], text: string): Message {
@@ -173,26 +174,33 @@ describe('recentStudentTurns', () => {
     expect(await recentStudentTurns(env)).toEqual(['s3', 's4', 's5']);
   }, 1_000);
 
-  it('a failing history read → [] (the classifier still runs on the message)', async () => {
+  it('a failing history read → [] (the classifier still runs) and is reported without text', async () => {
     const failing: TranscriptStore = {
-      history: () => Promise.reject(new Error('db down')),
+      history: () => Promise.reject(new TypeError('db down SECRET-TEXT')),
       append: () => Promise.resolve(),
     };
-    const { env } = envWith('x', { transcripts: failing });
+    const { env, reported } = envWith('x', { transcripts: failing });
     expect(await recentStudentTurns(env)).toEqual([]);
+    expect(reported.map((e) => (e as Error).message)).toEqual([
+      'preGuard: earlier student messages unavailable (TypeError)',
+    ]);
   }, 1_000);
 
-  it('a malformed history result → []', async () => {
+  it('a malformed history result → [] and reported', async () => {
     const odd = {
       history: () => Promise.resolve('nope' as unknown as Message[]),
       append: () => Promise.resolve(),
     };
-    const { env } = envWith('x', { transcripts: odd });
+    const { env, reported } = envWith('x', { transcripts: odd });
     expect(await recentStudentTurns(env)).toEqual([]);
+    expect(reported.map((e) => (e as Error).message)).toEqual([
+      'preGuard: earlier student messages unavailable (malformed)',
+    ]);
   }, 1_000);
 
-  it(`a history read slower than ${HISTORY_TIMEOUT_MS} ms → []`, async () => {
+  it(`a history read slower than ${HISTORY_TIMEOUT_MS} ms → [] and reported`, async () => {
     const t = testDeps();
+    const reported: unknown[] = [];
     const slow: TranscriptStore = {
       history: async () => {
         await t.clock.sleep(HISTORY_TIMEOUT_MS + 1);
@@ -205,8 +213,11 @@ describe('recentStudentTurns', () => {
       deps: { ...t.deps, transcripts: slow },
       cancel: cancelSource().token,
       turnId: 'turn_1',
-      ...stepEnvExtras(),
+      ...stepEnvExtras(reported),
     };
     expect(await t.clock.drive(recentStudentTurns(env))).toEqual([]);
+    expect(reported.map((e) => (e as Error).message)).toEqual([
+      'preGuard: earlier student messages unavailable (timeout)',
+    ]);
   }, 1_000);
 });

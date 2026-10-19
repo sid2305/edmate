@@ -5,6 +5,7 @@ import { runGuardChain, type GuardFailure } from '../../guardrails/chain.js';
 import { createDistressDetectGuard, DISTRESS_CONTEXT_TURNS } from '../../guardrails/distressDetect.js';
 import type { PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
+import { errorName, HarnessError } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
 import type { Entitled, PreGuardResult, StepEnv, Steps } from '../types.js';
 
@@ -32,7 +33,8 @@ export function defaultPreGuardRegistry(): GuardRegistry<PreGuardCtx> {
 /**
  * The student's last few messages this session, oldest first, for the distress classifier
  * (lead answer 8). Best effort: a failed, slow or malformed read gives [] and the classifier
- * still sees the message itself. History is saved scrubbed (commit stores the scrubbed input).
+ * still sees the message itself; the miss is reported (`env.report`, cause and error name only).
+ * History is saved scrubbed (commit stores the scrubbed input).
  */
 export async function recentStudentTurns(env: StepEnv): Promise<string[]> {
   const r = await runWithTimeout(
@@ -40,7 +42,12 @@ export async function recentStudentTurns(env: StepEnv): Promise<string[]> {
     HISTORY_TIMEOUT_MS,
     env.deps.clock,
   );
-  if (r.status !== 'ok' || !Array.isArray(r.value)) return [];
+  if (r.status !== 'ok' || !Array.isArray(r.value)) {
+    const cause =
+      r.status === 'ok' ? 'malformed' : r.status === 'timeout' ? 'timeout' : errorName(r.error);
+    env.report(new HarnessError(`preGuard: earlier student messages unavailable (${cause})`));
+    return [];
+  }
   return (r.value as unknown[])
     .filter(
       (m): m is Message =>
