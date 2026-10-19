@@ -980,6 +980,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 4.6c
+  milestone: M4
+  title: 'lockedLeak follow-ups (4.6b fix-round re-review): markdown emphasis inside words (l**o**op, ~~, backticks) padded in the rendered reading; known-miss notes for <a<b>, a < inside a quoted value, --!> comments and non-ASCII tag names; a failed or timed-out post-guard step counts as a locked trip; a corrupt stored help state is reported once'
+  accept: each item has a unit test; the markdown in-word case (locked-loops-md-inword-bold-en, pending) trips; no regression on the 34 locked cases.
+  deps:
+  - 4.6b
+  status: todo
+  branch: null
+  model: null
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
@@ -1489,7 +1498,7 @@ tasks:
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
   accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews); streamed text is shown as provisional
-    until done, and a replacement is visibly marked (4.7 safety review)
+    until done, and a replacement is visibly marked (4.7 safety review); the chat never renders raw model HTML (4.6b safety review)
   deps:
   - GATE
   - '1.3'
