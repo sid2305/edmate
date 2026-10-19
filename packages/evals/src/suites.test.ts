@@ -13,20 +13,28 @@ const DEMO_PACKAGES = readdirSync(join(REPO_ROOT, 'content/demo-teacher/packages
   .sort();
 
 // --- The real suites -------------------------------------------------------------------------
-// EDMATE_REQUIRE_REVIEWED=1: no case may still say `reviewed_by: pending` (set after sign-off).
-// EDMATE_REQUIRE_SUITES=1: every guard folder must be seeded (set once 4.0a and 4.0b land).
+// On by default: no case may still say `reviewed_by: pending`, and every guard folder must be
+// seeded. EDMATE_ALLOW_PENDING=1 opts out of the first (before sign-off); EDMATE_ALLOW_UNSEEDED=1
+// opts out of the second (before a guard folder is seeded).
 describe('evals/suites (real cases)', () => {
   const rules: SuiteRules = {
     guardFolders: GUARD_FOLDERS,
     minCases: MIN_CASES_PER_GUARD,
     packages: DEMO_PACKAGES,
-    requireReviewed: process.env.EDMATE_REQUIRE_REVIEWED === '1',
-    requireAllGuards: process.env.EDMATE_REQUIRE_SUITES === '1',
+    requireReviewed: process.env.EDMATE_ALLOW_PENDING !== '1',
+    requireAllGuards: process.env.EDMATE_ALLOW_UNSEEDED !== '1',
   };
   const report = validateSuites(SUITES_ROOT, rules);
 
   it('finds the demo packages the cases must name', () => {
     expect(DEMO_PACKAGES.length).toBeGreaterThan(0);
+  });
+
+  it('requires reviewed cases and all guards by default (no opt-out env var set here)', () => {
+    expect(process.env.EDMATE_ALLOW_PENDING).toBeUndefined();
+    expect(process.env.EDMATE_ALLOW_UNSEEDED).toBeUndefined();
+    expect(rules.requireReviewed).toBe(true);
+    expect(rules.requireAllGuards).toBe(true);
   });
 
   it('every case validates and follows the suite rules', () => {
@@ -184,5 +192,59 @@ describe('validateSuites', () => {
     expect(across.problems).toContain(
       'locked/leak-dup-001.yaml: duplicate case id "leak-dup-001" (also in leak/leak-dup-001.yaml)',
     );
+  });
+
+  it('flags a pending reviewer regardless of case or surrounding whitespace', () => {
+    seed('leak', 'leak-hint', 3, { reviewed_by: '  Pending  ' });
+    seed('safety/pii', 'safety-pii', 3, { reviewed_by: 'PENDING' });
+    const r = validateSuites(root, { ...base, requireReviewed: true });
+    expect(r.problems).toEqual([
+      'leak/leak-hint-001.yaml: reviewed_by is still "pending"',
+      'leak/leak-hint-002.yaml: reviewed_by is still "pending"',
+      'leak/leak-hint-003.yaml: reviewed_by is still "pending"',
+      'safety/pii/safety-pii-001.yaml: reviewed_by is still "pending"',
+      'safety/pii/safety-pii-002.yaml: reviewed_by is still "pending"',
+      'safety/pii/safety-pii-003.yaml: reviewed_by is still "pending"',
+    ]);
+  });
+
+  it('a case properly reviewed by someone whose name merely contains "pending" is not flagged', () => {
+    seed('leak', 'leak-hint', 1, { reviewed_by: 'ependington' });
+    const r = validateSuites(root, { ...base, requireReviewed: true, guardFolders: [] });
+    expect(r.problems).toEqual([]);
+  });
+
+  it('reports "suite failed to load" for a guard, not "has no cases", when its suite errors out', () => {
+    put('leak/leak-bad-001.yaml', 'id: [unclosed');
+    seed('safety/pii', 'safety-pii', 3);
+    const r = validateSuites(root, { ...base, requireAllGuards: true });
+    expect(r.problems).toHaveLength(2);
+    expect(r.problems[0]).toMatch(/^leak: .*invalid YAML/);
+    expect(r.problems[1]).toBe('leak: suite failed to load');
+  });
+
+  it('still calls a failed-to-load guard unseeded, not a problem, when all guards are not required', () => {
+    put('leak/leak-bad-001.yaml', 'id: [unclosed');
+    const r = validateSuites(root, base);
+    expect(r.problems).toHaveLength(1);
+    expect(r.problems[0]).toMatch(/^leak: .*invalid YAML/);
+    expect(r.unseeded).toContain('leak');
+  });
+
+  it('pairs every loaded case with its own file across nested, differently-sorted suites', () => {
+    // Nesting "bbb" one folder deeper than "aaa" makes the path sort ("a/..." before "leak-...")
+    // run opposite to id order, the way a re-list-and-cast bug (pairing by array index from a
+    // separate re-listing, instead of the pair the load itself produced) could silently swap a
+    // case's file with a neighbour's.
+    put('leak/a/leak-bbb-002.yaml', caseYaml('leak-bbb-002'));
+    put('leak/leak-aaa-001.yaml', caseYaml('leak-aaa-001'));
+    put('safety/pii/safety-pii-003.yaml', caseYaml('safety-pii-003', { suite: 'safety' }));
+    const r = validateSuites(root, { ...base, guardFolders: [] });
+    expect(r.problems).toEqual([]);
+    expect(r.cases.map((c) => [c.file, c.evalCase.id])).toEqual([
+      ['leak/a/leak-bbb-002.yaml', 'leak-bbb-002'],
+      ['leak/leak-aaa-001.yaml', 'leak-aaa-001'],
+      ['safety/pii/safety-pii-003.yaml', 'safety-pii-003'],
+    ]);
   });
 });

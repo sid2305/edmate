@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CaseLoadError, loadCasesFromDir } from './loader.js';
+import { CaseLoadError, loadCasesFromDir, loadCasesWithFiles } from './loader.js';
 
 const FIXTURE_SUITE = fileURLToPath(new URL('../test/fixtures/suite', import.meta.url));
 
@@ -99,6 +99,35 @@ describe('loadCasesFromDir', () => {
     expect(err.message).toContain('two.yaml');
     expect(err.message).toContain('one.yaml');
     expect(err.message).toContain('case-dup');
+  });
+});
+
+describe('loadCasesWithFiles', () => {
+  it('pairs each file with the case it actually holds, even when ids sort differently from paths', () => {
+    // b.yaml < z.yaml by path, but holds the id that sorts last; a bug that paired by re-listing
+    // the directory and zipping by index (instead of returning the pair from the same load)
+    // would not be caught by an id/filename-match rule, only by checking file against content.
+    writeFileSync(join(dir, 'b.yaml'), caseYaml('zzz-last'));
+    writeFileSync(join(dir, 'z.yaml'), caseYaml('aaa-first'));
+    const pairs = loadCasesWithFiles(dir);
+    expect(pairs).toEqual([
+      { file: 'b.yaml', evalCase: expect.objectContaining({ id: 'zzz-last' }) },
+      { file: 'z.yaml', evalCase: expect.objectContaining({ id: 'aaa-first' }) },
+    ]);
+  });
+
+  it('agrees with loadCasesFromDir on order and content', () => {
+    mkdirSync(join(dir, 'nested'));
+    writeFileSync(join(dir, 'nested', 'c.yaml'), caseYaml('case-c'));
+    writeFileSync(join(dir, 'a.yaml'), caseYaml('case-a'));
+    const pairs = loadCasesWithFiles(dir);
+    const plain = loadCasesFromDir(dir);
+    expect(pairs.map((p) => p.evalCase)).toEqual(plain);
+    expect(pairs.map((p) => p.file)).toEqual(['a.yaml', 'nested/c.yaml']);
+  });
+
+  it('throws when the directory holds no cases', () => {
+    expect(() => loadCasesWithFiles(dir)).toThrow(/no \.yaml or \.yml cases/);
   });
 });
 
