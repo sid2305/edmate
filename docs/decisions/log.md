@@ -10,6 +10,63 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.2b — refuse attachments now, design the real pipeline as a follow-up
+Decided: every turn carrying an `attachments` entry is refused at the scrub step, before anything
+about it is read, until a real extract-and-scrub (OCR/vision) pipeline exists. The refusal reuses
+4.2's existing fail-closed mechanics (`ScrubFailedError`, `guard_blocked`); the raw-text distress
+check still runs first and still escalates.
+Why: no OCR/vision pipeline exists anywhere in the repo; photo upload is explicit P1 (MVP out) per
+the PRD and build plan. Building the real pipeline now would need a new storage-fetch port, a new
+OCR/vision port or a `ModelRequest` content-block change (either way a `packages/contracts` ADR
+reviewed by architect, security-reviewer and typescript-reviewer), and real/fixture OCR output wired
+through `packages/evals` — materially bigger than a guard task and building infrastructure for a
+deferred feature.
+Alternatives: build the real OCR/vision pipeline now (rejected — out of scope, needs an ADR, a board
+follow-up should carry it when photo upload is scheduled).
+Reversible: yes — this is a stopgap guard, not a contract or schema change; a later task can replace
+the refusal with real extraction without touching this decision.
+Risk: medium.
+
+---
+
+### 19 Oct 2026 · 4.2b — no injectable FallbackReplies.attachmentRefused hook yet
+Decided: `ATTACHMENT_REFUSED_REPLY` is a fixed exported English constant, not plumbed through an
+injectable `FallbackReplies` hook.
+Why: nothing in the runner currently reads any such hook for a `guard_blocked` turn — the wire
+`TurnEvent`'s `error` variant has no text field at all, so an injectable surface would be unused
+plumbing today.
+Alternatives: add the hook now for consistency with `limitReached`/`lockedReply` (rejected — no
+caller, no localisation need yet).
+Reversible: yes.
+Risk: low.
+
+---
+
+### 19 Oct 2026 · 4.2b — the missing client-visible text on guard_blocked turns stays a separate,
+cross-cutting fix
+Decided: 4.2b does not invent a wire-delivery mechanism for guard-blocked reply text (the same
+pre-existing gap `DEFAULT_LIMIT_REACHED_REPLY` already has, and every future `guard_blocked` case,
+e.g. 4.4's moderation/jailbreak blocks, will have too).
+Why: that is a `TurnEventSchema`/`apps/web` composition concern, not a guard task's job; the lead
+flagged it as 9.4 scope.
+Alternatives: add a message field to the wire `error` event now (rejected — needs its own ADR and
+contracts change, bigger than this task).
+Reversible: yes.
+Risk: low.
+
+---
+
+### 19 Oct 2026 · 4.2b — PII smuggled inside `skillPayload` (e.g. base64 image data) stays out of
+scope
+Decided: accepted as a known, pre-existing gap, not addressed by this task.
+Why: this task is scoped to the `attachments` field; `skillPayload` is still scrubbed by the
+existing pattern-based text scrub, which cannot parse binary-encoded image data. Not new to 4.2b.
+Alternatives: none evaluated — explicitly out of scope per the lead's revisions.
+Reversible: n/a (no code change made for this).
+Risk: low (noted for awareness, not a blocking item).
+
+---
+
 ### 19 Oct 2026 · Repeated jailbreak strikes: stricter checks and a trust-team notice, no pause · decided by human (B-12) · risk: high
 Decided: after 3 strikes in one session, the rest of that session gets stricter checks and the trust team gets one notice. The student is not paused, locked out or punished. Built as task 4.4e.
 Why: repeated attempts are a signal worth a human look, but a 13+ learner poking at the rules should not lose access.

@@ -808,6 +808,16 @@ tasks:
   accept: an attachment with seeded PII never reaches a model unscrubbed; tests with fixture images.
   deps:
   - '4.2'
+  status: done
+  branch: null
+  model: null
+- id: 4.2d
+  milestone: M4
+  title: 'Attachment follow-ups (4.2b safety review): an optional attachments field on EvalTurnInput, then distress-with-photo safety cases (English reply); a monitoring case for image data pasted as base64
+    or a data: URL in text or skillPayload; the merge gate''s safety glob covers pipeline/steps/scrub.ts and admit.ts'
+  accept: a distress-with-attachment eval case runs end to end and escalates; the base64 monitoring case runs; a change to scrub.ts requires safety-reviewer at the merge gate.
+  deps:
+  - 4.2b
   status: todo
   branch: null
   model: null
@@ -944,7 +954,7 @@ tasks:
   accept: tests for each item; 0 locked tokens streamed in the fixture runs; the 34 locked cases still pass.
   deps:
   - '4.6'
-  status: running
+  status: review
   branch: m4/4.6b-lockedleak-followups
   model: build:sonnet
 - id: 4.4d
@@ -985,9 +995,13 @@ tasks:
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
 - id: 4.7b
   milestone: M4
-  title: 'Grounding follow-ups (4.7 reviews): per-request random judge delimiters and full-width/look-alike fence breaking; citations like "[ 3 ]", "[３]" and "source 3"; reversed or worded premise forms ("I got 4 for 7 // 2", "seven // two is four");
-    canonicalNumber over 1e15 without the cast; the concurrent-turn race on groundingAsks (no per-session turn serialisation exists: an atomic cap in the session store, or serialise turns per session); the cast-free reason read in postGuard.ts watched()'
-  accept: each item has a unit test; the reversed-premise pending case passes offline; two concurrent ungrounded turns at groundingAsks 2 open at most one question.
+  title: 'Grounding follow-ups (4.7 reviews): per-request random judge delimiters and full-width/look-alike fence breaking; citations like "[ 3 ]", "[３]" and "source 3"; reversed or worded premise forms
+    ("I got 4 for 7 // 2", "seven // two is four"); canonicalNumber over 1e15 without the cast; the concurrent-turn race on groundingAsks (no per-session turn serialisation exists: an atomic cap in the
+    session store, or serialise turns per session); the cast-free reason read in postGuard.ts watched(); Rule C (4.7 fix-round re-review): opening praise or agreement after a wrong student claim forces
+    the correction prompt even when the right number is shown, and a premise counts as corrected only by a correct claim on the same expression or the right value in an answer context, never an unrelated
+    number ("keep going with step 3"); a neutral judge-outage text when the locale has no safe reply'
+  accept: each item has a unit test; the reversed-premise pending case passes offline; "Yes, 6 - 3 is 3. Well done!" after "6 - 3 is 2, right?" gives the correction prompt; two concurrent ungrounded turns
+    at groundingAsks 2 open at most one question.
   deps:
   - '4.7'
   status: todo
@@ -1474,7 +1488,8 @@ tasks:
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
-  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews); streamed text is shown as provisional until done, and a replacement is visibly marked (4.7 safety review)
+  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews); streamed text is shown as provisional
+    until done, and a replacement is visibly marked (4.7 safety review)
   deps:
   - GATE
   - '1.3'
