@@ -548,6 +548,8 @@ tasks:
   - '3.7'
   - M0
   - '4.5'
+  - '4.3'
+  - '4.4'
   status: todo
   branch: null
   model: null
@@ -963,7 +965,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.7-grounding
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
