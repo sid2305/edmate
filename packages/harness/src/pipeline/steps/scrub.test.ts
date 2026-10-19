@@ -307,6 +307,40 @@ describe('scrub: a bare "name"/"card"/"pin" key redacts its own scalar value (fi
   });
 });
 
+describe('scrub: the file-like-parent exemption also needs the value to look like a file or identifier (fix round 2, HIGH)', () => {
+  const run = async (skillPayload: unknown) => {
+    const { env, drive } = setup({ ...demoTurnInput, skillPayload });
+    return drive(scrub(env, entitled()));
+  };
+
+  // Fix round 1 keyed the exemption on the enclosing key's name alone, so a person's name under
+  // `files`, `module`, `function`, `class` or `variable` was never redacted, at any depth. Now
+  // both have to hold: the parent is file-shaped AND the value itself looks like a file name or a
+  // plain identifier (a dot-extension, or a single no-whitespace token that isn't a bare
+  // Title-Case word). Unsure cases redact (fail toward privacy).
+  it.each([
+    ['a name under "files"', { files: [{ name: 'Riya Sen' }] }, { files: [{ name: P.name }] }],
+    ['a one-word name under "module"', { module: { name: 'Riya' } }, { module: { name: P.name } }],
+    ['a name under "function"', { function: { name: 'Riya Sen' } }, { function: { name: P.name } }],
+    ['a name under "class"', { class: { name: 'Riya Sen' } }, { class: { name: P.name } }],
+    ['a name under "variable"', { variable: { name: 'Riya Sen' } }, { variable: { name: P.name } }],
+    [
+      'a name under "files" nested two levels deep',
+      { project: { files: [{ name: 'Riya Sen' }] } },
+      { project: { files: [{ name: P.name }] } },
+    ],
+  ] as const)('%s', async (_label, payload, expected) => {
+    expect((await run(payload)).skillPayload).toEqual(expected);
+  });
+
+  it.each([
+    ['a dot-extension file name under "files"', { files: [{ name: 'main.py' }] }],
+    ['a snake_case identifier under "function"', { function: { name: 'greet_user' } }],
+  ] as const)('still left alone: %s', async (_label, payload) => {
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+});
+
 describe('scrub at the input cap (fix round)', () => {
   const fill = (head: string, unit: string, cap: number) =>
     head + unit.repeat(Math.floor((cap - head.length) / unit.length));

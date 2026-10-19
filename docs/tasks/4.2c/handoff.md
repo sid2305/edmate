@@ -299,3 +299,75 @@ Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin
 over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
 original 4.2c false positives it was meant to fix).
 Reversible: Yes.
+
+## Fix round 2 (19 Oct 2026, PR #42)
+
+- **Branch:** `m4/4.2c-pii-hardening` (pushed from `fix-4.2c`)
+
+### [HIGH] `FILE_LIKE_PARENT` keyed only on the enclosing key, not the value shape
+Fix round 1's file-like-parent exemption (`scrub.ts`, then `keyCategory`) checked only whether a
+bare "name" key's nearest enclosing key was file-shaped (`files`, `file`, `module`, `function`,
+`variable`, `class`), so a real person's name under any of those keys, at any depth, was never
+redacted: `{"files":[{"name":"Riya Sen"}]}`, `{"module":{"name":"Riya"}}`,
+`{"function":{"name":"Riya Sen"}}`, `{"class":{"name":"Riya Sen"}}`,
+`{"variable":{"name":"Riya Sen"}}`, `{"project":{"files":[{"name":"Riya Sen"}]}}` all reached the
+model unredacted.
+
+Fixed: the exemption now requires BOTH conditions — the enclosing key is file-shaped AND the
+value itself looks like a file name or a plain identifier (`looksFileOrIdentifier`): a
+dot-extension (`main.py`, `notes.md`), or a single no-whitespace token matching
+`/^[A-Za-z_][A-Za-z0-9_.-]*$/` that is not a bare Title-Case word (`/^[A-Z][a-z]+$/` — exactly
+what a first name looks like). `"utils"`, `"greet_user"`, `"calcTotal"` still stay; `"Riya"`,
+`"Riya Sen"` and anything with a space now redact regardless of the enclosing key, since unsure
+cases fail toward privacy. `keyCategory` now takes the value as a parameter so this check can see
+both the key and the value shape together.
+
+New tests: `scrub.test.ts` "the file-like-parent exemption also needs the value to look like a
+file or identifier (fix round 2, HIGH)" — 6 redact cases (every probe the reviewer listed, plus
+the two-levels-deep `project.files` case) and 2 still-left-alone cases (`main.py`, `greet_user`).
+
+### Also added: reversed order, Devanagari ("आरव मेरा नाम है")
+Small addition alongside the above: `NAME_REVERSED_DEVA` in `piiPatterns.ts` mirrors the Latin
+`NAME_REVERSED` (fix round 1, item 3) for Devanagari script. Devanagari has no case to narrow the
+word shape the way `TITLE_WORD` does, so this captures one word only (not up to 3) and filters it
+through the existing `NOT_A_NAME` stop-list directly, same protection `nameWords` gives every
+other name pattern (new near-miss test: "परेशान मेरा नाम है" stays unchanged).
+
+### Acceptance evidence
+
+Postgres/Redis up (same compose command as before), then:
+
+```
+turbo run typecheck lint test --filter=...@edmate/harness --force
+```
+
+```
+@edmate/harness:test:  Test Files  54 passed (54)
+@edmate/harness:test:       Tests  2757 passed (2757)
+@edmate/harness:test:  src/guardrails    |     100 |      100 |     100 |     100 |
+@edmate/evals:test:   src/suites.test.ts > ... > every case validates and follows the suite rules
+                      — FAILS, reporting the same 6 pre-existing `reviewed_by: pending` cases
+                      (unchanged by this fix round; awaiting human sign-off)
+ Tasks:    7 successful, 21 total
+ Failed:   @edmate/evals#test
+```
+
+`src/guardrails` stays at 100% statements/branches/funcs/lines. `python3
+.githooks/secret-scan.py --all` → clean.
+
+### Decisions (fix round 2)
+
+#### 19 Oct 2026 · Fix round 2: the file-like-parent exemption needs the value's shape too, not just the parent key's name · decided by build-error-resolver · risk: low
+Decided: a bare "name" under a file-shaped key (`files`/`file`/`module`/`function`/`variable`/
+`class`) is only exempt from redaction when the value also looks like a file name or a plain code
+identifier (a dot-extension, or a single no-whitespace token that isn't a bare Title-Case word);
+otherwise it redacts, even under one of those keys.
+Why: keying the exemption on the parent alone let a real person's name under any of those keys go
+unredacted at any depth — a HIGH-severity privacy gap the reviewer found in fix round 1. Checking
+the value's shape too closes it while still letting ordinary file names and code identifiers
+through.
+Alternatives: drop the file-like-parent exemption entirely (reopens the original `main.py` false
+positive it was added for); key only on the value's shape and ignore the parent (would also
+exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
+which is less targeted than keeping both conditions).
+Reversible: Yes.

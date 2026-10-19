@@ -341,6 +341,17 @@ const SIGNOFF = new RegExp(
   'giu',
 );
 /**
+ * Reversed order, Devanagari (fix round 2): "आरव मेरा नाम है" says the name before the phrase too.
+ * Devanagari has no case to narrow the word shape the way `TITLE_WORD` does, so this only takes
+ * one word (not up to 3, unlike `NAME_REVERSED`) and that word is still checked against
+ * `NOT_A_NAME` before it is kept (see `names()`), same stop-list protection `nameWords` gives the
+ * forward-order patterns.
+ */
+const NAME_REVERSED_DEVA = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])([\p{L}\p{M}]+)[^\S\r\n]+मेरा\s+नाम\s+है(?![\p{L}\p{M}])`,
+  'gdu',
+);
+/**
  * A leading copula right after a strong phrase ("mera naam hai Aarav", "मेरा नाम है आरव": hardened
  * 4.2c item 5), skipped so the real name words after it are still captured.
  */
@@ -682,6 +693,12 @@ function names(s: string): PiiSpan[] {
     }
   }
   for (const [, end] of ranges(SIGNOFF, s)) words.push(...nameWords(s, end, WORD_TITLE));
+  // Reversed order, Devanagari (fix round 2): one word, filtered against the stop-list directly
+  // (no case to lean on the way `NAME_REVERSED`'s Title-Case requirement does).
+  for (const m of all(NAME_REVERSED_DEVA, s)) {
+    const [a, b] = group1(m);
+    if (!NOT_A_NAME.has(s.slice(a, b).toLowerCase())) words.push([a, b]);
+  }
   // Later (and earlier) repeats of a captured word in the same message.
   const tokens = new Set(words.map(([a, b]) => s.slice(a, b)));
   for (const t of tokens) {

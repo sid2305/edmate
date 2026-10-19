@@ -822,6 +822,14 @@ describe('fix round item 3 (MEDIUM): reversed Hinglish order and comma sign-offs
     expect(scrub('Aarav mera naam hai')).toBe(`${P.name} mera naam hai`);
   });
 
+  it('reversed order, Devanagari: "<Name> मेरा नाम है" (fix round 2)', () => {
+    expect(scrub('आरव मेरा नाम है')).toBe(`${P.name} मेरा नाम है`);
+  });
+
+  it('reversed order, Devanagari, near-miss: a stop-list word before the phrase is never a name', () => {
+    expect(scrub('परेशान मेरा नाम है')).toBe('परेशान मेरा नाम है');
+  });
+
   it('sign-off with a comma: "Thanks, Aarav"', () => {
     expect(scrub('Thanks, Aarav')).toBe(`Thanks, ${P.name}`);
   });

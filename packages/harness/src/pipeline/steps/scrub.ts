@@ -120,7 +120,11 @@ function collect(v: unknown, into: Set<string>, depth: number): void {
  * regression from 4.2c item 7) that ambiguity must never block a bare key's own direct scalar
  * value: `{"name":"Riya Sen"}` is still a name. Three gates are narrower instead:
  *  - a bare "name" whose nearest enclosing key is file-shaped (`files`, `file`, `module`,
- *    `function`, `variable`, `class`) is left alone (`{"files":[{"name":"main.py"}]}`);
+ *    `function`, `variable`, `class`) is left alone only when the value ALSO looks like a file
+ *    name or a plain identifier (fix round 2, HIGH: a parent-only check let a real person's name
+ *    under `files`/`module`/`function`/`class`/`variable` go unredacted at any depth —
+ *    `{"files":[{"name":"main.py"}]}` stays, but `{"files":[{"name":"Riya Sen"}]}`,
+ *    `{"module":{"name":"Riya"}}` and the like still redact; unsure cases redact);
  *  - a bare "name" whose value is itself an object only redacts that object's own direct
  *    name-shaped fields (`first`, `last`, `full`, `middle`, ...), not every field in it
  *    (`{"name":{"first":"Riya","last":"Sen"}}`, but a `nickname` sibling stays, same as any other
@@ -149,7 +153,8 @@ const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
   pan: 'id',
   upi: 'id',
 };
-/** A bare "name" under one of these keys (through any number of arrays) is a file, not a person. */
+/** A bare "name" under one of these keys (through any number of arrays) MAY be a file, not a
+ * person — but only once the value shape agrees too (see `looksFileOrIdentifier`). */
 const FILE_LIKE_PARENT: ReadonlySet<string> = new Set([
   'files',
   'file',
@@ -158,6 +163,25 @@ const FILE_LIKE_PARENT: ReadonlySet<string> = new Set([
   'variable',
   'class',
 ]);
+/** A file name's extension ("main.py", "notes.md"): a dot, then letters/digits, at the end. */
+const DOT_EXTENSION = /\.[A-Za-z0-9]+$/;
+/** A single identifier-shaped token: starts with a letter or underscore, no whitespace. */
+const IDENTIFIER_TOKEN = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+/** A bare capitalised word ("Riya"): shaped exactly like a first name, not an identifier. */
+const TITLE_CASE_SINGLE_WORD = /^[A-Z][a-z]+$/;
+
+/**
+ * True only for a value that looks like a file name or a plain code identifier: a dot-extension,
+ * or a single no-whitespace token that isn't just a bare Title-Case word (fix round 2, HIGH: the
+ * file-like-PARENT check alone let `{"files":[{"name":"Riya Sen"}]}` go unredacted). Anything
+ * else — including a single Title-Case word, since that is exactly what a first name looks like —
+ * fails toward privacy and is treated as not file/identifier-shaped.
+ */
+function looksFileOrIdentifier(value: unknown): boolean {
+  if (typeof value !== 'string' || value === '') return false;
+  if (DOT_EXTENSION.test(value)) return true;
+  return IDENTIFIER_TOKEN.test(value) && !TITLE_CASE_SINGLE_WORD.test(value);
+}
 /** A bare "name" key's object value: only these direct fields are name-shaped on their own. */
 const NAME_SUBFIELDS: ReadonlySet<string> = new Set([
   'first',
@@ -176,16 +200,22 @@ const normalizeKey = (key: string): string => key.toLowerCase().replace(/[\s_.-]
 
 /**
  * `enclosingKey` is the nearest key whose value directly contains this one (through any number of
- * arrays), used only to tell a bare "name" apart from a file's own "name" field.
+ * arrays), used with `value` only to tell a bare "name" apart from a file's own "name" field (both
+ * the parent key and the value's own shape have to agree; see `looksFileOrIdentifier`).
  */
-function keyCategory(key: string, enclosingKey: string | undefined): Under {
+function keyCategory(key: string, value: unknown, enclosingKey: string | undefined): Under {
   const norm = normalizeKey(key);
   const m = PII_KEY.exec(norm);
   if (m === null) return undefined;
   const [, prefix, core, suffix] = m;
   const bare = prefix === undefined && suffix === undefined;
   if (bare) {
-    if (core === 'name' && enclosingKey !== undefined && FILE_LIKE_PARENT.has(normalizeKey(enclosingKey))) {
+    if (
+      core === 'name' &&
+      enclosingKey !== undefined &&
+      FILE_LIKE_PARENT.has(normalizeKey(enclosingKey)) &&
+      looksFileOrIdentifier(value)
+    ) {
       return undefined;
     }
     if (core === 'pin') return 'pinBare';
@@ -249,7 +279,7 @@ function rebuild(
     if (keys.has(key)) throw payloadShape();
     keys.add(key);
     const forced = nameFields?.has(normalizeKey(k)) ? ('name' as const) : undefined;
-    entries.push([key, rebuild(x, scrubbed, state, forced ?? keyCategory(k, enclosingKey), k)]);
+    entries.push([key, rebuild(x, scrubbed, state, forced ?? keyCategory(k, x, enclosingKey), k)]);
   }
   // fromEntries defines own keys, so a "__proto__" key never sets the prototype.
   return Object.fromEntries(entries);
