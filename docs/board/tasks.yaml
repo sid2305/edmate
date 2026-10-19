@@ -562,7 +562,7 @@ tasks:
   - '2.6'
   - '3.6'
   - M0
-  status: todo
+  status: running
   needs_decision:
   - pilot-market
   risk: risky

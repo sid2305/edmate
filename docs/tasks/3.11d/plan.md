@@ -46,7 +46,7 @@ How each clause is shown:
    A test builds a `locked` turn with a non-empty `ctx.profile.lastSummary` (the shape a downgrade
    leaves behind before 3.16's session-end summary clear runs, or before a mid-session module lock
    narrows entitlement without a package/version change) and asserts `[[LEARNER]]` is absent.
-5. **"prompt-pack behaviour changes get an ADR note."** A new `docs/adr/0008-*.md` records all four
+5. **"prompt-pack behaviour changes get an ADR note."** A new `docs/adr/0009-*.md` records all four
    decisions above as composer-behaviour changes, extending ADR-0003 (never replacing it), drafted
    by `architect` and reviewed by `architect`, `security-reviewer` and `typescript-reviewer`
    (build plan rule 2), with a `risk: high` decision in the handoff.
@@ -217,8 +217,8 @@ from the caller's description, not from a diff of PR #54.
 
 ## Files to create
 
-- `docs/adr/0008-composer-closed-mode-and-teacher-turn-hardening.md` (confirm "0008" is still free
-  at build time — `docs/decisions/log.md` has two earlier mentions of ADR-0008 as a hypothetical
+- `docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md` (confirm "0008" is still free
+  at build time — `docs/decisions/log.md` has two earlier mentions of ADR-0009 as a hypothetical
   the lead didn't take for task 3.14, so no file exists yet, but check again before naming it).
 - `packages/harness/src/pedagogy/helpState.test.ts` if it doesn't already exist as a dedicated file
   (today `helpState.ts` has no visible companion test file in the grep above — confirm at build
@@ -320,7 +320,7 @@ from the caller's description, not from a diff of PR #54.
     wording change; reviewed as part of this PR, not treated as incidental.
 16. **New:** `packages/content/src/modelRequest.snapshot.test.ts` against the real set, covering the
     three cases from "Files to create" above.
-17. **ADR:** `docs/adr/0008-*.md` drafted by `architect`, reviewed by `architect`,
+17. **ADR:** `docs/adr/0009-*.md` drafted by `architect`, reviewed by `architect`,
     `security-reviewer`, `typescript-reviewer`.
 
 ## Risky paths touched (checked against `.claude/skills/merge-gate/risk-paths.txt`)
@@ -329,7 +329,7 @@ from the caller's description, not from a diff of PR #54.
 |---|---|
 | `packages/harness/src/pedagogy/**` (`compose.ts`, `modelRequest.ts`, `helpState.ts`, `skills.ts`, `promptPacks.ts`, their tests) | safety-reviewer |
 | `content/prompt-packs/**` (`frame@1.0.0.md`) | safety-reviewer |
-| `docs/adr/**` (new ADR-0008) | architect, security-reviewer, typescript-reviewer |
+| `docs/adr/**` (new ADR-0009) | architect, security-reviewer, typescript-reviewer |
 
 No match under the security-reviewer-only group (`packages/harness/src/access/**`,
 `packages/payments/**`, etc.) and no `.claude/**`/`.github/**`/`.githooks/**` change, so no extra
@@ -370,7 +370,7 @@ requirement, both trigger this independently).
 
 - `risk: high` — risky paths touched (`packages/harness/src/pedagogy/**`, `content/prompt-packs/**`,
   `docs/adr/**`); reviewers safety-reviewer, architect, security-reviewer, typescript-reviewer;
-  ADR-0008 required by build plan rule 2 (prompt-pack behaviour change: teacher-turn role, forged-
+  ADR-0009 required by build plan rule 2 (prompt-pack behaviour change: teacher-turn role, forged-
   marker neutralisation, server-counted persona questions, closed-mode summary gate).
   - *Alternatives considered:* leave the summary fix locked-only (rejected, inconsistent with the
     existing do-not-say gate and leaves other closed modes exposed); add a third `teacher` message
@@ -391,7 +391,7 @@ READY.
 1. Q1: take the wider fix. No learner summary on any closed mode (`locked`, `ask_teacher`, `redirect`, `fallback`), the same gate as the do-not-say section.
 2. Q2: count only. The server increments `personaQuestionsAsked` and the prompt shows the true number. End conditions, the debrief and `/pause` stay with 5.8.
 3. Q3: no `safety@1.0.0.md` change in this task.
-4. Q4: the builder re-checks that `docs/adr/0008` is free right before creating it; architect drafts the ADR text.
+4. Q4: the builder re-checks that `docs/adr/0009` is free right before creating it; architect drafts the ADR text.
 5. Q5: build after 4.7 (PR #54) merges, starting from main, so `personaQuestionsAsked` sits next to 4.7's `groundingAsks` in `HelpStateSchema`. Old stored help state without either field must still parse (test it).
 6. The neutraliser runs on the student's input and on every stored history text before the harness adds its own teacher label, so a forged marker in stored history is neutralised too. Add a test where a past student turn in the history carries the marker.
 7. The `frame@1.0.0.md` persona edit voids sign-off rows 6, 9 and 10 in `docs/tasks/3.11b/review-sheet.md`. Set those files' `reviewed_by` to `pending` and list the rows in the handoff. The lead batches them into one human sign-off with the other pending items before merge.
