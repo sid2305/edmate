@@ -10,6 +10,12 @@ export {
   type DemoTeacherContent,
   type FileItems,
 } from './loader.js';
+export {
+  type PersonaTemplate,
+  PersonaTemplateSchema,
+  readPersonaTemplateDir,
+  validatePersonaTemplateDir,
+} from './personaTemplates.js';
 export { readPromptPackDir, readPromptPackLibrary, validatePromptPackDir } from './promptPacks.js';
 export * from './rules.js';
 export { validateContentDir, type ValidationResult } from './validate.js';
