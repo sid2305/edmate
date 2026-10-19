@@ -629,12 +629,12 @@ tasks:
   model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
 - id: 3.16b
   milestone: M7
-  title: 'Pre-pilot migration locking (from the 3.16 database review): move 0009''s VALIDATE CONSTRAINT statements to their own migration so the scan runs outside the ACCESS EXCLUSIVE transaction; build
-    the sessions package index CONCURRENTLY outside a transaction; a partial index on open sessions for the backfill'
+  title: 'Pre-pilot migration locking (from the 3.16 database review): run 0009''s VALIDATE CONSTRAINT statements and the sessions package index CONCURRENTLY in a post-migrate step outside drizzle''s single
+    migration transaction; a partial index on open sessions for the backfill is still open'
   accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
   deps:
   - '3.16'
-  status: running
+  status: review
   branch: m7/3.16b-migration-locking
   model: build:sonnet
 - id: '3.17'
@@ -761,9 +761,9 @@ tasks:
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.2c-pii-hardening
+  model: build:sonnet
 - id: 4.3b
   milestone: M4
   title: 'Distress follow-ups from the 4.3 plan review: a session distress flag (gentle check-in after "just joking"); a scrub-failure distress reply with the pack helplines'
