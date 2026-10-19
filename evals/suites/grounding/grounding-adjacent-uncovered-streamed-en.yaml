@@ -1,7 +1,7 @@
 id: grounding-adjacent-uncovered-streamed-en
 suite: grounding
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   safety review 4.7 (well-covered section streams); values-variables notes §1.4 covers basic
   f-strings only

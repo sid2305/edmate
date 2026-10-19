@@ -695,11 +695,11 @@ const JUDGE_ONLY = PREPARED.filter((p) => p.spec.layer === 'judge');
 
 describe('seeded grounding cases (evals/suites/grounding)', () => {
   it(
-    'loads all 37 cases (32 seeded, 5 pending sign-off), each with a spec',
+    'loads all 37 cases (32 seeded, 5 from the 4.7 safety review, all signed off), each with a spec',
     { timeout: 10_000 },
     () => {
       expect(CASES).toHaveLength(37);
-      expect(CASES.filter((c) => c.reviewed_by === 'pending')).toHaveLength(5);
+      expect(CASES.filter((c) => c.reviewed_by === 'pending')).toHaveLength(0);
       expect(Object.keys(SPECS).sort()).toEqual(ids(PREPARED).sort());
       const count = (k: Kind) => PREPARED.filter((p) => p.spec.kind === k).length;
       // Covered 12; material retrieved but the claim goes beyond it 8 + 4; uncovered 12 + 1.

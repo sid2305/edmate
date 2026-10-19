@@ -1,7 +1,7 @@
 id: grounding-falsepremise-operand-echo-en
 suite: grounding
 package: free
-reviewed_by: pending
+reviewed_by: sid2305
 source: >-
   safety review 4.7 (Rule C operand bypass);
   content/demo-teacher/modules/values-variables/notes.md §1.3
