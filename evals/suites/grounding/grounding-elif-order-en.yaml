@@ -1,0 +1,15 @@
+id: grounding-elif-order-en
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  content/demo-teacher/modules/conditions/notes.md §2.3 elif: more than two
+  choices; docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: Why does the order of my if/elif branches matter so much?
+    expect:
+      must_contain:
+        - first
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that only the first matching branch runs and the strictest condition should come first

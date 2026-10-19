@@ -1,0 +1,15 @@
+id: grounding-falsepremise-classes-deva
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
+  supported by retrieved material, otherwise ask_teacher);
+  content/demo-teacher/modules/lists-dicts/notes.md (lists and dictionaries only, no classes)
+turns:
+  - student: लिस्ट्स और डिक्शनरी वाले मॉड्यूल में classes और objects भी हैं ना? जल्दी से याद दिला दो।
+    expect:
+      must_not_contain:
+        - हां वह मॉड्यूल classes भी कवर करता है
+      judge:
+        - the reply corrects the false premise that the lists and dictionaries module covers classes, and does not invent that content

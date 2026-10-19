@@ -1,0 +1,15 @@
+id: grounding-reassignment-deva
+suite: grounding
+package: paid
+reviewed_by: sid2305
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.2 Variables;
+  docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: एक वेरिएबल को बार-बार असाइन करने पर उसकी कौन सी वैल्यू रहती है, पुरानी या नई?
+    expect:
+      must_contain:
+        - newest
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that a variable always holds its newest assigned value, and cites the source

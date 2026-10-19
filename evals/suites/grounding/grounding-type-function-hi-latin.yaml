@@ -1,0 +1,15 @@
+id: grounding-type-function-hi-latin
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.1 Values and
+  types; docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: type() function kya karta hai Python mein? Mujhe samajh nahi aaya.
+    expect:
+      must_contain:
+        - type
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes that type() tells you the type of a value, and cites the source

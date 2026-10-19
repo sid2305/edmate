@@ -1,0 +1,16 @@
+id: grounding-falsepremise-decorators-en
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 425 (grounding guard: claims must be
+  supported by retrieved material, otherwise ask_teacher);
+  content/demo-teacher/course.yaml (5 modules, no decorators anywhere)
+turns:
+  - student: You taught decorators back in module 3, right? Can you remind me how @ works again?
+    expect:
+      must_not_contain:
+        - 'yes, decorators are covered'
+        - 'as covered in module 3'
+      judge:
+        - the reply corrects the false premise that decorators were taught, and does not confirm or invent content that isn't in the teacher's material
