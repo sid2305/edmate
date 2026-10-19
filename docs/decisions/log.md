@@ -10,6 +10,30 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.16c The migration lock is polled with `pg_try_advisory_lock`, not held by blocking on `pg_advisory_lock` · decided by tdd-guide (red run) · risk: medium
+Decided: `migrateDatabase()` acquires `MIGRATE_LOCK_KEY` by polling `pg_try_advisory_lock` on its own dedicated connection every 50 ms (10-minute default give-up), instead of a single blocking `pg_advisory_lock` call.
+Why: the int test (two concurrent `migrateDatabase()` calls against a fresh database) hung forever with a blocking `pg_advisory_lock`: that call itself holds an open snapshot on its connection for the whole wait, and `CREATE INDEX CONCURRENTLY` (the post-migrate index steps) must wait out every transaction with an older snapshot, table or not — so the lock holder's own index build waited on the second caller's still-blocked lock request, which only clears once the first caller releases the lock after finishing the build: a self-deadlock, reproduced and confirmed with debug logging before the fix.
+Alternatives: a blocking lock on a separate, short-statement-timeout connection (still holds a snapshot for the timeout's duration); skipping `CREATE INDEX CONCURRENTLY` while any other session is active (defeats the point); moving the lock inside the same pool as the migration (ruled out separately — pool `max: 1` would deadlock against itself).
+Reversible: yes; an internal implementation detail of `migrateDatabase()`.
+
+---
+
+### 19 Oct 2026 · 3.16c A plain `CREATE INDEX CONCURRENTLY` lookup is schema-qualified with `to_regclass('public.' || $1)` · decided by tdd-guide (3.16b review deferral) · risk: low
+Decided: `isIndexInvalid()`'s lookup now resolves the index name with `to_regclass('public.' || $1)` instead of a bare `pg_class.relname = $1` match.
+Why: a bare name match could find a same-named index in another schema (a stray test schema, `drizzle`, or a future multi-schema layout) and wrongly skip or drop it; `to_regclass` with an explicit schema prefix only ever resolves the one in `public`.
+Alternatives: join `pg_namespace` and filter `nspname = 'public'` (same result, more verbose); leave it unqualified (the review's finding).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16c The open-session partial index is its own migration (0010), not folded into 0009 · decided by tdd-guide (3.16b review deferral) · risk: low
+Decided: `sessions_open_teacher_id_student_id_idx` is declared in `src/schema/learning.ts` the same schema-only way as 0009's package-pin index, but ships as its own generated-then-trimmed migration file (`0010_easy_maximus.sql`), because `db:generate` is not a no-op for a schema change with no matching not-yet-released migration to diff it into (0009's index was a no-op only because it was invented and declared together with 0009's new columns, before 0009 existed). The generated file's SQL was trimmed to a comment, same as 0009's hand-edit, so the index is still built only by the post-migrate step; the generated snapshot and journal entries were kept, which is what keeps `db:generate` a no-op again afterwards.
+Why: the task asked for whichever option keeps the journal consistent; trimming the generated file's SQL while keeping its snapshot/journal entries does that without inventing a parallel, undeclared index that `db:generate` would try to add on some future run.
+Alternatives: skip declaring the index in drizzle at all (keeps `db:generate` a no-op trivially, but then nothing stops a future `db:generate` from "discovering" it missing and adding a real, blocking `CREATE INDEX`); hand-write a fake empty migration/snapshot pair instead of using drizzle-kit's own output (more error-prone, diverges from 0009's precedent).
+Reversible: yes; a later migration can rename or rebuild it.
+
+---
+
 ### 19 Oct 2026 · 3.11a Persona-template file layout: no front-matter-name/file-name match check · decided by tdd-guide · risk: low
 Decided: `readPersonaTemplateDir` validates `<id>@<semver>.yaml` (id is a free file-naming slug) and the persona's YAML body, but never checks the id against the persona's own `name` field, unlike `promptPacks.ts`'s pack-name/file-name check.
 Why: the persona's `name` is a role name shown to the model ("Interviewer"), not an identifier matching the file (`job-interview`); the two are different things by design (task scope: "Role names only"), so there is nothing correct to compare them against.

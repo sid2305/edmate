@@ -3,7 +3,12 @@
 // INVALID leftover index that must be dropped and rebuilt). Integration coverage against real
 // Postgres is in migrate.int.test.ts.
 import { describe, expect, it, vi } from 'vitest';
-import { POST_MIGRATE_STEPS, runPostMigrateSteps, type PostMigrateStep } from '../src/migrate.js';
+import {
+  acquireMigrateLock,
+  POST_MIGRATE_STEPS,
+  runPostMigrateSteps,
+  type PostMigrateStep,
+} from '../src/migrate.js';
 
 interface FakeClient {
   query: ReturnType<typeof vi.fn>;
@@ -86,6 +91,17 @@ describe('runPostMigrateSteps', () => {
     expect(client.query.mock.calls.some((c) => String(c[0]).includes('DROP INDEX'))).toBe(false);
   });
 
+  it('qualifies the index lookup to the public schema with to_regclass, not a bare relname match', async () => {
+    const client = fakeClient([true]);
+    const steps: PostMigrateStep[] = [
+      { kind: 'concurrentIndex', indexName: 'an_idx', sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "an_idx" ON "t" ("c")' },
+    ];
+    await runPostMigrateSteps(client as never, steps);
+    const lookup = String(client.query.mock.calls[0]?.[0]);
+    expect(lookup).toMatch(/to_regclass\('public\.' \|\| \$1\)/);
+    expect(client.query.mock.calls[0]?.[1]).toEqual(['an_idx']);
+  });
+
   it('drops and rebuilds an INVALID leftover index (a failed or killed earlier build)', async () => {
     const client = fakeClient([false]);
     const steps: PostMigrateStep[] = [
@@ -100,7 +116,7 @@ describe('runPostMigrateSteps', () => {
     );
   });
 
-  it('the default step list runs the three 0009 VALIDATEs and the package-pin index', () => {
+  it('the default step list runs the three 0009 VALIDATEs and the package-pin and open-session indexes', () => {
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(3);
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'concurrentIndex')).toEqual([
       {
@@ -108,6 +124,40 @@ describe('runPostMigrateSteps', () => {
         indexName: 'sessions_package_id_package_version_idx',
         sql: expect.stringContaining('CREATE INDEX CONCURRENTLY IF NOT EXISTS'),
       },
+      {
+        kind: 'concurrentIndex',
+        indexName: 'sessions_open_teacher_id_student_id_idx',
+        sql: expect.stringMatching(
+          /CREATE INDEX CONCURRENTLY IF NOT EXISTS.*WHERE.*"ended_at" is null/,
+        ),
+      },
     ]);
+  });
+});
+
+describe('acquireMigrateLock', () => {
+  it('returns immediately when pg_try_advisory_lock reports true on the first poll', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: true }] });
+    await acquireMigrateLock({ query } as never, 1n);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toMatch(/pg_try_advisory_lock/);
+    expect(query.mock.calls[0]?.[1]).toEqual([1n]);
+  });
+
+  it('polls until pg_try_advisory_lock reports true', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ locked: false }] })
+      .mockResolvedValueOnce({ rows: [{ locked: false }] })
+      .mockResolvedValueOnce({ rows: [{ locked: true }] });
+    await acquireMigrateLock({ query } as never, 1n, 10_000);
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives up and throws once maxWaitMs elapses with the lock still held elsewhere', async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ locked: false }] });
+    await expect(acquireMigrateLock({ query } as never, 1n, 0)).rejects.toThrow(
+      /timed out after 0ms waiting for the migration lock/,
+    );
   });
 });
