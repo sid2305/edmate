@@ -627,6 +627,16 @@ tasks:
   status: running
   branch: m3/3.16-sessions-follow-package
   model: plan:sonnet planreview:sonnet(security) build:opus-5.5/medium
+- id: 3.16b
+  milestone: M7
+  title: 'Pre-pilot migration locking (from the 3.16 database review): move 0009''s VALIDATE CONSTRAINT statements to their own migration so the scan runs outside the ACCESS EXCLUSIVE transaction; build
+    the sessions package index CONCURRENTLY outside a transaction; a partial index on open sessions for the backfill'
+  accept: a migration test shows the constraints validate in a separate migration; no long ACCESS EXCLUSIVE lock on sessions.
+  deps:
+  - '3.16'
+  status: todo
+  branch: null
+  model: null
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -786,10 +796,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: planning
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.5-answer-leak
+  model: plan:sonnet
 - id: '4.6'
   milestone: M4
   title: '`lockedLeak` post-guard (code only)'
