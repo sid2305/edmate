@@ -26,7 +26,7 @@ import {
   matchJailbreak,
   matchModeration,
   runTurn,
-  WITHHELD_MESSAGE,
+  withheldMessage,
 } from '@edmate/harness';
 import {
   demoAgentConfig,
@@ -134,7 +134,7 @@ async function runOneTurn(
     await transcripts.append(input.sessionId, {
       id: `m${transcripts.appended.length + 1}`,
       role: 'student',
-      text: commit.inputWithheld === true ? WITHHELD_MESSAGE : commit.input.text,
+      text: commit.inputWithheld === true ? withheldMessage(commit.withheldCode) : commit.input.text,
       createdAt: '2026-10-19T10:00:00.000Z',
     });
   }

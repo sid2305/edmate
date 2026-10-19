@@ -11,7 +11,7 @@ import { scriptedStreamText } from '../testing/gatewayFixtures.js';
 import { memoryAlertSink, memoryTranscriptStore } from '../testing/memoryPorts.js';
 import { memoryRetrieval } from '../testing/memoryRetrieval.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
-import { WITHHELD_MESSAGE } from './policies.js';
+import { withheldMessage } from './policies.js';
 import type { Steps } from './types.js';
 import { testDeps, testSteps } from '../testing/testSteps.js';
 import { runTurn } from './runner.js';
@@ -48,6 +48,7 @@ describe('runTurn: a pre-guard block with a reply', () => {
       expect(steps.commits[0]).toMatchObject({ outcome: 'blocked', replyText: BLOCK_REPLIES.hate });
       expect(steps.commits[0]?.alert).toBeUndefined();
     expect(steps.commits[0]?.inputWithheld).toBe(true);
+    expect(steps.commits[0]?.withheldCode).toBe('hate');
       expect(result.trace?.move).toBe('redirect');
       expect(result.trace?.guards).toContainEqual({
         name: 'moderationIn',
@@ -120,6 +121,25 @@ describe('runTurn: a pre-guard block with a reply', () => {
       expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: false }]);
       expect(steps.commits[0]).toMatchObject({ outcome: 'blocked' });
       expect(steps.commits[0]?.replyText).toBeUndefined();
+      // Any non-ok pre outcome withholds the input (fix round 2, MEDIUM 2).
+      expect(steps.commits[0]?.inputWithheld).toBe(true);
+    },
+    T,
+  );
+});
+
+describe('runTurn: a failed pre chain withholds the input too (fix round 2, MEDIUM 2)', () => {
+  it(
+    'preGuard throws (chain failed): guard_blocked, and the input is saved as the placeholder',
+    async () => {
+      const t = testDeps();
+      const steps = testSteps({
+        preGuard: () => Promise.reject(new Error('chain failed')),
+      });
+      const { events } = await driveTurn(runTurn(at('FAILED-CANARY'), { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+      expect(steps.commits[0]).toMatchObject({ outcome: 'blocked', inputWithheld: true });
+      expect(steps.commits[0]?.withheldCode).toBeUndefined();
     },
     T,
   );
@@ -162,7 +182,7 @@ describe('runTurn: a blocked input never reaches a later turn (fix round MEDIUM 
       );
       expect(r1.events[0]).toEqual({ type: 'token', text: BLOCK_REPLIES.jailbreak_override });
       expect(transcripts.appended.map((a) => a.message.text)).toEqual([
-        WITHHELD_MESSAGE,
+        withheldMessage('jailbreak_override'),
         BLOCK_REPLIES.jailbreak_override,
       ]);
 
@@ -184,7 +204,7 @@ describe('runTurn: a blocked input never reaches a later turn (fix round MEDIUM 
       expect(r2.events.at(-1)?.type).toBe('done');
       expect(t2.gateway.requests).toHaveLength(1);
       expect(JSON.stringify(t2.gateway.requests)).not.toContain(CANARY);
-      expect(JSON.stringify(t2.gateway.requests)).not.toContain(WITHHELD_MESSAGE);
+      expect(JSON.stringify(t2.gateway.requests)).not.toContain('[message withheld');
       expect(JSON.stringify(transcripts.appended)).not.toContain(CANARY);
     },
     T,

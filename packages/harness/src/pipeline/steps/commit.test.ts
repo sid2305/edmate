@@ -17,7 +17,7 @@ import {
 } from '../../testing/memoryPorts.js';
 import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import type { CommitRecord, PipelineDeps, StepEnv } from '../types.js';
-import { WITHHELD_MESSAGE } from '../policies.js';
+import { WITHHELD_MESSAGE, withheldMessage } from '../policies.js';
 import { commit } from './commit.js';
 
 const CANARY = 'CANARY-ANSWER-7f3a';
@@ -141,6 +141,21 @@ describe('commit', () => {
       ['agent', 'My rules stay the same.'],
     ]);
     expect(JSON.stringify(w.transcripts.appended)).not.toContain('BLOCKED-CANARY');
+  });
+
+  it('a blocked input with its code is saved as the coded placeholder (fix round 2)', async () => {
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        input: { ...demoTurnInput, text: 'BLOCKED-CANARY' },
+        outcome: 'blocked',
+        inputWithheld: true,
+        withheldCode: 'hate',
+      }),
+    );
+    expect(w.transcripts.appended[0]?.message.text).toBe(withheldMessage('hate'));
+    expect(withheldMessage('hate')).toBe('[message withheld: hate]');
   });
 
   it('a failed scrub (input null) still appends the reply to the right session', async () => {

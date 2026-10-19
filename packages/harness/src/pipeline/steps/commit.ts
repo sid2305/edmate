@@ -11,7 +11,7 @@
 // jobs are enqueued, never on the database write. TeacherQuestion for `ask_teacher` and learner
 // memory are task 3.17.
 import { serializeSessionHelp } from '../../pedagogy/helpState.js';
-import { WITHHELD_MESSAGE } from '../policies.js';
+import { withheldMessage } from '../policies.js';
 import type { Steps } from '../types.js';
 
 export const commit: Steps['commit'] = async (env, record) => {
@@ -21,7 +21,7 @@ export const commit: Steps['commit'] = async (env, record) => {
     record.input?.text === undefined
       ? undefined
       : record.inputWithheld === true
-        ? WITHHELD_MESSAGE
+        ? withheldMessage(record.withheldCode)
         : record.input.text;
   if (text !== undefined) {
     await transcripts.append(record.sessionId, {

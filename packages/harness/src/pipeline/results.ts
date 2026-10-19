@@ -14,6 +14,7 @@ import {
   PedagogyDecisionSchema,
   PersonaSchema,
   SafetyAlertSchema,
+  SafetyEventCodeSchema,
   SourceRefSchema,
   StyleCardSchema,
   TurnContextSchema,
@@ -61,6 +62,7 @@ export const PreGuardResultSchema: z.ZodType<PreGuardResult> = z.discriminatedUn
     usage,
     reply: z.string().min(1).exactOptional(),
     alert: SafetyAlertSchema.exactOptional(),
+    code: SafetyEventCodeSchema.exclude(['self_harm']).exactOptional(),
   }),
   z.strictObject({ result: z.literal('escalate'), alert: SafetyAlertSchema, guards, usage }),
 ]);

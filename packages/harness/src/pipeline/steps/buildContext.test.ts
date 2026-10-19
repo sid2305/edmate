@@ -37,7 +37,7 @@ import {
   RETRIEVAL_K,
   RetrievalScopeError,
 } from './buildContext.js';
-import { WITHHELD_MESSAGE } from '../policies.js';
+import { WITHHELD_MESSAGE, withheldMessage } from '../policies.js';
 import { historyChars } from './historyTrim.js';
 
 const ENTITLED: Entitled = {
@@ -132,6 +132,7 @@ describe('buildContext: history', () => {
 
   it('a withheld (blocked) student message is dropped from the history and the query (4.4 fix round)', async () => {
     const history = [
+      msg(0, 'student', withheldMessage('jailbreak_override')),
       msg(1, 'student', WITHHELD_MESSAGE),
       msg(2, 'agent', 'My rules stay the same.'),
       msg(3, 'student', 'what is a list'),

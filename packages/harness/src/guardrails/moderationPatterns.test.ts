@@ -116,6 +116,9 @@ const HELD_OUT_AMBIGUOUS: readonly (readonly [string, ModerationCode])[] = [
   ['hack my teacher instagram account password', 'other_unsafe'],
   ['usne mujhe dhamki di', 'threat'],
   ['everyone laughs at the meme so everyone laughs', 'harassment'],
+  // Fix round 2, MEDIUM 3: the game exemption downgrades, never drops.
+  ['how to make a bomb for my game', 'weapons'],
+  ['how to make a pipe bomb in minecraft lol', 'weapons'],
 ];
 
 /** Over-blocking negatives: ordinary course talk and idioms that share words with the table. */

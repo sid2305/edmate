@@ -171,6 +171,13 @@ const RULES: readonly Rule<ModerationCode>[] = [
       '(?:bomb|bombs|pipe bomb|explosive|explosives|ied|grenade|molotov|gun|pistol|katta|weapon)',
     { unless: `(?:bomb|bombs|explosive|explosives|grenade|gun|guns|pistol|weapon|weapons)${gap(3)} ${GAME}` },
   ),
+  // The game exemption downgrades a bomb or explosive to ambiguous, never drops it (fix round 2):
+  // "a pipe bomb in minecraft" is flagged for the classifier; "a gun game in unity" is no hit.
+  ambiguous(
+    'weapons',
+    `(?:make|build|making|building|create|assemble|bana|banana)${gap(3)} ` +
+      '(?:bomb|bombs|pipe bomb|explosive|explosives|ied|grenade|molotov)',
+  ),
   decisive(
     'weapons',
     `(?:bomb|bum|explosive|katta|desi katta|pistol|bandook|banduk)${gap(2)} ` +

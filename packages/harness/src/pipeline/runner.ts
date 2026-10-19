@@ -458,11 +458,24 @@ class Turn {
     }
     if (pg.ok && pg.value.result === 'block' && pg.value.reply !== undefined) {
       // moderationIn / jailbreak (4.4): the code's own reply, plus a misuse alert if one came.
-      return this.sendBlockReply(e, scrubbed, intent, pg.value.reply, pg.value.alert);
+      return this.sendBlockReply(e, scrubbed, intent, pg.value.reply, pg.value.alert, pg.value.code);
     }
     if (!pg.ok || pg.value.result === 'block') {
       this.endWithError(pg.ok ? PRE_GUARD_BLOCKED : PRE_GUARD_FAILED);
-      return this.finish(e, { outcome: 'blocked', input: scrubbed, intent }, intent, 'redirect');
+      // Any non-ok pre outcome keeps the input out of later turns (4.4 fix round 2).
+      const code = pg.ok && pg.value.result === 'block' ? pg.value.code : undefined;
+      return this.finish(
+        e,
+        {
+          outcome: 'blocked',
+          input: scrubbed,
+          intent,
+          inputWithheld: true,
+          ...(code === undefined ? {} : { withheldCode: code }),
+        },
+        intent,
+        'redirect',
+      );
     }
 
     // Assemble the TurnContext; its refine (retrieved ⊆ allowed, same teacher, ids match) is the
@@ -683,6 +696,7 @@ class Turn {
     intent: Intent,
     replyText: string,
     alert: SafetyAlert | undefined,
+    code: string | undefined,
   ): Promise<TurnRunResult> {
     const delivered = alert === undefined ? undefined : this.deliverAlert(alert);
     this.send({ type: 'token', text: replyText });
@@ -696,6 +710,7 @@ class Turn {
         replyText,
         // The blocked text is saved as a placeholder and kept out of later turns (4.4 fix round).
         inputWithheld: true,
+        ...(code === undefined ? {} : { withheldCode: code }),
         ...(alert === undefined ? {} : { alert }),
       },
       intent,

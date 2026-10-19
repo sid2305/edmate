@@ -101,4 +101,4 @@ export type {
   TurnRun,
   TurnRunResult,
 } from './types.js';
-export { isWithheld, WITHHELD_MESSAGE } from './policies.js';
+export { blockedTurnNote, isWithheld, WITHHELD_MESSAGE, withheldMessage } from './policies.js';

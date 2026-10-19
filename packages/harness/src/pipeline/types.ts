@@ -20,6 +20,7 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SafetyEventCode,
   SafetyEventSink,
   SessionStateStore,
   SourceRef,
@@ -238,6 +239,8 @@ export type PreGuardResult =
       reply?: string;
       /** A misuse alert to raise with the block (4.4: harm to others). */
       alert?: SafetyAlert;
+      /** The blocking guard's code (4.4), for the withheld placeholder. Never text. */
+      code?: Exclude<SafetyEventCode, 'self_harm'>;
     }
   | { result: 'escalate'; alert: SafetyAlert; guards: GuardTrace[]; usage: Usage[] };
 
@@ -327,6 +330,8 @@ export interface CommitRecord {
    * WITHHELD_MESSAGE in its place, so the blocked text never reaches a later turn's history.
    */
   inputWithheld?: true;
+  /** The blocking guard's code, when a code came with the block (for the placeholder). */
+  withheldCode?: string;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when

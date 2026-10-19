@@ -21,7 +21,7 @@ import { memorySafetyEventSink, memoryTranscriptStore } from '../../testing/memo
 import type { GatewayScript } from '../../testing/scriptedGateway.js';
 import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
-import { WITHHELD_MESSAGE } from '../policies.js';
+import { WITHHELD_MESSAGE, withheldMessage } from '../policies.js';
 import type { Entitled, PipelineDeps, StepEnv } from '../types.js';
 import {
   createPreGuardStep,
@@ -134,6 +134,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       ],
       usage: [],
       reply: BLOCK_REPLIES.hate,
+      code: 'hate',
     });
     expect(sink.recorded).toEqual([
       {
@@ -368,12 +369,17 @@ describe('recentStudentTurns', () => {
     expect(await recentStudentTurns(env)).toEqual(['s3', 's4', 's5']);
   }, 1_000);
 
-  it('a withheld (blocked) student message is not read back (4.4 fix round)', async () => {
+  it('a withheld student message is read back as "[earlier message blocked: <code>]", never its text (fix round 2)', async () => {
     const transcripts = memoryTranscriptStore();
     await transcripts.append(demoTurnInput.sessionId, msg('s1', 'student', 'first'));
-    await transcripts.append(demoTurnInput.sessionId, msg('s2', 'student', WITHHELD_MESSAGE));
+    await transcripts.append(demoTurnInput.sessionId, msg('s2', 'student', withheldMessage('jailbreak_override')));
+    await transcripts.append(demoTurnInput.sessionId, msg('s3', 'student', WITHHELD_MESSAGE));
     const { env } = envWith('x', { transcripts });
-    expect(await recentStudentTurns(env)).toEqual(['first']);
+    expect(await recentStudentTurns(env)).toEqual([
+      'first',
+      '[earlier message blocked: jailbreak_override]',
+      '[earlier message blocked]',
+    ]);
   }, 1_000);
 
   it('a failing history read → [] (the classifier still runs) and is reported without text', async () => {

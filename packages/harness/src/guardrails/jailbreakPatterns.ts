@@ -69,9 +69,27 @@ const PLAN_NOUN =
   '(?:package|course|plan|subscription|premium|paid|tier|full access|पैकेज|कोर्स|प्लान|सब्सक्रिप्शन|प्रीमियम)' +
   '(?! (?:table|tables|model|models|class|object|field|column|id|data|type|schema)(?![\\p{L}]))';
 const YOU = '(?:you|u|youre|ur|you are|your|tum|tumhe|aap|tu)';
-const ANSWERS =
-  '(?:answers?|solutions?|final|full code|direct|seedha|seedhe|skip|hints|rules|unlock\\S*|paid|' +
-  'everything|jawab)';
+/** What a "my teacher said you can…" claim asks for. Hints are not answers (fix round 2). */
+const ANSWERS = '(?:answers?|solutions?|final answers?|full code|the code|direct answers?)';
+const HI_ANSWERS = '(?:answers?|solutions?|final|seedha|seedhe|jawab|code)';
+/** "you can / could / may / are allowed …": permission given to the agent. */
+const MAY = '(?:can|could|may|are allowed|re allowed|allowed|should|must|have to|are permitted|permitted)';
+/** Rule words an override must name to be decisive with a demand ("filters" is pandas talk). */
+const STRICT_RULE = '(?:instructions?|rules?|restrictions?|guidelines?|guardrails|limits|policies|policy)';
+/** A demand for answers, code or locked content (fix round 2, HIGH 1). */
+const EN_DEMAND =
+  '(?:give|show|tell|unlock|reveal|print|write|send)' +
+  `${gap(3)} (?:answer|answers|answer key|code|final answer|solution|solutions|module|modules|everything|output)|` +
+  'final answer|answer key|(?:answer|jawab|code|solution)s? (?:do|de do|dedo|batao|bata do|dikhao|likh do|bolo)|' +
+  '(?:जवाब|उत्तर|कोड)(?: \\S+)? (?:दो|दे दो|बताओ|दिखाओ|लिखो)';
+/** A file, README or code word: "ignore the previous instructions in the README" is not an attack. */
+const FILE_WORD =
+  '(?:file|files|readme|code|docs?|documentation|pdf|tutorial|assignment|install\\S*|setup|comments?|' +
+  'script|book|guide|lab|worksheet|repo|notebook|page|question)';
+/** What turns a "pretend I have a plan" into a decisive claim: a demand for locked content. */
+const CLAIM_DEMAND =
+  'unlock\\S*|अनलॉक|padhao|padhaao|sikhao|पढाओ|सिखाओ|chapter|चैप्टर|मॉड्यूल|module \\d+|answer key|' +
+  `(?:show|open|give)${gap(2)} (?:module|modules|chapter|lesson|answers?)`;
 /** A demand that turns a generic role claim into a decisive one. */
 const DEMAND =
   'unlock\\S*|answer key|answers? (?:dikhao|do|batao|de do)|(?:give|show|tell) me (?:the )?' +
@@ -81,7 +99,7 @@ const GENERIC_ROLE =
   '(?:i am|im) the (?:teacher|tutor|developer|admin|owner|creator)|' +
   '(?:main|mai) (?:(?!ek )\\S+ )?(?:teacher|tutor|developer|admin) (?:hoon|hun|hu|hoo)|' +
   'मैं (?:(?!एक )\\S+ )?(?:टीचर|शिक्षक|डेवलपर|एडमिन) (?:हूं|हू)';
-const MODE_WORD = '(?:developer|dev|god|jailbreak|unrestricted|dan)';
+const MODE_WORD = '(?:developer|dev|admin|god|jailbreak|unrestricted|dan)';
 /** "Chrome developer mode": a device or tool setting, not a jailbreak. */
 const DEVICE =
   '(?:chrome|android|browser|phone|windows|edge|firefox|safari|mobile|iphone|ios|mac|laptop|vs ?code|' +
@@ -116,18 +134,27 @@ const RULES: readonly Rule<JailbreakCode>[] = [
     'jailbreak_authority_claim',
     '(?:teacher|sir|maam|madam|mam|tutor|instructor|professor|principal|mom|dad|parents?)' +
       `${gap(1)} (?:said|says|told me|allowed|lets|permitted|approved)${gap(4)} ${YOU}` +
-      `(?: \\S+){0,6} ${ANSWERS}`,
+      `(?: \\S+)? ${MAY}(?: \\S+){0,5} ${ANSWERS}`,
   ),
   decisive(
     'jailbreak_authority_claim',
     `(?:maam|mam|madam|sir|teacher|tutor|papa|mummy)${gap(1)} ne (?:bola|kaha|boli|bataya)` +
-      `${gap(4)} (?:tum|aap|tu)${gap(3)} ${ANSWERS}`,
+      `${gap(4)} (?:tum|aap|tu)${gap(3)} ${HI_ANSWERS}`,
   ),
-  decisive('jailbreak_authority_claim', `${PRETEND}${gap(2)} ${ME}${gap(4)} ${PLAN_NOUN}`),
+  decisive(
+    'jailbreak_authority_claim',
+    `${PRETEND}${gap(2)} (?:i m|im|i am|main|mai)${gap(1)} (?:on|in|pe|par)${gap(3)} ${PLAN_NOUN}|` +
+      `${PRETEND}${gap(2)} (?:main|mai)${gap(3)} ${PLAN_NOUN} (?:pe|par|mein) (?:hoon|hun|hu)`,
+  ),
+  decisive('jailbreak_authority_claim', `${PRETEND}${gap(2)} ${ME}${gap(4)} ${PLAN_NOUN}`, {
+    also: CLAIM_DEMAND,
+  }),
+  ambiguous('jailbreak_authority_claim', `${PRETEND}${gap(2)} ${ME}${gap(4)} ${PLAN_NOUN}`),
   decisive(
     'jailbreak_authority_claim',
     `i (?:just )?(?:upgraded|switched|moved) to (?:the )?(?:\\S+ ){0,3}(?:plan|package|tier|subscription)` +
       '(?! (?:table|tables|model|class|object|field|column|id|data|type)(?![\\p{L}]))',
+    { also: CLAIM_DEMAND },
   ),
   decisive('jailbreak_authority_claim', 'package (?:is )?(?:now|ab) (?:paid|premium|unlocked|full)'),
   ambiguous('jailbreak_authority_claim', GENERIC_ROLE),
@@ -151,7 +178,30 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   ),
   decisive(
     'jailbreak_override',
-    `(?:your|ur) (?:rules|instructions|restrictions|guidelines|limits) (?:are |r )?(?:only )?` +
+    `${OVERRIDE_VERB}(?: (?:all|any|the|these|those|of|my|previous|prior|above|earlier))* ${STRICT_RULE}`,
+    { also: EN_DEMAND },
+  ),
+  decisive(
+    'jailbreak_override',
+    '(?:ignore|lgnore|disregard|forget|bypass|override)(?: (?:all|any|the|these|those|of|your|ur))* ' +
+      '(?:previous|prior|above|earlier|preceding) (?:instructions?|directions)|' +
+      '(?:ignore|lgnore|disregard|forget|bypass|override) all (?:the )?(?:\\S+ )?(?:instructions?|directions)|' +
+      '(?:ignore|lgnore|disregard|forget|bypass|override)(?: (?:all|the))? (?:instructions?|directions) (?:above|before|so far)',
+    { unless: FILE_WORD },
+  ),
+  decisive(
+    'jailbreak_override',
+    `(?:rules?|niyam|instructions?|nirdesh|guidelines?)${gap(1)} (?:bhool|bhul|ignore|chhod|chod|tod|todo|hata)` +
+      '(?: \\S+)? (?:jao|karo|do|de|dena|kar do|dijiye)',
+  ),
+  decisive(
+    'jailbreak_override',
+    '(?:नियम|नियमों|निर्देश|निर्देशों|रूल्स|इंस्ट्रक्शन\\S*) (?:भूल|भुला|तोड|छोड|इग्नोर)(?: \\S+)? ' +
+      '(?:जाओ|दो|करो|दें|दीजिए)',
+  ),
+  decisive(
+    'jailbreak_override',
+    `(?:your|ur) (?:rules|instructions|restrictions|guidelines|limits) (?:are |r )?only ` +
       '(?:for|apply to|applies to) \\S+|' +
       `(?:your|ur) (?:rules|instructions|restrictions|guidelines|limits) (?:dont|do not|no longer|wont|doesnt) apply`,
   ),
@@ -192,12 +242,17 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   decisive(
     'jailbreak_prompt_leak',
     '(?:your|ur) (?:secret|hidden|internal|original|initial|real|exact|full|whole|entire) ' +
-      '(?:rules|instructions|prompt|guidelines|config\\S*|settings)',
+      '(?:rules|instructions|prompt|guidelines)|' +
+      '(?:your|ur)(?: \\S+)? (?:system|hidden|secret|internal|prompt) (?:config\\S*|settings)',
+  ),
+  decisive(
+    'jailbreak_prompt_leak',
+    `(?:show|tell|give|list|share|send)${gap(1)} (?:all )?(?:your|ur) (?:rules|instructions|prompt|guidelines)`,
   ),
   decisive(
     'jailbreak_prompt_leak',
     `(?:reveal|print|repeat|leak|dump|output|recite)${gap(2)} (?:your|ur) ` +
-      '(?:rules|instructions|prompt|guidelines|config\\S*)',
+      '(?:rules|instructions|prompt|guidelines)',
   ),
   decisive(
     'jailbreak_prompt_leak',
@@ -213,7 +268,7 @@ const RULES: readonly Rule<JailbreakCode>[] = [
     'jailbreak_prompt_leak',
     `(?:repeat|print|output|copy|show|write)${gap(2)} (?:every|each|all|the)? ?` +
       `(?:word|words|text|line|lines|thing|things|message|messages|everything)${gap(2)} ` +
-      '(?:above|before|preceding) (?:this|my) (?:message|prompt|question|chat)',
+      '(?:above|before|preceding) (?:(?:this|my) (?:message|prompt|question|chat)|this$)',
   ),
   ambiguous('jailbreak_prompt_leak', 'सिस्टम प्रॉम्प्ट'),
 
@@ -235,7 +290,12 @@ const RULES: readonly Rule<JailbreakCode>[] = [
   decisive(
     'jailbreak_roleplay',
     '(?:you are|youre|u r|ur|you re) (?:now )?(?:free|fr33|unlocked|jailbroken|unfiltered|unrestricted|uncensored)' +
-      '(?: now| from)?',
+      '(?! to(?![\\p{L}]))(?: now| from)?',
+  ),
+  decisive(
+    'jailbreak_roleplay',
+    `^(?:the )?${MODE_WORD} mode (?:is )?(?:now )?(?:enabled|on|activated|active|engaged|unlocked)`,
+    { unless: DEVICE },
   ),
   decisive('jailbreak_roleplay', `${MODE_WORD} mode`, {
     also: '(?:you|u|tum|answers?|answer key|hints?|rules)',

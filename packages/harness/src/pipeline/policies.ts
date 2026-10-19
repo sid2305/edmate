@@ -55,9 +55,24 @@ export const PRE_GUARD_FAILED: TurnError = { code: 'guard_blocked', retryable: t
  */
 export const WITHHELD_MESSAGE = '[message withheld]';
 
-/** Whether `m` is a withheld student message (see WITHHELD_MESSAGE). */
+/** The placeholder for a withheld input: with the block's code when there is one (fix round 2). */
+export const withheldMessage = (code?: string): string =>
+  code === undefined ? WITHHELD_MESSAGE : `[message withheld: ${code}]`;
+
+const WITHHELD = /^\[message withheld(?:: ([a-z_]+))?\]$/;
+
+/** Whether `m` is a withheld student message (see withheldMessage). */
 export const isWithheld = (m: { role: string; text: string }): boolean =>
-  m.role === 'student' && m.text === WITHHELD_MESSAGE;
+  m.role === 'student' && WITHHELD.test(m.text);
+
+/**
+ * What the classifiers' earlier-turns window shows for a withheld message (fix round 2, LOW 5):
+ * that one was blocked, and why, never its text.
+ */
+export function blockedTurnNote(text: string): string {
+  const code = WITHHELD.exec(text)?.[1];
+  return code === undefined ? '[earlier message blocked]' : `[earlier message blocked: ${code}]`;
+}
 
 /** Step 3: a guard decided to block. */
 export const PRE_GUARD_BLOCKED: TurnError = { code: 'guard_blocked', retryable: false };

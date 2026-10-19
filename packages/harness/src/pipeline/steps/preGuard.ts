@@ -12,7 +12,7 @@ import { createModerationInGuard } from '../../guardrails/moderationIn.js';
 import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import { errorName, HarnessError } from '../errors.js';
-import { isWithheld } from '../policies.js';
+import { blockedTurnNote, isWithheld } from '../policies.js';
 import { runWithTimeout } from '../timeout.js';
 import type { Entitled, PreGuardResult, StepEnv, Steps } from '../types.js';
 
@@ -63,10 +63,10 @@ export async function recentStudentTurns(env: StepEnv): Promise<string[]> {
         typeof m === 'object' &&
         m !== null &&
         (m as Message).role === 'student' &&
-        typeof (m as Message).text === 'string' &&
-        !isWithheld(m as Message),
+        typeof (m as Message).text === 'string',
     )
-    .map((m) => m.text)
+    // A blocked message reads as a note with its code, never its text (fix round 2, LOW 5).
+    .map((m) => (isWithheld(m) ? blockedTurnNote(m.text) : m.text))
     .slice(-DISTRESS_CONTEXT_TURNS);
 }
 
@@ -137,6 +137,7 @@ export function createPreGuardStep(
           guards,
           usage,
           reply: blockReplyFor(b.code),
+          code: b.code,
           ...(b.alert === undefined ? {} : { alert: b.alert }),
         };
       }
