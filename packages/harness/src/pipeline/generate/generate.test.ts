@@ -23,9 +23,9 @@ import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
-import { generate } from '../steps/generate.js';
+import { createGenerate, generate } from '../steps/generate.js';
 import type { RegisteredTool } from '../tools.js';
-import type { StepEnv, UsageRecorder } from '../types.js';
+import type { StepEnv, Steps, UsageRecorder } from '../types.js';
 import { SkillEventDropped } from './skillEvent.js';
 import type { StreamGateFactory } from './streamGate.js';
 
@@ -73,6 +73,8 @@ function setup(
     usage?: Partial<UsageRecorder>;
     gate?: StreamGateFactory;
     lockedStopped?: boolean;
+    onLockedTrip?: () => void;
+    step?: Steps['generate'];
   } = {},
 ) {
   const clock = virtualClock();
@@ -110,7 +112,7 @@ function setup(
     recorded,
     run: () =>
       clock.drive(
-        generate(
+        (o.step ?? generate)(
           env,
           {
             ctx: c,
@@ -118,6 +120,7 @@ function setup(
             sources,
             attempt: 'primary',
             ...(o.lockedStopped === undefined ? {} : { lockedStopped: o.lockedStopped }),
+            ...(o.onLockedTrip === undefined ? {} : { onLockedTrip: o.onLockedTrip }),
           },
           (e) => {
             // The runner's emitter rejects what fails the schema; so does this one.
@@ -346,6 +349,18 @@ describe('generate: lockedStopped (ADR-0007 §8, 4.6b)', () => {
     ]);
     expect(out.draft).toBe('One two three four. Five six seven eight.');
     expect(out.locked).toBeUndefined();
+  });
+
+  it('passes onLockedTrip through: told once when the stream trips (4.6b fix round 1)', async () => {
+    let told = 0;
+    const s = setup([[say('One two three four five six seven eight. '), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      onLockedTrip: () => void told++,
+      step: createGenerate({ lockedCheck: () => () => Promise.resolve(true) }),
+    });
+    const out = await s.run();
+    expect(out.locked).toBe('hit');
+    expect(told).toBe(1);
   });
 
   it('defaults to the ordinary per-sentence stream when unset', async () => {

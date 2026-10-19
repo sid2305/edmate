@@ -102,6 +102,12 @@ export interface ToolLoopInput {
    * session, hold the whole reply and show it only once the attempt ends cleanly. Default false.
    */
   holdAll?: boolean;
+  /**
+   * Told at once of every locked hit or failed locked check (the stream tripping, or a tool
+   * output failed as `locked`), so the runner can save the session's stop flag even when the
+   * attempt then fails (4.6b fix round 1).
+   */
+  onLocked?: () => void;
   /** Background work (a stream close) the runner waits for before `finished`. */
   track(settled: Promise<unknown>): void;
 }
@@ -124,7 +130,10 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
   /** Everything the model wrote, shown or not (postGuard checks all of it). */
   let raw = '';
   let rounds = 0;
-  const locked = lockedStream(i.lockedCheck, i.report, i.cancel, { holdAll: i.holdAll === true });
+  const locked = lockedStream(i.lockedCheck, i.report, i.cancel, {
+    holdAll: i.holdAll === true,
+    onTrip: () => i.onLocked?.(),
+  });
   /** Shows sentences once the locked check passed them. */
   const show = async (sentences: readonly string[]) => {
     for (const p of await locked.check(sentences)) {
@@ -173,7 +182,7 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
       // The attempt ended cleanly (or was already tripped, where this is empty): anything the
       // locked check passed but held back (the carryover, or the whole reply under `holdAll`) is
       // safe to show now, nothing more can come to join it into a longer span.
-      for (const p of locked.release()) {
+      for (const p of await locked.release()) {
         draft += p;
         i.show(p);
       }
@@ -262,10 +271,12 @@ async function runTool(
   if (revealsAnswerKey(json.value, i.mustNotReveal)) return failed('answer_key');
   try {
     if (await raceCancel(i.lockedCheck(stringLeaves(json.value)), i.cancel)) {
+      i.onLocked?.();
       return failed('locked');
     }
   } catch (error) {
     if (error instanceof TurnCancelled) throw error;
+    i.onLocked?.();
     return failed('locked', errorName(error));
   }
   return { value: json.value };

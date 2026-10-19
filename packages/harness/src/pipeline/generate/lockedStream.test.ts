@@ -34,7 +34,7 @@ async function feed(s: ReturnType<typeof lockedStream>, pieces: string[]) {
   const shown: string[] = [];
   for (const p of pieces) shown.push(...(await s.check(s.split([p]))));
   shown.push(...(await s.check(s.rest())));
-  shown.push(...s.release());
+  shown.push(...(await s.release()));
   return shown;
 }
 
@@ -58,7 +58,7 @@ describe('lockedStream: checks each batch before it is shown', () => {
     expect(checked).toEqual([]); // 2 tokens: carryStart holds all of it
     const rest = await s.check(s.rest());
     expect(rest).toEqual([]);
-    expect(s.release()).toEqual(['Hello there. ']);
+    expect(await s.release()).toEqual(['Hello there. ']);
   }, 5_000);
 
   it('a batch under 8 tokens holds everything until more text arrives to check it with', async () => {
@@ -67,7 +67,7 @@ describe('lockedStream: checks each batch before it is shown', () => {
     expect(checked).toEqual([]); // under 8 tokens: carryStart holds all of it
     const more = await s.check(s.rest());
     expect(more).toEqual([]);
-    expect(s.release()).toEqual(['One two three. ']);
+    expect(await s.release()).toEqual(['One two three. ']);
   }, 5_000);
 
   it('withholds a sentence holding a locked span, and everything after it, with 0 locked tokens shown', () => {
@@ -119,7 +119,7 @@ describe('lockedStream: checks each batch before it is shown', () => {
     expect(s.split(['Third. '])).toEqual([]);
     expect(await s.check(['Fourth. '])).toEqual([]);
     expect(s.rest()).toEqual([]);
-    expect(s.release()).toEqual([]);
+    expect(await s.release()).toEqual([]);
     expect(calls).toBe(1);
   }, 5_000);
 
@@ -172,6 +172,31 @@ describe('lockedStream: checks each batch before it is shown', () => {
   }, 5_000);
 });
 
+describe('lockedStream: onTrip tells the caller once, whatever tripped it', () => {
+  it.each([
+    ['a hit', (() => Promise.resolve(true)) as LockedCheck, ['Hello there. ']],
+    ['a failed check', (() => Promise.reject(new Error('down'))) as LockedCheck, ['Hello there. ']],
+    [
+      'text past the maximum',
+      (() => Promise.resolve(false)) as LockedCheck,
+      ['word '.repeat(Math.ceil(LIMITS.modelTextMaxLength / 5) + 10)],
+    ],
+  ])('%s', async (_label, check, pieces) => {
+    let trips = 0;
+    const { s } = setup(check, { onTrip: () => void trips++ });
+    await feed(s, [...pieces, 'More text. ']);
+    expect(s.tripped).toBeDefined();
+    expect(trips).toBe(1);
+  }, 5_000);
+
+  it('a clean reply never calls it', async () => {
+    let trips = 0;
+    const { s } = setup(undefined, { onTrip: () => void trips++ });
+    await feed(s, ['One two three. ', 'Four five six seven eight nine ten. ']);
+    expect(trips).toBe(0);
+  }, 5_000);
+});
+
 describe('lockedStream: holdAll (ADR-0007 §8, session-wide stop)', () => {
   it('holds every batch whole, showing nothing until release() at a clean end', async () => {
     const { s, asked } = setup(undefined, { holdAll: true });
@@ -181,16 +206,50 @@ describe('lockedStream: holdAll (ADR-0007 §8, session-wide stop)', () => {
     expect(second).toEqual([]);
     const rest = await s.check(s.rest());
     expect(rest).toEqual([]);
-    expect(s.release()).toEqual(['One two three. Four five six. ']);
-    expect(asked.length).toBeGreaterThan(0);
+    expect(asked).toEqual([]); // nothing is checked until the end
+    expect(await s.release()).toEqual(['One two three. Four five six. ']);
+    expect(asked).toEqual([['One two three. Four five six. ']]);
+  }, 5_000);
+
+  it('a long multi-batch reply makes exactly one leakCheck call, of the whole reply, at release()', async () => {
+    const { s, asked } = setup(undefined, { holdAll: true });
+    const pieces = Array.from({ length: 200 }, (_, i) => `Sentence number ${i} is clean. `);
+    const shown = await feed(s, pieces);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toEqual([pieces.join('')]);
+    expect(shown).toEqual([pieces.join('')]);
+  }, 5_000);
+
+  it('an empty reply makes no call at all', async () => {
+    const { s, asked } = setup(undefined, { holdAll: true });
+    expect(await feed(s, [])).toEqual([]);
+    expect(asked).toEqual([]);
   }, 5_000);
 
   it('still trips on a hit, with nothing shown or released', async () => {
-    const { s } = setup(undefined, { holdAll: true });
+    const { s, reported } = setup(undefined, { holdAll: true });
     const shown = await feed(s, [`Here: ${MATERIAL}. `]);
     expect(shown).toEqual([]);
     expect(s.tripped).toBe('hit');
-    expect(s.release()).toEqual([]);
+    expect(reported[0]).toBeInstanceOf(LockedLeakDetected);
+    expect(await s.release()).toEqual([]);
+  }, 5_000);
+
+  it('a failed check at release() withholds the whole reply (fail closed)', async () => {
+    const { s, reported } = setup(() => Promise.reject(new LockedCheckFailed('timeout')), {
+      holdAll: true,
+    });
+    expect(await feed(s, ['Hello there. ', 'More text.'])).toEqual([]);
+    expect(s.tripped).toBe('failed');
+    expect(reported[0]).toBeInstanceOf(LockedCheckFailed);
+  }, 5_000);
+
+  it('a cancel during the release() check rejects with TurnCancelled', async () => {
+    const { s, cancel } = setup(() => new Promise(() => undefined), { holdAll: true });
+    await s.check(s.split(['Hello there. ']));
+    const pending = s.release();
+    cancel.cancel();
+    await expect(pending).rejects.toBeInstanceOf(TurnCancelled);
   }, 5_000);
 
   it('the span across sentences is still caught: the batched call sees it joined', async () => {
@@ -198,6 +257,44 @@ describe('lockedStream: holdAll (ADR-0007 §8, session-wide stop)', () => {
     const shown = await feed(s, ['alpha beta gamma delta. ', 'Epsilon zeta eta theta. ']);
     expect(shown).toEqual([]);
     expect(s.tripped).toBe('hit');
+  }, 5_000);
+});
+
+describe('lockedStream: never cuts the held-back text inside unfinished markup (4.6b fix round 1)', () => {
+  const PHRASE = 'the loop repeats while the condition stays true and then stops';
+  const phraseIndex = lockedIndex([`Remember: ${PHRASE}.`], []);
+  const phraseSetup = () => setup((texts) => Promise.resolve(phraseIndex.hits(texts)));
+  const lockedWordsIn = (shown: string) =>
+    lockedTokens(shown).filter((t) => ['loop', 'repeats', 'while'].includes(t.t)).length;
+
+  it('the safety probe: an attribute left open across pieces streams none of the locked words', async () => {
+    const { s } = phraseSetup();
+    const shown = await feed(s, [
+      'Sure. the loop repeats while <span title="a b c d e f g h. ',
+      'y">the condition stays true and then stops.',
+    ]);
+    expect(s.tripped).toBe('hit');
+    expect(lockedWordsIn(shown.join(''))).toBe(0);
+  }, 5_000);
+
+  it('holds from 7 tokens before an unclosed tag at the end of the checked text', async () => {
+    const { s } = setup(() => Promise.resolve(false));
+    const shown = await s.check(['one two three four five six seven eight nine <span title="ten ']);
+    expect(shown).toEqual(['one two ']);
+  }, 5_000);
+
+  it('never shows part of an unfinished entity', async () => {
+    const { s } = setup(() => Promise.resolve(false));
+    const shown = await s.check(['one two three four five six seven eight nine ten eleven &#10']);
+    expect(shown.join('')).not.toContain('&');
+  }, 5_000);
+
+  it('a SENTENCE_GATE_CAP cut inside an open attribute streams none of the locked words', async () => {
+    const { s } = phraseSetup();
+    const text = `the loop repeats while <span title="${'q '.repeat(120)}">the condition stays true and then stops.`;
+    const shown = await feed(s, [text]);
+    expect(s.tripped).toBe('hit');
+    expect(lockedWordsIn(shown.join(''))).toBe(0);
   }, 5_000);
 });
 

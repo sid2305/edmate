@@ -673,6 +673,62 @@ describe('runToolLoop: locked material (4.6)', () => {
     expect(out).toMatchObject({ draft: '', locked: 'hit' });
   }, 5_000);
 
+  it('onLocked (4.6b fix round 1) is told of a stream trip, even if the attempt then fails', async () => {
+    let told = 0;
+    const s = setup(
+      [[say(`Here it is: ${MATERIAL}. `), say('Bye. '), { type: 'error', code: 'provider_error' }]],
+      { lockedCheck: byIndex },
+    );
+    const input = { ...s.input, onLocked: () => void told++ };
+    // The provider errors after the trip: the attempt fails, but the trip was already told.
+    await expect(s.clock.drive(runToolLoop(input))).rejects.toBeDefined();
+    expect(told).toBe(1);
+  }, 5_000);
+
+  it('onLocked is told of a locked hit or failed check on a tool output', async () => {
+    for (const lockedCheck of [
+      ((texts) => Promise.resolve(texts.length > 1)) as LockedCheck,
+      ((texts) =>
+        texts.length > 1 ? Promise.reject(new Error('down')) : Promise.resolve(false)) as LockedCheck,
+    ]) {
+      let told = 0;
+      const s = setup(
+        [
+          [call('c1'), used],
+          [say('ok'), used],
+        ],
+        { tools: [toolWith({ value: 'fine' })], lockedCheck },
+      );
+      await s.clock.drive(runToolLoop({ ...s.input, onLocked: () => void told++ }));
+      expect(told).toBe(1);
+    }
+  }, 5_000);
+
+  it('onLocked is never called for a clean reply', async () => {
+    let told = 0;
+    const s = setup([[say('Nothing locked here at all, just words. '), used]], {
+      lockedCheck: byIndex,
+    });
+    await s.clock.drive(runToolLoop({ ...s.input, onLocked: () => void told++ }));
+    expect(told).toBe(0);
+  }, 5_000);
+
+  it('holdAll checks a long multi-chunk reply once, at the end (4.6b fix round 1)', async () => {
+    let calls = 0;
+    const pieces = Array.from({ length: 50 }, (_, i) => say(`Clean sentence ${i} here. `));
+    const s = setup([[...pieces, used]], {
+      lockedCheck: (texts) => {
+        calls++;
+        return byIndex(texts);
+      },
+      holdAll: true,
+    });
+    const out = await s.run();
+    expect(calls).toBe(1);
+    expect(s.shown).toHaveLength(1);
+    expect(out.locked).toBeUndefined();
+  }, 5_000);
+
   it('a span split across tool rounds is still caught (the check is not reset per round)', async () => {
     const s = setup(
       [

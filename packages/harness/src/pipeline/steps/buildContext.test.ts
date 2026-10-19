@@ -339,6 +339,18 @@ describe('buildContext: session help state (ADR-0005)', () => {
     expect(b.helpRung).toBe(0);
     expect(b.helpState).toEqual(INITIAL_HELP_STATE);
   });
+
+  it.each([
+    ['malformed', { ...stored, rung: 7 }, true],
+    ['not an object', 'rung 4', true],
+    ['missing', undefined, false],
+    ['empty (the column default)', {}, false],
+    ['valid', stored, false],
+  ])('%s → helpStateUnreadable %s (4.6b fix round 1)', async (_l, raw, unreadable) => {
+    const b = await run(world(), { ...ENTITLED, helpState: raw });
+    expect(b.helpStateUnreadable === true).toBe(unreadable);
+    expect('helpStateUnreadable' in b).toBe(unreadable);
+  });
 });
 
 describe('buildContext: never exceeds the model context', () => {

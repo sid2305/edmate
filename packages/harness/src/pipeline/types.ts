@@ -242,6 +242,12 @@ export interface BuiltContext {
    * the runner passes it to decide, and decide's `next` goes to commit.
    */
   helpState: HelpState;
+  /**
+   * True when a help state was stored but could not be read (4.6b fix round 1). It may hold
+   * `lockedStopped: true`, so the runner holds the whole reply and saves no help state this turn
+   * (never false over a stored true). Absent: read fine, or nothing stored yet.
+   */
+  helpStateUnreadable?: true;
 }
 
 /** What decide works from: the context plus the parsed help state (kept out of TurnContext). */
@@ -376,6 +382,12 @@ export interface Steps {
        * ends cleanly instead of streaming it sentence by sentence. Default false.
        */
       lockedStopped?: boolean;
+      /**
+       * Called at once on every locked hit or failed locked check in this attempt (the stream
+       * tripping, or a tool output failed as `locked`), even when the attempt then fails: the
+       * runner saves the session's stop flag from it (4.6b fix round 1).
+       */
+      onLockedTrip?: () => void;
     },
     emit: Emit,
   ): Promise<GenerateResult>;

@@ -18,18 +18,21 @@
 //      inside one batch is still one contiguous run in the joined text, so it needs no special
 //      case beyond the carryover across batches.
 //   3. `holdAll` (ADR-0007 §8, session-wide stop after a session's first locked hit or failed
-//      check): when set, every batch is held in full (as if its last 7 tokens were the whole
-//      batch) and only `release()` at a clean end shows anything, so the reply streams as one
-//      piece at the very end, the same as a non-streamed reply. The caller (generate.ts) builds
-//      this with the session's saved `lockedStopped` flag; see guardrails/lockedLeak.ts for how a
-//      hit here sets it for the rest of the session.
+//      check): when set, nothing streams and nothing is checked per batch; `release()` at a clean
+//      end checks the whole reply once and shows it as one piece, the same as a non-streamed
+//      reply (fix round 1: per-batch checks re-sent the whole reply so far every time). The
+//      caller (generate.ts) sets it from the session's saved `lockedStopped` flag (or when the
+//      help state could not be read); `onTrip` tells the runner, which saves the flag.
+//   4. Fix round 1: the held-back text never starts inside an unfinished tag, comment or entity
+//      at the end of the checked text (`heldFrom`): the rest of it may still arrive and change
+//      how the text before it is read, so the post guard could see a span the stream did not.
 //
 // A hit, a failed check (timeout, error, bad result) or text past a reply's maximum withholds the
 // batch and everything after it for the attempt (`tripped`); postGuard then replaces the whole
 // reply. A cancelled step rejects with TurnCancelled. Reports name the site or cause, never text.
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
-import { carryStart } from '../../guardrails/lockedMatch.js';
+import { carryStart, unfinishedMarkupStart } from '../../guardrails/lockedMatch.js';
 import type { CancelToken } from '../clock.js';
 import { TurnCancelled } from '../errors.js';
 import type { AnswerKeyMatcher } from './answerKey.js';
@@ -52,9 +55,10 @@ export interface LockedStream {
   check(sentences: readonly string[]): Promise<string[]>;
   /**
    * What `check` held back after its last passing call, released now that the attempt has ended
-   * cleanly (call once, after the final `check`). Empty once tripped, or with nothing held.
+   * cleanly (call once, after the final `check`). Empty once tripped, or with nothing held. Under
+   * `holdAll` this makes the reply's only check (the whole reply), so it may trip.
    */
-  release(): string[];
+  release(): Promise<string[]>;
   /** Why text was withheld: a locked hit, or a check that could not answer (or too much text). */
   readonly tripped: 'hit' | 'failed' | undefined;
 }
@@ -65,6 +69,23 @@ export interface LockedStreamOptions {
    * `release()` at a clean end. Default false (the ordinary per-sentence stream).
    */
   holdAll?: boolean;
+  /**
+   * Called once when the stream trips (a hit, a failed check, or text past the maximum), so the
+   * runner can record it for the session even if the attempt then fails (4.6b fix round 1).
+   */
+  onTrip?: () => void;
+}
+
+/**
+ * Where the held-back text starts in checked text: the carryover (`carryStart`), but never later
+ * than 7 tokens before an unfinished tag, comment or entity at the very end (4.6b fix round 1).
+ * The rest of one may still arrive and change how everything before it is read (a tag that
+ * closes later is padded away in the rendered reading), so the text around it is checked again.
+ */
+function heldFrom(checked: string): number {
+  const at = carryStart(checked);
+  const open = unfinishedMarkupStart(checked);
+  return open < 0 ? at : Math.min(at, carryStart(checked.slice(0, open)));
 }
 
 /** A matcher that never matches: the sentence gate then only cuts text into sentences. */
@@ -87,24 +108,40 @@ export function lockedStream(
   let pending = '';
   let tripped: 'hit' | 'failed' | undefined;
 
-  const check = async (sentences: readonly string[]): Promise<string[]> => {
-    if (tripped !== undefined || sentences.length === 0) return [];
-    const combined = pending + sentences.join('');
+  const trip = (kind: 'hit' | 'failed') => {
+    tripped = kind;
+    opts.onTrip?.();
+  };
+
+  /** One locked check of `text`; false (and tripped) on a hit or a failed check. */
+  const passes = async (text: string): Promise<boolean> => {
     let hit: boolean;
     try {
-      hit = await raceCancel(lockedCheck([combined]), cancel);
+      hit = await raceCancel(lockedCheck([text]), cancel);
     } catch (error) {
       if (error instanceof TurnCancelled) throw error;
       report(error);
-      tripped = 'failed';
-      return [];
+      trip('failed');
+      return false;
     }
     if (hit) {
       report(new LockedLeakDetected('stream'));
-      tripped = 'hit';
+      trip('hit');
+      return false;
+    }
+    return true;
+  };
+
+  const check = async (sentences: readonly string[]): Promise<string[]> => {
+    if (tripped !== undefined || sentences.length === 0) return [];
+    const combined = pending + sentences.join('');
+    // holdAll: nothing streams, so nothing is checked until release() checks the whole reply once.
+    if (holdAll) {
+      pending = combined;
       return [];
     }
-    const splitAt = holdAll ? 0 : carryStart(combined);
+    if (!(await passes(combined))) return [];
+    const splitAt = heldFrom(combined);
     pending = combined.slice(splitAt);
     const toShow = combined.slice(0, splitAt);
     return toShow === '' ? [] : [toShow];
@@ -112,7 +149,7 @@ export function lockedStream(
 
   /** Text past a reply's maximum trips the splitter: never shown, and counted as failed. */
   const tooLong = (sentences: string[]): string[] => {
-    if (tripped === undefined && splitter.tripped === true) tripped = 'failed';
+    if (tripped === undefined && splitter.tripped === true) trip('failed');
     return tripped === undefined ? sentences : [];
   };
 
@@ -126,10 +163,13 @@ export function lockedStream(
       return tooLong([...splitter.flush()]);
     },
     check,
-    release() {
+    async release() {
       if (tripped !== undefined || pending === '') return [];
       const out = pending;
       pending = '';
+      // Under holdAll this is the reply's one and only check (the whole reply); otherwise the
+      // held tail was already checked with the batch it came from.
+      if (holdAll && !(await passes(out))) return [];
       return [out];
     },
     get tripped() {
