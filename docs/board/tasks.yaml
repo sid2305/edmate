@@ -643,7 +643,7 @@ tasks:
   accept: Daily message limits survive a restart and hold across web processes; tests prove it against real Postgres or Redis.
   deps:
   - '3.2'
-  status: running
+  status: review
   branch: m7/3.14-durable-counters
   model: plan:sonnet build:sonnet
 - id: '3.15'
@@ -928,7 +928,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.6-locked-leak
   model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
@@ -940,9 +940,9 @@ tasks:
   accept: tests for each item; 0 locked tokens streamed in the fixture runs; the 34 locked cases still pass.
   deps:
   - '4.6'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.6b-lockedleak-followups
+  model: build:sonnet
 - id: 4.4d
   milestone: M4
   title: 'Jailbreak rule follow-ups (4.4 third safety review): exempt "rules of/for <noun>" and app or "my" mode switches ("dev mode on in my app"); add rules for "नियमों को छोड़ो", "skip the instructions
@@ -963,10 +963,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.7-grounding
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -991,6 +991,16 @@ tasks:
   - '4.1'
   status: todo
   risk: risky
+  branch: null
+  model: null
+- id: 4.9b
+  milestone: M4
+  title: 'Name-aware persona and tone checks (4.9 plan review): give the post guards the teacher''s display name (a TurnContext field, ADR) so "I am <teacher name>" and its variants are caught without a
+    role word'
+  accept: ADR approved; renaming the fixture teacher still trips every identity case; tests.
+  deps:
+  - '4.9'
+  status: todo
   branch: null
   model: null
 - id: '5.1'

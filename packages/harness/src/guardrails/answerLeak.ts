@@ -28,6 +28,12 @@ export interface LeakRewrite {
   usage: Usage[];
 }
 
+/**
+ * Asks the index whether any of `texts` holds a locked span (ADR-0007): true on a hit. Rejects
+ * when it can't tell (timeout, error, bad result); every caller fails closed on that.
+ */
+export type LockedCheck = (texts: readonly string[]) => Promise<boolean>;
+
 /** The post phase's guard context (4.5; 4.6-4.9 add what their guards need). */
 export interface PostGuardCtx {
   readonly ctx: TurnContext;
@@ -36,6 +42,10 @@ export interface PostGuardCtx {
   readonly studentText?: string;
   /** One bounded small-tier rewrite of a leaking draft; never throws. Absent: the hint. */
   readonly rewrite?: (draft: string, cancel: CancelToken) => Promise<LeakRewrite>;
+  /** lockedLeak's check (4.6). Required, so a chain can't run without it by accident. */
+  readonly lockedCheck: LockedCheck;
+  /** The reply lockedLeak sends instead of a reply that holds locked material (4.6). */
+  readonly lockedReply: string;
 }
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };

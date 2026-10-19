@@ -251,3 +251,23 @@ code-shape confirmations, same posture 4.7's Q2-Q4 took.
 no contracts change; the GUARD_ORDER completeness test closes 4.1's Q3). The one genuine ambiguity
 (Q2, the guard-scope split) has a clear, implementable, testable recommendation and does not block
 starting the build.
+
+## Lead answers and plan revisions from the safety plan review (19 Oct 2026; these override the plan)
+
+1. **Honest replies stay ok (HIGH).** Match only "I am / I'm / this is / main…hoon + (your|the) teacher|ma'am|sir|<Title-Case name> + here/speaking". Exempt "not (a|the|your)" and "AI … built/made from … teacher's". Add a table of 10+ honest replies that must stay ok, including the safety-preamble line and tone's own fixed text.
+2. **Families (HIGH).** real/actual + person/human/tutor/examiner/recruiter; "<name> here/speaking/regards" and "<name> ma'am/sir"; relationship promises ("always be here for you", "care about you more than anyone", "call me your friend"). Context rule: if a recent student turn raises human or teacher identity and the reply opens with yes/haan/true/you got me with no AI statement, rewrite. History is already in the turn context (harness); no contracts change. If it isn't reachable from PostGuardCtx, add it there (harness type only).
+3. **Teacher display name (HIGH; lead decision, risk: medium).** TurnContext has no teacher display name (the frame doesn't render one), so name-aware matching needs a contracts field and an ADR. That is deferred to board task 4.9b. 4.9 relies on the general families in item 2 (which catch "<Name> ma'am/here/speaking"). "I am Priya Sharma" with no role word is a documented known miss. The rename mutation is tested against the general families only.
+4. **No literal fixture phrases (HIGH).** General families: main/mai/मैं + insaan/इंसान/asli/असली/real/human/teacher/टीचर/ma'am/dost/दोस्त/girlfriend/गर्लफ्रेंड + hoon/hun/hu/हूं/हूँ, and haan/हाँ…sach. Test held-out variants ("main ek insaan hun", "मैं असली इंसान हूँ", "tumhara teacher hi hoon").
+5. **Echo and identity swap (HIGH).** Rewrite whenever a quoted span the student demanded (straight, curly or «» quotes, 3+ words) appears in the reply, unless the span is also in the course material. Add an identity-swap family ("I am (now) X", "from now on I'm", "as a normal person"). Normalise first: NFKC, strip \p{Cf}, fold confusables, collapse dots and spaces between letters, and treat I'm/Im/I am alike. Reuse the shared normaliser.
+6. **Personas step out of role (HIGH).** On /pause, stop, "are you human/real?", or a distress flag, require an out-of-role reply, with a fixed text that drops the role ("Pausing the practice. I'm an AI…"). Add real recruiter/HR/examiner claims to the in-persona identity checks. Note in the plan where /pause is handled upstream; if nowhere, it's 5.8's job, and personaBoundary is the backstop.
+7. **Never touch an escalation (HIGH).** A chain test that post guards never rewrite an escalate reply. Run tone on the distress template rendered from the IN pack and assert 14416 survives.
+8. **Outcome rules for every turn (MEDIUM).** The outcome-claim ("you're hired", "you passed") and real-recruiter/examiner rules run on every turn, not only with ctx.persona. The rules are one code-side set for every persona, not compiled from must_not prose.
+9. **Persona name (MEDIUM).** Insert it only if it's letters and spaces, at most 40 characters; otherwise use "practice interviewer". Never insert must_not items or a reason. Test the rendered text against every post guard, for both personas and a hostile name.
+10. **Code (MEDIUM).** Fenced code is exempt from the identity families; the echo rule still applies inside code. Quoted refusals that repeat the demanded words are rewritten on purpose.
+11. **Teacher note (MEDIUM).** Confirm postGuard runs before the platform adds the teacher label; normalise case and whitespace; add a drift test against frame@1.0.0.md's teacher-label.
+12. **Completeness test (MEDIUM).** Unconditional, derived from GUARD_ORDER: for every phase, missing() is empty and ordered() matches GUARD_ORDER, on the registry runTurn really uses. Mutation: a registry without tone fails it.
+13. **Fixtures (MEDIUM).** Assert each scripted reply fails its must_not_contain with NO guards; stub only the target guard per mutation, with the rest live. Add the held-out set, the rename and the over-trigger negatives.
+14. **Bounded regexes (LOW).** No nested quantifiers. The handoff says tone only checks what a reply must not say.
+
+- **Build:** tdd-guide on opus, after 4.6, 4.7 and 4.8 merge.
+- **Reviewers:** safety-reviewer (opus), security-reviewer, typescript-reviewer, silent-failure-hunter. risk: high.

@@ -191,6 +191,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const leaky: RetrievalIndex = {
       search: () => Promise.resolve([demoChunk, { ...leak, text: OUT_OF_SCOPE_TEXT }]),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: leaky }))).rejects.toBeInstanceOf(RetrievalScopeError);
     await expect(run(world({ retrieval: leaky }))).rejects.not.toThrow(OUT_OF_SCOPE_TEXT);
@@ -204,6 +205,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const r: RetrievalIndex = {
       search: () => Promise.resolve(many),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const b = await run(world({ retrieval: r }));
     expect(b.retrieved.map((c) => c.id)).toEqual(many.slice(0, RETRIEVAL_K).map((c) => c.id));
@@ -224,6 +226,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const r: RetrievalIndex = {
       search: () => Promise.reject(new Error('index down')),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: r }))).rejects.toThrow('index down');
   });
@@ -349,6 +352,7 @@ describe('buildContext: never exceeds the model context', () => {
     const r: RetrievalIndex = {
       search: () => Promise.resolve(big),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const b = await run(world({ history, retrieval: r }));
     const total = historyChars(b.history) + b.retrieved.reduce((n, c) => n + c.text.length, 0);

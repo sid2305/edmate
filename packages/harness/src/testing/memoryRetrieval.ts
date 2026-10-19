@@ -2,15 +2,24 @@
 // `search` only ever looks at the scope's teacher and allowed modules, and `probe` returns only
 // `{ hit, score }`, so a test can put locked and other-teacher chunks in the same index and prove
 // that nothing outside the scope comes back.
+//
+// `leakCheck` (ADR-0007, task 4.6) runs the shared matcher (guardrails/lockedMatch.ts) against the
+// scope teacher's chunks outside `allowedModuleIds` (the complement: locked, draft and unpackaged
+// modules), each module's chunks joined in order, ignoring spans also in an allowed chunk. It
+// returns only `{ hit }` and records only the candidate count, never a candidate.
 import type { Chunk, RetrievalIndex } from '@edmate/contracts';
 import { demoChunk } from '@edmate/contracts/fixtures';
+import { lockedIndex } from '../guardrails/lockedMatch.js';
 
 type SearchScope = Parameters<RetrievalIndex['search']>[1];
 type ProbeScope = Parameters<RetrievalIndex['probe']>[1];
+type LeakScope = Parameters<RetrievalIndex['leakCheck']>[1];
 
 export interface MemoryRetrieval extends RetrievalIndex {
   readonly searches: { q: string; scope: SearchScope; k: number }[];
   readonly probes: { q: string; scope: ProbeScope }[];
+  /** One entry per leakCheck call: how many candidates and the scope; never the text. */
+  readonly leakChecks: { candidates: number; scope: LeakScope }[];
 }
 
 /** Marks text that must never reach a TurnContext (locked or another teacher's). */
@@ -42,17 +51,38 @@ function scopeError(method: string): Error {
   return new Error(`memoryRetrieval.${method}: a teacherId and module id list scope is required`);
 }
 
+/** Each module's text, its chunks joined in order, for one teacher: [allowed, outside]. */
+function moduleTexts(chunks: readonly Chunk[], teacherId: string, allowed: ReadonlySet<string>) {
+  const byModule = new Map<string, string[]>();
+  for (const c of chunks) {
+    if (c.teacherId !== teacherId) continue;
+    const texts = byModule.get(c.moduleId) ?? [];
+    texts.push(c.text);
+    byModule.set(c.moduleId, texts);
+  }
+  const inside: string[] = [];
+  const outside: string[] = [];
+  for (const [moduleId, texts] of byModule) {
+    (allowed.has(moduleId) ? inside : outside).push(texts.join('\n'));
+  }
+  return [inside, outside] as const;
+}
+
 export function memoryRetrieval(opts: {
   chunks: readonly Chunk[];
   /** A fixed probe result, instead of the computed one. */
   probe?: { hit: boolean; score: number };
+  /** A fixed leakCheck result instead of the computed one; an Error rejects. */
+  leakCheck?: boolean | Error;
 }): MemoryRetrieval {
   const chunks = opts.chunks.map(copy);
   const searches: MemoryRetrieval['searches'] = [];
   const probes: MemoryRetrieval['probes'] = [];
+  const leakChecks: MemoryRetrieval['leakChecks'] = [];
   return {
     searches,
     probes,
+    leakChecks,
     search(q, scope, k) {
       const s = scope as Partial<SearchScope> | undefined;
       if (typeof s?.teacherId !== 'string' || !isIds(s.allowedModuleIds)) {
@@ -90,6 +120,24 @@ export function memoryRetrieval(opts: {
         }
       }
       return Promise.resolve({ hit: score > 0, score });
+    },
+    leakCheck(candidates, scope) {
+      const s = scope as Partial<LeakScope> | undefined;
+      if (typeof s?.teacherId !== 'string' || !isIds(s.allowedModuleIds)) {
+        return Promise.reject(scopeError('leakCheck'));
+      }
+      if (!isIds(candidates)) {
+        return Promise.reject(new Error('memoryRetrieval.leakCheck: candidates must be strings'));
+      }
+      leakChecks.push({
+        candidates: candidates.length,
+        scope: { teacherId: s.teacherId, allowedModuleIds: [...s.allowedModuleIds] },
+      });
+      const fixed = opts.leakCheck;
+      if (fixed instanceof Error) return Promise.reject(fixed);
+      if (fixed !== undefined) return Promise.resolve({ hit: fixed });
+      const [inside, outside] = moduleTexts(chunks, s.teacherId, new Set(s.allowedModuleIds));
+      return Promise.resolve({ hit: lockedIndex(outside, inside).hits(candidates) });
     },
   };
 }

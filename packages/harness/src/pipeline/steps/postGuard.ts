@@ -1,5 +1,13 @@
-// Step 9, postGuard (task 4.5): runs the post-phase guard chain (answerLeak first; 4.6-4.9 add the
-// rest) over the reply the student was shown, before `done`.
+// Step 9, postGuard (task 4.5): runs the post-phase guard chain (lockedLeak, then answerLeak;
+// 4.7-4.9 add the rest) over the reply the student was shown, before `done`.
+//
+// Locked material (4.6) comes first:
+//   - the stream's locked check withheld text (`locked`): no chain runs on that text (no rewrite
+//     may see it); a hit gives the locked reply, a check that could not answer the safe reply (the
+//     hint when an answer leak was also withheld);
+//   - otherwise lockedLeak checks the whole reply first in the chain; a hit replaces the WHOLE
+//     reply with the locked reply (no surgical strip), so answerLeak's rewrite never receives
+//     locked text. Each hit is reported to background by name (LockedLeakDetected), no text.
 //
 // Results, all built here (the runner only adds its own fallback when this step throws, times out
 // or returns something malformed):
@@ -25,6 +33,7 @@ import {
 } from '../../guardrails/answerLeak.js';
 import { type GuardChainResult, type GuardFailure, runGuardChain } from '../../guardrails/chain.js';
 import type { Guard } from '../../guardrails/guard.js';
+import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
 import { HarnessError } from '../errors.js';
@@ -33,6 +42,7 @@ import { StreamReader } from '../generate/streamReader.js';
 import { STEP_SPEC } from '../spec.js';
 import { runWithTimeout } from '../timeout.js';
 import type { GuardTrace, PostGuardResult, StepEnv, Steps } from '../types.js';
+import { lockedCheckFor, lockedReplyFor } from './locked.js';
 
 /** The step's budget (2 s) less this margin is what the chain may use. */
 export const POST_GUARD_MARGIN_MS = 200;
@@ -114,12 +124,14 @@ function rewriter(env: StepEnv, budgetMs: number) {
 }
 
 const answerLeakHit = (g: GuardTrace): boolean => g.name === 'answerLeak' && !g.ok;
+const lockedLeakHit = (g: GuardTrace): boolean =>
+  g.name === 'lockedLeak' && !g.ok && g.action === 'rewrite';
 
 /** The postGuard step over `guards` (default: the registered post-phase guards). */
 export function createPostGuard(
   guards: readonly Guard<PostGuardCtx>[] = postGuards.ordered(),
 ): Steps['postGuard'] {
-  return async (env, { ctx, decision, draft, raw, withheld }): Promise<PostGuardResult> => {
+  return async (env, { ctx, decision, draft, raw, withheld, locked }): Promise<PostGuardResult> => {
     const studentText = env.input.text;
     const own = studentText === undefined ? {} : { studentText };
     const hint = (guards: GuardTrace[], usage: Usage[]): PostGuardResult => ({
@@ -137,6 +149,20 @@ export function createPostGuard(
         raw !== draft &&
         compileAnswerKeys(decision.mustNotReveal, own).leaks(raw));
     const subject = leaked ? (raw ?? draft) : draft;
+    const lockedReply = lockedReplyFor(env, ctx);
+
+    // The stream withheld locked text, or could not check it: nothing it held is judged or
+    // rewritten here (a rewrite would send it to a model).
+    if (locked !== undefined) {
+      const trace: GuardTrace[] = [
+        { name: 'lockedLeak', ok: false, action: locked === 'hit' ? 'rewrite' : 'failed' },
+      ];
+      if (locked === 'hit')
+        return { result: 'replace', text: lockedReply, guards: trace, usage: [] };
+      if (leaked) return hint(trace, []);
+      const text = env.deps.fallbackReplies.safeReply(env.input.lang);
+      return { result: 'replace', text, guards: trace, usage: [] };
+    }
 
     const slice = postGuardSliceMs(guards.length);
     const x: PostGuardCtx = {
@@ -144,6 +170,8 @@ export function createPostGuard(
       decision,
       ...own,
       rewrite: rewriter(env, Math.floor(slice * REWRITE_SHARE)),
+      lockedCheck: lockedCheckFor(env, ctx),
+      lockedReply,
     };
     const r: GuardChainResult = await runGuardChain(guards, subject, x, {
       phase: 'post',
@@ -152,6 +180,7 @@ export function createPostGuard(
       cancel: env.cancel,
     });
     const { guards: trace, usage } = r;
+    if (trace.some(lockedLeakHit)) env.report(new LockedLeakDetected('reply'));
     switch (r.outcome) {
       case 'ok':
         // A known leak that no guard rewrote is never shown: fail to the hint.
