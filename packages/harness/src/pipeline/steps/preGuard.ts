@@ -1,9 +1,12 @@
-// Step 3, phase 2 (task 4.3): the `pre` guard chain on the scrubbed text, concurrent with route
-// and buildContext. Phase 1, the PII scrub, is `scrub.ts` (4.2).
+// Step 3, phase 2 (tasks 4.3, 4.4): the `pre` guard chain on the scrubbed text, concurrent with
+// route and buildContext. Phase 1, the PII scrub, is `scrub.ts` (4.2).
 import type { Message } from '@edmate/contracts';
+import { blockReplyFor } from '../../guardrails/blockReplies.js';
 import { runGuardChain, type GuardFailure } from '../../guardrails/chain.js';
 import { createDistressDetectGuard, DISTRESS_CONTEXT_TURNS } from '../../guardrails/distressDetect.js';
-import type { PreGuardCtx } from '../../guardrails/preGuardCtx.js';
+import { createJailbreakGuard } from '../../guardrails/jailbreak.js';
+import { createModerationInGuard } from '../../guardrails/moderationIn.js';
+import type { PreGuardBlock, PreGuardCtx } from '../../guardrails/preGuardCtx.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import { errorName, HarnessError } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
@@ -23,10 +26,12 @@ export class PreGuardChainFailedError extends Error {
   }
 }
 
-/** The pre guards that exist so far. moderationIn and jailbreak register here in 4.4. */
+/** Every pre guard (GUARD_ORDER decides their order): distressDetect, moderationIn, jailbreak. */
 export function defaultPreGuardRegistry(): GuardRegistry<PreGuardCtx> {
   const registry = new GuardRegistry<PreGuardCtx>('pre');
   registry.register(createDistressDetectGuard());
+  registry.register(createModerationInGuard());
+  registry.register(createJailbreakGuard());
   return registry;
 }
 
@@ -72,8 +77,12 @@ export function createPreGuardStep(
       gateway: env.gateway,
       ids: env.deps.ids,
       clock: env.deps.clock,
-      // Read concurrently with the guards; distressDetect waits for it only before its classifier.
+      // Read concurrently with the guards; a guard waits for it only before its classifier.
       recentStudentTurns: recentStudentTurns(env),
+      turnId: env.turnId,
+      safetyEvents: env.deps.safetyEvents,
+      packageNames: [s.pkg.name],
+      blocks: new Map<string, PreGuardBlock>(),
     };
     const chain = await runGuardChain(registry.ordered(), env.input.text ?? '', ctx, {
       phase: 'pre',
@@ -87,8 +96,19 @@ export function createPreGuardStep(
         return { result: 'ok', guards, usage };
       case 'escalate':
         return { result: 'escalate', alert: chain.alert, guards, usage };
-      case 'block':
-        return { result: 'block', guards, usage };
+      case 'block': {
+        // The blocking guard's code picks the student's reply (4.4, lead answer 2); a block with
+        // no code (a guard that left none) gets the runner's generic guard_blocked error.
+        const b = ctx.blocks.get(chain.blockedBy);
+        if (b === undefined) return { result: 'block', guards, usage };
+        return {
+          result: 'block',
+          guards,
+          usage,
+          reply: blockReplyFor(b.code),
+          ...(b.alert === undefined ? {} : { alert: b.alert }),
+        };
+      }
       case 'failed':
         // Thrown, not `block`: the runner then runs its own distress keyword check (4.1 review).
         throw new PreGuardChainFailedError(chain.failure);
@@ -96,5 +116,5 @@ export function createPreGuardStep(
   };
 }
 
-/** Phase 2: the `pre` guards (distressDetect; moderationIn and jailbreak in 4.4). */
+/** Phase 2: the `pre` guards (distressDetect, moderationIn, jailbreak). */
 export const preGuard: Steps['preGuard'] = createPreGuardStep(defaultPreGuardRegistry());

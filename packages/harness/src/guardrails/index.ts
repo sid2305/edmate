@@ -1,4 +1,5 @@
-// Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9 (4.2: piiScrub).
+// Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9 (4.2: piiScrub;
+// 4.3: distressDetect; 4.4: moderationIn, jailbreak).
 export {
   type GuardBlockCause,
   type GuardChainOptions,
@@ -29,8 +30,40 @@ export {
   hasDistressKeyword,
   normaliseForDistress,
 } from './distressKeywords.js';
+export { BLOCK_REPLIES, type BlockCode, blockReplyFor } from './blockReplies.js';
+export {
+  DECODE_INPUT_MAX,
+  DECODE_MAX_LEVELS,
+  DECODE_MAX_PAYLOADS,
+  DECODE_OUTPUT_MAX,
+  decodeEncodedPayloads,
+  reverseText,
+  rot13,
+  textVariants,
+  type TextVariants,
+} from './decodeAttempts.js';
 export type { Guard, GuardRun } from './guard.js';
-export type { PreGuardCtx } from './preGuardCtx.js';
+export { createJailbreakGuard } from './jailbreak.js';
+export {
+  JAILBREAK_CODES,
+  type JailbreakCode,
+  matchJailbreak,
+  type MatchJailbreakOptions,
+} from './jailbreakPatterns.js';
+export { createModerationInGuard, preGuardAlert } from './moderationIn.js';
+export { matchModeration, MODERATION_CODES, type ModerationCode } from './moderationPatterns.js';
+export type { PreGuardBlock, PreGuardCtx } from './preGuardCtx.js';
+export {
+  buildJailbreakClassifierRequest,
+  buildModerationClassifierRequest,
+  JailbreakVerdictSchema,
+  ModerationVerdictSchema,
+  SAFETY_CLASSIFIER_TIMEOUT_MS,
+  SAFETY_CONTEXT_TURNS,
+  SafetyClassifierInvalidError,
+  SafetyClassifierTimeoutError,
+  SafetyGuardCancelledError,
+} from './safetyClassifier.js';
 export {
   declaredIndex,
   GUARD_ORDER,

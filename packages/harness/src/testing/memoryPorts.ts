@@ -3,6 +3,7 @@ import type {
   AlertSink,
   Message,
   SafetyAlert,
+  SafetyEventSink,
   SessionStateStore,
   TeacherQuestion,
   TeacherQuestionStore,
@@ -107,6 +108,38 @@ export function memoryAlertSink(opts: { failTimes?: number } = {}): MemoryAlertS
         return Promise.reject(new Error(`alert sink down (attempt ${attempts})`));
       }
       raised.push(a);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** One `SafetyEventSink.record` call (ADR-0006). */
+export type SafetyEvent = Parameters<SafetyEventSink['record']>[0];
+
+export interface MemorySafetyEventSink extends SafetyEventSink {
+  /** Events recorded (calls that succeeded). */
+  readonly recorded: SafetyEvent[];
+  /** Every call, including failed ones. */
+  readonly attempts: number;
+}
+
+/** Fails the first `failTimes` calls (or every call with `fail`), then records. */
+export function memorySafetyEventSink(
+  opts: { failTimes?: number; fail?: boolean } = {},
+): MemorySafetyEventSink {
+  const recorded: SafetyEvent[] = [];
+  let attempts = 0;
+  return {
+    recorded,
+    get attempts() {
+      return attempts;
+    },
+    record(e) {
+      attempts++;
+      if (opts.fail === true || attempts <= (opts.failTimes ?? 0)) {
+        return Promise.reject(new Error(`safety event sink down (attempt ${attempts})`));
+      }
+      recorded.push({ ...e });
       return Promise.resolve();
     },
   };

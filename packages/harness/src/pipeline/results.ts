@@ -54,7 +54,14 @@ export const ScrubbedSchema: z.ZodType<Scrubbed> = z.strictObject({
 });
 
 export const PreGuardResultSchema: z.ZodType<PreGuardResult> = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal(['ok', 'block']), guards, usage }),
+  z.strictObject({ result: z.literal('ok'), guards, usage }),
+  z.strictObject({
+    result: z.literal('block'),
+    guards,
+    usage,
+    reply: z.string().min(1).exactOptional(),
+    alert: SafetyAlertSchema.exactOptional(),
+  }),
   z.strictObject({ result: z.literal('escalate'), alert: SafetyAlertSchema, guards, usage }),
 ]);
 

@@ -6,6 +6,7 @@ import { demoEntitlementSubscription, demoLocalePack } from '@edmate/contracts/f
 import { describe, expect, it } from 'vitest';
 import { cancelSource } from '../pipeline/clock.js';
 import { sequentialIds } from '../testing/ids.js';
+import { memorySafetyEventSink } from '../testing/memoryPorts.js';
 import { type GatewayScript, ScriptedGateway } from '../testing/scriptedGateway.js';
 import { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from '../testing/virtualClock.js';
 import { runGuardChain } from './chain.js';
@@ -37,6 +38,11 @@ function ctxWith(
     ids: sequentialIds(),
     clock,
     recentStudentTurns: recent,
+    // 4.4's PreGuardCtx fields; distressDetect reads none of them.
+    turnId: 'trn_test_01',
+    safetyEvents: memorySafetyEventSink(),
+    packageNames: [],
+    blocks: new Map(),
   };
 }
 

@@ -20,6 +20,7 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SafetyEventSink,
   SessionStateStore,
   SourceRef,
   StyleCard,
@@ -149,6 +150,11 @@ export interface PipelineDeps {
   usage: UsageMeter;
   traces: TraceSink;
   alerts: AlertSink;
+  /**
+   * Where moderationIn and jailbreak record a block (ADR-0006): ids and a fixed code, never text.
+   * Bound to the turn's student x teacher by the composition root (`queuedTurnPorts`).
+   */
+  safetyEvents: SafetyEventSink;
   fallbackReplies: FallbackReplies;
   /**
    * The validated prompt-pack sets, by version, loaded once at start-up by the composition root
@@ -214,7 +220,19 @@ export interface Scrubbed {
 }
 
 export type PreGuardResult =
-  | { result: 'ok' | 'block'; guards: GuardTrace[]; usage: Usage[] }
+  | { result: 'ok'; guards: GuardTrace[]; usage: Usage[] }
+  | {
+      result: 'block';
+      guards: GuardTrace[];
+      usage: Usage[];
+      /**
+       * The reply the student sees, picked by the blocking guard's code (4.4). Absent: the turn
+       * ends with the generic `guard_blocked` error instead.
+       */
+      reply?: string;
+      /** A misuse alert to raise with the block (4.4: harm to others). */
+      alert?: SafetyAlert;
+    }
   | { result: 'escalate'; alert: SafetyAlert; guards: GuardTrace[]; usage: Usage[] };
 
 export interface RouteResult {

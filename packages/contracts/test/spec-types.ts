@@ -121,6 +121,8 @@ export type GuardResult =
   | { ok: false; action: 'block'; reason: string }
   | { ok: false; action: 'rewrite'; text: string; reason: string }   // text = the replacement input or reply
   | { ok: false; action: 'escalate'; alert: SafetyAlert };
+export type SafetyEventCode = 'self_harm' | 'harm_to_others' | 'sexual' | 'sexual_minors' | 'hate' | 'harassment' | 'threat' | 'weapons' | 'extremism' | 'cheating' | 'other_unsafe'
+  | 'jailbreak_override' | 'jailbreak_roleplay' | 'jailbreak_prompt_leak' | 'jailbreak_encoded' | 'jailbreak_authority_claim' | 'jailbreak_other';   // fixed codes, never free text (ADR-0006)
 export interface Guard { name: string; stage: 'pre' | 'post'; check(x: { input?: TurnInput; draft?: string; ctx: TurnContext }): Promise<GuardResult> }
 export interface LearnerProfile {          // one per (student, teacher)
   studentId: string; teacherId: string; lang: Lang;
@@ -180,3 +182,6 @@ export interface Tool<I, O> {
 export interface EvidenceEvent { studentId: string; teacherId: string; topicId: string; correct: boolean; source: 'check' | 'practice' | 'rubric'; weight: number; ts: string }
 export interface TraceSink { record(t: TurnTrace): Promise<void> }
 export interface AlertSink { raise(a: SafetyAlert): Promise<void> }
+export interface SafetyEventSink {                // moderationIn and jailbreak blocks; ids and a code, never text; dedupe key `${turnId}:${guard}` (ADR-0006)
+  record(e: { studentId: string; teacherId: string; sessionId: string; turnId: string; guard: 'moderationIn' | 'jailbreak'; code: SafetyEventCode; source: 'rule' | 'classifier' }): Promise<void>;
+}

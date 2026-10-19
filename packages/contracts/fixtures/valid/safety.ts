@@ -1,4 +1,4 @@
-import type { GuardResult, SafetyAlert } from '../../src/index.js';
+import type { GuardResult, SafetyAlert, SafetyEventCode } from '../../src/index.js';
 
 export const demoSafetyAlert = {
   id: 'alr_test_01',
@@ -44,4 +44,12 @@ export const valid = {
     { ...demoSafetyAlert, kind: 'misuse' } satisfies SafetyAlert,
   ],
   GuardResult: [guardOk, guardBlock, guardRewrite, guardEscalate],
+  SafetyEventCode: [
+    'self_harm',
+    'harm_to_others',
+    'other_unsafe',
+    'jailbreak_override',
+    'jailbreak_encoded',
+    'jailbreak_other',
+  ] satisfies SafetyEventCode[],
 };

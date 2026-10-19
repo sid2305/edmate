@@ -1000,7 +1000,12 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('a soft hit never escalates through the raw-text check alone (it stays hard-only)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const t = deps({ stream: [scriptedStreamText], generateObject: [
+      { value: { distress: false } },
+      // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
+      { value: { category: 'none' } },
+      { value: { category: 'none' } },
+    ] });
     const { events } = await driveTurn(
       runTurn(at('i feel so hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,
@@ -1009,7 +1014,12 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('soft keyword + classifier false → a normal reply (no alert)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const t = deps({ stream: [scriptedStreamText], generateObject: [
+      { value: { distress: false } },
+      // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
+      { value: { category: 'none' } },
+      { value: { category: 'none' } },
+    ] });
     const { events } = await driveTurn(
       runTurn(at('this bug is hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,

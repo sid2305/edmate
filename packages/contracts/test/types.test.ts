@@ -41,6 +41,7 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.TranscribeInput>().toEqualTypeOf<Spec.TranscribeInput>();
     expectTypeOf<C.TranscriptSegment>().toEqualTypeOf<Spec.TranscriptSegment>();
     expectTypeOf<C.Transcript>().toEqualTypeOf<Spec.Transcript>();
+    expectTypeOf<C.SafetyEventCode>().toEqualTypeOf<Spec.SafetyEventCode>();
   });
 
   it('ports (type-only)', () => {
@@ -58,6 +59,27 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.ModelGateway>().toEqualTypeOf<Spec.ModelGateway>();
     expectTypeOf<C.TraceSink>().toEqualTypeOf<Spec.TraceSink>();
     expectTypeOf<C.AlertSink>().toEqualTypeOf<Spec.AlertSink>();
+    expectTypeOf<C.SafetyEventSink>().toEqualTypeOf<Spec.SafetyEventSink>();
     expectTypeOf<C.Tool<{ a: number }, string>>().toEqualTypeOf<Spec.Tool<{ a: number }, string>>();
+  });
+});
+
+describe('SafetyEventSink (ADR-0006)', () => {
+  type Event = Parameters<C.SafetyEventSink['record']>[0];
+
+  it('records ids, the guard, a fixed code and the source; no free text field', () => {
+    expectTypeOf<keyof Event>().toEqualTypeOf<
+      'studentId' | 'teacherId' | 'sessionId' | 'turnId' | 'guard' | 'code' | 'source'
+    >();
+    expectTypeOf<Event['guard']>().toEqualTypeOf<'moderationIn' | 'jailbreak'>();
+    expectTypeOf<Event['source']>().toEqualTypeOf<'rule' | 'classifier'>();
+    expectTypeOf<Event['code']>().toEqualTypeOf<C.SafetyEventCode>();
+    expectTypeOf<ReturnType<C.SafetyEventSink['record']>>().toEqualTypeOf<Promise<void>>();
+  });
+
+  it('a code is one of the fixed set, never an arbitrary string', () => {
+    expectTypeOf<string>().not.toExtend<C.SafetyEventCode>();
+    expectTypeOf<'jailbreak_override'>().toExtend<C.SafetyEventCode>();
+    expectTypeOf<'self_harm'>().toExtend<C.SafetyEventCode>();
   });
 });

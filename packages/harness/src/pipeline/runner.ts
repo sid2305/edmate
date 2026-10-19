@@ -455,6 +455,10 @@ class Turn {
     ) {
       return this.escalate(scrubbed, e, preAlert);
     }
+    if (pg.ok && pg.value.result === 'block' && pg.value.reply !== undefined) {
+      // moderationIn / jailbreak (4.4): the code's own reply, plus a misuse alert if one came.
+      return this.sendBlockReply(e, scrubbed, intent, pg.value.reply, pg.value.alert);
+    }
     if (!pg.ok || pg.value.result === 'block') {
       this.endWithError(pg.ok ? PRE_GUARD_BLOCKED : PRE_GUARD_FAILED);
       return this.finish(e, { outcome: 'blocked', input: scrubbed, intent }, intent, 'redirect');
@@ -661,6 +665,31 @@ class Turn {
         ...(built.alert === null ? {} : { alert: built.alert }),
       },
       'distress',
+      'redirect',
+      delivered,
+    );
+  }
+
+  /**
+   * A pre guard blocked with a reply (4.4): send it and end the turn, saved as `blocked`. An alert
+   * that came with the block (a misuse alert) is delivered like an escalation's: retried until
+   * delivered, and awaited (bounded) before `finished`. No `safety` event: nothing is shown as a
+   * crisis.
+   */
+  private sendBlockReply(
+    e: Entitled,
+    input: TurnInput,
+    intent: Intent,
+    replyText: string,
+    alert: SafetyAlert | undefined,
+  ): Promise<TurnRunResult> {
+    const delivered = alert === undefined ? undefined : this.deliverAlert(alert);
+    this.send({ type: 'token', text: replyText });
+    this.done();
+    return this.finish(
+      e,
+      { outcome: 'blocked', input, intent, replyText, ...(alert === undefined ? {} : { alert }) },
+      intent,
       'redirect',
       delivered,
     );

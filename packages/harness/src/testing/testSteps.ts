@@ -25,6 +25,8 @@ import { sequentialIds, type SequentialIds } from './ids.js';
 import {
   type MemoryAlertSink,
   memoryAlertSink,
+  type MemorySafetyEventSink,
+  memorySafetyEventSink,
   type MemoryTraceSink,
   memoryTraceSink,
   type MemoryTurnLog,
@@ -265,6 +267,8 @@ export interface TestDeps {
   traces: MemoryTraceSink;
   usage: MemoryUsageMeter;
   alerts: MemoryAlertSink;
+  /** moderationIn and jailbreak blocks (ADR-0006). */
+  safetyEvents: MemorySafetyEventSink;
   log: MemoryTurnLog;
   /** Calls to ports the happy path never uses (stores); should stay empty. */
   portCalls: string[];
@@ -283,6 +287,7 @@ export function testDeps(
     traces?: MemoryTraceSink;
     usage?: MemoryUsageMeter;
     alerts?: MemoryAlertSink;
+    safetyEvents?: MemorySafetyEventSink;
     log?: MemoryTurnLog;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
@@ -296,6 +301,7 @@ export function testDeps(
   const traces = opts.traces ?? memoryTraceSink();
   const usage = opts.usage ?? memoryUsageMeter();
   const alerts = opts.alerts ?? memoryAlertSink();
+  const safetyEvents = opts.safetyEvents ?? memorySafetyEventSink();
   const log = opts.log ?? memoryTurnLog();
   const portCalls: string[] = [];
   const deps: PipelineDeps = {
@@ -316,6 +322,7 @@ export function testDeps(
     usage,
     traces,
     alerts,
+    safetyEvents,
     fallbackReplies: {
       safeReply: () => TEST_SAFE_REPLY,
       distress: () => TEST_DISTRESS_REPLY,
@@ -324,5 +331,5 @@ export function testDeps(
     promptPacks: fixturePromptPackLibrary,
     ...opts.overrides,
   };
-  return { deps, clock, ids, gateway, traces, usage, alerts, log, portCalls };
+  return { deps, clock, ids, gateway, traces, usage, alerts, safetyEvents, log, portCalls };
 }
