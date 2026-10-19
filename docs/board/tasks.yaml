@@ -866,7 +866,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: done
   risk: risky
   branch: m4/4.5-answer-leak
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -899,10 +899,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.6-locked-leak
+  model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
