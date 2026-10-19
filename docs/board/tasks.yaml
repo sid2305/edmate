@@ -534,9 +534,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
-  branch: null
-  model: null
+  status: planning
+  branch: m3/3.8-meter-commit
+  model: plan:sonnet
 - id: '3.9'
   milestone: M3
   title: CLI `edmate chat --agent --package` (teacher-preview or eval entitlement)
