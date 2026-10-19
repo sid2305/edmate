@@ -7,10 +7,11 @@ import {
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
+import { foldMastery } from '../mastery.js';
 import { evidenceEvents, learnerProfiles, topics } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { toLearnerProfile } from './map.js';
-import { parseArg, studentScope, type StudentScope } from './scope.js';
+import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
 
 const sameScope = (x: { studentId: string; teacherId: string }, scope: StudentScope) =>
   x.studentId === scope.studentId && x.teacherId === scope.teacherId;
@@ -64,26 +65,27 @@ export function learnerProfilesRepo(db: Db) {
           }),
       );
     },
-  };
-}
 
-const Events = z.array(EvidenceEventSchema);
-
-/** Scored evidence (append-only). */
-export function evidenceEventsRepo(db: Db) {
-  return {
     /**
-     * Appends events for the scope, all or nothing. An event naming another student or teacher,
-     * or a topic that isn't the scope's teacher's, is `scope` and nothing is written.
+     * Merges `patch` (topic id -> mastery entry) into the scope's profile, creating it (lang `en`,
+     * empty mistakes — task 3.17's new-profile default; locale work may revisit) when none exists
+     * yet. Every topic in `patch` must be the scope's teacher's, else `scope` (nothing written) —
+     * defense in depth: the only caller (`profileStoreFor.applyEvidence`) already derives `patch`
+     * from `evidenceEvents.append`'s own ownership-checked return, so this never rejects there, but
+     * this method has no other way to tell a borrowed topic id from an owned one.
+     *
+     * The `SET` list only ever names `mastery` (merged with Postgres's jsonb `||`, so topics not in
+     * `patch` are untouched) and `updated_at`: `mistakes` and `last_summary` are never in this
+     * statement, so this write can never clobber `last_summary` (closes the 3.16 review's deferred
+     * finding for this write path; `save()`'s own semantics are unchanged, still 6.4's job). An
+     * empty patch writes nothing.
      */
-    async append(scope: StudentScope, events: EvidenceEvent[]): Promise<void> {
-      const method = 'evidenceEvents.append';
+    async applyMastery(scope: StudentScope, patch: LearnerProfile['mastery']): Promise<void> {
+      const method = 'learnerProfiles.applyMastery';
       const sc = studentScope(scope, method);
-      const list = parseArg(Events, events, method);
-      if (!list.every((e) => sameScope(e, sc))) throw new RepositoryError('scope', method);
-      if (list.length === 0) return;
-      const topicIds = [...new Set(list.map((e) => e.topicId))];
-
+      const p = parseArg(LearnerProfileSchema.shape.mastery, patch, method);
+      const topicIds = Object.keys(p);
+      if (topicIds.length === 0) return;
       await translateWrite(method, () =>
         db.transaction(async (tx) => {
           const owned = await tx
@@ -92,17 +94,173 @@ export function evidenceEventsRepo(db: Db) {
             .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
             .for('key share');
           if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
-          await tx.insert(evidenceEvents).values(
-            list.map((e) => ({
+          await tx
+            .insert(learnerProfiles)
+            .values({
               studentId: sc.studentId,
               teacherId: sc.teacherId,
-              topicId: e.topicId,
-              correct: e.correct,
-              source: e.source,
-              weight: e.weight,
-              ts: new Date(e.ts),
-            })),
-          );
+              lang: 'en',
+              mastery: p,
+              mistakes: [],
+            })
+            .onConflictDoUpdate({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+              set: {
+                mastery: sql`${learnerProfiles.mastery} || ${JSON.stringify(p)}::jsonb`,
+                updatedAt: sql`now()`,
+              },
+            });
+        }),
+      );
+    },
+
+    /**
+     * Review fix round (3.17): folds `events` (already deduplicated and topic-scoped by the only
+     * caller, `profileStoreFor.applyEvidence`) into the scope's mastery under a row lock, so two
+     * concurrent calls for the same pair can never both read the same prior mastery and clobber
+     * each other (a lost update) — unlike computing the fold in application code from a plain
+     * `get()` and merging it back with `applyMastery` (the previous shape of this path). The scope
+     * and topic-ownership checks stay inside the same transaction as the lock and the fold:
+     * - a default row (lang `en`, empty mastery/mistakes) is inserted first if none exists yet
+     *   (`ON CONFLICT DO NOTHING`, so a second concurrent caller never errors on it);
+     * - the row is then locked (`SELECT ... FOR UPDATE`), so a second concurrent caller's own
+     *   insert-or-lock blocks until the first transaction commits;
+     * - the fold reads only that locked value, and the `UPDATE` replaces `mastery` wholesale with
+     *   the fold's result (which already carries every untouched topic forward unchanged), still
+     *   never touching `mistakes` or `last_summary`.
+     * An empty `events` is a no-op.
+     */
+    async applyEvidenceMastery(
+      scope: StudentScope,
+      events: readonly { topicId: string; correct: boolean; ts: string }[],
+    ): Promise<void> {
+      const method = 'learnerProfiles.applyEvidenceMastery';
+      const sc = studentScope(scope, method);
+      if (events.length === 0) return;
+      const topicIds = [...new Set(events.map((e) => e.topicId))];
+      await translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const owned = await tx
+            .select({ id: topics.id })
+            .from(topics)
+            .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
+            .for('key share');
+          if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
+
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({ mastery: learnerProfiles.mastery })
+            .from(learnerProfiles)
+            .where(
+              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+            )
+            .for('update');
+
+          const next = foldMastery(locked!.mastery, events);
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mastery: next, updatedAt: sql`now()` })
+            .where(
+              and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
+            );
+        }),
+      );
+    },
+  };
+}
+
+/** A would-be `evidence_events` row: the contract plus an optional explicit id (below). */
+const EventWithId = EvidenceEventSchema.extend({ id: IdSchema.optional() });
+export type EvidenceEventEntry = z.infer<typeof EventWithId>;
+const EventsWithId = z.array(EventWithId);
+
+function toEvidenceEvent(
+  row: {
+    studentId: string;
+    teacherId: string;
+    topicId: string;
+    correct: boolean;
+    source: string;
+    weight: number;
+    ts: Date;
+  },
+  method: string,
+): EvidenceEvent {
+  return parseArg(EvidenceEventSchema, { ...row, ts: row.ts.toISOString() }, method);
+}
+
+/** Scored evidence (append-only). */
+export function evidenceEventsRepo(db: Db) {
+  return {
+    /**
+     * Appends events for the scope, all or nothing, and returns the ones actually written (the
+     * contract shape, without `id`). An event naming another student or teacher, or a topic that
+     * isn't the scope's teacher's, is `scope` and nothing is written.
+     *
+     * Idempotency (task 3.17): an event carrying `id` (the queue producer's content hash of
+     * studentId|teacherId|topicId|correct|source|weight|its *original* ts — see
+     * `packages/queue/src/queues.ts`'s `evidenceEventId`) that already exists is silently skipped
+     * (`ON CONFLICT (id) DO NOTHING`, so a replayed job, or the same evidence fed twice, inserts
+     * its row once) and is left out of the returned list — `profileStoreFor.applyEvidence` only
+     * folds BKT updates for events this call actually wrote, so a replay changes mastery once too.
+     * An event with no `id` always gets a fresh one (never deduplicated).
+     */
+    async append(scope: StudentScope, events: EvidenceEventEntry[]): Promise<EvidenceEvent[]> {
+      const method = 'evidenceEvents.append';
+      const sc = studentScope(scope, method);
+      const list = parseArg(EventsWithId, events, method);
+      if (!list.every((e) => sameScope(e, sc))) throw new RepositoryError('scope', method);
+      if (list.length === 0) return [];
+      const topicIds = [...new Set(list.map((e) => e.topicId))];
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const owned = await tx
+            .select({ id: topics.id })
+            .from(topics)
+            .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
+            .for('key share');
+          if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
+          const rows = await tx
+            .insert(evidenceEvents)
+            .values(
+              list.map((e) => ({
+                ...(e.id === undefined ? {} : { id: e.id }),
+                studentId: sc.studentId,
+                teacherId: sc.teacherId,
+                topicId: e.topicId,
+                correct: e.correct,
+                source: e.source,
+                weight: e.weight,
+                ts: new Date(e.ts),
+              })),
+            )
+            .onConflictDoNothing({ target: evidenceEvents.id })
+            .returning({
+              studentId: evidenceEvents.studentId,
+              teacherId: evidenceEvents.teacherId,
+              topicId: evidenceEvents.topicId,
+              correct: evidenceEvents.correct,
+              source: evidenceEvents.source,
+              weight: evidenceEvents.weight,
+              ts: evidenceEvents.ts,
+            });
+          return rows.map((r) => toEvidenceEvent(r, method));
         }),
       );
     },

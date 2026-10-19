@@ -28,13 +28,17 @@ import { decide } from './decide.js';
 const agent = { ...demoAgentConfig, promptPackVersion: FIXTURE_PROMPT_PACK_VERSION };
 const ctx = (o: CtxOverrides = {}): TurnContext => ctxWith({ agent, ...o });
 
-function env(input: TurnInput = demoTurnInput, deps: Partial<PipelineDeps> = {}): StepEnv {
+function env(
+  input: TurnInput = demoTurnInput,
+  deps: Partial<PipelineDeps> = {},
+  reported: unknown[] = [],
+): StepEnv {
   return {
     input,
     deps: { ...testDeps().deps, ...deps },
     cancel: { cancelled: false, onCancel: () => undefined },
     turnId: 'turn_test',
-    ...stepEnvExtras(),
+    ...stepEnvExtras(reported),
   };
 }
 
@@ -103,11 +107,13 @@ describe('decide.run', () => {
   });
 
   it('uses the input language and the input kind', async () => {
+    // Pilot policy (3.11c): `demoAgentConfig` fixture is `['en', 'hi']`, so the reply is clamped
+    // to English regardless of the input language (see compose.test.ts for the clamp itself).
     const r = await decide.run(env({ ...demoTurnInput, lang: 'hi' }), {
       ctx: ctx(),
       help: helpWith(),
     });
-    expect(r.decision.systemPrompt).toContain('Reply in language hi.');
+    expect(r.decision.systemPrompt).toContain('Reply in language en.');
     const hint = await decide.run(env({ ...demoTurnInput, kind: 'hint_request' }), {
       ctx: ctx(),
       help: helpWith(),
@@ -141,6 +147,22 @@ describe('decide.run', () => {
     expect(() => decide.fallback(env(), { ctx: c, help: helpWith() })).toThrow(
       UnknownPromptPackVersionError,
     );
+  });
+
+  it('reports a background warning when the agent is not pinned to English only (pilot policy)', async () => {
+    const reported: unknown[] = [];
+    await decide.run(env(demoTurnInput, {}, reported), { ctx: ctx(), help: helpWith() });
+    expect(reported).toHaveLength(1);
+    expect((reported[0] as Error).name).toBe('PilotLanguageClamped');
+  });
+
+  it('reports no background warning for an English-only agent', async () => {
+    const reported: unknown[] = [];
+    await decide.run(env(demoTurnInput, {}, reported), {
+      ctx: ctx({ agent: { ...agent, languages: ['en'] } }),
+      help: helpWith(),
+    });
+    expect(reported).toEqual([]);
   });
 
   it('distress → the distress pack; off_topic → the redirect pack', async () => {

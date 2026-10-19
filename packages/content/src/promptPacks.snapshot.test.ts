@@ -1,8 +1,7 @@
-// Snapshot of the composed prompt, from a real-on-disk prompt-pack set (task 3.11a). Runs
-// against the v1.0.0-shaped fixture set checked into this package's own test fixtures now; 3.11b
-// points `DIR` at `content/prompt-packs` once the real pack prose lands (its own PR keeps this
-// file's snapshot, updating it only where the real prose changes the composed prompt — see the
-// 3.11 plan, "snapshot tests from 3.6 updated").
+// Snapshot of the composed prompt, from the real on-disk prompt-pack set (tasks 3.11a, 3.11b).
+// Loads the reviewed v1.0.0 prose from `content/prompt-packs` and the two persona templates from
+// `content/skills/mock_interview`, so any edit to a pack or template shows up here as a
+// reviewable snapshot diff (the 3.11 plan, "snapshot tests from 3.6 updated").
 //
 // `composeSystemPrompt` and `composeMode` are both pure and re-exported from `@edmate/harness`;
 // this is content-side proof that the on-disk v1.0.0 shape renders through them, not a change to
@@ -38,8 +37,9 @@ import { readPersonaTemplateDir } from './personaTemplates.js';
 import { readPromptPackLibrary } from './promptPacks.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DIR = resolve(here, '../test/fixtures/prompt-packs/v1');
-const PERSONA_DIR = resolve(here, '../test/fixtures/skills/mock_interview/valid');
+const REPO_ROOT = resolve(here, '../../..');
+const DIR = resolve(REPO_ROOT, 'content/prompt-packs');
+const PERSONA_DIR = resolve(REPO_ROOT, 'content/skills/mock_interview');
 const SET_VERSION = '1.0.0';
 
 const library = readPromptPackLibrary(DIR);

@@ -9,11 +9,14 @@ export {
   isoAt,
   linkCancel,
 } from './clock.js';
+// Every HarnessError's message is fixed text, codes and ids only, never student or model text
+// (errors.ts); the background log relies on that.
 export {
   errorName,
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PilotLanguageClamped,
   ScrubFailedError,
   type ScrubFailureCause,
   type ScrubFailureDetail,
@@ -70,6 +73,17 @@ export {
 export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
 export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
+export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
+export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
+export {
+  createPostGuard,
+  POST_GUARD_MARGIN_MS,
+  PostGuardFailed,
+  postGuardSliceMs,
+  REWRITE_MAX_OUTPUT_TOKENS,
+  REWRITE_SHARE,
+  REWRITE_SYSTEM,
+} from './steps/postGuard.js';
 export { defaultSteps } from './steps/index.js';
 export { runWithTimeout, type TimedResult } from './timeout.js';
 export type {

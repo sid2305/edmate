@@ -15,6 +15,7 @@ export {
   DATA_CLOSE,
   DATA_OPEN,
   LockedMaterialError,
+  PILOT_LANGUAGES,
   PromptPackMismatchError,
   replyLanguage,
 } from './compose.js';

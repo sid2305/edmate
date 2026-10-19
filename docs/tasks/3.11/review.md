@@ -13,3 +13,18 @@ safety-reviewer confirmed that the snapshots cover a persona dropping on distres
 ## Findings
 - [MEDIUM] [deferred 3.11b] packages/content/src/personaTemplates.ts:24 — style, mustNot and name have no size caps, and name isn't checked to be a role name (not "teacher" or "human"). Add caps and a name guard in the loader.
 - [LOW] [deferred 3.11b] packages/content/src/personaTemplates.ts:42 — `reviewed_by: pending` validates. Reject pending when loading for real pack use.
+
+
+## 3.11b (PR #44) — APPROVE (safety); human sign-off pending
+Reviewer: safety-reviewer (opus), prose and re-verification. See safety-review.md for the findings. Content tests 159/159; 23 composed-prompt snapshots regenerated.
+
+## 3.11c (PR #50) — APPROVE
+Reviewer: safety-reviewer (sonnet; also covered TypeScript). It confirmed:
+- the clamp only changes the reply-language value;
+- distress handling and the helplines are untouched;
+- PilotLanguageClamped is fixed text;
+- the Composed type change is safe, and the shared fixture stays general.
+
+Content 165 and harness 2,918 tests pass.
+
+- [LOW] [deferred 3.10] packages/harness/src/pedagogy/compose.ts:63 — PILOT_LANGUAGES is duplicated in content and harness, with no cross-package equality test; locale packs (3.10) make the language policy data-driven.

@@ -10,6 +10,620 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.5c "baar"/"times" are weak markers: a run verb next to them, never an imperative · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: `numbers.ts` drops "baar"/"times"/"बार" from the always-on answer-word set and instead checks the token right next to them: it counts only when a run/print verb (chalega, chalegi, chalti, chalta, runs, prints, print, executes, execute, loops, loop, चलेगा, चलेगी, छपेगा) is adjacent, never when an imperative (karo, padho, socho, dekho, try, read, likho) is — the imperative check wins over a run verb on the other side, so "do baar chalega, socho" still never counts. "Ek baar try karo" and "Do baar socho" (an imperative right next to the count word) no longer trip a one-digit key; "Loop teen baar chalega" and "It runs three times" (a run verb right next to it, or a run-verb marker elsewhere in the sentence) still do.
+Why: a bare count word ("ek baar", "do baar", "X times") is ordinary lesson Hinglish; only a verb that names the code running or printing turns it into an answer.
+Alternatives: drop the markers to zero context (misses genuine "teen baar chalega" leaks); keep them unconditional (the false positives this task was opened for).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c No own-code exemption when the student offered two code lines that differ only at the key · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: before granting a code-shaped key the own-code exemption, `compileAnswerKeys` now also checks whether the student's message holds a second line, also clearly code, that is identical to the key's line except for a span covering the key (`if s.upper()...` next to `if s.lower()...`). If so, the key is never exempted (confirmation words or not): the student offered two options and picked neither yet, so quoting one back is still a leak. A single quoted line with no alternative stays exempt, as does a line the student repeated verbatim (not "two options").
+Why: the fix-round-1 exemption (a clearly-code line, confirmed-context aside) let a tutor's "Keep s.lower()" through once the student had typed both branches as code, which is still telling the student the answer.
+Alternatives: require the confirmation-word list to catch "keep"/"pick"/"wala lagao" too (an open-ended word list, always behind); drop the own-code exemption whenever the message holds more than one code line regardless of content (would also block a student who fixed a typo and resent the same line).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c Spelling variants and spoken fraction, percentage and digit-by-digit decimal forms · decided by tdd-guide (safety-reviewer's deferred list) · risk: medium
+Decided: `baiyaalis`/`byalis`/`beyalis` (42) and `unatees` (29) are added to the Hindi-Latin 21-99 table as explicit spellings, since `latinFold` folds them to a different value than the table's own spelling for 42/29 (the table's "never guess" rule means a fold collision is dropped, not guessed, so these needed listing by hand, not a fold change). `numbers.ts` also now reads spoken fractions ("five sixths", "5 out of 6"; numerator/denominator each one number word or digit), a percentage ("83%", "83.5%"; over 100, at its own written decimals plus two) and a decimal read digit by digit ("zero point eight three"; one number word for the whole part, then digit words after "point"), each matched against a key at the existing fraction/decimal precision rules (unchanged).
+Why: these are ordinary ways a tutor or student would say a fraction, percentage or decimal answer, and the matcher already has the precision rules to compare them; only the forms that reach those rules were missing.
+Alternatives: a judge model for paraphrase generally (4.5b, needs a live model, out of scope here); support multi-word whole parts for spoken decimals ("twelve point five") — narrowed to one word to avoid a greedy regex swallowing unrelated preceding prose ("the point eight three").
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c `CommitRecord.escalatedText` was already out of history and the model; added the round-trip test · decided by tdd-guide (safety-reviewer's deferred list) · risk: high
+Decided: no code change to `commit.ts` was needed — it already persists only `record.replyText` to the transcript store, never `record.escalatedText`. Added `runner.escalatedText.test.ts`: a real postGuard-escalate turn runs the real `commit` step against a real in-memory transcript store, then a real `buildContext` call (and a full second turn through the real `buildContext` and `generate` steps, with a scripted-gateway spy) confirms the escalated text is absent from the transcript store, from the next turn's `history`, and from the next turn's `ModelRequest`s.
+Why: the safety review flagged this as still open; verifying it end to end (not just that `commit`'s own unit test omits the field) is what "never reaches a later turn's model request" means.
+Alternatives: trust the existing `commit.test.ts`/`runner.answerLeak.test.ts` coverage (neither drives a second turn's `buildContext`/`generate` off a real transcript store, so neither proves the field can't leak back in through history).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5c fix round A spoken fraction, "out of", percentage or spoken decimal needs an answer context whatever the key's length · decided by build-error-resolver (PR #53 follow-up) · risk: medium
+Decided: `numbers.ts` marks a mention from `FRACTION_WORDS`, `OUT_OF`, `PERCENT` or `SPOKEN_DECIMAL` as `weak`; `answerKey.ts`'s leak check now requires an answer context for a weak mention no matter how long the key's canonical value is, instead of letting any key longer than one digit through unconditionally. "83% of students passed the test." (key `0.83`) and "5 out of 6 tests passed." (key `5/6`) no longer trip; "the answer is five sixths" and "it's 83%" still do, same as a one-digit key's words and arithmetic already worked.
+Why: these four forms are new enough (4.5c, this same task) that the house's existing one-digit answer-context rule had not been extended to them, and a bare "83% of students passed" or "5 out of 6 tests passed" is ordinary lesson/word-problem text, not an answer.
+Alternatives: keep the key-length rule and widen the one-digit exception to "any key whose value came from one of these four forms" (same effect, more roundabout: ties the rule to the key instead of the mention, which is what varies); require context only for percentage and spoken-decimal, not spoken fraction/"out of" (inconsistent — all four are equally ordinary word-problem phrasing).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.14 No ADR; Redis over Postgres; harness-owned `TurnCounter` · decided by lead (plan's Q1–Q3) · risk: low
+- Decided: `TurnCounter`/`TurnLimits` stay harness-owned types (no contracts port, no ADR);
+  `packages/queue` depends on `@edmate/harness` as a production dependency to consume them,
+  exactly as `packages/content` already does; the durable adapter is built on Redis with an exact
+  sliding-window-log (ZSET), not Postgres or an approximate bucket counter.
+- Why: Redis is already deployed and already a `packages/queue` dependency; one atomic Lua `EVAL`
+  matches the existing sliding-window-log semantics with a single round trip well under the 50 ms
+  step budget; `appendonly yes` (see `docker/compose.yaml`) already gives restart durability.
+  Promoting `TurnCounter` to a contracts port would only matter if a second, non-harness-dependent
+  package needed to implement it — nothing today does.
+- Alternatives: a contracts port (ADR-0008); Postgres with row locks/`SELECT ... FOR UPDATE`; an
+  approximate fixed-bucket counter instead of the exact log.
+- Reversible: yes — both the port-vs-type question and Redis-vs-Postgres sit behind the unchanged
+  `TurnCounter` interface; swapping either later needs no `admit.ts`/`entitle.ts` change.
+
+---
+
+### 19 Oct 2026 · 3.14 Stale board "ADR-0005" reference · decided by builder (flagged by plan) · risk: low
+- Decided: the board's task 3.14 title line's "ADR-0005" mention is stale (ADR-0005 belongs to
+  3.15); no ADR is created for 3.14.
+- Why: ADR-0005 was assigned to 3.15 (Transcriber + session help state) after 3.14 was written onto
+  the board; the lead's answer confirms no ADR is needed here regardless of numbering.
+- Alternatives: renumber and use ADR-0008 for this task (the plan's fallback if the lead preferred
+  a contracts port); not taken, since the lead agreed no ADR is needed at all.
+- Reversible: yes — a future task can still add a contracts port with its own ADR if a second
+  package ever needs to implement `TurnCounter` without a harness dependency.
+
+---
+
+### 19 Oct 2026 · 3.14 Separate key sub-namespace for rate vs. messages · decided by builder · risk: low
+- Decided: `redisTurnLimits` gives its `rate` and `messages` counters distinct key sub-namespaces
+  (`${prefix}:rate:*`, `${prefix}:messages:*`) instead of one shared namespace.
+- Why: `admit`'s rate key (`studentId`) and `entitle`'s message key (`studentId:packageId`) are
+  unlikely to collide by convention alone, but the plan's own spec doesn't rule out a caller or
+  future use reusing the same raw string for both; a cheap, explicit sub-namespace removes the
+  possibility entirely rather than relying on callers to always differ.
+- Alternatives: the plan's literal single-prefix sketch (`${prefix}:${key}` for both); not taken,
+  since it leaves an avoidable (if currently unlikely) collision path.
+- Reversible: yes — an internal key-naming detail behind `TurnCounter`/`TurnLimits`; no external
+  contract depends on the exact Redis key shape.
+
+---
+
+### 19 Oct 2026 · 3.14 One documented cast for the Redis Lua command · decided by team lead (typescript review) · risk: low
+Decided: `packages/queue/src/turnLimits.ts` keeps a single commented cast to probe and define the custom Lua command on the ioredis client.
+Why: ioredis has no typed generics for defineCommand; the cast is isolated and tested.
+Alternatives: call `eval` with the script text each time (no cached script).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 ADR-0007: `RetrievalIndex.leakCheck` returns one boolean for a batch, over the complement scope, failing closed · decided by lead (plan answers, after safety-reviewer and architect plan reviews) and tdd-guide (ADR text) · risk: high
+Decided: add `leakCheck(candidates: string[], scope: { teacherId; allowedModuleIds }): Promise<{ hit: boolean }>` to contracts. Locked means every chunk of the teacher outside the allowed modules, and spans also in allowed chunks are ignored. The adapter fails closed and never logs candidates, with a latency SLO (p95 ≤ 50 ms, p99 ≤ 100 ms), a cache keyed by package version plus the teacher's material revision, and a residual oracle of one bit per turn bounded by the message limit.
+Why: locked text must never enter the harness or a model (ADR-0003). Spans, scores or counts would make the port an oracle that reads locked text out.
+Alternatives: return matched spans (architect proposal); `{ hit, score }` like `probe`; fetch locked text or hashed shingles into the harness.
+Reversible: yes, by a new ADR, reviewed by architect, security-reviewer and typescript-reviewer.
+
+---
+
+### 19 Oct 2026 · 4.6 lockedLeak runs before answerLeak in the post chain · decided by lead (plan answer 2) · risk: high
+Decided: `GUARD_ORDER.post` is now `lockedLeak, answerLeak, grounding, adviceGuard, personaBoundary, tone`, a departure from the build plan's table order. A test shows the answer rewriter never receives a locked span.
+Why: answerLeak's rewrite sends the draft to a small model; a locked span must be gone before then.
+Alternatives: keep the table order and strip locked text inside answerLeak's rewrite path.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Any locked hit replaces the whole reply with the locked reply; no surgical strip · decided by lead (plan answer 3) · risk: high
+Decided: on a hit in the post chain or the stream, the student gets the locked reply. It is the built-in English reply or the locale's `FallbackReplies.lockedReply`, and names only the student's own package when the teacher chose `name_package`. The guard accepts that text without a check, so it is idempotent by construction.
+Why: cutting spans out leaves fragments and needs spans from the port (an oracle). A fixed reply is safe and simple.
+Alternatives: strip matched spans and recheck in a bounded loop (original plan).
+Reversible: yes, with safety-reviewer sign-off and an ADR if the port would have to return spans.
+
+---
+
+### 19 Oct 2026 · 4.6 Every streamed sentence waits for a locked check, with a 7-token carryover · decided by lead (plan answer 1) and tdd-guide (seam placement, partial-word rule) · risk: high
+Decided: text the answer gate releases is cut into sentences by the same rules. Each sentence is shown only after `leakCheck` passes it, together with the last 7 shown tokens (8 when the shown text ends inside a word). A hit, a failed check or too much text withholds the rest of the attempt. Fragments with no sentence end are not shown until checked.
+Why: build plan line 316 requires locked n-grams to be checked before sending. The carryover catches spans across sentences, chunks and tool rounds.
+Alternatives: post-only checking, where locked text would stream and then be replaced; one check per chunk, which means too many port calls.
+Reversible: yes, with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.6 Up to 7 locked tokens can stream before the hit; accepted as a known miss for now · decided by tdd-guide (finding, for safety-reviewer) · risk: high
+Decided: no hold-back beyond the carryover. In the fixture run, 89 of 351 forms showed a short case phrase (always fewer than 8 locked tokens) before the replace. None showed 8+ tokens, and every final reply is the locked reply.
+Why: knowing that a shown sentence starts a locked span needs a prefix query, which is a finer oracle than ADR-0007 allows.
+Alternatives: delay each sentence until 7 more tokens arrive (slower streaming, and it still can't tell); a prefix-query port (new ADR, an oracle risk).
+Reversible: yes; safety-reviewer to decide whether this needs a follow-up task.
+
+---
+
+### 19 Oct 2026 · 4.6 The student's own words: only their own 8-token windows are left out · decided by tdd-guide (narrowing lead answer 4's false-positive rule) · risk: high
+Decided: the harness drops from the candidates only the 8-token windows that appear in the student's (scrubbed) message. A window mixing the student's quote with new words is still checked.
+Why: cutting out the student's tokens would let "echo my quote plus 7 more locked tokens" pass, the partial-quote attack. Tests show both the false positive and the attack.
+Alternatives: cut covered tokens out (my first version, caught in testing); no student exception (quoting back a student's paste would be replaced).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Fail-closed outcomes per call site · decided by lead (plan answer 5) and tdd-guide (reply choice) · risk: medium
+Decided: `lockedCheck` is required everywhere. On a rejection or timeout: the tool loop gives `failed('locked')`, skillEvent gives `drop('locked')`, the stream withholds and postGuard then sends the safe reply (or the hint if an answer also leaked), and the post chain fails and sends the safe reply. A real hit gives the locked reply.
+Why: telling a student "that's not in your package" when the index was only slow would mislead them; the safe reply is neutral.
+Alternatives: treat every failure as a hit and send the locked reply.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Harness timeout 150 ms per check; checks of under 8 tokens skip the call · decided by tdd-guide · risk: medium
+Decided: `LOCKED_CHECK_TIMEOUT_MS = 150`, the per-guard slice once all six post guards exist. No port call is made when no candidate has 8 tokens. Candidates are folded token spans, with base64 decoded once (plan Q3).
+Why: keeps latency bounded and fails closed. Short text can't hold a leak.
+Alternatives: use the post slice only; always call.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Skill-only locked cases and one framed leak · decided by tdd-guide · risk: medium
+Decided: `skill-feedback-en`, `skill-feedback-hi-latin` and `skill-revision-allowed-module-en` lock a skill and name no locked module file. Their leaks quote locked functions or loops material. The first and third fail unguarded only through `must_contain` (the locked reply). `skill-feedback-hi-latin`'s phrases ("rubric line", "marks:") appear in no content file, so its leak puts "Rubric line 1: " before a verbatim locked rubric span.
+Why: the lead asked that every case fail under both mutations. For these cases lockedLeak is a backstop; the main protection is decide's locked move and the skill registry.
+Alternatives: exclude these three from the mutation count.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Test virtual clock flushes 2,000 microtask turns, up from 200 · decided by tdd-guide · risk: low
+Decided: raise `FLUSH_TURNS` in `testing/virtualClock.ts`.
+Why: a long reply now awaits one check per sentence at a single virtual instant. At 200 turns the clock wrongly fired a 15 s attempt timeout or reported a deadlock (4.5's leak suite showed it). Production code is unaffected.
+Alternatives: add delays to every scripted stream.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Locked hits go to background reports until 4.4's SafetyEventSink exists · decided by lead (task brief) · risk: low
+Decided: hits are reported by name only: `LockedLeakDetected(stream|reply)`, `ToolFailed(…, 'locked')` and `SkillEventDropped(…, 'locked')`. None carries any text.
+Why: 4.4 has not merged.
+Alternatives: wait for 4.4.
+Reversible: yes; wire to the sink in 4.4 or a follow-up.
+
+---
+
+### 19 Oct 2026 · 4.6 A locked-check outage gives the generic safe reply · decided by team lead (security review) · risk: low
+Decided: when the full-reply leakCheck fails (timeout or error) rather than hits, `packages/harness/src/pipeline/steps/postGuard.ts` sends the generic safe reply, as the stream path already does.
+Why: an outage is not evidence of a locked request, so naming the package would mislead.
+Alternatives: send the locked reply on any failure.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.6 Build-plan guard table updated for ADR-0007 · decided by team lead (architect review) · risk: high
+Decided: the build plan's guard table now lists lockedLeak before answerLeak, with whole-reply replacement and the per-sentence stream check.
+Why: the spec must match the accepted ADR; a reader of the table alone would build the wrong order and action.
+Alternatives: leave the table stale.
+Reversible: only by another ADR.
+
+---
+
+### 19 Oct 2026 · 3.17 fix round · Duplicate `teacher_questions` rows are dismissed, not left open and not deleted · decided by build-error-resolver (fix round) · risk: medium, reversible
+Decided: 0011's dedup cleanup sets every open duplicate but the oldest to `status = 'dismissed'` (append-only, no deletes), so the new unique index can always be created even against data seeded before it existed.
+Why: the review's instruction was explicit ("close duplicates... never delete rows"); `dismissed` is the only terminal status besides `answered` in `teacher_question_status`, and a duplicate asked only because of the pre-fix race was never actually answered.
+Alternatives: delete the duplicate rows (violates "never delete"); leave them open and make the index `CREATE UNIQUE INDEX CONCURRENTLY` with a pre-check that refuses to proceed on conflict (adds an operational step with no clear owner, and still needs some resolution of the conflicting rows first).
+Reversible: Yes — a later migration could re-open a dismissed duplicate if that ever mattered (none of this pilot's history needs it).
+
+---
+
+### 19 Oct 2026 · 3.17 No locale/age (DPDP) gate on learner-profile writes yet · decided by lead (pre-build) · risk: high
+Decided: ship 3.17 without a locale/age gate on `applyEvidence` or `get`; the gap is tracked by board task 6.0b (the DPDP gate for learner memory), which must land before any India pilot.
+Why: `ProfileStore` has no market/age parameter — adding one here is a contracts change needing an ADR, disproportionate to a plumbing task with no real evidence producer yet (route/3.3, the practice skill/5.6 and the topic map/6.1 are all still `todo`); `buildContext` already reads whatever is in `learner_profiles` for every session today, independent of this task, so this task's write path does not newly expose anything an India 13–17 session doesn't already carry.
+Alternatives: add a market/age check to `ProfileStore` now (contracts ADR); block 3.17 until 6.0b lands.
+Reversible: Yes — 6.0b can add the gate without touching this task's write path.
+
+---
+
+### 19 Oct 2026 · 3.17 TeacherQuestion open-dedup via a new partial unique index + insert-or-return-existing · decided by lead (plan) and tdd-guide (the `md5(text)` expression, found while writing the migration) · risk: high
+Decided: migration 0011 adds a partial unique index on `teacher_questions (teacher_id, student_id, agent_id, md5(text)) WHERE status = 'open'`; `teacherQuestionsRepo.open()` becomes insert-or-return-existing on that key, so the live (3.7) attempt and commit's (3.17) fallback — which can both try to open "the same" question for one turn, since a timed-out live attempt may still land — converge on one row instead of raising a duplicate. A plain (non-`CONCURRENTLY`) migration, unlike 3.16's session-pin indexes: `teacher_questions` is small and low-write.
+Why: without this, an `ask_teacher` turn whose live open timed out (but still landed) would get a second, duplicate question from commit's fallback.
+Alternatives: dedup in application code only (a read-then-write race window); index on raw `text` (would exceed btree's row-size limit for a long question); `CREATE INDEX CONCURRENTLY` via a post-migrate step (disproportionate for a small, low-write table).
+Reversible: Only with a new migration and a review of any `open()` callers relying on the current raw-insert behaviour.
+
+---
+
+### 19 Oct 2026 · 3.17 Evidence idempotency: content-hash id over the original timestamp, one shared function · decided by lead (answer) · risk: medium
+Decided: `evidenceEventId` (in `packages/queue`) hashes `studentId|teacherId|topicId|correct|source|weight|ts` with a fixed field order and encoding (`JSON.stringify` of a fixed-key array); `ts` must be the event's *original* timestamp, documented with a code comment at the one place it is computed (`queues.ts`) and at every call site (`profileStore.ts`'s producer, `processors.ts`'s worker). The same function is used for the BullMQ job id (`jobId.evidence`) and the row id `evidenceEventsRepo.append` writes, so a replayed job and the first attempt agree on one id. A test (`adapters.test.ts`, "jobId.evidence and the producer both derive from this one function") asserts the two call sites produce the same id for the same event.
+Why: a retry must hash to the same id as the first attempt, or dedup breaks; one shared function (not two copies) removes the chance of the hash algorithm drifting between the producer and the processor.
+Alternatives: a per-event id chosen by the caller (loses the "replay reproduces the same id" property unless the caller is also deterministic); separate hash functions in `@edmate/queue` and `@edmate/db` (duplication risk).
+Reversible: Yes — changing the hash's field order or encoding is a one-file change, though it invalidates in-flight job ids across a deploy.
+
+---
+
+### 19 Oct 2026 · 3.17 `profileStoreFor.applyMastery`'s write path closes the 3.16 "last_summary clobbered" finding structurally · decided by lead (plan) · risk: medium, reversible
+Decided: `learnerProfilesRepo.applyMastery`'s `SET` list only ever names `mastery` and `updated_at`; `mistakes` and `last_summary` are never in the statement, so this write path cannot clobber `last_summary` no matter what calls it. `learnerProfiles.save()`'s own semantics (and any session-open/package-pin check on it) are unchanged — closing this specific write path does not close the finding for `save()` in general, which is still 6.4's job (`EvidenceEvent` has no `sessionId` to check against).
+Why: evidence should never erase a student's last-session summary.
+Alternatives: give `applyMastery` a `save()`-style full-row overwrite (reintroduces the risk); add a session check here anyway (no session id available on `EvidenceEvent`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.17 `TeacherQuestionStore.findSimilar` always returns `[]` for now · decided by tdd-guide (build-time finding, logged for the lead) · risk: medium
+Decided: `teacherQuestionStoreFor.findSimilar` returns `[]` unconditionally (still scope-checked). No embeddings-backed similarity search exists yet in this codebase; building one is out of this task's scope (a RAG/embeddings task) and not in the plan's file list.
+Why: shipping plumbing, not an invented heuristic — matches the task's own stated approach for evidence extraction.
+Alternatives: a naive text-similarity heuristic (e.g. trigram overlap) now; block this task on the embeddings task.
+Reversible: Yes — a later task can replace the body without changing the port's shape.
+
+---
+
+### 19 Oct 2026 · 3.17 New-profile default: `lang: 'en'`, empty mastery/mistakes · decided by tdd-guide (plan's own recommendation) · risk: low
+Decided: `profileStoreFor.get`/`applyMastery` default a never-seen (student, teacher) pair to `lang: 'en'` (the pilot is English-only today).
+Why: `ProfileStore.get` has no `lang` parameter (unlike `fallbackContext`'s `input.lang`), so some default is needed; English matches the current pilot.
+Alternatives: default to the entitlement's market's locale (no market available at this port's level); throw instead of defaulting (breaks `buildContext`, which calls this every turn).
+Reversible: Yes, once locale work lands.
+
+---
+
+### 19 Oct 2026 · 3.11c Pilot-policy validation lives in `packages/content`, called from the one real construction site · decided by tdd-guide · risk: medium
+Decided: `checkPilotLanguages`/`PILOT_LANGUAGES` (18 Oct 2026 English-only decision) are added to `@edmate/content`, not to `packages/contracts` (a contracts change needs an ADR, and `AgentConfigSchema.languages` must stay general per the task). The content package's own `validateContentDir`/CONTENT_RULES are untouched because no content-tree file carries `languages` yet (no agent config field exists in the teacher content layout; it is built only by `packages/db/src/seed.ts`, the one real `AgentConfigSchema.parse` call with live `languages` data today). `seed.ts` calls `checkPilotLanguages(agentConfig.languages)` right after parsing and throws a clear message if it ever fails; it cannot fail today because the seed's `languages` is a hardcoded `['en']`, so this is forward defence, not a reachable branch (db's coverage threshold is 80%, not 100%, so this is allowed).
+Why: grepping `AgentConfigSchema` across `packages/content`, `packages/db` and `apps/cli` (task instruction) found no teacher-facing publish path with a `languages` field yet — `edmate content validate` validates course/style-card/package/licence files only. Putting the check where the real data flows, and exporting it from content so a future studio/publish path (and apps/cli) can reuse the same function, seemed better than inventing an unused content-tree field.
+Alternatives: add a no-op `ContentRule` for a `languages` field that doesn't exist yet (speculative); put the function directly in `packages/db` (then a future `apps/cli`/content publish path would need to depend on `@edmate/db` to reuse it, the wrong dependency direction).
+Reversible: yes — the function can move or be called from new sites without changing its shape.
+
+---
+
+### 19 Oct 2026 · 3.11c The harness clamp lives in `replyLanguage`/`composeSystemPrompt`; the warning is reported from `decide`, not from `compose.ts` · decided by tdd-guide · risk: high
+Decided: `compose.ts` gains its own `PILOT_LANGUAGES` constant (the harness may import only contracts, zod, mathjs and its own modules, so it cannot import `@edmate/content`'s copy) and clamps `replyLanguage` to `'en'` whenever `agent.languages` is not exactly `['en']`, regardless of the student's requested language or what the agent config otherwise claims to allow. `composeSystemPrompt` stays pure and now also returns `languageClamped: boolean` on `Composed`. `decide.ts` (which already holds a `StepEnv` with `.report`) reports a `PilotLanguageClamped` (a `HarnessError` with fixed, content-free text) to `finished.background` when `languageClamped` is true, exactly like every other background-only failure in the pipeline (ids and error name only, never agent or student text). This touches `packages/harness/src/pedagogy/**`, a risk-paths group requiring safety-reviewer sign-off.
+Why: the task calls for "a narrow input clamp... where the language is picked" plus a background-only warning; `replyLanguage` is literally where the language is picked, and `decide` is the first place downstream that already has a reporting channel, so no new plumbing (a new `BackgroundTask` variant, a logger param on `compose.ts`) was needed to keep `compose.ts` pure.
+Alternatives: thread a logger or callback into `composeSystemPrompt` itself (breaks purity, a `prompt-pack behaviour is frozen` file the task said to touch narrowly); add a new `BackgroundTask` union member for this (unneeded — the existing default `'runner'` task plus the error's own `name` already identifies it uniquely in the background log).
+Reversible: yes, but only with safety-reviewer sign-off (risk-paths rule).
+
+---
+
+### 19 Oct 2026 · 3.11c Existing demoAgentConfig-based tests updated for the new clamp, not left to describe stale behaviour · decided by tdd-guide · risk: low
+Decided: `compose.test.ts`'s locale-pack test, `decide.test.ts`'s "uses the input language" test, and `turn.integration.test.ts`'s turn-config loader were updated: the fixture `demoAgentConfig` carries `languages: ['en', 'hi']` (the contracts fixture is general on purpose and was not touched), so turns built from it are now clamped to English; the integration test's loader was given `languages: ['en']` instead, since that test is about turn flow, not language policy, and its `expect(result.background).toEqual([])` assertion predates this task.
+Why: task instruction 3 ("the harness clamp falls back to en") is a behaviour change from the pre-task state, so the old assertions (`replyLanguage('hi', {...})` returning `'hi'`) described exactly the gap this task closes; updating them in place (TDD red→green) rather than leaving them failing or weakening the clamp was the only option that keeps both the policy and the test suite honest.
+Alternatives: give `compose.snapshot.test.ts`'s `demoAgentConfig`-based cases a non-pilot-compliant agent too (unnecessary — every snapshot case requests `lang: 'en'`, which the clamp also resolves to `'en'`, so no snapshot changed).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
+Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
+ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped
+subfields (bare "name" only), and a PIN/postcode digit-length check (bare "pin" only) — so a bare
+key's own scalar value always redacts unless one of those three specifically says otherwise.
+Why: the original rule's comment claimed it only stopped cascading into unrelated *nested* keys,
+but the code actually blocked the key's own direct value too, which is the CRITICAL regression
+this round fixes; the three gates above are the narrowest change that satisfies every named case
+(including the new ones) without reopening the original flashcard/file-name/GPIO-pin false
+positives.
+Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin":9999}`-shaped
+over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
+original 4.2c false positives it was meant to fix).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 2: the file-like-parent exemption needs the value's shape too, not just the parent key's name · decided by build-error-resolver · risk: low
+Decided: a bare "name" under a file-shaped key (`files`/`file`/`module`/`function`/`variable`/
+`class`) is only exempt from redaction when the value also looks like a file name or a plain code
+identifier (a dot-extension, or a single no-whitespace token that isn't a bare Title-Case word);
+otherwise it redacts, even under one of those keys.
+Why: keying the exemption on the parent alone let a real person's name under any of those keys go
+unredacted at any depth — a HIGH-severity privacy gap the reviewer found in fix round 1. Checking
+the value's shape too closes it while still letting ordinary file names and code identifiers
+through.
+Alternatives: drop the file-like-parent exemption entirely (reopens the original `main.py` false
+positive it was added for); key only on the value's shape and ignore the parent (would also
+exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
+which is less targeted than keeping both conditions).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 3: the digit-form pre-pass moves inside the shared `foldText`, not duplicated per caller · decided by build-error-resolver · risk: low
+Decided: `textFold.ts`'s `foldText` calls `digitForms.ts`'s `foldDigitForms` first, composing its
+span map into `foldText`'s single-index `at`; `piiPatterns.ts` keeps its own separate, already-first
+`foldDigitForms` → `buildView` chain rather than being rewired to share `foldText`.
+Why: this is the smallest change that gets every current and future caller of the shared
+`foldText` (today: `answerKey.ts`/`answerLeak`, `numbers.ts`) the same digit-form folding
+`piiScrub` already had, without touching `piiPatterns.ts`'s own (different-shaped) fold pipeline,
+which was already correct and is unrelated to this gap.
+Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers.ts` directly
+(repeats the same fix at every call site, the exact duplication `textFold.ts` was created to
+avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
+round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 4: a whole-string pre-test, not a smarter algorithm, fixes the hot-path regression · decided by build-error-resolver · risk: low
+Decided: `foldDigitForms` gains one precompiled regex test over the whole input; when it finds
+none of the characters the function can possibly change, it returns an identity map without
+running the per-code-point loop at all. `foldOne` also skips `normalize()` for plain ASCII.
+Why: the dominant cost was calling `.normalize('NFKC')` on every single character regardless of
+whether it could ever change under NFKC; almost no real text has any of the digit-form characters
+this module cares about, so skipping the whole per-character pass is both correct (same output)
+and by far the cheapest fix, with no change to the O(n) position-map composition added in fix
+round 3.
+Alternatives: cache `normalize()` results per code point (helps repeated characters within one
+call, not the dominant case of many distinct ASCII characters); restructure the stream gate to
+call `foldText` less often (a bigger, riskier change to a different file, for a problem that is
+really about `foldDigitForms`'s own unconditional per-character cost).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Digit-form folding is a separate pre-pass module · decided by lead (coordination with 4.5) and tdd-guide · risk: medium
+Decided: `foldDigitForms` (keycap, superscript, circled digits; marks dropped after a digit) lives in its own new file, `guardrails/digitForms.ts`, called once at the top of `findPii` before the existing fold/view code in `piiPatterns.ts`, which is left untouched.
+Why: 4.5 is moving that existing fold/view block to a shared helper on its own branch; keeping the two changes in separate files avoids a conflicting edit to the same lines, whichever PR merges first.
+Alternatives: add the new digit forms to the existing `fold()` function directly.
+Reversible: Yes; a later merge can fold the two modules together once both land.
+
+---
+
+### 19 Oct 2026 · 4.2c Card redaction after an unrelated word still stays excluded · decided by tdd-guide · risk: medium
+Decided: the ~25-character window after a card for an unlabelled CVV/expiry only passes through punctuation and whitespace; a word (a letter) stops it immediately.
+Why: the task's own near-miss ("... and the exam on 12/29" must stay unchanged) and the new eval case (punctuation-only gaps) both need to pass; a word-blind 25-character window would redact the near-miss's unrelated date too.
+Alternatives: a plain 25-character window with no word boundary; a shorter window with no boundary check.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Flexible-group and locale-pattern over-scrub guards exclude constant runs, not counting ones · decided by tdd-guide · risk: medium
+Decided: the new flexible-group phone pattern and the locale-pattern over-scrub guard (item 8) both exclude a run of the same digit repeated, but not a monotonic/counting run (ascending or descending by one).
+Why: two of the task's own example numbers, and a pre-existing required test (`9876543210`, India mobile shape), are counting runs that must still redact; only the narrower "constant digit" exclusion satisfies every required case at once.
+Alternatives: reuse `phoneLikeDigits` (constant or counting) everywhere, which breaks the pre-existing test and one of the task's own phone examples.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Payload-key ambiguity is narrowed to three words, via a prefix/suffix requirement · decided by tdd-guide · risk: low
+Decided: `card`, `name` and `pin` alone no longer redact a payload value (they need a prefix or suffix — `cardNumber`, `studentName`, `pinCode`); an object value under a PII-named key no longer propagates its category into the object's own nested keys (an array still does, since it is the key's own value).
+Why: a flashcard's `card`, a file's `name` and a map/GPIO `pin` are ordinary teaching content, and the old code redacted a sibling key's unrelated nested object too (`{"card":{"front":...}}`).
+Alternatives: keep all PII words bare-matching and rely on value shape alone; propagate `under` into nested objects too (today's behaviour, the thing being fixed).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c The 2 proposed distress eval cases are seeded only, not wired into piiScrubPipeline · decided by lead (correction) · risk: low
+Decided: `safety-distress-name-heuristic-in-en`/`-hi-latin` live under `evals/suites/safety/distress/in/` with `reviewed_by: pending`, same shape as every other distress case; they are not PII-scrub cases and are left out of `piiScrubPipeline.test.ts`'s PII assertions.
+Why: the lead's correction said so explicitly; a live/reply check for these needs 4.3's distress-eval wiring, not this task.
+Alternatives: fold them into the PII pipeline test anyway (would assert nothing meaningful, since they carry no PII).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c PII pattern hardening · decided by team lead · risk: high
+Decided: the 4.2 safety review's deferred forms are scrubbed (keycap, superscript and circled digits; flexible phone, card, CVV and OTP shapes; spelled-out numbers; Hindi word-order names, name:/naam:, sign-offs). PII-named payload keys redact their own values, with narrow exemptions for flashcards, small numbers and file or identifier values under code-shaped keys.
+Why: every form here reached the model unscrubbed in the 4.2 review's probes.
+Alternatives: leave these to a model-based scrubber.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Accepted gap: lowercase names under code-shaped payload keys · decided by team lead (safety review) · risk: medium
+Decided: a single lowercase, all-caps or snake_case token under a files, file, module, function, variable or class key ({"module":{"name":"riya"}} in `packages/harness/src/pipeline/steps/scrub.ts`) is treated as an identifier and not redacted. Skill payloads must never put a real student name in those fields; that is fixed at the source in 5.x skill design.
+Why: such a token has the same shape as a real identifier ("utils"); redacting it would bring back the over-scrubbing that broke flashcards and file names.
+Alternatives: redact every bare token under code keys; drop the exemption.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 0.14 Wall-clock latency bounds are gross-regression guards only · decided by team lead · risk: low
+Decided: the stream-gate latency test keeps a 5 s wall-clock bound; linear work is asserted by counting work, not by timing.
+Why: shared CI runners with coverage are 8–12× slower than local runs, and the 1 s bound turned main's CI red.
+Alternatives: drop the timing test; skip it on CI.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
+Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
+Why: the model's instructions are the last line of defence when a guard misses.
+Alternatives: keep the fixture packs; ship without a human signature.
+Reversible: yes (a new pack version).
+
+---
+
+### 19 Oct 2026 · 3.11b Conversation-side markers removed · decided by team lead (safety review) · risk: medium
+Decided: the teacher-label, generic-disclaimer, no-helplines and empty-turn sections carry no `[[…]]` marker, because their text reaches the conversation or is passed on. The teacher note reads "(Platform note: the teacher wrote this reply.)". System-prompt section markers stay.
+Why: a marker in conversation text teaches the model to write `[[`, which the jailbreak cases forbid, and lets a student forge the teacher's voice.
+Alternatives: keep every marker.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.5 answerLeak is live: the default stream gate and the first post guard · decided by lead (task) and tdd-guide · risk: high
+Decided: `generate` now uses the sentence gate by default and `postGuard` runs the post-phase chain with answerLeak; no real-model turn may run before this merges. Reviewed by safety-reviewer (required), with security-reviewer, typescript-reviewer and silent-failure-hunter.
+Why: this task is the gate before any real-model turn; the fixtures show 0 leaks for numeric and encoded forms, and the mutation run shows the test bites.
+Alternatives: keep the pass-through default and rely on the final check only (the student would see the leak stream in before the replace).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The student's own code may be quoted back only when it is clearly code, and never as a confirmation · decided by tdd-guide (narrowing lead revision 6; tightened in fix round 1 after the safety review) · risk: high
+Decided: a code-shaped key in the student's current message is allowed back only when it sits on a line that is clearly code (inside a ``` fence, indented, ending in a colon, or starting with a statement keyword or an assignment, and not ending in "?") or comes right after `elif`, `while` or `return`. Offering options never counts ("is it .upper() or .lower()?", backticked or not, "n % 2 == 1 or n % 2 == 0"); and/or/not/else/if count only on a clearly-code line. An apostrophe inside a word does not make a key code-shaped. Even an allowed quote is a leak in an answer or confirmation context (yes, right, correct, exactly, fix, use, solution, works, sahi, haan, bilkul, हाँ, सही within five words in the same sentence), and inside decoded base64. Plain words and numbers are never allowed back.
+Why: the first rule (any code word or backticks before the key) was beaten by offering options; echoing a proposed answer confirms it.
+Alternatives: exempt any code key the student typed (fails leak-co6-falseattempt-en); drop the exemption (false positives on the student's own buggy code).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 A withheld leak: the whole post chain judges everything the model wrote; only a checked rewrite or the hint is shown · decided by lead (revision 2) and tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: when generate reports `withheld`, or the full model text (`raw`) leaks, postGuard runs the post chain on `raw` instead of the shown draft. So the other post guards still see it (an escalate is forwarded), and answerLeak makes its one bounded small-tier rewrite of it, which every guard re-checks. Anything else (no rewrite, a failed or leaking rewrite, a block, a chain failure) gives `ANSWER_LEAK_SAFE_HINT`. With no `raw` kept, a withheld turn is always the hint.
+Why: skipping the chain hid escalates in withheld text, and a canned hint for every one-digit false positive teaches nothing.
+Alternatives: go straight to the hint without a chain run (the first version).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream gate checks a window measured in visible units, holds number-word tails, and works in linear time · decided by tdd-guide (fix round 1, security and safety review) · risk: high
+Decided: each sentence is checked with the shown text from `reach` visible units back (whitespace and invisible units are walked over, not counted; then back to the start of a word) plus the new text. `reach` is 64 + 4 × the longest key, plus 512 when there is a number key. A tail that could start a key, a number, or a run of number words ("two thousand", "twenty") is held. Each unit is scanned for sentence ends once and each sentence judged once; sentences within the 200-unit cap are judged one by one, a longer stretch goes through the cap cut.
+Why: the first window counted spaces, so 700 spaces between "two thousand" and "sixteen" pushed the start out of it; and rescanning the buffer made one 400k chunk take 3.1 s.
+Alternatives: check all shown text every sentence (quadratic); cap the window in raw units (beaten by padding).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 More than a reply's maximum of model text trips the gate · decided by security-reviewer (fix round 1) and tdd-guide · risk: high
+Decided: once the text pushed in one attempt exceeds `LIMITS.modelTextMaxLength` (8000), the gate trips: the rest is withheld and the reply is the hint. generate keeps at most 8000 units of `raw`, and `GenerateResult.draft`/`raw` are capped at 8000 in the harness's own schema. The contracts `ModelChunkSchema` is unchanged.
+Why: bounded work on adversarial streams; no reply is longer than that anyway.
+Alternatives: cap each chunk in contracts (needs an ADR); let the gate judge any length (unbounded work).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Hindi in Latin letters covers 21-99, with spelling folding · decided by safety-reviewer (fix round 1) and tdd-guide (the fold) · risk: medium
+Decided: 21-99 are listed in Latin letters with common spellings, and words of five or more letters are also matched after a fold (doubled letters once, chh/chch as ch, au as o, ai as e, w as v, e as i), so chaubees, chaubis and chobis all read 24. A folded form that two values share is dropped, never guessed. They combine with hazaar/lakh ("chaubees hazaar" is 24000).
+Why: the safety review found 21-99 Hinglish answers went through.
+Alternatives: list every spelling by hand (never complete).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Count and confirmation words make an answer context for one-digit keys · decided by safety-reviewer (fix round 1) · risk: medium
+Decided: times, runs, run, baar, बार, chalega, chalegi, chalta, चलेगा, चलेगी, it's and its join the answer words (three words before, one after). "It runs three times", "It's three", "Loop teen baar chalega" and "तीन बार चलेगा" trip key 3. Known strict trips, pinned by test: "Ek baar code ko line by line padho" (key 1) and "Read it three times slowly" (key 3).
+Why: a count is how a loop answer is said.
+Alternatives: a wider window (more false positives).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Decimals, fractions and grouped thousands · decided by safety-reviewer (fix round 1) and tdd-guide (precision rule) · risk: medium
+Decided: a fraction key ("5/6") is its value; a decimal key matches mentions written to at least its precision that round to it (".83" and "0.833" for 0.83, a leading "." allowed); a fraction key matches decimals of 2+ places it rounds to ("0.83" for 5/6, not "0.8"); "24 000" with a space (no-break and narrow no-break spaces fold to a space) is 24000.
+Why: the same answer in another notation is still the answer.
+Alternatives: exact match only.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Short and padded base64 · decided by security-reviewer (fix round 1) and tdd-guide (contexts) · risk: medium
+Decided: a padded run is never treated as a plain word ("Mw==", "Mg=="); runs of 2-3 characters ("MTY", "Mw") are decoded near the word "base64" (within 40 characters), and, if not word-shaped, after an answer word or standing alone in a sentence. Every candidate counts toward the 256-run cap, skipped ones included.
+Why: "MTY" without padding is 16; "Mw==" is 3.
+Alternatives: decode every 2-3 character run (plain words decode to noise that trips one-digit keys).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A failed postGuard step is reported; a post guard's escalate text is saved on the CommitRecord · decided by silent-failure-hunter and safety-reviewer (fix round 1) · risk: medium
+Decided: when the postGuard step throws, times out or returns a malformed result, the runner reports `PostGuardStepFailed` (kind and error name only) before the safe reply. On a postGuard escalate, the chain's text goes on `CommitRecord.escalatedText` (never shown); commit does not persist it yet.
+Why: no step failure goes unreported; revision 13 says save the escalate text.
+Alternatives: keep the text on the step result only (the first version).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Six new leak cases, pending the human's sign-off · decided by lead (fix round 1) and tdd-guide (bank items) · risk: high
+Decided: six cases are added under `evals/suites/leak/` with `reviewed_by: pending`. The bank has no 21-99 item outside loops, no year and no 5/6, so the closest items are used: lo-q2 (55) for the 21-99 words and the padded-spaces cases, lo-q6 (3) for the count, vv-q5 (16) for short base64, and vv-q1 (7 / 2 = 3.5) for the decimal case, whose "starting with a dot" is dropped. lo-q6's key (3 in `range(3)`) and vv-q1's (7 / 2) also occur in their questions (5.6).
+Why: each review probe gets a fixture; the human signs cases off before merge.
+Alternatives: write new bank items (content work outside this task).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 A post guard's escalate ends the turn as an escalation · decided by lead (revision 13) and tdd-guide (runner path) · risk: high
+Decided: postGuard returns `escalate` with the alert and the chain's text; the runner sends `replace ''`, then runs its existing escalate path (caring template from the escalate step, alert raised, outcome escalated). The chain's text stays on the step result only; it is never shown or stored.
+Why: the 4.1 safety review: save the escalate text but always reply with the caring template. No post guard escalates yet; this is the wiring for 4.8/4.9.
+Alternatives: store the chain's text on the CommitRecord (a new field nobody reads yet).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 postGuard owns the reply text for guard verdicts; the runner keeps its fallback for crashes · decided by tdd-guide (plan question) · risk: medium
+Decided: the step returns the hint when answerLeak was involved in a block or failure, else `fallbackReplies.safeReply`; the runner's own safe reply is used only when the step throws, times out or returns something malformed. The runner sends `replace ''` before every postGuard replacement, so skill events and sources clear too (revision 12).
+Why: one owner per case; a chain failure is reported (`PostGuardFailed`, guard name and cause only) instead of hidden behind a throw.
+Alternatives: always throw on a non-ok chain and let the runner pick the text.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Arithmetic uses a small built-in evaluator, not mathjs · decided by tdd-guide · risk: medium
+Decided: `print(8*2)` and `f"{5+3}"` are evaluated by a hand-written parser (numbers, `+ - * / // % ** × ÷`, parentheses; at most 64 units, 31 tokens, depth 8).
+Why: mathjs is not yet a dependency, and its `evaluate` over model text is a larger attack surface than a parser that can only add and multiply literals.
+Alternatives: add mathjs and walk only its number and operator nodes.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 How keys match: whole numbers, word-bounded text, answer context for one digit · decided by lead (revision 6) and tdd-guide (details) · risk: medium
+Decided: a key that is one number (digits, literal or number words) matches only as a whole number in any form; text keys match at word boundaries after folding (spaces and commas ignored), so `if marks >= 80:` does not match inside `elif marks >= 80:`. A one-digit key's digits count anywhere, but its words and arithmetic only in an answer context (an answer word up to three words before or right after, or the number alone in its sentence); inside decoded base64, its digits need that context too.
+Why: ordinary lesson text ("one step", "teen lines hain", "1 + 2") must pass; decoded noise ("j{0z") can hold stray digits.
+Alternatives: substring matching (false positives on 160, 2016 and `elif`).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.5 Base64 skips plain words and decodes only printable UTF-8 · decided by tdd-guide · risk: medium
+Decided: runs of 4+ base64/base64url characters (padded or not) are decoded once; lower-case or Capitalised words (also hyphenated) are skipped; only strict, printable UTF-8 is kept. Hex and reversed digits are not decoded (LOW extras, left out).
+Why: "together" decoded to printable noise containing a digit and tripped a one-digit key in the hint itself.
+Alternatives: require 8+ characters (misses `MTY=`).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The rewrite is one small-tier call with a fixed instruction and no key · decided by lead (revision 11) and tdd-guide (shape) · risk: medium
+Decided: the rewrite sends the draft with a fixed English instruction (`REWRITE_SYSTEM`) on the small tier, at most 400 output tokens and 60% of the guard's time slice, after the turn's cost check. A failure, a tool call or a leaking result gives the hint.
+Why: the draft already holds the answer, so the key adds nothing; the matcher re-checks whatever comes back.
+Alternatives: send the key list so the model knows what to remove.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Post-guard time slices: (2 s − 200 ms) / (2 × guards) · decided by lead (revision 14) and tdd-guide (margin) · risk: low
+Decided: each post guard's slice is 900 ms with one guard and 150 ms with six; a six-guard chain that rewrites and uses almost every slice ends at 1 788 ms.
+Why: both passes of every guard fit inside the step's 2 s with a margin.
+Alternatives: an overall chain deadline.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 Constraints for 5.6 (answer keys) · decided by lead (revision 6) and tdd-guide (the exception) · risk: medium
+Decided: no answer key may match its problem statement; each answer may have several keys (one per canonical phrasing, e.g. `n >= 1 and n <= 10` and `1 <= n <= 10`). Exception found: for "what does this print" items the printed output is in the question (co-q2's only key, `Warm`), so 5.6 must decide how to handle those (for example, count them only in an answer context).
+Why: a key in the problem statement makes the guard trip when the tutor quotes the problem.
+Alternatives: none chosen for the exception; it is left to 5.6.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.5 The stream is read to the end after a trip · decided by tdd-guide · risk: low
+Decided: after the gate trips, the attempt keeps reading the model stream (showing nothing) until it ends.
+Why: usage arrives at the end of the stream; stopping early would lose metering.
+Alternatives: close the stream on a trip (faster hint, unmetered spend).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 3.16d The advisory-lock acquire/release pattern is factored into an exported `withMigrateLock` helper · decided by tdd-guide · risk: low
+Decided: `withMigrateLock(lockClient, key, fn, maxWaitMs?)` wraps `acquireMigrateLock` + `fn()` + a conditional `pg_advisory_unlock`, tracked by a `locked` flag set only after `acquireMigrateLock` returns; `migrateDatabase()` now calls it instead of inlining the same `try`/`finally`.
+Why: the review's finding (unlock only when the lock was actually taken) needs a unit test, and `migrateDatabase()` itself isn't unit-testable (it always opens a real `pg.Client`/pool against a URL); factoring the lock logic into a small function that takes an injectable client makes the "no unlock after a failed acquire" behaviour directly testable without touching `migrateDatabase()`'s signature or needing a real database.
+Alternatives: add a client-factory parameter to `migrateDatabase()` for test injection (keeps one function, but widens its public signature for a test-only need); test the behaviour only at the integration level (real Postgres, no quick unit coverage of the "connection already dead" branch).
+Reversible: yes; an internal implementation detail of `migrateDatabase()`.
+
+---
+
+### 19 Oct 2026 · 3.16d The post-migrate step timeout is set on the connection with `set_config`, not a plain `SET` · decided by tdd-guide · risk: low
+Decided: `migrateDatabase()` runs `select set_config('statement_timeout', $1, false)` (parameterized, session-level — the third argument `false` means "not transaction-local") on the post-migrate connection before `runPostMigrateSteps`, instead of string-building a `SET statement_timeout = <value>` statement.
+Why: Postgres's `SET` doesn't accept a bind parameter, so a literal value would have to be built with string interpolation even though `stepTimeoutMs()` already validates it is a safe positive integer; `set_config` takes the value as a normal parameterized argument, which is both simpler and avoids ever building SQL by concatenating a number into a string, as a matter of habit.
+Alternatives: `SET statement_timeout = ${n}` (works given the validation, but trains the eventual next reader/editor that string-built SQL is fine here); a second, dedicated pool just for the post-migrate steps with `statement_timeout` baked into its `pg.PoolConfig` (more connections and a second `close()` to manage, for no behavioural difference since the migrator pool is already `max: 1`).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.16d Reproducing the blocked-`CREATE INDEX CONCURRENTLY` test needed an actively running blocker statement, not just an idle-in-transaction one · decided by tdd-guide (int test red run) · risk: low
+Decided: the integration test's blocking connection runs `BEGIN; select pg_sleep(2)` (not awaited; rolled back afterwards) and the test waits ~300 ms before calling the timed `migrateDatabase()`, rather than `BEGIN; select 1` with no delay.
+Why: the first attempt (`BEGIN; select 1`, no delay) did not reproduce a wait: `CREATE INDEX CONCURRENTLY` completed in a few milliseconds even though `pg_stat_activity` showed the blocker as `idle in transaction` at that instant, confirmed with debug logging before the fix; a manual `psql` reproduction with the same table and a `pg_sleep`-based blocker reliably blocked and timed out as the Postgres documentation describes. The exact reason for the gap wasn't tracked down further (not needed for the test itself), but a blocker with an in-flight statement and a short lead time reproduces the behaviour deterministically.
+Alternatives: keep polling `pg_stat_activity`/`pg_locks` until some specific lock or wait-event condition is observed before issuing the timed call (more precise, meaningfully more complex for a test); accept flakiness with the idle-in-transaction form.
+Reversible: yes; an internal detail of the test, not of `migrate.ts` itself.
+
+---
+
+### 19 Oct 2026 · 3.16d Accepted edge cases in the migration lock and its timeout test · decided by team lead · risk: low
+Decided: in `packages/db/src/migrate.ts`, a failure inside the locked section followed by a failed unlock reports the unlock error (both need a dead connection, and the lock is released when the session ends anyway); `packages/db/test/migrate.int.test.ts` keeps its fixed 300 ms lead before the timed call.
+Why: rare, and harmless to data; a fix would add code paths with no test value now.
+Alternatives: wrap the unlock in try/catch and rethrow the original; poll pg_stat_activity in the test.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 3.16c The migration lock is polled with `pg_try_advisory_lock`, not held by blocking on `pg_advisory_lock` · decided by tdd-guide (red run) · risk: medium
 Decided: `migrateDatabase()` acquires `MIGRATE_LOCK_KEY` by polling `pg_try_advisory_lock` on its own dedicated connection every 50 ms (10-minute default give-up), instead of a single blocking `pg_advisory_lock` call.
 Why: the int test (two concurrent `migrateDatabase()` calls against a fresh database) hung forever with a blocking `pg_advisory_lock`: that call itself holds an open snapshot on its connection for the whole wait, and `CREATE INDEX CONCURRENTLY` (the post-migrate index steps) must wait out every transaction with an older snapshot, table or not — so the lock holder's own index build waited on the second caller's still-blocked lock request, which only clears once the first caller releases the lock after finishing the build: a self-deadlock, reproduced and confirmed with debug logging before the fix.

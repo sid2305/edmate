@@ -2,9 +2,16 @@
 // turn route, the CLI chat, the eval runner) builds the queues once and, per turn, the four
 // queue-backed ports for the turn's student x teacher; apps/worker processes the jobs. The
 // safety-alert queue (task 4.3) carries distress alerts to the alert worker.
-import type { AlertSink, SessionStateStore, TraceSink, TranscriptStore } from '@edmate/contracts';
+import type {
+  AlertSink,
+  ProfileStore,
+  SessionStateStore,
+  TraceSink,
+  TranscriptStore,
+} from '@edmate/contracts';
 import { type ConnectionOptions, Queue } from 'bullmq';
 import { queuedAlertSink, type QueuedAlertSinkOptions } from './alertSink.js';
+import { type ProfileReader, queuedProfileStore } from './profileStore.js';
 import { ALERT_QUEUE, COMMIT_QUEUE, type JobQueue, type JobScope, METER_QUEUE } from './queues.js';
 import { queuedSessionStateStore } from './sessionStateStore.js';
 import { queuedTraceSink } from './traceSink.js';
@@ -13,9 +20,11 @@ import { type QueuedUsageMeter, queuedUsageMeter } from './usageMeter.js';
 
 export * from './queues.js';
 export { queuedAlertSink, type QueuedAlertSinkOptions } from './alertSink.js';
+export { type ProfileReader, queuedProfileStore } from './profileStore.js';
 export { queuedSessionStateStore } from './sessionStateStore.js';
 export { queuedTraceSink } from './traceSink.js';
 export { queuedTranscriptStore } from './transcriptStore.js';
+export { type RedisTurnCounterOptions, redisTurnCounter, redisTurnLimits } from './turnLimits.js';
 export {
   MAX_TRACKED_TURNS,
   type QueuedUsageMeter,
@@ -59,13 +68,19 @@ export interface QueuedTurnPorts {
   sessionState: SessionStateStore;
   traces: TraceSink;
   alerts: AlertSink;
+  profiles: ProfileStore;
 }
 
-/** One turn's queue-backed ports for its student x teacher (`reader` serves transcript history). */
+/**
+ * One turn's queue-backed ports for its student x teacher (`reader` serves transcript history and
+ * `profileReader` serves `profiles.get`: both reads the turn needs now, so neither goes through
+ * the queue).
+ */
 export function queuedTurnPorts(
   queues: Pick<TurnQueues, 'meter' | 'commit' | 'alert'>,
   scope: JobScope,
   reader: Pick<TranscriptStore, 'history'>,
+  profileReader: ProfileReader,
   alertOptions: QueuedAlertSinkOptions = {},
 ): QueuedTurnPorts {
   return {
@@ -74,5 +89,6 @@ export function queuedTurnPorts(
     sessionState: queuedSessionStateStore(queues.commit, scope),
     traces: queuedTraceSink(queues.commit, scope),
     alerts: queuedAlertSink(queues.alert, alertOptions),
+    profiles: queuedProfileStore(queues.commit, scope, profileReader),
   };
 }

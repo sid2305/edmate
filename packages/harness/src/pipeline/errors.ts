@@ -39,6 +39,20 @@ export class TurnAbort extends HarnessError {
   }
 }
 
+/**
+ * Pilot policy (18 Oct 2026 decision, docs/decisions/log.md): decide reports this to the
+ * background log, by name only, whenever the composer had to clamp a pinned agent's reply
+ * language to English because `agent.languages` was not exactly English-only. Fixed text, no
+ * agent or student content.
+ */
+export class PilotLanguageClamped extends HarnessError {
+  override readonly name = 'PilotLanguageClamped';
+
+  constructor() {
+    super('agent languages were not English-only; the composer clamped the reply to English');
+  }
+}
+
 /** A step a later task builds. Stubs throw this, so each hits its failure policy (fail closed). */
 export class StepNotImplementedError extends HarnessError {
   override readonly name = 'StepNotImplementedError';
@@ -123,6 +137,21 @@ export class GenerateAttemptFailed extends HarnessError {
       `generate ${attempt} attempt failed: ${kind}` +
         (causeName === undefined ? '' : ` (${causeName})`),
     );
+  }
+}
+
+/**
+ * The postGuard step failed (threw, timed out or returned a malformed result) and the runner sent
+ * the safe reply (4.5). Carries only the kind and the underlying error's name.
+ */
+export class PostGuardStepFailed extends HarnessError {
+  override readonly name = 'PostGuardStepFailed';
+
+  constructor(
+    readonly kind: 'error' | 'timeout' | 'invalid_result',
+    readonly causeName?: string,
+  ) {
+    super(`postGuard failed: ${kind}` + (causeName === undefined ? '' : ` (${causeName})`));
   }
 }
 

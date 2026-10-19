@@ -68,7 +68,12 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const turnConfig: TurnConfigStore = {
     load: () =>
       Promise.resolve({
-        agent: { ...demoAgentConfig, promptPackVersion: FIXTURE_PROMPT_PACK_VERSION },
+        // Pilot policy (3.11c): English only, so this turn's `background` stays empty.
+        agent: {
+          ...demoAgentConfig,
+          languages: ['en'],
+          promptPackVersion: FIXTURE_PROMPT_PACK_VERSION,
+        },
         pkg: demoPackagePaid,
         styleCard: demoStyleCard,
         locale: demoLocalePack,
@@ -78,6 +83,7 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const retrieval: RetrievalIndex = {
     search: () => Promise.resolve([{ ...demoChunkScored }]),
     probe: () => Promise.resolve({ hit: false, score: 0 }),
+    leakCheck: () => Promise.resolve({ hit: false }),
   };
   const tools = memoryToolRegistry([
     testTool({
@@ -184,7 +190,7 @@ describe('turn integration (3.7 acceptance)', () => {
   it('aborts an over-budget turn', async () => {
     const w = world(
       [
-        [say('Start '), used, say('never shown')],
+        [say('Start. '), used, say('never shown')],
         [say('retry'), used],
       ],
       {
@@ -198,7 +204,7 @@ describe('turn integration (3.7 acceptance)', () => {
 
     expect(events).toEqual([
       { type: 'hint_rung', rung: 2 },
-      { type: 'token', text: 'Start ' },
+      { type: 'token', text: 'Start. ' },
       { type: 'replace', text: '' },
       { type: 'error', code: 'turn_cost_exceeded', retryable: false },
     ]);

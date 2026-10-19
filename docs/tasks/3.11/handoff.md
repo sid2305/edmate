@@ -38,6 +38,43 @@ points `promptPacks.snapshot.test.ts` at `content/prompt-packs` once it exists.
 - The persona-template file layout drops the promptPacks.ts-style "front matter name must equal the file name" check: the file's `<id>` (e.g. `job-interview`) is a naming slug, while the persona's own `name` field is the role name rendered into the prompt ("Interviewer"). Requiring them to match would force either a non-role-name file-matching field or a role name baked into the filename; neither matches "mirroring the shape (not the bulk)" from the plan. Logged below.
 - `end_after_questions` needed `z.coerce.number().pipe(...)` because the FAILSAFE YAML schema returns every scalar as a string (the same reason `promptPacks.ts` keeps `version` a string); `style` needed an explicit `.min(1)` the contracts `PersonaSchema` doesn't itself require, so the task's required "empty style" issue case has something to catch.
 
+## 3.11c
+
+3.11c pins the pilot to English only (18 Oct 2026 decision): a content-side policy check that
+rejects any agent config not pinned to exactly `['en']`, plus defence in depth in the harness
+composer so a non-compliant `agent.languages` can never make the model reply in anything but
+English. See `docs/tasks/3.11c/handoff.md` for the task's own one-line handoff (decisions live
+here, per the lettered sub-task convention).
+
+### Acceptance evidence
+
+| Item | Evidence |
+|---|---|
+| Gates (`@edmate/content` and `@edmate/harness`, nothing skipped) | `corepack pnpm turbo run typecheck lint test --filter=...@edmate/content --filter=...@edmate/harness --force` → `Tasks: 34 successful, 34 total`; `@edmate/content:test` → `Test Files 9 passed (9)`, `Tests 165 passed (165)`; `@edmate/harness:test` → `Test Files 63 passed (63)`, `Tests 2918 passed (2918)` |
+| `packages/content/src/pilotLanguages.ts` coverage | `pilotLanguages.test.ts` (6 tests): exactly `['en']` passes; `['en', 'hi']` rejected with a message naming both the required and the given list; `['hi']`, `[]` and `['hi', 'en']` all rejected; `PILOT_LANGUAGES` itself is `['en']`. Coverage row: `pilotLanguages.ts \| 100 \| 100 \| 100 \| 100` |
+| Content-validation path | Grepped `AgentConfigSchema` across `packages/content`, `packages/db`, `apps/cli` first (task instruction): the only real construction site with live `languages` data is `packages/db/src/seed.ts`'s `AgentConfigSchema.parse(...)`; `edmate content validate` (`apps/cli`) validates course/style-card/package/licence files only — there is no teacher-authored `languages` field yet. `seed.ts` now calls `checkPilotLanguages(agentConfig.languages)` right after parsing and throws a clear message on failure (unreachable today, since the seed's `languages` is the hardcoded `['en']` — forward defence, not a gap the 80%-threshold db package needs covered) |
+| Harness clamp (defence in depth) | `compose.test.ts`: `replyLanguage` clamps to `'en'` for `['en', 'hi']`, `['hi']` and `[]` regardless of the requested language, and leaves `['en']` alone; `composeSystemPrompt(...).languageClamped` is `true` only for a non-pilot agent. `decide.test.ts`: `decide.run` reports a `PilotLanguageClamped` (name only, fixed text) to the background log when the agent isn't pinned to English only, and reports nothing for an English-only agent |
+| Snapshots unchanged | `compose.snapshot.test.ts` untouched and still green: every case requests `lang: 'en'`, which the clamp resolves to `'en'` either way, so no `.snap` file changed |
+| `packages/harness/src/pedagogy/**` is a risk-paths group (safety-reviewer) | `.claude/skills/merge-gate/risk-paths.txt` — `compose.ts` lives under this group; flagged `risk: high` below and in the PR body |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0, no output |
+
+### Changes
+
+- `packages/content/src/pilotLanguages.ts` (new): `PILOT_LANGUAGES` (`['en']`) and `checkPilotLanguages(languages)`, returning plain-words issues in the same shape as a `ContentRule`.
+- `packages/content/src/pilotLanguages.test.ts` (new): the cases above.
+- `packages/content/src/index.ts`: exports `checkPilotLanguages`, `PILOT_LANGUAGES`.
+- `packages/db/src/seed.ts`: imports `checkPilotLanguages`; `buildDemoSeed` throws a clear error if the built `agentConfig.languages` ever fails the pilot check.
+- `packages/harness/src/pedagogy/compose.ts`: adds `PILOT_LANGUAGES` (the harness's own copy — it cannot import `@edmate/content`) and `isPilotLanguages`; `replyLanguage` now clamps to `'en'` whenever `agent.languages` isn't exactly `['en']`; `Composed` gains `languageClamped: boolean`.
+- `packages/harness/src/pedagogy/index.ts`: exports `PILOT_LANGUAGES`.
+- `packages/harness/src/pipeline/errors.ts`: new `PilotLanguageClamped extends HarnessError` (fixed, content-free message).
+- `packages/harness/src/pipeline/index.ts`: exports `PilotLanguageClamped`.
+- `packages/harness/src/pipeline/steps/decide.ts`: reports `PilotLanguageClamped` via `env.report` when `composeSystemPrompt(...).languageClamped` is true.
+- `packages/harness/src/pedagogy/compose.test.ts`, `packages/harness/src/pipeline/steps/decide.test.ts`, `packages/harness/src/pipeline/turn.integration.test.ts`: updated/added cases (see Decisions).
+
+### Deviations from the plan
+
+None (small task, no planner).
+
 ## Decisions
 
 ### 19 Oct 2026 · 3.11a Persona-template file layout: no front-matter-name/file-name match check · decided by tdd-guide · risk: low
@@ -57,6 +94,36 @@ Decided: this PR ships only the loader, schema, fixtures (under `packages/conten
 Why: the task brief and the 3.11 plan's "Lead answers and plan revisions" section split 3.11 into code (3.11a, this PR) and content (3.11b, `pedagogy-author` on opus, safety-reviewer first, then human sign-off per row).
 Alternatives: none — this was given, not decided.
 Reversible: n/a.
+
+### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
+Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
+Why: the model's instructions are the last line of defence when a guard misses.
+Alternatives: keep the fixture packs; ship without a human signature.
+Reversible: yes (a new pack version).
+
+### 19 Oct 2026 · 3.11b Conversation-side markers removed · decided by team lead (safety review) · risk: medium
+Decided: the teacher-label, generic-disclaimer, no-helplines and empty-turn sections carry no `[[…]]` marker, because their text reaches the conversation or is passed on. The teacher note reads "(Platform note: the teacher wrote this reply.)". System-prompt section markers stay.
+Why: a marker in conversation text teaches the model to write `[[`, which the jailbreak cases forbid, and lets a student forge the teacher's voice.
+Alternatives: keep every marker.
+Reversible: yes.
+
+### 19 Oct 2026 · 3.11c Pilot-policy validation lives in `packages/content`, called from the one real construction site · decided by tdd-guide · risk: medium
+Decided: `checkPilotLanguages`/`PILOT_LANGUAGES` (18 Oct 2026 English-only decision) are added to `@edmate/content`, not to `packages/contracts` (a contracts change needs an ADR, and `AgentConfigSchema.languages` must stay general per the task). The content package's own `validateContentDir`/CONTENT_RULES are untouched because no content-tree file carries `languages` yet (no agent config field exists in the teacher content layout; it is built only by `packages/db/src/seed.ts`, the one real `AgentConfigSchema.parse` call with live `languages` data today). `seed.ts` calls `checkPilotLanguages(agentConfig.languages)` right after parsing and throws a clear message if it ever fails; it cannot fail today because the seed's `languages` is a hardcoded `['en']`, so this is forward defence, not a reachable branch (db's coverage threshold is 80%, not 100%, so this is allowed).
+Why: grepping `AgentConfigSchema` across `packages/content`, `packages/db` and `apps/cli` (task instruction) found no teacher-facing publish path with a `languages` field yet — `edmate content validate` validates course/style-card/package/licence files only. Putting the check where the real data flows, and exporting it from content so a future studio/publish path (and apps/cli) can reuse the same function, seemed better than inventing an unused content-tree field.
+Alternatives: add a no-op `ContentRule` for a `languages` field that doesn't exist yet (speculative); put the function directly in `packages/db` (then a future `apps/cli`/content publish path would need to depend on `@edmate/db` to reuse it, the wrong dependency direction).
+Reversible: yes — the function can move or be called from new sites without changing its shape.
+
+### 19 Oct 2026 · 3.11c The harness clamp lives in `replyLanguage`/`composeSystemPrompt`; the warning is reported from `decide`, not from `compose.ts` · decided by tdd-guide · risk: high
+Decided: `compose.ts` gains its own `PILOT_LANGUAGES` constant (the harness may import only contracts, zod, mathjs and its own modules, so it cannot import `@edmate/content`'s copy) and clamps `replyLanguage` to `'en'` whenever `agent.languages` is not exactly `['en']`, regardless of the student's requested language or what the agent config otherwise claims to allow. `composeSystemPrompt` stays pure and now also returns `languageClamped: boolean` on `Composed`. `decide.ts` (which already holds a `StepEnv` with `.report`) reports a `PilotLanguageClamped` (a `HarnessError` with fixed, content-free text) to `finished.background` when `languageClamped` is true, exactly like every other background-only failure in the pipeline (ids and error name only, never agent or student text). This touches `packages/harness/src/pedagogy/**`, a risk-paths group requiring safety-reviewer sign-off.
+Why: the task calls for "a narrow input clamp... where the language is picked" plus a background-only warning; `replyLanguage` is literally where the language is picked, and `decide` is the first place downstream that already has a reporting channel, so no new plumbing (a new `BackgroundTask` variant, a logger param on `compose.ts`) was needed to keep `compose.ts` pure.
+Alternatives: thread a logger or callback into `composeSystemPrompt` itself (breaks purity, a `prompt-pack behaviour is frozen` file the task said to touch narrowly); add a new `BackgroundTask` union member for this (unneeded — the existing default `'runner'` task plus the error's own `name` already identifies it uniquely in the background log).
+Reversible: yes, but only with safety-reviewer sign-off (risk-paths rule).
+
+### 19 Oct 2026 · 3.11c Existing demoAgentConfig-based tests updated for the new clamp, not left to describe stale behaviour · decided by tdd-guide · risk: low
+Decided: `compose.test.ts`'s locale-pack test, `decide.test.ts`'s "uses the input language" test, and `turn.integration.test.ts`'s turn-config loader were updated: the fixture `demoAgentConfig` carries `languages: ['en', 'hi']` (the contracts fixture is general on purpose and was not touched), so turns built from it are now clamped to English; the integration test's loader was given `languages: ['en']` instead, since that test is about turn flow, not language policy, and its `expect(result.background).toEqual([])` assertion predates this task.
+Why: task instruction 3 ("the harness clamp falls back to en") is a behaviour change from the pre-task state, so the old assertions (`replyLanguage('hi', {...})` returning `'hi'`) described exactly the gap this task closes; updating them in place (TDD red→green) rather than leaving them failing or weakening the clamp was the only option that keeps both the policy and the test suite honest.
+Alternatives: give `compose.snapshot.test.ts`'s `demoAgentConfig`-based cases a non-pilot-compliant agent too (unnecessary — every snapshot case requests `lang: 'en'`, which the clamp also resolves to `'en'`, so no snapshot changed).
+Reversible: yes.
 
 ## Notes for 3.11b
 

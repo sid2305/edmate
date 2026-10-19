@@ -172,7 +172,11 @@ describe('generate: events in order', () => {
       [say('Now try it.'), used],
     ]);
     const out = await s.run();
-    expect(out).toEqual({ draft: 'Look at [2]. Now try it.' });
+    expect(out).toEqual({
+      draft: 'Look at [2]. Now try it.',
+      raw: 'Look at [2]. Now try it.',
+      withheld: false,
+    });
     expect(s.events).toEqual([
       { type: 'hint_rung', rung: 2 },
       { type: 'token', text: 'Look at [2]. ' },
@@ -274,7 +278,45 @@ describe('generate: the stream gate seam', () => {
       };
     };
     const s = setup([[say('a'), say('b'), used]], { gate: holding, decision: { move: 'ask' } });
-    expect(await s.run()).toEqual({ draft: 'AB' });
+    expect(await s.run()).toEqual({ draft: 'AB', raw: 'ab', withheld: false });
     expect(s.events).toEqual([{ type: 'token', text: 'AB' }]);
+  });
+});
+
+describe('generate: the answer-leak sentence gate is the default (4.5)', () => {
+  it('a leaking sentence is never shown nor in the draft; raw keeps it; withheld is set', async () => {
+    const s = setup([[say('Good. '), say(`It is ${KEY}`), say('. More. '), used]], {
+      decision: { move: 'ask' },
+    });
+    expect(await s.run()).toEqual({
+      draft: 'Good. ',
+      raw: `Good. It is ${KEY}. More. `,
+      withheld: true,
+    });
+    expect(s.events).toEqual([{ type: 'token', text: 'Good. ' }]);
+  });
+
+  it('a key split across tool rounds is still caught: no flush between rounds', async () => {
+    const s = setup(
+      [
+        [say('See ANSWER_'), callCalc, used],
+        [say('KEY_3_7 now.'), used],
+      ],
+      { decision: { move: 'ask' } },
+    );
+    const out = await s.run();
+    expect(out).toMatchObject({ draft: '', withheld: true });
+    expect(types(s.events)).toEqual(['skill']);
+  });
+
+  it('a cited source whose label holds the key is dropped and reported', async () => {
+    const s = setup([[say('Look at [1] and [2].'), used]], {
+      decision: { move: 'ask', mustNotReveal: ['p. 2'] },
+    });
+    await s.run();
+    expect(s.events.at(-1)).toEqual({ type: 'sources', items: [src(1)] });
+    expect(s.reported.map((e) => String(e))).toEqual([
+      'SourceDropped: a cited source label held the answer key and was dropped',
+    ]);
   });
 });

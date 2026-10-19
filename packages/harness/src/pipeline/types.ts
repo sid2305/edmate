@@ -7,6 +7,7 @@ import type {
   Chunk,
   Entitlement,
   EntitlementStore,
+  EvidenceEvent,
   Intent,
   Lang,
   LearnerProfile,
@@ -105,6 +106,12 @@ export interface FallbackReplies {
    * failing, entitle uses the built-in English `DEFAULT_LIMIT_REACHED_REPLY`.
    */
   limitReached?(lang: Lang): string;
+  /**
+   * The reply that replaces one holding locked material (task 4.6). `packageName` is the student's
+   * own package, given only when the teacher chose `name_package`. Optional: when absent, empty or
+   * failing, the built-in English `lockedReplyText` is used.
+   */
+  lockedReply?(lang: Lang, packageName?: string): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -123,7 +130,7 @@ export interface PipelineDeps {
   maxTurnCostMicroUsd?: number;
   /** The tool registry; default `noTools` (5.5 builds the real one). */
   tools?: ToolRegistry;
-  /** Builds generate's stream gate; default the pass-through (4.5 adds the sentence gate). */
+  /** Builds generate's stream gate; default the answer-leak sentence gate (4.5). */
   streamGate?: StreamGateFactory;
   /** Where `finished.background` failures are logged (ids and error name and message only). */
   log: TurnLog;
@@ -266,10 +273,25 @@ export interface EscalateResult {
 export interface GenerateResult {
   /** What the student was shown, all tool rounds joined. */
   draft: string;
+  /** Everything the model wrote, shown or not (4.5); postGuard checks it. Absent: the draft. */
+  raw?: string;
+  /** The stream gate withheld text as an answer leak (4.5): postGuard forces the hint. */
+  withheld?: boolean;
+  /**
+   * The stream's locked check withheld text (4.6): `hit` gives the locked reply, `failed` (the
+   * check could not answer) the safe reply.
+   */
+  locked?: 'hit' | 'failed';
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
-  { result: 'ok' } | { result: 'replace'; text: string }
+  | { result: 'ok' }
+  | { result: 'replace'; text: string }
+  /**
+   * A post guard escalated (4.5 forwards it; later post guards may raise it). The runner replies
+   * with the caring template and raises `alert`; `text` (the chain's text) is kept, never shown.
+   */
+  | { result: 'escalate'; alert: SafetyAlert; text: string }
 );
 
 export type TurnOutcome = 'replied' | 'escalated' | 'blocked' | 'error';
@@ -298,12 +320,24 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
+   * (the student got the caring template). Server-side only; commit decides where it is kept.
+   */
+  escalatedText?: string;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when
    * opening failed or timed out: commit (3.17) then opens it.
    */
   teacherQuestionId?: string;
+  /**
+   * Topic-scored evidence from this turn, for `profiles.applyEvidence` (task 3.17; harness-internal
+   * — not a contracts change). Absent or empty today: no step upstream produces real, topic-scoped
+   * evidence yet (that needs route/3.3, the practice skill/5.6 and the topic map/6.1); commit calls
+   * `applyEvidence` only when this is non-empty.
+   */
+  evidence?: EvidenceEvent[];
 }
 
 export interface Steps {
@@ -341,7 +375,18 @@ export interface Steps {
   ): Promise<GenerateResult>;
   postGuard(
     env: StepEnv,
-    x: { ctx: TurnContext; decision: PedagogyDecision; draft: string },
+    x: {
+      ctx: TurnContext;
+      decision: PedagogyDecision;
+      /** What the student was shown. */
+      draft: string;
+      /** Everything the model wrote (GenerateResult.raw). */
+      raw?: string;
+      /** The stream gate withheld a leak (GenerateResult.withheld). */
+      withheld?: boolean;
+      /** The stream's locked check withheld text (GenerateResult.locked). */
+      locked?: 'hit' | 'failed';
+    },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;
   commit(env: StepEnv, record: CommitRecord): Promise<void>;

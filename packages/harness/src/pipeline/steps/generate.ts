@@ -7,15 +7,29 @@
 // The request is 3.6's `buildModelRequest` plus the tools: those the decision named whose skill
 // is in the entitlement, checked again here (access rule 5). Usage goes through `env.usage` as it
 // streams, which enforces the per-turn cost ceiling.
+//
+// Answer leaks (4.5): the default stream gate is the sentence gate (generate/streamGate.ts), so a
+// sentence holding the answer key is never shown. The result carries everything the model wrote
+// (`raw`) and whether the gate withheld anything (`withheld`); postGuard forces the hint on either.
+// A source whose title or locator holds the key is dropped (and reported).
+//
+// Locked material (4.6): one locked check per attempt (steps/locked.ts), scoped to the
+// entitlement's teacher and allowed modules. Each sentence is checked before it is shown, each
+// tool output before the model sees it, each skill payload before it is sent; the result says
+// when the stream withheld text (`locked`), and postGuard then replaces the whole reply.
 import type { PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
+import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
 import { citedSources } from '../generate/citations.js';
 import { SkillEventDropped, skillEvent } from '../generate/skillEvent.js';
-import { passThroughGate } from '../generate/streamGate.js';
+import { revealsAnswerKey } from '../generate/answerKey.js';
+import { answerLeakStreamGate } from '../generate/streamGate.js';
+import { HarnessError } from '../errors.js';
 import { runToolLoop } from '../generate/toolLoop.js';
 import { noTools, offeredTools } from '../tools.js';
-import type { Steps } from '../types.js';
+import type { StepEnv, Steps } from '../types.js';
+import { lockedCheckFor } from './locked.js';
 
 /** The ladder moves whose rung the student's screen shows (9.4). */
 const HINT_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
@@ -31,38 +45,73 @@ function lockedEvent(pkg: TurnContext['pkg']): Extract<TurnEvent, { type: 'locke
     : { type: 'locked' };
 }
 
-export const generate: Steps['generate'] = async (env, { ctx, decision, sources }, emit) => {
-  const { deps } = env;
-  // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
-  env.usage.checkBeforeCall();
-  const set = resolvePromptPackSet(deps.promptPacks, ctx.agent.promptPackVersion);
-  const request = buildModelRequest({ ctx, decision, input: env.input, set });
-  const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement);
-  const gate = (deps.streamGate ?? passThroughGate)({ ctx, decision });
+/** A cited source's title or locator held the answer key, so it was not sent. Fixed text only. */
+export class SourceDropped extends HarnessError {
+  override readonly name = 'SourceDropped';
 
-  if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
-  const { draft } = await runToolLoop({
-    gateway: env.gateway,
-    request,
-    offered,
-    ctx,
-    clock: deps.clock,
-    cancel: env.cancel,
-    usage: env.usage,
-    gate,
-    show: (text) => emit({ type: 'token', text }),
-    onToolOutput: (entry, output) => {
-      const e = skillEvent(entry, output, ctx, decision.mustNotReveal);
-      if (e instanceof SkillEventDropped) env.report(e);
-      else if (e !== undefined) emit(e);
-    },
-    report: env.report,
-    mustNotReveal: decision.mustNotReveal,
-    track: env.track,
-  });
+  constructor() {
+    super('a cited source label held the answer key and was dropped');
+  }
+}
 
-  const cited = citedSources(draft, sources);
-  if (cited.length > 0) emit({ type: 'sources', items: cited });
-  if (decision.move === 'locked') emit(lockedEvent(ctx.pkg));
-  return { draft };
-};
+export interface GenerateOptions {
+  /** Builds the turn's locked check; default `lockedCheckFor`. Tests only (mutation runs). */
+  lockedCheck?: (env: StepEnv, ctx: TurnContext) => LockedCheck;
+}
+
+/** The generate step; `opts` exists for tests that swap the locked check. */
+export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
+  const lockedCheckOf = opts.lockedCheck ?? lockedCheckFor;
+  return async (env, { ctx, decision, sources }, emit) => {
+    const { deps } = env;
+    // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
+    env.usage.checkBeforeCall();
+    const set = resolvePromptPackSet(deps.promptPacks, ctx.agent.promptPackVersion);
+    const request = buildModelRequest({ ctx, decision, input: env.input, set });
+    const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement);
+    const studentText = env.input.text;
+    const gate = (deps.streamGate ?? answerLeakStreamGate)(
+      studentText === undefined ? { ctx, decision } : { ctx, decision, studentText },
+    );
+
+    const lockedCheck = lockedCheckOf(env, ctx);
+
+    if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
+    const { draft, raw, locked } = await runToolLoop({
+      gateway: env.gateway,
+      request,
+      offered,
+      ctx,
+      clock: deps.clock,
+      cancel: env.cancel,
+      usage: env.usage,
+      gate,
+      show: (text) => emit({ type: 'token', text }),
+      onToolOutput: async (entry, output) => {
+        const e = await skillEvent(entry, output, ctx, decision.mustNotReveal, lockedCheck);
+        if (e instanceof SkillEventDropped) env.report(e);
+        else if (e !== undefined) emit(e);
+      },
+      report: env.report,
+      mustNotReveal: decision.mustNotReveal,
+      lockedCheck,
+      track: env.track,
+    });
+
+    const cited = citedSources(draft, sources).filter((s) => {
+      const leaks = revealsAnswerKey([s.title, s.locator], decision.mustNotReveal);
+      if (leaks) env.report(new SourceDropped());
+      return !leaks;
+    });
+    if (cited.length > 0) emit({ type: 'sources', items: cited });
+    if (decision.move === 'locked') emit(lockedEvent(ctx.pkg));
+    return {
+      draft,
+      raw,
+      withheld: gate.tripped === true,
+      ...(locked === undefined ? {} : { locked }),
+    };
+  };
+}
+
+export const generate: Steps['generate'] = createGenerate();

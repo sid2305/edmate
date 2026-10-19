@@ -1,5 +1,29 @@
 // generate's building blocks (task 3.7); the step itself is `steps/generate.ts`.
-export { normaliseForMatch, revealsAnswerKey } from './answerKey.js';
+export {
+  type AnswerKeyMatcher,
+  type AnswerKeyOptions,
+  compileAnswerKeys,
+  normaliseForMatch,
+  revealsAnswerKey,
+} from './answerKey.js';
+export { arithmeticSpans, evaluateArithmetic, MAX_EXPRESSION_LENGTH } from './arithmetic.js';
+export {
+  decodeBase64Text,
+  decodedBase64Spans,
+  MAX_CANDIDATE_LENGTH,
+  MAX_CANDIDATES,
+  wordLike,
+} from './base64Leak.js';
+export { foldWord, type NumberWord, numberWord, scaleSuffix } from './numberWords.js';
+export {
+  canonicalNumber,
+  foldForNumbers,
+  type MentionKind,
+  type NumberMention,
+  numberMentions,
+  numbersMentioned,
+  numericKeyValue,
+} from './numbers.js';
 export { citedSources } from './citations.js';
 export {
   ceilingOf,
@@ -8,7 +32,16 @@ export {
   TurnCost,
 } from './costCeiling.js';
 export { type SkillDropReason, SkillEventDropped, skillEvent } from './skillEvent.js';
-export { passThroughGate, type StreamGate, type StreamGateFactory } from './streamGate.js';
+export {
+  answerLeakStreamGate,
+  passThroughGate,
+  SENTENCE_GATE_CAP,
+  sentenceGate,
+  type StreamGate,
+  type StreamGateFactory,
+  type StreamGateInput,
+} from './streamGate.js';
+export { type LockedStream, lockedStream } from './lockedStream.js';
 export { InvalidChunkError, raceCancel, StreamCloseFailed, StreamReader } from './streamReader.js';
 export {
   MAX_TOOL_CALLS_PER_ROUND,
@@ -20,6 +53,7 @@ export {
   type ToolFailReason,
   ToolFailed,
   type ToolLoopInput,
+  type ToolLoopResult,
 } from './toolLoop.js';
 export {
   jsonSafe,

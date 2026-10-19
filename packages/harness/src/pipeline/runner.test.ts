@@ -323,7 +323,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8; preGuard, escalate: 4.3)', async () => {
+  it('the one remaining stub (route.run) throws StepNotImplementedError', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -333,10 +333,7 @@ describe('defaultSteps (stubs)', () => {
       ...stepEnvExtras(),
     };
     const anyArg = {} as never;
-    const calls: (() => unknown)[] = [
-      () => defaultSteps.route.run(env, anyArg),
-      () => defaultSteps.postGuard(env, anyArg),
-    ];
+    const calls: (() => unknown)[] = [() => defaultSteps.route.run(env, anyArg)];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
       intent: 'on_task',
@@ -669,6 +666,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
       search: () =>
         Promise.resolve([{ ...demoChunk, moduleId: 'mod_test_04', text: OUT_OF_SCOPE_TEXT }]),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const { t, steps, seen } = setup({ retrieval: leaky });
     const { events, result } = await driveTurn(
@@ -979,7 +977,10 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   it('a slow scrub plus a soft hit: preGuard times out, the runner still escalates (safety review)', async () => {
     const t = testDeps({
       overrides: {
-        transcripts: { history: () => new Promise(() => undefined), append: () => Promise.resolve() },
+        transcripts: {
+          history: () => new Promise(() => undefined),
+          append: () => Promise.resolve(),
+        },
         // The raw-text and fallback dep stays hard-only; the soft check is the runner's own.
         distressCheck: hasDistressKeyword,
       },
@@ -1000,7 +1001,10 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('a soft hit never escalates through the raw-text check alone (it stays hard-only)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const t = deps({
+      stream: [scriptedStreamText],
+      generateObject: [{ value: { distress: false } }],
+    });
     const { events } = await driveTurn(
       runTurn(at('i feel so hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,
@@ -1009,7 +1013,10 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('soft keyword + classifier false → a normal reply (no alert)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [{ value: { distress: false } }] });
+    const t = deps({
+      stream: [scriptedStreamText],
+      generateObject: [{ value: { distress: false } }],
+    });
     const { events } = await driveTurn(
       runTurn(at('this bug is hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,
