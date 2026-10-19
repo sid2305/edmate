@@ -152,11 +152,10 @@ const NEGATIVE: readonly string[] = [
   'sab khatam ho gaya, exam over! ab python sikhao',
   'मेरा प्रोग्राम अटक गया है',
   'thak gaya hu, kal padhte hai',
-  // Over-escalation the safety review listed: bare nouns, third person, past tense, games.
+  // Over-escalation the safety review listed: bare nouns, third person, past tense.
   'what did durkheim say about suicide',
   'self harm is a topic in psychology',
   'Romeo wanted to die',
-  'how to die in minecraft',
   'cutting myself a slice of cake',
   'suicide squad review',
   'jeena nahi aata coding',
@@ -295,8 +294,8 @@ describe('soft keywords', () => {
     expect(distressKeywordMatch('hopeless. so hopeless').softHits).toBe(1);
   }, 1_000);
 
-  it('a game context turns a hard phrase soft', () => {
-    expect(distressKeywordLevel('how to kill myself in valorant')).toBe('soft');
+  it('a hard phrase stays hard in a game context (human decision B-18: exemption dropped)', () => {
+    expect(distressKeywordLevel('how to kill myself in valorant')).toBe('hard');
     expect(distressKeywordLevel('how to kill myself')).toBe('hard');
   }, 1_000);
 
@@ -324,7 +323,8 @@ describe('soft keywords', () => {
   }, 1_000);
 });
 
-describe('game talk (fix round 3): only game-shaped phrases are softened', () => {
+describe('game talk (fix round 4, human decision B-18, option c): the exemption is dropped — ' +
+  'every hard phrase stays hard even with a game word nearby', () => {
   it.each([
     // The two sentences from the safety re-check.
     ['my squad left me and i want to kill myself', 'distress'],
@@ -342,6 +342,22 @@ describe('game talk (fix round 3): only game-shaped phrases are softened', () =>
     ['papa maarte hai jab main pubg khelta hoon', 'abuse'],
     ['my uncle touches me when we play roblox together', 'abuse'],
     ['पापा मारते हैं जब मैं गेम खेलता हूं', 'abuse'],
+    // Previously softened as "game-shaped" (fix round 3, now reverted, fix round 4): a game word
+    // tied right next to the phrase never softens it any more.
+    ['how to kill myself in valorant', 'distress'],
+    ['how to die in minecraft', 'distress'],
+    ['i keep killing myself in fortnite with my own grenades', 'distress'],
+    ['how do i kill myself in minecraft faster to respawn', 'distress'],
+    ['minecraft mein khud ko maar diya galti se', 'distress'],
+    ['in this round i keep ending my life to respawn faster', 'distress'],
+    ['killmyself in roblox again lol', 'distress'],
+    // The round-4 re-check lines (human decision B-18): still hard with a game word right there.
+    ['I keep thinking about suicide during the match', 'distress'],
+    ['i feel suicidal during every match', 'distress'],
+    ['i have been cutting my wrists during each round', 'distress'],
+    ['i keep wanting to kill myself in the match', 'distress'],
+    ['how to die in this level of pain', 'distress'],
+    ['match mein marne ka mann karta hai', 'distress'],
   ] as const)(
     '%s → hard (%s)',
     (text, kind) => {
@@ -350,31 +366,16 @@ describe('game talk (fix round 3): only game-shaped phrases are softened', () =>
     1_000,
   );
 
-  it.each([
-    ['how to kill myself in valorant'],
-    ['i keep killing myself in fortnite with my own grenades'],
-    ['how do i kill myself in minecraft faster to respawn'],
-    ['minecraft mein khud ko maar diya galti se'],
-    ['in this round i keep ending my life to respawn faster'],
-    ['killmyself in roblox again lol'],
-  ] as const)(
-    'game-shaped %s → soft (the classifier decides)',
-    (text) => {
-      expect(distressKeywordLevel(text)).toBe('soft');
-    },
-    1_000,
-  );
-
   it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
-    'plain game talk %s → none',
+    'plain game talk with no distress phrase at all %s → none',
     (text) => {
       expect(distressKeywordLevel(text)).toBe('none');
     },
     1_000,
   );
 
-  it('a game method plus another soft phrase in the game is not a combination', () => {
-    expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('soft');
+  it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
+    expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('hard');
   }, 1_000);
 });
 

@@ -12,9 +12,10 @@
 // - `hard`: intent, plan or method in the first person ("i want to die", "zehar kha lunga") and
 //   abuse disclosures. It escalates on its own.
 // - `soft`: ambiguous on its own: bare nouns ("suicide"), third person or past tense ("he killed
-//   himself", "wanted to die"), vague farewells ("tomorrow i wont be here"), and any hard phrase in
-//   a game context ("in minecraft"). distressDetect asks the classifier, also when two unrelated
-//   soft phrases hit; a classifier failure on a soft hit escalates (lead answer 3, safety review).
+//   himself", "wanted to die"), vague farewells ("tomorrow i wont be here"). distressDetect asks
+//   the classifier, also when two unrelated soft phrases hit; a classifier failure on a soft hit
+//   escalates (lead answer 3, safety review). A hard phrase is hard whatever sits near it: a game
+//   word nearby never softens it (human decision B-18, fix round 4).
 // - Two combinations of soft phrases count as hard (lead decision, fix round 2): (a) a method
 //   phrase (rope or noose, pills, blade, jumping off, poison, a roof) plus any other soft phrase;
 //   (b) a first-person vanish phrase plus a hopelessness phrase.
@@ -330,51 +331,18 @@ const SOFT: readonly SoftEntry[] = [
   other('जान दे (?:दूंगा|दूंगी|दूं|देना)'),
 ];
 
-// ---- context around a hit (fix round 3) -----------------------------------------------------
+// ---- context around a hit (fix round 3; game downgrade dropped fix round 4) ------------------
 //
-// Game talk: a hard self-harm phrase counts as soft only when it is game-shaped, that is tied to a
-// game within a few words ("killed myself in fortnite", "minecraft mein khud ko maar diya"). A
-// game word elsewhere in the message ("my squad left me", "when i play free fire") changes
-// nothing. Never downgraded: abuse phrases, and first-person intent next to the phrase ("i want
-// to", "i'm going to", "main ... chahta hoon", "... kar lunga").
+// A hard phrase is hard whatever sits near it: a game word nearby (fortnite, a match, a round)
+// never softens it (human decision B-18, option c). Occasional on-call pages for game talk are
+// accepted.
 //
 // Code talk: a soft phrase next to a code word ("pills array is empty, nothing matters") does not
 // count towards the combination rules, so it goes to the classifier as an ordinary soft hit. It
 // is never dropped, and a hard phrase is never downgraded by code context.
 
-/** Words either side of a hit that are looked at for a game, intent or code tie. */
+/** Words either side of a hit that are looked at for a code tie. */
 const TIE_WORDS = 5;
-
-const GAME_WORDS =
-  '(?:minecraft|valorant|fortnite|roblox|pubg|bgmi|free ?fire|gta|among us|apex|overwatch|terraria|' +
-  'call of duty|game|games|match|round|level|lobby|ranked|server|multiplayer)';
-const GAME_DET = '(?:the |this |my |a |that |every |each |our |their )?';
-/** The words after a hit start with (up to two words, then) "in/on/during <game>". */
-const GAME_AFTER = new RegExp(
-  `^(?:\\S+ ){0,2}(?:in|on|during|inside|while playing) ${GAME_DET}${GAME_WORDS}(?![\\p{L}\\p{N}])`,
-  'u',
-);
-/** The words before a hit end with "in <game>" or "<game> mein" (then up to two words). */
-const GAME_BEFORE = new RegExp(
-  `(?:(?:^| )(?:in|on|during|inside) ${GAME_DET}${GAME_WORDS}|(?:^| )${GAME_WORDS} (?:mein|me|main|pe|par|में))` +
-    '(?: \\S+){0,2}$',
-  'u',
-);
-
-/** First-person intent in the words before a hit or in the hit itself. */
-const INTENT = phrase(
-  'want|wanna|wish|need to|going to|gonna|imma|ima|plan|planning|decided|ready to|will|ill|' +
-    'about to|trying to|tryna|gotta|have to|main|mai|mujhe|muje|chahta|chahti|chahte|chahiye|' +
-    '\\S+(?:unga|ungi|oonga|oongi)|मैं|मुझे|चाहता|चाहती|\\S*(?:ूंगा|ूंगी)',
-);
-/** Hindi intent often follows the phrase ("marna chahta hoon", "maar lunga"). */
-const INTENT_AFTER = new RegExp(
-  `^(?:\\S+ )?(?:chahta|chahti|chahte|chahiye|\\S+(?:unga|ungi|oonga|oongi)|चाहता|चाहती|\\S*(?:ूंगा|ूंगी))(?![\\p{L}\\p{M}\\p{N}])`,
-  'u',
-);
-/** A written-together phrase that carries its own intent ("iwanttodie", "gonnakillmyself"). */
-const COMPACT_INTENT =
-  /^(?:i|ill|iwill|igonna|gonna|wanna|iwanna|iwant)(?=\p{L})|wanttodie|wannadie/u;
 
 /** Code words (and identifiers, which normalise to them: `pills_array` → "pills array"). */
 const CODE = phrase(
@@ -404,20 +372,9 @@ function around(re: RegExp, form: string): Around[] {
   return out;
 }
 
-function intentNear(a: Around): boolean {
-  return INTENT.test(`${a.before} ${a.hit}`) || INTENT_AFTER.test(a.after);
-}
-
-function gameTied(a: Around): boolean {
-  return GAME_AFTER.test(a.after) || GAME_BEFORE.test(a.before);
-}
-
 function codeTied(a: Around): boolean {
   return CODE.test(a.before) || CODE.test(a.after);
 }
-
-/** A hard self-harm hit is game talk when every occurrence is game-tied with no intent. */
-const gameTalk = (a: Around): boolean => gameTied(a) && !intentNear(a);
 
 /** Written-together phrases ("killmyself", "iwanttodie"), checked word by word. */
 const COMPACT = new RegExp(
@@ -556,32 +513,23 @@ export function distressKeywordMatch(text: string): DistressKeywordMatch {
   const everyHit = (re: RegExp, pred: (a: Around) => boolean) =>
     forms.every((f) => around(re, f).every(pred));
 
-  // Hard phrases: abuse always counts; a self-harm phrase counts unless it is game talk.
-  const hardHit = HARD.filter((e) => hits(e.re));
-  const hard = hardHit.filter((e) => e.kind === 'abuse' || !everyHit(e.re, gameTalk));
-  let downgraded = hard.length < hardHit.length;
+  // Hard phrases: every hit counts, whatever sits near it (human decision B-18: the game-talk
+  // exemption is dropped; a game word nearby never softens a hard phrase).
+  const hard = HARD.filter((e) => hits(e.re));
 
-  // Written-together phrases, word by word, with the same game-talk rule.
+  // Written-together phrases, word by word ("killmyself", "iwanttodie").
   let compact = false;
   for (const f of forms) {
     const words = f.split(' ');
-    words.forEach((w, i) => {
-      if (!COMPACT.test(w)) return;
-      const a: Around = {
-        before: words.slice(Math.max(0, i - TIE_WORDS), i).join(' '),
-        hit: w,
-        after: words.slice(i + 1, i + 1 + TIE_WORDS).join(' '),
-      };
-      if (!COMPACT_INTENT.test(w) && gameTalk(a)) downgraded = true;
-      else compact = true;
+    words.forEach((w) => {
+      if (COMPACT.test(w)) compact = true;
     });
   }
 
   const softHit = SOFT.filter((e) => hits(e.re));
-  let soft = softHit.length;
-  // For the combination rules a soft phrase counts only when it is not tied to code or a game
-  // (and a game tie with intent next to it still counts).
-  const counted = softHit.filter((e) => !everyHit(e.re, codeTied) && !everyHit(e.re, gameTalk));
+  const soft = softHit.length;
+  // For the combination rules a soft phrase counts only when it is not tied to code.
+  const counted = softHit.filter((e) => !everyHit(e.re, codeTied));
   const has = (f: SoftFamily) => counted.some((e) => e.family === f);
   // (a) a method plus any other soft phrase; (b) vanishing plus hopelessness.
   const combination = (has('method') && counted.length >= 2) || (has('vanish') && has('hopeless'));
@@ -589,7 +537,6 @@ export function distressKeywordMatch(text: string): DistressKeywordMatch {
     const kind = hard.length > 0 && hard.every((e) => e.kind === 'abuse') ? 'abuse' : 'distress';
     return { level: 'hard', kind, softHits: soft };
   }
-  if (downgraded) soft++;
   return { level: soft > 0 ? 'soft' : 'none', kind: 'distress', softHits: soft };
 }
 
