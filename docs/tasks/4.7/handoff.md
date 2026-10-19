@@ -149,6 +149,17 @@ db 491 · gateway 405 · content 165 · web 132 · worker 106 · cli 46 · queue
 - Gate (`groundingFixtures.test.ts`, 46 tests, all pass): 37 cases (32 seeded + 5 pending). Grounding off fails 37/37. A judge that always says grounded fails exactly the 25 judge-only cases; rules catch the other 12 (`operand-echo` is caught by Rule C). The 24 cases with material: 0 TeacherQuestions on their good replies. Latency: `grounding postGuard step (judge 450 ms, 74 turns): p50 450 ms, p95 450 ms, max 450 ms of 2000 ms`.
 - Secret scan: exit 0.
 
+## Sign-off and merge with main (4.6b, 4.2b)
+
+- The human approved the five safety-review cases (B-19): `reviewed_by: sid2305` on all five; the gate now checks that none is pending.
+- Merged origin/main a8fc073 (no rebase, no force). Conflicts were in `helpState.ts`/`.test.ts`, `types.ts`, `steps/generate.ts`, `generate.test.ts`, `runner.ts` and `runner.generate.test.ts`. Both sides were kept:
+  - `HelpState` has both `lockedStopped` (4.6b) and `groundingAsks` (4.7), and `parseSessionHelp` keeps both.
+  - generate's input has 4.6b's `lockedStopped` and `onLockedTrip` plus 4.7's `fromFallback`. A 4.7-held reply is never shown by generate; 4.6b's `holdAll` still gates and checks it.
+  - In the runner, `base.next` carries `groundingAsks` (`withGroundingAsks`), and 4.6b's `withStopFlag` in `finish()` then forces `lockedStopped` onto every saved `next`. It spreads the help state, so the count survives.
+  - postGuard records 4.6b's locked trip before 4.7's held-reply release.
+- The interaction: when 4.6b drops `next` (unreadable help state), commit's grounding fallback still opens the question but saves no help state, because it only adds to `record.next` when one exists. Two new runner tests: an unreadable help state with a live open and with a failed live open (the fallback opens, nothing is saved); and a saved help state that keeps both `groundingAsks: 2` and `lockedStopped: false`.
+- `turbo run typecheck lint test --filter=...@edmate/harness --force` (Postgres and Redis healthy): 34/34 tasks, 0 cached, nothing skipped. harness 3370, evals 346, db 491, gateway 405, content 165, web 132, worker 106, cli 46, queue 40. Secret scan: exit 0.
+
 ## Decisions
 
 ### 19 Oct 2026 · 4.7 merged: the grounding post guard is wired (coverage backstop, citation validity, number recompute, small-tier judge with an ask-teacher fallback) · decided by lead (plan and plan-review answers) and tdd-guide (build) · risk: high
@@ -299,4 +310,10 @@ Reversible: yes.
 Decided: the five cases are in `evals/suites/grounding` with `reviewed_by: pending`, so `suites.test.ts` fails on exactly those five until the human signs off (the 4.5 precedent). All five pass the offline gate; `falsepremise-reversed-en` is caught by the judge layer only, since Rule C does not parse that form (not widened, as asked).
 Why: the human signs off eval cases; worded and reversed premises are deferred.
 Alternatives: widen the premise parser now (deferred by the lead).
+Reversible: yes.
+
+### 19 Oct 2026 · 4.7 merge with 4.6b: the stop flag and the grounding count share the help state · decided by tdd-guide (merge resolution, lead's instructions) · risk: medium
+Decided: keep both fields. The runner sets `groundingAsks` in `base.next`, then 4.6b's `withStopFlag` forces `lockedStopped` on whatever is saved. When 4.6b saves no help state (unreadable blob), the grounding count is not saved either, and commit's fallback open never writes one.
+Why: both are runner-owned, per-session counters in the same blob; neither may reset the other, and a stored `lockedStopped: true` must never be overwritten.
+Alternatives: save the grounding count even when the help state is unreadable (would overwrite a possible stored stop flag).
 Reversible: yes.
