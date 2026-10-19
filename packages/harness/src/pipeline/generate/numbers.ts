@@ -7,6 +7,10 @@
 // as substrings: "160" does not name 16. Signs are ignored. Roman numerals are out of scope.
 // Fix round 1: "24 000" (space-grouped; NFKC turns no-break spaces into spaces), ".83", fraction
 // keys ("5/6"), and decimals compared at the precision written (".83" and "0.833" name 0.83).
+// Fix round 2 (4.5c): spoken fractions ("five sixths", "5 out of 6"), a percentage ("83%"), and a
+// decimal read digit by digit ("zero point eight three") all name the value they compute, at the
+// precision they imply (a percentage: its own written decimals plus two; a spoken decimal: the
+// digits spoken after "point").
 import { foldText } from '../../guardrails/textFold.js';
 import { arithmeticSpans, evaluateArithmetic } from './arithmetic.js';
 import { foldWord, numberWord, SCALE_SUFFIX_SOURCE, scaleSuffix } from './numberWords.js';
@@ -57,6 +61,65 @@ const SPACED = /(?<![\d.,])\d(?: \d)+(?![\d])/g;
 /** Arithmetic results are exact as far as a check needs: compared at the key's precision. */
 const COMPUTED_DECIMALS = 12;
 
+/** English fraction denominator words ("five sixths", "three quarters"), singular or plural. */
+const DENOMINATOR_WORDS: Record<string, number> = {
+  half: 2,
+  halves: 2,
+  third: 3,
+  thirds: 3,
+  quarter: 4,
+  quarters: 4,
+  fourth: 4,
+  fourths: 4,
+  fifth: 5,
+  fifths: 5,
+  sixth: 6,
+  sixths: 6,
+  seventh: 7,
+  sevenths: 7,
+  eighth: 8,
+  eighths: 8,
+  ninth: 9,
+  ninths: 9,
+  tenth: 10,
+  tenths: 10,
+};
+/** A spoken fraction, "five sixths" or "3 fourths": a number word or digit, then a denominator. */
+const FRACTION_WORDS = new RegExp(
+  String.raw`(\d+|[a-z]+)\s+(${Object.keys(DENOMINATOR_WORDS).join('|')})\b`,
+  'gu',
+);
+/** "5 out of 6": a spoken fraction, numerator and denominator each a number word or digit. */
+const OUT_OF = /(\d+|[a-z]+)\s+out\s+of\s+(\d+|[a-z]+)\b/gu;
+/** A percentage ("83%", "83.5%"): the number over 100. */
+const PERCENT = /(\d+(?:\.\d+)?)\s*%/gu;
+/** Single digit words, for a decimal read digit by digit ("zero point eight three"). */
+const DIGIT_WORDS: Record<string, number> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+};
+/**
+ * A decimal read digit by digit: one number word for the whole part (keeps false positives down;
+ * "the point is ..." never names a number), "point", then one or more digit words.
+ */
+const SPOKEN_DECIMAL =
+  /([a-z]+)\s+point\s+((?:(?:zero|one|two|three|four|five|six|seven|eight|nine)\s*)+)\b/gu;
+
+/** `w` as a plain integer: a digit string, or a single small number word (no scale words). */
+function smallWordValue(w: string): number | undefined {
+  if (/^\d+$/.test(w)) return Number(w);
+  const nw = numberWord(w);
+  return nw?.kind === 'small' ? nw.value : undefined;
+}
+
 /** Digits after the point as written, less the exponent ("1.25" is 2, "1.6e1" is 0). */
 function literalDecimals(m: RegExpMatchArray): number {
   const [, hex, bin, oct, , frac, exp] = m;
@@ -106,10 +169,8 @@ const MARKERS = new Set(
     'becomes',
     "it's",
     'its',
-    'times',
     'runs',
     'run',
-    'baar',
     'chalega',
     'chalegi',
     'chalta',
@@ -133,10 +194,37 @@ const MARKERS = new Set(
     'बराबर',
     'छपेगा',
     'आएगा',
-    'बार',
     'चलेगा',
     'चलेगी',
   ].map(foldWord),
+);
+/**
+ * "baar"/"times" ("do baar", "three times") are weak markers (4.5c): on their own they are
+ * ordinary count words ("ek baar try karo", "read it three times"), so they count as an answer
+ * word only when a run/print verb sits right next to them, and never when an imperative does
+ * (that beats a run verb on the other side: "do baar chalega socho" still never counts).
+ */
+const WEAK_MARKERS = new Set(['baar', 'times', 'बार'].map(foldWord));
+const RUN_VERBS = new Set(
+  [
+    'chalega',
+    'chalegi',
+    'chalti',
+    'chalta',
+    'runs',
+    'prints',
+    'print',
+    'executes',
+    'execute',
+    'loops',
+    'loop',
+    'चलेगा',
+    'चलेगी',
+    'छपेगा',
+  ].map(foldWord),
+);
+const IMPERATIVES = new Set(
+  ['karo', 'padho', 'socho', 'dekho', 'try', 'read', 'likho'].map(foldWord),
 );
 /** Answer words count up to three words before a number, or right after it ("teen hai"). */
 const BEFORE_WINDOW = 3;
@@ -159,7 +247,33 @@ function tokenize(s: string): Token[] {
   return out;
 }
 
-const isMarker = (t: Token): boolean => MARKERS.has(t.text.replace('’', "'"));
+const wordOf = (t: Token): string => t.text.replace('’', "'");
+
+/** The word right next to `k` (index `k - 1` or `k + 1`), in the same sentence, else undefined. */
+function neighborWord(toks: readonly Token[], k: number, dir: -1 | 1): string | undefined {
+  const n = k + dir;
+  if (n < 0 || n >= toks.length) return undefined;
+  const between = dir === 1 ? (toks[n] as Token) : (toks[k] as Token);
+  if (between.breakBefore) return undefined;
+  return wordOf(toks[n] as Token);
+}
+
+/**
+ * Whether token `k` counts as an answer marker: a strong marker always does; a weak marker
+ * ("baar", "times") only when a run/print verb sits right next to it, never when an imperative
+ * does (see WEAK_MARKERS).
+ */
+function isAnswerMarker(toks: readonly Token[], k: number): boolean {
+  const w = wordOf(toks[k] as Token);
+  if (MARKERS.has(w)) return true;
+  if (!WEAK_MARKERS.has(w)) return false;
+  const before = neighborWord(toks, k, -1);
+  const after = neighborWord(toks, k, 1);
+  if ((before !== undefined && IMPERATIVES.has(before)) || (after !== undefined && IMPERATIVES.has(after))) {
+    return false;
+  }
+  return (before !== undefined && RUN_VERBS.has(before)) || (after !== undefined && RUN_VERBS.has(after));
+}
 
 /** Whether tokens [i, j] have an answer marker within the window, in the same sentence. */
 function inAnswerContext(toks: readonly Token[], i: number, j: number): boolean {
@@ -167,11 +281,11 @@ function inAnswerContext(toks: readonly Token[], i: number, j: number): boolean 
   let alone = true;
   for (let k = i - 1; k >= 0 && !(toks[k + 1] as Token).breakBefore; k--) {
     alone = false;
-    if (i - k <= BEFORE_WINDOW && isMarker(toks[k] as Token)) return true;
+    if (i - k <= BEFORE_WINDOW && isAnswerMarker(toks, k)) return true;
   }
   for (let k = j + 1; k < toks.length && !(toks[k] as Token).breakBefore; k++) {
     alone = false;
-    if (k - j <= AFTER_WINDOW && isMarker(toks[k] as Token)) return true;
+    if (k - j <= AFTER_WINDOW && isAnswerMarker(toks, k)) return true;
   }
   return alone;
 }
@@ -269,6 +383,33 @@ export function numberMentions(text: string): NumberMention[] {
     push(Number(m[0].replace(/ /g, '')), 0, 'digits', m.index, m.index + m[0].length);
   }
   for (const a of arithmeticSpans(s)) push(a.value, COMPUTED_DECIMALS, 'expr', a.start, a.end);
+  for (const m of s.matchAll(FRACTION_WORDS)) {
+    const num = smallWordValue(m[1] as string);
+    const denom = DENOMINATOR_WORDS[m[2] as string];
+    if (num === undefined || denom === undefined) continue;
+    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length);
+  }
+  for (const m of s.matchAll(OUT_OF)) {
+    const num = smallWordValue(m[1] as string);
+    const denom = smallWordValue(m[2] as string);
+    if (num === undefined || denom === undefined || denom === 0) continue;
+    push(num / denom, COMPUTED_DECIMALS, 'word', m.index, m.index + m[0].length);
+  }
+  for (const m of s.matchAll(PERCENT)) {
+    const text = m[1] as string;
+    const dot = text.indexOf('.');
+    const written = dot < 0 ? 0 : text.length - dot - 1;
+    push(Number(text) / 100, written + 2, 'digits', m.index, m.index + m[0].length);
+  }
+  for (const m of s.matchAll(SPOKEN_DECIMAL)) {
+    const whole = smallWordValue(m[1] as string);
+    if (whole === undefined) continue;
+    const digitWords = (m[2] as string).trim().split(/\s+/);
+    const digits = digitWords.map((w) => DIGIT_WORDS[w]);
+    if (digits.some((d) => d === undefined)) continue;
+    const value = whole + Number(`0.${digits.join('')}`);
+    push(value, digits.length, 'word', m.index, m.index + m[0].length);
+  }
   wordMentions(toks, out);
   return out;
 }

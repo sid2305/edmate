@@ -84,6 +84,63 @@ function clearlyCode(raw: string, at: number): boolean {
   return /^(?: {2,}|\t)/.test(line) || /:\s*$/.test(line) || CODE_LINE_START.test(line);
 }
 
+/** A code line's text and where it starts in `raw`. */
+interface CodeLine {
+  line: string;
+  lineStart: number;
+}
+
+/** Every line of `raw` that is clearly code (see `clearlyCode`), with its start offset. */
+function codeLines(raw: string): CodeLine[] {
+  const out: CodeLine[] = [];
+  let lineStart = 0;
+  for (const line of raw.split('\n')) {
+    if (clearlyCode(raw, lineStart)) out.push({ line, lineStart });
+    lineStart += line.length + 1;
+  }
+  return out;
+}
+
+/**
+ * Whether `a` and `b` are the same line except for a run that covers [ks, ke) (the key's span in
+ * `a`): everything up to the key matches (`p >= ks`), everything from the key on matches
+ * (`sa <= ke`), and the two lines are not in fact identical.
+ */
+function differsOnlyAroundKey(a: string, b: string, ks: number, ke: number): boolean {
+  if (a === b) return false;
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let i = a.length - 1;
+  let j = b.length - 1;
+  while (i >= 0 && j >= 0 && a[i] === b[j]) {
+    i--;
+    j--;
+  }
+  const sa = i + 1;
+  return p >= ks && sa <= ke && sa > p;
+}
+
+/**
+ * Whether the student's own message offers the key as one of two or more code options that
+ * differ only at the key (fix round 2, 4.5c): `if s.upper()...` next to `if s.lower()...`. Such a
+ * key never gets the own-code exemption, offered or not: the student picked neither yet.
+ */
+function offeredAsOptions(raw: string, c: Compact, key: string): boolean {
+  const lines = codeLines(raw);
+  if (lines.length < 2) return false;
+  for (const [start, end] of occurrences(c, key)) {
+    const a = lines.find((l) => start >= l.lineStart && start < l.lineStart + l.line.length);
+    if (a === undefined) continue;
+    const ks = start - a.lineStart;
+    const ke = end - a.lineStart;
+    for (const b of lines) {
+      if (b.lineStart === a.lineStart) continue;
+      if (differsOnlyAroundKey(a.line, b.line, ks, ke)) return true;
+    }
+  }
+  return false;
+}
+
 /** Up to CONFIRM_WINDOW words either side of [start, end), within the sentence. */
 function confirmedNear(raw: string, start: number, end: number): boolean {
   const sentenceEnd = /[!?\n।]|\.(?:\s|$)/;
@@ -238,7 +295,12 @@ export function compileAnswerKeys(
   if (opts.studentText !== undefined && opts.studentText !== '') {
     const c = compact(opts.studentText);
     const raw = opts.studentText;
-    own = texts.filter((k) => codeShaped(keyed.get(k) as string) && writtenAsCode(c, raw, k));
+    own = texts.filter(
+      (k) =>
+        codeShaped(keyed.get(k) as string) &&
+        writtenAsCode(c, raw, k) &&
+        !offeredAsOptions(raw, c, k),
+    );
     texts = texts.filter((k) => !own.includes(k));
   }
 

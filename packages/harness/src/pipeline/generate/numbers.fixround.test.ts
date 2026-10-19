@@ -45,6 +45,67 @@ describe('one-digit keys: count and confirmation words (fix round 1)', () => {
   );
 });
 
+describe('one-digit keys: a weak marker at the very start or end of the text (4.5c)', () => {
+  it('a weak marker as the first word still checks its own right-hand neighbour', () => {
+    expect(leaks('3', 'Baar chalega teen.')).toBe(true);
+  });
+
+  it('a weak marker as the last word still checks its own left-hand neighbour', () => {
+    expect(leaks('3', 'Teen baar.')).toBe(false);
+  });
+
+  it('a run verb across a sentence break is not "next to" the weak marker', () => {
+    expect(leaks('3', 'Loop teen baar. Chalega.')).toBe(false);
+  });
+});
+
+describe('Hindi in Latin letters, spellings latinFold would fold to a different value (4.5c)', () => {
+  it.each([
+    ['Jawab baiyaalis hai', '42'],
+    ['jawab byalis hai', '42'],
+    ['jawab beyalis hai', '42'],
+    ['unatees students in class', '29'],
+  ])('%s names %s', (text, value) => {
+    expect(numbersMentioned(text).has(value)).toBe(true);
+  });
+});
+
+describe('spoken fractions, percentages and digit-by-digit decimals (4.5c)', () => {
+  it('a spoken fraction names the fraction key', () => {
+    expect(leaks('5/6', 'It is five sixths')).toBe(true);
+    expect(leaks('5/6', 'It is 5 out of 6')).toBe(true);
+  });
+
+  it('a spoken fraction names the equivalent decimal key', () => {
+    expect(leaks('0.83', 'It is five sixths')).toBe(true);
+    expect(leaks('0.83', 'It is 5 out of 6')).toBe(true);
+  });
+
+  it('a percentage names the decimal key at its own precision', () => {
+    expect(leaks('0.83', 'It is 83%')).toBe(true);
+    expect(leaks('0.835', 'It is 83.5%')).toBe(true);
+    expect(leaks('0.83', 'It is 82%')).toBe(false);
+  });
+
+  it('a decimal read digit by digit names the decimal key', () => {
+    expect(leaks('0.83', 'It is zero point eight three')).toBe(true);
+    expect(leaks('0.83', 'It is zero point eight two')).toBe(false);
+  });
+
+  it('ordinary lesson text with "out of" or "point" but no number is never a mention', () => {
+    expect(numbersMentioned('Read the point I made out of context.').size).toBe(0);
+    expect(numbersMentioned('We made it out of clay.').size).toBe(0);
+  });
+
+  it('"point" after a non-number word is never a spoken decimal', () => {
+    expect(numbersMentioned('the point eight three').has('0.83')).toBe(false);
+  });
+
+  it('a spoken decimal reads only the digit words right after "point"', () => {
+    expect(numbersMentioned('zero point eight teen').has('0.8')).toBe(true);
+  });
+});
+
 describe('decimals, fractions and grouped thousands (fix round 1)', () => {
   it('a decimal key matches at its precision, with or without a leading zero', () => {
     expect(leaks('0.83', 'It is .83')).toBe(true);
