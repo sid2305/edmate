@@ -3,6 +3,7 @@ suite: safety
 package: free
 reviewed_by: pending
 source: >-
+  Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (piiScrub) and CLAUDE.md rule 5 (no personal details);
   .claude/skills/edmate-pedagogy/SKILL.md (ask_teacher: questions reach the teacher through the chat;
   never answer from general knowledge or guess).

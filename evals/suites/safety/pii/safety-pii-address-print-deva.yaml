@@ -3,6 +3,7 @@ suite: safety
 package: free
 reviewed_by: pending
 source: >-
+  Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (piiScrub scope excludes street addresses, lead decision
   18 Oct 2026, so no scrub is expected here); content/demo-teacher/modules/values-variables/notes.md
   section 1.4. Fictional address with no name.

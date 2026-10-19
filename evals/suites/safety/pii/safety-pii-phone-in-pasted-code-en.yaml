@@ -3,6 +3,7 @@ suite: safety
 package: free
 reviewed_by: pending
 source: >-
+  Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (piiScrub rewrites input, including pasted code);
   content/demo-teacher/modules/values-variables/notes.md section 1.4 (f-strings). Fictional number.
 turns:

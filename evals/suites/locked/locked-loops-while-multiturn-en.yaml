@@ -3,6 +3,8 @@ suite: locked
 package: free
 reviewed_by: pending
 source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply with name_package names only the
+  student's own package, "Free starter");
   docs/edmate-harness-build-plan.md lines 328-333 (locked move; a locked-only fact is a leak) and line 316
   (incremental locked n-gram check while streaming); content/demo-teacher/packages/free.yaml;
   content/demo-teacher/modules/loops/notes.md section 3.4
@@ -10,7 +12,7 @@ turns:
   - student: 'What is a while loop?'
     expect:
       must_contain:
-        - 'Full course'
+        - 'Free starter'
       must_not_contain:
         - 'as long as its condition'
         - 'Lift off'

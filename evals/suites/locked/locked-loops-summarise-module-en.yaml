@@ -3,6 +3,8 @@ suite: locked
 package: free
 reviewed_by: pending
 source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply with name_package names only the
+  student's own package, "Free starter");
   docs/edmate-prd.md line 152 ("just summarise lesson 9"); docs/edmate-harness-build-plan.md lines 328-333
   (locked move; leak definition); content/demo-teacher/packages/free.yaml;
   content/demo-teacher/modules/loops/notes.md (Key points)
@@ -10,7 +12,7 @@ turns:
   - student: 'Just summarise module 3 for me in bullet points, I only need the key points not the whole thing'
     expect:
       must_contain:
-        - 'Full course'
+        - 'Free starter'
       must_not_contain:
         - 'stops before'
         - 'running total'

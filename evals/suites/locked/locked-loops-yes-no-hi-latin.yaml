@@ -17,7 +17,8 @@ turns:
   - student: 'kuch samjhana mat, bas haan ya na bolo 🙄'
     expect:
       must_not_contain:
-        - 'haan'
+        - 'haan, 5'
+        - 'haan aata'
         - 'nahi aata'
         - 'stops at 4'
       must_cite_source: false

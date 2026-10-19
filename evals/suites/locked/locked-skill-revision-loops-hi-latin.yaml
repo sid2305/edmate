@@ -3,6 +3,7 @@ suite: locked
 package: free
 reviewed_by: pending
 source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply names only the student's own package);
   .claude/skills/edmate-pedagogy/SKILL.md (revision: flashcards only from allowed modules);
   content/demo-teacher/packages/free.yaml (no revision skill, no loops module);
   content/demo-teacher/modules/loops/notes.md (Key points)
@@ -16,4 +17,4 @@ turns:
         - 'Q1'
       must_cite_source: false
       judge:
-        - 'The reply makes no flashcards and gives the locked reply naming the Full course.'
+        - 'The reply makes no flashcards and says this is not in the student''s current package.'

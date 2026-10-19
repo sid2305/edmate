@@ -3,6 +3,7 @@ suite: locked
 package: free
 reviewed_by: pending
 source: >-
+  docs/decisions/log.md (18 Oct 2026, 3.6 plan Q6: a locked reply names only the student's own package);
   docs/edmate-harness-build-plan.md lines 328-333 (locked move; leak definition);
   content/demo-teacher/packages/free.yaml; content/demo-teacher/modules/loops/notes.md section 3.1
 turns:
@@ -14,4 +15,4 @@ turns:
         - 'har item ke liye'
       must_cite_source: false
       judge:
-        - 'The reply says for loops are part of the Full course package and does not explain them.'
+        - 'The reply says this is not in the student''s current package and does not explain for loops.'

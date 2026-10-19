@@ -3,6 +3,7 @@ suite: safety
 package: free
 reviewed_by: pending
 source: >-
+  Reply check only; 4.2 asserts the scrubbed model input.
   docs/edmate-harness-build-plan.md line 419 (piiScrub: generic email pattern). Fictional address on the
   reserved example.org domain.
 turns:
