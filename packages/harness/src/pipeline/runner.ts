@@ -12,7 +12,6 @@ import {
   type PedagogyDecision,
   type SafetyAlert,
   type SourceRef,
-  TeacherQuestionSchema,
   type TurnContext,
   TurnContextSchema,
   type TurnEvent,
@@ -22,7 +21,7 @@ import {
   type Usage,
   UsageSchema,
 } from '@edmate/contracts';
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { HelpState } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
@@ -71,6 +70,7 @@ import {
   STREAM_CLOSE_SETTLE_MS,
   TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
+import { openTeacherQuestion } from './teacherQuestion.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
 import { TraceBuilder } from './trace.js';
 import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
@@ -145,9 +145,6 @@ function ids(input: TurnInput): { sessionId: unknown; agentId: unknown; studentI
 
 /** generate's outcome when the turn was cancelled during or before it. */
 const CANCELLED = 'cancelled';
-
-/** findSimilar's result, checked like any port result. */
-const SimilarQuestionsSchema = z.array(TeacherQuestionSchema);
 
 /** A step result that passed its schema, or why it didn't. */
 type Checked<T> = { ok: true; value: T; ms: number } | { ok: false; ms: number; error?: unknown };
@@ -517,7 +514,7 @@ class Turn {
 
     // The TeacherQuestion is opened before done, so its id reaches the student (lead answer Q3).
     const questionId =
-      decision.move === 'ask_teacher' ? await this.openTeacherQuestion(scrubbed, e) : undefined;
+      decision.move === 'ask_teacher' ? await this.openTeacherQuestionLive(scrubbed, e) : undefined;
     if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
 
     // 9. postGuard on the whole reply, before done; a failure sends the safe reply. A post guard
@@ -543,41 +540,16 @@ class Turn {
   }
 
   /**
-   * findSimilar then open, within one budget, with the scrubbed text (never the raw input). Any
-   * failure or timeout is reported and gives no id: the turn still replies and commit (3.17)
-   * opens the question. A timed-out open may still land; 3.17 must open idempotently.
+   * findSimilar then open (`teacherQuestion.ts`'s shared helper), within one budget, with the
+   * scrubbed text (never the raw input). Any failure or timeout is reported and gives no id: the
+   * turn still replies and commit (3.17) opens the question. A timed-out open may still land;
+   * the store's dedup (migration 0011) makes that, and commit's own fallback, land once.
    */
-  private async openTeacherQuestion(input: TurnInput, e: Entitled): Promise<string | undefined> {
+  private async openTeacherQuestionLive(input: TurnInput, e: Entitled): Promise<string | undefined> {
     const text = input.text;
     if (text === undefined || text.trim() === '') return undefined;
-    const ent = e.entitlement;
-    const store = this.deps.teacherQuestions;
     const r = await runWithTimeout(
-      async () => {
-        const similar = SimilarQuestionsSchema.parse(await store.findSimilar(ent.teacherId, text));
-        if (similar.some((q) => q.teacherId !== ent.teacherId)) {
-          throw new HarnessError(
-            "TeacherQuestionStore.findSimilar returned another teacher's question",
-          );
-        }
-        const q = TeacherQuestionSchema.parse(
-          await store.open({
-            teacherId: ent.teacherId,
-            agentId: ent.agentId,
-            studentId: ent.studentId,
-            text,
-            similarIds: [...new Set(similar.map((s) => s.id))],
-          }),
-        );
-        if (
-          q.teacherId !== ent.teacherId ||
-          q.agentId !== ent.agentId ||
-          q.studentId !== ent.studentId
-        ) {
-          throw new HarnessError('TeacherQuestionStore.open returned a question for another turn');
-        }
-        return q.id;
-      },
+      () => openTeacherQuestion(this.deps.teacherQuestions, e.entitlement, text),
       TEACHER_QUESTION_TIMEOUT_MS,
       this.deps.clock,
     );

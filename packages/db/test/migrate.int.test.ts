@@ -299,6 +299,64 @@ describe.skipIf(!up)(
       }, TEST_URL);
     });
 
+    // Task 3.17: migration 0011 is additive only (a new index on existing columns) — it never
+    // drops or rewrites a row, so existing teacher_questions survive untouched; it also enforces
+    // the dedup the repository relies on (teacherQuestionsRepo.open), checked here at the raw SQL
+    // level, independent of that repository.
+    it('0011’s teacher_questions dedup index survives a re-run with existing data and rejects a duplicate open question', async () => {
+      await admin(async (c) => {
+        await c.query(`insert into users (id, name, locale, market, role)
+          values ('usr_3_17_fixture', 'T', 'en', 'test', 'teacher')`);
+        await c.query(
+          `insert into agents (id, teacher_id) values ('agt_3_17_fixture', 'usr_3_17_fixture')`,
+        );
+        // A pre-existing open question (as if migrated from before 0011): the migration must not
+        // touch or lose it.
+        await c.query(
+          `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+             values ('tq_3_17_pre', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                     'Why?', 'open')`,
+        );
+      }, TEST_URL);
+
+      await migrateDatabase(TEST_URL);
+
+      await admin(async (c) => {
+        const pre = await c.query(`select id from teacher_questions where id = 'tq_3_17_pre'`);
+        expect(pre.rowCount, 'the pre-existing row survives the migration').toBe(1);
+
+        const idx = await c.query<{ indisvalid: boolean; indisunique: boolean }>(
+          `select indisvalid, indisunique from pg_index
+             where indexrelid = 'teacher_questions_open_dedup_key'::regclass`,
+        );
+        expect(idx.rows).toHaveLength(1);
+        expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisunique: true });
+
+        // A second identical open question collides on the index …
+        await expect(
+          c.query(
+            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+               values ('tq_3_17_dup', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                       'Why?', 'open')`,
+          ),
+        ).rejects.toThrow(/teacher_questions_open_dedup_key/);
+        // … but once answered, the same (teacher, student, agent, text) can open again (the index
+        // is partial, `WHERE status = 'open'`).
+        await c.query(
+          `update teacher_questions set status = 'answered' where id = 'tq_3_17_pre'`,
+        );
+        await c.query(
+          `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+             values ('tq_3_17_reopen', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                     'Why?', 'open')`,
+        );
+        const reopened = await c.query(
+          `select id from teacher_questions where id = 'tq_3_17_reopen'`,
+        );
+        expect(reopened.rowCount).toBe(1);
+      }, TEST_URL);
+    }, 30_000);
+
     it('rejects a session that violates the 0009 package-pin constraints', async () => {
       await admin(async (c) => {
         // Self-contained fixture: a teacher, acting as its own student, and that teacher's agent.

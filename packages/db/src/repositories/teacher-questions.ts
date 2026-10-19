@@ -5,7 +5,6 @@ import { z } from 'zod';
 import type { Db } from '../client.js';
 import { agents, teacherQuestions } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
-import { insertSelect, written } from './insert.js';
 import {
   toTeacherQuestion,
   toTeacherQuestionForTeacher,
@@ -76,6 +75,13 @@ export function teacherQuestionsRepo(db: Db) {
      * Opens a question from the scope's student to one of the scope's teacher's agents (another
      * teacher's agent is `not_found`). Every `similarIds` entry must be one of that teacher's
      * questions (`scope`).
+     *
+     * Insert-or-return-existing (task 3.17, migration 0011's partial unique index on
+     * `(teacher_id, student_id, agent_id, md5(text))` where `status = 'open'`): the live (3.7)
+     * attempt and commit's fallback (3.17) can both try to open "the same" question for one turn
+     * (a timed-out live attempt may still land), so a second identical open converges on the
+     * first row — `similarIds` and `moduleHint` from a second, redundant call are discarded; the
+     * first open's are kept.
      */
     async open(
       scope: StudentScope,
@@ -88,8 +94,15 @@ export function teacherQuestionsRepo(db: Db) {
       const id = randomUUID();
       const createdAt = new Date().toISOString();
 
-      await translateWrite(method, () =>
+      const row = await translateWrite(method, () =>
         db.transaction(async (tx) => {
+          const [owner] = await tx
+            .select({ id: agents.id })
+            .from(agents)
+            .where(and(eq(agents.id, q.agentId), eq(agents.teacherId, teacherId)))
+            .for('key share');
+          if (!owner) throw new RepositoryError('not_found', method);
+
           if (similarIds.length > 0) {
             const owned = await tx
               .select({ id: teacherQuestions.id })
@@ -103,41 +116,54 @@ export function teacherQuestionsRepo(db: Db) {
               .for('key share');
             if (owned.length !== similarIds.length) throw new RepositoryError('scope', method);
           }
-          const result = await tx.execute(
-            insertSelect(
-              teacherQuestions,
-              [
-                [teacherQuestions.id, sql`${id}::text`],
-                [teacherQuestions.teacherId, sql`${agents.teacherId}`],
-                [teacherQuestions.agentId, sql`${agents.id}`],
-                [teacherQuestions.studentId, sql`${studentId}::text`],
-                [teacherQuestions.text, sql`${q.text}::text`],
-                [teacherQuestions.moduleHint, sql`${q.moduleHint ?? null}::text`],
-                // sql.param binds one text[] value (a bare array in a template expands to a list).
-                [teacherQuestions.similarIds, sql`${sql.param(similarIds)}::text[]`],
-                [teacherQuestions.createdAt, sql`${createdAt}::timestamptz`],
-              ],
-              sql`from ${agents} where ${and(eq(agents.id, q.agentId), eq(agents.teacherId, teacherId))}`,
-            ),
-          );
-          if (written(result) !== 1) throw new RepositoryError('not_found', method);
+
+          // Drizzle's onConflictDoNothing() only infers a conflict target from plain columns
+          // (drizzle-orm/pg-core's PgInsertBase.onConflictDoNothing types `target` as
+          // IndexColumn | IndexColumn[]), not an expression like migration 0011's `md5(text)`;
+          // Postgres itself requires `ON CONFLICT`'s target to match the index expression
+          // exactly (else `42P10 invalid_column_reference`), so this is a raw insert — with bare
+          // (table-unqualified) column names via `sql.identifier` in both the column list and the
+          // conflict target: an INSERT's column list and ON CONFLICT target both reject a
+          // table-qualified name (`"teacher_questions"."id"`) with a plain syntax error (`42601`).
+          const col = (c: { name: string }) => sql.identifier(c.name);
+          await tx.execute(sql`
+            insert into ${teacherQuestions}
+              (${col(teacherQuestions.id)}, ${col(teacherQuestions.teacherId)},
+               ${col(teacherQuestions.agentId)}, ${col(teacherQuestions.studentId)},
+               ${col(teacherQuestions.text)}, ${col(teacherQuestions.moduleHint)},
+               ${col(teacherQuestions.similarIds)}, ${col(teacherQuestions.createdAt)})
+            values (
+              ${id}::text, ${teacherId}::text, ${q.agentId}::text, ${studentId}::text,
+              ${q.text}::text, ${q.moduleHint ?? null}::text,
+              ${sql.param(similarIds)}::text[], ${createdAt}::timestamptz
+            )
+            on conflict (
+              ${col(teacherQuestions.teacherId)}, ${col(teacherQuestions.studentId)},
+              ${col(teacherQuestions.agentId)}, md5(${col(teacherQuestions.text)})
+            ) where ${col(teacherQuestions.status)} = 'open'
+            do nothing
+          `);
+
+          // Either the row this call just inserted, or the open row it collided with: the WHERE
+          // below names exactly the dedup index's key (plus `status = 'open'`, its predicate), so
+          // one of those two always matches; there is no third outcome to handle.
+          const [existing] = await tx
+            .select(common)
+            .from(teacherQuestions)
+            .where(
+              and(
+                eq(teacherQuestions.teacherId, teacherId),
+                eq(teacherQuestions.studentId, studentId),
+                eq(teacherQuestions.agentId, q.agentId),
+                eq(teacherQuestions.text, q.text),
+                eq(teacherQuestions.status, 'open'),
+              ),
+            )
+            .limit(1);
+          return existing!;
         }),
       );
-      return toTeacherQuestion(
-        {
-          id,
-          teacherId,
-          agentId: q.agentId,
-          studentId,
-          text: q.text,
-          moduleHint: q.moduleHint ?? null,
-          similarIds,
-          status: 'open',
-          createdAt: new Date(createdAt),
-          answeredAt: null,
-        },
-        method,
-      );
+      return toTeacherQuestion({ ...row, studentId }, method);
     },
 
     /** The scope's own questions to this teacher, newest first (at most 200). */

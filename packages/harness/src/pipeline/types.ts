@@ -7,6 +7,7 @@ import type {
   Chunk,
   Entitlement,
   EntitlementStore,
+  EvidenceEvent,
   Intent,
   Lang,
   LearnerProfile,
@@ -319,6 +320,13 @@ export interface CommitRecord {
    * opening failed or timed out: commit (3.17) then opens it.
    */
   teacherQuestionId?: string;
+  /**
+   * Topic-scored evidence from this turn, for `profiles.applyEvidence` (task 3.17; harness-internal
+   * — not a contracts change). Absent or empty today: no step upstream produces real, topic-scoped
+   * evidence yet (that needs route/3.3, the practice skill/5.6 and the topic map/6.1); commit calls
+   * `applyEvidence` only when this is non-empty.
+   */
+  evidence?: EvidenceEvent[];
 }
 
 export interface Steps {
