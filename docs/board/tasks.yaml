@@ -523,7 +523,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: planning
+  status: todo
   branch: m3/3.7-orchestrator
   model: plan:opus
 - id: '3.8'
@@ -628,7 +628,7 @@ tasks:
   model: null
 - id: '3.17'
   milestone: M3
-  title: 'Commit follow-ups from 3.8: open a TeacherQuestion when the move is ask_teacher, and apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with their db adapters'
+  title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
   accept: An ask_teacher turn creates exactly one teacher question scoped to that teacher and student; evidence updates the learner profile idempotently; tests on real Postgres.
   deps:
   - '3.8'
