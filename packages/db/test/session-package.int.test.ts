@@ -306,6 +306,24 @@ describe.skipIf(!up)(
     );
 
     it(
+      'turnConfigStoreFor(...).load ends the session exactly once under concurrent calls',
+      async () => {
+        await subscribe('pv_a');
+        const sid = await openSession();
+        await subscribe('pv_a_2');
+        await setSummary('[race] summary');
+        const e = await entitlement();
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () => turnConfigStoreFor(repos, { locales }).load(e, sid)),
+        );
+        expect(results).toEqual(Array.from({ length: 5 }, () => null));
+        expect(await summary()).toBeNull();
+        expect(await endedAt(sid)).not.toBeNull();
+      },
+      CASE_MS,
+    );
+
+    it(
       'endOnPackageChange works with no profile row, and refuses a session outside the scope',
       async () => {
         const evalScope = { studentId: EVAL_STUDENT, teacherId: 'tch_a' };

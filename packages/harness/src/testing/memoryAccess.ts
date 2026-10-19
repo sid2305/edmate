@@ -54,6 +54,23 @@ export interface MemorySession {
   helpState?: unknown;
 }
 
+/**
+ * The db's own invariant (migration 0009): `packageId` and `packageVersion` are both-or-neither,
+ * and an open session (`endedAt === null`) always carries a pin. A fixture that breaks either is
+ * a bug in the test, not a state the real adapter can reach, so this throws instead of silently
+ * reading a bad row.
+ */
+function assertValidSession(s: MemorySession): void {
+  if ((s.packageId === null) !== (s.packageVersion === null)) {
+    throw new Error(
+      `memory fixture: session ${s.id} has only one of packageId/packageVersion set`,
+    );
+  }
+  if (s.endedAt === null && s.packageId === null) {
+    throw new Error(`memory fixture: open session ${s.id} has no package pin`);
+  }
+}
+
 export interface AccessWorld {
   agents: MemoryAgent[];
   /** Every immutable package version. */
@@ -218,46 +235,52 @@ export function memoryTurnConfigStore(world: AccessWorld): MemoryTurnConfigStore
     calls,
     load(e, sessionId) {
       calls.push({ e, sessionId });
-      // ADR-0004 Decision 3: the session must be open and the entitlement's student, teacher, agent.
-      const session = world.sessions.find(
-        (s) =>
-          s.id === sessionId &&
-          s.studentId === e.studentId &&
-          s.teacherId === e.teacherId &&
-          s.agentId === e.agentId &&
-          s.endedAt === null,
-      );
-      // Task 3.16: sessions follow the package. Pinned to another package or version: end it and
-      // load nothing. (The db adapter also clears the pair's last summary; there is no profile
-      // here.)
-      if (
-        session &&
-        (session.packageId !== e.packageId || session.packageVersion !== e.packageVersion)
-      ) {
-        session.endedAt = new Date().toISOString();
-        return Promise.resolve(null);
-      }
-      // Decision 4: the agent at exactly the session's server-set version.
-      const agent = session
-        ? world.agents
-            .find((a) => a.id === e.agentId && a.teacherId === e.teacherId)
-            ?.versions.find((v) => v.version === session.agentVersion)
-        : undefined;
-      const pkg = world.packages.find(
-        (p) =>
-          p.id === e.packageId && p.version === e.packageVersion && p.teacherId === e.teacherId,
-      );
-      const styleCard = agent
-        ? world.styleCards.find((c) => c.id === agent.styleCardId && c.teacherId === e.teacherId)
-        : undefined;
-      const locale = world.locales.find((l) => l.market === e.market);
-      return Promise.resolve(
-        session && agent && pkg && styleCard && locale
-          ? { agent, pkg, styleCard, locale, helpState: session.helpState }
-          : null,
-      );
+      // Async, so a bad fixture rejects like a real adapter error instead of throwing synchronously.
+      return Promise.resolve().then(() => loadNow(e, sessionId));
     },
   };
+
+  function loadNow(
+    e: Entitlement,
+    sessionId: string,
+  ): Awaited<ReturnType<TurnConfigStore['load']>> {
+    // ADR-0004 Decision 3: the session must be open and the entitlement's student, teacher, agent.
+    const session = world.sessions.find(
+      (s) =>
+        s.id === sessionId &&
+        s.studentId === e.studentId &&
+        s.teacherId === e.teacherId &&
+        s.agentId === e.agentId &&
+        s.endedAt === null,
+    );
+    if (session) assertValidSession(session);
+    // Task 3.16: sessions follow the package. Pinned to another package or version: end it and
+    // load nothing. (The db adapter also clears the pair's last summary; there is no profile
+    // here.)
+    if (
+      session &&
+      (session.packageId !== e.packageId || session.packageVersion !== e.packageVersion)
+    ) {
+      session.endedAt = new Date().toISOString();
+      return null;
+    }
+    // Decision 4: the agent at exactly the session's server-set version.
+    const agent = session
+      ? world.agents
+          .find((a) => a.id === e.agentId && a.teacherId === e.teacherId)
+          ?.versions.find((v) => v.version === session.agentVersion)
+      : undefined;
+    const pkg = world.packages.find(
+      (p) => p.id === e.packageId && p.version === e.packageVersion && p.teacherId === e.teacherId,
+    );
+    const styleCard = agent
+      ? world.styleCards.find((c) => c.id === agent.styleCardId && c.teacherId === e.teacherId)
+      : undefined;
+    const locale = world.locales.find((l) => l.market === e.market);
+    return session && agent && pkg && styleCard && locale
+      ? { agent, pkg, styleCard, locale, helpState: session.helpState }
+      : null;
+  }
 }
 
 // ---- a two-teacher world --------------------------------------------------------------------

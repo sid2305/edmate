@@ -26,6 +26,16 @@ Nothing skipped (no `SKIPPED` line in the db run).
 | red run (db) | `session-package.int.test.ts` failed in setup before the repository change (seed and repo had no pin) |
 | `python3 .githooks/secret-scan.py --all` | exit 0 |
 
+### 19 Oct 2026 fix round (build-error-resolver)
+
+| Command | Result (trimmed) |
+|---|---|
+| `corepack pnpm turbo run typecheck lint --filter=@edmate/db... --filter=@edmate/harness...` | `Tasks: 13 successful, 13 total` |
+| `corepack pnpm turbo run test --filter=@edmate/db... --filter=@edmate/harness... --force` (Postgres up, nothing skipped) | db: `Test Files 22 passed (22)` · `Tests 421 passed (421)`; harness: `Test Files 34 passed (34)` · `Tests 2118 passed (2118)` |
+| `python3 .githooks/secret-scan.py --all` | no output, exit 0 |
+
+New/changed tests in this round: `messages.append also refuses an ended session (like saveHelpState)` (`session-state.int.test.ts`); `an open session with no package pin is a bad fixture: load throws` and `a session with only one of packageId/packageVersion is a bad fixture: load throws` (`memoryAccess.test.ts`, plus the existing "no package pin" case updated to an ended session); `turnConfigStoreFor(...).load ends the session exactly once under concurrent calls` (`session-package.int.test.ts`).
+
 Migration path used in tests: all three. `ses_ok` (active, own agent) and `ses_paused` (paused,
 own agent) were **backfilled**; `ses_other` (live subscription is another agent's package),
 `ses_lapsed` (ended subscription), `ses_none` (no subscription) and `ses_preview` (teacher
@@ -111,3 +121,9 @@ Decided: the method returns `{ ended: true }` when it ended the session, `{ ende
 Why: retries are safe, a cross-tenant call still fails closed for the isolation grid, and tests can see which call did the work.
 Alternatives: return void; throw on an already-ended session.
 Reversible: yes.
+
+### 19 Oct 2026 · 3.16 0009's FK and both CHECKs are added `NOT VALID` then validated in separate statements; the plain `CREATE INDEX` stays as it is · decided by build-error-resolver (fix round) · risk: low
+Decided: `sessions_package_version_fk`, `sessions_package_pin_complete` and `sessions_open_has_package` are each added `NOT VALID` and validated by a following `ALTER TABLE ... VALIDATE CONSTRAINT`, so the ACCESS EXCLUSIVE lock needed to add them is held only briefly and the table-scan runs under `VALIDATE CONSTRAINT`'s lighter SHARE UPDATE EXCLUSIVE lock instead. The index stays a plain (non-`CONCURRENTLY`) `CREATE INDEX`: drizzle runs every migration file in one transaction, and `CREATE INDEX CONCURRENTLY` cannot run inside a transaction, so splitting it out would need a second migration file for no real benefit on a table this small.
+Why: minimise how long `sessions` is unavailable for reads and writes while 0009 runs, without changing the schema or the backfill.
+Alternatives: leave the FK and CHECKs as plain `ADD CONSTRAINT` (longer lock); move the index to its own non-transactional migration.
+Reversible: yes; a later migration can re-order or re-validate.

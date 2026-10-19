@@ -21,6 +21,8 @@ DECLARE
 BEGIN
 	SELECT count(*) INTO already_ended FROM "sessions" WHERE "ended_at" IS NOT NULL;
 
+	-- Pins an open session to today's live subscription; a session that stayed open across a
+	-- package change before 0009 keeps its earlier history (there's no real data yet).
 	UPDATE "sessions" SET "package_id" = pv."package_id", "package_version" = pv."version", "updated_at" = now()
 	FROM "subscriptions" sub
 	JOIN "package_versions" pv ON pv."id" = sub."package_version_id"
@@ -50,7 +52,13 @@ BEGIN
 
 	RAISE NOTICE 'sessions package pin (3.16): % backfilled, % ended, % already ended', backfilled, ended, already_ended;
 END $$;--> statement-breakpoint
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_version_fk" FOREIGN KEY ("package_id","package_version") REFERENCES "public"."package_versions"("package_id","version") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+-- NOT VALID + a separate VALIDATE CONSTRAINT: each still takes ACCESS EXCLUSIVE to add, but only
+-- briefly (no full-table scan under the lock); the scan runs under VALIDATE CONSTRAINT, which only
+-- needs a SHARE UPDATE EXCLUSIVE lock, so reads and writes on "sessions" aren't blocked for long.
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_version_fk" FOREIGN KEY ("package_id","package_version") REFERENCES "public"."package_versions"("package_id","version") ON DELETE no action ON UPDATE no action NOT VALID;--> statement-breakpoint
 CREATE INDEX "sessions_package_id_package_version_idx" ON "sessions" USING btree ("package_id","package_version");--> statement-breakpoint
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_pin_complete" CHECK (("sessions"."package_id" is null) = ("sessions"."package_version" is null));--> statement-breakpoint
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_open_has_package" CHECK ("sessions"."ended_at" is not null or "sessions"."package_id" is not null);
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_package_pin_complete" CHECK (("sessions"."package_id" is null) = ("sessions"."package_version" is null)) NOT VALID;--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_open_has_package" CHECK ("sessions"."ended_at" is not null or "sessions"."package_id" is not null) NOT VALID;--> statement-breakpoint
+ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_package_version_fk";--> statement-breakpoint
+ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_package_pin_complete";--> statement-breakpoint
+ALTER TABLE "sessions" VALIDATE CONSTRAINT "sessions_open_has_package";

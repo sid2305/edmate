@@ -214,11 +214,12 @@ describe.skipIf(!up)(`migration 0009 on Postgres${up ? '' : ` (${SKIP_REASON})`}
   });
 
   it('from now on an open session must carry a complete pin to a real package version', async () => {
+    let newSessionCount = 0;
     const insert = (pkg: string | null, version: number | null, endedAt: string | null) =>
       raw.query(
         `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, ended_at)
-         values ('ses_new_' || floor(random() * 1e9)::text, 'stu_1', 'tch_a', 'agt_a', 1, $1, $2, $3)`,
-        [pkg, version, endedAt],
+         values ($4, 'stu_1', 'tch_a', 'agt_a', 1, $1, $2, $3)`,
+        [pkg, version, endedAt, `ses_new_${++newSessionCount}`],
       );
     await expect(insert(null, null, null)).rejects.toThrow(/sessions_open_has_package/);
     await expect(insert('pkg_a', null, null)).rejects.toThrow(/sessions_package_pin_complete/);

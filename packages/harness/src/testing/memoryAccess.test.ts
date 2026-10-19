@@ -315,7 +315,29 @@ describe('memoryTurnConfigStore (ADR-0004)', () => {
     const s = world.sessions.find((x) => x.id === 'ses_1a')!;
     s.packageId = null;
     s.packageVersion = null;
+    s.endedAt = '2026-10-10T00:00:00.000Z';
     expect(await memoryTurnConfigStore(world).load(e, 'ses_1a')).toBeNull();
+  });
+
+  it('an open session with no package pin is a bad fixture: load throws', async () => {
+    const world = twoTeacherWorld();
+    const e = await mustResolve({ studentId: S.one, agentId: 'agt_a', source: 'subscription' });
+    const s = world.sessions.find((x) => x.id === 'ses_1a')!;
+    s.packageId = null;
+    s.packageVersion = null;
+    await expect(memoryTurnConfigStore(world).load(e, 'ses_1a')).rejects.toThrow(
+      /open session/,
+    );
+  });
+
+  it('a session with only one of packageId/packageVersion is a bad fixture: load throws', async () => {
+    const world = twoTeacherWorld();
+    const e = await mustResolve({ studentId: S.one, agentId: 'agt_a', source: 'subscription' });
+    const s = world.sessions.find((x) => x.id === 'ses_1a')!;
+    s.packageVersion = null;
+    await expect(memoryTurnConfigStore(world).load(e, 'ses_1a')).rejects.toThrow(
+      /only one of/,
+    );
   });
 
   it('a pinned version that is gone, a missing style card, package or locale give null', async () => {

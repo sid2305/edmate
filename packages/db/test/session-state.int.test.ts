@@ -97,6 +97,29 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
     expect(await helpStateOf(id)).toEqual({});
   });
 
+  it('messages.append also refuses an ended session (like saveHelpState)', async () => {
+    const transcripts = transcriptStoreFor(repos, own);
+    const { id } = await repos.sessions.create(own, {
+      agentId: ids.agent('A'),
+      agentVersion: 1,
+      packageId: ids.pkg('A'),
+      packageVersion: 1,
+    });
+    const before = await repos.messages.history(own, id, 200);
+    await raw.query('update sessions set ended_at = now() where id = $1', [id]);
+    expect(
+      await kind(
+        transcripts.append(id, {
+          id: 'msg_on_ended',
+          role: 'student',
+          text: 'late message',
+          createdAt: '2026-10-18T10:00:00.000Z',
+        }),
+      ),
+    ).toBe('not_found');
+    expect(await repos.messages.history(own, id, 200)).toEqual(before);
+  });
+
   it('a value over LIMITS.helpStateMaxJsonLength is refused before any write', async () => {
     const store = sessionStateStoreFor(repos, own);
     await store.saveHelpState(ids.session('1A'), { v: 1, keep: true });
