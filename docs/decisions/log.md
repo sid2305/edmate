@@ -10,6 +10,22 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 4.0c "Suite failed to load" is reported alongside the load-error line, not instead of it · decided by tdd-guide · risk: low
+Decided: when a suite's load throws, `validateSuites` still pushes the `"<suite>: <load error message>"` problem (per-file, naming the real cause) *and*, for each affected guard under `requireAllGuards`, a second `"<guard>: suite failed to load"` line — not a replacement of the first.
+Why: the review finding was about a guard folder being reported as merely "empty" when the real cause (a load error) was knowable; dropping the load-error line would lose that cause, and a reader scanning guard-level problems still needs the per-guard line to know which guard is affected.
+Alternatives: fold the guard-level line into the load-error line (one line that names both the suite and the guard); only emit the guard-level line and drop the per-suite load error.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0c loadCasesWithFiles is exported alongside loadCasesFromDir · decided by tdd-guide · risk: low
+Decided: `loader.ts` exports `loadCasesWithFiles` (and its `LoadedCaseFile` type) publicly from `index.ts`, not just internally to `suites.ts`.
+Why: every other loader export is already public, and any future caller needing a case paired with its file (not just `suites.ts`) should reach for this instead of re-deriving the pairing itself.
+Alternatives: keep it package-internal (export only from `loader.js`, not `index.ts`) until a second caller exists.
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · 4.1 The guard chain fails closed on every failure · decided by lead (plan) and tdd-guide (details) · risk: high
 Decided: a throw, a result that fails `GuardResultSchema`/`UsageSchema`, a guard past its own time slice (or a non-positive slice), a step cancelled before or during a guard, an empty list, an undeclared or wrong-phase guard, and a list out of declared order all end the chain non-ok (`outcome: 'failed'` with a `failure` cause, fix round 1); later guards never run and the chain never throws.
 Why: guards protect students; any doubt must stop the reply, and the calling step's own fail-closed policy still applies on top.

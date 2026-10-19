@@ -684,7 +684,7 @@ tasks:
   accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
   deps:
   - '4.0'
-  status: running
+  status: done
   branch: m4/4.0c-validator-followups
   model: build:sonnet
 - id: 4.0d
