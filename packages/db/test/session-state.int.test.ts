@@ -86,7 +86,12 @@ describe.skipIf(!up)(`sessionStateStoreFor on Postgres${up ? '' : ` (${SKIP_REAS
     expect(await kind(store.saveHelpState('ses_nowhere', { v: 1 }))).toBe('not_found');
     expect(await helpStateOf(ids.session('2A'))).toEqual(before);
 
-    const { id } = await repos.sessions.create(own, { agentId: ids.agent('A'), agentVersion: 1 });
+    const { id } = await repos.sessions.create(own, {
+      agentId: ids.agent('A'),
+      agentVersion: 1,
+      packageId: ids.pkg('A'),
+      packageVersion: 1,
+    });
     await raw.query('update sessions set ended_at = now() where id = $1', [id]);
     expect(await kind(store.saveHelpState(id, { v: 1 }))).toBe('not_found');
     expect(await helpStateOf(id)).toEqual({});

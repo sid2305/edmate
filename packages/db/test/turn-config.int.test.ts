@@ -16,6 +16,7 @@ import {
   turnConfigStoreFor,
 } from '../src/index.js';
 import { locales, packMarket, seedAccess } from './access-seed.js';
+import { packageConfig } from './isolation-seed.js';
 import {
   createDatabase,
   dropDatabase,
@@ -33,6 +34,7 @@ let repos: Repositories;
 let raw: pg.Client;
 
 const AT = '2026-10-18T10:00:00.000Z';
+const ONE_A = { studentId: 'stu_1', teacherId: 'tch_a' };
 const input: TurnInput = {
   ...demoTurnInput,
   studentId: 'stu_1',
@@ -146,9 +148,19 @@ describe.skipIf(!up)(`turnConfigStoreFor on Postgres${up ? '' : ` (${SKIP_REASON
   it('a pinned version that is gone, a missing style card, package or locale give null', async () => {
     const e = await entitlementFor();
     expect(await turnConfigStoreFor(repos, { locales: () => null }).load(e, 'ses_1a')).toBeNull();
+    // A package version row that is not the entitlement teacher's (corrupt data): null. (An
+    // entitlement naming another version than the session's pin ends the session: task 3.16,
+    // session-package.int.test.ts.)
+    await raw.query(
+      `insert into package_versions (id, teacher_id, package_id, version, config) values ('pv_a_foreign', 'tch_b', 'pkg_a', 5, $1)`,
+      [JSON.stringify(packageConfig('A', 5))],
+    );
+    await raw.query(`update sessions set package_version = 5 where id = 'ses_1a'`);
     expect(
-      await turnConfigStoreFor(repos, { locales }).load({ ...e, packageVersion: 9 }, 'ses_1a'),
+      await turnConfigStoreFor(repos, { locales }).load({ ...e, packageVersion: 5 }, 'ses_1a'),
     ).toBeNull();
+    await raw.query(`update sessions set package_version = 1 where id = 'ses_1a'`);
+    expect((await repos.sessions.get(ONE_A, 'ses_1a'))?.endedAt).toBeNull();
     await raw.query(`update sessions set agent_version = 7 where id = 'ses_1a'`);
     expect(await turnConfigStoreFor(repos, { locales }).load(e, 'ses_1a')).toBeNull();
     await raw.query(`update sessions set agent_version = 1 where id = 'ses_1a'`);

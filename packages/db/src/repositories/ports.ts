@@ -187,6 +187,8 @@ export interface TurnConfigStoreOptions {
  * student x teacher scope and must be this agent's and open; the agent is loaded at exactly the
  * session row's server-set `agent_version`, the package at the entitlement's version, and the
  * style card row `agent.styleCardId` names (each version is its own immutable row).
+ * The session must also be pinned to the entitlement's package and version (task 3.16); if not,
+ * it is ended (see `sessions.endOnPackageChange`) and the load is null.
  */
 export function turnConfigStoreFor(
   repos: Repositories,
@@ -199,6 +201,17 @@ export function turnConfigStoreFor(
         sessionId,
       );
       if (session === null || session.agentId !== e.agentId || session.endedAt !== null) {
+        return null;
+      }
+      // Task 3.16: sessions follow the package. Any change of package or version since the
+      // session was created ends it and clears the pair's last summary, so earlier history,
+      // sources and summary never reach the model; the caller starts a fresh session. The scope
+      // is the entitlement's, never the client's.
+      if (session.packageId !== e.packageId || session.packageVersion !== e.packageVersion) {
+        await repos.sessions.endOnPackageChange(
+          { studentId: e.studentId, teacherId: e.teacherId },
+          sessionId,
+        );
         return null;
       }
       const scope = { teacherId: e.teacherId };

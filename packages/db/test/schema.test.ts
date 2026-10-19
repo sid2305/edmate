@@ -330,15 +330,47 @@ describe('cost alarm migration (task 2.5): existing audit rows keep their role',
 /** `ALTER TABLE "t" ALTER COLUMN "c" DROP NOT NULL;`: one statement, nothing else in it. */
 const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/g;
 
+/**
+ * `UPDATE "t" SET`: the only data updates a migration may make, per file, each reviewed. Task 3.16
+ * (lead answer and security plan review): 0009 backfills the package pin of open sessions from
+ * their entitlement, or ends them and clears that pair's last summary. No row is deleted.
+ */
+const REVIEWED_UPDATES: Record<string, string[]> = {
+  '0009_session_package_pin.sql': ['sessions', 'learner_profiles', 'sessions'],
+};
+const UPDATE_SET = /UPDATE "(\w+)" SET/g;
+
 describe('migrations are create-only', () => {
   it('has at least one migration and none drop, truncate, delete or update data', () => {
     const files = migrationSql();
     expect(files.length).toBeGreaterThan(0);
     for (const { file, sql } of files) {
       // Relaxing NOT NULL loses no data (lead, task 2.4 fix round 1); everything else is checked.
-      const rest = sql.replace(RELAX_NOT_NULL, '');
+      let rest = sql.replace(RELAX_NOT_NULL, '');
+      if (file in REVIEWED_UPDATES) rest = rest.replace(UPDATE_SET, '');
       expect(DESTRUCTIVE_SQL.test(rest), `${file} is destructive`).toBe(false);
     }
+  });
+
+  it('updates data only where a reviewed task did (task 3.16)', () => {
+    const updated = Object.fromEntries(
+      migrationSql()
+        .map(({ file, sql }) => [file, [...sql.matchAll(UPDATE_SET)].map((m) => m[1]!)] as const)
+        .filter(([, tables]) => tables.length > 0),
+    );
+    expect(updated).toEqual(REVIEWED_UPDATES);
+  });
+
+  it('0009 sets only the pin, ended_at and last_summary (and updated_at)', () => {
+    const sql = migrationSql().find((f) => f.file === '0009_session_package_pin.sql')!.sql;
+    const sets = [...sql.matchAll(/UPDATE "\w+" SET ([^\n]+)/g)].map((m) =>
+      [...m[1]!.matchAll(/"(\w+)" =/g)].map((c) => c[1]),
+    );
+    expect(sets).toEqual([
+      ['package_id', 'package_version', 'updated_at'],
+      ['last_summary', 'updated_at'],
+      ['ended_at', 'updated_at'],
+    ]);
   });
 
   it('relaxes NOT NULL only where a reviewed task did', () => {

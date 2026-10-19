@@ -18,6 +18,14 @@ import {
 import { testDeps } from './testSteps.js';
 
 const AT = '2026-10-17T10:00:00.000Z';
+/** A smaller package of agt_a (only module a1): the downgrade target. */
+const pkgSmall = { ...twoTeacherWorld().packages[0]!, id: 'pkg_a_small', name: 'pkg_a_small v1' };
+/** Moves stu_1's subscription with teacher A to another package version. */
+function moveSub(w: AccessWorld, packageId: string, packageVersion: number): void {
+  const sub = w.subscriptions.find((x) => x.id === 'sub_1a')!;
+  sub.packageId = packageId;
+  sub.packageVersion = packageVersion;
+}
 const OPTS: AccessOptions = { market: 'IN' };
 
 function resolve(
@@ -265,6 +273,49 @@ describe('memoryTurnConfigStore (ADR-0004)', () => {
     const e = await mustResolve({ studentId: S.one, agentId: 'agt_a', source: 'subscription' });
     expect(await memoryTurnConfigStore(twoTeacherWorld()).load(e, sessionId)).toBeNull();
     expect(await entitleWith({ studentId: S.one, agentId: 'agt_a', sessionId })).toBe('no_access');
+  });
+
+  // Task 3.16: sessions follow the package, as the db adapter.
+  it.each([
+    ['a downgrade to another package', (w: AccessWorld) => moveSub(w, 'pkg_a_small', 1)],
+    ['a new version of the same package', (w: AccessWorld) => moveSub(w, 'pkg_a', 1)],
+  ])(
+    '%s: load gives null, ends the session, and entitle gives no_access',
+    async (_label, change) => {
+      const world = twoTeacherWorld();
+      world.packages.push(pkgSmall);
+      change(world);
+      const e = await mustResolve(
+        { studentId: S.one, agentId: 'agt_a', source: 'subscription' },
+        OPTS,
+        world,
+      );
+      const store = memoryTurnConfigStore(world);
+      expect(await store.load(e, 'ses_1a')).toBeNull();
+      expect(world.sessions.find((s) => s.id === 'ses_1a')?.endedAt).not.toBeNull();
+      // Already ended: still null, and the end time is not rewritten.
+      const ended = world.sessions.find((s) => s.id === 'ses_1a')?.endedAt;
+      expect(await store.load(e, 'ses_1a')).toBeNull();
+      expect(world.sessions.find((s) => s.id === 'ses_1a')?.endedAt).toBe(ended);
+      const fresh = twoTeacherWorld();
+      fresh.packages.push(pkgSmall);
+      change(fresh);
+      expect(
+        await entitleWith(
+          { studentId: S.one, agentId: 'agt_a', sessionId: 'ses_1a' },
+          { world: fresh },
+        ),
+      ).toBe('no_access');
+    },
+  );
+
+  it('a session with no package pin (ended before the pin existed) is never loaded', async () => {
+    const world = twoTeacherWorld();
+    const e = await mustResolve({ studentId: S.one, agentId: 'agt_a', source: 'subscription' });
+    const s = world.sessions.find((x) => x.id === 'ses_1a')!;
+    s.packageId = null;
+    s.packageVersion = null;
+    expect(await memoryTurnConfigStore(world).load(e, 'ses_1a')).toBeNull();
   });
 
   it('a pinned version that is gone, a missing style card, package or locale give null', async () => {

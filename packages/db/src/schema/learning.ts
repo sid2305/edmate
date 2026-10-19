@@ -7,6 +7,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -25,11 +26,18 @@ import {
   tstz,
   usageStatus,
 } from './_shared.js';
-import { agents, packages } from './agents.js';
+import { agents, packages, packageVersions } from './agents.js';
 import { topics } from './content.js';
 import { studentId, teacherId } from './users.js';
 
-/** A student's study session with one teacher's agent. The retention job applies. */
+/**
+ * A student's study session with one teacher's agent. The retention job applies.
+ *
+ * Task 3.16: a session is pinned to the package version its entitlement resolved to when it was
+ * created. When the entitlement's package or version changes, the session is ended (and the
+ * pair's last summary cleared), so nothing from a lapsed package reaches the model. Every open
+ * session has a pin; a session that had already ended before migration 0009 has none.
+ */
 export const sessions = pgTable(
   'sessions',
   {
@@ -40,6 +48,8 @@ export const sessions = pgTable(
       .notNull()
       .references(() => agents.id),
     agentVersion: integer('agent_version').notNull(),
+    packageId: text('package_id'),
+    packageVersion: integer('package_version'),
     /** Hint ladder state for the open problem. */
     helpState: jsonb('help_state')
       .notNull()
@@ -53,6 +63,18 @@ export const sessions = pgTable(
     index('sessions_teacher_id_student_id_idx').on(t.teacherId, t.studentId),
     index('sessions_student_id_idx').on(t.studentId),
     index('sessions_agent_id_idx').on(t.agentId),
+    // The pin names a real package version (the unique (package_id, version) key).
+    foreignKey({
+      name: 'sessions_package_version_fk',
+      columns: [t.packageId, t.packageVersion],
+      foreignColumns: [packageVersions.packageId, packageVersions.version],
+    }),
+    index('sessions_package_id_package_version_idx').on(t.packageId, t.packageVersion),
+    check(
+      'sessions_package_pin_complete',
+      sql`(${t.packageId} is null) = (${t.packageVersion} is null)`,
+    ),
+    check('sessions_open_has_package', sql`${t.endedAt} is not null or ${t.packageId} is not null`),
   ],
 );
 

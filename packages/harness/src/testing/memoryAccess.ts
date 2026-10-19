@@ -43,6 +43,12 @@ export interface MemorySession {
   agentId: string;
   /** Set server-side when the session was created. */
   agentVersion: number;
+  /**
+   * The package version the entitlement resolved to when the session was created (task 3.16);
+   * null only on a session that ended before the pin existed.
+   */
+  packageId: string | null;
+  packageVersion: number | null;
   endedAt: string | null;
   /** sessions.help_state as stored (ADR-0005); unset reads as `undefined`. Never validated here. */
   helpState?: unknown;
@@ -221,6 +227,16 @@ export function memoryTurnConfigStore(world: AccessWorld): MemoryTurnConfigStore
           s.agentId === e.agentId &&
           s.endedAt === null,
       );
+      // Task 3.16: sessions follow the package. Pinned to another package or version: end it and
+      // load nothing. (The db adapter also clears the pair's last summary; there is no profile
+      // here.)
+      if (
+        session &&
+        (session.packageId !== e.packageId || session.packageVersion !== e.packageVersion)
+      ) {
+        session.endedAt = new Date().toISOString();
+        return Promise.resolve(null);
+      }
       // Decision 4: the agent at exactly the session's server-set version.
       const agent = session
         ? world.agents
@@ -337,16 +353,20 @@ export function twoTeacherWorld(): AccessWorld {
       sub('sub_1b', S.one, T.B, 'pkg_b', 1, 'ended'),
       sub('sub_2b', S.two, T.B, 'pkg_b', 1, 'trial'),
     ],
+    // Each pinned (task 3.16) to what its entitlement resolves to in the tests.
     sessions: [
-      session('ses_1a', S.one, T.A, 'agt_a', 1),
-      { ...session('ses_1a_ended', S.one, T.A, 'agt_a', 2), endedAt: '2026-10-17T09:00:00.000Z' },
-      session('ses_1a_draft', S.one, T.A, 'agt_a_draft', 1),
-      session('ses_2a', S.two, T.A, 'agt_a', 2),
-      session('ses_1b', S.one, T.B, 'agt_b', 1),
-      session('ses_2b', S.two, T.B, 'agt_b', 1),
-      session('ses_preview_a', T.A, T.A, 'agt_a', 2),
-      session('ses_preview_a_draft', T.A, T.A, 'agt_a_draft', 1),
-      session('ses_eval_a', S.evalStudent, T.A, 'agt_a', 2),
+      session('ses_1a', S.one, T.A, 'agt_a', 1, 'pkg_a', 2),
+      {
+        ...session('ses_1a_ended', S.one, T.A, 'agt_a', 2, 'pkg_a', 2),
+        endedAt: '2026-10-17T09:00:00.000Z',
+      },
+      session('ses_1a_draft', S.one, T.A, 'agt_a_draft', 1, 'pkg_a_draft', 1),
+      session('ses_2a', S.two, T.A, 'agt_a', 2, 'pkg_a', 1),
+      session('ses_1b', S.one, T.B, 'agt_b', 1, 'pkg_b', 1),
+      session('ses_2b', S.two, T.B, 'agt_b', 1, 'pkg_b', 1),
+      session('ses_preview_a', T.A, T.A, 'agt_a', 2, 'pkg_a', 2),
+      session('ses_preview_a_draft', T.A, T.A, 'agt_a_draft', 1, 'pkg_a_draft', 1),
+      session('ses_eval_a', S.evalStudent, T.A, 'agt_a', 2, 'pkg_a', 2),
     ],
     locales: [demoLocalePack, localePackMinimal],
   };
@@ -377,6 +397,17 @@ function session(
   teacherId: string,
   agentId: string,
   agentVersion: number,
+  packageId: string,
+  packageVersion: number,
 ): MemorySession {
-  return { id, studentId, teacherId, agentId, agentVersion, endedAt: null };
+  return {
+    id,
+    studentId,
+    teacherId,
+    agentId,
+    agentVersion,
+    packageId,
+    packageVersion,
+    endedAt: null,
+  };
 }
