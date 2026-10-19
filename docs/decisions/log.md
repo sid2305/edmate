@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Pilot language: English only, with a Hindi/Hinglish safety net · decided by you · risk: high
+Decided: the agent teaches and replies only in English in both pilot markets (en-US, en-IN). No new Hindi or Hinglish teaching, prompt-pack or non-safety eval work. Safety guards still recognise Hindi and Hinglish input (distress keywords in romanised and Devanagari script, Devanagari-digit phone numbers and IDs), and the safety and locked seed cases in those languages stay. The existing non-safety Hinglish and Devanagari cases (leak, advice, persona, grounding) are frozen, not deleted. This replaces the language part of the 18 Oct pilot-market decision; the markets are unchanged.
+Why: focus. Indian students will still type Hinglish, so safety must catch it.
+Alternatives: English only everywhere (drop the safety net); English and the US only.
+Reversible: yes; Hindi locale content can be added later.
+
+---
+
 ### 18 Oct 2026 · 4.0c "Suite failed to load" is reported alongside the load-error line, not instead of it · decided by tdd-guide · risk: low
 Decided: when a suite's load throws, `validateSuites` still pushes the `"<suite>: <load error message>"` problem (per-file, naming the real cause) *and*, for each affected guard under `requireAllGuards`, a second `"<guard>: suite failed to load"` line — not a replacement of the first.
 Why: the review finding was about a guard folder being reported as merely "empty" when the real cause (a load error) was knowable; dropping the load-error line would lose that cause, and a reader scanning guard-level problems still needs the per-guard line to know which guard is affected.
