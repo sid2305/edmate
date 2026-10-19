@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Per-turn cost ceiling · decided by team lead · risk: medium
+Decided: A turn stops when its model cost passes a provisional 0.10 USD (configurable); a turn on a model with no price aborts rather than running unmetered. Billing context comes from the entitlement, never the request.
+Why: The spec requires a per-turn ceiling but sets no number; this is a placeholder until the cost data in 7.6.
+Alternatives: No default; let unpriced models run.
+Reversible: Yes, config.
+
 ### 18 Oct 2026 · 3.6 Composer: locked text kept out, distress wording, prompt-pack layout · decided by builder (tdd-guide), lead answers Q1–Q5 · risk: high
 Decided: the composer checks every retrieved chunk against the entitlement (teacher and allowed modules) before rendering, on every call and in every mode, and throws `LockedMaterialError` naming only an index; `decide.fallback` composes with no retrieved chunks, so a leaky context still gets a material-free `ask` prompt. Distress is chosen by `reason`, not by move: the distress pack plus its own `move-distress` line, with no style card, learner summary, disclaimer or teaching-question line. Packs are a flat directory of `set@<semver>.yaml` manifests and `<name>@<semver>.md` files; all prose comes from packs and code fills only fixed, allow-listed placeholders, checked at load time.
 Why: ADR-0003 (locked material never reaches a model, built in), build plan rule 6 (distress replies never teach), lead answers Q2 and Q5.
