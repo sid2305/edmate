@@ -1,23 +1,40 @@
 // The turn pipeline runner (build plan § Turn pipeline spec):
 //   admit → entitle → scrub → [ preGuard ‖ route ‖ buildContext ] → escalate | decide → generate
-//   → postGuard → done, then meter ‖ commit in the background, then the trace.
+//   → teacher_question (ask_teacher) → postGuard → done, then meter ‖ commit in the background,
+//   then the trace.
+//
+// Task 3.7 adds: the per-turn gateways billed to the entitlement (turnGateway.ts), usage priced
+// as it streams with the per-turn cost ceiling, `replace ''` before an error whenever text was
+// shown, cancellation (the consumer detaching, or `RunTurnOptions.cancel`), the TeacherQuestion
+// opened before `done`, and every `finished.background` failure logged (ids and error only).
 import {
   type Intent,
   type PedagogyDecision,
   type SafetyAlert,
   type SourceRef,
+  TeacherQuestionSchema,
   type TurnContext,
   TurnContextSchema,
   type TurnEvent,
   TurnEventSchema,
   type TurnInput,
   type TurnTrace,
+  type Usage,
+  UsageSchema,
 } from '@edmate/contracts';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { HelpState } from '../pedagogy/helpState.js';
-import { cancelSource, type CancelToken, isoAt } from './clock.js';
-import { InvalidEventError } from './errors.js';
+import { logBackground } from './backgroundLog.js';
+import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
+import {
+  errorName,
+  GenerateAttemptFailed,
+  HarnessError,
+  InvalidEventError,
+  UnpricedUsage,
+} from './errors.js';
 import { EventQueue } from './events.js';
+import { ceilingOf, TurnCost } from './generate/costCeiling.js';
 import {
   admitFailure,
   entitledMismatch,
@@ -49,10 +66,14 @@ import {
   ALERT_RETRY_START_MS,
   STEP_SPEC,
   type StepName,
+  STREAM_CLOSE_SETTLE_MS,
+  TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
 import { TraceBuilder } from './trace.js';
+import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
 import type {
+  BackgroundTask,
   BuiltContext,
   CommitRecord,
   DecideResult,
@@ -61,8 +82,11 @@ import type {
   PipelineDeps,
   StepEnv,
   Steps,
+  TurnBilling,
+  TurnGateway,
   TurnRun,
   TurnRunResult,
+  UsageRecorder,
 } from './types.js';
 
 /**
@@ -79,21 +103,47 @@ export const LAST_RESORT_DISTRESS_REPLY =
 export interface RunTurnOptions {
   deps: PipelineDeps;
   steps: Steps;
+  /**
+   * Cancels the turn (the CLI's Ctrl-C), the same as the consumer calling `return()` on
+   * `events`: generate stops at once and is not retried; postGuard and teacher_question are
+   * skipped; meter, commit (outcome `error`) and the trace still run.
+   */
+  cancel?: Cancel;
 }
 
 /** Runs one student turn. The stream ends with exactly one `done` or `error`; `finished` never rejects. */
 export function runTurn(input: TurnInput, opts: RunTurnOptions): TurnRun {
   const queue = new EventQueue<TurnEvent>();
   const background: TurnRunResult['background'] = [];
-  const turn = new Turn(input, opts.deps, opts.steps, queue, background);
-  const finished = turn.run().catch((error: unknown): TurnRunResult => {
-    // A runner bug: never leave the stream hanging.
-    background.push({ task: 'runner', error });
-    turn.endWithErrorIfOpen(PROVIDER_ERROR);
-    return { trace: null, background };
-  });
+  const cancel = cancelSource();
+  queue.onDetach(() => cancel.cancel());
+  opts.cancel?.onCancel(() => cancel.cancel());
+  const turn = new Turn(input, opts.deps, opts.steps, queue, background, cancel.token);
+  const finished = turn
+    .run()
+    .catch((error: unknown): TurnRunResult => {
+      // A runner bug: never leave the stream hanging.
+      background.push({ task: 'runner', error });
+      turn.endWithErrorIfOpen(PROVIDER_ERROR);
+      return { trace: null, background };
+    })
+    .then((result) => {
+      logBackground(opts.deps.log, { ...turn.ids, ...ids(input) }, result.background);
+      return result;
+    });
   return { events: queue, finished };
 }
+
+/** The input's ids as given (backgroundLog checks each before logging it). */
+function ids(input: TurnInput): { sessionId: unknown; agentId: unknown; studentId: unknown } {
+  return { sessionId: input.sessionId, agentId: input.agentId, studentId: input.studentId };
+}
+
+/** generate's outcome when the turn was cancelled during or before it. */
+const CANCELLED = 'cancelled';
+
+/** findSimilar's result, checked like any port result. */
+const SimilarQuestionsSchema = z.array(TeacherQuestionSchema);
 
 /** A step result that passed its schema, or why it didn't. */
 type Checked<T> = { ok: true; value: T; ms: number } | { ok: false; ms: number; error?: unknown };
@@ -110,7 +160,7 @@ function check<T>(r: TimedResult<unknown>, schema: z.ZodType<T>): Checked<T> {
 
 function timeoutOf(name: StepName): number {
   const ms = STEP_SPEC[name].timeoutMs;
-  if (ms === null) throw new Error(`step ${name} has no timeout`);
+  if (ms === null) throw new HarnessError(`step ${name} has no timeout`);
   return ms;
 }
 
@@ -123,6 +173,18 @@ class Turn {
   private terminated = false;
   /** What meter and commit see: the scrubbed input once the scrub passed; never unscrubbed text. */
   private safeInput: TurnInput;
+  /** Every usage the turn saw, against the per-turn ceiling. Set after entitle. */
+  private cost: TurnCost;
+  /** Usage for the `meter` step: step-reported usage plus usage from unmetered gateways. */
+  private readonly meterable: Usage[] = [];
+  /** Background work steps handed over (stream closes); settled, bounded, before `finished`. */
+  private readonly pending: Promise<void>[] = [];
+  /** Who the turn's model calls are billed to; set after entitle, from the entitlement only. */
+  private billing: TurnBilling | null = null;
+  /** The gateway for preGuard, route and postGuard (the agent's full policy). */
+  private guardGateway: TurnGateway | null = null;
+  /** Streamed text is on the student's screen and no `replace` cleared it yet. */
+  private shown = false;
 
   constructor(
     private readonly input: TurnInput,
@@ -130,14 +192,20 @@ class Turn {
     private readonly steps: Steps,
     private readonly queue: EventQueue<TurnEvent>,
     private readonly background: TurnRunResult['background'],
+    private readonly cancelled: CancelToken,
   ) {
     this.safeInput = withoutText(input);
+    this.cost = new TurnCost(deps.priceUsage, 0);
+  }
+
+  get ids(): { turnId: string } {
+    return { turnId: this.turnId };
   }
 
   // ---- events -------------------------------------------------------------------------------
 
   private send(e: TurnEvent): void {
-    if (this.terminated) throw new Error(`event after the end of the turn: ${e.type}`);
+    if (this.terminated) throw new HarnessError(`event after the end of the turn: ${e.type}`);
     this.queue.push(TurnEventSchema.parse(e));
   }
 
@@ -154,6 +222,8 @@ class Turn {
   endWithErrorIfOpen(err: TurnError): void {
     if (this.terminated) return;
     this.terminated = true;
+    // Unguarded shown text never stays on screen, even when the runner itself failed.
+    if (this.shown) this.queue.push({ type: 'replace', text: '' });
     this.queue.push({ type: 'error', code: err.code, retryable: err.retryable });
     this.queue.close();
   }
@@ -163,7 +233,7 @@ class Turn {
   }
 
   /** An emitter for one step attempt: validates, drops late events, reports invalid ones. */
-  private emitter(cancel: CancelToken, state: { tokens: number; invalid: boolean }): Emit {
+  private emitter(cancel: CancelToken, state: { invalid: boolean }): Emit {
     return (e) => {
       if (cancel.cancelled || this.terminated) return;
       const parsed = TurnEventSchema.safeParse(e);
@@ -171,15 +241,76 @@ class Turn {
         state.invalid = true;
         throw new InvalidEventError(parsed.success ? parsed.data.type : 'unparseable');
       }
-      if (parsed.data.type === 'token') state.tokens++;
+      // A `replace ''` also tells the client to drop skill events shown so far (sse.ts).
+      if (parsed.data.type === 'token' || parsed.data.type === 'skill') this.shown = true;
       this.queue.push(parsed.data);
     };
   }
 
+  /** Clears unguarded streamed text off the student's screen (before a retry or an error). */
+  private clearShown(): void {
+    if (!this.shown) return;
+    this.shown = false;
+    this.send({ type: 'replace', text: '' });
+  }
+
   // ---- step helpers -------------------------------------------------------------------------
 
-  private env(input: TurnInput, cancel: CancelToken): StepEnv {
-    return { input, deps: this.deps, cancel, turnId: this.turnId };
+  /**
+   * A step's environment. Without a turn gateway (admit, entitle) every model call is refused
+   * and recording usage throws: those steps make no model call.
+   */
+  private env(
+    input: TurnInput,
+    cancel: CancelToken,
+    tg: TurnGateway | null = this.guardGateway,
+    task: BackgroundTask = 'runner',
+  ): StepEnv {
+    return {
+      input,
+      deps: this.deps,
+      cancel,
+      turnId: this.turnId,
+      gateway: tg === null ? refusingGateway('before entitle') : tg.gateway,
+      usage: this.recorder(tg, task),
+      report: (error) => this.background.push({ task, error }),
+      track: (settled) => {
+        this.pending.push(
+          settled.then(
+            () => undefined,
+            () => undefined,
+          ),
+        );
+      },
+    };
+  }
+
+  /**
+   * Prices each usage as it arrives, keeps it (trace, `done`, meter if unmetered), checks the
+   * ceiling. Unpriced usage stays in the trace (its tokens are real) but is never metered as
+   * free: it is reported as UnpricedUsage instead (2.4's meter records it as unpriced).
+   */
+  private recorder(tg: TurnGateway | null, task: BackgroundTask): UsageRecorder {
+    return {
+      record: (u) => {
+        if (tg === null) throw new HarnessError('no model usage before entitle');
+        const { usage, priced } = this.cost.priceOne(UsageSchema.parse(u));
+        this.trace.addUsage([usage]);
+        if (!priced) this.background.push({ task, error: new UnpricedUsage(usage.model) });
+        else if (!tg.metered) this.meterable.push(usage);
+        this.cost.assertWithin();
+      },
+      checkBeforeCall: () => this.cost.assertRoomForCall(),
+    };
+  }
+
+  /** Usage a step reported in its result: traced, counted against the ceiling, and metered. */
+  private addReported(usage: readonly Usage[]): void {
+    this.trace.addUsage(usage);
+    for (const u of usage) {
+      this.cost.addReported(u);
+      this.meterable.push({ ...u });
+    }
   }
 
   private timed<T>(
@@ -188,6 +319,33 @@ class Turn {
     fn: (env: StepEnv) => Promise<T>,
   ): Promise<TimedResult<T>> {
     return runWithTimeout((cancel) => fn(this.env(input, cancel)), ms, this.deps.clock);
+  }
+
+  /**
+   * Billing, the cost ceiling and the guards' gateway, once entitle passed. A gateway that
+   * can't be built is reported and replaced by one that refuses every call, so each step meets
+   * its own failure policy (and distress keywords still escalate).
+   */
+  private startBilling(e: Entitled): void {
+    this.billing = billingFor(e.entitlement, this.turnId);
+    const ceiling = ceilingOf(this.deps.maxTurnCostMicroUsd);
+    if (!ceiling.valid) {
+      this.background.push({
+        task: 'runner',
+        error: new HarnessError('maxTurnCostMicroUsd is invalid; every model call is refused'),
+      });
+    }
+    this.cost = new TurnCost(this.deps.priceUsage, ceiling.value);
+    try {
+      this.guardGateway = buildTurnGateway(
+        this.deps,
+        turnPolicies(e.agent.modelPolicy).guards,
+        this.billing,
+      );
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+      this.guardGateway = { gateway: refusingGateway('no turn gateway'), metered: true };
+    }
   }
 
   // ---- the turn -----------------------------------------------------------------------------
@@ -221,6 +379,7 @@ class Turn {
     const e = entitled.value;
     this.trace.step('admit', admitted.ms, 'ok');
     this.trace.step('entitle', ent.ms, 'ok');
+    this.startBilling(e);
 
     // 3a. Regex PII scrub, first; its time counts against step 3's one budget.
     const budget = timeoutOf('preGuard');
@@ -254,7 +413,7 @@ class Turn {
     this.trace.step('preGuard', sc.ms + pg.ms, pg.ok ? 'ok' : 'failed');
     if (pg.ok) {
       this.trace.addGuards(pg.value.guards);
-      this.trace.addUsage(pg.value.usage);
+      this.addReported(pg.value.usage);
     }
 
     const rt = check(rtRaw, RouteResultSchema);
@@ -262,7 +421,7 @@ class Turn {
     let attempt: TurnContext['attempt'];
     if (rt.ok) {
       ({ intent, attempt } = rt.value);
-      this.trace.addUsage(rt.value.usage);
+      this.addReported(rt.value.usage);
       this.trace.step('route', rt.ms, 'ok');
     } else {
       const fb = this.routeFallback(scrubbed, e);
@@ -323,17 +482,81 @@ class Turn {
       promptPack: decided.promptPack,
     };
 
-    // 8. generate: one retry; a TurnAbort is final.
+    // 8. generate: one retry on the fallback model; a TurnAbort or a cancel is final. Text the
+    // student saw is cleared before the error, so unguarded partial text never stays on screen.
     const gen = await this.generate(scrubbed, ctx, decision, decided.sources);
-    if ('code' in gen) {
-      this.endWithError(gen);
+    if (gen === CANCELLED || 'code' in gen) {
+      this.clearShown();
+      this.endWithError(gen === CANCELLED ? PROVIDER_ERROR : gen);
       return this.finish(e, { ...base, outcome: 'error' }, intent, decision.move);
     }
+
+    // The TeacherQuestion is opened before done, so its id reaches the student (lead answer Q3).
+    const questionId =
+      decision.move === 'ask_teacher' ? await this.openTeacherQuestion(scrubbed, e) : undefined;
+    if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
 
     // 9. postGuard on the whole reply, before done; a failure sends the safe reply.
     const replyText = await this.postGuard(scrubbed, ctx, decision, gen.draft);
     this.done();
-    return this.finish(e, { ...base, outcome: 'replied', replyText }, intent, decision.move);
+    return this.finish(
+      e,
+      {
+        ...base,
+        outcome: 'replied',
+        replyText,
+        ...(questionId === undefined ? {} : { teacherQuestionId: questionId }),
+      },
+      intent,
+      decision.move,
+    );
+  }
+
+  /**
+   * findSimilar then open, within one budget, with the scrubbed text (never the raw input). Any
+   * failure or timeout is reported and gives no id: the turn still replies and commit (3.17)
+   * opens the question. A timed-out open may still land; 3.17 must open idempotently.
+   */
+  private async openTeacherQuestion(input: TurnInput, e: Entitled): Promise<string | undefined> {
+    const text = input.text;
+    if (text === undefined || text.trim() === '') return undefined;
+    const ent = e.entitlement;
+    const store = this.deps.teacherQuestions;
+    const r = await runWithTimeout(
+      async () => {
+        const similar = SimilarQuestionsSchema.parse(await store.findSimilar(ent.teacherId, text));
+        if (similar.some((q) => q.teacherId !== ent.teacherId)) {
+          throw new HarnessError(
+            "TeacherQuestionStore.findSimilar returned another teacher's question",
+          );
+        }
+        const q = TeacherQuestionSchema.parse(
+          await store.open({
+            teacherId: ent.teacherId,
+            agentId: ent.agentId,
+            studentId: ent.studentId,
+            text,
+            similarIds: [...new Set(similar.map((s) => s.id))],
+          }),
+        );
+        if (
+          q.teacherId !== ent.teacherId ||
+          q.agentId !== ent.agentId ||
+          q.studentId !== ent.studentId
+        ) {
+          throw new HarnessError('TeacherQuestionStore.open returned a question for another turn');
+        }
+        return q.id;
+      },
+      TEACHER_QUESTION_TIMEOUT_MS,
+      this.deps.clock,
+    );
+    if (r.status === 'ok') return r.value;
+    this.background.push({
+      task: 'teacher_question',
+      error: r.status === 'error' ? r.error : new HarnessError('TeacherQuestionStore timed out'),
+    });
+    return undefined;
   }
 
   /**
@@ -391,7 +614,7 @@ class Turn {
     if (replyText === '') {
       this.background.push({
         task: 'runner',
-        error: new Error('no distress reply text; sent the last-resort reply'),
+        error: new HarnessError('no distress reply text; sent the last-resort reply'),
       });
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
@@ -460,7 +683,8 @@ class Turn {
     } catch (error) {
       this.background.push({
         task: 'runner',
-        error: kind === 'raw' ? new Error('distressCheck failed on the unscrubbed text') : error,
+        error:
+          kind === 'raw' ? new HarnessError('distressCheck failed on the unscrubbed text') : error,
       });
       return false;
     }
@@ -478,7 +702,7 @@ class Turn {
       if (r.status === 'ok') return;
       this.background.push({
         task: 'alert',
-        error: r.status === 'error' ? r.error : new Error('AlertSink.raise timed out'),
+        error: r.status === 'error' ? r.error : new HarnessError('AlertSink.raise timed out'),
       });
       await this.deps.clock.sleep(delay);
       delay = Math.min(delay * 2, ALERT_RETRY_MAX_MS);
@@ -506,7 +730,7 @@ class Turn {
       // `ask`; `redirect` only for distress (3.5's fallback never asks a distressed student).
       const move = fb.decision.move;
       if (move !== 'ask' && !(move === 'redirect' && ctx.intent === 'distress')) {
-        throw new Error(`decide.fallback returned move "${move}"`);
+        throw new HarnessError(`decide.fallback returned move "${move}"`);
       }
       this.trace.step('decide', d.ms, 'fallback');
       return fb;
@@ -522,31 +746,49 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
-  ): Promise<{ draft: string } | TurnError> {
+  ): Promise<{ draft: string } | TurnError | typeof CANCELLED> {
+    const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
     for (const attempt of ['primary', 'fallback'] as const) {
-      const state = { tokens: 0, invalid: false };
-      const raw = await this.timed(input, timeoutOf('generate'), (env) =>
-        this.steps.generate(
-          env,
-          { ctx, decision, sources, attempt },
-          this.emitter(env.cancel, state),
-        ),
+      // A turn cancelled before (or between) attempts makes no model call.
+      if (this.cancelled.cancelled) {
+        this.trace.step('generate', ms, 'failed');
+        return CANCELLED;
+      }
+      const state = { invalid: false };
+      const policy = attempt === 'primary' ? policies.primary : policies.retry;
+      const raw = await runWithTimeout(
+        (stepCancel) => {
+          const cancel = linkCancel(stepCancel, this.cancelled);
+          const tg = buildTurnGateway(this.deps, policy, this.billing as TurnBilling);
+          return this.steps.generate(
+            this.env(input, cancel, tg, 'generate'),
+            { ctx, decision, sources, attempt },
+            this.emitter(cancel, state),
+          );
+        },
+        timeoutOf('generate'),
+        this.deps.clock,
       );
       ms += raw.ms;
+      if (this.cancelled.cancelled) {
+        this.trace.step('generate', ms, 'failed');
+        return CANCELLED;
+      }
       const g = check(raw, GenerateResultSchema);
       if (g.ok && !state.invalid) {
-        this.trace.addUsage(g.value.usage);
         this.trace.step('generate', ms, attempt === 'primary' ? 'ok' : 'fallback');
         return { draft: g.value.draft };
       }
-      const policy = generateFailure(raw);
-      if (policy !== 'retry') {
+      // Every failed attempt is reported, by kind and error name only (never a foreign message).
+      this.background.push({ task: 'generate', error: attemptFailure(attempt, raw, state) });
+      const failure = generateFailure(raw);
+      if (failure !== 'retry') {
         this.trace.step('generate', ms, 'failed');
-        return policy;
+        return failure;
       }
       // Clear streamed text before the retry so the student never sees two half-replies.
-      if (attempt === 'primary' && state.tokens > 0) this.send({ type: 'replace', text: '' });
+      if (attempt === 'primary') this.clearShown();
     }
     this.trace.step('generate', ms, 'failed');
     return PROVIDER_ERROR;
@@ -566,7 +808,7 @@ class Turn {
     );
     if (p.ok) {
       this.trace.addGuards(p.value.guards);
-      this.trace.addUsage(p.value.usage);
+      this.addReported(p.value.usage);
       this.trace.step('postGuard', p.ms, 'ok');
       if (p.value.result === 'ok') return draft;
       this.send({ type: 'replace', text: p.value.text });
@@ -605,7 +847,8 @@ class Turn {
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
     };
-    const usage = this.trace.usage;
+    // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
+    const usage = this.meterable.map((u) => ({ ...u }));
     await Promise.all([
       usage.length > 0
         ? this.backgroundStep('meter', (env) =>
@@ -630,7 +873,28 @@ class Turn {
       this.background.push({ task: 'trace', error });
     }
     if (alertDelivered !== undefined) await alertDelivered;
+    await this.settlePending();
     return { trace, background: this.background };
+  }
+
+  /**
+   * Waits for stream closes the steps handed over, so a late `return()` failure is in
+   * `background` before it is logged. Bounded: past STREAM_CLOSE_SETTLE_MS it is reported and
+   * `finished` resolves anyway.
+   */
+  private async settlePending(): Promise<void> {
+    if (this.pending.length === 0) return;
+    const r = await runWithTimeout(
+      () => Promise.all(this.pending),
+      STREAM_CLOSE_SETTLE_MS,
+      this.deps.clock,
+    );
+    if (r.status === 'timeout') {
+      this.background.push({
+        task: 'generate',
+        error: new HarnessError('a model stream close did not settle in time'),
+      });
+    }
   }
 
   /** meter and commit: no timeout, never block the reply; a failure is reported, not thrown. */
@@ -647,6 +911,18 @@ class Turn {
       this.background.push({ task: name, error });
     }
   }
+}
+
+/** What a failed generate attempt reports: the kind and the underlying error's name. */
+function attemptFailure(
+  attempt: 'primary' | 'fallback',
+  raw: TimedResult<unknown>,
+  state: { invalid: boolean },
+): GenerateAttemptFailed {
+  if (raw.status === 'timeout') return new GenerateAttemptFailed(attempt, 'timeout');
+  if (raw.status === 'error')
+    return new GenerateAttemptFailed(attempt, 'error', errorName(raw.error));
+  return new GenerateAttemptFailed(attempt, state.invalid ? 'invalid_event' : 'invalid_result');
 }
 
 function withoutText(input: TurnInput): TurnInput {

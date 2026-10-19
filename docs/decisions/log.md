@@ -10,6 +10,246 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 4.0d Coverage-gap cases follow the 4.0 conventions · decided by team lead · risk: high
+Decided: the six cases use the 4.0 market folders, placeholders and reply-check notes. The broad last-5-digits phrase in `evals/suites/safety/pii/safety-pii-phone-hyphenated-en.yaml` is kept to match its merged siblings, and tightening phone phrases suite-wide waits until 4.2 asserts on the scrubbed model input.
+Why: one convention across the suite; reply phrases matter less once 4.2 checks the input.
+Alternatives: tighten only this case.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tools offered and run only when entitled; skill payloads checked for the answer key; partial text cleared before an error · decided by tdd-guide (lead brief) · risk: high
+Decided: a tool is offered and run only when the decision names it, it is in the registry, and its skill is in the entitlement (checked in decide and again in generate; duplicate names fail closed). A `skill` event is dropped and reported unless its skill is entitled, its payload is at most 16 KB of JSON, and it holds no do-not-say string (case-insensitive, JSON text and every string leaf). Any streamed text is cleared with `replace ''` before a retry and before every error, a cancel included.
+Why: access rule 5 (locked means locked), no answer leak through structured events, and unguarded text never stays on screen.
+Alternatives: trust decide's tool list; leave the payload check to 4.5; leave partial text on an error.
+Reversible: yes; 4.5 replaces the substring check with the robust one.
+
+---
+
+### 18 Oct 2026 · 3.7 Q1 per-turn metered gateway billed from the entitlement · decided by lead · risk: medium
+Decided: after entitle the runner calls `gatewayFor({ policy, billing })`, with billing `{teacherId, packageId, studentId, turnId, source}` from the entitlement only. The guards get the full policy, generate's primary gets no `fallback`, and the retry gets `tiers.main := fallback`. `TurnGateway.metered` keeps usage the gateway already metered out of the `meter` step.
+Why: 2.4's `meterRouter` meters every attempt, unknown ones included; nothing is billed twice; 3.8's code is unchanged.
+Alternatives: (A) the harness prices and meters everything, which loses unknown usage; meter all usage in the step and double-bill.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Q2 cost ceiling 0.10 USD; unpriced usage aborts with `turn_cost_exceeded` · decided by lead (code picked by tdd-guide) · risk: medium
+Decided: the ceiling is `maxTurnCostMicroUsd` (default 100,000), counting step-reported usage plus every priced gateway call, failed attempts included. The check runs after each usage (over → abort) and before each call (at or over → abort). Unpriced or invalid prices, and an invalid ceiling, abort with `turn_cost_exceeded` (not `provider_error`).
+Why: fail closed on cost; the code says why the turn stopped; one call can overshoot by at most its own cost (bounded by `maxOutputTokens`).
+Alternatives: `provider_error` for unpriced; treat unpriced as free.
+Reversible: yes; tune at 7.6.
+
+---
+
+### 18 Oct 2026 · 3.7 Q3 the runner opens the TeacherQuestion before `done` · decided by lead · risk: medium
+Decided: for `ask_teacher`, the runner runs findSimilar then open with the scrubbed text within 500 ms, before postGuard, and sends `teacher_question` and `CommitRecord.teacherQuestionId`. On a failure, a timeout, or a cross-teacher or cross-student result there is no event, the failure is reported, and the turn still replies.
+Why: the event needs the id before `done`; 3.17 shrinks to opening it in commit when it's absent, plus the profile evidence.
+Alternatives: open in commit only (no event).
+Reversible: yes. Note for 3.17: an open that times out may still land, so commit must open idempotently.
+
+---
+
+### 18 Oct 2026 · 3.7 Q4 tool results as JSON envelopes over the frozen ModelRequest · decided by lead · risk: medium
+Decided: a tool round adds an assistant message (the round's text plus `{"tool_calls":[…]}`) and a user message (`{"tool_results":[…]}`, with output or a fixed error code). Both are built in code, with no prose.
+Why: no contracts or prompt-pack change.
+Alternatives: an ADR for native tool messages now.
+Reversible: yes; that ADR is needed before 5.5's real tools meet a real model.
+
+---
+
+### 18 Oct 2026 · 3.7 Q5 abort reaches the provider at the next chunk · decided by lead · risk: low
+Decided: the reader stops waiting on cancel at once and calls `return()` in the background; the adapter aborts when that reaches it.
+Why: `ModelGateway.stream` has no abort signal (frozen contract).
+Alternatives: an ADR adding a signal now.
+Reversible: yes (a follow-up ADR candidate).
+
+---
+
+### 18 Oct 2026 · 3.7 Q6 SSE route deferred to 9.4 · decided by lead · risk: low
+Decided: only the pure `formatSseEvent` encoder ships in the harness.
+Why: auth, sessions and the root don't exist yet, and `apps/web/src/auth/**` is a risky path.
+Alternatives: a route now.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Q7 sentence-gate seam, and every background failure logged · decided by lead · risk: medium
+Decided: text passes `deps.streamGate` (a pass-through now; 4.5 fills it). Every `finished.background` failure goes to `deps.log.backgroundFailure` with the task, the ids (only when valid ids, else `invalid`), `errorName`, and `errorMessage` only for harness errors (cut at 300 characters; see the fix-round entry below), never turn text. A throwing logger is swallowed.
+Why: no silent background failures; no text in logs.
+Alternatives: leave logging to each caller.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Cancellation semantics · decided by tdd-guide · risk: medium
+Decided: the consumer `return()`ing `events`, or `RunTurnOptions.cancel`, cancels the turn. Generate stops at once (`TurnCancelled`, never retried); postGuard and teacher_question are skipped; the stream ends `error provider_error`; meter, commit (outcome `error`, input saved, no reply) and the trace (generate `failed`) still run. A turn cancelled before generate makes no model call; steps before generate are not interrupted.
+Why: the plan; no wasted model spend after the client leaves.
+Alternatives: run the turn to the end; also interrupt earlier steps.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tool-loop limits and event rules · decided by tdd-guide · risk: low
+Decided: at most 3 tool rounds, then a final call with no tools; 4 calls per round, run in order; 3 s per tool; a 4,000-character result cap; error codes `not_available | invalid_arguments | failed | timed_out | too_many_calls`. `hint_rung` goes out for hint, worked_example and solution (again on a retry, after `replace ''`); `sources` holds only cited `[n]`; `locked` names only the student's own package and only for `name_package`. A gateway that can't be built becomes a refusing gateway (reported), so every step meets its own failure policy. admit and entitle get a refusing gateway.
+Why: the plan's provisional numbers; fail closed.
+Alternatives: other limits (revisit at 5.5 and 7.6).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 `TurnGateway.metered` and the out-of-plan test edits · decided by tdd-guide · risk: medium
+Decided: `gatewayFor` returns `{ gateway, metered }` so that 3.8's meter step, the queue latency test and the worker test stay unchanged. Usage a step reports in its result is still metered by `meter`. Three test files outside the plan get a one-line `...stepEnvExtras()`: `access/property.test.ts` (a risky path) and two `packages/db` int tests.
+Why: keeps 3.8 green without double billing; keeps `StepEnv` strictly typed.
+Alternatives: make the new `StepEnv` fields optional; send no usage to `meter` (breaks the 3.8 tests).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tool outputs checked for the answer key; one normalised answer-key check · decided by lead (fix round, safety review) · risk: high
+Decided: a tool output that holds a do-not-say string, after NFKC folding and stripping whitespace, separators, commas and zero-width characters on both sides, is `failed` and never reaches the model. Skill payloads use the same shared `revealsAnswerKey`/`normaliseForMatch` (`generate/answerKey.ts`), which 4.5 reuses. Tools must scope to `allowedModuleIds`; 4.5 adds the lockedLeak check on tool outputs.
+Why: a tool result fed back to the model was an unfiltered path to the answer; formatting variants beat a raw substring match.
+Alternatives: wait for 4.5; check outputs with a raw substring.
+Reversible: yes. Known cost: a short key can over-match (for example "5/6" inside "15/60"), which fails closed.
+
+---
+
+### 18 Oct 2026 · 3.7 Error logging: names always, messages only for harness errors · decided by lead (fix round, reconciling safety and silent-failure reviews) · risk: medium
+Decided: every harness-written error extends `HarnessError` (fixed text, codes and ids only), and the background log records its message. Any foreign error (provider, port, store, tool) is logged by name only. Reports the harness makes about foreign failures carry only the name: `GenerateAttemptFailed(attempt, kind, name)`, `ToolFailed(tool, reason, name)`, `StreamCloseFailed(name)`, and `SkillEventDropped` with a `{ name }` cause.
+Why: foreign messages can quote prompt or student text; names still say what failed.
+Alternatives: log all messages (leak risk); log no messages (loses the harness's own diagnostics).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Failed generate attempts, unpriced usage and stream closes are reported · decided by tdd-guide (fix round, silent-failure review) · risk: medium
+Decided: each failed generate attempt is reported (task `generate`) before the retry or the final error. Unpriced usage stays in the trace, stays out of the `meter` step and is reported as `UnpricedUsage(model)` (2.4's meter records it as unpriced). Early stream closes are handed to the runner through `StepEnv.track`, and `finished` waits for them for at most `STREAM_CLOSE_SETTLE_MS` (1,000 ms, injected clock); past that, a "did not settle" report is added and `finished` resolves.
+Why: no silent failure, no free-looking cost row, no report landing after the log.
+Alternatives: mark unpriced rows in the trace (no schema field for it); await closes without a bound.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 `replace ''` also clears skill events and runner-bug errors · decided by lead (fix round, safety review) · risk: medium
+Decided: a shown `skill` event counts as shown, so the `replace ''` before a retry or an error also tells the client to drop skill events (rule written in `sse.ts` for 9.4). A runner bug that ends the stream sends `replace ''` before `error` when anything was shown.
+Why: unguarded content never stays on screen on any error path.
+Alternatives: a separate clear event (a contracts change).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · Pilot language: English only, with a Hindi/Hinglish safety net · decided by you · risk: high
+Decided: the agent teaches and replies only in English in both pilot markets (en-US, en-IN). No new Hindi or Hinglish teaching, prompt-pack or non-safety eval work. Safety guards still recognise Hindi and Hinglish input (distress keywords in romanised and Devanagari script, Devanagari-digit phone numbers and IDs), and the safety and locked seed cases in those languages stay. The existing non-safety Hinglish and Devanagari cases (leak, advice, persona, grounding) are frozen, not deleted. This replaces the language part of the 18 Oct pilot-market decision; the markets are unchanged.
+Why: focus. Indian students will still type Hinglish, so safety must catch it.
+Alternatives: English only everywhere (drop the safety net); English and the US only.
+Reversible: yes; Hindi locale content can be added later.
+
+---
+
+### 18 Oct 2026 · 4.0c "Suite failed to load" is reported alongside the load-error line, not instead of it · decided by tdd-guide · risk: low
+Decided: when a suite's load throws, `validateSuites` still pushes the `"<suite>: <load error message>"` problem (per-file, naming the real cause) *and*, for each affected guard under `requireAllGuards`, a second `"<guard>: suite failed to load"` line — not a replacement of the first.
+Why: the review finding was about a guard folder being reported as merely "empty" when the real cause (a load error) was knowable; dropping the load-error line would lose that cause, and a reader scanning guard-level problems still needs the per-guard line to know which guard is affected.
+Alternatives: fold the guard-level line into the load-error line (one line that names both the suite and the guard); only emit the guard-level line and drop the per-suite load error.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0c loadCasesWithFiles is exported alongside loadCasesFromDir · decided by tdd-guide · risk: low
+Decided: `loader.ts` exports `loadCasesWithFiles` (and its `LoadedCaseFile` type) publicly from `index.ts`, not just internally to `suites.ts`.
+Why: every other loader export is already public, and any future caller needing a case paired with its file (not just `suites.ts`) should reach for this instead of re-deriving the pairing itself.
+Alternatives: keep it package-internal (export only from `loader.js`, not `index.ts`) until a second caller exists.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The guard chain fails closed on every failure · decided by lead (plan) and tdd-guide (details) · risk: high
+Decided: a throw, a result that fails `GuardResultSchema`/`UsageSchema`, a guard past its own time slice (or a non-positive slice), a step cancelled before or during a guard, an empty list, an undeclared or wrong-phase guard, and a list out of declared order all end the chain non-ok (`outcome: 'failed'` with a `failure` cause, fix round 1); later guards never run and the chain never throws.
+Why: guards protect students; any doubt must stop the reply, and the calling step's own fail-closed policy still applies on top.
+Alternatives: skip a broken guard and continue; let errors propagate to the step.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.1 A rewrite is verified by a second pass of every guard · decided by lead (safety review, fix round 1) · risk: high
+Decided: when any guard rewrote, the whole phase runs once more on the final text; there any rewrite or block becomes `block` with cause `rewrite_unverified`, a failure is `failed`, and an escalate still escalates (it is stronger than block and must not lose its alert).
+Why: a later guard's rewrite (grounding, adviceGuard, tone) could put back what an earlier guard (answerLeak) removed; the build plan says "rewrite once; else safe reply".
+Alternatives: single pass; re-run only the guards before the rewriting one; loop until stable.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 18 Oct 2026 · 4.1 Framework failures get their own `failed` outcome · decided by lead (silent-failure review, fix round 1) · risk: medium
+Decided: `GuardChainResult` is `ok` | `block` (`cause: 'verdict' | 'rewrite_unverified'`) | `escalate` | `failed` (`failure: { name, cause, errorName? }`); `failed` is non-ok and callers treat it like block; only `ok` and `escalate` carry `text`; the trace action is `failed` and the event carries `cause`.
+Why: 4.3 needs to tell "a guard said no" from "the guards broke" to keep the distress keyword fallback; a block must not carry text a caller could send.
+Alternatives: one `block` outcome with an optional failure field.
+Reversible: Yes, before 4.2-4.5 build on it.
+
+---
+
+### 18 Oct 2026 · 4.1 Failures keep only an error name, never the raw error · decided by lead (security/silent-failure review, fix round 1) · risk: low
+Decided: `failure.errorName` is the `Error#name` or `typeof` (capped at 100); undeclared names show as `(undeclared)` in the trace and events.
+Why: a thrown value or a guard name can quote unscrubbed input or model output.
+Alternatives: keep the raw error for the caller.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The step's cancel token cancels the in-flight guard · decided by tdd-guide (fix round 1) · risk: low
+Decided: each guard's token is linked to its own slice and to `opts.cancel`; on a step cancel the chain stops waiting at once and fails with `cancelled`. `timeout.ts` is unchanged (the link is built inside the chain).
+Why: a cancelled step should not keep a guard (and its model call) running for the rest of its slice.
+Alternatives: document that only the slice cancels the guard.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Each guard gets its own time slice on the injected clock · decided by tdd-guide · risk: low
+Decided: `runGuardChain` runs each guard under `runWithTimeout(…, opts.timeoutMs, opts.clock)`; the slice is per guard, not shared; the caller picks the number.
+Why: the plan's fail-closed acceptance names a guard past "its own slice"; reusing 3.1's helper keeps tests on the virtual clock with no wall-clock waits.
+Alternatives: one budget for the whole chain; rely only on the step timeout.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 The chain re-checks the guard list it is given · decided by tdd-guide · risk: low
+Decided: besides the registry's wiring-time checks, `runGuardChain` fails closed (`failed`) before running anything when a guard is undeclared, of another phase, duplicated or out of declared order.
+Why: "unknown guard means block" must hold even for a list not built by the registry (an eval wrapper, a test, a later refactor).
+Alternatives: trust `registry.ordered()`; sort the list silently.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 A throwing `onGuardOutcome` observer is ignored · decided by tdd-guide · risk: low
+Decided: an exception from the observer is caught and does not change the outcome or make the chain throw.
+Why: the hook is for logging; a logging fault must not turn a passed or blocked guard into something else, and the chain must never throw.
+Alternatives: treat an observer throw as a fail-closed block.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q1 Safety-event seam is a no-op hook only · decided by lead · risk: low
+Decided: 4.1 ships only `onGuardOutcome({ name, phase, outcome })` with no text and no persistence; the first guard task that writes a `safety_events` row (likely 4.4) raises the `SafetyEventSink` ADR.
+Why: no contracts port exists for it, and nothing needs persistence yet.
+Alternatives: add a port now (contracts change, ADR).
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q2 The scrub/preGuard/postGuard stubs stay as they are · decided by lead · risk: low
+Decided: 4.1 does not wire the step stubs; they keep failing closed. Each guard task wires its own phase (4.2 scrub, 4.3 pre, 4.5 post).
+Why: an empty registry would turn today's fail-closed stub into an always-ok pass-through with no real checks.
+Alternatives: wire empty registries now.
+Reversible: Yes.
+
+---
+
+### 18 Oct 2026 · 4.1 Q3 Registry completeness test goes into 4.9 · decided by lead · risk: low
+Decided: `ordered()` skips declared guards not built yet; 4.9 adds the test `ordered().length === GUARD_ORDER[phase].length` for every phase (`missing()` added here to help).
+Why: every phase is intentionally partial until M4 ends; a runtime throw now would be too strict.
+Alternatives: throw at run time on a missing guard.
+Reversible: Yes.
+
+---
+
 ### 18 Oct 2026 · Agent-system efficiency review · decided by team lead (the human asked for the review) · risk: medium
 Decided: safety-path tasks get a safety-reviewer pass on the plan before the build; board and log commits are batched with the next real commit; planners get a scoped reading list; short mechanical fix rounds go to a fresh sonnet builder instead of resuming a long builder; big tasks split into sub-PRs. Tooling fixes are board task 0.13.
 Why: 33 tasks in: the lead was the serial bottleneck (141 of 177 main commits docs-only, and 17 of the last 30 main CI runs cancelled by the next push), nearly every risky PR needed a fix round for issues visible at plan time, and planners and resumed agents were the largest token costs.

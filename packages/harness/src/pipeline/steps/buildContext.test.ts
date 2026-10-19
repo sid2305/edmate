@@ -25,7 +25,7 @@ import {
   OUT_OF_SCOPE_TEXT,
   retrievalWorld,
 } from '../../testing/memoryRetrieval.js';
-import { testDeps } from '../../testing/testSteps.js';
+import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
 import { BuiltContextSchema } from '../results.js';
 import type { Entitled, PipelineDeps, StepEnv } from '../types.js';
@@ -90,7 +90,7 @@ function world(
 }
 
 function env(deps: PipelineDeps, input: TurnInput = demoTurnInput): StepEnv {
-  return { input, deps, cancel: cancelSource().token, turnId: 'turn_1' };
+  return { input, deps, cancel: cancelSource().token, turnId: 'turn_1', ...stepEnvExtras() };
 }
 
 const run = (w: World, s: Entitled = ENTITLED, input?: TurnInput) =>

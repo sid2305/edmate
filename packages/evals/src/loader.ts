@@ -42,19 +42,35 @@ function loadOne(filePath: string): EvalCase {
   return parsed.data;
 }
 
-/** Every `.yaml`/`.yml` under `dir` (recursive), validated, in sorted relative-path order. */
-export function loadCasesFromDir(dir: string): EvalCase[] {
+export interface LoadedCaseFile {
+  /** Path relative to `dir`, `/`-separated. */
+  file: string;
+  evalCase: EvalCase;
+}
+
+/**
+ * Every `.yaml`/`.yml` under `dir` (recursive), validated, in sorted relative-path order, each
+ * paired with the relative path it came from. Callers that need to report problems against a
+ * specific file (not just the case) should use this instead of re-listing the directory
+ * themselves, which can drift from the order `loadCasesFromDir` actually loaded.
+ */
+export function loadCasesWithFiles(dir: string): LoadedCaseFile[] {
   const files = listCaseFiles(dir);
   if (files.length === 0) throw new Error(`${dir}: no .yaml or .yml cases found`);
   const seen = new Map<string, string>();
-  return files.map((rel) => {
-    const filePath = join(dir, rel);
+  return files.map((file) => {
+    const filePath = join(dir, file);
     const evalCase = loadOne(filePath);
     const earlier = seen.get(evalCase.id);
     if (earlier !== undefined) {
       throw new CaseLoadError(filePath, `duplicate case id "${evalCase.id}" (also in ${earlier})`);
     }
     seen.set(evalCase.id, filePath);
-    return evalCase;
+    return { file, evalCase };
   });
+}
+
+/** Every `.yaml`/`.yml` under `dir` (recursive), validated, in sorted relative-path order. */
+export function loadCasesFromDir(dir: string): EvalCase[] {
+  return loadCasesWithFiles(dir).map((c) => c.evalCase);
 }

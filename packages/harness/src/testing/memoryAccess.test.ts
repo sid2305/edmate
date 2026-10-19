@@ -15,7 +15,7 @@ import {
   T,
   twoTeacherWorld,
 } from './memoryAccess.js';
-import { testDeps } from './testSteps.js';
+import { stepEnvExtras, testDeps } from './testSteps.js';
 
 const AT = '2026-10-17T10:00:00.000Z';
 /** A smaller package of agt_a (only module a1): the downgrade target. */
@@ -65,6 +65,7 @@ async function entitleWith(
       deps: t.deps,
       cancel: cancelSource().token,
       turnId: 'turn_1',
+      ...stepEnvExtras(),
     });
     return 'ok';
   } catch (e) {

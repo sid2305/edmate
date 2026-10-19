@@ -52,3 +52,10 @@ export function cancelSource(): { token: CancelToken; cancel(): void } {
     },
   };
 }
+
+/** A token that fires as soon as any of `tokens` fires (at once if one already has). */
+export function linkCancel(...tokens: readonly CancelToken[]): CancelToken {
+  const source = cancelSource();
+  for (const t of tokens) t.onCancel(() => source.cancel());
+  return source.token;
+}

@@ -6,6 +6,7 @@
 // `fallbackContext`, which takes the ask_teacher path.
 import type { Chunk, Entitlement } from '@edmate/contracts';
 import { parseSessionHelp } from '../../pedagogy/helpState.js';
+import { HarnessError } from '../errors.js';
 import type { Steps } from '../types.js';
 import { historyChars, historyTrim } from './historyTrim.js';
 import { retrievalQuery } from './retrievalQuery.js';
@@ -24,7 +25,7 @@ export const HISTORY_MAX_CHARS = 16_000;
 export const RETRIEVAL_K = 5;
 
 /** The index returned a chunk outside the entitlement's scope: refused, never passed on. */
-export class RetrievalScopeError extends Error {
+export class RetrievalScopeError extends HarnessError {
   override readonly name = 'RetrievalScopeError';
 }
 

@@ -8,7 +8,7 @@ The turn pipeline and teaching engine. Pure TypeScript: it imports only `@edmate
 admit → entitle → scrub (step 3, regex PII)
       → [ preGuard (step 3 checks) ‖ route ‖ buildContext ]   concurrent
       → escalate (distress)  ─────────────────────────────►  done → meter ‖ commit → trace
-      → decide → generate → postGuard → done → meter ‖ commit → trace
+      → decide → generate → teacher_question? → postGuard → done → meter ‖ commit → trace
 ```
 
 `runTurn(input, { deps, steps })` returns `{ events, finished }`. `events` ends with exactly one `done` or `error`; `finished` never rejects and lists background failures (meter, commit, trace, alert delivery). Timeouts, failure policies and the trace follow build plan § Turn pipeline spec; `STEP_SPEC` in `spec.ts` holds the numbers and the "On failure" text.
@@ -17,7 +17,7 @@ Determinism: `deps.clock` (`now`, `sleep`) and `deps.ids` are injected. Nothing 
 
 ## Step interface (`src/pipeline/types.ts`)
 
-Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`) and returns a typed result; it never mutates shared state. The runner checks each result against a schema (`results.ts`); a result that fails counts as the step failing. Only `generate` gets an `emit` function, so event order never depends on scheduling. Steps report errors with meaning by throwing `TurnRejection(code)` (admit, entitle) or `TurnAbort(code)` (generate).
+Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`, `gateway`, `usage`, `report`) and returns a typed result; it never mutates shared state. The runner checks each result against a schema (`results.ts`); a result that fails counts as the step failing. Only `generate` gets an `emit` function, so event order never depends on scheduling. Steps report errors with meaning by throwing `TurnRejection(code)` (admit, entitle) or `TurnAbort(code)` (generate).
 
 ## admit and entitle (task 3.2)
 
@@ -32,6 +32,35 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`) and returns a 
 - Retrieval only through `RetrievalIndex.search(q, { teacherId, allowedModuleIds }, 5)`; every chunk returned is checked again and one outside the scope fails the step (`RetrievalScopeError`, the runner's `ask_teacher` fallback). `probe` runs over `lockedModuleIds` only (skipped when there are none) and only its `hit` is read. History plus chunk text stays within `MAX_CONTEXT_CHARS` (32,000; no tokenizer in the harness).
 - Parses the session's raw help state (on `Entitled`, from `TurnConfigStore.load`, ADR-0005) with `parseSessionHelp`; anything invalid is rung 0 and `INITIAL_HELP_STATE`. The parsed `helpState` (with `answerKey`) stays out of `TurnContext`, events and traces; 3.6/3.8 thread it into decide and commit (`serializeSessionHelp`).
 - **Testing:** `memoryRetrieval({ chunks, probe? })` and `retrievalWorld()` (allowed, locked and other-teacher chunks; out-of-scope text carries `OUT_OF_SCOPE_TEXT`).
+
+## generate and the orchestrator (task 3.7)
+
+- **Turn gateways (lead answer Q1).** After entitle the runner calls `deps.gatewayFor({ policy, billing })`, with billing `{ teacherId, packageId, studentId, turnId, source }` taken from the entitlement only. Guards get the agent's full policy; generate's primary attempt gets the policy without `fallback`; the retry runs with `tiers.main := fallback` (main again when there is none). The root binds `gatewayFor` to 2.4's `meterRouter` and returns `metered: true`, so that usage stays out of the `meter` step; a bare (test) gateway returns `metered: false` and its usage goes to `meter`. admit and entitle get a gateway that refuses every call. A `gatewayFor` that throws or returns something unusable gives a refusing gateway (fail closed).
+- **Streaming.** `StreamReader` races each chunk against the cancel token, validates chunks with `ModelChunkSchema` and calls the iterator's `return()` (in the background, errors reported) when it stops early. The frozen port has no abort signal, so the provider sees the abort at its next chunk (Q5). Text passes a `StreamGate` (`deps.streamGate`; pass-through now, 4.5's sentence gate later).
+- **Tools.** Offered only when the decision names them, they are in `deps.tools` and their skill is entitled (checked in decide and again in generate). Max 3 tool rounds, then a final call with no tools; a tool call on a call that offered none fails the attempt. Per round at most 4 calls, run in order; each needs JSON-safe args that pass `tool.input`, runs within 3 s, and its output must pass `tool.output` and stay under 4,000 JSON characters. Results go back as JSON envelopes (`{"tool_calls":…}` from the assistant, `{"tool_results":…}` from the user; Q4) with fixed error codes only. `present` turns an output into a `skill` event, dropped (and reported) unless the skill is entitled, the payload fits 16 KB and holds no do-not-say string.
+- **Cost ceiling (Q2).** `deps.priceUsage` prices each usage as it streams; the trace and `done.usage` get it at once, failed attempts included. The turn total (step-reported usage at its own cost plus every priced call) aborts with `turn_cost_exceeded` when it goes over `deps.maxTurnCostMicroUsd` (default 100,000 = 0.10 USD) and refuses a new call once at or over it. Unpriced usage, or an invalid ceiling, also aborts.
+- **Events.** `hint_rung` (hint, worked_example, solution) → `token`/`skill` in stream order → `sources` (only cited `[n]`) → `locked` (names the package only for `name_package`) → `teacher_question` → `replace` → `done`. Shown text is cleared with `replace ''` before a retry and before any error.
+- **Cancel.** The consumer calling `return()` on `events`, or `RunTurnOptions.cancel`, stops generate at once with no retry; postGuard and teacher_question are skipped; the stream ends `error provider_error`; meter, commit (outcome `error`) and the trace still run.
+- **TeacherQuestion (Q3).** For `ask_teacher` the runner calls `findSimilar` then `open` with the scrubbed text within 500 ms, sends `teacher_question` and sets `CommitRecord.teacherQuestionId`. A failure or timeout is reported and the turn still replies.
+- **Logging (Q7).** Every `finished.background` failure goes to `deps.log.backgroundFailure` with the task, ids (logged only when valid ids) and the error's name; the message (cut to 300 characters) only for the harness's own `HarnessError` classes; never turn text.
+- **SSE.** `formatSseEvent(e)` encodes one event; the web route is 9.4.
+- **Testing:** `spyGateway(inner)` records requests, `gatewayFor` specs and iterator `return()` calls; `memoryToolRegistry`, `testTool`, `memoryTeacherQuestionStore`, `memoryTurnLog`, `stepEnvExtras()`.
+
+## Guardrails (task 4.1, `src/guardrails`)
+
+- **Phases and order:** `GUARD_ORDER` lists every guard per phase in the build plan's guard-table order: `scrub` (`piiScrub`), `pre` (`distressDetect`, `moderationIn`, `jailbreak`), `post` (`answerLeak`, `lockedLeak`, `grounding`, `adviceGuard`, `personaBoundary`, `tone`). That list decides run order; registration order never does.
+- **Guard:** `{ name, phase, run(text, ctx, cancel) → { result: GuardResult, usage } }`. A factory closes over what the guard needs; `Ctx` is phase-specific and owned by each guard task.
+- **Registry:** `new GuardRegistry<Ctx>(phase)`. `register` throws (`GuardRegistryError`) for an undeclared, duplicate, wrong-phase or malformed guard. `ordered()` returns the registered guards in declared order and skips ones not built yet; `missing()` lists those (4.9 adds the completeness test).
+- **Chain:** `runGuardChain(registry.ordered(), text, ctx, { phase, clock, timeoutMs, cancel?, onGuardOutcome? })` never rejects. Outcomes:
+  - `ok` with `text`: every guard passed on the final text.
+  - `block` (`cause: 'verdict' | 'rewrite_unverified'`, `blockedBy`): a guard blocked, or the verification pass did not accept a rewrite. No `text`.
+  - `escalate` with `text` and `alert`.
+  - `failed` with `failure: { name, cause, errorName? }` (`empty`, `undeclared`, `out_of_order`, `error`, `invalid_result`, `timeout`, `cancelled`): the guards broke, so treat it like `block` (fail closed). No `text`, no raw error.
+- **Verification pass:** when any guard rewrote, every guard runs once more on the final text; a rewrite or block there is `block` / `rewrite_unverified` ("rewrite once; else safe reply"). An escalate still escalates.
+- **Time and cancel:** each guard has its own `timeoutMs` slice on the injected clock; the step's `cancel` token cancels the in-flight guard and fails the chain. The trace entries are `GuardTrace` (`{ name, ok, action? }`, action `failed` for framework failures, `(undeclared)` for an undeclared name), never reason or text.
+- **Safety-event seam:** `onGuardOutcome({ name, phase, pass, outcome, cause? })` fires once per guard run; a throw or a rejected promise from it is ignored. Persistence (`safety_events`) waits for its ADR (lead answer Q1).
+- **Wiring:** the `scrub`, `preGuard` and `postGuard` step stubs still fail closed. Each guard task (4.2 scrub, 4.3 pre, 4.5 post) wires its own phase when it lands that phase's first guard.
+- **Testing:** `fakeGuard(name, phase, resultOrFn, { usage?, spy? })` from `@edmate/harness/testing`.
 
 ## Replacing a stub
 

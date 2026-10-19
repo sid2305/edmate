@@ -2,8 +2,8 @@
 // loaded through 3.12's loader (so it must parse against EvalCaseSchema), then held to the
 // suite-layout rules the eval author follows. Nothing here runs a case against an agent.
 import { existsSync, readdirSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
-import { loadCasesFromDir } from './loader.js';
+import { basename, join, sep } from 'node:path';
+import { loadCasesWithFiles } from './loader.js';
 import type { EvalCase } from './schema.js';
 
 /** The literal placeholder a case carries until a named human signs it off. */
@@ -78,7 +78,7 @@ function caseRuleProblems(file: string, c: EvalCase, rules: SuiteRules): string[
   if (!rules.packages.includes(c.package)) {
     problems.push(`${file}: package "${c.package}" is not one of: ${rules.packages.join(', ')}`);
   }
-  if (rules.requireReviewed && c.reviewed_by.trim() === PENDING_REVIEWER) {
+  if (rules.requireReviewed && c.reviewed_by.trim().toLowerCase() === PENDING_REVIEWER) {
     problems.push(`${file}: reviewed_by is still "${PENDING_REVIEWER}"`);
   }
   return problems;
@@ -97,21 +97,20 @@ export function validateSuites(root: string, rules: SuiteRules): SuiteReport {
     .map((e) => e.name)
     .sort();
 
+  const failedSuites = new Set<string>();
   for (const suite of suites) {
     const dir = join(root, suite);
-    let loaded: EvalCase[];
+    let loaded: ReturnType<typeof loadCasesWithFiles>;
     try {
-      loaded = loadCasesFromDir(dir);
+      loaded = loadCasesWithFiles(dir);
     } catch (error) {
       problems.push(`${suite}: ${(error as Error).message}`);
+      failedSuites.add(suite);
       continue;
     }
-    // loadCasesFromDir keeps sorted-path order; recompute the same order to pair files.
-    const files = readdirSync(dir, { recursive: true, withFileTypes: true })
-      .filter((e) => e.isFile() && /\.ya?ml$/.test(e.name))
-      .map((e) => toPosix(relative(root, join(e.parentPath, e.name))))
-      .sort();
-    loaded.forEach((evalCase, i) => cases.push({ file: files[i] as string, evalCase }));
+    for (const { file, evalCase } of loaded) {
+      cases.push({ file: `${suite}/${toPosix(file)}`, evalCase });
+    }
   }
 
   const firstFileById = new Map<string, string>();
@@ -128,9 +127,16 @@ export function validateSuites(root: string, rules: SuiteRules): SuiteReport {
     const count = cases.filter((c) => c.file.startsWith(`${guard}/`)).length;
     guardCounts[guard] = count;
     if (count === 0) {
-      const where = existsSync(join(root, guard)) ? 'has no cases' : 'is missing';
-      if (rules.requireAllGuards) problems.push(`${guard}: guard folder ${where}`);
-      else unseeded.push(guard);
+      const topFolder = guard.split('/')[0] as string;
+      if (rules.requireAllGuards) {
+        if (failedSuites.has(topFolder)) problems.push(`${guard}: suite failed to load`);
+        else {
+          const where = existsSync(join(root, guard)) ? 'has no cases' : 'is missing';
+          problems.push(`${guard}: guard folder ${where}`);
+        }
+      } else {
+        unseeded.push(guard);
+      }
     } else if (count < rules.minCases) {
       problems.push(`${guard}: ${count} cases, needs at least ${rules.minCases}`);
     }
