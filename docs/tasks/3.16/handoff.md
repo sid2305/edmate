@@ -278,3 +278,9 @@ Why: the first attempt (`BEGIN; select 1`, no delay) did not reproduce a wait: `
 Alternatives: keep polling `pg_stat_activity`/`pg_locks` until some specific lock or wait-event condition is observed before issuing the timed call (more precise, meaningfully more complex for a test); accept flakiness with the idle-in-transaction form.
 Reversible: yes; an internal detail of the test, not of `migrate.ts` itself.
 
+### 19 Oct 2026 · 3.16d Accepted edge cases in the migration lock and its timeout test · decided by team lead · risk: low
+Decided: in `packages/db/src/migrate.ts`, a failure inside the locked section followed by a failed unlock reports the unlock error (both need a dead connection, and the lock is released when the session ends anyway); `packages/db/test/migrate.int.test.ts` keeps its fixed 300 ms lead before the timed call.
+Why: rare, and harmless to data; a fix would add code paths with no test value now.
+Alternatives: wrap the unlock in try/catch and rethrow the original; poll pg_stat_activity in the test.
+Reversible: yes.
+
