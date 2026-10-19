@@ -71,6 +71,13 @@
       "when": 1792386045135,
       "tag": "0009_session_package_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792421327315,
+      "tag": "0010_easy_maximus",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,7 @@
+-- Task 3.16c (3.16b review deferral): a partial index on open sessions, (teacher_id, student_id)
+-- WHERE ended_at IS NULL, for the lookups the review flagged. Declared in src/schema/learning.ts
+-- so a later `db:generate` stays a no-op (the same pattern as 0009's package-pin index, task
+-- 3.16b); built by the post-migrate step (packages/db/src/migrate.ts's runPostMigrateSteps) with
+-- CREATE INDEX CONCURRENTLY, not by this file: drizzle 0.45 runs every pending migration file in
+-- one transaction, and a plain CREATE INDEX here would hold the table's ACCESS EXCLUSIVE lock for
+-- the build, where CONCURRENTLY outside the transaction only needs it briefly.
