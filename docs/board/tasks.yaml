@@ -756,7 +756,7 @@ tasks:
 - id: 4.2c
   milestone: M4
   title: 'PII pattern hardening from the 4.2 safety review: keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out single-turn numbers; Aadhaar Verhoeff
-    instead of the years exception; constant-digit over-scrub; the 6 proposed eval cases'
+    instead of the years exception; constant-digit over-scrub; the 6 proposed eval cases; PII-named payload keys redact only scalars directly under the key, with compound forms for name/card/pin (flashcards and file names keep their content); stop-list words khatam, barbaad, bekaar, nothing'
   accept: each listed form has a test; the pipeline test still passes; the near-miss list still passes unchanged.
   deps:
   - '4.2'
