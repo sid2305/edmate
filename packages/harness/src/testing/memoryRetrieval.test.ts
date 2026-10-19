@@ -1,4 +1,4 @@
-import type { RetrievalIndex } from '@edmate/contracts';
+import type { Chunk, RetrievalIndex } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from './memoryRetrieval.js';
 
@@ -108,4 +108,95 @@ describe('memoryRetrieval.probe: a hit and a score, never text', () => {
     await expect(probe('q', undefined)).rejects.toThrow(/scope/);
     await expect(probe('q', { teacherId: 't', moduleIds: 'm' })).rejects.toThrow(/scope/);
   });
+});
+
+describe('memoryRetrieval.leakCheck (ADR-0007): one boolean, complement scope', () => {
+  const LOCKED_SPAN = 'Integration by parts: choose u and dv, then integrate.';
+  const scope = (allowedModuleIds: string[], teacherId = 'tch_test_01') => ({
+    teacherId,
+    allowedModuleIds,
+  });
+  const base = retrievalWorld()[0] as Chunk;
+
+  it('hits on 8+ tokens of material outside the allowed modules, returning only { hit }', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const out = await r.leakCheck([`Sure: ${LOCKED_SPAN}`], scope(['mod_test_01', 'mod_test_02']));
+    expect(out).toEqual({ hit: true });
+    expect(Object.keys(out)).toEqual(['hit']);
+    const clean = await r.leakCheck(['Fractions name equal parts of a whole.'], scope([]));
+    expect(clean).toEqual({ hit: false });
+  }, 5_000);
+
+  it('checks the complement: a module in no list (draft, unpackaged) counts as locked', async () => {
+    const draftText = 'A draft module about vectors with magnitude and direction in the plane.';
+    const r = memoryRetrieval({
+      chunks: [
+        ...retrievalWorld(),
+        { ...base, id: 'chk_world_draft', moduleId: 'mod_test_draft', text: draftText },
+      ],
+    });
+    const draft = 'about vectors with magnitude and direction in the plane';
+    expect(await r.leakCheck([draft], scope(['mod_test_01']))).toEqual({ hit: true });
+    const allowed = await r.leakCheck([draft], scope(['mod_test_01', 'mod_test_draft']));
+    expect(allowed).toEqual({ hit: false });
+  }, 5_000);
+
+  it('is per teacher: another teacher’s material never counts', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    // tch_test_02 owns only a chunk in mod_test_01: with it allowed, nothing is locked.
+    const own = await r.leakCheck([LOCKED_SPAN], scope(['mod_test_01'], 'tch_test_02'));
+    expect(own).toEqual({ hit: false });
+    const other = 'OUT_OF_SCOPE_MARKER Another teacher: fractions with a common denominator.';
+    expect(await r.leakCheck([other], scope(['mod_test_02']))).toEqual({ hit: false });
+  }, 5_000);
+
+  it('ignores a span that also appears in an allowed chunk', async () => {
+    const shared = 'one two three four five six seven eight nine';
+    const r = memoryRetrieval({
+      chunks: [
+        { ...base, id: 'chk_a', moduleId: 'mod_test_01', text: `allowed ${shared}` },
+        { ...base, id: 'chk_b', moduleId: 'mod_test_04', text: `locked ${shared} tail` },
+      ],
+    });
+    expect(await r.leakCheck([shared], scope(['mod_test_01']))).toEqual({ hit: false });
+    expect(await r.leakCheck([`${shared} tail`], scope(['mod_test_01']))).toEqual({ hit: true });
+  }, 5_000);
+
+  it('matches a span across two chunks of one module (shingled in source order)', async () => {
+    const r = memoryRetrieval({
+      chunks: [
+        { ...base, id: 'chk_1', moduleId: 'mod_test_04', text: 'alpha beta gamma delta' },
+        { ...base, id: 'chk_2', moduleId: 'mod_test_04', text: 'epsilon zeta eta theta' },
+      ],
+    });
+    const span = 'alpha beta gamma delta epsilon zeta eta theta';
+    expect(await r.leakCheck([span], scope(['mod_test_01']))).toEqual({ hit: true });
+  }, 5_000);
+
+  it('records only the candidate count and scope, never the candidates', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    await r.leakCheck([LOCKED_SPAN, 'x'], scope(['mod_test_01']));
+    expect(r.leakChecks).toEqual([{ candidates: 2, scope: scope(['mod_test_01']) }]);
+    expect(JSON.stringify(r.leakChecks)).not.toContain('Integration');
+  }, 5_000);
+
+  it('a configured result overrides the computed one (true, false, or a rejection)', async () => {
+    const yes = memoryRetrieval({ chunks: [], leakCheck: true });
+    expect(await yes.leakCheck(['anything'], scope([]))).toEqual({ hit: true });
+    const no = memoryRetrieval({ chunks: retrievalWorld(), leakCheck: false });
+    expect(await no.leakCheck([LOCKED_SPAN], scope(['mod_test_01']))).toEqual({ hit: false });
+    const down = memoryRetrieval({ chunks: [], leakCheck: new Error('index down') });
+    await expect(down.leakCheck(['x'], scope([]))).rejects.toThrow('index down');
+  }, 5_000);
+
+  it('rejects a call without a well-formed scope or candidate list', async () => {
+    const r: RetrievalIndex = memoryRetrieval({ chunks: [] });
+    const leakCheck = r.leakCheck.bind(r) as (c: unknown, s: unknown) => Promise<unknown>;
+    await expect(leakCheck(['q'], undefined)).rejects.toThrow(/scope/);
+    const badIds = { teacherId: 't', allowedModuleIds: 'm' };
+    await expect(leakCheck(['q'], badIds)).rejects.toThrow(/scope/);
+    await expect(leakCheck(['q'], { allowedModuleIds: [] })).rejects.toThrow(/scope/);
+    await expect(leakCheck('q', scope([]))).rejects.toThrow(/candidates/);
+    await expect(leakCheck([1], scope([]))).rejects.toThrow(/candidates/);
+  }, 5_000);
 });

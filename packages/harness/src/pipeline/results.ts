@@ -86,6 +86,7 @@ export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   draft: z.string().max(LIMITS.modelTextMaxLength),
   raw: z.string().max(LIMITS.modelTextMaxLength).exactOptional(),
   withheld: z.boolean().exactOptional(),
+  locked: z.enum(['hit', 'failed']).exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [

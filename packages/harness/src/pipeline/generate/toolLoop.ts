@@ -7,6 +7,11 @@
 // registry and entitled), its args must be JSON-safe and pass `tool.input`, and its output must
 // pass `tool.output` and fit TOOL_RESULT_MAX_JSON_LENGTH. The model only ever sees a fixed error
 // code for a failed call, never an error message.
+//
+// Locked material (4.6): every piece the answer gate releases goes through the stream's locked
+// check (lockedStream.ts) before it is shown, and every tool output is checked (each string leaf
+// and the leaves joined) before the model sees it. A hit or a failed check fails the tool call
+// (`locked`); in the stream it withholds the rest of the attempt and the result says so.
 import {
   LIMITS,
   type ModelChunk,
@@ -15,11 +20,14 @@ import {
   type TurnContext,
 } from '@edmate/contracts';
 import { type CancelToken, type Clock, linkCancel } from '../clock.js';
-import { errorName, HarnessError } from '../errors.js';
+import { errorName, HarnessError, TurnCancelled } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
 import { type RegisteredTool, toolSpec } from '../tools.js';
 import type { UsageRecorder } from '../types.js';
+import type { LockedCheck } from '../../guardrails/answerLeak.js';
+import { stringLeaves } from '../../guardrails/lockedMatch.js';
 import { revealsAnswerKey } from './answerKey.js';
+import { lockedStream } from './lockedStream.js';
 import type { StreamGate } from './streamGate.js';
 import { raceCancel, StreamReader } from './streamReader.js';
 import {
@@ -79,25 +87,31 @@ export interface ToolLoopInput {
   gate: StreamGate;
   /** Shows a piece of text to the student (a `token` event). */
   show(text: string): void;
-  /** A tool ran and its output passed every check. */
-  onToolOutput(entry: RegisteredTool, output: unknown): void;
+  /** A tool ran and its output passed every check (awaited before the next call). */
+  onToolOutput(entry: RegisteredTool, output: unknown): void | Promise<void>;
   report(error: unknown): void;
   /** The decision's do-not-say list: a tool output holding one is `failed`. */
   mustNotReveal: readonly string[];
   /**
-   * The lockedLeak seam (4.6 fills it): true when a tool output holds locked module text, which
-   * then fails like an answer key. Default: never.
+   * The locked check (4.6, required): run on each sentence before it is shown and on each tool
+   * output before the model sees it. A hit or a rejection withholds or fails (fail closed).
    */
-  lockedCheck?: (value: unknown) => boolean;
+  lockedCheck: LockedCheck;
   /** Background work (a stream close) the runner waits for before `finished`. */
   track(settled: Promise<unknown>): void;
 }
 
 type ToolCallChunk = Extract<ModelChunk, { type: 'tool_call' }>;
 
-export async function runToolLoop(
-  i: ToolLoopInput,
-): Promise<{ draft: string; raw: string; toolRounds: number }> {
+export interface ToolLoopResult {
+  draft: string;
+  raw: string;
+  toolRounds: number;
+  /** Set when the stream's locked check withheld text: a hit, or a check that failed. */
+  locked?: 'hit' | 'failed';
+}
+
+export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
   const specs = i.offered.map(toolSpec);
   const byName = new Map(i.offered.map((r) => [r.tool.name, r]));
   const extra: ModelRequest['messages'] = [];
@@ -105,8 +119,10 @@ export async function runToolLoop(
   /** Everything the model wrote, shown or not (postGuard checks all of it). */
   let raw = '';
   let rounds = 0;
-  const show = (pieces: readonly string[]) => {
-    for (const p of pieces) {
+  const locked = lockedStream(i.lockedCheck, i.report, i.cancel);
+  /** Shows sentences once the locked check passed them. */
+  const show = async (sentences: readonly string[]) => {
+    for (const p of await locked.check(sentences)) {
       draft += p;
       i.show(p);
     }
@@ -131,7 +147,9 @@ export async function runToolLoop(
           if (raw.length < LIMITS.modelTextMaxLength) {
             raw += c.text.slice(0, LIMITS.modelTextMaxLength - raw.length);
           }
-          show(i.gate.push(c.text));
+          // Most pieces end no sentence: nothing to check, nothing to wait for.
+          const sentences = locked.split(i.gate.push(c.text));
+          if (sentences.length > 0) await show(sentences);
         } else if (c.type === 'usage') {
           i.usage.record(c.usage);
         } else {
@@ -145,8 +163,15 @@ export async function runToolLoop(
     // The gate is flushed once, when the attempt ends: never between tool rounds, so a key split
     // across rounds is still judged whole.
     if (calls.length === 0) {
-      show(i.gate.flush());
-      return { draft, raw, toolRounds: rounds };
+      const last = [...locked.split(i.gate.flush()), ...locked.rest()];
+      if (last.length > 0) await show(last);
+      const tripped = locked.tripped;
+      return {
+        draft,
+        raw,
+        toolRounds: rounds,
+        ...(tripped === undefined ? {} : { locked: tripped }),
+      };
     }
 
     rounds++;
@@ -181,7 +206,7 @@ export async function runToolLoop(
         continue;
       }
       results.push({ id: c.id, name: c.name, ok: true, output: out.value });
-      i.onToolOutput(entry, out.value);
+      await i.onToolOutput(entry, out.value);
     }
     extra.push(toolCallsMessage(roundText, records), toolResultsMessage(results));
   }
@@ -189,7 +214,8 @@ export async function runToolLoop(
 
 /**
  * Runs one checked call; a fixed code on any failure, reported first (ToolFailed, error name
- * only). An output holding a do-not-say string is `failed`: it would hand the model the answer.
+ * only. An output holding a do-not-say string or locked material is `failed`: it would hand the
+ * model the answer or the locked text; so is one the locked check can't vouch for (fail closed).
  * Throws only TurnCancelled.
  */
 async function runTool(
@@ -222,6 +248,13 @@ async function runTool(
   if (!json.ok) return failed('not_json');
   if (json.json.length > TOOL_RESULT_MAX_JSON_LENGTH) return failed('too_large');
   if (revealsAnswerKey(json.value, i.mustNotReveal)) return failed('answer_key');
-  if (i.lockedCheck?.(json.value) === true) return failed('locked');
+  try {
+    if (await raceCancel(i.lockedCheck(stringLeaves(json.value)), i.cancel)) {
+      return failed('locked');
+    }
+  } catch (error) {
+    if (error instanceof TurnCancelled) throw error;
+    return failed('locked', errorName(error));
+  }
   return { value: json.value };
 }

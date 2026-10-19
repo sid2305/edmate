@@ -29,8 +29,8 @@ describe('GuardRegistry', () => {
       r.register(fakeGuard(n, 'post', ok));
     }
     expect(names(r.ordered())).toEqual([
-      'answerLeak',
       'lockedLeak',
+      'answerLeak',
       'grounding',
       'adviceGuard',
       'personaBoundary',

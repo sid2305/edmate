@@ -664,6 +664,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
       search: () =>
         Promise.resolve([{ ...demoChunk, moduleId: 'mod_test_04', text: OUT_OF_SCOPE_TEXT }]),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const { t, steps, seen } = setup({ retrieval: leaky });
     const { events, result } = await driveTurn(

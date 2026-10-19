@@ -61,3 +61,24 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.Tool<{ a: number }, string>>().toEqualTypeOf<Spec.Tool<{ a: number }, string>>();
   });
 });
+
+describe('RetrievalIndex.leakCheck (ADR-0007)', () => {
+  type LeakCheck = C.RetrievalIndex['leakCheck'];
+
+  it('takes a batch of candidate texts and the allowed-module scope (the complement is checked)', () => {
+    expectTypeOf<Parameters<LeakCheck>>().toEqualTypeOf<
+      [candidates: string[], scope: { teacherId: string; allowedModuleIds: string[] }]
+    >();
+  });
+
+  it('returns one boolean for the whole batch: no text, span, score or count', () => {
+    expectTypeOf<Awaited<ReturnType<LeakCheck>>>().toEqualTypeOf<{ hit: boolean }>();
+    expectTypeOf<Awaited<ReturnType<LeakCheck>>>().not.toHaveProperty('score');
+    expectTypeOf<Awaited<ReturnType<LeakCheck>>>().not.toHaveProperty('spans');
+  });
+
+  it('is a required member, so every adapter must implement it', () => {
+    expectTypeOf<{ search: C.RetrievalIndex['search']; probe: C.RetrievalIndex['probe'] }>()
+      .not.toExtend<C.RetrievalIndex>();
+  });
+});

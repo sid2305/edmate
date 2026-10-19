@@ -5,8 +5,12 @@ import type { Cancel, Clock } from '../pipeline/clock.js';
 /** 2026-10-17T10:00:00.000Z: the default start, so timestamps in traces are stable. */
 export const VIRTUAL_EPOCH_MS = Date.UTC(2026, 9, 17, 10, 0, 0);
 
-/** Microtask turns flushed between timers; enough for the pipeline's await chains. */
-const FLUSH_TURNS = 200;
+/**
+ * Microtask turns flushed between timers; enough for the pipeline's await chains. Raised from 200
+ * in task 4.6: each streamed sentence now waits for a locked check, so a long reply's chain at one
+ * virtual instant is longer (too few turns made the clock fire a timeout the code never reached).
+ */
+const FLUSH_TURNS = 2_000;
 
 export interface VirtualClock extends Clock {
   /** Timers not yet fired or cancelled. */
