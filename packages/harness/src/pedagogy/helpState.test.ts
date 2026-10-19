@@ -15,6 +15,7 @@ const VALID = {
   attemptLogged: true,
   pendingCheck: false,
   answerKey: ['42'],
+  lockedStopped: false,
 };
 
 const DEFAULT = { rung: 0, help: { ...INITIAL_HELP_STATE, answerKey: [] } };
@@ -23,8 +24,18 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
   it('parses a valid stored blob into rung and help', () => {
     expect(parseSessionHelp(VALID)).toEqual({
       rung: 3,
-      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: ['42'] },
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: ['42'],
+        lockedStopped: false,
+      },
     });
+  });
+
+  it('parses lockedStopped true (4.6b: set for the rest of a session after a locked hit)', () => {
+    expect(parseSessionHelp({ ...VALID, lockedStopped: true }).help.lockedStopped).toBe(true);
   });
 
   it.each([
@@ -43,9 +54,14 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     ['stuckTurns 2', { ...VALID, stuckTurns: 2 }],
     ['a non-boolean flag', { ...VALID, attemptLogged: 'yes' }],
     ['a non-string answer key', { ...VALID, answerKey: [42] }],
+    ['a non-boolean lockedStopped', { ...VALID, lockedStopped: 'yes' }],
     [
       'a missing field',
       { v: 1, rung: 2, stuckTurns: 0, attemptLogged: false, pendingCheck: false },
+    ],
+    [
+      'a missing lockedStopped (an old stored blob, before 4.6b)',
+      { v: 1, rung: 2, stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [] },
     ],
     ['an unknown key', { ...VALID, extra: true }],
   ])('%s → the default', (_label, raw) => {

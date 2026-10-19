@@ -314,6 +314,7 @@ describe('buildContext: session help state (ADR-0005)', () => {
     attemptLogged: true,
     pendingCheck: false,
     answerKey: ['5/6'],
+    lockedStopped: false,
   };
 
   it('parses the raw help state from Entitled into helpRung and helpState', async () => {
@@ -324,6 +325,7 @@ describe('buildContext: session help state (ADR-0005)', () => {
       attemptLogged: true,
       pendingCheck: false,
       answerKey: ['5/6'],
+      lockedStopped: false,
     });
   });
 

@@ -10,6 +10,14 @@
 // word change nothing. Invisible characters used as spaces are read both ways (dropped, and as a
 // space), so `a<ZWSP>b` is tried as "ab" and as "a b".
 //
+// Fix round (4.6b): before any of that, HTML tags are stripped and common HTML entities are
+// decoded (`stripHtmlTags`, `decodeHtmlEntities`), and a small, conservative set of Cyrillic and
+// Greek look-alike letters is folded to the Latin letter they render as (`foldConfusables`), so
+// `&#108;&#111;op`, `<b>loop</b>` and `ӏоор` (Cyrillic) all fold toward `loop`. Every one of these
+// three passes is length-preserving (a tag or entity is replaced by same-length padding, a
+// confusable is a one-for-one character swap), so a token's `start` still points at the exact
+// place in the original text (`carryStart`'s callers slice the original text by it).
+//
 // The harness never holds locked text: it only prepares candidates (`lockedCandidates`) and asks
 // the index (`RetrievalIndex.leakCheck`), which answers with one boolean. `lockedIndex` is what an
 // adapter builds from the material it already stores.
@@ -17,9 +25,81 @@
 // Known misses (judge-scored, task 4.5b; lockedLeak is a verbatim backstop only): spans under 8
 // tokens; filler words interleaved; reordered sentences; renamed variables in code; summaries and
 // paraphrase; contractions written differently ("does not" / "doesn't"); translation (folding
-// normalises script, case and width, not language, so a translated sentence shares no tokens).
+// normalises script, case and width, not language, so a translated sentence shares no tokens);
+// hex- or decimal-escaped text outside HTML entities (`\x6c\x6f\x6f\x70`, `l...`); ROT13 and
+// other letter ciphers; URL percent-encoding (`%6C%6F%6F%70`); words joined by camelCase or
+// snake_case so the token boundary disappears (`theLoopRepeats`, `the_loop_repeats`); a span
+// written in reverse token or character order; and confusables outside the small table above
+// (`foldConfusables` is not an exhaustive Unicode confusables mapping).
 import { decodedBase64Spans } from '../pipeline/generate/base64Leak.js';
 import { foldText } from './textFold.js';
+
+// A real tag's name starts right after `<` (or `</`) with a letter: `< 5` (a comparison, with a
+// space) and `count > 0` (no matching `<` right before it) never match, so ordinary code with `<`
+// and `>` as operators is left alone, even across a whole file with no real tags in it.
+const TAG = /<\/?[a-zA-Z][-a-zA-Z0-9]*(?:\s[^<>]*)?\/?>/g;
+
+/** Strips HTML tags, each replaced by spaces of the same length (keeps every index in place). */
+export function stripHtmlTags(text: string): string {
+  return text.replace(TAG, (m) => ' '.repeat(m.length));
+}
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+};
+const ENTITY = /&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g;
+
+/**
+ * Decodes named (`&amp;`) and numeric (`&#108;`, `&#x6c;`) HTML entities. Each match is replaced
+ * by its decoded character followed by zero-width-space padding up to the entity's own length, so
+ * the result is exactly as long as `text` (the padding is `\p{Cf}`: the `drop` reading of
+ * `lockedTokens` joins it into the surrounding word, the `space` reading splits there, same as any
+ * other invisible character). An entity that does not decode is left as is.
+ */
+export function decodeHtmlEntities(text: string): string {
+  return text.replace(ENTITY, (m, body: string) => {
+    let ch: string | undefined;
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X';
+      const code = Number.parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      ch =
+        Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : undefined;
+    } else {
+      ch = NAMED_ENTITIES[body.toLowerCase()];
+    }
+    if (ch === undefined) return m;
+    const pad = Math.max(0, m.length - ch.length);
+    return ch + '​'.repeat(pad);
+  });
+}
+
+// A small, conservative table of Cyrillic and Greek letters that render identically (or near
+// identically) to a Latin letter: not an exhaustive confusables mapping (see known misses above).
+const CONFUSABLES: Readonly<Record<string, string>> = {
+  а: 'a', А: 'A', е: 'e', Е: 'E', о: 'o', О: 'O', р: 'p', Р: 'P', с: 'c', С: 'C',
+  х: 'x', Х: 'X', у: 'y', У: 'Y', і: 'i', І: 'I', ѕ: 's', Ѕ: 'S', ј: 'j', Ј: 'J',
+  Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O',
+  Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X', ο: 'o', ι: 'i',
+};
+
+/** Folds the look-alike letters in `CONFUSABLES`; every other character passes through unchanged. */
+export function foldConfusables(text: string): string {
+  let out = '';
+  for (const ch of text) out += CONFUSABLES[ch] ?? ch;
+  return out;
+}
+
+/** The three length-preserving passes above, composed. */
+function deobfuscate(text: string): string {
+  return foldConfusables(stripHtmlTags(decodeHtmlEntities(text)));
+}
 
 /** A leak is a span of this many tokens or more (ADR-0003 point 8). */
 export const LOCKED_LEAK_MIN_TOKENS = 8;
@@ -42,9 +122,11 @@ const lower = (u: string): string => u.toLowerCase();
 
 /** The folded tokens of `text`, each with its start in `text`. */
 export function lockedTokens(text: string, invisible: InvisibleReading = 'drop'): LockedToken[] {
-  // A space of the same length keeps every index where it was.
+  // Every pass here (deobfuscate, and a space of the same length for `space`) keeps every index
+  // the same length as the next, so a token's `start` still points into the original `text`.
+  const deobfuscated = deobfuscate(text);
   const source =
-    invisible === 'space' ? text.replace(INVISIBLE, (m) => ' '.repeat(m.length)) : text;
+    invisible === 'space' ? deobfuscated.replace(INVISIBLE, (m) => ' '.repeat(m.length)) : deobfuscated;
   const f = foldText(source, lower);
   const out: LockedToken[] = [];
   for (const m of f.s.matchAll(TOKEN)) {

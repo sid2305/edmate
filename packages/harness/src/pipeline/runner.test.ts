@@ -582,6 +582,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
   const history: Message[] = [
     {
@@ -699,6 +700,7 @@ describe('runTurn with the real decide (3.6)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
 
   function setup(
@@ -744,6 +746,7 @@ describe('runTurn with the real decide (3.6)', () => {
           attemptLogged: false,
           pendingCheck: false,
           answerKey: [ANSWER_KEY],
+          lockedStopped: false,
         },
         ...o.built,
       }),
@@ -766,7 +769,7 @@ describe('runTurn with the real decide (3.6)', () => {
     expect(rec?.decision).toMatchObject({ move: 'hint', rung: 2, mustNotReveal: [ANSWER_KEY] });
     expect(rec?.next).toEqual({
       rung: 2,
-      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY] },
+      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY], lockedStopped: false },
     });
     expect(rec?.promptPack).toEqual({
       set: FIXTURE_PROMPT_PACK_VERSION,

@@ -48,7 +48,11 @@ function notesTool(output: unknown) {
   });
 }
 
-async function turn(stream: ScriptedStreamCall[], overrides: Partial<PipelineDeps> = {}) {
+async function turn(
+  stream: ScriptedStreamCall[],
+  overrides: Partial<PipelineDeps> = {},
+  stepOverrides: Partial<Parameters<typeof testSteps>[0]> = {},
+) {
   const retrieval = memoryRetrieval({ chunks: retrievalWorld() });
   const t = testDeps({ script: { stream }, overrides: { retrieval, ...overrides } });
   const steps = testSteps({
@@ -56,6 +60,7 @@ async function turn(stream: ScriptedStreamCall[], overrides: Partial<PipelineDep
     decide: { run: () => Promise.resolve(testDecideResult(decision)) },
     generate: defaultSteps.generate,
     postGuard: defaultSteps.postGuard,
+    ...stepOverrides,
   });
   const { events, result } = await driveTurn(
     runTurn(demoTurnInput, { deps: t.deps, steps }),
@@ -77,8 +82,10 @@ describe('runner + lockedLeak', () => {
     const { events, steps, result } = await turn([
       main(say('Good question. '), say(`Here it is: ${LOCKED} `), say('Hope that helps.'), used),
     ]);
+    // 4.6b: "Good question. " is under 8 tokens, so the locked stream holds it back rather than
+    // showing it at once; the next batch trips, so it is never released. `clearAll` still sends
+    // `replace ''` unconditionally before the locked reply.
     expect(events).toEqual([
-      { type: 'token', text: 'Good question. ' },
       { type: 'replace', text: '' },
       { type: 'replace', text: REPLY },
       { type: 'done', messageId: 'message_1', usage: [usageMain] },
@@ -143,6 +150,41 @@ describe('runner + lockedLeak', () => {
     const retrieval = memoryRetrieval({ chunks: retrievalWorld(), leakCheck: false });
     const { events } = await turn([main(say(`Here it is: ${LOCKED}`), used)], { retrieval });
     expect(events.map((e) => (e.type === 'token' ? e.text : '')).join('')).toContain(LOCKED);
+  }, 10_000);
+
+  it('a locked hit sets lockedStopped on the saved help state, for the rest of the session', async () => {
+    const { steps } = await turn([
+      main(say('Good question. '), say(`Here it is: ${LOCKED} `), say('Hope that helps.'), used),
+    ]);
+    expect(steps.commits[0]?.next?.help.lockedStopped).toBe(true);
+  }, 10_000);
+
+  it('ADR-0007 §8 (4.6b): once the session stopped, a later clean reply streams only at the end', async () => {
+    const { events } = await turn(
+      [main(say('This is a perfectly clean reply, with enough words. '), used)],
+      {},
+      {
+        buildContext: () =>
+          Promise.resolve({
+            profile: { studentId: 'stu_test_01', teacherId: 'tch_test_01', lang: 'en', mastery: {}, mistakes: [] },
+            history: [],
+            retrieved: [],
+            lockedHit: false,
+            helpRung: 0,
+            helpState: {
+              stuckTurns: 0,
+              attemptLogged: false,
+              pendingCheck: false,
+              answerKey: [],
+              lockedStopped: true,
+            },
+          }),
+      },
+    );
+    // One token event only: the whole reply, released at the clean end, never piecemeal.
+    expect(events.filter((e) => e.type === 'token')).toEqual([
+      { type: 'token', text: 'This is a perfectly clean reply, with enough words. ' },
+    ]);
   }, 10_000);
 
   it('reports name the site only', () => {

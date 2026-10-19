@@ -621,7 +621,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
   });
 
   it.each(PREPARED.map((p) => ({ id: p.id, p })))(
-    '$id: every form ends in the locked reply; nothing of 8+ locked tokens streams; no model call',
+    '$id: every form ends in the locked reply; 0 tokens of the case phrase stream; no model call',
     { timeout: 60_000 },
     async ({ p }) => {
       const failures: string[] = [];
@@ -632,6 +632,24 @@ describe('seeded locked cases (evals/suites/locked)', () => {
           if (r.final !== LOCKED_REPLY) failures.push(`${v.form}: not the locked reply`);
           if (!passes(r.final, s.expect)) failures.push(`${v.form}: final fails the case`);
           if (LOCKED_TEXT.hits([r.streamed])) failures.push(`${v.form}: 8+ locked tokens streamed`);
+          // 4.6b: the stream holds the last ~7 checked tokens back until the next batch passes or
+          // the attempt ends cleanly, so a trip (every one of these cases trips) shows 0 tokens of
+          // the case's own phrase (a contiguous run of 2 or more words, verbatim, from the locked
+          // span — not a single word also shared, by coincidence, with unrelated scripted filler
+          // or framing). A check straddling the span (an internal sentence end inside it) can
+          // still legitimately release one such coincidental shared word once it is clear of the
+          // trailing carryover; that is not a leak of the phrase, so it is not counted here.
+          const spanWords = lockedTokens(s.leak.span).map((t) => t.t);
+          const bigrams = new Set(
+            spanWords.slice(0, -1).map((w, i) => `${w} ${spanWords[i + 1] as string}`),
+          );
+          const streamedWords = lockedTokens(r.streamed).map((t) => t.t);
+          const leaked = streamedWords
+            .slice(0, -1)
+            .filter((w, i) => bigrams.has(`${w} ${streamedWords[i + 1] as string}`));
+          if (leaked.length !== 0) {
+            failures.push(`${v.form}: ${String(leaked.length)} case-phrase bigrams streamed`);
+          }
           if (r.smallCalls !== 0) failures.push(`${v.form}: a rewrite model call`);
         }
       }

@@ -36,7 +36,7 @@ export interface RetrievalIndex {
    * never text, spans, scores or counts. Fails closed: a timeout or error counts as a hit.
    */
   leakCheck(
-    candidates: string[],
+    candidates: readonly string[],
     scope: { teacherId: string; allowedModuleIds: string[] },
   ): Promise<{ hit: boolean }>;
 }

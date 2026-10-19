@@ -97,6 +97,11 @@ export interface ToolLoopInput {
    * output before the model sees it. A hit or a rejection withholds or fails (fail closed).
    */
   lockedCheck: LockedCheck;
+  /**
+   * Session-wide stop (ADR-0007 §8, 4.6b): after a locked hit or failed check earlier in the
+   * session, hold the whole reply and show it only once the attempt ends cleanly. Default false.
+   */
+  holdAll?: boolean;
   /** Background work (a stream close) the runner waits for before `finished`. */
   track(settled: Promise<unknown>): void;
 }
@@ -119,7 +124,7 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
   /** Everything the model wrote, shown or not (postGuard checks all of it). */
   let raw = '';
   let rounds = 0;
-  const locked = lockedStream(i.lockedCheck, i.report, i.cancel);
+  const locked = lockedStream(i.lockedCheck, i.report, i.cancel, { holdAll: i.holdAll === true });
   /** Shows sentences once the locked check passed them. */
   const show = async (sentences: readonly string[]) => {
     for (const p of await locked.check(sentences)) {
@@ -165,6 +170,13 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
     if (calls.length === 0) {
       const last = [...locked.split(i.gate.flush()), ...locked.rest()];
       if (last.length > 0) await show(last);
+      // The attempt ended cleanly (or was already tripped, where this is empty): anything the
+      // locked check passed but held back (the carryover, or the whole reply under `holdAll`) is
+      // safe to show now, nothing more can come to join it into a longer span.
+      for (const p of locked.release()) {
+        draft += p;
+        i.show(p);
+      }
       const tripped = locked.tripped;
       return {
         draft,

@@ -370,6 +370,12 @@ export interface Steps {
       /** decide's numbered sources, for the `sources` event. */
       sources: SourceRef[];
       attempt: 'primary' | 'fallback';
+      /**
+       * Session-wide stop (ADR-0007 §8, 4.6b): the session's saved help state already had a
+       * locked hit or failed check. When true, generate holds the whole reply until the attempt
+       * ends cleanly instead of streaming it sentence by sentence. Default false.
+       */
+      lockedStopped?: boolean;
     },
     emit: Emit,
   ): Promise<GenerateResult>;

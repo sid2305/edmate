@@ -14,6 +14,14 @@ export const HelpStateSchema = z.strictObject({
   pendingCheck: z.boolean(),
   /** The current problem's answer; goes to `mustNotReveal`. Filled by 5.6. */
   answerKey: z.array(z.string()),
+  /**
+   * Set once a turn's stream withholds locked text (a hit or a failed check: ADR-0007 §8,
+   * 4.6b). Stays true for the rest of the session: every later turn's reply is held whole and
+   * shown only once the full-reply check passes, instead of streaming sentence by sentence
+   * (`generate.ts` reads it; `runner.ts` sets it after a turn whose `GenerateResult.locked` is
+   * set). Harness-internal only: never a contracts change, never shown to the student.
+   */
+  lockedStopped: z.boolean(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -22,6 +30,7 @@ export const INITIAL_HELP_STATE: Readonly<HelpState> = Object.freeze({
   attemptLogged: false,
   pendingCheck: false,
   answerKey: Object.freeze([]) as unknown as string[],
+  lockedStopped: false,
 });
 
 /** A fresh copy, so a result never aliases (possibly frozen) input state. */
@@ -56,8 +65,11 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey } = r.data;
-  return { rung, help: copyHelp({ stuckTurns, attemptLogged, pendingCheck, answerKey }) };
+  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped } = r.data;
+  return {
+    rung,
+    help: copyHelp({ stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped }),
+  };
 }
 
 /**

@@ -154,7 +154,7 @@ export interface RetrievalIndex {
   // Code-only: says whether locked modules match, never returns their text.
   probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
   // Code-only: true when any candidate shares an 8+ token span with this teacher's material outside allowedModuleIds; never text, spans or counts (ADR-0007).
-  leakCheck(candidates: string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
+  leakCheck(candidates: readonly string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
 }
 export interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
 export interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)

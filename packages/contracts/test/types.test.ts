@@ -67,7 +67,7 @@ describe('RetrievalIndex.leakCheck (ADR-0007)', () => {
 
   it('takes a batch of candidate texts and the allowed-module scope (the complement is checked)', () => {
     expectTypeOf<Parameters<LeakCheck>>().toEqualTypeOf<
-      [candidates: string[], scope: { teacherId: string; allowedModuleIds: string[] }]
+      [candidates: readonly string[], scope: { teacherId: string; allowedModuleIds: string[] }]
     >();
   });
 

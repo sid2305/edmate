@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   carryStart,
+  decodeHtmlEntities,
+  foldConfusables,
   LOCKED_LEAK_MIN_TOKENS,
   LOCKED_STREAM_CARRY_TOKENS,
   lockedCandidates,
@@ -8,6 +10,7 @@ import {
   lockedTokens,
   shingles,
   stringLeaves,
+  stripHtmlTags,
 } from './lockedMatch.js';
 
 // Synthetic teacher material only (no real content in unit tests).
@@ -18,6 +21,7 @@ const SPAN7 = 'repeats its body as long as its'; // 7 tokens
 const ZWSP = String.fromCharCode(0x200b);
 const fullwidth = (s: string) =>
   s.replace(/[!-~]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0xfee0));
+const index = lockedIndex([LOCKED], [ALLOWED]);
 
 describe('lockedTokens', () => {
   it('folds case, width and digits and splits on anything that is not a word character', () => {
@@ -66,8 +70,6 @@ describe('shingles', () => {
 });
 
 describe('lockedIndex', () => {
-  const index = lockedIndex([LOCKED], [ALLOWED]);
-
   it('hits on any 8 contiguous locked tokens, wherever they sit in a candidate', () => {
     expect(LOCKED_LEAK_MIN_TOKENS).toBe(8);
     expect(index.hits([SPAN8])).toBe(true);
@@ -156,6 +158,84 @@ describe('carryStart', () => {
   it('carries everything when there are fewer tokens than that', () => {
     expect(carryStart('a b c')).toBe(0);
     expect(carryStart('')).toBe(0);
+  }, 5_000);
+});
+
+describe('stripHtmlTags', () => {
+  it('replaces each tag with spaces of the same length', () => {
+    expect(stripHtmlTags('<b>repeats</b> its body')).toBe('   repeats     its body');
+    expect(stripHtmlTags('a<br/>b')).toBe('a     b');
+    expect(stripHtmlTags('no tags here')).toBe('no tags here');
+  }, 5_000);
+
+  it('is folded away before tokens are taken, so a tag never joins or splits a word', () => {
+    expect(lockedTokens('<b>repeats</b> its body').map((t) => t.t)).toEqual([
+      'repeats',
+      'its',
+      'body',
+    ]);
+    expect(index.hits([`<em>${SPAN8}</em>`])).toBe(true);
+  }, 5_000);
+
+  it('never treats `<` and `>` used as comparison operators as a tag, even across a long text', () => {
+    // A loose `<[^>]*>` would swallow everything between an unrelated `<` and a much later `>`;
+    // real teacher material is full of code like this (regression: a demo module’s own text).
+    const code = `while count > 0:\n    count -= 1\n${SPAN8}\nwhile count < 5:\n    count += 1`;
+    expect(stripHtmlTags(code)).toBe(code);
+    expect(index.hits([code])).toBe(true);
+  }, 5_000);
+});
+
+describe('decodeHtmlEntities', () => {
+  it('decodes named and numeric entities, padded to the entity’s own length', () => {
+    expect(decodeHtmlEntities('a&amp;b')).toBe('a&' + '​'.repeat(4) + 'b');
+    expect(decodeHtmlEntities('&#108;oop')).toBe('l' + '​'.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('&#x6C;oop')).toBe('l' + '​'.repeat(5) + 'oop');
+    expect(decodeHtmlEntities('x').length).toBe(1);
+  }, 5_000);
+
+  it('leaves an entity that does not decode as is', () => {
+    expect(decodeHtmlEntities('&notareal;')).toBe('&notareal;');
+  }, 5_000);
+
+  it('leaves a numeric entity past the last code point as is', () => {
+    expect(decodeHtmlEntities('&#99999999;')).toBe('&#99999999;');
+  }, 5_000);
+
+  it('folds a span spelled out in entities into one token, caught by the index', () => {
+    const spelled = SPAN8.split('')
+      .map((ch) => (ch === ' ' ? ' ' : `&#${ch.codePointAt(0)};`))
+      .join('');
+    expect(lockedTokens(spelled).map((t) => t.t)).toEqual(lockedTokens(SPAN8).map((t) => t.t));
+    expect(index.hits([spelled])).toBe(true);
+  }, 5_000);
+});
+
+describe('foldConfusables', () => {
+  it('folds Cyrillic and Greek look-alikes to the Latin letter they render as, same length', () => {
+    expect(foldConfusables('Р').length).toBe(1);
+    expect(foldConfusables('xyz')).toBe('xyz');
+    // Cyrillic а, е, р: spells "repeats" with three Cyrillic look-alikes.
+    const cyr = 'rереats'; // е (U+0435) and р (U+0440) swapped in
+    expect(foldConfusables(cyr)).toBe('repeats');
+  }, 5_000);
+
+  it('catches a span with Cyrillic look-alike letters mixed in', () => {
+    const mixed = SPAN8.replace(/e/g, 'е').replace(/o/g, 'о');
+    expect(mixed).not.toBe(SPAN8);
+    expect(index.hits([mixed])).toBe(true);
+  }, 5_000);
+});
+
+describe('performance at the 8,000-character cap', () => {
+  it('shingles an 8,000-character text and checks candidates well inside 5 s', () => {
+    const big = 'word '.repeat(1_600); // 8,000 characters
+    const start = Date.now();
+    const sh = shingles(big);
+    const cands = lockedCandidates([big]);
+    expect(sh.length).toBeGreaterThan(0);
+    expect(cands.length).toBeGreaterThan(0);
+    expect(Date.now() - start).toBeLessThan(5_000);
   }, 5_000);
 });
 

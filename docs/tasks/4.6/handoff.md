@@ -199,3 +199,97 @@ Why: the spec must match the accepted ADR; a reader of the table alone would bui
 Alternatives: leave the table stale.
 Reversible: only by another ADR.
 
+## 4.6b
+
+- **Status:** DONE (follow-ups from the 4.6 review and safety review)
+- **Branch:** `m4/4.6b-lockedleak-followups` (from origin/main, 4.6 merged)
+- **Worktree:** `.claude/worktrees/agent-ace1aa25339f09ebd` (repo-relative)
+- **Risky paths:** `packages/contracts/**` and `docs/adr/**` (architect, security-reviewer, typescript-reviewer — item 7 landed); `packages/harness/src/guardrails/**` and `packages/harness/src/pedagogy/**` (safety-reviewer).
+
+### Acceptance evidence
+
+`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d postgres redis`, then
+`corepack pnpm turbo run typecheck lint test --filter=...@edmate/contracts --force` (nothing cached, nothing skipped):
+
+```
+Tasks:    37 successful, 37 total
+Cached:    0 cached, 37 total
+@edmate/contracts:test  Tests  325 passed   All files 100 / 100 / 100 / 100
+@edmate/harness:test    Tests 3124 passed   All files 99.05 / 97.63 / 98.56 / 99.46   src/guardrails 100 / 100 / 100 / 100
+@edmate/evals:test      Tests  300 passed   All files 100 / 98.33 / 100 / 100 (34 locked cases, both mutations, included)
+@edmate/content:test  165 · @edmate/db:test 491 · @edmate/gateway:test 405 · @edmate/web:test 132 · @edmate/worker:test 106 · @edmate/cli:test 46 · @edmate/queue:test 40 (all passed)
+```
+
+`python3 docs/adr/check-headings.py` → exit 0, no output.
+`python3 <worktree>/.githooks/secret-scan.py --all` → exit 0, no output.
+
+Per-item evidence (the 4.6 review's and safety-review's MEDIUM/LOW findings, all `[deferred 4.6b]`):
+
+1. **No short-phrase flash.** `pipeline/generate/lockedStream.ts` redesigned: `check()` now holds back the last ~7 checked tokens (`carryStart`) after every passing batch instead of showing the whole batch; they are released only once the *next* batch also passes, or by the new `release()` once the attempt ends cleanly. On a hit, everything held (including a clean sentence shown earlier that was still held back) is discarded — never shown. `packages/evals/src/lockedFixtures.test.ts` now asserts 0 case-phrase bigrams stream across all 34 cases × 9 forms (up from the 4.6 handoff's documented 89/351 short flashes); see its updated `it.each` test. Unit tests: `pipeline/generate/lockedStream.test.ts` (rewritten, 16 tests), `pipeline/generate/toolLoop.test.ts` and `pipeline/generate/generate.test.ts` (updated for the new release timing).
+2. **Session-wide stop (ADR-0007 §8).** After a locked hit or failed check, the session's saved help state gets `lockedStopped: true` (new `HelpState` field, `pedagogy/helpState.ts`; carried forward untouched by every branch of the ladder, `pedagogy/ladder.ts`). `runner.ts` reads it from `built.helpState.lockedStopped` and passes it to `generate` as `lockedStopped`; `generate.ts` turns it into `lockedStream`'s new `holdAll` option, which holds every batch whole until `release()` at a clean end (no per-sentence streaming at all for the rest of the session). The ADR's §8 wording is corrected: the residual oracle is about log2(N+1) bits once per session (the turn that first trips), then 1 bit per turn after that, not a fresh positional guess every turn. Tests: `pedagogy/helpState.test.ts`, `pedagogy/ladder.test.ts` (new `describe('lockedStopped ...')`), `pipeline/generate/toolLoop.test.ts` (`holdAll`), `pipeline/generate/generate.test.ts` (`lockedStopped` wiring), `pipeline/runner.lockedLeak.test.ts` (end to end: a hit sets it on the saved `next`; a session that already stopped streams a later clean reply only at the end).
+3. **Batching.** `lockedStream.check()` makes one `lockedCheck` call for the whole batch of sentences it is given (joined with the held-back carryover), not one per sentence. `pipeline/generate/toolLoop.test.ts` adds `'one call checks the whole batch, not one call per sentence (120 ms each, 300 lines)'`: a scripted 300-line code reply with a (real, busy-wait) 120 ms `leakCheck` makes exactly one call and finishes in well under 2 s, inside the attempt budget (no `setTimeout`: the harness is pure, so the delay is a real busy-wait, not a fake timer).
+4. **Folding.** `guardrails/lockedMatch.ts` now strips HTML tags (`stripHtmlTags`, a tag-shaped match only — `<[^>]*>` would have swallowed teacher code using `<`/`>` as comparison operators across a whole file; caught by a regression test on the demo teacher's own `loops/notes.md`), decodes common HTML entities (`decodeHtmlEntities`, named and numeric, padded with `\p{Cf}` to stay length-preserving), and folds a small, explicit table of Cyrillic/Greek look-alike letters (`foldConfusables`) — all three passes are length-preserving, so `carryStart`'s token `start` offsets still point into the original text. No shared confusables normaliser existed yet (4.3's distress branch isn't merged and has none either), so this one is new; a later guard can reuse it. The file's known-miss comment now also lists hex/unicode escapes, ROT13, URL percent-encoding, camelCase/snake_case joins and reversed order. Tests: `guardrails/lockedMatch.test.ts` (+12).
+5. **virtualClock FLUSH_TURNS.** `testing/virtualClock.ts`'s `drive()` now flushes until quiet: on a still-pending promise with no timer due, it keeps taking up to `QUIET_FLUSH_PASSES` (50) more passes of the same size before calling it a deadlock, instead of trusting one fixed-size pass. `pipeline/generate/toolLoop.test.ts` pins the worst case that motivated raising `FLUSH_TURNS` in 4.6: 400 single-sentence model chunks in one round, no tool call or timer between them (this reproduced a real deadlock against the old one-pass `drive()` before the fix).
+6. **Performance regression test.** `guardrails/lockedMatch.test.ts`: `shingles`/`lockedCandidates` over an 8,000-character text, bound at 5 s (well inside it in practice).
+7. **`ports.ts:39` readonly tweak.** `leakCheck(candidates: readonly string[], …)` in `packages/contracts/src/ports.ts`, the build plan's Core contracts block, `test/spec-types.ts` and the type test (`test/types.test.ts`). A pure type tightening (no behaviour change); `lockedCandidates` already returned `string[]`, which is assignable. The ADR text is also updated to match. The merge gate requires architect, security-reviewer and typescript-reviewer for this (noted below and in the PR).
+
+### Changes
+
+- `packages/contracts/src/ports.ts`, `test/spec-types.ts`, `test/types.test.ts`, `docs/edmate-harness-build-plan.md`, `docs/adr/0007-locked-leak-check-port.md`: `leakCheck(candidates: readonly string[], …)`; ADR §8 reworded for the session-wide stop.
+- `packages/harness/src/guardrails/lockedMatch.ts` (+test): `stripHtmlTags`, `decodeHtmlEntities`, `foldConfusables`, applied in `lockedTokens` before folding; known-miss comment extended.
+- `packages/harness/src/pipeline/generate/lockedStream.ts` (+test, rewritten): held-back release, one call per batch, `release()`, `LockedStreamOptions.holdAll`.
+- `packages/harness/src/pipeline/generate/toolLoop.ts` (+test): `holdAll` threaded into `lockedStream`; `locked.release()` called (and shown) once the attempt ends cleanly.
+- `packages/harness/src/pipeline/steps/generate.ts` (+test): reads `lockedStopped` from `x`, passes `holdAll` to `runToolLoop`.
+- `packages/harness/src/pipeline/types.ts`: `Steps['generate']`'s `x` gains optional `lockedStopped?: boolean` (harness-internal, not a contracts change).
+- `packages/harness/src/pipeline/runner.ts`: passes `built.helpState.lockedStopped` into `generate`; sets `next.help.lockedStopped = true` on the saved `CommitRecord.next` when `gen.locked` is set.
+- `packages/harness/src/pedagogy/helpState.ts` (+test): `HelpState` gains `lockedStopped: boolean`; `INITIAL_HELP_STATE`, `parseSessionHelp` updated. An old stored blob without it fails to parse and falls back to rung 0 / `INITIAL_HELP_STATE`, the schema's existing behaviour for any shape change.
+- `packages/harness/src/pedagogy/ladder.ts` (+test): every branch now carries `help.lockedStopped` through untouched (sticky for the session; the ladder never resets it).
+- `packages/harness/src/pedagogy/testing.ts`: `helpWith()` default gains `lockedStopped: false`.
+- `packages/harness/src/testing/virtualClock.ts` (+test): `drive()` flushes until quiet, capped at `QUIET_FLUSH_PASSES`.
+- `packages/evals/src/lockedFixtures.test.ts`: the per-case test now asserts 0 case-phrase bigrams stream (not just 0 locked tokens total — a single word also shared, by coincidence, with unrelated scripted filler or a synthetic frame is not a leak; see its decision below).
+- Test-only updates for the new release timing (no production behaviour change beyond what is listed above): `pipeline/generate/toolLoop.test.ts`, `pipeline/generate/generate.test.ts`, `pipeline/runner.generate.test.ts`, `pipeline/runner.lockedLeak.test.ts`, `pipeline/turn.integration.test.ts`, `pipeline/steps/commit.test.ts`, `pipeline/steps/buildContext.test.ts`, `pedagogy/helpState.test.ts`, `pedagogy/ladder.test.ts`; `packages/content/src/promptPacks.snapshot.test.ts` and `packages/db/test/session-state.int.test.ts` updated for the new `HelpState` field.
+
+### Decisions
+
+### 19 Oct 2026 · 4.6b No short-phrase flash: a passing batch's last ~7 tokens stay held until the next batch passes or the attempt ends · decided by tdd-guide (4.6 review finding) · risk: high
+Decided: `lockedStream.check()` releases a passing batch minus its carryover (same `carryStart` rule as before), and that held tail is checked again with the next batch; a hit discards the whole thing, held tail included. `release()` shows it once at a clean end.
+Why: the 4.6 review found up to 7 locked tokens could flash before a later replace; holding them back until they are re-checked with more text (or the attempt ends cleanly) means a span that trips later is never shown, not even in part.
+Alternatives: keep the 4.6 behaviour (accepted known miss); a prefix-query port (an oracle, ruled out in ADR-0007).
+Reversible: yes, with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.6b Batch: one `leakCheck` call per batch of sentences, not one per sentence · decided by tdd-guide (4.6 review finding) · risk: medium
+Decided: `check(sentences)` joins every sentence it is given (plus the held-back carryover) into one combined text and makes one call.
+Why: the 4.6 design made one port call per sentence; a long reply arriving as many sentences in one model chunk (e.g. a 300-line code answer) could then need as many slow round trips in series, risking the attempt budget. A span crossing sentences inside one batch is still one contiguous run in the joined text, so batching needs no extra carryover logic of its own.
+Alternatives: keep one call per sentence; cap the number of sentences per call (adds complexity for no safety benefit, since the batch is still checked as one string either way).
+Reversible: yes.
+
+### 19 Oct 2026 · 4.6b Session-wide stop after the first locked hit or failed check, via a new sticky `HelpState.lockedStopped` field · decided by lead (task brief, ADR-0007 §8) and tdd-guide (where the flag lives and how it is threaded) · risk: high
+Decided: add `lockedStopped: boolean` to the harness-internal `HelpState` (not a contracts change: it rides in the existing opaque `sessions.help_state` blob `SessionStateStore` already saves, the same path `answerKey` and the help ladder use). The ladder (`pedagogy/ladder.ts`) carries it through every branch untouched. `runner.ts` sets it true on the saved `next` when a turn's `GenerateResult.locked` is set, and reads the session's existing value from `built.helpState.lockedStopped` to pass into `generate` as `lockedStopped`, which `createGenerate` turns into `lockedStream`'s `holdAll` option: every later turn in the session holds its whole reply until the attempt ends cleanly, the same path a non-streamed reply already takes, instead of streaming sentence by sentence.
+Why: ADR-0007 §8 (as written at 4.6) said the stop position leaks about log2(N+1) bits *per turn*; stopping all per-sentence streaming for the rest of the session after the first hit bounds that to log2(N+1) bits once, then 1 bit per turn (whether that turn's reply was replaced) — the ADR text is corrected to say this.
+Alternatives: a new contracts field or port for session state (unnecessary: the existing opaque blob already round-trips harness-internal state across turns); reset the flag after some number of turns (no textual basis in the ADR for when that would be safe, so left out); carry it in `TurnContext` (ADR-0005 keeps `TurnContext` free of anything beyond what the model, events and traces need — this is harness/session bookkeeping only).
+Reversible: yes, with safety-reviewer sign-off (no ADR needed: the field lives entirely inside the harness's own opaque blob).
+
+### 19 Oct 2026 · 4.6b Folding: HTML tags and entities and a small confusables table, all length-preserving · decided by tdd-guide (4.6 review finding) · risk: medium
+Decided: `stripHtmlTags` only matches a real tag shape (`<\/?[a-zA-Z][-a-zA-Z0-9]*(?:\s[^<>]*)?\/?>`), not a bare `<[^>]*>`, after a first attempt with the bare form broke the fixture suite by swallowing a demo teacher's own `while count > 0:` / `while count < 5:` code as a "tag" spanning from one comparison operator to a `>` paragraphs later. `decodeHtmlEntities` and `foldConfusables` are both one-for-one, same-length transforms (padding decoded entities with `\p{Cf}`), so token `start` offsets (`carryStart`'s callers slice the original text by them) stay correct.
+Why: the 4.6 review found HTML and homoglyph spans as known misses. A confusables table had to be written from scratch: no shared one exists yet (4.3's distress branch, which might have had one, is unmerged and in fact has none either); it is written for reuse once a later guard needs it.
+Alternatives: route confusable folding through the shared `guardrails/textFold.ts` (risked changing behaviour for every other guard that already uses it — piiPatterns, answerLeak, numbers — which is out of scope here); an exhaustive Unicode confusables table (a known-miss list is honest about what a small table leaves out instead).
+Reversible: yes.
+
+### 19 Oct 2026 · 4.6b "Case phrase streamed" measured as a 2+-token contiguous run from the locked span, not any shared token · decided by tdd-guide (fixture test design) · risk: low
+Decided: `lockedFixtures.test.ts`'s per-case test counts a leak as a contiguous bigram (or longer) from the case's own `span` appearing in what streamed, not any single token in common with it.
+Why: a single coincidental shared word (e.g. "line", used in a synthetic test frame like "Rubric line 1: " and also, separately, a real word inside a case's locked YAML span) is not locked material leaking; the fixture's job is to catch the actual phrase, not flag ordinary vocabulary overlap.
+Alternatives: 0 tokens of any kind (too strict: an unrelated, 1-token filler word can legitimately release when a check straddles the span's own internal sentence break, since the check genuinely found no 8+-token locked match yet); 8+-token-only (too loose: it was already the pre-existing check and misses the "0 tokens of the case phrase" bar this task sets).
+Reversible: yes.
+
+### 19 Oct 2026 · 4.6b virtualClock `drive()` flushes until quiet, capped at 50 extra passes, instead of trusting one fixed-size flush · decided by tdd-guide (4.6 review finding) · risk: low
+Decided: on a still-pending promise with no timer due, `drive()` spends up to `QUIET_FLUSH_PASSES` (50) more passes of `FLUSH_TURNS` (2,000) microtask turns each before it calls it a deadlock, instead of deciding after exactly one pass. A regression test (400 single-sentence model chunks in one round, no tool call or timer between them) reproduced a real `virtualClock.drive: deadlock` against the single-pass version and now passes.
+Why: the 4.6 review called the fixed 2,000 a magic number; a true "flush until quiet" (detecting microtask-queue quiescence directly) has no public hook to observe from outside the engine, so this is the practical, capped approximation the review's own wording allowed ("capped").
+Alternatives: raise `FLUSH_TURNS` itself again (same magic-number problem, just a bigger one, as the regression test shows); instrument a quiescence signal into the pipeline's own code for tests to use (adds test-only hooks to production code, against the `tdd-workflow` skill's "don't test implementation details").
+Reversible: yes.
+
+### 19 Oct 2026 · 4.6b `ports.ts:39` tightened to `candidates: readonly string[]` · decided by tdd-guide (4.6 review finding) · risk: high
+Decided: `RetrievalIndex.leakCheck`'s first parameter is `readonly string[]`, matching the build plan's Core contracts block, `test/spec-types.ts` and the ADR text. A pure type tightening: every caller already passed an array it never mutates, and the in-memory adapter only reads it.
+Why: the 4.6 review noted the port never needed to mutate its input, so a mutable array was unnecessarily permissive, matching the existing style of other read-only port parameters.
+Alternatives: leave it `string[]` (what the review flagged); a shared type alias for the `scope` shape too (left out: out of scope for this one-line tightening, and the existing inline shape matches `search`'s).
+Reversible: yes, by another ADR (a contracts change, even a type-only one, per build plan rule 2); this PR carries architect, security-reviewer and typescript-reviewer for it.
+

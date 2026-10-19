@@ -505,7 +505,15 @@ class Turn {
 
     // 8. generate: one retry on the fallback model; a TurnAbort or a cancel is final. Text the
     // student saw is cleared before the error, so unguarded partial text never stays on screen.
-    const gen = await this.generate(scrubbed, ctx, decision, decided.sources);
+    // ADR-0007 §8 (4.6b): a session that already stopped streaming (an earlier turn's locked
+    // hit or failed check) holds this turn's whole reply too.
+    const gen = await this.generate(
+      scrubbed,
+      ctx,
+      decision,
+      decided.sources,
+      built.helpState.lockedStopped,
+    );
     if (gen === CANCELLED || 'code' in gen) {
       this.clearShown();
       this.endWithError(gen === CANCELLED ? PROVIDER_ERROR : gen);
@@ -526,10 +534,17 @@ class Turn {
     }
     const replyText = post;
     this.done();
+    // ADR-0007 §8 (4.6b): a hit or a failed check in this turn's stream sets the flag for the
+    // rest of the session, saved via commit's `next` (sticky; the ladder never clears it).
+    const next =
+      gen.locked === undefined
+        ? base.next
+        : { ...base.next, help: { ...base.next.help, lockedStopped: true } };
     return this.finish(
       e,
       {
         ...base,
+        next,
         outcome: 'replied',
         replyText,
         ...(questionId === undefined ? {} : { teacherQuestionId: questionId }),
@@ -748,6 +763,7 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
+    lockedStopped: boolean,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
@@ -765,7 +781,7 @@ class Turn {
           const tg = buildTurnGateway(this.deps, policy, this.billing as TurnBilling);
           return this.steps.generate(
             this.env(input, cancel, tg, 'generate'),
-            { ctx, decision, sources, attempt },
+            { ctx, decision, sources, attempt, lockedStopped },
             this.emitter(cancel, state),
           );
         },
