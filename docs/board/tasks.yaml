@@ -692,9 +692,9 @@ tasks:
   accept: tests for a mixed-case index name, a post-migrate timeout, and an acquire failure that keeps its original error.
   deps:
   - 3.16c
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/3.16d-migration-followups
+  model: build:sonnet
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
