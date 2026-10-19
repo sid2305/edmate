@@ -65,6 +65,7 @@ export {
 export { DecideResultSchema } from './results.js';
 export { checkInputLimits } from './steps/admit.js';
 export { DEFAULT_LIMIT_REACHED_REPLY } from './steps/entitle.js';
+export { ATTACHMENT_REFUSED_REPLY } from './steps/scrub.js';
 export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
 export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
 export {

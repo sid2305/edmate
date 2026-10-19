@@ -64,7 +64,8 @@ export class StepNotImplementedError extends HarnessError {
 
 /**
  * Why the scrub failed closed (task 4.2): a guard-chain cause, a payload the scrub could not walk,
- * or (set by the runner) the step itself throwing, timing out or returning a bad result.
+ * (set by the runner) the step itself throwing, timing out or returning a bad result, or (task
+ * 4.2b) an attachment present on the turn.
  */
 export type ScrubFailureCause =
   | 'empty'
@@ -80,7 +81,8 @@ export type ScrubFailureCause =
   | 'payload_shape'
   | 'step_error'
   | 'step_timeout'
-  | 'step_invalid_result';
+  | 'step_invalid_result'
+  | 'attachment';
 
 /** Only a cause and an error *name*: never a message, reason or text (messages can echo input). */
 export interface ScrubFailureDetail {
@@ -91,6 +93,9 @@ export interface ScrubFailureDetail {
 /**
  * The scrub could not give a trusted scrubbed input; the turn fails closed (`guard_blocked`).
  * A HarnessError: its message is fixed text plus the cause code, so the background log may keep it.
+ * Most causes are a framework bug; `'attachment'` is the one deliberate, by-design refusal (task
+ * 4.2b, no OCR/vision pipeline exists yet) — the turn still fails closed the same way, but it is
+ * not reported as a bug.
  */
 export class ScrubFailedError extends HarnessError {
   override readonly name = 'ScrubFailedError';
