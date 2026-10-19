@@ -46,7 +46,15 @@ Each step takes a `StepEnv` (`input`, `deps`, `cancel`, `turnId`) and returns a 
 - **Verification pass:** when any guard rewrote, every guard runs once more on the final text; a rewrite or block there is `block` / `rewrite_unverified` ("rewrite once; else safe reply"). An escalate still escalates.
 - **Time and cancel:** each guard has its own `timeoutMs` slice on the injected clock; the step's `cancel` token cancels the in-flight guard and fails the chain. The trace entries are `GuardTrace` (`{ name, ok, action? }`, action `failed` for framework failures, `(undeclared)` for an undeclared name), never reason or text.
 - **Safety-event seam:** `onGuardOutcome({ name, phase, pass, outcome, cause? })` fires once per guard run; a throw or a rejected promise from it is ignored. Persistence (`safety_events`) waits for its ADR (lead answer Q1).
-- **Wiring:** the `scrub`, `preGuard` and `postGuard` step stubs still fail closed. Each guard task (4.2 scrub, 4.3 pre, 4.5 post) wires its own phase when it lands that phase's first guard.
+- **Wiring:** the `scrub` phase is wired (4.2, below). The `preGuard` and `postGuard` step stubs still fail closed; 4.3 and 4.5 wire their phases the same way when they land each phase's first guard.
+
+## PII scrub (task 4.2, `src/guardrails/piiScrub.ts`, `src/pipeline/steps/scrub.ts`)
+
+- **What it removes:** phone numbers (fixed group shapes, `+CC`, spaced digits, a bare 10-digit number only next to a phone keyword), emails (also `[at]`, `(at)`, fullwidth `＠`), Luhn-valid card numbers (and a CVV or expiry only in the same message as one), OTP-like codes next to an OTP keyword, the student's own name after an introduction ("my name is", "mera naam", "मेरा नाम", "I'm", "myself", "call me", "main … hoon"), and every `LocalePack.piiPatterns` match (Aadhaar-like, PAN and UPI ids come from the pack). Street addresses are out of scope. Each match becomes a placeholder: `[card]`, `[phone]`, `[id]`, `[otp]`, `[email]`, `[name]`.
+- **Unicode:** matching runs on a copy with every decimal digit folded to ASCII and invisible format characters shown as a space or dropped; the same spans are redacted in the original text.
+- **Fail closed:** locale patterns compile with exactly `'gu'`; one that doesn't compile throws `PiiPatternError`, the chain returns `failed`, and the turn ends `guard_blocked`. The scrub runs to a fixed point, so `piiScrub` returns `ok` on its own output (the chain's verification pass).
+- **Step:** `scrub` scrubs `input.text` and every string (and PII-shaped number) in `input.skillPayload`. Any chain outcome but `ok` throws `ScrubFailedError` whose `cause` is `{ guardCause, errorName? }` only; the runner reports it on `finished.background` (`task: 'runner'`). Transcripts (2.7) arrive as `input.text`, so they are scrubbed the same way; text inside images is 4.2b.
+- **Testing:** `indiaLocalePackWithPii` / `IN_PII_PATTERNS` from `@edmate/harness/testing` (a stopgap until 3.10's real `content/locales/IN.yaml`, which must pass the same tests).
 - **Testing:** `fakeGuard(name, phase, resultOrFn, { usage?, spy? })` from `@edmate/harness/testing`.
 
 ## Replacing a stub

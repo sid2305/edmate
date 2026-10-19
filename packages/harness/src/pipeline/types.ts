@@ -124,6 +124,8 @@ export interface Entitled {
 export interface Scrubbed {
   /** The input text with PII replaced; absent when the input had no text. */
   text?: string;
+  /** The skill payload with every string (and PII-shaped number) scrubbed; absent when none. */
+  skillPayload?: unknown;
   guards: GuardTrace[];
 }
 

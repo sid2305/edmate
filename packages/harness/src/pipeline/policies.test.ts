@@ -648,8 +648,9 @@ describe('distress keyword check when step 3 fails', () => {
       t.clock,
     );
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
-    expect(String(result.background[0]?.error)).not.toContain(RAW);
+    // The scrub failure itself (4.2), then the check's failure; neither quotes the raw text.
+    expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']);
+    for (const b of result.background) expect(String(b.error)).not.toContain(RAW);
   });
 
   it.each([

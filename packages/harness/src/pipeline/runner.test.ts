@@ -37,7 +37,11 @@ import {
   testDeps,
   testSteps,
 } from '../testing/testSteps.js';
-import { InvalidEventError, StepNotImplementedError } from './errors.js';
+import type { PiiScrubCtx } from '../guardrails/piiScrub.js';
+import { fakeGuard } from '../testing/guardFixtures.js';
+import { prng } from '../testing/prng.js';
+import { InvalidEventError, ScrubFailedError, StepNotImplementedError } from './errors.js';
+import { createScrub } from './steps/scrub.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES } from './spec.js';
 import type { BuiltContext } from './types.js';
@@ -314,7 +318,6 @@ describe('defaultSteps (stubs)', () => {
     };
     const anyArg = {} as never;
     const calls: (() => unknown)[] = [
-      () => defaultSteps.scrub(env, anyArg),
       () => defaultSteps.preGuard(env, anyArg),
       () => defaultSteps.route.run(env, anyArg),
       () => defaultSteps.escalate(env, anyArg, undefined),
@@ -338,7 +341,7 @@ describe('defaultSteps (stubs)', () => {
     expect(t.portCalls).toEqual(['entitlements.resolve']);
   });
 
-  it('fails closed: past admit and entitle, the stub scrub blocks the turn', async () => {
+  it('fails closed: past admit and entitle and the real scrub, the stub preGuard blocks the turn', async () => {
     const t = testDeps();
     const happy = testSteps();
     const steps = {
@@ -349,7 +352,151 @@ describe('defaultSteps (stubs)', () => {
     };
     const { events } = await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
     expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
-    expect(t.portCalls).toEqual([]);
+    // The real buildContext runs alongside the stub preGuard; it only read (and hit an unused store).
+    expect(t.portCalls).toEqual(['profiles.get']);
+  });
+});
+
+describe('runTurn with the real scrub (4.2)', () => {
+  // Fake numbers from the eval cases; never in a test name.
+  const PHONE = '90000 11111';
+  const piiInput = { ...demoTurnInput, text: `save my number ${PHONE} and text me` };
+  const scrubbedText = 'save my number [phone] and text me';
+
+  it('threads the scrubbed text to every later step, the model and CommitRecord.input', async () => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: defaultSteps.scrub });
+    const seen: string[] = [];
+    const gateway = t.deps.gateway;
+    const deps = {
+      ...t.deps,
+      gateway: {
+        ...gateway,
+        stream: (req: ModelRequest) => {
+          seen.push(JSON.stringify(req));
+          return gateway.stream(req);
+        },
+        generateObject: gateway.generateObject.bind(gateway),
+        embed: gateway.embed.bind(gateway),
+      },
+    };
+    const { events, result } = await driveTurn(runTurn(piiInput, { deps, steps }), t.clock);
+    expect(events.at(-1)?.type).toBe('done');
+    for (const s of ['preGuard', 'route', 'buildContext', 'decide', 'generate', 'commit']) {
+      const entry = steps.log.find((l) => l.step === s && l.phase === 'start');
+      expect(entry?.text, s).toBe(scrubbedText);
+    }
+    expect(steps.log.find((l) => l.step === 'scrub')?.text).toBe(piiInput.text);
+    expect(steps.commits[0]?.input?.text).toBe(scrubbedText);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain(scrubbedText);
+    expect(seen.join('')).not.toContain(PHONE);
+    expect(result.trace?.guards.slice(0, 2)).toEqual([
+      { name: 'piiScrub', ok: false, action: 'rewrite' },
+      { name: 'piiScrub', ok: true },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(PHONE);
+  });
+
+  it('scrubs the skill payload before any later step sees it', async () => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: defaultSteps.scrub });
+    let payloadSeen: unknown;
+    const input = { ...demoTurnInput, skillPayload: { note: `call ${PHONE}` } };
+    const route = steps.route.run;
+    steps.route.run = (env, e) => {
+      payloadSeen = env.input.skillPayload;
+      return route(env, e);
+    };
+    await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+    expect(payloadSeen).toEqual({ note: 'call [phone]' });
+    expect(JSON.stringify(steps.commits)).not.toContain(PHONE);
+  });
+
+  it('a scrub that drops the payload fails closed', async () => {
+    const t = testDeps();
+    const steps = testSteps({
+      scrub: (env) => Promise.resolve({ text: env.input.text ?? '', guards: [] }),
+    });
+    const input = { ...demoTurnInput, skillPayload: { a: 1 } };
+    const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(result.background.map((b) => (b.error as Error).cause)).toEqual([
+      { guardCause: 'step_invalid_result' },
+    ]);
+  });
+
+  it.each([
+    [
+      'the step throws a ScrubFailedError',
+      () => Promise.reject(new ScrubFailedError({ guardCause: 'error', errorName: 'TypeError' })),
+      { guardCause: 'error', errorName: 'TypeError' },
+    ],
+    [
+      'the step throws a plain Error',
+      () => Promise.reject(new RangeError(`bad ${PHONE}`)),
+      { guardCause: 'step_error', errorName: 'RangeError' },
+    ],
+    [
+      'the step throws a non-Error',
+      () => Promise.reject(`raw ${PHONE}`),
+      { guardCause: 'step_error', errorName: 'string' },
+    ],
+    [
+      'the step throws an Error with a non-string name',
+      () => Promise.reject(Object.assign(new Error(PHONE), { name: 7 })),
+      { guardCause: 'step_error', errorName: 'Error' },
+    ],
+    [
+      'the step returns a bad result',
+      () => Promise.resolve({ text: 1 } as never),
+      { guardCause: 'step_invalid_result' },
+    ],
+    [
+      'the step times out',
+      () => new Promise<never>(() => undefined),
+      { guardCause: 'step_timeout' },
+    ],
+  ] as const)('a failed scrub is reported on background: %s', async (_label, scrub, cause) => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: scrub as never });
+    const { events, result } = await driveTurn(runTurn(piiInput, { deps: t.deps, steps }), t.clock);
+    expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+    expect(result.background).toHaveLength(1);
+    const bg = result.background[0];
+    expect(bg?.task).toBe('runner');
+    expect(bg?.error).toBeInstanceOf(ScrubFailedError);
+    expect((bg?.error as Error).cause).toEqual(cause);
+    expect(steps.commits[0]?.input).toBeNull();
+  });
+
+  it('property: a guard error that quotes the input never reaches background, trace or commit', async () => {
+    const r = prng(4_2);
+    const phones = ['90000 11111', '80000 33333', '+91 90000 66666', '९०००० १२३४५'];
+    const errors = [Error, TypeError, RangeError, SyntaxError];
+    for (let i = 0; i < 40; i++) {
+      const literal = r.pick(phones);
+      const Ctor = r.pick(errors);
+      const guard = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', (text) => {
+        throw new Ctor(`guard broke on: ${text} (${literal})`);
+      });
+      const t = testDeps();
+      const steps = testSteps({ scrub: createScrub([guard]) });
+      const input = { ...demoTurnInput, text: `my number is ${literal}` };
+      const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)).toEqual({ type: 'error', code: 'guard_blocked', retryable: true });
+      const bg = result.background.map((b) => {
+        const e = b.error as Error;
+        return [b.task, String(e), e.message, e.stack, JSON.stringify({ ...e, cause: e.cause })];
+      });
+      expect(bg).toHaveLength(1);
+      expect((result.background[0]?.error as Error).cause).toEqual({
+        guardCause: 'error',
+        errorName: Ctor.name,
+      });
+      const all = JSON.stringify([bg, result.trace, steps.commits, t.traces.records]);
+      expect(all).not.toContain(literal);
+    }
   });
 });
 

@@ -7,7 +7,15 @@ export {
   type IdSource,
   isoAt,
 } from './clock.js';
-export { InvalidEventError, StepNotImplementedError, TurnAbort, TurnRejection } from './errors.js';
+export {
+  InvalidEventError,
+  ScrubFailedError,
+  type ScrubFailureCause,
+  type ScrubFailureDetail,
+  StepNotImplementedError,
+  TurnAbort,
+  TurnRejection,
+} from './errors.js';
 export {
   createTurnLimits,
   type SlidingWindow,

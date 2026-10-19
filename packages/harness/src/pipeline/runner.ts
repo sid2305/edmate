@@ -16,7 +16,7 @@ import {
 import type { z } from 'zod';
 import type { HelpState } from '../pedagogy/helpState.js';
 import { cancelSource, type CancelToken, isoAt } from './clock.js';
-import { InvalidEventError } from './errors.js';
+import { InvalidEventError, ScrubFailedError } from './errors.js';
 import { EventQueue } from './events.js';
 import {
   admitFailure,
@@ -59,6 +59,7 @@ import type {
   Emit,
   Entitled,
   PipelineDeps,
+  Scrubbed,
   StepEnv,
   Steps,
   TurnRun,
@@ -224,11 +225,14 @@ class Turn {
 
     // 3a. Regex PII scrub, first; its time counts against step 3's one budget.
     const budget = timeoutOf('preGuard');
-    const sc = check(await this.timed(input, budget, (env) => steps.scrub(env, e)), ScrubbedSchema);
-    const scrubbed = sc.ok ? applyScrub(input, sc.value.text) : null;
+    const scRaw = await this.timed(input, budget, (env) => steps.scrub(env, e));
+    const sc = check(scRaw, ScrubbedSchema);
+    const scrubbed = sc.ok ? applyScrub(input, sc.value) : null;
     if (scrubbed !== null) this.safeInput = scrubbed;
     if (!sc.ok || scrubbed === null) {
       this.trace.step('preGuard', sc.ms, 'failed');
+      // Reported, never dropped: a failed scrub is a guard bug or outage. Ids and names only.
+      this.background.push({ task: 'runner', error: scrubFailure(scRaw) });
       // In-process keyword check on the raw text (no model call; the text is never stored,
       // traced or reported). A hit escalates without running any step on the raw text.
       if (this.distressHit(input, 'raw')) {
@@ -649,16 +653,37 @@ class Turn {
   }
 }
 
+/** The input without anything the scrub must see first (text and skill payload). */
 function withoutText(input: TurnInput): TurnInput {
   const rest = { ...input };
   delete rest.text;
+  delete rest.skillPayload;
   return rest;
 }
 
-/** The scrubbed input, or `null` when the scrub lost or invented the text. */
-function applyScrub(input: TurnInput, text: string | undefined): TurnInput | null {
-  if (input.text === undefined) return text === undefined ? input : null;
-  return text === undefined ? null : { ...input, text };
+/** The scrubbed input, or `null` when the scrub lost or invented the text or the payload. */
+function applyScrub(input: TurnInput, s: Scrubbed): TurnInput | null {
+  if ((input.text === undefined) !== (s.text === undefined)) return null;
+  if ((input.skillPayload === undefined) !== (s.skillPayload === undefined)) return null;
+  return {
+    ...withoutText(input),
+    ...(s.text === undefined ? {} : { text: s.text }),
+    ...(s.skillPayload === undefined ? {} : { skillPayload: s.skillPayload }),
+  };
+}
+
+const NAME_CAP = 100;
+
+/** What `finished.background` gets for a failed scrub: a cause and an error name, no text. */
+function scrubFailure(r: TimedResult<Scrubbed>): ScrubFailedError {
+  if (r.status === 'timeout') return new ScrubFailedError({ guardCause: 'step_timeout' });
+  if (r.status === 'ok') return new ScrubFailedError({ guardCause: 'step_invalid_result' });
+  if (r.error instanceof ScrubFailedError) return r.error;
+  const name = r.error instanceof Error ? r.error.name : typeof r.error;
+  return new ScrubFailedError({
+    guardCause: 'step_error',
+    errorName: typeof name === 'string' ? name.slice(0, NAME_CAP) : 'Error',
+  });
 }
 
 function assemble(
