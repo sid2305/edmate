@@ -10,6 +10,134 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · 4.0d Coverage-gap cases follow the 4.0 conventions · decided by team lead · risk: high
+Decided: the six cases use the 4.0 market folders, placeholders and reply-check notes. The broad last-5-digits phrase in `evals/suites/safety/pii/safety-pii-phone-hyphenated-en.yaml` is kept to match its merged siblings, and tightening phone phrases suite-wide waits until 4.2 asserts on the scrubbed model input.
+Why: one convention across the suite; reply phrases matter less once 4.2 checks the input.
+Alternatives: tighten only this case.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tools offered and run only when entitled; skill payloads checked for the answer key; partial text cleared before an error · decided by tdd-guide (lead brief) · risk: high
+Decided: a tool is offered and run only when the decision names it, it is in the registry, and its skill is in the entitlement (checked in decide and again in generate; duplicate names fail closed). A `skill` event is dropped and reported unless its skill is entitled, its payload is at most 16 KB of JSON, and it holds no do-not-say string (case-insensitive, JSON text and every string leaf). Any streamed text is cleared with `replace ''` before a retry and before every error, a cancel included.
+Why: access rule 5 (locked means locked), no answer leak through structured events, and unguarded text never stays on screen.
+Alternatives: trust decide's tool list; leave the payload check to 4.5; leave partial text on an error.
+Reversible: yes; 4.5 replaces the substring check with the robust one.
+
+---
+
+### 18 Oct 2026 · 3.7 Q1 per-turn metered gateway billed from the entitlement · decided by lead · risk: medium
+Decided: after entitle the runner calls `gatewayFor({ policy, billing })`, with billing `{teacherId, packageId, studentId, turnId, source}` from the entitlement only. The guards get the full policy, generate's primary gets no `fallback`, and the retry gets `tiers.main := fallback`. `TurnGateway.metered` keeps usage the gateway already metered out of the `meter` step.
+Why: 2.4's `meterRouter` meters every attempt, unknown ones included; nothing is billed twice; 3.8's code is unchanged.
+Alternatives: (A) the harness prices and meters everything, which loses unknown usage; meter all usage in the step and double-bill.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Q2 cost ceiling 0.10 USD; unpriced usage aborts with `turn_cost_exceeded` · decided by lead (code picked by tdd-guide) · risk: medium
+Decided: the ceiling is `maxTurnCostMicroUsd` (default 100,000), counting step-reported usage plus every priced gateway call, failed attempts included. The check runs after each usage (over → abort) and before each call (at or over → abort). Unpriced or invalid prices, and an invalid ceiling, abort with `turn_cost_exceeded` (not `provider_error`).
+Why: fail closed on cost; the code says why the turn stopped; one call can overshoot by at most its own cost (bounded by `maxOutputTokens`).
+Alternatives: `provider_error` for unpriced; treat unpriced as free.
+Reversible: yes; tune at 7.6.
+
+---
+
+### 18 Oct 2026 · 3.7 Q3 the runner opens the TeacherQuestion before `done` · decided by lead · risk: medium
+Decided: for `ask_teacher`, the runner runs findSimilar then open with the scrubbed text within 500 ms, before postGuard, and sends `teacher_question` and `CommitRecord.teacherQuestionId`. On a failure, a timeout, or a cross-teacher or cross-student result there is no event, the failure is reported, and the turn still replies.
+Why: the event needs the id before `done`; 3.17 shrinks to opening it in commit when it's absent, plus the profile evidence.
+Alternatives: open in commit only (no event).
+Reversible: yes. Note for 3.17: an open that times out may still land, so commit must open idempotently.
+
+---
+
+### 18 Oct 2026 · 3.7 Q4 tool results as JSON envelopes over the frozen ModelRequest · decided by lead · risk: medium
+Decided: a tool round adds an assistant message (the round's text plus `{"tool_calls":[…]}`) and a user message (`{"tool_results":[…]}`, with output or a fixed error code). Both are built in code, with no prose.
+Why: no contracts or prompt-pack change.
+Alternatives: an ADR for native tool messages now.
+Reversible: yes; that ADR is needed before 5.5's real tools meet a real model.
+
+---
+
+### 18 Oct 2026 · 3.7 Q5 abort reaches the provider at the next chunk · decided by lead · risk: low
+Decided: the reader stops waiting on cancel at once and calls `return()` in the background; the adapter aborts when that reaches it.
+Why: `ModelGateway.stream` has no abort signal (frozen contract).
+Alternatives: an ADR adding a signal now.
+Reversible: yes (a follow-up ADR candidate).
+
+---
+
+### 18 Oct 2026 · 3.7 Q6 SSE route deferred to 9.4 · decided by lead · risk: low
+Decided: only the pure `formatSseEvent` encoder ships in the harness.
+Why: auth, sessions and the root don't exist yet, and `apps/web/src/auth/**` is a risky path.
+Alternatives: a route now.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Q7 sentence-gate seam, and every background failure logged · decided by lead · risk: medium
+Decided: text passes `deps.streamGate` (a pass-through now; 4.5 fills it). Every `finished.background` failure goes to `deps.log.backgroundFailure` with the task, the ids (only when valid ids, else `invalid`), `errorName`, and `errorMessage` only for harness errors (cut at 300 characters; see the fix-round entry below), never turn text. A throwing logger is swallowed.
+Why: no silent background failures; no text in logs.
+Alternatives: leave logging to each caller.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Cancellation semantics · decided by tdd-guide · risk: medium
+Decided: the consumer `return()`ing `events`, or `RunTurnOptions.cancel`, cancels the turn. Generate stops at once (`TurnCancelled`, never retried); postGuard and teacher_question are skipped; the stream ends `error provider_error`; meter, commit (outcome `error`, input saved, no reply) and the trace (generate `failed`) still run. A turn cancelled before generate makes no model call; steps before generate are not interrupted.
+Why: the plan; no wasted model spend after the client leaves.
+Alternatives: run the turn to the end; also interrupt earlier steps.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tool-loop limits and event rules · decided by tdd-guide · risk: low
+Decided: at most 3 tool rounds, then a final call with no tools; 4 calls per round, run in order; 3 s per tool; a 4,000-character result cap; error codes `not_available | invalid_arguments | failed | timed_out | too_many_calls`. `hint_rung` goes out for hint, worked_example and solution (again on a retry, after `replace ''`); `sources` holds only cited `[n]`; `locked` names only the student's own package and only for `name_package`. A gateway that can't be built becomes a refusing gateway (reported), so every step meets its own failure policy. admit and entitle get a refusing gateway.
+Why: the plan's provisional numbers; fail closed.
+Alternatives: other limits (revisit at 5.5 and 7.6).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 `TurnGateway.metered` and the out-of-plan test edits · decided by tdd-guide · risk: medium
+Decided: `gatewayFor` returns `{ gateway, metered }` so that 3.8's meter step, the queue latency test and the worker test stay unchanged. Usage a step reports in its result is still metered by `meter`. Three test files outside the plan get a one-line `...stepEnvExtras()`: `access/property.test.ts` (a risky path) and two `packages/db` int tests.
+Why: keeps 3.8 green without double billing; keeps `StepEnv` strictly typed.
+Alternatives: make the new `StepEnv` fields optional; send no usage to `meter` (breaks the 3.8 tests).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Tool outputs checked for the answer key; one normalised answer-key check · decided by lead (fix round, safety review) · risk: high
+Decided: a tool output that holds a do-not-say string, after NFKC folding and stripping whitespace, separators, commas and zero-width characters on both sides, is `failed` and never reaches the model. Skill payloads use the same shared `revealsAnswerKey`/`normaliseForMatch` (`generate/answerKey.ts`), which 4.5 reuses. Tools must scope to `allowedModuleIds`; 4.5 adds the lockedLeak check on tool outputs.
+Why: a tool result fed back to the model was an unfiltered path to the answer; formatting variants beat a raw substring match.
+Alternatives: wait for 4.5; check outputs with a raw substring.
+Reversible: yes. Known cost: a short key can over-match (for example "5/6" inside "15/60"), which fails closed.
+
+---
+
+### 18 Oct 2026 · 3.7 Error logging: names always, messages only for harness errors · decided by lead (fix round, reconciling safety and silent-failure reviews) · risk: medium
+Decided: every harness-written error extends `HarnessError` (fixed text, codes and ids only), and the background log records its message. Any foreign error (provider, port, store, tool) is logged by name only. Reports the harness makes about foreign failures carry only the name: `GenerateAttemptFailed(attempt, kind, name)`, `ToolFailed(tool, reason, name)`, `StreamCloseFailed(name)`, and `SkillEventDropped` with a `{ name }` cause.
+Why: foreign messages can quote prompt or student text; names still say what failed.
+Alternatives: log all messages (leak risk); log no messages (loses the harness's own diagnostics).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 Failed generate attempts, unpriced usage and stream closes are reported · decided by tdd-guide (fix round, silent-failure review) · risk: medium
+Decided: each failed generate attempt is reported (task `generate`) before the retry or the final error. Unpriced usage stays in the trace, stays out of the `meter` step and is reported as `UnpricedUsage(model)` (2.4's meter records it as unpriced). Early stream closes are handed to the runner through `StepEnv.track`, and `finished` waits for them for at most `STREAM_CLOSE_SETTLE_MS` (1,000 ms, injected clock); past that, a "did not settle" report is added and `finished` resolves.
+Why: no silent failure, no free-looking cost row, no report landing after the log.
+Alternatives: mark unpriced rows in the trace (no schema field for it); await closes without a bound.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.7 `replace ''` also clears skill events and runner-bug errors · decided by lead (fix round, safety review) · risk: medium
+Decided: a shown `skill` event counts as shown, so the `replace ''` before a retry or an error also tells the client to drop skill events (rule written in `sse.ts` for 9.4). A runner bug that ends the stream sends `replace ''` before `error` when anything was shown.
+Why: unguarded content never stays on screen on any error path.
+Alternatives: a separate clear event (a contracts change).
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · Pilot language: English only, with a Hindi/Hinglish safety net · decided by you · risk: high
 Decided: the agent teaches and replies only in English in both pilot markets (en-US, en-IN). No new Hindi or Hinglish teaching, prompt-pack or non-safety eval work. Safety guards still recognise Hindi and Hinglish input (distress keywords in romanised and Devanagari script, Devanagari-digit phone numbers and IDs), and the safety and locked seed cases in those languages stay. The existing non-safety Hinglish and Devanagari cases (leak, advice, persona, grounding) are frozen, not deleted. This replaces the language part of the 18 Oct pilot-market decision; the markets are unchanged.
 Why: focus. Indian students will still type Hinglish, so safety must catch it.

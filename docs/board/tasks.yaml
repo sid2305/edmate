@@ -523,7 +523,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: running
+  status: done
   branch: m3/3.7-orchestrator
   model: plan:opus build:opus-5.5/medium
 - id: '3.8'
@@ -694,7 +694,7 @@ tasks:
   accept: the new cases validate and are signed off on a review sheet like 4.0's.
   deps:
   - '4.0'
-  status: running
+  status: done
   branch: m4/4.0d-coverage-gaps
   model: build:sonnet
 - id: '4.1'
