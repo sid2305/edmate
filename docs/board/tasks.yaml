@@ -594,9 +594,9 @@ tasks:
   accept: packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.
   deps:
   - 3.11a
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m3/3.11b-prompt-pack-content
+  model: build:opus-5.5/medium
 - id: 3.11c
   milestone: M3
   title: 'Pin pilot agents to English: agent config validation rejects languages other than [en] while the pilot is English-only (from the 3.11 plan review)'
@@ -846,7 +846,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.5-answer-leak
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
