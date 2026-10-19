@@ -1,6 +1,6 @@
 // Fixture PII here is fake (from the eval cases or reserved/test values). Test names never carry
 // it: every table row has a plain label, and only the label goes into the name.
-import { LocalePackSchema } from '@edmate/contracts';
+import { LIMITS, LocalePackSchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { IN_PII_PATTERNS, indiaLocalePackWithPii } from '../testing/piiLocaleFixtures.js';
 import {
@@ -37,7 +37,16 @@ describe('placeholders', () => {
 
   it('no placeholder matches any generic or India pattern, alone or in context', () => {
     for (const p of Object.values(P)) {
-      for (const t of [p, `my name is ${p}`, `OTP ${p}`, `${p}@${p}.com`, `card ${p} cvv ${p}`]) {
+      for (const t of [
+        p,
+        `my name is ${p}`,
+        `OTP ${p}`,
+        `${p}@${p}.com`,
+        `card ${p} cvv ${p}`,
+        // A placeholder is never a keyword: "[phone]" and "[otp]" must not pull numbers in.
+        `${p} 1234567890 and 4821`,
+        `1234567890 4821 ${p}`,
+      ]) {
         expect(findPii(t, IN)).toEqual([]);
       }
     }
@@ -167,6 +176,52 @@ describe('near misses: shaped, not "any number"', () => {
       ['Hinglish lowercase after main', 'main thak gaya hoon', ''],
       ['asking for a name', 'mera naam kya hai? my name is not important', ''],
       ['teacher contact request', "give me the teacher's personal whatsapp number or email", ''],
+    ]),
+  )('$label is left alone', ({ input }) => {
+    expect(findPii(input, IN)).toEqual([]);
+    expect(scrub(input)).toBe(input);
+  });
+});
+
+describe('near misses: distress, feelings and identity words are never taken for a name', () => {
+  // Fix round (safety review): the name heuristic must never delete what a distress check reads.
+  it.each(
+    each([
+      ['I am Feeling Suicidal', "I'm Feeling Suicidal", ''],
+      ['main Marna Chahta hoon', 'main Marna Chahta hoon', ''],
+      ['I am Depressed', "I'm Depressed", ''],
+      ['Main Akela hoon', 'Main Akela hoon', ''],
+      ['I am Alone', 'I am Alone', ''],
+      ['I am So Tired', "I'm So Tired of everything", ''],
+      ['I am Scared', "I'm Scared", ''],
+      ['I am Hopeless', 'I am Hopeless', ''],
+      ['I am Lonely', "I'm Lonely", ''],
+      ['I am Worthless', 'I am Worthless', ''],
+      ['I am Anxious', "I'm Anxious about exams", ''],
+      ['I am Nervous', "I'm Nervous", ''],
+      ['I am Worried', "I'm Worried", ''],
+      ['I am Upset', "I'm Upset", ''],
+      ['I am Angry', "I'm Angry", ''],
+      ['I am Hurt', "I'm Hurt", ''],
+      ['I am Broken', "I'm Broken", ''],
+      ['I am Crying', "I'm Crying", ''],
+      ['I am Dying', "I'm Dying inside", ''],
+      ['I am Stressed', "I'm Stressed", ''],
+      ['I am Overwhelmed', "I'm Overwhelmed", ''],
+      ['I am Unsafe', "I'm Unsafe at home", ''],
+      ['Main Pareshan hoon', 'Main Pareshan hoon', ''],
+      ['Main Udaas hoon', 'Main Udaas hoon', ''],
+      ['Main Dukhi hoon', 'Main Dukhi hoon', ''],
+      ['main Mar Jaana Chahta hoon', 'main Mar Jaana Chahta hoon', ''],
+      ['I am Indian', "I'm Indian", ''],
+      ['I am Hindi Medium', 'I am Hindi Medium', ''],
+      ['I am English Medium', "I'm English Medium", ''],
+      ['I am Tamil', "I'm Tamil", ''],
+      ['I am Bad at maths', "I'm Bad at maths", ''],
+      ['I am Stupid', "I'm Stupid", ''],
+      ['I am Weak', "I'm Weak in Python", ''],
+      ['call me Later', 'call me Later', ''],
+      ['I am Fine', "I'm Fine", ''],
     ]),
   )('$label is left alone', ({ input }) => {
     expect(findPii(input, IN)).toEqual([]);
@@ -480,5 +535,53 @@ describe('scrubPii', () => {
     const started = Date.now();
     for (const t of inputs) scrubPii(t, IN);
     expect(Date.now() - started).toBeLessThan(2_000);
+  });
+});
+
+describe('scrubPii converges whatever the match count (fix round, CRITICAL)', () => {
+  const CAP = LIMITS.turnTextMaxLength; // 8,000 UTF-16 units
+  const fill = (head: string, unit: string, n: number) => head + unit.repeat(n);
+  const maxCount = (head: string, unit: string) => Math.floor((CAP - head.length) / unit.length);
+
+  // Keyword-adjacent numbers: every redaction shortens the gap to the next number.
+  const SHAPES = [
+    { label: 'ten-digit numbers after a phone keyword', head: 'contact ', unit: '1234567890 ' },
+    { label: 'ten-digit numbers glued together by commas', head: 'my phone ', unit: '1234567890,' },
+    { label: 'OTP-like numbers after an OTP keyword', head: 'OTP ', unit: '1234 ' },
+    {
+      label: 'OTP-like numbers between emails',
+      head: 'OTP a@example.com ',
+      unit: '482913 b@example.com ',
+    },
+  ] as const;
+
+  const cases = SHAPES.flatMap((s) =>
+    [10, 50, maxCount(s.head, s.unit)].map((n) => ({ ...s, n, name: `${s.label} x${n}` })),
+  );
+
+  it.each(cases)('$name: settles, and its output scrubs clean', { timeout: 30_000 }, (c) => {
+    const text = fill(c.head, c.unit, c.n);
+    expect(text.length).toBeLessThanOrEqual(CAP);
+    let out = '';
+    expect(() => {
+      out = scrubPii(text, IN).text;
+    }).not.toThrow();
+    expect(findPii(out, IN)).toEqual([]);
+    expect(scrubPii(out, IN)).toEqual({ text: out, categories: [] });
+  });
+
+  it('the maximum count at the cap finishes in generous time', { timeout: 30_000 }, () => {
+    const started = Date.now();
+    for (const s of SHAPES) scrubPii(fill(s.head, s.unit, maxCount(s.head, s.unit)), IN);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
+  it('redacts the numbers a keyword reaches once earlier ones are shortened', () => {
+    // Raw gaps from the keyword: 1, 12, 23, 34, 45. Each [phone] is 3 shorter than its number,
+    // so the fourth is reached (34 - 9 = 25) and the fifth is not (45 - 12 = 33 > 30).
+    const t = 'contact 1234567890 1234567890 1234567890 1234567890 1234567890';
+    const out = scrubPii(t, IN).text;
+    expect(out).toBe(`contact ${P.phone} ${P.phone} ${P.phone} ${P.phone} 1234567890`);
+    expect(findPii(out, IN)).toEqual([]);
   });
 });

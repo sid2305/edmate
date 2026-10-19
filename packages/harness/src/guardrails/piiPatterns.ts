@@ -144,7 +144,7 @@ const PHONE_SPACED = new RegExp(
 );
 const BARE_TEN = /(?<![\d+])0?\d{10}(?!\d)/g;
 const PHONE_KEYWORDS = new RegExp(
-  String.raw`(?<![\p{L}\p{M}])(?:phone|mobile|cell|whats\s?app|contact|call|text\s+me|sms|tel|ph|mob|(?:my|mera|meri|mere)\s+(?:number|no\.?|num))(?![\p{L}\p{M}])|फ़ोन|फोन|मोबाइल|मेरा\s+नंबर|कॉल|व्हाट्सएप`,
+  String.raw`(?<![\p{L}\p{M}[])(?:phone|mobile|cell|whats\s?app|contact|call|text\s+me|sms|tel|ph|mob|(?:my|mera|meri|mere)\s+(?:number|no\.?|num))(?![\p{L}\p{M}])|फ़ोन|फोन|मोबाइल|मेरा\s+नंबर|कॉल|व्हाट्सएप`,
   'giu',
 );
 /** How far (in view characters) a keyword may sit from the number it marks. */
@@ -170,7 +170,7 @@ const EXPIRY = new RegExp(
 const BARE_EXPIRY = /[\s,;:]*(\d{1,2}\s*\/\s*\d{2,4})(?!\d)/dy;
 
 const OTP_STRONG = new RegExp(
-  String.raw`(?<![\p{L}\p{M}])(?:otp|pin|passcode|(?:verification|login|sign[\s-]?in|access|auth|confirmation)\s+code|one[\s-]?time\s+(?:code|password|pin))(?![\p{L}\p{M}])|ओटीपी|पिन`,
+  String.raw`(?<![\p{L}\p{M}[])(?:otp|pin|passcode|(?:verification|login|sign[\s-]?in|access|auth|confirmation)\s+code|one[\s-]?time\s+(?:code|password|pin))(?![\p{L}\p{M}])|ओटीपी|पिन`,
   'giu',
 );
 const OTP_CODE = new RegExp(
@@ -213,7 +213,23 @@ const NOT_A_NAME = new Set(
     'ready done learning stuck confused back here new trying sorry fine good okay ok going ' +
     'working sure still very really also just using getting doing studying writing reading ' +
     'having looking unable able happy sad tired bored excited interested curious lost late ' +
-    'free busy python java beginner student teacher my me name naam mera meri'
+    'free busy python java beginner student teacher my me name naam mera meri ' +
+    // Feelings and states: a distress message must never lose these words (safety review).
+    'feeling feel feels felt suicidal suicide depressed depression alone lonely akela akeli ' +
+    'marna marne mar mujhe jaana jana chahta chahti chahiye hopeless helpless worthless useless ' +
+    'scared afraid frightened anxious nervous worried upset angry hurt hurting broken empty numb ' +
+    'stressed overwhelmed crying dying dead finished unsafe unhappy miserable pareshan pareshaan ' +
+    'udaas udas dukhi thaka thaki thak ghabraya ghabrayi dara dari bimar beemar sick ill ' +
+    'exhausted ashamed guilty embarrassed trapped desperate suffering struggling failing ' +
+    'kill killing ending gone over tension frustrated irritated jealous ' +
+    // Nationality, language and medium words.
+    'indian hindi english tamil telugu marathi bengali bangla gujarati punjabi kannada ' +
+    'malayalam urdu odia assamese nepali medium american british foreign ' +
+    // Common adjectives and fillers.
+    'bad weak strong smart dumb stupid poor rich young old big small tall short fat thin ugly ' +
+    'normal alright great better best worse worst later soon now today tomorrow kal aaj abhi ' +
+    'always never sometimes again too quite pretty extremely totally completely literally ' +
+    'class grade standard'
   ).split(' '),
 );
 const MAX_NAME_WORDS = 3;
@@ -267,13 +283,6 @@ function cards(s: string): PiiSpan[] {
   return out;
 }
 
-/** True when the number ends within the window of any keyword (on either side). */
-function nearKeyword(start: number, end: number, keywords: readonly [number, number][]): boolean {
-  return keywords.some(([ks, ke]) =>
-    start >= ke ? start - ke <= KEYWORD_WINDOW : ks - end <= KEYWORD_WINDOW,
-  );
-}
-
 const ranges = (re: RegExp, s: string): [number, number][] =>
   all(re, s).map((m) => [m.index, m.index + m[0].length]);
 
@@ -295,21 +304,110 @@ function phones(s: string): PiiSpan[] {
       out.push(span(m.index, m.index + m[0].length, 'phone'));
     }
   }
-  const keywords = ranges(PHONE_KEYWORDS, s);
-  for (const [a, b] of ranges(BARE_TEN, s)) {
-    if (nearKeyword(a, b, keywords)) out.push(span(a, b, 'phone'));
-  }
   return out;
 }
 
 function otps(s: string): PiiSpan[] {
-  const out: PiiSpan[] = [];
-  const keywords = ranges(OTP_STRONG, s);
-  for (const [a, b] of ranges(OTP_NUMBER, s)) {
-    if (nearKeyword(a, b, keywords)) out.push(span(a, b, 'otp'));
+  return all(OTP_CODE, s).map((m) => span(...group1(m), 'otp'));
+}
+
+/** A number that is PII only when a keyword of its kind is within the window. */
+interface Candidate {
+  start: number;
+  end: number;
+  category: 'phone' | 'otp';
+  /** Keyword spans of the candidate's kind, sorted by start. */
+  keywords: readonly [number, number][];
+}
+
+function candidates(s: string): Candidate[] {
+  const phoneKw = ranges(PHONE_KEYWORDS, s);
+  const otpKw = ranges(OTP_STRONG, s);
+  return [
+    ...ranges(BARE_TEN, s).map(([start, end]) => ({
+      start,
+      end,
+      category: 'phone' as const,
+      keywords: phoneKw,
+    })),
+    ...ranges(OTP_NUMBER, s).map(([start, end]) => ({
+      start,
+      end,
+      category: 'otp' as const,
+      keywords: otpKw,
+    })),
+  ];
+}
+
+/**
+ * shrink[i]: how much shorter the text before position i gets once `spans` become placeholders,
+ * so a gap measured "after redaction" is `(b - a) - (shrink[b] - shrink[a])`.
+ */
+function shrinkPrefix(length: number, spans: readonly PiiSpan[]): Int32Array {
+  const delta = new Int32Array(length + 1);
+  for (const sp of mergeSpans(spans)) {
+    delta[sp.end] = (delta[sp.end] as number) + size(sp) - PII_PLACEHOLDERS[sp.category].length;
   }
-  for (const m of all(OTP_CODE, s)) out.push(span(...group1(m), 'otp'));
-  return out;
+  for (let i = 1; i <= length; i++) delta[i] = (delta[i] as number) + (delta[i - 1] as number);
+  return delta;
+}
+
+/** The gap between positions a <= b once the spans in it are placeholders (never negative). */
+const gapAfter = (a: number, b: number, shrink: Int32Array): number =>
+  Math.max(0, b - a - ((shrink[b] as number) - (shrink[a] as number)));
+
+/** Index of the first keyword that starts at or after `pos` (keywords sorted, non-overlapping). */
+function firstFrom(keywords: readonly [number, number][], pos: number): number {
+  let lo = 0;
+  let hi = keywords.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((keywords[mid] as [number, number])[0] < pos) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * True when a keyword is within the window, measured on the text as it will be after redaction.
+ * That gap only grows with distance, so the nearest keyword on each side decides it.
+ */
+function reached(c: Candidate, shrink: Int32Array): boolean {
+  const i = firstFrom(c.keywords, c.end);
+  const after = c.keywords[i];
+  const before = c.keywords[firstFrom(c.keywords, c.start) - 1];
+  return (
+    (after !== undefined && gapAfter(c.end, after[0], shrink) <= KEYWORD_WINDOW) ||
+    (before !== undefined &&
+      before[1] <= c.start &&
+      gapAfter(before[1], c.start, shrink) <= KEYWORD_WINDOW)
+  );
+}
+
+/**
+ * The keyword-window numbers, decided in one pass over this text. Redacting a span shortens the
+ * gaps around it, so a number can come within reach of a keyword only once others are redacted;
+ * instead of rescanning the text once per such step (which never settled for long lists), the
+ * gaps are measured as they will be after redaction and the set is grown in memory until it
+ * stops changing. The result is what a rescan of the redacted text would find, so the outer
+ * loop in `scrubPii` settles in two rounds.
+ */
+function windowed(s: string, fixed: readonly PiiSpan[]): PiiSpan[] {
+  const cands = candidates(s);
+  const taken: PiiSpan[] = [];
+  const done = new Set<Candidate>();
+  for (let grew = true; grew;) {
+    grew = false;
+    const shrink = shrinkPrefix(s.length, [...fixed, ...taken]);
+    for (const c of cands) {
+      if (!done.has(c) && reached(c, shrink)) {
+        done.add(c);
+        taken.push(span(c.start, c.end, c.category));
+        grew = true;
+      }
+    }
+  }
+  return taken;
 }
 
 function emails(s: string): PiiSpan[] {
@@ -353,7 +451,7 @@ function names(s: string): PiiSpan[] {
 }
 
 function detect(s: string, locale: readonly RegExp[]): PiiSpan[] {
-  return [
+  const fixed = [
     ...cards(s),
     ...phones(s),
     ...localeMatches(s, locale),
@@ -361,6 +459,7 @@ function detect(s: string, locale: readonly RegExp[]): PiiSpan[] {
     ...emails(s),
     ...names(s),
   ];
+  return [...fixed, ...windowed(s, fixed)];
 }
 
 const rank = (c: PiiCategory): number => PII_CATEGORIES.indexOf(c);

@@ -93,6 +93,21 @@ All 35 cases load from `evals/suites/safety/pii/` through 3.12's `loadCasesFromD
 | Harness purity | New harness files import only `@edmate/contracts` and own modules; the pipeline test lives in `packages/evals` (devDependency on `@edmate/harness` from 3.12). |
 | Heavy tests | The 4,000-character adversarial inputs test has a 5 s timeout and runs in well under 2 s; pipeline cases have 10 s timeouts. |
 
+## Fix round 1 (safety, TypeScript and silent-failure reviews of PR #38)
+
+Gate re-run: `turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/evals...` → `Tasks: 14 successful, 14 total`. Harness 2476 tests, evals 160, contracts 322. `src/guardrails/**` (including `piiPatterns.ts` and `piiScrub.ts`) is at 100/100/100/100; `steps/scrub.ts` 98.8/98.3/100/100 (line 151 is the unreachable "string missing from the map" throw). Secret scan, run with an absolute path, is clean.
+
+| # | Finding | Fix | Evidence |
+|---|---|---|---|
+| 1 CRITICAL | Ten or more keyword-adjacent numbers never settled within `MAX_ROUNDS`, so the turn failed closed | Two causes. (a) The placeholders `[phone]` and `[otp]` themselves matched the phone and OTP keywords, so every round reached a few more numbers. Keywords now never start right after `[`. (b) Keyword-window numbers (bare 10-digit phones, OTP-like numbers) are decided in one pass. Gaps are measured as they will be after redaction (a prefix sum of how much each span shrinks), and the set grows in memory until it stops changing. Only the nearest keyword on each side is checked (binary search), because that gap only grows with distance. So a rescan of the output finds nothing new. `MAX_ROUNDS` (4) remains only as a guard against a locale pattern that matches its own placeholder | `piiPatterns.test.ts` "converges whatever the match count": 4 shapes (a run after `contact`, comma-joined after `my phone`, a run after `OTP`, OTP numbers between emails) × {10, 50, max at `LIMITS.turnTextMaxLength` 8,000}: no throw, output scrubs clean and is a fixed point. The 4 max-count inputs together finish within a 10 s bound (30 s test timeout). An exact-result test covers the gap arithmetic; placeholders next to numbers find nothing |
+| 2a HIGH | A distress phrase could be redacted as a name before any distress check saw it | **Seam: the existing `PipelineDeps.distressCheck` dep** (the injected keyword-only check; 4.3 fills it). `runner.ts` now calls it on the **raw** text before the scrub, keeps only the boolean and ORs it into the step-5 escalate condition; the scrub-failure path reuses the same boolean. A throw is reported as `distressCheck failed on the unscrubbed text`, never with the text | `runner.test.ts` "the distress keyword check on the raw text": a scrub that removes the word still escalates (alert, caring reply, commit `escalated`); the raw text reaches no later step, result, commit, alert or trace; no hit → normal reply, checked once; a throwing check → reported without the text, the turn goes on. `policies.test.ts`: "preGuard ok" now runs the check once, on the raw text (a hit escalates, no hit replies), and two call and background counts were updated |
+| 2b HIGH | `NOT_A_NAME` lacked feeling, state, nationality and language words | Added feeling and state words (feeling, suicidal, depressed, alone, lonely, akela, marna, mar, chahta, hopeless, worthless, scared, anxious, upset, hurt, broken, crying, dying, unsafe, pareshan, udaas, dukhi, …), nationality, language and medium words (indian, hindi, english, tamil, …, medium), and common adjectives and fillers | `piiPatterns.test.ts` "distress, feelings and identity words are never taken for a name": 35 phrases left unredacted, including "I'm Feeling Suicidal", "main Marna Chahta hoon", "I'm Depressed", "Main Akela hoon", "I am Alone", "I'm Indian", "I am Hindi Medium" and "main Mar Jaana Chahta hoon" |
+| 3 HIGH | The perf test used tight timing below the real cap | Step-level tests at `LIMITS.turnTextMaxLength` (8,000) and `LIMITS.turnTextMaxChars` (4,000) | `scrub.test.ts` "scrub at the input cap": 4 inputs, including a keyword before every number (≥ 400 redactions) and runs after one keyword. Each asserts no throw, the trace `[rewrite, ok]`, a minimum redaction count, a second scrub returning the same text with `[ok]`, and a 10 s bound (30 s timeout) |
+| 4 MEDIUM | `scrubbed.get(s) as string` | Throws `payloadShape()` when the string is missing | Code: `rebuild` → `of()` |
+| 5 MEDIUM | Bare values under PII-named keys passed | When a key, lower-cased with separators removed, matches `^(my|student|parent|user|first|last|full|contact)?(otp|pin|cvv|cvc|card|phone|mobile|whatsapp|email|mail|name|aadhaar|aadhar|pan|upi)(number|no|num|id|address|code)?$`, every non-empty string or number under it, at any depth, becomes the category placeholder. The trace gets a rewrite entry when no chain run shows one | `scrub.test.ts`: `{"otp":"482913"}` → `[otp]` and `{"name":"Riya"}` → `[name]`, plus 11 more key shapes (phone, `mobile_number` as a number, `Email`, `cardNumber`, `cvv`, `aadhaar`, `PAN`, `upi-id`, `studentName`, nested, empty/bool/null kept). Ordinary keys (`fileName`, `code`, `names`, `panel`) are untouched |
+| 6 LOW | The mutation check was manual | A test: `leakCount` (a count, so failures never print PII) must be > 0 for all 26 PII cases with a pass-through scrub, and 0 for the 8 no-PII cases | `piiScrubPipeline.test.ts` "the leak detector catches a pass-through scrub on every PII case" |
+| 7 LOW | Misleading `Promise.all` comment | Says what it does: each run keeps its own slice and the step's cancel token; the regex work still takes turns | `scrub.ts` |
+
 ## Changes
 
 Created:
@@ -166,4 +181,28 @@ Reversible: Yes.
 Decided: `indiaLocalePackWithPii` (Aadhaar-like with a three-years exception, PAN either case, UPI without a dot in the provider, Indian mobile) lives in `packages/harness/src/testing/`; no contracts edit.
 Why: 3.10 owns the real locale files and loader; the guard reads whatever pack it gets.
 Alternatives: edit `demoLocalePack` in contracts (needs an ADR).
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2 The distress keyword check runs on the raw text before the scrub · decided by lead (safety review, fix round 1) and tdd-guide (seam) · risk: high
+Decided: the runner calls the injected `PipelineDeps.distressCheck` on the raw input before the scrub. Only its boolean is kept, and it is ORed into the step-5 escalate decision (and reused if the scrub fails). A throw is reported without the text. The seam is the existing dep, which 4.3 fills; no new port.
+Why: the scrub could redact words a distress check needs ("I'm Feeling Suicidal"); a distressed student must always get the caring reply.
+Alternatives: run the check only on scrubbed text; a new keyword-only function in the harness.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.2 Keyword-window numbers are decided in one pass, measured after redaction · decided by tdd-guide (fix round 1) · risk: medium
+Decided: bare 10-digit phones and OTP-like numbers count when a keyword is within 30 characters of the text as it will read after redaction. The set grows in memory until stable, and placeholders never count as keywords. The rescan loop stays as a guard against packs that match their own placeholder.
+Why: a long list of numbers after one keyword never settled in four rounds, so a benign turn failed closed.
+Alternatives: a round bound derived from the text length; chaining each number to the previous one (redacts whole lists).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+### 19 Oct 2026 · 4.2 The name stop list covers feelings, states, languages and common adjectives · decided by lead (safety review) and tdd-guide (words) · risk: medium
+Decided: words like feeling, suicidal, depressed, alone, akela, marna, chahta, hindi, indian, medium, bad and weak (about 150 in all) end a name capture, so "I'm Feeling Suicidal" stays as written.
+Why: the name heuristic must never delete what a distress check or the teacher reads.
+Alternatives: drop the weak phrases ("I'm", "I am") entirely.
+Reversible: Yes.
+
+### 19 Oct 2026 · 4.2 Values under PII-named payload keys are redacted whole · decided by lead (review) and tdd-guide (key list) · risk: low
+Decided: a payload key such as otp, pin, cvv, card, phone, mobile, email, name, aadhaar, pan or upi (with optional my/student/first/... before and number/no/id/... after, ignoring case and separators) has every non-empty string or number under it replaced by the category placeholder.
+Why: a bare "482913" or "Riya" has no keyword of its own for the pattern scrub to find.
+Alternatives: scrub "key: value" text through the chain (needs a "name:" phrase that would hit code like `name = ...`).
 Reversible: Yes.

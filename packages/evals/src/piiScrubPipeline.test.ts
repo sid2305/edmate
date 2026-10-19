@@ -65,7 +65,9 @@ const textOf = (req: ModelRequest): string =>
   [req.system, ...req.messages.map((m) => m.content)].join('\n');
 const userText = (req: ModelRequest): string | undefined => req.messages.at(-1)?.content;
 
-async function runCase(c: EvalCase) {
+type ScrubStep = ReturnType<typeof testSteps>['scrub'];
+
+async function runCase(c: EvalCase, scrub: ScrubStep = defaultSteps.scrub) {
   const captured: Captured[] = [];
   let turn = 0;
   const capture = (req: ModelRequest): boolean => {
@@ -83,7 +85,7 @@ async function runCase(c: EvalCase) {
   const happy = testSteps();
   const steps = testSteps({
     entitle: async (env) => ({ ...(await happy.entitle(env)), locale: indiaLocalePackWithPii }),
-    scrub: defaultSteps.scrub,
+    scrub,
     // Small-tier probe: what a classifier on `env.input` would send.
     preGuard: async (env) => {
       await env.deps.gateway.generateObject(
@@ -140,6 +142,15 @@ async function runCase(c: EvalCase) {
   return { captured, ends, stored: transcripts.appended.map((a) => a.message.text) };
 }
 
+/**
+ * The leak detector: how many of the case's PII phrases (either digit script, any case) appear in
+ * any captured model request or in stored history. A count, so a failure never prints the PII.
+ */
+function leakCount(c: EvalCase, run: Awaited<ReturnType<typeof runCase>>): number {
+  const seen = [...run.captured.map((x) => textOf(x.req)), ...run.stored].flatMap(norm);
+  return piiOf(c).filter((p) => norm(p).some((q) => seen.some((s) => s.includes(q)))).length;
+}
+
 describe('seeded PII cases (evals/suites/safety/pii)', () => {
   it('loads all 35 cases and checks 34 (the split spelled number stays a reply check)', () => {
     expect(CASES).toHaveLength(35);
@@ -156,7 +167,8 @@ describe('seeded PII cases (evals/suites/safety/pii)', () => {
       if (NO_PII.has(c.id)) expect(pii).toEqual([]);
       else expect(pii.length).toBeGreaterThan(0);
 
-      const { captured, ends, stored } = await runCase(c);
+      const run = await runCase(c);
+      const { captured, ends } = run;
       expect(ends).toEqual(c.turns.map(() => 'done'));
 
       for (const [i, { student }] of c.turns.entries()) {
@@ -173,15 +185,23 @@ describe('seeded PII cases (evals/suites/safety/pii)', () => {
         }
       }
 
-      const seen = [...captured.map((x) => textOf(x.req)), ...stored].flatMap(norm);
-      for (const p of pii) {
-        for (const q of norm(p)) {
-          expect(
-            seen.some((s) => s.includes(q)),
-            `${c.id}: a must_not_contain phrase reached the model or history`,
-          ).toBe(false);
-        }
+      expect(leakCount(c, run), `${c.id}: PII phrases that reached the model or history`).toBe(0);
+    },
+  );
+
+  it(
+    'the leak detector catches a pass-through scrub on every PII case (mutation check)',
+    { timeout: 30_000 },
+    async () => {
+      const passThrough = testSteps().scrub;
+      const caught: string[] = [];
+      for (const c of CHECKED) {
+        const leaks = leakCount(c, await runCase(c, passThrough));
+        if (NO_PII.has(c.id)) expect(leaks, c.id).toBe(0);
+        else if (leaks > 0) caught.push(c.id);
       }
+      expect(caught).toEqual(CHECKED.filter((c) => !NO_PII.has(c.id)).map((c) => c.id));
+      expect(caught).toHaveLength(26);
     },
   );
 

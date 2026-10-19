@@ -32,6 +32,7 @@ import {
 } from '../testing/promptPackFixtures.js';
 import {
   type StepOverrides,
+  TEST_CARING_REPLY,
   testAskDecision,
   testDecideResult,
   testDeps,
@@ -44,7 +45,7 @@ import { InvalidEventError, ScrubFailedError, StepNotImplementedError } from './
 import { createScrub } from './steps/scrub.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES } from './spec.js';
-import type { BuiltContext } from './types.js';
+import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
 import { decide } from './steps/decide.js';
 import { defaultSteps } from './steps/index.js';
@@ -396,6 +397,66 @@ describe('runTurn with the real scrub (4.2)', () => {
       { name: 'piiScrub', ok: true },
     ]);
     expect(JSON.stringify(result)).not.toContain(PHONE);
+  });
+
+  describe('the distress keyword check on the raw text (fix round, safety review)', () => {
+    const MARKER = 'RAWDISTRESSMARKER';
+    const raw = { ...demoTurnInput, text: `I feel ${MARKER} today` };
+    // A scrub that removes the words the keyword check needs (what over-redaction would do).
+    const wipe = (env: StepEnv) =>
+      Promise.resolve({ text: (env.input.text ?? '').replace(MARKER, '[name]'), guards: [] });
+    const deps = (impl: (text: string) => boolean) => {
+      const seen: string[] = [];
+      const t = testDeps({
+        overrides: {
+          distressCheck: (text) => {
+            seen.push(text);
+            return impl(text);
+          },
+        },
+      });
+      return { t, seen };
+    };
+
+    it('runs before the scrub; a hit escalates even when the scrub removed the words', async () => {
+      const { t, seen } = deps((text) => text.includes(MARKER));
+      const steps = testSteps({ scrub: wipe });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(seen[0]).toBe(raw.text);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: TEST_CARING_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toHaveLength(1);
+      expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', intent: 'distress' });
+      // Only the boolean is kept: the raw text reaches no step after the scrub, no alert or trace.
+      const after = steps.log.filter((l) => !['admit', 'entitle', 'scrub'].includes(l.step));
+      expect(after.map((l) => l.text)).not.toContain(raw.text);
+      const kept = JSON.stringify([result, steps.commits, t.alerts.raised, t.traces.records]);
+      expect(kept).not.toContain(MARKER);
+    });
+
+    it('no hit on the raw text → the turn replies as usual', async () => {
+      const { t, seen } = deps(() => false);
+      const steps = testSteps({ scrub: wipe });
+      const { events } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)?.type).toBe('done');
+      expect(t.alerts.raised).toEqual([]);
+      expect(seen).toEqual([raw.text]);
+    });
+
+    it('a throwing check is reported without the text and the turn goes on', async () => {
+      const { t } = deps((text) => {
+        throw new Error(`cannot check ${text}`);
+      });
+      const steps = testSteps({ scrub: wipe });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events.at(-1)?.type).toBe('done');
+      expect(result.background.map((b) => String(b.error))).toEqual([
+        'Error: distressCheck failed on the unscrubbed text',
+      ]);
+    });
   });
 
   it('scrubs the skill payload before any later step sees it', async () => {

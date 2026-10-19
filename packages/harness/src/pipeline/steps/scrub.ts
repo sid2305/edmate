@@ -8,6 +8,7 @@
 // accept, an escalate) throws ScrubFailedError with ids and an error name only, never a message,
 // reason or text; the runner then ends the turn with `guard_blocked` and reports the error.
 import type { Guard } from '../../guardrails/guard.js';
+import { type PiiCategory, PII_PLACEHOLDERS } from '../../guardrails/piiPatterns.js';
 import { createPiiScrubGuard, type PiiScrubCtx } from '../../guardrails/piiScrub.js';
 import { GuardRegistry } from '../../guardrails/registry.js';
 import { type GuardChainResult, runGuardChain } from '../../guardrails/chain.js';
@@ -66,17 +67,22 @@ export function createScrub(
     const strings = new Set<string>();
     if (payload !== undefined) collect(payload, strings, 0);
     const list = [...strings];
-    // Concurrent: the payload costs one chain's latency, not one per string.
+    // Started together rather than one after another: each run keeps its own guard slice and the
+    // step's single cancel token covers all of them. (The regex work itself is synchronous, so the
+    // runs still take turns on the thread; this only avoids chaining one await per string.)
     const [main, ...runs] = await Promise.all([text ?? '', ...list].map(scrubOne));
     const out: Scrubbed = { guards: [...(main as Run).guards] };
     if (text !== undefined) out.text = (main as Run).text;
 
     if (payload !== undefined) {
       const scrubbed = new Map(list.map((s, i) => [s, (runs[i] as Run).text]));
-      out.skillPayload = rebuild(payload, scrubbed);
+      const state = { keyed: false };
+      out.skillPayload = rebuild(payload, scrubbed, state, undefined);
       // One rewrite entry for the payload, not one per string.
       const rewrite = runs.find((r, i) => r.text !== list[i]);
       if (rewrite !== undefined) out.guards.push(...rewrite.guards);
+      // A value redacted by its key alone has no chain run of its own to show.
+      else if (state.keyed) out.guards.push({ name: 'piiScrub', ok: false, action: 'rewrite' });
     }
     return out;
   };
@@ -105,8 +111,50 @@ function collect(v: unknown, into: Set<string>, depth: number): void {
   }
 }
 
-function rebuild(v: unknown, scrubbed: ReadonlyMap<string, string>): unknown {
-  const of = (s: string): string => scrubbed.get(s) as string;
+/**
+ * A key that says its value is PII ("otp", "name", "phone_number", "studentName", "upi-id", ...):
+ * the whole value is redacted, since a bare "482913" or "Riya" has no keyword of its own.
+ */
+const PII_KEY =
+  /^(?:my|student|parent|user|first|last|full|contact)?(otp|pin|cvv|cvc|card|phone|mobile|whatsapp|email|mail|name|aadhaar|aadhar|pan|upi)(?:number|no|num|id|address|code)?$/;
+const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
+  otp: 'otp',
+  pin: 'otp',
+  cvv: 'card',
+  cvc: 'card',
+  card: 'card',
+  phone: 'phone',
+  mobile: 'phone',
+  whatsapp: 'phone',
+  email: 'email',
+  mail: 'email',
+  name: 'name',
+  aadhaar: 'id',
+  aadhar: 'id',
+  pan: 'id',
+  upi: 'id',
+};
+
+function keyCategory(key: string): PiiCategory | undefined {
+  const m = PII_KEY.exec(key.toLowerCase().replace(/[\s_.-]/g, ''));
+  return m === null ? undefined : KEY_CATEGORY[m[1] as string];
+}
+
+function rebuild(
+  v: unknown,
+  scrubbed: ReadonlyMap<string, string>,
+  state: { keyed: boolean },
+  under: PiiCategory | undefined,
+): unknown {
+  const of = (s: string): string => {
+    const r = scrubbed.get(s);
+    if (r === undefined) throw payloadShape();
+    return r;
+  };
+  if (under !== undefined && (typeof v === 'number' || (typeof v === 'string' && v !== ''))) {
+    state.keyed = true;
+    return PII_PLACEHOLDERS[under];
+  }
   if (typeof v === 'string') return of(v);
   if (typeof v === 'number') {
     // A phone or ID sent as a number is PII too: it comes back as its placeholder string.
@@ -114,14 +162,14 @@ function rebuild(v: unknown, scrubbed: ReadonlyMap<string, string>): unknown {
     return of(s) === s ? v : of(s);
   }
   if (typeof v !== 'object' || v === null) return v;
-  if (Array.isArray(v)) return v.map((x: unknown) => rebuild(x, scrubbed));
+  if (Array.isArray(v)) return v.map((x: unknown) => rebuild(x, scrubbed, state, under));
   const entries: [string, unknown][] = [];
   const keys = new Set<string>();
   for (const [k, x] of Object.entries(v)) {
     const key = of(k);
     if (keys.has(key)) throw payloadShape();
     keys.add(key);
-    entries.push([key, rebuild(x, scrubbed)]);
+    entries.push([key, rebuild(x, scrubbed, state, under ?? keyCategory(k))]);
   }
   // fromEntries defines own keys, so a "__proto__" key never sets the prototype.
   return Object.fromEntries(entries);

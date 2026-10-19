@@ -1,5 +1,5 @@
 // Fixture PII is fake (from the eval cases). Test names carry labels only, never the values.
-import type { GuardResult, LocalePack, TurnInput } from '@edmate/contracts';
+import { type GuardResult, LIMITS, type LocalePack, type TurnInput } from '@edmate/contracts';
 import {
   demoAgentConfig,
   demoEntitlementSubscription,
@@ -207,6 +207,107 @@ describe('scrub: skillPayload (no bypass)', () => {
     await drive(createScrub([g])(env, entitled()));
     expect(g.calls.map((c) => c.text)).toEqual([demoTurnInput.text, 'same']);
   });
+});
+
+describe('scrub: values under PII-named keys are redacted whole (fix round)', () => {
+  const run = async (skillPayload: unknown) => {
+    const { env, drive } = setup({ ...demoTurnInput, skillPayload });
+    return drive(scrub(env, entitled()));
+  };
+
+  it('a bare OTP and a bare first name (no keyword in the value) are redacted', async () => {
+    expect((await run({ otp: '482913' })).skillPayload).toEqual({ otp: P.otp });
+    expect((await run({ name: 'Riya' })).skillPayload).toEqual({ name: P.name });
+  });
+
+  it.each([
+    ['phone', { phone: '9000011111' }, { phone: P.phone }],
+    ['mobile number as a number', { mobile_number: 9000011111 }, { mobile_number: P.phone }],
+    ['email', { Email: 'riya' }, { Email: P.email }],
+    ['card number', { cardNumber: '4111' }, { cardNumber: P.card }],
+    ['cvv', { cvv: 123 }, { cvv: P.card }],
+    ['aadhaar', { aadhaar: '1234' }, { aadhaar: P.id }],
+    ['pan', { PAN: 'ABCDE' }, { PAN: P.id }],
+    ['upi id', { 'upi-id': 'riya' }, { 'upi-id': P.id }],
+    ['student name', { studentName: 'Riya Sen' }, { studentName: P.name }],
+    [
+      'nested under the key',
+      { name: { first: 'Riya', last: ['Sen'] } },
+      { name: { first: P.name, last: [P.name] } },
+    ],
+    [
+      'empty, boolean and null values stay',
+      { name: '', otp: null, phone: true },
+      { name: '', otp: null, phone: true },
+    ],
+  ] as const)('%s', async (_label, payload, expected) => {
+    expect((await run(payload)).skillPayload).toEqual(expected);
+  });
+
+  it('ordinary keys are left to the pattern scrub', async () => {
+    const payload = { fileName: 'main.py', code: 'name = "x"', names: ['Riya'], panel: 'left' };
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('the trace shows the payload rewrite', async () => {
+    expect((await run({ otp: '482913' })).guards).toEqual([
+      { name: 'piiScrub', ok: true },
+      { name: 'piiScrub', ok: false, action: 'rewrite' },
+    ]);
+  });
+});
+
+describe('scrub at the input cap (fix round)', () => {
+  const fill = (head: string, unit: string, cap: number) =>
+    head + unit.repeat(Math.floor((cap - head.length) / unit.length));
+
+  it.each([
+    [
+      'a phone keyword before every ten-digit number, at the 8,000-unit length cap',
+      fill('', 'call 1234567890 ', LIMITS.turnTextMaxLength),
+      400,
+    ],
+    [
+      'a run of ten-digit numbers after one keyword, at the 8,000-unit length cap',
+      fill('contact ', '1234567890 ', LIMITS.turnTextMaxLength),
+      4,
+    ],
+    [
+      'an OTP keyword before every number, at the 4,000-character cap',
+      fill('', 'OTP 4821 ', LIMITS.turnTextMaxChars),
+      400,
+    ],
+    [
+      'a run of OTP-like numbers after one keyword, at the 4,000-character cap',
+      fill('OTP ', '1234 ', LIMITS.turnTextMaxChars),
+      5,
+    ],
+  ])(
+    '%s: settles, scrubs clean, in generous time',
+    { timeout: 30_000 },
+    async (_label, text, min) => {
+      expect(text.length).toBeGreaterThan(LIMITS.turnTextMaxChars - 20);
+      const started = Date.now();
+      const { env, drive } = setup({
+        ...demoTurnInput,
+        text,
+        skillPayload: { note: text.slice(0, 200) },
+      });
+      const r = await drive(scrub(env, entitled()));
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(r.guards.slice(0, 2)).toEqual([
+        { name: 'piiScrub', ok: false, action: 'rewrite' },
+        { name: 'piiScrub', ok: true },
+      ]);
+      // The keyword-adjacent numbers went, and the output is a fixed point.
+      expect((r.text ?? '').split('[').length - 1).toBeGreaterThanOrEqual(min);
+      const again = setup({ ...demoTurnInput, text: r.text ?? '' });
+      expect(await again.drive(scrub(again.env, entitled()))).toEqual({
+        text: r.text,
+        guards: [{ name: 'piiScrub', ok: true }],
+      });
+    },
+  );
 });
 
 describe('scrub: every non-ok outcome fails closed with ids and an error name only', () => {

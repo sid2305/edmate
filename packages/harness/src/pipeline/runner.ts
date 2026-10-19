@@ -223,6 +223,11 @@ class Turn {
     this.trace.step('admit', admitted.ms, 'ok');
     this.trace.step('entitle', ent.ms, 'ok');
 
+    // In-process keyword check on the raw text, before the scrub can redact any word it needs
+    // (no model call). Only the boolean is kept: the raw text is never stored, traced or reported.
+    // A hit escalates at step 5 (or right away if the scrub fails).
+    const rawDistress = this.distressHit(input, 'raw');
+
     // 3a. Regex PII scrub, first; its time counts against step 3's one budget.
     const budget = timeoutOf('preGuard');
     const scRaw = await this.timed(input, budget, (env) => steps.scrub(env, e));
@@ -233,9 +238,8 @@ class Turn {
       this.trace.step('preGuard', sc.ms, 'failed');
       // Reported, never dropped: a failed scrub is a guard bug or outage. Ids and names only.
       this.background.push({ task: 'runner', error: scrubFailure(scRaw) });
-      // In-process keyword check on the raw text (no model call; the text is never stored,
-      // traced or reported). A hit escalates without running any step on the raw text.
-      if (this.distressHit(input, 'raw')) {
+      // A raw-text keyword hit escalates without running any step on the raw text.
+      if (rawDistress) {
         return this.sendEscalation(e, null, this.buildAlert(input, e, undefined), {
           replyText: LAST_RESORT_DISTRESS_REPLY,
           outcome: 'fallback',
@@ -279,10 +283,12 @@ class Turn {
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
-    // A failed preGuard means no classifier verdict: the keyword check still runs.
+    // A failed preGuard means no classifier verdict: the keyword check still runs. A hit on the
+    // raw text (before the scrub) always counts.
     if (
       preAlert !== undefined ||
       intent === 'distress' ||
+      rawDistress ||
       (!pg.ok && this.distressHit(scrubbed, 'scrubbed'))
     ) {
       return this.escalate(scrubbed, e, preAlert);
