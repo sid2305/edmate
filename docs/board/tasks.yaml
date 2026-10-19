@@ -664,6 +664,15 @@ tasks:
   risk: risky
   branch: m4/4.0b-suites
   model: plan:sonnet build:opus-5.5/medium
+- id: 4.0c
+  milestone: M4
+  title: 'Suite validator follow-ups from the 4.0b review: the loader returns file/case pairs (no re-listing or `as` cast), `pending` matched case-insensitively, a suite that fails to load says so instead of "no cases", and the reviewer rule on by default (EDMATE_ALLOW_PENDING=1 to opt out)'
+  accept: suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any case) fails CI.
+  deps:
+  - '4.0'
+  status: todo
+  branch: null
+  model: null
 - id: '4.1'
   milestone: M4
   title: Guard framework and registry
