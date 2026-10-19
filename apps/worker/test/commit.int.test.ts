@@ -91,9 +91,12 @@ async function seed(c: pg.Client): Promise<void> {
     values ('av_1', 'tch_test_01', 'agt_test_01', 1, '{}')`);
   await c.query(`insert into packages (id, teacher_id, agent_id, name, live_version)
     values ('pkg_test_paid', 'tch_test_01', 'agt_test_01', 'P', 1)`);
-  await c.query(`insert into sessions (id, student_id, teacher_id, agent_id, agent_version) values
-    ('ses_test_01', 'stu_test_01', 'tch_test_01', 'agt_test_01', 1),
-    ('ses_test_02', 'stu_test_02', 'tch_test_01', 'agt_test_01', 1)`);
+  await c.query(`insert into package_versions (id, teacher_id, package_id, version, config)
+    values ('pv_test_paid_1', 'tch_test_01', 'pkg_test_paid', 1, '{}')`);
+  // Open sessions are pinned to a package version (3.16, sessions_open_has_package).
+  await c.query(`insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version) values
+    ('ses_test_01', 'stu_test_01', 'tch_test_01', 'agt_test_01', 1, 'pkg_test_paid', 1),
+    ('ses_test_02', 'stu_test_02', 'tch_test_01', 'agt_test_01', 1, 'pkg_test_paid', 1)`);
 }
 
 async function until<T>(read: () => Promise<T>, ok: (v: T) => boolean, ms = 15_000): Promise<T> {
