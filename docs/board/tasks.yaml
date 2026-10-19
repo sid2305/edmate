@@ -693,9 +693,9 @@ tasks:
   accept: the new cases validate and are signed off on a review sheet like 4.0's.
   deps:
   - '4.0'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.0d-coverage-gaps
+  model: build:sonnet
 - id: '4.1'
   milestone: M4
   title: Guard framework and registry
