@@ -433,7 +433,13 @@ describe.skipIf(!up)(
 
     it('a caller-chosen row id (the worker queue, 3.8) is stored; the same id again is invalid', async () => {
       const turnId = turn();
-      const usage = { model: 'm', tier: 'main', inputTokens: 1, outputTokens: 2, costMicroUsd: 3 };
+      const usage = {
+        model: 'm',
+        tier: 'main',
+        inputTokens: 1,
+        outputTokens: 2,
+        costMicroUsd: 3,
+      } as const;
       const entry = { id: `ul_${turnId}_0`, turnId, source: 'subscription', usage } as const;
       await repos.usageLedger.record(S1A, PKG_A, entry);
       await expect(repos.usageLedger.record(S1A, PKG_A, entry)).rejects.toMatchObject({
