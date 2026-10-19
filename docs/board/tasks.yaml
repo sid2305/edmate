@@ -982,6 +982,16 @@ tasks:
   risk: risky
   branch: m4/4.7-grounding
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+- id: 4.7b
+  milestone: M4
+  title: 'Grounding follow-ups (4.7 reviews): per-request random judge delimiters and full-width/look-alike fence breaking; citations like "[ 3 ]", "[３]" and "source 3"; reversed or worded premise forms ("I got 4 for 7 // 2", "seven // two is four");
+    canonicalNumber over 1e15 without the cast; the concurrent-turn race on groundingAsks (no per-session turn serialisation exists: an atomic cap in the session store, or serialise turns per session); the cast-free reason read in postGuard.ts watched()'
+  accept: each item has a unit test; the reversed-premise pending case passes offline; two concurrent ungrounded turns at groundingAsks 2 open at most one question.
+  deps:
+  - '4.7'
+  status: todo
+  branch: null
+  model: null
 - id: '4.8'
   milestone: M4
   title: '`adviceGuard` for regulated subjects'
@@ -1463,7 +1473,7 @@ tasks:
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
-  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews)
+  accept: component tests + e2e.; on replace '' the client clears shown text, skill events and sources, and drops text from a turn that never got done (3.7 and 4.5 reviews); streamed text is shown as provisional until done, and a replacement is visibly marked (4.7 safety review)
   deps:
   - GATE
   - '1.3'
