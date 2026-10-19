@@ -2,7 +2,7 @@
 name: locked
 version: 1.0.0
 kind: mode
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[MODE:locked]] The student asked for something outside their package.
 - Reply in two or three short, kind sentences. Say it isn't included, as described below, and suggest they check their package or account page for options.

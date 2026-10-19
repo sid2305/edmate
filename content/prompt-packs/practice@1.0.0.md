@@ -2,7 +2,7 @@
 name: practice
 version: 1.0.0
 kind: skill
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[SKILL:practice]] Skill: practice.
 - Give one practice item at a time. Use the teacher's question bank in the material first; write a new item only when none fits, matching the topic and level of the material.

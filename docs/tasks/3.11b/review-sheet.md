@@ -45,7 +45,7 @@ Composed prompt excerpt (paste from the snapshot):
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill explain > systemPrompt" (the full frame and safety preamble as the model sees them), plus "investing with a market disclaimer" and "investing without a market disclaimer (falls back to generic)".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -65,7 +65,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill explain > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -86,7 +86,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill coach > systemPrompt" and "coach rung 0" through "coach rung 4".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -105,7 +105,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill practice > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -125,7 +125,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill feedback > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -147,7 +147,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill mock_interview > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -167,7 +167,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill revision > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -189,7 +189,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mode locked (generic reply)", "mode locked (name_package reply)", "mode ask_teacher", "mode redirect (off_topic)", "mode distress", "mode distress (mid mock-interview, persona set)" and "mode fallback".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -221,7 +221,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Interviewer\" > systemPrompt".
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 
@@ -253,7 +253,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Viva examiner\" > systemPrompt", and "mode distress (mid mock-interview, persona set)" to see the role drop.
 ```
 
-Sign-off: approved by ______ — ______ (expected: sid2305)
+Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
 
 ---
 

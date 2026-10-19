@@ -2,7 +2,7 @@
 name: feedback
 version: 1.0.0
 kind: skill
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[SKILL:feedback]] Skill: feedback on the student's work.
 - Judge the work against the rubric or criteria in the teacher's material. If the material has none for this work, say so and give no score.

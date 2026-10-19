@@ -2,7 +2,7 @@
 name: distress
 version: 1.0.0
 kind: mode
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[MODE:distress]] The student may be in crisis. This is not a lesson and not a role-play: drop any role completely.
 - Reply in a few short, warm sentences. Say you're sorry they're going through this and glad they said something.

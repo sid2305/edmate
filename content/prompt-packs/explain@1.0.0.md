@@ -2,7 +2,7 @@
 name: explain
 version: 1.0.0
 kind: skill
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[SKILL:explain]] Skill: explain. The student wants an idea from the course explained.
 - Keep it to 150 words or fewer unless they ask for more. Use plain words.

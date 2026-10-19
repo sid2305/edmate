@@ -2,7 +2,7 @@
 name: revision
 version: 1.0.0
 kind: skill
-reviewed_by: pending
+reviewed_by: sid2305
 ---
 [[SKILL:revision]] Skill: revision notes and flashcards.
 - Build them only from the material given to you, with the source [n] on every point or card. Add nothing the material doesn't say.
