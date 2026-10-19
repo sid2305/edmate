@@ -11,6 +11,13 @@
 // Scope (build plan § guard table): phone, email, card (plus CVV/expiry next to a card), OTP-like
 // numbers, the student's own name when they introduce themselves, and the locale pack's patterns.
 // Street addresses are out of scope (lead decision 18 Oct 2026).
+//
+// Task 4.2c (hardening, from the 4.2 safety review): before the view above runs, `foldDigitForms`
+// (its own module, `digitForms.ts`) folds keycap, superscript and circled digit presentations to
+// ASCII and drops marks that follow a digit. Kept as a separate pre-pass, not merged into the
+// fold/view block above, because 4.5 is moving that block to a shared helper on its own branch
+// (lead instruction, 19 Oct 2026).
+import { foldDigitForms } from './digitForms.js';
 
 /** In priority order: on overlapping spans of equal length, the earlier category names the result. */
 export const PII_CATEGORIES = Object.freeze([
@@ -143,6 +150,19 @@ const PHONE_SPACED = new RegExp(
   'gd',
 );
 const BARE_TEN = /(?<![\d+])0?\d{10}(?!\d)/g;
+/**
+ * Hardened shapes (4.2c item 2): 7-13 digits in any grouping, joined by any of space, dot, comma,
+ * slash, underscore or dash (1-3 of them at a time, e.g. "   " or " - "). Groups up to 5 digits
+ * each (India's 5-5 split, the UK's 4-4-4 shapes, ...). With a `+CC` prefix this is unconditional
+ * (the CC itself is the context); without one, it only counts near a phone keyword (see
+ * `candidates`), same as a bare 10-digit run.
+ */
+const SEP2 = String.raw`[\s.,/_()-]{1,3}`;
+const PHONE_FLEX_BARE = new RegExp(String.raw`(?<![\d+])\d{1,5}(?:${SEP2}\d{1,5}){1,7}(?!\d)`, 'g');
+const PHONE_FLEX_CC = new RegExp(
+  String.raw`(?<![\d+])${CC}(${SEP2}?\d{1,5}(?:${SEP2}\d{1,5}){0,7})(?!\d)`,
+  'gd',
+);
 const PHONE_KEYWORDS = new RegExp(
   String.raw`(?<![\p{L}\p{M}])(?:phone|mobile|cell|whats\s?app|contact|call|text\s+me|sms|tel|ph|mob|(?:my|mera|meri|mere)\s+(?:number|no\.?|num))(?![\p{L}\p{M}])|फ़ोन|फोन|मोबाइल|मेरा\s+नंबर|कॉल|व्हाट्सएप`,
   'giu',
@@ -150,8 +170,9 @@ const PHONE_KEYWORDS = new RegExp(
 /** How far (in view characters) a keyword may sit from the number it marks. */
 const KEYWORD_WINDOW = 30;
 
+// Card separators now also take a dot (4.2c item 3: "4111.1111.1111.1111").
 const CARD = new RegExp(
-  String.raw`(?<![\d+])(?:\d{13,19}|\d{4}(?:[ \-]\d{4}){2}[ \-]\d{3,7}|\d{4}[ \-]\d{6}[ \-]\d{4,5})(?!\d)`,
+  String.raw`(?<![\d+])(?:\d{13,19}|\d{4}(?:[ .\-]\d{4}){2}[ .\-]\d{3,7}|\d{4}[ .\-]\d{6}[ .\-]\d{4,5})(?!\d)`,
   'g',
 );
 const YEAR_GROUPS = /^(?:(?:19|20)\d\d[ -]?)+$/;
@@ -169,6 +190,53 @@ const EXPIRY = new RegExp(
 );
 const BARE_EXPIRY = /[\s,;:]*(\d{1,2}\s*\/\s*\d{2,4})(?!\d)/dy;
 
+/**
+ * Hardened (4.2c item 3): a spelled-out or single-spaced-digit CVV ("cvv 1 2 3", "cvv one two
+ * three"), still only next to a card (see `cards`).
+ */
+const CVV_AFTER_SPACED = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?:cvv2?|cvc2?|cid|csc|security\s+code)\s*[:#=\-]?\s*(\d(?:[\s-]+\d){2,3})(?!\d)`,
+  'gdiu',
+);
+const SPELLED_DIGIT_WORDS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'shunya', 'ek', 'do', 'teen', 'char', 'chaar', 'paanch', 'panch', 'che', 'chhe', 'saat',
+  'aath', 'nau',
+] as const;
+const SPELLED_WORD = SPELLED_DIGIT_WORDS.join('|');
+const CVV_AFTER_SPELLED = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?:cvv2?|cvc2?)\s*[:#=\-]?\s*((?:${SPELLED_WORD})(?:[\s-]+(?:${SPELLED_WORD})){1,2})(?![\p{L}\p{M}])`,
+  'gdiu',
+);
+
+/**
+ * Hardened (4.2c item 3): after a card, the next 3-4 digit run and the next MM[ /-]YY date, each
+ * within about 25 characters, even with no "cvv"/"exp" keyword at all — but only through
+ * punctuation and whitespace, never through an unrelated word (so "... and the exam on 12/29"
+ * stays alone: the word "and" stops the window immediately).
+ */
+const WINDOW_AFTER_CARD = 25;
+const FIRST_LETTER = /\p{L}/u;
+const BARE_3_4_AFTER_CARD = /(?<!\d)(\d{3,4})(?!\d)/d;
+const MM_YY_AFTER_CARD = /(?<!\d)(\d{1,2}[ /-]\d{2,4})(?!\d)/d;
+
+function unlabelledAfterCard(s: string, end: number): PiiSpan[] {
+  const tailFull = s.slice(end, end + WINDOW_AFTER_CARD);
+  const letterAt = tailFull.search(FIRST_LETTER);
+  const tail = letterAt === -1 ? tailFull : tailFull.slice(0, letterAt);
+  const out: PiiSpan[] = [];
+  const mmYy = MM_YY_AFTER_CARD.exec(tail);
+  const date = mmYy === null ? undefined : group1(mmYy);
+  if (date !== undefined) out.push(span(date[0] + end, date[1] + end, 'card'));
+  const cvv = BARE_3_4_AFTER_CARD.exec(tail);
+  if (cvv !== null) {
+    const [a, b] = group1(cvv);
+    const insideDate = date !== undefined && a >= date[0] && b <= date[1];
+    if (!insideDate) out.push(span(a + end, b + end, 'card'));
+  }
+  return out;
+}
+
 const OTP_STRONG = new RegExp(
   String.raw`(?<![\p{L}\p{M}])(?:otp|pin|passcode|(?:verification|login|sign[\s-]?in|access|auth|confirmation)\s+code|one[\s-]?time\s+(?:code|password|pin))(?![\p{L}\p{M}])|ओटीपी|पिन`,
   'giu',
@@ -177,7 +245,33 @@ const OTP_CODE = new RegExp(
   String.raw`(?:(?<![\p{L}\p{M}_])code(?![\p{L}\p{M}_])|कोड)\s*(?:is|hai|aaya|aya|mila|:|-|है|आया|मिला)?\s*(?:hai|है)?\s*(\d{4,8})(?!\d)`,
   'gdiu',
 );
+/** Hardened (4.2c item 4): "code"/bheja/aaya/mila *after* the number too ("482913 code/bheja"). */
+const CODE_AFTER = new RegExp(
+  String.raw`(?<!\d)(\d{4,8})\s*(?:is\s+)?(?:code|कोड|bheja|bhej\s+diya|aaya|aya|mila)(?![\p{L}\p{M}_])`,
+  'gdiu',
+);
 const OTP_NUMBER = /(?<!\d)\d{4,8}(?!\d)/g;
+/**
+ * Hardened (4.2c item 4): a 4-8 digit OTP split by separators near a strong keyword
+ * ("otp 4 8 2 9 1 3", "otp: 482-913"), on the same window-check path as `BARE_TEN`.
+ */
+const OTP_FLEX = /(?<!\d)\d{1,4}(?:[\s-]\d{1,4}){1,7}(?!\d)/g;
+
+function validOtpFlex(raw: string): boolean {
+  const digits = digitGroups(raw).join('');
+  return digits.length >= 4 && digits.length <= 8;
+}
+
+/**
+ * Hardened (4.2c item 6): spelled-out single-turn numbers near a phone or OTP keyword ("nine
+ * eight seven ...", "ek do teen ..."). English and Hindi-latin digit words, 3-10 of them in a
+ * row. A number split across turns can't be linked by a regex (out of scope, per the 4.2 plan
+ * review).
+ */
+const SPELLED_RUN = new RegExp(
+  String.raw`(?<![\p{L}\p{M}])(?:${SPELLED_WORD})(?:[\s-]+(?:${SPELLED_WORD})){2,9}(?![\p{L}\p{M}])`,
+  'giu',
+);
 
 const AT = String.raw`(?:@|\s?[\[({]at[\])}]\s?)`;
 const DOT = String.raw`(?:\.|\s?[\[({]dot[\])}]\s?)`;
@@ -196,9 +290,12 @@ const EMAIL = new RegExp(
 );
 
 // Own name: an introduction phrase, then up to three name words.
-/** "my name is" and friends: any script, any case, after them. */
+/**
+ * "my name is" and friends, and "name:"/"naam:" (hardened 4.2c item 5): any script, any case,
+ * after them.
+ */
 const NAME_STRONG = new RegExp(
-  String.raw`(?<![\p{L}\p{M}])(?:my\s+name\s+is|my\s+name['’]s|mera\s+(?:naam|nam|name))(?![\p{L}\p{M}])|मेरा\s+नाम`,
+  String.raw`(?<![\p{L}\p{M}])(?:my\s+name\s+is|my\s+name['’]s|mera\s+(?:naam|nam|name)|name|naam)\s*:(?![\p{L}\p{M}])|(?<![\p{L}\p{M}])(?:my\s+name\s+is|my\s+name['’]s|mera\s+(?:naam|nam|name))(?![\p{L}\p{M}])|मेरा\s+नाम`,
   'giu',
 );
 /** "I'm", "I am", "myself", "call me": only Title-Case words after them. */
@@ -211,6 +308,17 @@ const NAME_MAIN = new RegExp(
   String.raw`(?<![\p{L}\p{M}])[Mm]ain(?=(?:[^\S\r\n]+\p{Lu}[\p{Ll}\p{M}]+){1,3}[^\S\r\n]+(?:hoon|hun|hu|hoo)(?![\p{L}\p{M}]))`,
   'gu',
 );
+/** "मैं <Name> हूँ" (hardened 4.2c item 5): a Devanagari-sentence equivalent of `NAME_MAIN`. */
+const NAME_MAIN_DEVA = new RegExp(
+  String.raw`मैं(?=(?:[^\S\r\n]+[\p{L}\p{M}]+){1,3}[^\S\r\n]+(?:हूँ|हूं|हू)(?![\p{L}\p{M}]))`,
+  'gu',
+);
+/**
+ * A leading copula right after a strong phrase ("mera naam hai Aarav", "मेरा नाम है आरव": hardened
+ * 4.2c item 5), skipped so the real name words after it are still captured.
+ */
+// No trailing whitespace consumed: `nameWords`/`WORD_ANY` need a leading space of their own.
+const LEAD_CONNECTOR = /^[^\S\r\n]*(?:hai|है|is|:)(?![\p{L}\p{M}])/iu;
 const WORD_ANY = /[^\S\r\n]+([\p{L}\p{M}]+(?:['’-][\p{L}\p{M}]+)*)/duy;
 const WORD_TITLE =
   /[^\S\r\n]+(\p{Lu}[\p{Ll}\p{M}]*(?:['’-]\p{Lu}?[\p{Ll}\p{M}]+)*)(?![\p{L}\p{M}])/duy;
@@ -231,6 +339,8 @@ const NOT_A_NAME = new Set(
     'udaas udas dukhi thaka thaki thak ghabraya ghabrayi dara dari bimar beemar sick ill ' +
     'exhausted ashamed guilty embarrassed trapped desperate suffering struggling failing ' +
     'kill killing ending gone over tension frustrated irritated jealous ' +
+    // More distress/negative words (hardened 4.2c item 5).
+    'khatam khatm barbaad bekaar bekar nothing ' +
     // Nationality, language and medium words.
     'indian hindi english tamil telugu marathi bengali bangla gujarati punjabi kannada ' +
     'malayalam urdu odia assamese nepali medium american british foreign ' +
@@ -238,7 +348,12 @@ const NOT_A_NAME = new Set(
     'bad weak strong smart dumb stupid poor rich young old big small tall short fat thin ugly ' +
     'normal alright great better best worse worst later soon now today tomorrow kal aaj abhi ' +
     'always never sometimes again too quite pretty extremely totally completely literally ' +
-    'class grade standard'
+    'class grade standard ' +
+    // Devanagari fillers/distress words for NAME_MAIN_DEVA (मैं ... हूँ is new; same caution
+    // as the Latin "main ... hoon" above, so the common verb helpers and distress words it
+    // already protects in Hinglish are mirrored in Devanagari script too).
+    'है हैं हूँ हूं रहा रही रहे गया गयी गए था थी थे कर करता करती ' +
+    'परेशान उदास दुखी अकेला अकेली थका थकी थके'
   ).split(' '),
 );
 const MAX_NAME_WORDS = 3;
@@ -275,13 +390,16 @@ function luhn(digits: string): boolean {
 
 function cards(s: string): PiiSpan[] {
   const out: PiiSpan[] = [];
+  const cardSpans: PiiSpan[] = [];
   for (const m of all(CARD, s)) {
     if (YEAR_GROUPS.test(m[0]) || !luhn(m[0].replace(/\D/g, ''))) continue;
-    out.push(span(m.index, m.index + m[0].length, 'card'));
+    const sp = span(m.index, m.index + m[0].length, 'card');
+    out.push(sp);
+    cardSpans.push(sp);
   }
   if (out.length === 0) return out;
   // CVV and expiry only count next to a card number in the same message.
-  for (const re of [CVV_AFTER, CVV_BEFORE, EXPIRY]) {
+  for (const re of [CVV_AFTER, CVV_BEFORE, EXPIRY, CVV_AFTER_SPACED, CVV_AFTER_SPELLED]) {
     for (const m of all(re, s)) out.push(span(...group1(m), 'card'));
   }
   for (const c of [...out]) {
@@ -289,6 +407,8 @@ function cards(s: string): PiiSpan[] {
     const m = BARE_EXPIRY.exec(s);
     if (m !== null) out.push(span(...group1(m), 'card'));
   }
+  // Unlabelled 3-4 digit run / MM[ /-]YY the next ~25 characters after each card number.
+  for (const c of cardSpans) out.push(...unlabelledAfterCard(s, c.end));
   return out;
 }
 
@@ -304,6 +424,27 @@ function phoneLikeDigits(d: string): boolean {
   return steps.size !== 1;
 }
 
+/** Digit runs in a matched phone candidate (one per separated group). */
+const digitGroups = (raw: string): string[] => raw.split(/\D+/).filter((g) => g.length > 0);
+
+/**
+ * A flexible-shape phone candidate is PII-shaped when its total digit count is 7-13, it is not
+ * every group a single digit (that narrower shape is a single-digit-spaced list, handled by
+ * `PHONE_SPACED`/`phoneLikeDigits` elsewhere, which also excludes a counting run like a
+ * countdown), it is not a run of year-shaped groups (2023 2024 2025, ...), and the digits are not
+ * a constant run (grouping into multi-digit chunks is itself a strong enough phone-shape signal,
+ * so a monotonic step like a classic "9876543210" test number is not excluded here).
+ */
+function validPhoneFlex(raw: string): boolean {
+  const groups = digitGroups(raw);
+  const digits = groups.join('');
+  if (digits.length < 7 || digits.length > 13) return false;
+  if (groups.every((g) => g.length === 1)) return false;
+  // `raw` may carry a leading separator (the `+CC` variant includes it in the capture).
+  if (YEAR_GROUPS.test(raw.trim())) return false;
+  return !isConstantRun(digits);
+}
+
 function phones(s: string): PiiSpan[] {
   const out: PiiSpan[] = [];
   for (const m of all(PHONE_GROUPED, s)) out.push(span(m.index, m.index + m[0].length, 'phone'));
@@ -313,11 +454,15 @@ function phones(s: string): PiiSpan[] {
       out.push(span(m.index, m.index + m[0].length, 'phone'));
     }
   }
+  for (const m of all(PHONE_FLEX_CC, s)) {
+    const [a, b] = group1(m);
+    if (validPhoneFlex(s.slice(a, b))) out.push(span(m.index, m.index + m[0].length, 'phone'));
+  }
   return out;
 }
 
 function otps(s: string): PiiSpan[] {
-  return all(OTP_CODE, s).map((m) => span(...group1(m), 'otp'));
+  return [...all(OTP_CODE, s), ...all(CODE_AFTER, s)].map((m) => span(...group1(m), 'otp'));
 }
 
 /** A number that is PII only when a keyword of its kind is within the window. */
@@ -353,12 +498,24 @@ function candidates(s: string): Candidate[] {
       category: 'phone' as const,
       keywords: phoneKw,
     })),
+    ...ranges(PHONE_FLEX_BARE, s)
+      .filter(([start, end]) => validPhoneFlex(s.slice(start, end)))
+      .map(([start, end]) => ({ start, end, category: 'phone' as const, keywords: phoneKw })),
+    ...ranges(OTP_FLEX, s)
+      .filter(([start, end]) => validOtpFlex(s.slice(start, end)))
+      .map(([start, end]) => ({ start, end, category: 'otp' as const, keywords: otpKw })),
     ...ranges(OTP_NUMBER, s).map(([start, end]) => ({
       start,
       end,
       category: 'otp' as const,
       keywords: otpKw,
     })),
+    // Spelled-out single-turn numbers (4.2c item 6): tried against both keyword kinds; only the
+    // one actually nearby ever gets realised by `reached`.
+    ...ranges(SPELLED_RUN, s).flatMap(([start, end]) => [
+      { start, end, category: 'phone' as const, keywords: phoneKw },
+      { start, end, category: 'otp' as const, keywords: otpKw },
+    ]),
   ];
 }
 
@@ -437,11 +594,21 @@ function emails(s: string): PiiSpan[] {
   return [...ranges(EMAIL, s), ...ranges(EMAIL_SPELLED, s)].map(([a, b]) => span(a, b, 'email'));
 }
 
+/** True for a run of the same digit repeated ("9999999999"): never an id, card or phone. */
+const isConstantRun = (d: string): boolean => d.length > 1 && [...d].every((c) => c === d[0]);
+
+/**
+ * A locale-pack match that is purely digits is skipped when those digits are a constant run
+ * (hardened 4.2c item 8: "x = 9999999999" is not an Aadhaar or a mobile number just because it
+ * happens to be the right length and shape).
+ */
 function localeMatches(s: string, locale: readonly RegExp[]): PiiSpan[] {
   const out: PiiSpan[] = [];
   for (const re of locale) {
     for (const m of all(re, s)) {
-      if (m[0].length > 0) out.push(span(m.index, m.index + m[0].length, 'id'));
+      if (m[0].length === 0) continue;
+      if (/^\d+$/.test(m[0]) && isConstantRun(m[0])) continue;
+      out.push(span(m.index, m.index + m[0].length, 'id'));
     }
   }
   return out;
@@ -460,11 +627,24 @@ function nameWords(s: string, at: number, word: RegExp): [number, number][] {
   return words;
 }
 
+/**
+ * The position right after a strong phrase, skipping one leading copula ("hai"/"है"/"is"/":") so
+ * "mera naam hai Aarav" and "मेरा नाम है आरव" still capture the real name after it (hardened 4.2c
+ * item 5; without this, the copula itself is the first "word" `nameWords` sees and stops there).
+ */
+function afterStrongPhrase(s: string, end: number): number {
+  const m = LEAD_CONNECTOR.exec(s.slice(end));
+  return m === null ? end : end + m[0].length;
+}
+
 function names(s: string): PiiSpan[] {
   const words: [number, number][] = [];
-  for (const [, end] of ranges(NAME_STRONG, s)) words.push(...nameWords(s, end, WORD_ANY));
+  for (const [, end] of ranges(NAME_STRONG, s)) {
+    words.push(...nameWords(s, afterStrongPhrase(s, end), WORD_ANY));
+  }
   for (const [, end] of ranges(NAME_WEAK, s)) words.push(...nameWords(s, end, WORD_TITLE));
   for (const [, end] of ranges(NAME_MAIN, s)) words.push(...nameWords(s, end, WORD_TITLE));
+  for (const [, end] of ranges(NAME_MAIN_DEVA, s)) words.push(...nameWords(s, end, WORD_ANY));
   // Later (and earlier) repeats of a captured word in the same message.
   const tokens = new Set(words.map(([a, b]) => s.slice(a, b)));
   for (const t of tokens) {
@@ -509,11 +689,14 @@ export function mergeSpans(spans: readonly PiiSpan[]): PiiSpan[] {
 
 /** One detection round: every PII span in `text` (original coordinates), sorted and merged. */
 export function findPii(text: string, locale: readonly RegExp[]): PiiSpan[] {
+  const pre = foldDigitForms(text);
   const found: PiiSpan[] = [];
   for (const drop of [false, true]) {
-    const v = buildView(text, drop);
+    const v = buildView(pre.text, drop);
     for (const sp of detect(v.s, locale)) {
-      found.push(span(v.from[sp.start] as number, v.to[sp.end - 1] as number, sp.category));
+      const preStart = v.from[sp.start] as number;
+      const preEnd = v.to[sp.end - 1] as number;
+      found.push(span(pre.from[preStart] as number, pre.to[preEnd - 1] as number, sp.category));
     }
   }
   return mergeSpans(found);

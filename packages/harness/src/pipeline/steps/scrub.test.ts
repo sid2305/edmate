@@ -215,9 +215,8 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
     return drive(scrub(env, entitled()));
   };
 
-  it('a bare OTP and a bare first name (no keyword in the value) are redacted', async () => {
+  it('a bare OTP (no keyword in the value) is redacted', async () => {
     expect((await run({ otp: '482913' })).skillPayload).toEqual({ otp: P.otp });
-    expect((await run({ name: 'Riya' })).skillPayload).toEqual({ name: P.name });
   });
 
   it.each([
@@ -230,10 +229,11 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
     ['pan', { PAN: 'ABCDE' }, { PAN: P.id }],
     ['upi id', { 'upi-id': 'riya' }, { 'upi-id': P.id }],
     ['student name', { studentName: 'Riya Sen' }, { studentName: P.name }],
+    ['pin code (compound, not bare "pin")', { pinCode: '411001' }, { pinCode: P.otp }],
     [
-      'nested under the key',
-      { name: { first: 'Riya', last: ['Sen'] } },
-      { name: { first: P.name, last: [P.name] } },
+      'an array is still the key’s own value',
+      { studentName: ['Riya', 'Sen'] },
+      { studentName: [P.name, P.name] },
     ],
     [
       'empty, boolean and null values stay',
@@ -254,6 +254,33 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
       { name: 'piiScrub', ok: true },
       { name: 'piiScrub', ok: false, action: 'rewrite' },
     ]);
+  });
+});
+
+describe('scrub: ambiguous key words need a compound form (4.2c item 7)', () => {
+  const run = async (skillPayload: unknown) => {
+    const { env, drive } = setup({ ...demoTurnInput, skillPayload });
+    return drive(scrub(env, entitled()));
+  };
+
+  it.each([
+    ['bare "card" is a flashcard, not a payment card', { card: { front: 'What is a list?' } }],
+    ['bare "name" nested under an unrelated key is a file name', { files: [{ name: 'main.py' }] }],
+    ['bare "pin" is not a PIN code', { pin: 13 }],
+    ['bare "name" at the top level is left alone too', { name: 'Riya' }],
+  ] as const)('%s', async (_label, payload) => {
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('an object value under a PII-named key does not propagate into its own unrelated keys', async () => {
+    const payload = { studentName: { nickname: 'Riya', initials: 'RS' } };
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('compound forms of the same ambiguous words still redact', async () => {
+    expect((await run({ cardNumber: '4111' })).skillPayload).toEqual({ cardNumber: P.card });
+    expect((await run({ studentName: 'Riya' })).skillPayload).toEqual({ studentName: P.name });
+    expect((await run({ pinCode: '411001' })).skillPayload).toEqual({ pinCode: P.otp });
   });
 });
 

@@ -114,9 +114,15 @@ function collect(v: unknown, into: Set<string>, depth: number): void {
 /**
  * A key that says its value is PII ("otp", "name", "phone_number", "studentName", "upi-id", ...):
  * the whole value is redacted, since a bare "482913" or "Riya" has no keyword of its own.
+ *
+ * Hardened (4.2c item 7): "card", "name" and "pin" are too generic to redact on their own — a
+ * flashcard's "card", a file's "name", a map or GPIO "pin" all hold ordinary teaching content, not
+ * PII. For these three only, a bare key (no prefix or suffix) is left to the pattern scrub
+ * instead; `cardNumber`, `studentName`, `pinCode` and the like still redact, same as before.
  */
 const PII_KEY =
-  /^(?:my|student|parent|user|first|last|full|contact)?(otp|pin|cvv|cvc|card|phone|mobile|whatsapp|email|mail|name|aadhaar|aadhar|pan|upi)(?:number|no|num|id|address|code)?$/;
+  /^(my|student|parent|user|first|last|full|contact)?(otp|pin|cvv|cvc|card|phone|mobile|whatsapp|email|mail|name|aadhaar|aadhar|pan|upi)(number|no|num|id|address|code)?$/;
+const AMBIGUOUS_ALONE: ReadonlySet<string> = new Set(['card', 'name', 'pin']);
 const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
   otp: 'otp',
   pin: 'otp',
@@ -137,7 +143,12 @@ const KEY_CATEGORY: Readonly<Record<string, PiiCategory>> = {
 
 function keyCategory(key: string): PiiCategory | undefined {
   const m = PII_KEY.exec(key.toLowerCase().replace(/[\s_.-]/g, ''));
-  return m === null ? undefined : KEY_CATEGORY[m[1] as string];
+  if (m === null) return undefined;
+  const [, prefix, core, suffix] = m;
+  if (AMBIGUOUS_ALONE.has(core as string) && prefix === undefined && suffix === undefined) {
+    return undefined;
+  }
+  return KEY_CATEGORY[core as string];
 }
 
 function rebuild(
@@ -162,6 +173,10 @@ function rebuild(
     return of(s) === s ? v : of(s);
   }
   if (typeof v !== 'object' || v === null) return v;
+  // An array is still the key's own value (`studentName: ["Riya", "Sen"]`), so `under` carries
+  // on into it; an object is one more level of keying (`card: {front: ...}`), so a PII-named key
+  // only redacts its own direct scalar/array value, never descends into unrelated nested keys
+  // (hardened 4.2c item 7: `{"card":{"front":"..."}}`, `{"files":[{"name":"main.py"}]}`).
   if (Array.isArray(v)) return v.map((x: unknown) => rebuild(x, scrubbed, state, under));
   const entries: [string, unknown][] = [];
   const keys = new Set<string>();
@@ -169,7 +184,7 @@ function rebuild(
     const key = of(k);
     if (keys.has(key)) throw payloadShape();
     keys.add(key);
-    entries.push([key, rebuild(x, scrubbed, state, under ?? keyCategory(k))]);
+    entries.push([key, rebuild(x, scrubbed, state, keyCategory(k))]);
   }
   // fromEntries defines own keys, so a "__proto__" key never sets the prototype.
   return Object.fromEntries(entries);
