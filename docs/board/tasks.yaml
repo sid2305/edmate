@@ -603,7 +603,7 @@ tasks:
   accept: an agent config with hi is rejected with a clear message; tests.
   deps:
   - '3.11'
-  status: review
+  status: done
   branch: m3/3.11c-english-only-agents
   model: build:sonnet
 - id: 3.11d
