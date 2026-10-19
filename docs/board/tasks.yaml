@@ -574,7 +574,7 @@ tasks:
   - '2.6'
   - '3.6'
   - M0
-  status: todo
+  status: done
   risk: risky
   branch: null
   model: null
@@ -594,7 +594,7 @@ tasks:
   accept: packs validate; safety-reviewer approves the prose; sid2305 signs each review-sheet row; snapshots updated.
   deps:
   - 3.11a
-  status: running
+  status: done
   branch: m3/3.11b-prompt-pack-content
   model: build:opus-5.5/medium
 - id: 3.11c
@@ -603,9 +603,9 @@ tasks:
   accept: an agent config with hi is rejected with a clear message; tests.
   deps:
   - '3.11'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m3/3.11c-english-only-agents
+  model: build:sonnet
 - id: 3.11d
   milestone: M3
   title: 'Teacher-label hardening (3.11b safety review): teacher turns in the history go in a non-assistant wrapper; the teacher-note string is neutralised in student input; the server, not the model, counts
@@ -701,7 +701,7 @@ tasks:
   accept: An ask_teacher turn creates exactly one teacher question scoped to that teacher and student; evidence updates the learner profile idempotently; tests on real Postgres.
   deps:
   - '3.8'
-  status: running
+  status: review
   branch: m3/3.17-profile-evidence
   model: plan:sonnet planreview:sonnet(security) build:sonnet
 - id: '0.11'
@@ -736,6 +736,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.14'
+  milestone: M7
+  title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
+  accept: main CI green; the linear-work tests unchanged.
+  deps:
+  - M0
+  status: done
+  branch: m7/0.14-latency-test-guard
+  model: build:lead
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
@@ -851,12 +860,32 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: review
   needs_decision:
   - moderation
   risk: risky
   branch: m4/4.4-moderation-jailbreak
   model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
+- id: 4.4b
+  milestone: M4
+  title: 'Pre-guard latency before live models (4.4 handoff): distress, moderation and jailbreak classifiers run as one combined small-model call (or concurrently) so a benign turn fits step 3''s 400 ms
+    budget; rule hits still skip the model'
+  accept: with the scripted gateway at realistic latencies, a benign turn finishes step 3 under 400 ms; every pre-guard eval result unchanged.
+  deps:
+  - '4.4'
+  status: todo
+  branch: null
+  model: null
+- id: 4.4c
+  milestone: M4
+  title: 'Pre-guard follow-ups (4.4 safety review): run the moderation and jailbreak rule tables in the runner''s failed-chain path, as distress keywords already are, so a down distress classifier still
+    raises misuse alerts for rule hits; a router distress label must not drop a misuse alert'
+  accept: with the distress classifier down, a harm_to_others rule hit still raises a misuse alert; tests.
+  deps:
+  - '4.4'
+  status: todo
+  branch: null
+  model: null
 - id: '4.5'
   milestone: M4
   title: '`answerLeak` (incremental + final) and the rewrite loop'
