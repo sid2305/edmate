@@ -10,6 +10,137 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.2c fix round: the 4.2c ambiguity rule is narrowed to three specific gates, not a blanket block · decided by build-error-resolver · risk: low
+Decided: replace the single "bare `card`/`name`/`pin` never redacts" rule with three narrower
+ones — a file-shaped enclosing key (bare "name" only), an object value's own direct name-shaped
+subfields (bare "name" only), and a PIN/postcode digit-length check (bare "pin" only) — so a bare
+key's own scalar value always redacts unless one of those three specifically says otherwise.
+Why: the original rule's comment claimed it only stopped cascading into unrelated *nested* keys,
+but the code actually blocked the key's own direct value too, which is the CRITICAL regression
+this round fixes; the three gates above are the narrowest change that satisfies every named case
+(including the new ones) without reopening the original flashcard/file-name/GPIO-pin false
+positives.
+Alternatives: keep the bare-key rule as "object value only" (still leaves `{"pin":9999}`-shaped
+over-redaction or under-redaction edge cases unaddressed); drop the ambiguity rule entirely (reopens the
+original 4.2c false positives it was meant to fix).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 2: the file-like-parent exemption needs the value's shape too, not just the parent key's name · decided by build-error-resolver · risk: low
+Decided: a bare "name" under a file-shaped key (`files`/`file`/`module`/`function`/`variable`/
+`class`) is only exempt from redaction when the value also looks like a file name or a plain code
+identifier (a dot-extension, or a single no-whitespace token that isn't a bare Title-Case word);
+otherwise it redacts, even under one of those keys.
+Why: keying the exemption on the parent alone let a real person's name under any of those keys go
+unredacted at any depth — a HIGH-severity privacy gap the reviewer found in fix round 1. Checking
+the value's shape too closes it while still letting ordinary file names and code identifiers
+through.
+Alternatives: drop the file-like-parent exemption entirely (reopens the original `main.py` false
+positive it was added for); key only on the value's shape and ignore the parent (would also
+exempt a bare "name" with an identifier-shaped value anywhere, e.g. `{"name":"Riya_underscored"}`,
+which is less targeted than keeping both conditions).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 3: the digit-form pre-pass moves inside the shared `foldText`, not duplicated per caller · decided by build-error-resolver · risk: low
+Decided: `textFold.ts`'s `foldText` calls `digitForms.ts`'s `foldDigitForms` first, composing its
+span map into `foldText`'s single-index `at`; `piiPatterns.ts` keeps its own separate, already-first
+`foldDigitForms` → `buildView` chain rather than being rewired to share `foldText`.
+Why: this is the smallest change that gets every current and future caller of the shared
+`foldText` (today: `answerKey.ts`/`answerLeak`, `numbers.ts`) the same digit-form folding
+`piiScrub` already had, without touching `piiPatterns.ts`'s own (different-shaped) fold pipeline,
+which was already correct and is unrelated to this gap.
+Alternatives: duplicate the `foldDigitForms` call inside `answerKey.ts`/`numbers.ts` directly
+(repeats the same fix at every call site, the exact duplication `textFold.ts` was created to
+avoid); rewrite `piiPatterns.ts` to use `foldText` too (a bigger refactor, out of scope for a fix
+round, and not needed since `piiPatterns.ts` was never missing the pre-pass).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c fix round 4: a whole-string pre-test, not a smarter algorithm, fixes the hot-path regression · decided by build-error-resolver · risk: low
+Decided: `foldDigitForms` gains one precompiled regex test over the whole input; when it finds
+none of the characters the function can possibly change, it returns an identity map without
+running the per-code-point loop at all. `foldOne` also skips `normalize()` for plain ASCII.
+Why: the dominant cost was calling `.normalize('NFKC')` on every single character regardless of
+whether it could ever change under NFKC; almost no real text has any of the digit-form characters
+this module cares about, so skipping the whole per-character pass is both correct (same output)
+and by far the cheapest fix, with no change to the O(n) position-map composition added in fix
+round 3.
+Alternatives: cache `normalize()` results per code point (helps repeated characters within one
+call, not the dominant case of many distinct ASCII characters); restructure the stream gate to
+call `foldText` less often (a bigger, riskier change to a different file, for a problem that is
+really about `foldDigitForms`'s own unconditional per-character cost).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Digit-form folding is a separate pre-pass module · decided by lead (coordination with 4.5) and tdd-guide · risk: medium
+Decided: `foldDigitForms` (keycap, superscript, circled digits; marks dropped after a digit) lives in its own new file, `guardrails/digitForms.ts`, called once at the top of `findPii` before the existing fold/view code in `piiPatterns.ts`, which is left untouched.
+Why: 4.5 is moving that existing fold/view block to a shared helper on its own branch; keeping the two changes in separate files avoids a conflicting edit to the same lines, whichever PR merges first.
+Alternatives: add the new digit forms to the existing `fold()` function directly.
+Reversible: Yes; a later merge can fold the two modules together once both land.
+
+---
+
+### 19 Oct 2026 · 4.2c Card redaction after an unrelated word still stays excluded · decided by tdd-guide · risk: medium
+Decided: the ~25-character window after a card for an unlabelled CVV/expiry only passes through punctuation and whitespace; a word (a letter) stops it immediately.
+Why: the task's own near-miss ("... and the exam on 12/29" must stay unchanged) and the new eval case (punctuation-only gaps) both need to pass; a word-blind 25-character window would redact the near-miss's unrelated date too.
+Alternatives: a plain 25-character window with no word boundary; a shorter window with no boundary check.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Flexible-group and locale-pattern over-scrub guards exclude constant runs, not counting ones · decided by tdd-guide · risk: medium
+Decided: the new flexible-group phone pattern and the locale-pattern over-scrub guard (item 8) both exclude a run of the same digit repeated, but not a monotonic/counting run (ascending or descending by one).
+Why: two of the task's own example numbers, and a pre-existing required test (`9876543210`, India mobile shape), are counting runs that must still redact; only the narrower "constant digit" exclusion satisfies every required case at once.
+Alternatives: reuse `phoneLikeDigits` (constant or counting) everywhere, which breaks the pre-existing test and one of the task's own phone examples.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Payload-key ambiguity is narrowed to three words, via a prefix/suffix requirement · decided by tdd-guide · risk: low
+Decided: `card`, `name` and `pin` alone no longer redact a payload value (they need a prefix or suffix — `cardNumber`, `studentName`, `pinCode`); an object value under a PII-named key no longer propagates its category into the object's own nested keys (an array still does, since it is the key's own value).
+Why: a flashcard's `card`, a file's `name` and a map/GPIO `pin` are ordinary teaching content, and the old code redacted a sibling key's unrelated nested object too (`{"card":{"front":...}}`).
+Alternatives: keep all PII words bare-matching and rely on value shape alone; propagate `under` into nested objects too (today's behaviour, the thing being fixed).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c The 2 proposed distress eval cases are seeded only, not wired into piiScrubPipeline · decided by lead (correction) · risk: low
+Decided: `safety-distress-name-heuristic-in-en`/`-hi-latin` live under `evals/suites/safety/distress/in/` with `reviewed_by: pending`, same shape as every other distress case; they are not PII-scrub cases and are left out of `piiScrubPipeline.test.ts`'s PII assertions.
+Why: the lead's correction said so explicitly; a live/reply check for these needs 4.3's distress-eval wiring, not this task.
+Alternatives: fold them into the PII pipeline test anyway (would assert nothing meaningful, since they carry no PII).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.2c PII pattern hardening · decided by team lead · risk: high
+Decided: the 4.2 safety review's deferred forms are scrubbed (keycap, superscript and circled digits; flexible phone, card, CVV and OTP shapes; spelled-out numbers; Hindi word-order names, name:/naam:, sign-offs). PII-named payload keys redact their own values, with narrow exemptions for flashcards, small numbers and file or identifier values under code-shaped keys.
+Why: every form here reached the model unscrubbed in the 4.2 review's probes.
+Alternatives: leave these to a model-based scrubber.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.2c Accepted gap: lowercase names under code-shaped payload keys · decided by team lead (safety review) · risk: medium
+Decided: a single lowercase, all-caps or snake_case token under a files, file, module, function, variable or class key ({"module":{"name":"riya"}} in `packages/harness/src/pipeline/steps/scrub.ts`) is treated as an identifier and not redacted. Skill payloads must never put a real student name in those fields; that is fixed at the source in 5.x skill design.
+Why: such a token has the same shape as a real identifier ("utils"); redacting it would bring back the over-scrubbing that broke flashcards and file names.
+Alternatives: redact every bare token under code keys; drop the exemption.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 0.14 Wall-clock latency bounds are gross-regression guards only · decided by team lead · risk: low
+Decided: the stream-gate latency test keeps a 5 s wall-clock bound; linear work is asserted by counting work, not by timing.
+Why: shared CI runners with coverage are 8–12× slower than local runs, and the 1 s bound turned main's CI red.
+Alternatives: drop the timing test; skip it on CI.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 3.11b Prompt packs v1.0.0 content (English) · decided by team lead · risk: high
 Decided: the real v1.0.0 frame, safety preamble, 6 skill packs, 5 mode packs and 2 persona templates ship, drafted by pedagogy-author from the safety-reviewed plan, fixed after two safety-reviewer passes, and signed per row by the human. They are not pinned for real-model turns until the 4.x guards merge and the full suite passes.
 Why: the model's instructions are the last line of defence when a guard misses.

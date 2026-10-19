@@ -175,19 +175,26 @@ describe('sentenceGate: leaks', () => {
     expect(g2.flush().join('').length).toBe(keys.reach + 10);
   });
 
-  it('a long reply is checked fast enough (latency)', () => {
-    const g = gate(['16', 'n % 2 == 0', 'print("Even")']);
-    const sentence = 'Trace the next line and tell me what you get. ';
-    const t0 = Date.now();
-    const r = run(
-      g,
-      Array.from({ length: 170 }, () => sentence),
-    ); // ~8000 characters
-    const ms = Date.now() - t0;
-    expect(r.shown.length).toBe(sentence.length * 170);
-    expect(ms).toBeLessThan(1_000);
-    expect(SENTENCE_GATE_CAP).toBe(200);
-  });
+  // A generous test timeout for slower CI runners (4.2c performance round).
+  it(
+    'a long reply is checked fast enough (latency)',
+    { timeout: 20_000 },
+    () => {
+      const g = gate(['16', 'n % 2 == 0', 'print("Even")']);
+      const sentence = 'Trace the next line and tell me what you get. ';
+      const t0 = Date.now();
+      const r = run(
+        g,
+        Array.from({ length: 170 }, () => sentence),
+      ); // ~8000 characters
+      const ms = Date.now() - t0;
+      expect(r.shown.length).toBe(sentence.length * 170);
+      // A gross-regression guard only: linear work is proven by the work-counting tests below.
+      // CI runners with coverage took 1.2–1.9 s here (0.15 s locally), so a 1 s wall-clock bound flaked (0.14).
+      expect(ms).toBeLessThan(5_000);
+      expect(SENTENCE_GATE_CAP).toBe(200);
+    },
+  );
 });
 
 describe('sentenceGate: fix round 1', () => {
@@ -220,29 +227,39 @@ describe('sentenceGate: fix round 1', () => {
     return { g: sentenceGate(wrapped), work, reach: m.reach };
   }
 
-  it('more than LIMITS.modelTextMaxLength pushed in small pieces trips too; work stays linear', () => {
-    const { g, work, reach } = counting(['16']);
-    const shown: string[] = [];
-    let pushed = 0;
-    for (let i = 0; i < 1_000 && !g.tripped; i++) {
-      shown.push(...g.push('Trace it. '));
-      pushed += 10;
-    }
-    expect(g.tripped).toBe(true);
-    expect(shown.join('').length).toBeLessThanOrEqual(LIMITS.modelTextMaxLength);
-    // Each sentence is checked once, with at most the window and the cap in front.
-    expect(work.checks).toBeLessThanOrEqual(pushed / 10);
-    expect(work.units / work.checks).toBeLessThanOrEqual(2 * (reach + SENTENCE_GATE_CAP));
-  });
+  // Performance fix round (19 Oct 2026): a generous *test* timeout for a slower CI runner; the
+  // linearity assertions below are the real bound and are unchanged.
+  it(
+    'more than LIMITS.modelTextMaxLength pushed in small pieces trips too; work stays linear',
+    { timeout: 20_000 },
+    () => {
+      const { g, work, reach } = counting(['16']);
+      const shown: string[] = [];
+      let pushed = 0;
+      for (let i = 0; i < 1_000 && !g.tripped; i++) {
+        shown.push(...g.push('Trace it. '));
+        pushed += 10;
+      }
+      expect(g.tripped).toBe(true);
+      expect(shown.join('').length).toBeLessThanOrEqual(LIMITS.modelTextMaxLength);
+      // Each sentence is checked once, with at most the window and the cap in front.
+      expect(work.checks).toBeLessThanOrEqual(pushed / 10);
+      expect(work.units / work.checks).toBeLessThanOrEqual(2 * (reach + SENTENCE_GATE_CAP));
+    },
+  );
 
-  it('many held sentences in one chunk are judged once each (linear)', () => {
-    const { g, work, reach } = counting(['.lower()']);
-    const text = 'a. '.repeat(2_600);
-    const r = [...g.push(text), ...g.flush()].join('');
-    expect(r).toBe(text);
-    expect(work.checks).toBeLessThanOrEqual(2_600 + 100);
-    expect(work.units).toBeLessThanOrEqual(work.checks * 2 * (2 * reach + SENTENCE_GATE_CAP));
-  });
+  it(
+    'many held sentences in one chunk are judged once each (linear)',
+    { timeout: 20_000 },
+    () => {
+      const { g, work, reach } = counting(['.lower()']);
+      const text = 'a. '.repeat(2_600);
+      const r = [...g.push(text), ...g.flush()].join('');
+      expect(r).toBe(text);
+      expect(work.checks).toBeLessThanOrEqual(2_600 + 100);
+      expect(work.units).toBeLessThanOrEqual(work.checks * 2 * (2 * reach + SENTENCE_GATE_CAP));
+    },
+  );
 
   it('whitespace padding never pushes a number phrase out of the window (key 2016)', () => {
     const g = gate(['2016']);

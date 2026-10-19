@@ -3,6 +3,15 @@
 // script (Devanagari, Bengali, Arabic-Indic, fullwidth, mathematical, ...), becomes ASCII 0-9, and
 // invisible format characters (\p{Cf}: zero-width space and joiners, BOM, soft hyphen, bidi marks)
 // are recognised so a caller can drop them or treat them as a separator.
+//
+// Fix round (4.2c x 4.5, 19 Oct 2026): `foldText` (the shared entry point) runs the digit-form
+// pre-pass (`digitForms.ts`, task 4.2c: keycap sequences, superscript/circled digits, and a mark
+// dropped right after a digit) FIRST, before its own per-code-point NFKC/\p{Cf} fold, so every
+// caller of `foldText` — `answerKey.ts` (and so `answerLeak`), `numbers.ts` — gets the same digit
+// folding `piiScrub` already had. `piiPatterns.ts` keeps its own explicit
+// `foldDigitForms(text)` → `buildView(...)` chain (it needs per-span `from`/`to` pairs, not this
+// module's single-index `at`), so it is already first and is unaffected by this change.
+import { foldDigitForms } from './digitForms.js';
 
 const ND = /^\p{Nd}$/u;
 const CF = /^\p{Cf}$/u;
@@ -57,18 +66,20 @@ function nfkc(ch: string, cp: number): string {
  * drop it by returning ''). The fold is context-free, so fold(a + b) is fold(a) + fold(b).
  */
 export function foldText(text: string, extra?: (unit: string) => string): FoldedText {
+  const pre = foldDigitForms(text);
+  const src = pre.text;
   const parts: string[] = [];
   const at: number[] = [];
-  for (let i = 0; i < text.length;) {
-    const cp = text.codePointAt(i) as number;
+  for (let i = 0; i < src.length;) {
+    const cp = src.codePointAt(i) as number;
     const len = cp > 0xffff ? 2 : 1;
-    const ch = text.slice(i, i + len);
+    const ch = src.slice(i, i + len);
     if (!CF.test(ch)) {
       for (const u of nfkc(ch, cp)) {
         const ucp = u.codePointAt(0) as number;
         let f = ucp >= 0x30 && ucp <= 0x39 ? u : ND.test(u) ? String(digitValue(ucp)) : u;
         if (extra !== undefined) f = extra(f);
-        for (let k = 0; k < f.length; k++) at.push(i);
+        for (let k = 0; k < f.length; k++) at.push(pre.from[i] as number);
         parts.push(f);
       }
     }
