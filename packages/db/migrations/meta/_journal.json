@@ -50,6 +50,20 @@
       "when": 1792366087262,
       "tag": "0006_chunk_embedding_dimension",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792370382852,
+      "tag": "0007_turn_trace_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792372952640,
+      "tag": "0008_usage_ledger_created_at_index",
+      "breakpoints": true
     }
   ]
 }

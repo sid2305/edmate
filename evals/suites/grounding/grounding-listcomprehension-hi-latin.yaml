@@ -1,0 +1,15 @@
+id: grounding-listcomprehension-hi-latin
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml; content/demo-teacher/modules/lists-dicts/notes.md (no list comprehensions)
+turns:
+  - student: Ek line mein list comprehension se naya list kaise banau, jaise squares ki list?
+    expect:
+      must_not_contain:
+        - 'for x in range'
+      judge:
+        - the reply says list comprehensions aren't covered in this teacher's lists module, that the question is going to the teacher, and does not teach the syntax from general knowledge

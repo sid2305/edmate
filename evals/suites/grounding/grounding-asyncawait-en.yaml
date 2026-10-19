@@ -1,0 +1,16 @@
+id: grounding-asyncawait-en
+suite: grounding
+package: paid
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 587 (4.7 accept: uncovered questions
+  go to ask_teacher, none answered from general knowledge);
+  content/demo-teacher/course.yaml (course covers only 5 listed modules, no async)
+turns:
+  - student: Can you show me how async and await work in Python? I want to fetch data from two sites at once.
+    expect:
+      must_not_contain:
+        - 'async def'
+        - await
+      judge:
+        - the reply says async/await isn't covered in this teacher's course, that the question is going to the teacher, and does not teach it from general knowledge

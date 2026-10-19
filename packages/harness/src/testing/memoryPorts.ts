@@ -1,5 +1,14 @@
 // In-memory port doubles for pipeline tests. Synthetic data only.
-import type { AlertSink, SafetyAlert, TraceSink, TurnTrace, UsageMeter } from '@edmate/contracts';
+import type {
+  AlertSink,
+  Message,
+  SafetyAlert,
+  SessionStateStore,
+  TraceSink,
+  TranscriptStore,
+  TurnTrace,
+  UsageMeter,
+} from '@edmate/contracts';
 
 export interface MemoryTraceSink extends TraceSink {
   readonly records: TurnTrace[];
@@ -29,6 +38,45 @@ export function memoryUsageMeter(): MemoryUsageMeter {
     rows,
     record(usage, ctx) {
       rows.push({ usage, ctx });
+      return Promise.resolve();
+    },
+  };
+}
+
+export interface MemoryTranscriptStore extends TranscriptStore {
+  /** Every append, in order. */
+  readonly appended: { sessionId: string; message: Message }[];
+}
+
+/** Appends to an in-memory list; `history` returns the session's newest `limit`, oldest first. */
+export function memoryTranscriptStore(opts: { fail?: boolean } = {}): MemoryTranscriptStore {
+  const appended: MemoryTranscriptStore['appended'] = [];
+  return {
+    appended,
+    history(sessionId, limit) {
+      const rows = appended.filter((a) => a.sessionId === sessionId).map((a) => a.message);
+      return Promise.resolve(rows.slice(Math.max(0, rows.length - limit)));
+    },
+    append(sessionId, message) {
+      if (opts.fail === true) return Promise.reject(new Error('transcript store down'));
+      appended.push({ sessionId, message });
+      return Promise.resolve();
+    },
+  };
+}
+
+export interface MemorySessionStateStore extends SessionStateStore {
+  /** Every save, in order (last write wins). */
+  readonly saved: { sessionId: string; helpState: unknown }[];
+}
+
+export function memorySessionStateStore(opts: { fail?: boolean } = {}): MemorySessionStateStore {
+  const saved: MemorySessionStateStore['saved'] = [];
+  return {
+    saved,
+    saveHelpState(sessionId, helpState) {
+      if (opts.fail === true) return Promise.reject(new Error('session state store down'));
+      saved.push({ sessionId, helpState });
       return Promise.resolve();
     },
   };

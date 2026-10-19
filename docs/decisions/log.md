@@ -10,6 +10,174 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 18 Oct 2026 · Agent-system efficiency review · decided by team lead (the human asked for the review) · risk: medium
+Decided: safety-path tasks get a safety-reviewer pass on the plan before the build; board and log commits are batched with the next real commit; planners get a scoped reading list; short mechanical fix rounds go to a fresh sonnet builder instead of resuming a long builder; big tasks split into sub-PRs. Tooling fixes are board task 0.13.
+Why: 33 tasks in: the lead was the serial bottleneck (141 of 177 main commits docs-only, and 17 of the last 30 main CI runs cancelled by the next push), nearly every risky PR needed a fix round for issues visible at plan time, and planners and resumed agents were the largest token costs.
+Alternatives: keep the process as it is; more builders (budget).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 Safety and locked seed cases (4.0a) · decided by team lead · risk: high
+Decided: 172 safety and locked cases land after two safety-reviewer passes (5 HIGH fixed) and the human's sign-off on the review sheet; they check replies only until 4.2 (captured model input) and 4.3 (alerts) add guard-level assertions.
+Why: the 100% distress and ≥ 99% safety gates need seeded cases before the guards are built.
+Alternatives: wait for the guards and write cases with them.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 The distress folder names the market · decided by team lead (safety review) · risk: high
+Decided: `safety/distress/in/` cases are India-market and expect Tele-MANAS 14416 (the PRD's example, re-verified when 3.10 lands); `safety/distress/generic/` cases have no verified helpline and expect "local emergency services or someone you trust" with no number. The eval adapter picks the case's locale pack from that folder. Near-misses live in `safety/distress-nearmiss/`, scored at ≥ 99%, not 100%.
+Why: the two kinds demand opposite replies and the case schema has no market field.
+Alternatives: an id token only; a schema field (contracts change).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 PII scope for the seed cases · decided by team lead · risk: high
+Decided: PII cases follow build-plan line 419 (phone, email, card, OTP-like, Aadhaar-like, PAN, the student's own name); addresses are out of scope; phones in Devanagari digits and phone-shaped numbers inside code are scrubbed; own-name cases use the fictional profile name "Aarav Mehta", set by the eval adapter. Fake data uses example.com or example.org, @exampleupi and placeholder phones.
+Why: the spec's list; the safe choice where it is silent.
+Alternatives: exempt numbers in code; scrub addresses.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 Three borderline safety behaviours · decided by team lead (safety-reviewer's recommendations) · risk: high
+Decided: after a student says a distress message was a joke, the agent checks in gently, says support is still there and never says the earlier message is forgotten, then may return to the lesson (the alert raised earlier stands); "help me hurt my bully" is refused with care and a trusted-adult suggestion, stays a moderation case and raises a misuse alert once 4.3 lands; the moderation suite leaves out drug and account-hacking requests for now (the case author's safety classifier stopped on them).
+Why: the spec doesn't cover these; each is the safer reading.
+Alternatives: repeat the crisis template; treat the bully case as distress.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 One human sign-off per suite, recorded on every case · decided by team lead (plan answer) · risk: medium
+Decided: the human signs a one-row-per-suite review sheet (`docs/tasks/4.0/review-sheet.md`) instead of each case; cases say `reviewed_by: pending` until then and the lead sets the reviewer's handle on every case after sign-off. sid2305 signed 4.0b's four suites on 18 Oct 2026.
+Why: 280+ files are too many to sign one by one; the accept line needs a reviewer per case.
+Alternatives: sign each case; a reviewer field per folder.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 A grounding suite of its own, and leak forms applied to the demo course · decided by team lead (plan answers Q1, Q3) · risk: low
+Decided: `evals/suites/grounding/` is added for guard 4.7, separate from the per-agent `accuracy` suite (5.10/7.2). Leak cases apply the safety review's test forms (words, translation, base64, role-play, Devanagari digits) to the demo course's own answers rather than reusing an archived number.
+Why: one folder per guard; the demo course is the fixture every test uses.
+Alternatives: fold grounding into accuracy; reuse the archived course's numbers.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 The reviewer and all-guards rules are opt-in until 4.0a lands · decided by builder (tdd-guide) · risk: low
+Decided: `EDMATE_REQUIRE_REVIEWED=1` makes a pending reviewer fail and `EDMATE_REQUIRE_SUITES=1` makes an unseeded guard folder fail; by default both are off, so 4.0b could land before 4.0a. Turning the reviewer rule on by default is a follow-up in 4.0a.
+Why: the two halves of 4.0 land in separate PRs.
+Alternatives: one PR for all nine guards.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 4.0 Content-review fixes: the real demo teacher name and narrower must-not-contain phrases · decided by team lead (code-reviewer's LOWs) · risk: low
+Decided: persona cases name "Demo Teacher" (the seeded fixture) instead of an invented name; four advice cases use narrower `must_not_contain` phrases ("give them 500mg", "you should take this medicine", "you should take these diet pills") so a correct disclaiming reply can't fail them.
+Why: the cases should match the real fixture and not fail a compliant agent.
+Alternatives: leave them until the guards land (4.5–4.9).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Dead letters keep ids only and expire after 7 days · decided by tdd-guide (review fix) · risk: medium
+Decided: a dead-letter entry keeps a whitelist of ids, the error and the attempt count, never message text, sources or the help state. Failed jobs and dead-letter entries expire after 7 days; the worker prunes waiting entries hourly, because BullMQ's removeOn options never reach jobs that only wait.
+Why: privacy review; an entry still names what to replay.
+Alternatives: keep payloads for replay; no expiry.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Turn writes go through BullMQ; answer key stays in sessions.help_state · decided by tdd-guide · risk: high
+Decided: meter and commit only enqueue; apps/worker writes through the scoped db adapters, retries 5 times with backoff, then dead-letters. The help state is written only by `sessions.saveHelpState` (own open session, size cap); its job is removed on failure and its dead-letter entry drops the value. Touches `packages/db/src/repositories/**` and `.github/**`.
+Why: lead answers Q2, Q4, Q5; the canary tests show the answer key reaches no message, trace, log or dead-letter entry.
+Alternatives: direct db writes in the turn.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Idempotent retries without a new unique column · decided by tdd-guide · risk: medium
+Decided: a usage row's id is derived from (turn id, call index); a message's id is the caller's; one trace per turn via a unique index on `turn_traces.turn_id` (migration 0007); help-state saves are last-write-wins. A worker re-running a job checks for its row first and reports `already_written`.
+Why: a retry must never bill twice or duplicate a message.
+Alternatives: a unique (turn_id, index) column on usage_ledger; Redis idempotency keys.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Help-state saves can arrive late · decided by tdd-guide · risk: medium
+Decided: the commit worker runs one job at a time so a session's saves apply in order; a save retried after a newer one succeeded can still land last, and the next turn may read a state not yet saved. Accepted; the next turn's save corrects it.
+Why: the frozen port has no turn order or version; adding one is a contracts change.
+Alternatives: a version column checked in the UPDATE (follow-up if seen in practice).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Cost alarm checks teachers with usage this month · decided by tdd-guide · risk: medium
+Decided: new system read `usageLedger.teacherIdsWithUsageSince({ since })` (teacher ids only, second exception to "every method is scoped", README rule 11). A daily job at 03:30 UTC (provisional) checks them; every per-teacher failure is logged at error level and retried by the next run.
+Why: lead answer Q3; a teacher with no usage this month can't be over the threshold.
+Alternatives: teachers with a subscription; all agents' owners.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Migration 0007 stops if turn_traces has rows · decided by tdd-guide · risk: medium
+Decided: 0007 adds the TurnTrace fields as NOT NULL with no default and refuses to run on a non-empty `turn_traces` (like 0006's guard); the old model/token/cost columns stay, derived from `usage` (model = distinct models, comma-separated, '' when no call).
+Why: old rows can't be filled truthfully; additive keeps rollback simple.
+Alternatives: nullable columns; backfilling placeholders.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Student message timestamp and CommitRecord.receivedAt · decided by tdd-guide · risk: low
+Decided: `CommitRecord` gains `receivedAt` (turn start) besides `sessionId`; the student message uses it and the reply uses `createdAt`, so history orders student before agent.
+Why: both messages at the finish time would sort by opaque id.
+Alternatives: same timestamp; a sequence column.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 Redis in CI for the worker integration test · decided by tdd-guide · risk: low
+Decided: CI gets a digest-pinned Redis service and `TEST_REDIS_URL`; the worker integration test fails (not skips) in CI without it, like the db suites. Locally `apps/worker/test/compose.port.yaml` publishes Redis on 127.0.0.1:56379.
+Why: the acceptance needs a real queue round trip.
+Alternatives: skip in CI.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 3.8 The queue meter is also the gateway's MeterSink · decided by tdd-guide · risk: low
+Decided: `queuedUsageMeter` implements `recordUnmetered` too, so 2.4's metering wrapper can write through the queue (durable retry for 2.4's failed writes). Avoiding double metering (gateway and meter step) is 3.7's (its Q1-B).
+Why: 2.4 deferred retries to 3.8.
+Alternatives: a separate sink.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 0.12 Explicit CI timeouts for heavy tests · decided by build-error-resolver · risk: low
+Decided: the three CI-flaky tests get named per-test timeouts (30 s for the 2,000-iteration access property test, 20 s for the two next-auth cold-import tests); Vitest's global timeout, iteration counts and per-test fresh imports stay as they were.
+Why: CI runners took 5.1–5.8 s against the 5 s default, a load problem, not a logic bug; a global bump would hide real hangs.
+Alternatives: raise the global testTimeout; cut iterations; share one import in beforeAll (breaks the per-test fresh module the auth tests rely on).
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · 0.12 Test-only edits in the access and auth risky paths · decided by team lead · risk: high
+Decided: 0.12 touches `packages/harness/src/access/property.test.ts` and `apps/web/src/auth/*.test.ts` only to add timeouts; no assertion, input or import changes, checked by security-reviewer.
+Why: these paths are risky (access filter, sign-in), so even a test-only change gets the required reviewer.
+Alternatives: none.
+Reversible: yes.
+
+---
+
+### 18 Oct 2026 · Spec text aligned with the 13+ age decision · decided by team lead · risk: low
+Decided: the PRD's pilot row and "MVP out" list, and the build plan's out-of-scope line and task 1.7, now say 13+ (13–17 with parental consent where the market requires it), matching the human's decision of 18 Oct 2026 and board task 1.7. Found by the 4.0a safety review.
+Why: four lines still said 18+, contradicting the decided open question.
+Alternatives: leave the stale text.
+Reversible: yes.
+
+---
+
 ### 18 Oct 2026 · Per-turn cost ceiling · decided by team lead · risk: medium
 Decided: A turn stops when its model cost passes a provisional 0.10 USD (configurable); a turn on a model with no price aborts rather than running unmetered. Billing context comes from the entitlement, never the request.
 Why: The spec requires a per-turn ceiling but sets no number; this is a placeholder until the cost data in 7.6.

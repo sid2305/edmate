@@ -29,6 +29,8 @@ export function samplePath(file: string): string {
 }
 
 const files = routeFiles(join(APP, 'api'));
+/** `api/auth/[...nextauth]/route.ts` cold-imports next-auth; CI is slower than a warm local cache. */
+const ROUTE_IMPORT_TIMEOUT_MS = 20_000;
 
 describe('every API route is guarded and in the policy', () => {
   it('finds the route files', () => {
@@ -37,21 +39,29 @@ describe('every API route is guarded and in the policy', () => {
 
   for (const file of files) {
     const path = samplePath(file);
-    it(path, async () => {
-      const mod = (await import(file)) as Record<string, unknown>;
-      const methods = HTTP_METHODS.filter((m) => m in mod);
-      expect(methods.length, `${path} exports no HTTP method`).toBeGreaterThan(0);
-      for (const m of methods) {
-        const brand = (mod[m] as { [GUARD]?: Access } | undefined)?.[GUARD];
-        expect(
-          brand,
-          `${m} ${path} is not wrapped in withRole/publicRoute/providerRoute`,
-        ).toBeDefined();
-        const policy = policyFor(m, path);
-        expect(policy, `${m} ${path} has no ROUTE_POLICY row`).not.toBeNull();
-        expect(sameAccess(brand!, policy!), `${m} ${path}: wrapper and policy disagree`).toBe(true);
-      }
-    });
+    // The auth catch-all route cold-imports next-auth; the rest are cheap.
+    const timeout = path === '/api/auth/x/y' ? ROUTE_IMPORT_TIMEOUT_MS : undefined;
+    it(
+      path,
+      async () => {
+        const mod = (await import(file)) as Record<string, unknown>;
+        const methods = HTTP_METHODS.filter((m) => m in mod);
+        expect(methods.length, `${path} exports no HTTP method`).toBeGreaterThan(0);
+        for (const m of methods) {
+          const brand = (mod[m] as { [GUARD]?: Access } | undefined)?.[GUARD];
+          expect(
+            brand,
+            `${m} ${path} is not wrapped in withRole/publicRoute/providerRoute`,
+          ).toBeDefined();
+          const policy = policyFor(m, path);
+          expect(policy, `${m} ${path} has no ROUTE_POLICY row`).not.toBeNull();
+          expect(sameAccess(brand!, policy!), `${m} ${path}: wrapper and policy disagree`).toBe(
+            true,
+          );
+        }
+      },
+      timeout,
+    );
   }
 
   it('maps dynamic segments to sample paths', () => {

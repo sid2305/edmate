@@ -16,6 +16,8 @@ vi.mock('next/navigation', () => ({
 }));
 
 const ORIGIN = 'http://localhost:8080';
+/** This test's `load()` cold-imports next-auth; CI is slower than a warm local cache. */
+const AUTH_IMPORT_TIMEOUT_MS = 20_000;
 
 function setAuthEnv() {
   vi.stubEnv('AUTH_SECRET', 'test-only-'.padEnd(40, 'x'));
@@ -37,11 +39,15 @@ describe('src/auth wiring', () => {
     vi.stubEnv('DATABASE_URL', undefined);
   });
 
-  it('imports and serves public routes with no AUTH_* or DATABASE_URL set', async () => {
-    const auth = await load();
-    const health = auth.publicRoute(() => new Response('ok'));
-    expect(health().status).toBe(200);
-  });
+  it(
+    'imports and serves public routes with no AUTH_* or DATABASE_URL set',
+    async () => {
+      const auth = await load();
+      const health = auth.publicRoute(() => new Response('ok'));
+      expect(health().status).toBe(200);
+    },
+    AUTH_IMPORT_TIMEOUT_MS,
+  );
 
   it('a guarded route without sign-in config is 500 provider_error, never anonymous', async () => {
     const auth = await load();

@@ -523,9 +523,9 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: running
   branch: m3/3.7-orchestrator
-  model: plan:opus
+  model: plan:opus build:opus-5.5/medium
 - id: '3.8'
   milestone: M3
   title: '`meter` and `commit` via the worker queue'
@@ -534,7 +534,7 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: review
+  status: done
   branch: m3/3.8-meter-commit
   model: plan:sonnet build:opus-5.5/medium review:opus(security)+sonnet(db,silent)
 - id: '3.9'
@@ -624,8 +624,8 @@ tasks:
   deps:
   - '3.4'
   status: todo
-  branch: null
-  model: null
+  branch: m3/3.16-sessions-follow-package
+  model: plan:sonnet
 - id: '3.17'
   milestone: M3
   title: 'Commit follow-up from 3.8: apply learner-profile evidence (ProfileStore.applyEvidence) after a turn, with its db adapter (the ask_teacher TeacherQuestion moved to 3.7)'
@@ -650,9 +650,21 @@ tasks:
   accept: the named tests carry explicit timeouts; three consecutive CI runs of the node job pass; no test is skipped or weakened.
   deps:
   - M0
-  status: review
+  status: done
   branch: m7/0.12-ci-timeouts
   model: build:sonnet
+- id: '0.13'
+  milestone: M7
+  title: 'Agent-system efficiency (lead review, 18 Oct 2026): a closeout script (log the handoff decisions, mark the board done, remove the worktree and branches); the merge gate waits for the PR head and
+    parses reviewer lines leniently; guard-bash stops flagging git branch -f and multi-PR merges; CI skips docs-only pushes to main and runs main nightly; eval-author gets Bash for validation; team-lead
+    skill: plan review for safety tasks, batched board commits, scoped planners, a fix-round policy'
+  accept: one command closes out a merged task; the false positives seen on 18 Oct no longer fire (tests); a docs-only push to main does not run the node job; eval-author can run the suite test; the team-lead
+    skill states the new rules.
+  deps:
+  - '0.7'
+  status: todo
+  branch: null
+  model: null
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
@@ -660,10 +672,29 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.0b-suites
   model: plan:sonnet build:opus-5.5/medium
+- id: 4.0c
+  milestone: M4
+  title: 'Suite validator follow-ups from the 4.0b review: the loader returns file/case pairs (no re-listing or `as` cast), `pending` matched case-insensitively, a suite that fails to load says so instead
+    of "no cases", and the reviewer rule on by default (EDMATE_ALLOW_PENDING=1 to opt out)'
+  accept: 'suites.test.ts covers each change; with the defaults, a case saying `reviewed_by: pending` (any letter case) fails CI.'
+  deps:
+  - '4.0'
+  status: running
+  branch: m4/4.0c-validator-followups
+  model: build:sonnet
+- id: 4.0d
+  milestone: M4
+  title: 'Seed-suite coverage gaps from the 4.0a safety review: khudkushi and a Hinglish companion-reliance distress case; hyphenated phones, dot/at emails, Aadhaar and OTP in Devanagari digits'
+  accept: the new cases validate and are signed off on a review sheet like 4.0's.
+  deps:
+  - '4.0'
+  status: todo
+  branch: null
+  model: null
 - id: '4.1'
   milestone: M4
   title: Guard framework and registry
@@ -671,14 +702,14 @@ tasks:
   deps:
   - '3.1'
   - '3.12'
-  status: running
+  status: review
   risk: risky
   branch: m4/4.1-guard-framework
   model: plan:sonnet build:opus-5.5/medium
 - id: '4.2'
   milestone: M4
   title: '`piiScrub` (generic + locale-pack patterns)'
-  accept: 100% on the seeded PII cases.
+  accept: 100% on the seeded PII cases, and the model input the scripted gateway captures on every tier contains none of the case's PII (multi-turn split numbers stay reply checks).
   deps:
   - '3.1'
   - '3.12'
@@ -686,8 +717,8 @@ tasks:
   - '4.1'
   status: todo
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.2-pii-scrub
+  model: plan:sonnet
 - id: '4.3'
   milestone: M4
   title: '`distressDetect`, escalate, alert worker with acknowledgement and 15-min escalation'

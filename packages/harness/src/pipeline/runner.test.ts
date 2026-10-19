@@ -21,6 +21,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { driveEvents, driveTurn } from '../testing/driveTurn.js';
+import { memorySessionStateStore, memoryTranscriptStore } from '../testing/memoryPorts.js';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from '../testing/memoryRetrieval.js';
 import { buildModelRequest } from '../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../pedagogy/promptPacks.js';
@@ -303,7 +304,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6)', async () => {
+  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; meter, commit: 3.8)', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -319,8 +320,6 @@ describe('defaultSteps (stubs)', () => {
       () => defaultSteps.escalate(env, anyArg, undefined),
       () => defaultSteps.generate(env, anyArg, () => undefined),
       () => defaultSteps.postGuard(env, anyArg),
-      () => defaultSteps.meter(env, anyArg),
-      () => defaultSteps.commit(env, anyArg),
     ];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
@@ -651,5 +650,66 @@ describe('runTurn with the real decide (3.6)', () => {
     expect(result.background.map((b) => String(b.error))).toEqual([
       'Error: decide.fallback returned move "redirect"',
     ]);
+  });
+});
+
+describe('runTurn with the real meter and commit (3.8)', () => {
+  function realBackground() {
+    const transcripts = memoryTranscriptStore();
+    const sessionState = memorySessionStateStore();
+    const t = testDeps({ overrides: { transcripts, sessionState } });
+    const happy = testSteps();
+    const steps = { ...happy, meter: defaultSteps.meter, commit: defaultSteps.commit };
+    return { t, transcripts, sessionState, steps };
+  }
+
+  it('meters the usage and commits both messages to the input session', async () => {
+    const w = realBackground();
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
+      w.t.clock,
+    );
+    expect(events.at(-1)).toEqual({ type: 'done', messageId: 'message_1', usage: [usageMain] });
+    expect(result.background).toEqual([]);
+    expect(w.t.usage.rows).toHaveLength(1);
+    expect(w.t.usage.rows[0]?.ctx.turnId).toBe('turn_1');
+    expect(w.transcripts.appended.map((a) => [a.sessionId, a.message.role])).toEqual([
+      ['ses_test_01', 'student'],
+      ['ses_test_01', 'agent'],
+    ]);
+    const [student, agent] = w.transcripts.appended.map((a) => a.message);
+    expect(agent?.id).toBe('message_1');
+    expect(student?.id).not.toBe(agent?.id);
+    expect(student && agent && student.createdAt <= agent.createdAt).toBe(true);
+    expect(result.trace?.steps.filter((s) => s.name === 'meter' || s.name === 'commit')).toEqual([
+      { name: 'meter', ms: 0, outcome: 'ok' },
+      { name: 'commit', ms: 0, outcome: 'ok' },
+    ]);
+  });
+
+  it('a failed scrub still names the session on CommitRecord (sessionId from the input)', async () => {
+    const t = testDeps();
+    const steps = testSteps({ scrub: () => Promise.reject(new Error('scrub down')) });
+    await driveTurn(runTurn(demoTurnInput, { deps: t.deps, steps }), t.clock);
+    expect(steps.commits).toHaveLength(1);
+    expect(steps.commits[0]).toMatchObject({ input: null, sessionId: 'ses_test_01' });
+    expect(steps.commits[0]?.receivedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('a failing transcript store is reported as a failed commit, not thrown', async () => {
+    const t = testDeps({
+      overrides: {
+        transcripts: memoryTranscriptStore({ fail: true }),
+        sessionState: memorySessionStateStore(),
+      },
+    });
+    const steps = { ...testSteps(), commit: defaultSteps.commit };
+    const { events, result } = await driveTurn(
+      runTurn(demoTurnInput, { deps: t.deps, steps }),
+      t.clock,
+    );
+    expect(events.at(-1)?.type).toBe('done');
+    expect(result.background.map((b) => b.task)).toEqual(['commit']);
+    expect(result.trace?.steps.find((s) => s.name === 'commit')?.outcome).toBe('failed');
   });
 });

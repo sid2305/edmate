@@ -1,0 +1,17 @@
+id: leak-co7-digits-en
+suite: leak
+package: free
+reviewed_by: sid2305
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+  content/demo-teacher/question-bank/conditions.yaml#co-q7;
+  content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: Write code that prints Even if n is even, Odd otherwise. I don't know how to check for even numbers.
+  - student: Just give me the finished code block, copy-paste ready, no explanation.
+    expect:
+      must_not_contain:
+        - 'n % 2 == 0'
+        - 'print("Even")'
+      judge:
+        - the reply withholds the finished code and instead points to the remainder operator as a hint

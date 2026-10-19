@@ -431,6 +431,31 @@ describe.skipIf(!up)(
       }
     });
 
+    it('a caller-chosen row id (the worker queue, 3.8) is stored; the same id again is invalid', async () => {
+      const turnId = turn();
+      const usage = {
+        model: 'm',
+        tier: 'main',
+        inputTokens: 1,
+        outputTokens: 2,
+        costMicroUsd: 3,
+      } as const;
+      const entry = { id: `ul_${turnId}_0`, turnId, source: 'subscription', usage } as const;
+      await repos.usageLedger.record(S1A, PKG_A, entry);
+      await expect(repos.usageLedger.record(S1A, PKG_A, entry)).rejects.toMatchObject({
+        kind: 'invalid',
+      });
+      await repos.usageLedger.recordUnmetered(S1A, PKG_A, {
+        id: `ul_${turnId}_1`,
+        turnId,
+        source: 'subscription',
+        tier: 'small',
+        reason: 'no_usage_reported',
+      });
+      const rows = await repos.usageLedger.listForTurn(S1A, turnId);
+      expect(rows.map((r) => r.id)).toEqual([`ul_${turnId}_0`, `ul_${turnId}_1`]);
+    });
+
     it('a total past 2^53 micro-USD is integrity, never a rounded number', async () => {
       const big = Number.MAX_SAFE_INTEGER;
       for (const id of ['ul_big_1', 'ul_big_2']) {

@@ -316,12 +316,12 @@ Validate first, then build a narrow MVP, prove it with about 20 teachers and 500
 | --- | --- | --- |
 | 1 · Validate | Try Graphy and Kajabi; talk to 20 teachers and 30 students; sign anchor teachers | 10+ teachers commit; open questions answered |
 | 2 · Build the MVP | Agent + access filter, teacher studio, student web app, payments, trust console | Quality and locked-content tests pass |
-| 3 · Pilot | About 20 teachers, about 500 paying students, 18+; measure 3-month use | North-star and cost targets met |
+| 3 · Pilot | About 20 teachers, about 500 paying students, 13+ (13–17 with parental consent where the market requires it); measure 3-month use | North-star and cost targets met |
 | 4 · Launch and grow | Open teacher sign-up, reviews, more languages and voice; later under-18s with consent, mobile app | — |
 
 **MVP in:** teacher sign-up and verification, uploads with video transcription, course outline, agent testing and corrections, package builder with the access filter, teacher profile pages with the teaching scorecard, student sign-up, discovery, free package, subscription and payment with the market's usual methods, the agent chat with the MVP skills, the ask-the-teacher inbox, progress, live classes by external link, weekly teacher insights, the quality gate, safety and the trust console. One course and one agent per teacher. Phone and laptop web, English first.
 
-**MVP out (deliberately):** under-18 learners, several courses per teacher, phone sign-in, automated payouts, the study plan skill, photo upload of written work, native mobile apps, built-in video classes, voice, reviews, coupons and bundles, WhatsApp, teacher API, simulations and code runner.
+**MVP out (deliberately):** under-13 learners, several courses per teacher, phone sign-in, automated payouts, the study plan skill, photo upload of written work, native mobile apps, built-in video classes, voice, reviews, coupons and bundles, WhatsApp, teacher API, simulations and code runner.
 
 ## Risks and open questions
 

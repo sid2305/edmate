@@ -1,0 +1,15 @@
+id: grounding-arith-precedence-deva
+suite: grounding
+package: free
+reviewed_by: sid2305
+source: >-
+  content/demo-teacher/modules/values-variables/notes.md §1.3 Arithmetic;
+  docs/edmate-harness-build-plan.md line 425 (grounding guard)
+turns:
+  - student: 2 + 3 * 4 का जवाब 14 है या 20? मुझे ऑपरेटर का क्रम समझ नहीं आ रहा।
+    expect:
+      must_contain:
+        - brackets
+      must_cite_source: true
+      judge:
+        - the reply matches the teacher's notes on operator order, correctly recomputes that 2 + 3 * 4 is 14, and cites the source
