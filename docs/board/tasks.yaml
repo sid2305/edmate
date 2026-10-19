@@ -736,6 +736,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.14'
+  milestone: M7
+  title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
+  accept: 'main CI green; the linear-work tests unchanged.'
+  deps:
+  - M0
+  status: running
+  branch: m7/0.14-latency-test-guard
+  model: build:lead
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
