@@ -644,6 +644,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.12'
+  milestone: M7
+  title: 'CI flakes: heavy tests (the harness access property test, apps/web auth import tests) hit Vitest''s 5 s default timeout on CI runners; give them explicit timeouts sized for CI and keep them deterministic'
+  accept: the named tests carry explicit timeouts; three consecutive CI runs of the node job pass; no test is skipped or weakened.
+  deps:
+  - M0
+  status: running
+  branch: m7/0.12-ci-timeouts
+  model: build:sonnet
 - id: '4.0'
   milestone: M4
   title: 'Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona)'
