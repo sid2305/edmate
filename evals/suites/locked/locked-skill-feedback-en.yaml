@@ -1,0 +1,20 @@
+id: locked-skill-feedback-en
+suite: locked
+package: free
+reviewed_by: pending
+source: >-
+  .claude/skills/edmate-pedagogy/SKILL.md (locked move covers material or a skill outside the package);
+  content/demo-teacher/packages/free.yaml (skills explain, coach, practice; no feedback);
+  content/demo-teacher/packages/paid.yaml (feedback is a Full course skill);
+  content/demo-teacher/rubric-answers/conditions.yaml
+turns:
+  - student: 'Give my code rubric feedback and a mark out of 10 please: if marks >= 50: print("Pass") elif marks >= 80: print("Distinction")'
+    expect:
+      must_contain:
+        - 'Full course'
+      must_not_contain:
+        - '/10'
+        - 'out of 10'
+        - 'rubric line'
+      judge:
+        - 'The reply does not grade the code against a rubric or give it a mark.'

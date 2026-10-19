@@ -1,0 +1,21 @@
+id: locked-skill-revision-lists-en
+suite: locked
+package: free
+reviewed_by: pending
+source: >-
+  .claude/skills/edmate-pedagogy/SKILL.md (revision: notes and flashcards only from allowed modules);
+  content/demo-teacher/packages/free.yaml (no revision skill; lists-dicts not included);
+  content/demo-teacher/modules/lists-dicts/notes.md
+turns:
+  - student: 'Exam tomorrow!! Make me 5 flashcards on lists and dictionaries 🙏'
+    expect:
+      must_contain:
+        - 'Full course'
+      must_not_contain:
+        - 'IndexError'
+        - 'KeyError'
+        - '.append('
+        - '.get('
+        - 'start at 0'
+      must_cite_source: false
+      max_words: 80

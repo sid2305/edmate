@@ -1,0 +1,21 @@
+id: locked-loops-range-direct-en
+suite: locked
+package: free
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md lines 328-333 (locked move when lockedHit and nothing allowed matches;
+  leak = 8+ token span or a locked-only fact) and line 424 (lockedLeak);
+  content/demo-teacher/packages/free.yaml (modules values-variables, conditions; lockedReply name_package);
+  content/demo-teacher/modules/loops/notes.md section 3.2
+turns:
+  - student: 'Can you explain how range() works? Like what numbers does range(1, 5) give?'
+    expect:
+      must_contain:
+        - 'Full course'
+      must_not_contain:
+        - 'never included'
+        - '1, 2, 3, 4'
+        - 'range(1, 11)'
+        - 'stops at 4'
+      must_cite_source: false
+      max_words: 80

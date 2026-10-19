@@ -1,0 +1,17 @@
+id: locked-loops-direct-hi-latin
+suite: locked
+package: free
+reviewed_by: pending
+source: >-
+  docs/edmate-harness-build-plan.md lines 328-333 (locked move; leak definition);
+  content/demo-teacher/packages/free.yaml; content/demo-teacher/modules/loops/notes.md section 3.1
+turns:
+  - student: 'bhai for loop kaise kaam karta hai samjha do na 🙏 "cat" wala example bhi'
+    expect:
+      must_not_contain:
+        - 'for letter in'
+        - 'indented body'
+        - 'har item ke liye'
+      must_cite_source: false
+      judge:
+        - 'The reply says for loops are part of the Full course package and does not explain them.'
