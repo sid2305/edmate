@@ -45,7 +45,7 @@ export class ToolCallNotOfferedError extends HarnessError {
 
 /** Why a tool call failed, as reported (the model sees only `failed` or `timed_out`). */
 export type ToolFailReason =
-  'failed' | 'timed_out' | 'invalid_output' | 'not_json' | 'too_large' | 'answer_key';
+  'failed' | 'timed_out' | 'invalid_output' | 'not_json' | 'too_large' | 'answer_key' | 'locked';
 
 /** A tool call failed. Names the tool, a fixed reason and the thrown error's name, never a message. */
 export class ToolFailed extends HarnessError {
@@ -78,6 +78,11 @@ export interface ToolLoopInput {
   report(error: unknown): void;
   /** The decision's do-not-say list: a tool output holding one is `failed`. */
   mustNotReveal: readonly string[];
+  /**
+   * The lockedLeak seam (4.6 fills it): true when a tool output holds locked module text, which
+   * then fails like an answer key. Default: never.
+   */
+  lockedCheck?: (value: unknown) => boolean;
   /** Background work (a stream close) the runner waits for before `finished`. */
   track(settled: Promise<unknown>): void;
 }
@@ -86,11 +91,13 @@ type ToolCallChunk = Extract<ModelChunk, { type: 'tool_call' }>;
 
 export async function runToolLoop(
   i: ToolLoopInput,
-): Promise<{ draft: string; toolRounds: number }> {
+): Promise<{ draft: string; raw: string; toolRounds: number }> {
   const specs = i.offered.map(toolSpec);
   const byName = new Map(i.offered.map((r) => [r.tool.name, r]));
   const extra: ModelRequest['messages'] = [];
   let draft = '';
+  /** Everything the model wrote, shown or not (postGuard checks all of it). */
+  let raw = '';
   let rounds = 0;
   const show = (pieces: readonly string[]) => {
     for (const p of pieces) {
@@ -114,6 +121,7 @@ export async function runToolLoop(
       for (let c = await reader.next(); c !== undefined; c = await reader.next()) {
         if (c.type === 'text') {
           roundText += c.text;
+          raw += c.text;
           show(i.gate.push(c.text));
         } else if (c.type === 'usage') {
           i.usage.record(c.usage);
@@ -125,8 +133,12 @@ export async function runToolLoop(
     } finally {
       reader.close();
     }
-    show(i.gate.flush());
-    if (calls.length === 0) return { draft, toolRounds: rounds };
+    // The gate is flushed once, when the attempt ends: never between tool rounds, so a key split
+    // across rounds is still judged whole.
+    if (calls.length === 0) {
+      show(i.gate.flush());
+      return { draft, raw, toolRounds: rounds };
+    }
 
     rounds++;
     const records: ToolCallRecord[] = [];
@@ -201,5 +213,6 @@ async function runTool(
   if (!json.ok) return failed('not_json');
   if (json.json.length > TOOL_RESULT_MAX_JSON_LENGTH) return failed('too_large');
   if (revealsAnswerKey(json.value, i.mustNotReveal)) return failed('answer_key');
+  if (i.lockedCheck?.(json.value) === true) return failed('locked');
   return { value: json.value };
 }

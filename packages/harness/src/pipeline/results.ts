@@ -83,11 +83,20 @@ export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({
 
 export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   draft: z.string(),
+  raw: z.string().exactOptional(),
+  withheld: z.boolean().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [
   z.strictObject({ result: z.literal('ok'), guards, usage }),
   z.strictObject({ result: z.literal('replace'), text: z.string(), guards, usage }),
+  z.strictObject({
+    result: z.literal('escalate'),
+    alert: SafetyAlertSchema,
+    text: z.string(),
+    guards,
+    usage,
+  }),
 ]);
 
 /** Every PolicyReason; the Record type makes the compiler reject a missing or extra one. */

@@ -1,7 +1,8 @@
 // `skill` events from tool results (task 3.7). A tool's `present` turns its output into a payload
 // for the student's screen (a practice item, interview state). Fail closed: the event is sent only
 // when the skill is entitled, the payload fits LIMITS.skillPayloadMaxJsonLength, and no do-not-say
-// string (the answer key) appears in it, after normalising (answerKey.ts); 4.5 adds the robust one.
+// string (the answer key) appears in it, in any form the shared matcher reads (answerKey.ts, 4.5),
+// and the lockedLeak seam (`lockedCheck`, filled by 4.6) does not flag it.
 import { LIMITS, SkillSchema, type TurnContext, type TurnEvent } from '@edmate/contracts';
 import { z } from 'zod';
 import type { RegisteredTool } from '../tools.js';
@@ -10,7 +11,7 @@ import { revealsAnswerKey } from './answerKey.js';
 import { jsonSafe } from './toolMessages.js';
 
 export type SkillDropReason =
-  'present_failed' | 'invalid' | 'not_entitled' | 'too_large' | 'answer_key';
+  'present_failed' | 'invalid' | 'not_entitled' | 'too_large' | 'answer_key' | 'locked';
 
 /**
  * Reported to `finished.background`; names the tool and a fixed reason, never the payload. A
@@ -39,6 +40,7 @@ export function skillEvent(
   output: unknown,
   ctx: TurnContext,
   mustNotReveal: readonly string[],
+  lockedCheck?: (value: unknown) => boolean,
 ): Extract<TurnEvent, { type: 'skill' }> | SkillEventDropped | undefined {
   if (entry.present === undefined) return undefined;
   const drop = (reason: SkillDropReason) => new SkillEventDropped(entry.tool.name, reason);
@@ -55,5 +57,6 @@ export function skillEvent(
   const json = jsonSafe(p.data.payload);
   if (!json.ok || json.json.length > LIMITS.skillPayloadMaxJsonLength) return drop('too_large');
   if (revealsAnswerKey(json.value, mustNotReveal)) return drop('answer_key');
+  if (lockedCheck?.(json.value) === true) return drop('locked');
   return { type: 'skill', skill: p.data.skill, payload: json.value };
 }

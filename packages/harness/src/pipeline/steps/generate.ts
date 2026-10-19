@@ -7,12 +7,19 @@
 // The request is 3.6's `buildModelRequest` plus the tools: those the decision named whose skill
 // is in the entitlement, checked again here (access rule 5). Usage goes through `env.usage` as it
 // streams, which enforces the per-turn cost ceiling.
+//
+// Answer leaks (4.5): the default stream gate is the sentence gate (generate/streamGate.ts), so a
+// sentence holding the answer key is never shown. The result carries everything the model wrote
+// (`raw`) and whether the gate withheld anything (`withheld`); postGuard forces the hint on either.
+// A source whose title or locator holds the key is dropped (and reported).
 import type { PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
 import { citedSources } from '../generate/citations.js';
 import { SkillEventDropped, skillEvent } from '../generate/skillEvent.js';
-import { passThroughGate } from '../generate/streamGate.js';
+import { revealsAnswerKey } from '../generate/answerKey.js';
+import { answerLeakStreamGate } from '../generate/streamGate.js';
+import { HarnessError } from '../errors.js';
 import { runToolLoop } from '../generate/toolLoop.js';
 import { noTools, offeredTools } from '../tools.js';
 import type { Steps } from '../types.js';
@@ -31,6 +38,15 @@ function lockedEvent(pkg: TurnContext['pkg']): Extract<TurnEvent, { type: 'locke
     : { type: 'locked' };
 }
 
+/** A cited source's title or locator held the answer key, so it was not sent. Fixed text only. */
+export class SourceDropped extends HarnessError {
+  override readonly name = 'SourceDropped';
+
+  constructor() {
+    super('a cited source label held the answer key and was dropped');
+  }
+}
+
 export const generate: Steps['generate'] = async (env, { ctx, decision, sources }, emit) => {
   const { deps } = env;
   // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
@@ -38,10 +54,13 @@ export const generate: Steps['generate'] = async (env, { ctx, decision, sources 
   const set = resolvePromptPackSet(deps.promptPacks, ctx.agent.promptPackVersion);
   const request = buildModelRequest({ ctx, decision, input: env.input, set });
   const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement);
-  const gate = (deps.streamGate ?? passThroughGate)({ ctx, decision });
+  const studentText = env.input.text;
+  const gate = (deps.streamGate ?? answerLeakStreamGate)(
+    studentText === undefined ? { ctx, decision } : { ctx, decision, studentText },
+  );
 
   if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
-  const { draft } = await runToolLoop({
+  const { draft, raw } = await runToolLoop({
     gateway: env.gateway,
     request,
     offered,
@@ -61,8 +80,12 @@ export const generate: Steps['generate'] = async (env, { ctx, decision, sources 
     track: env.track,
   });
 
-  const cited = citedSources(draft, sources);
+  const cited = citedSources(draft, sources).filter((s) => {
+    const leaks = revealsAnswerKey([s.title, s.locator], decision.mustNotReveal);
+    if (leaks) env.report(new SourceDropped());
+    return !leaks;
+  });
   if (cited.length > 0) emit({ type: 'sources', items: cited });
   if (decision.move === 'locked') emit(lockedEvent(ctx.pkg));
-  return { draft };
+  return { draft, raw, withheld: gate.tripped === true };
 };

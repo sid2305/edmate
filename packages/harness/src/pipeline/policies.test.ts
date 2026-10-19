@@ -898,10 +898,13 @@ describe(`postGuard: ${policy('postGuard')}`, () => {
     expect(steps.commits[0]?.replyText).toBe(TEST_SAFE_REPLY);
   });
 
-  it('timeout at 2 s → safe reply', async () => {
+  it("timeout at 2 s → replace '' (clears skill events and sources), then the safe reply", async () => {
     const { timed } = await run({ postGuard: hang() });
-    const replace = timed.find((x) => x.event.type === 'replace');
-    expect(replace?.event).toEqual({ type: 'replace', text: TEST_SAFE_REPLY });
+    const replaces = timed.filter((x) => x.event.type === 'replace').map((x) => x.event);
+    expect(replaces).toEqual([
+      { type: 'replace', text: '' },
+      { type: 'replace', text: TEST_SAFE_REPLY },
+    ]);
   });
 
   it('a throwing safe-reply text still replaces the draft (with empty text) and reports it', async () => {
