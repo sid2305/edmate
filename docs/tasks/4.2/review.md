@@ -18,3 +18,14 @@ After the reviews, merging main brought 4.0d's spelled-out email case. The build
 - [MEDIUM] [deferred 4.2c] packages/harness/src/guardrails/piiPatterns.ts:74 — keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out numbers; Aadhaar Verhoeff; constant-digit over-scrub.
 - [MEDIUM] [deferred 4.2c] packages/harness/src/pipeline/steps/scrub.ts:96 — PII-named keys over-scrub teaching content (flashcards, file names); redact only scalars directly under compound key names.
 - [LOW] [deferred 4.2c] packages/harness/src/guardrails/piiPatterns.ts:196 — stop-list words khatam, barbaad, bekaar and nothing.
+
+
+## 4.2c (PR #42) — APPROVE
+Reviewer: safety-reviewer (sonnet): the build (1 CRITICAL), fix round 1 (CRITICAL fixed, a new HIGH), fix round 2 (HIGH fixed) — APPROVE. Harness 2,757 tests pass; `src/guardrails` is at 100% coverage. 6 new eval cases await the human's sign-off.
+
+- [CRITICAL] [fixed] packages/harness/src/pipeline/steps/scrub.ts:144 — bare name/pin keys stopped redacting their own scalar values. Fixed and re-verified.
+- [HIGH] [fixed] packages/harness/src/pipeline/steps/scrub.ts:153 — the file-like-parent exemption keyed only on the parent key. Now the value must also look like a file or identifier; re-verified.
+- [MEDIUM] [fixed] packages/harness/src/guardrails/piiPatterns.ts:248 — filler words between an OTP and "code".
+- [MEDIUM] [fixed] packages/harness/src/guardrails/piiPatterns.ts:196 — reversed Hinglish and Devanagari name order, and sign-offs with a comma.
+- [MEDIUM] [wontfix] packages/harness/src/pipeline/steps/scrub.ts:153 — a lowercase single-token name under a file-shaped key ({"module":{"name":"riya"}}) still passes. It can't be told apart from an identifier by shape; accepted and logged in the 4.2c decision.
+- [LOW] [deferred 3.10] packages/harness/src/testing/piiLocaleFixtures.ts:12 — Aadhaar Verhoeff, with the real IN pack.
