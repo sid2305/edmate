@@ -1,19 +1,24 @@
-// Step 11, commit (task 3.8): persists what the turn produced, through ports only.
+// Step 11, commit (tasks 3.8, 3.17): persists what the turn produced, through ports only.
 // 1. The scrubbed student message (when the scrub passed and the input had text), timestamped
 //    when the turn started, with an id drawn here once (a worker retry replays the same job).
 // 2. The agent's reply (when the student was shown one), with the `done` event's message id.
 // 3. The session's next help state (when decide produced one), via SessionStateStore only.
+// 4. Learner-profile evidence (when the turn produced any — task 3.17), via `profiles.applyEvidence`.
+// 5. The TeacherQuestion for an `ask_teacher` turn, as a fallback, when the live (3.7) attempt left
+//    `teacherQuestionId` unset (its own open timed out or failed) — never a second question when
+//    it is already set (`teacherQuestion.ts`'s shared, idempotent open).
 //
 // The answer key lives in `record.next` and in `record.decision` (systemPrompt, mustNotReveal);
-// it goes to saveHelpState and nowhere else (ADR-0005): messages carry only `input.text` and
-// `replyText`. In production the ports are queue-backed (@edmate/queue): this resolves once the
-// jobs are enqueued, never on the database write. TeacherQuestion for `ask_teacher` and learner
-// memory are task 3.17.
+// it goes to saveHelpState and nowhere else (ADR-0005): messages, evidence and the TeacherQuestion
+// carry only `input.text` (scrubbed) and `replyText` — never the answer key or locked text. In
+// production the ports are queue-backed (@edmate/queue): this resolves once the jobs are
+// enqueued, never on the database write.
 import { serializeSessionHelp } from '../../pedagogy/helpState.js';
+import { openTeacherQuestion } from '../teacherQuestion.js';
 import type { Steps } from '../types.js';
 
 export const commit: Steps['commit'] = async (env, record) => {
-  const { transcripts, sessionState, ids } = env.deps;
+  const { transcripts, sessionState, profiles, teacherQuestions, ids } = env.deps;
   const text = record.input?.text;
   if (text !== undefined) {
     await transcripts.append(record.sessionId, {
@@ -33,5 +38,16 @@ export const commit: Steps['commit'] = async (env, record) => {
   }
   if (record.next !== undefined) {
     await sessionState.saveHelpState(record.sessionId, serializeSessionHelp(record.next));
+  }
+  if (record.evidence !== undefined && record.evidence.length > 0) {
+    await profiles.applyEvidence(record.evidence);
+  }
+  if (
+    record.decision?.move === 'ask_teacher' &&
+    record.teacherQuestionId === undefined &&
+    text !== undefined &&
+    text.trim() !== ''
+  ) {
+    await openTeacherQuestion(teacherQuestions, record.entitled.entitlement, text);
   }
 };

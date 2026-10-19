@@ -2,14 +2,20 @@ import {
   type Entitlement,
   EntitlementSchema,
   type EntitlementStore,
+  type EvidenceEvent,
+  type LearnerProfile,
   type LocalePack,
   type PackageConfig,
+  type ProfileStore,
   type SessionStateStore,
+  type TeacherQuestion,
+  type TeacherQuestionStore,
   type TraceSink,
   type TranscriptStore,
   type TurnConfigStore,
   type UsageMeter,
 } from '@edmate/contracts';
+import { foldMastery } from '../mastery.js';
 import { RepositoryError } from './errors.js';
 import type { Repositories } from './index.js';
 import { studentScope, type StudentScope } from './scope.js';
@@ -50,6 +56,91 @@ export function sessionStateStoreFor(repos: Repositories, scope: StudentScope): 
 export function traceSinkFor(repos: Repositories, scope: StudentScope): TraceSink {
   const bound = studentScope(scope, 'traceSinkFor');
   return { record: (t) => repos.turnTraces.insert(bound, t) };
+}
+
+/** A never-seen student's profile (task 3.17 decision): English, no mastery, no mistakes yet. */
+function defaultProfile(scope: StudentScope): LearnerProfile {
+  return { studentId: scope.studentId, teacherId: scope.teacherId, lang: 'en', mastery: {}, mistakes: [] };
+}
+
+/**
+ * ProfileStore (task 3.17) for one student x teacher, built per turn like the other `*For`
+ * adapters. `get`/`applyEvidence` take `(studentId, teacherId)` on the port itself (ADR-free,
+ * contracts unchanged); here that pair must equal the bound scope, else `scope` — so a step can
+ * never read or write another pair's profile even if it were handed the wrong ids.
+ *
+ * `applyEvidence` never calls `learnerProfiles.save()` (so `last_summary` is never touched here;
+ * see `learnerProfilesRepo.applyMastery`'s doc comment): it appends the evidence (idempotent by
+ * content-hash id — `evidenceEventsRepo.append`), folds BKT only over the events that append
+ * actually wrote (a replay then changes mastery zero times, not once more), and merges the result.
+ */
+export function profileStoreFor(repos: Repositories, scope: StudentScope): ProfileStore {
+  const bound = studentScope(scope, 'profileStoreFor');
+  const checkPair = (studentId: string, teacherId: string, method: string) => {
+    if (studentId !== bound.studentId || teacherId !== bound.teacherId) {
+      throw new RepositoryError('scope', method);
+    }
+  };
+  return {
+    async get(studentId, teacherId) {
+      checkPair(studentId, teacherId, 'profileStoreFor.get');
+      const existing = await repos.learnerProfiles.get(bound);
+      return existing ?? defaultProfile(bound);
+    },
+    async applyEvidence(events: EvidenceEvent[]) {
+      const method = 'profileStoreFor.applyEvidence';
+      if (!events.every((e) => e.studentId === bound.studentId && e.teacherId === bound.teacherId)) {
+        throw new RepositoryError('scope', method);
+      }
+      if (events.length > 0) {
+        const applied = await repos.evidenceEvents.append(bound, events);
+        if (applied.length > 0) {
+          const current = await repos.learnerProfiles.get(bound);
+          const patch = foldMastery(current?.mastery ?? {}, applied);
+          await repos.learnerProfiles.applyMastery(bound, patch);
+        }
+      }
+      const profile = await repos.learnerProfiles.get(bound);
+      return profile ?? defaultProfile(bound);
+    },
+  };
+}
+
+/**
+ * TeacherQuestionStore (task 3.17) for one student x teacher's agent. `open` is scoped by the
+ * port's own payload (it already carries `teacherId`/`agentId`/`studentId`): a payload naming
+ * another pair is `scope`, never written.
+ *
+ * `findSimilar` always returns `[]`: no embeddings-backed similarity search exists yet (that is a
+ * later RAG task); this ships the plumbing (the live 3.7 attempt and the 3.17 fallback both call
+ * one `openTeacherQuestion` path) without inventing one. `similarIds` on a question opened through
+ * this adapter is therefore always `[]` until that task lands — a decision logged in the task
+ * handoff, not a contracts change (`TeacherQuestionStore.findSimilar` is unchanged).
+ */
+export function teacherQuestionStoreFor(
+  repos: Repositories,
+  scope: StudentScope,
+): TeacherQuestionStore {
+  const bound = studentScope(scope, 'teacherQuestionStoreFor');
+  return {
+    async findSimilar(teacherId: string) {
+      if (teacherId !== bound.teacherId) throw new RepositoryError('scope', 'teacherQuestionStoreFor.findSimilar');
+      const noSimilarity: TeacherQuestion[] = [];
+      return noSimilarity;
+    },
+    async open(q) {
+      const method = 'teacherQuestionStoreFor.open';
+      if (q.teacherId !== bound.teacherId || q.studentId !== bound.studentId) {
+        throw new RepositoryError('scope', method);
+      }
+      return repos.teacherQuestions.open(bound, {
+        agentId: q.agentId,
+        text: q.text,
+        ...(q.moduleHint === undefined ? {} : { moduleHint: q.moduleHint }),
+        similarIds: q.similarIds,
+      });
+    },
+  };
 }
 
 /**

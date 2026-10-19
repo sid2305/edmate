@@ -1,0 +1,11 @@
+-- Task 3.17: the live (3.7) runner attempt and the commit-step (3.17) fallback can both try to
+-- open "the same" TeacherQuestion for one ask_teacher turn (a timed-out live attempt may still
+-- land); teacherQuestionsRepo.open becomes insert-or-return-existing on this key, so both land on
+-- one row instead of raising a duplicate (risk: high, see docs/tasks/3.17/handoff.md).
+--
+-- `md5(text)`, not `text` itself: text is up to LIMITS.turnTextMaxLength (8000 chars, well past a
+-- btree index row's ~2.7 KB limit), so indexing it directly would fail on long questions; a
+-- 32-char hex digest is always small. teacher_questions is small and low-write (unlike
+-- `sessions`), so a plain (non-CONCURRENTLY) migration is proportionate, unlike 0009/0010 — this
+-- is additive only (a new index on an existing column set) and drops no data.
+CREATE UNIQUE INDEX "teacher_questions_open_dedup_key" ON "teacher_questions" USING btree ("teacher_id","student_id","agent_id",md5("text")) WHERE "teacher_questions"."status" = 'open';
