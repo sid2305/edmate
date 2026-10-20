@@ -1353,9 +1353,9 @@ tasks:
   accept: a real-gateway-shaped validation error surfaces as validation, retryable false; a provider outage stays provider_error, retryable true
   deps:
   - '5.11'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m5/5.11a-drafter-gateway-errors
+  model: plan:lead build:sonnet-5/medium
 - id: 6.0b
   milestone: M6
   title: 'DPDP gate for learner memory (logged decision, 18 Oct 2026; raised again by 3.17): before any India pilot, decide and enforce what learner memory (mastery, mistakes, summaries, evidence) may be
@@ -2143,7 +2143,8 @@ tasks:
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
-    the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper; apps/cli sameTopic.test.ts "three same-topic allowed turns" flaked once in CI (turn ended in error, passed on re-run, PR #78, 20 Oct 2026): find the cause'
+    the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper; apps/cli sameTopic.test.ts "three same-topic allowed turns" flaked
+    once in CI (turn ended in error, passed on re-run, PR #78, 20 Oct 2026): find the cause'
   accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
   deps:
   - 3.4c
