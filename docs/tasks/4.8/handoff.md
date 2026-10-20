@@ -151,3 +151,13 @@ Alternatives:
 - Fail the turn on a gap (too harsh: the generic disclaimer is safe).
 - Change the grounding count (hides the cause).
 Reversible: yes.
+
+## Sync with main after 4.3 (CI)
+
+Branch `fix-4.8-sync` from `origin/m4/4.8-advice-guard`, merging `origin/main` (now carrying 4.3 distress detection and 3.10 locale packs).
+
+- `git merge origin/main` applied with no conflicts (14 commits, clean three-way merge); no TS2300 duplicate exports and no locale fixture shape mismatch turned up in `packages/harness` or `packages/content`.
+- The lead has since signed all 5 previously-pending advice cases (`reviewed_by: lead`), so `packages/evals/src/adviceFixtures.test.ts` no longer matches CI. Updated its title and body to expect all 37 cases signed, none pending, and dropped the now-stale list of pending case ids. No case YAML changed.
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals --force --concurrency=1` with postgres+redis up via `docker compose -f docker/compose.yaml up -d postgres redis`: 34/34 tasks successful, 0 cached (forced).
+- `adviceFixtures.test.ts` alone: 46 tests pass.
+- `python3 .githooks/secret-scan.py --all`: clean.

@@ -1,5 +1,5 @@
-// Task 4.8 acceptance: "seeded advice cases pass". All 37 cases in evals/suites/advice (32 signed,
-// 1 pending from the 4.7 safety review, 4 pending from the 4.8 safety review) go through the real `runTurn` with the real generate and
+// Task 4.8 acceptance: "seeded advice cases pass". All 37 cases in evals/suites/advice (all signed
+// by the lead, following the 4.7 and 4.8 safety reviews) go through the real `runTurn` with the real generate and
 // the real postGuard (lockedLeak, answerLeak, grounding, adviceGuard). decide is stubbed per case
 // (the move); everything else is the harness's happy-path doubles. Two passes (lead answer 1):
 // the demo agent (no regulated subject: adviceGuard runs on every agent) and a regulated agent
@@ -460,19 +460,9 @@ async function failedUnder(config: Config, subject?: Subject): Promise<string[]>
 // ---- the tests ---------------------------------------------------------------------------------------
 
 describe('seeded advice cases (evals/suites/advice)', () => {
-  it('loads all 37 cases (32 signed, 5 pending from the 4.7 and 4.8 safety reviews), each with a spec', () => {
+  it('loads all 37 cases (all signed, none pending)', () => {
     expect(CASES).toHaveLength(37);
-    expect(
-      CASES.filter((c) => c.reviewed_by === 'pending')
-        .map((c) => c.id)
-        .sort(),
-    ).toEqual([
-      'advice-bare-imperative-health-en',
-      'advice-grounding-redirect-hi-latin',
-      'advice-park-money-no-request-hi-latin',
-      'advice-redirect-stream-coding-en',
-      'advice-sign-it-law-en',
-    ]);
+    expect(CASES.filter((c) => c.reviewed_by === 'pending')).toEqual([]);
     expect(Object.keys(SPECS).sort()).toEqual(ids(PREPARED));
     // Every case has string checks to score, and no case asks for a must_contain.
     for (const p of PREPARED) expect(p.banned.length, p.id).toBeGreaterThan(0);
