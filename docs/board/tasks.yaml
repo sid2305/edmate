@@ -1226,7 +1226,7 @@ tasks:
   - M3
   status: running
   branch: m5/5.6-practice-skill
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet arch:opus
 - id: 5.6a
   milestone: M5
   title: 'Answer keys out of retrieved context (5.6 architect Q-C): buildContext drops, and reports, any retrieved chunk where revealsAnswerKey is true; an ingest rule that the practice bank and its keys
@@ -2045,7 +2045,8 @@ tasks:
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
-    document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3); edmate chat reloads the saved help state each turn so the ladder can climb (found by the 3.4c planner)'
+    document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3); edmate chat reloads the saved help state each turn so the ladder can
+    climb (found by the 3.4c planner)'
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
