@@ -24,7 +24,9 @@ interface Quant {
 }
 type Atom =
   | { kind: 'char'; ch: string }
-  | { kind: 'set' } // a class, `.`, `\d`, `\p{..}`: more than one possible character
+  // a class, `.`, `\d`, `\p{..}`: more than one possible character. `sample` is one character the
+  // class actually matches (undefined for `.` and `\p{..}`, which are too generic to pick one).
+  | { kind: 'set'; sample?: string }
   | { kind: 'assert' } // ^ $ \b \B
   | { kind: 'backref' }
   | { kind: 'group'; type: 'plain' | 'ahead' | 'behind'; alts: Term[][] };
@@ -40,6 +42,16 @@ const SIMPLE_CHAR_ESCAPES: Readonly<Record<string, string>> = {
   t: '\t',
   v: '\v',
   '0': '\0',
+};
+
+/** One character each escape class actually matches, for the pattern-derived timing probe. */
+const ESCAPE_SET_SAMPLES: Readonly<Record<string, string>> = {
+  d: '1',
+  D: 'a',
+  w: 'a',
+  W: '!',
+  s: ' ',
+  S: 'a',
 };
 
 class Parser {
@@ -79,8 +91,8 @@ class Parser {
     const c = this.s[this.i++] as string;
     if (c === '\\') return this.escape();
     if (c === '[') {
-      this.charClass();
-      return { kind: 'set' };
+      const sample = this.charClass();
+      return sample === undefined ? { kind: 'set' } : { kind: 'set', sample };
     }
     if (c === '(') return this.group();
     if (c === '.') return { kind: 'set' };
@@ -102,7 +114,10 @@ class Parser {
       return { kind: 'backref' };
     }
     if (c === 'b' || c === 'B') return { kind: 'assert' };
-    if ('dDwWsS'.includes(c)) return { kind: 'set' };
+    if ('dDwWsS'.includes(c)) {
+      const sample = ESCAPE_SET_SAMPLES[c];
+      return sample === undefined ? { kind: 'set' } : { kind: 'set', sample };
+    }
     if (c === 'p' || c === 'P') {
       this.skipPast('}');
       return { kind: 'set' };
@@ -126,13 +141,24 @@ class Parser {
     return { kind: 'char', ch: SIMPLE_CHAR_ESCAPES[c] ?? c };
   }
 
-  /** Skips a character class up to its closing `]` (escapes inside are skipped whole). */
-  private charClass(): void {
+  /**
+   * Skips a character class up to its closing `]` (escapes inside are skipped whole) and returns
+   * one character it is likely to match, for the timing probe (task 3.10, fix round 1).
+   */
+  private charClass(): string | undefined {
+    let sample: string | undefined;
+    if (this.peek() === '^') this.i++; // negation does not change the sample we pick
     while (this.i < this.s.length) {
-      const c = this.s[this.i++];
-      if (c === '\\') this.i++;
-      else if (c === ']') return;
+      const c = this.s[this.i++] as string;
+      if (c === ']') return sample;
+      if (c === '\\') {
+        const esc = this.s[this.i++] ?? '';
+        sample ??= ESCAPE_SET_SAMPLES[esc] ?? SIMPLE_CHAR_ESCAPES[esc] ?? esc;
+        continue;
+      }
+      sample ??= c;
     }
+    return sample;
   }
 
   private group(): Atom {
@@ -207,9 +233,38 @@ function oneCharWide(alts: readonly Term[][]): boolean {
   );
 }
 
+/**
+ * Two or more adjacent, unquantified alternation groups whose branches overlap each other are an
+ * ambiguous repeat spelled out longhand (`(x|xx)(x|xx)...` instead of `(x|xx)+`): just as
+ * dangerous to backtrack, and not caught by the quantifier-gated check above (fix round 1,
+ * security review of PR #57). Flags once per run of 2+, not once per adjacent pair.
+ */
+function unrolledOverlap(alt: readonly Term[]): boolean {
+  let branches: Term[][] = [];
+  let groups = 0;
+  const flushed = (): boolean => groups >= 2 && branchesOverlap(branches);
+  for (const term of alt) {
+    const isAltGroup =
+      term.quant === null &&
+      term.atom.kind === 'group' &&
+      term.atom.type === 'plain' &&
+      term.atom.alts.length > 1;
+    if (isAltGroup) {
+      branches = [...branches, ...(term.atom as { alts: Term[][] }).alts];
+      groups++;
+      continue;
+    }
+    if (flushed()) return true;
+    branches = [];
+    groups = 0;
+  }
+  return flushed();
+}
+
 function walk(alts: readonly Term[][], underRepeat: boolean, found: Set<string>): void {
   if (underRepeat && alts.length > 1 && branchesOverlap(alts)) found.add(SAFE_REGEX_ISSUES.overlap);
   for (const alt of alts) {
+    if (unrolledOverlap(alt)) found.add(SAFE_REGEX_ISSUES.overlap);
     for (const { atom, quant } of alt) {
       if (atom.kind === 'backref') found.add(SAFE_REGEX_ISSUES.backref);
       if (atom.kind !== 'group') continue;
@@ -238,6 +293,12 @@ export interface TimingOptions {
    * stalls one attempt, not three.
    */
   attempts?: number;
+  /**
+   * The characters to build probe inputs from, alone and in pairs. Defaults to `PROBE_UNITS`;
+   * `checkSafeRegex` adds every unit `extractProbeUnits` finds in the pattern itself (fix round
+   * 1), so a pattern whose ambiguous literal is not in the generic alphabet is still caught.
+   */
+  units?: readonly string[];
 }
 
 /** Characters a PII pattern is likely to loop on, alone and in pairs. */
@@ -249,16 +310,40 @@ const PROBE_UNITS = ['a', 'A', '1', ' ', '-', '.', '@', '_', '+', 'a1', 'a.', '1
  */
 const PROBE_LENGTHS = [32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192];
 
-function probeInputs(): string[] {
+/**
+ * Every distinct literal character and class/escape sample used in `source` (fix round 1): a
+ * pattern can be ambiguous on a character the generic `PROBE_UNITS` alphabet never tries, for
+ * example `(x|xx)` when `x` is not one of them.
+ */
+export function extractProbeUnits(source: string): string[] {
+  const units = new Set<string>();
+  const collect = (alts: readonly Term[][]): void => {
+    for (const alt of alts) {
+      for (const { atom } of alt) {
+        if (atom.kind === 'char') units.add(atom.ch);
+        else if (atom.kind === 'set' && atom.sample !== undefined) units.add(atom.sample);
+        else if (atom.kind === 'group') collect(atom.alts);
+      }
+    }
+  };
+  try {
+    collect(new Parser(source).parse());
+  } catch {
+    return [];
+  }
+  return [...units];
+}
+
+function probeInputs(units: readonly string[]): string[] {
   return PROBE_LENGTHS.flatMap((n) =>
-    PROBE_UNITS.map((u) => u.repeat(Math.ceil(n / u.length)).slice(0, n) + '!'),
+    units.map((u) => u.repeat(Math.ceil(n / u.length)).slice(0, n) + '!'),
   );
 }
 
 /** One attempt: true when every probe input finished within the budget (stops at the first overrun). */
-function attemptInTime(re: RegExp, now: () => number, budgetMs: number): boolean {
+function attemptInTime(re: RegExp, now: () => number, budgetMs: number, units: readonly string[]): boolean {
   const start = now();
-  for (const input of probeInputs()) {
+  for (const input of probeInputs(units)) {
     input.replace(re, ''); // visits every match, as the scrub does
     if (now() - start > budgetMs) return false;
   }
@@ -273,8 +358,9 @@ export function probeTiming(re: RegExp, opts: TimingOptions = {}): string | unde
   const now = opts.now ?? (() => performance.now());
   const budgetMs = opts.budgetMs ?? 100;
   const attempts = opts.attempts ?? 3;
+  const units = opts.units ?? PROBE_UNITS;
   for (let i = 0; i < attempts; i++) {
-    if (attemptInTime(re, now, budgetMs)) return undefined;
+    if (attemptInTime(re, now, budgetMs, units)) return undefined;
   }
   return `took longer than ${budgetMs} ms on a probe input`;
 }
@@ -289,6 +375,7 @@ export function checkSafeRegex(source: string, opts: TimingOptions = {}): string
   }
   const structural = structuralIssues(source);
   if (structural.length > 0) return structural;
-  const slow = probeTiming(re, opts);
+  const units = opts.units ?? [...PROBE_UNITS, ...extractProbeUnits(source)];
+  const slow = probeTiming(re, { ...opts, units });
   return slow === undefined ? [] : [slow];
 }

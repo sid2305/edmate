@@ -6,7 +6,7 @@
 import type { LocalePack } from '@edmate/contracts';
 import { compileLocalePatterns } from '@edmate/harness';
 import { PILOT_LANGUAGES } from './pilotLanguages.js';
-import { checkSafeRegex } from './safeRegex.js';
+import { checkSafeRegexGuarded } from './safeRegexGuard.js';
 
 export type LocalePacks = ReadonlyMap<string, LocalePack>;
 export type LocaleRule = (packs: LocalePacks) => string[];
@@ -92,10 +92,13 @@ function guIssues(p: LocalePack): string[] {
   );
 }
 
-/** The patterns of `pack` that fail the safe-regex check (structure first, then a timing probe). */
+/**
+ * The patterns of `pack` that fail the safe-regex check (structure first, then a timing probe,
+ * the probe itself run with a hard wall-clock ceiling -- see `safeRegexGuard.ts`).
+ */
 function safeRegexIssues(p: LocalePack): string[] {
   return p.piiPatterns.flatMap((source, i) =>
-    checkSafeRegex(source).map((issue) => `piiPatterns[${i}] ${issue}`),
+    checkSafeRegexGuarded(source).map((issue) => `piiPatterns[${i}] ${issue}`),
   );
 }
 
