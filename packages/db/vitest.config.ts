@@ -27,6 +27,15 @@ export default defineConfig(async () => {
       // The integration tests create, migrate and drop their own throwaway databases.
       testTimeout: 60_000,
       hookTimeout: 60_000,
+      // retrieval-leak.int.test.ts's SLO (ADR-0007 point 6) measures real wall-clock latency of a
+      // real Postgres round trip (lockedIndexFor reads the teacher's revision on every call, even
+      // on a warm locked-index cache, so a hit is never free of the database). Several other int
+      // test files in this package also open real Postgres connections and pools; running them
+      // across parallel vitest workers lets one file's heavy work (or GC/CPU scheduling under CI's
+      // shared runner) stretch that round trip past the 50/100 ms budget (task 4.4 found the same
+      // class of flake in apps/worker). Running this package's test files one at a time removes
+      // that contention without touching leakCheck's behaviour or the SLO itself.
+      fileParallelism: false,
       coverage: {
         provider: 'v8' as const,
         include: ['src/**/*.ts'],

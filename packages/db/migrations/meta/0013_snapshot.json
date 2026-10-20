@@ -1,6 +1,6 @@
 {
-  "id": "18e49c46-2e32-4acb-b85f-429e54f1341d",
-  "prevId": "8d05fa63-4a6f-4ca5-bb3f-ca4309f5d0f8",
+  "id": "e00c4a6e-7dd3-47ba-b088-849d9062d6ff",
+  "prevId": "0df4e9a1-4d5b-4a64-8d89-77fc0df25d0f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4433,6 +4433,82 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.teacher_material_revisions": {
+      "name": "teacher_material_revisions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "teacher_id": {
+          "name": "teacher_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "teacher_material_revisions_teacher_id_key": {
+          "name": "teacher_material_revisions_teacher_id_key",
+          "columns": [
+            {
+              "expression": "teacher_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "teacher_material_revisions_teacher_id_users_id_fk": {
+          "name": "teacher_material_revisions_teacher_id_users_id_fk",
+          "tableFrom": "teacher_material_revisions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "teacher_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

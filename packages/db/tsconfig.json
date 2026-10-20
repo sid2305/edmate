@@ -3,7 +3,15 @@
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "*.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "scripts",
+    "*.config.ts"
+  ]
 }

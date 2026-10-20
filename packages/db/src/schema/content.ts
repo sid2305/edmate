@@ -1,6 +1,6 @@
 // Data model rows: courses / modules / topics, documents / chunks, style_cards, corrections.
 import { sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import {
   chunkKind,
   EMBEDDING_DIMENSIONS,
@@ -117,6 +117,22 @@ export const chunks = pgTable(
     // Cosine distance (`<=>`), the metric OpenAI embeddings are meant for (task 2.7; 5.3 ranks).
     index('chunks_embedding_hnsw_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
+);
+
+/**
+ * Task 5.3: one counter per teacher, bumped in the same transaction as every write to that
+ * teacher's documents or chunks. leakCheck's cache key includes it (ADR-0007), so a material
+ * change invalidates the cache across processes. Any future delete path (8.x, 13.4) must bump it.
+ */
+export const teacherMaterialRevisions = pgTable(
+  'teacher_material_revisions',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    revision: bigint('revision', { mode: 'number' }).notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex('teacher_material_revisions_teacher_id_key').on(t.teacherId)],
 );
 
 /** The teacher's voice. Versions are immutable. */

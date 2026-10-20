@@ -22,7 +22,16 @@ export {
   platformActorRole,
   platformAuditLog,
 } from './auth.js';
-export { chunks, corrections, courses, documents, modules, styleCards, topics } from './content.js';
+export {
+  chunks,
+  corrections,
+  courses,
+  documents,
+  modules,
+  styleCards,
+  teacherMaterialRevisions,
+  topics,
+} from './content.js';
 export { agents, agentVersions, packages, packageVersions } from './agents.js';
 export {
   invoices,

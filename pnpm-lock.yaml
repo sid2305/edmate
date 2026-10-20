@@ -426,6 +426,9 @@ importers:
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
@@ -439,9 +442,12 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
-      '@edmate/harness':
+      '@edmate/gateway':
         specifier: workspace:*
-        version: link:../harness
+        version: link:../gateway
+      '@edmate/ingest':
+        specifier: workspace:*
+        version: link:../ingest
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
@@ -574,6 +580,9 @@ importers:
 
   packages/ingest:
     dependencies:
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       cheerio:
         specifier: 1.2.0
         version: 1.2.0
@@ -596,6 +605,9 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

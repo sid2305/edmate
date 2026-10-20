@@ -203,6 +203,33 @@ describe('rule 6: module and question references', () => {
     ]);
   });
 
+  it('reports a recall heading that is not a heading in the expected module notes (5.3)', () => {
+    const dir = copyValid();
+    edit(dir, 'qa-recall.yaml', (s) =>
+      s.replace('expectedHeadings:\n    - Loops', 'expectedHeadings:\n    - Loops\n    - While loops'),
+    );
+    expect(moduleReferences(tree(dir))).toEqual([
+      'qa-recall.yaml: recall-2 expectedHeadings entry "While loops" is not a heading in modules/loops/notes.md',
+    ]);
+  });
+
+  it('matches a recall heading written with inline code or bold in the notes (5.3)', () => {
+    const dir = copyValid();
+    edit(dir, 'modules/loops/notes.md', (s) => `${s}\n## 3.2 \`range()\` and **while**\n\nText.\n`);
+    edit(dir, 'qa-recall.yaml', (s) =>
+      s.replace('expectedHeadings:\n    - Loops', 'expectedHeadings:\n    - 3.2 range() and while'),
+    );
+    expect(moduleReferences(tree(dir))).toEqual([]);
+  });
+
+  it('does not check gold on an out-of-course recall item (5.3)', () => {
+    const dir = copyValid();
+    edit(dir, 'qa-recall.yaml', (s) => s.replace('id: recall-3\n  moduleId: loops', 'id: recall-3\n  moduleId: graphs'));
+    expect(moduleReferences(tree(dir))).toEqual([
+      'qa-recall.yaml: recall-3 moduleId "graphs" is not a module in course.yaml',
+    ]);
+  });
+
   it('reports a rubric answer pointing at an unknown question', () => {
     const dir = copyValid();
     edit(dir, 'rubric-answers/variables.yaml', (s) =>

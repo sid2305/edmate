@@ -3,10 +3,12 @@ import { guarded } from './errors.js';
 import { agentVersionsRepo } from './agent-versions.js';
 import { agentsRepo } from './agents.js';
 import { auditRepo } from './audit.js';
+import { chunksRepo, documentsRepo } from './chunks.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { packageVersionsRepo } from './package-versions.js';
+import { retrievalRepo } from './retrieval.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
@@ -48,6 +50,9 @@ export function createRepositories(db: Db) {
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
     audit: guardAll('audit', auditRepo(db)),
     usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
+    documents: guardAll('documents', documentsRepo(db)),
+    chunks: guardAll('chunks', chunksRepo(db)),
+    retrieval: guardAll('retrieval', retrievalRepo(db)),
     safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
   };
 }
@@ -97,6 +102,7 @@ export {
   type EntitlementStoreOptions,
   entitlementStoreFor,
   profileStoreFor,
+  retrievalIndexFor,
   sessionStateStoreFor,
   teacherQuestionStoreFor,
   traceSinkFor,
@@ -109,4 +115,22 @@ export {
   type UsageMeterContext,
 } from './ports.js';
 export type { EvidenceEventEntry } from './learner.js';
+export {
+  CHUNK_TEXT_MAX_LENGTH,
+  CHUNK_WRITE_MAX,
+  chunkId,
+  type ChunkDraft,
+  type DocumentInput,
+} from './chunks.js';
+export {
+  type EmbedFallback,
+  type LeakFallback,
+  NOTE_MATCH_FLOOR,
+  PROBE_FLOOR,
+  RETRIEVAL_MAX_MODULES,
+  type RetrievalIndexOptions,
+  SEARCH_MAX_K,
+  type ProbeInput,
+  type SearchInput,
+} from './retrieval.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
