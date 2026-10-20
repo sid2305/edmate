@@ -9,7 +9,7 @@
 // fixed IngestError that names neither the chunk text nor the invented id (rule: no teacher
 // material in a thrown message).
 import type { ModelGateway, ModelRequest } from '@edmate/contracts';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 import { IngestError } from '../errors.js';
 import type { ModuleOutlineDraft, OutlineDraft, OutlineModuleInput, TopicDraft } from './types.js';
 
@@ -54,6 +54,10 @@ function draftFailed(): IngestError {
   return new IngestError('provider_error', true, 'the outline could not be drafted');
 }
 
+function schemaFailed(): IngestError {
+  return new IngestError('validation', false, 'the model drafted an outline that failed validation');
+}
+
 async function draftModule(
   gateway: Pick<ModelGateway, 'generateObject'>,
   input: OutlineModuleInput,
@@ -62,8 +66,10 @@ async function draftModule(
   let model: z.infer<typeof ModuleOutlineModelSchema>;
   try {
     model = await gateway.generateObject(buildOutlineModuleRequest(input), ModuleOutlineModelSchema);
-  } catch {
-    throw draftFailed();
+  } catch (e) {
+    // A ZodError means the model's own schema call rejected the shape of the reply (a
+    // deterministic, non-retryable mistake); anything else is a real gateway/provider failure.
+    throw e instanceof ZodError ? schemaFailed() : draftFailed();
   }
   const topics: TopicDraft[] = model.topics.map((t) => {
     if (t.topic.trim() === '') {

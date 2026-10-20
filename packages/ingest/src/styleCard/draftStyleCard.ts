@@ -9,7 +9,7 @@
 // `mistakeTags` entry outside `mistakeCandidates` is rejected (mirrors 6.3's "never emits a tag
 // outside the list"), with a fixed IngestError that names neither the entry nor the teacher text.
 import { StyleCardSchema, type ModelGateway, type ModelRequest } from '@edmate/contracts';
-import type { z } from 'zod';
+import { ZodError, type z } from 'zod';
 import { IngestError } from '../errors.js';
 
 const MAX_OUTPUT_TOKENS = 800;
@@ -56,6 +56,14 @@ function draftFailed(): IngestError {
   return new IngestError('provider_error', true, 'the style card could not be drafted');
 }
 
+function schemaFailed(): IngestError {
+  return new IngestError(
+    'validation',
+    false,
+    'the model drafted a style card that failed validation',
+  );
+}
+
 /** Drafts a style card; the caller assigns `id`/`teacherId`/`version` before storing it. */
 export async function draftStyleCard(
   gateway: Pick<ModelGateway, 'generateObject'>,
@@ -64,8 +72,11 @@ export async function draftStyleCard(
   let draft: StyleCardDraft;
   try {
     draft = await gateway.generateObject(buildStyleCardRequest(input), StyleCardDraftSchema);
-  } catch {
-    throw draftFailed();
+  } catch (e) {
+    // A ZodError means the model's own schema call rejected the shape or content of the reply
+    // (e.g. the ≤300-word rule in StyleCardSchema): a deterministic, non-retryable mistake. Any
+    // other failure is a real gateway/provider failure.
+    throw e instanceof ZodError ? schemaFailed() : draftFailed();
   }
   const candidates = new Set(input.mistakeCandidates);
   if (draft.mistakeTags.some((tag) => !candidates.has(tag))) {

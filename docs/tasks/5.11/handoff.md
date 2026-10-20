@@ -92,6 +92,40 @@ its own drafter module (rather than a shared prompts file) makes a later migrati
 prompt pack a single-file change per drafter.
 risk: low
 
+## Fix round
+
+typescript-reviewer (HIGH, also raised as MEDIUM by code-reviewer): the bare
+`catch { throw draftFailed() }` around each drafter's `generateObject` call turned a deterministic
+schema/validation failure of the model's reply into `IngestError('provider_error', retryable: true)`
+— wrong for a failure that will reproduce on retry (e.g. the style card going over
+`LIMITS.styleCardMaxWords`, enforced by `StyleCardDraftSchema` itself via `schema.parse` inside
+`ScriptedGateway.generateObject`).
+
+Fix: both `draftModule` (`draftOutline.ts`) and `draftStyleCard` (`draftStyleCard.ts`) now branch on
+`e instanceof ZodError` (zod, already an allowed harness/ingest import) in the `catch`. A `ZodError`
+means the schema call itself rejected the model's reply shape/content — now
+`IngestError('validation', false, ...)`, a new `schemaFailed()` helper per file. Anything else
+(a `ScriptedGatewayError`/`ScriptedProviderError` standing in for a real gateway/provider failure)
+still becomes the existing `IngestError('provider_error', true, ...)` via `draftFailed()`. Neither
+message names the model's reply or teacher text, matching the existing post-schema checks.
+
+Updated `draftStyleCard.test.ts`'s "rejects a scripted answer longer than the word limit" to expect
+`{ code: 'validation', retryable: false }` (was `provider_error`). Added
+`draftOutline.test.ts`'s "rejects a scripted reply that fails the model output schema" (a reply
+missing `topics` entirely), which did not have a schema-failure case before.
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/ingest...
+ Test Files  20 passed (20)
+      Tests  295 passed (295)
+ src/outline/draftOutline.ts    | 100 | 100 | 100 | 100
+ src/styleCard/draftStyleCard.ts| 100 | 100 | 100 | 100
+ Tasks:    14 successful, 14 total
+
+$ python3 .githooks/secret-scan.py --all
+(no output — clean)
+```
+
 ### 20 Oct 2026 · 5.11 outline/style-card drafts stay local to ingest, not contracts · decided by tdd-guide
 Decided: `OutlineDraft`/`ModuleOutlineDraft`/`TopicDraft` are local types in
 `packages/ingest/src/outline/types.ts`, not `packages/contracts`; the style-card drafter returns

@@ -112,4 +112,18 @@ describe('draftOutline', () => {
       code: 'provider_error',
     });
   });
+
+  it('rejects a scripted reply that fails the model output schema', async () => {
+    const module = chunkedModule('sample', 'Sample module', fixture('sample-module.md'));
+    const gateway = scripted({
+      // Missing "topics" entirely: the schema call itself throws a ZodError, not a gateway error.
+      generateObject: [{ value: { notTopics: [] } }],
+    });
+
+    await expect(draftOutline(gateway, [module])).rejects.toMatchObject({
+      name: 'IngestError',
+      code: 'validation',
+      retryable: false,
+    });
+  });
 });

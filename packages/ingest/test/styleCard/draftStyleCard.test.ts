@@ -55,7 +55,8 @@ describe('draftStyleCard', () => {
 
     await expect(draftStyleCard(gateway, BASE_INPUT)).rejects.toMatchObject({
       name: 'IngestError',
-      code: 'provider_error',
+      code: 'validation',
+      retryable: false,
     });
   });
 
