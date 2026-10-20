@@ -19,6 +19,8 @@ Checks, in order (both modes run the same checks):
      (handoff `## Decisions` or main's docs/decisions/log.md) whose heading has the task id and
      that names the finding's file.
   4. Safety paths changed (or any path in a group that needs safety-reviewer) -> safety-review.md exists.
+     Only while some risk-paths.txt group lists safety-reviewer; until the pilot gate none does
+     (MVP first, human decision 20 Oct 2026) and task 13.3 switches it back on.
   5. Risky paths changed (risk-paths.txt groups), or a migration drops/deletes data -> review.md's
      Reviewers: line names every reviewer each touched group requires (`# reviewers:` lines in
      risk-paths.txt; database-reviewer for destructive migrations), and the handoff's
@@ -233,8 +235,10 @@ def evaluate(task, branch, pr=None):
             for who in MIGRATION_REVIEWERS:
                 needed.setdefault(who, p)
 
-    safety_paths = [p for p in changed if p.startswith(SAFETY) or any(
-        matches(p, g) and r and "safety-reviewer" in r for g, r in groups)]
+    # Dormant until 13.3 puts `safety-reviewer` back in risk-paths.txt (MVP first, 20 Oct 2026).
+    safety_on = any(r and "safety-reviewer" in r for _, r in groups)
+    safety_paths = [p for p in changed if safety_on and (p.startswith(SAFETY) or any(
+        matches(p, g) and r and "safety-reviewer" in r for g, r in groups))]
     if safety_paths and show(f"docs/tasks/{task}/safety-review.md") is None:
         fails.append(f"safety paths changed but docs/tasks/{task}/safety-review.md is missing")
 
