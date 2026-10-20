@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.6a ingest refuses practice banks and answer keys · decided by tdd-guide
+Decided: `indexDocument` calls `assertNotAnswerBank(sourceTitle, units)` on every parsed source,
+after parsing and before chunking, refusing by title (a `question-bank`/`rubric-answers` path
+segment, or a `.yaml`/`.yml` name) or by parsed shape (`question:`+`answer:`, or
+`studentAnswer:`+`rubricNotes:`, case-sensitive, matched as a YAML key rather than requiring a
+literal line start). The refusal is a fixed, non-leaking `IngestError('validation', false, …)`.
+Why: the board acceptance requires ingest to refuse bank files before 5.11; a literal line-start
+regex does not fire on the real demo bank files once markdown-parsed (soft-wrapped YAML lines
+merge into one paragraph), so the shape check uses a word-boundary key match instead, verified
+against all five demo question-bank/rubric-answers pairs and all five demo notes.md files, plus
+the Q4 worksheet case (a capitalised or unmatched lowercase "Answer:"/"answer:" line is not
+refused).
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6a answer-key chunks dropped before the model sees them · decided by tdd-guide · risk: high
+Decided: buildContext drops every retrieved chunk whose text, source title or locator reveals the held answer key (shared `answerKey.ts` matcher), before the merge and the fit, so clean chunks fill the slots. On a locked hit a dropped own chunk is not backfilled from the context search (3.4c unchanged). An unreadable help state gives no chunks that turn. The runner records one `answerKeyContext` guard entry (`ok: false, action: 'drop'`), no count or text. `practice.next_item` also refuses an item whose own key shows in any of this turn's chunks, then tries the next bank item or generated variant, else fails closed. Short numeric keys ("1", "7", "42") are not used for either check: a key is skipped when it reads as a whole number of one or two digits, in digits or in words ("one", "forty-two"); 3+ digit numbers, decimals, fractions, negatives and any text key are used. The stream gate and postGuard still hold every key.
+Why: the lead's answer of 20 Oct. A short key would drop almost every chunk and push hints to ask-teacher, and a chunk that happens to hold "7" doesn't give an item's answer away. Number words count as their value, otherwise the demo key ["1", "one"] would still drop every chunk with a "1". The bank itself is never indexed (Phase B).
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6a answerKeyDropped stays out of TurnContext · decided by tdd-guide
+Decided: `BuiltContext.answerKeyDropped` is a runner-only count; `assemble` strips it before the strict `TurnContextSchema` parse, and only the guard entry reaches the trace.
+Why: TurnContext is a strict contracts schema (no contracts change allowed), and the count is only needed to decide whether to log the drop.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6a short-key exemption covers whole numbers 0–99 in any written form · decided by lead · risk: high
+Decided: The exemption works on a key's value, so any key equal to a whole number from 0 to 99 is exempt, however it's written: digits, number words, "1.0", "007", "1e1", "10/2", Devanagari or Arabic-Indic digits. Exempt keys are not used to drop chunks or refuse items. The stream gate and postGuard still hold every key (packages/harness/src/pipeline/steps/buildContext.ts).
+Why: The security review confirmed the exemption is limited to 0–99 and that every other key is still checked. Exempting only the literal digit form would bring back the "drop every chunk with a 1" problem for keys like ["1","one","1.0"].
+risk: high. A short number in an answer context ("the answer is 7") can still reach the context. 5.6b closes this.
+
+---
+
+### 20 Oct 2026 · 5.6a merge with the review MEDIUMs deferred to 5.6c · decided by lead · risk: high
+Decided: Merge 5.6a with the two MEDIUMs (ingest bank-refusal bypasses; the `assemble` deny-list) and the related LOWs deferred to 5.6c. The matcher false-positive and gap LOWs go to 5.6b.
+Why: All three reviewers approve, and there are no CRITICAL or HIGH findings. Nothing can upload files until 8.x, and 5.6c lands before any real practice bank.
+risk: high. Until 5.6c, a bank file in an unusual format could still be indexed. The gate and postGuard still hold the reply.
+
+---
+
 ### 20 Oct 2026 · 5.2 video ingestion · decided by tdd-guide
 Decided: Keep the 90-second time-window size for one video "unit" (bucket), per the plan's lead answer; no change needed, reversible later as one constant.
 Why: No spec value was given; 90s mirrors the "one unit ≈ one page" precedent at ordinary speech density and the lead confirmed it in the plan ("Lead answers", Q2).

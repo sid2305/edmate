@@ -1255,10 +1255,10 @@ tasks:
   accept: a chunk containing an active or bank answer key never reaches the model context (tested); ingest refuses bank files; must land before 5.11
   deps:
   - '5.6'
-  status: running
+  status: done
   risk: risky
   branch: m5/5.6a-keys-out-of-context
-  model: plan:opus build:opus/sonnet
+  model: plan:opus build:opus+sonnet review:sonnet+opus+opus
 - id: 5.6b
   milestone: M13
   title: 'Answer-context mode for the matcher (5.6 architect MEDIUM): MCQ bare-label keys and code_output keys that appear in their own prompt can be checked without tripping the leak gate, so the bank
