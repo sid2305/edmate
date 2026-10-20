@@ -2,7 +2,7 @@
 // § Ingestion 4; ADR-0003, ADR-0007). Both signals filter by teacher and allowed module in the
 // same statement, before ranking; there is no unfiltered search.
 import { type Chunk, type ChunkKind, LIMITS, type RetrievalIndex } from '@edmate/contracts';
-import { type LockedIndex, lockedIndex } from '@edmate/harness';
+import { DEFAULT_COVERAGE_THRESHOLD, type LockedIndex, lockedIndex } from '@edmate/harness';
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -25,24 +25,58 @@ const RRF_K = 60;
 /** Most query terms used for full text. */
 const MAX_TERMS = 32;
 
-// Calibration (provisional until Phase D measures the demo Q&A set): every score is an absolute
-// 0-1 relevance, never the RRF number. Full text: `raw / (raw + TEXT_HALF)` of ts_rank_cd (one
-// cover of a single term is about 0.1). Vector: cosine similarity rescaled from VECTOR_ZERO..1.
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
+// Calibration (Phase D, measured on the demo Q&A set; see the handoff's "Phase D" table). Every
+// score is an absolute 0-1 relevance, never the RRF number, on the scale of the harness's
+// DEFAULT_COVERAGE_THRESHOLD (0.5): at or above it a question counts as covered.
+//
+// Full text: termCoverage (IDF-weighted share of the query's terms the chunk has) times
+// `raw / (raw + TEXT_HALF)` of ts_rank_cd, then mapped piecewise so TEXT_PIVOT lands on 0.5.
+// Measured (full text only, best of the top 5): 30 in-course questions 0.269-0.983 (27 at or
+// above 0.30), 8 out-of-course questions 0-0.318 (1 at or above 0.30). TEXT_PIVOT = 0.30 is the
+// round value between them.
+//
+// Vector: cosine similarity rescaled from VECTOR_ZERO..1. Provisional: the real model's vectors
+// are not recorded yet (B-24), and the hashed test embedder says nothing about semantic scores,
+// so this stays the identity until the recorded run measures it.
 const TEXT_HALF = 0.05;
+export const TEXT_PIVOT = 0.3;
 const VECTOR_ZERO = 0;
 /** A teacher note found only by vector search counts as matching from this score. */
-export const NOTE_MATCH_FLOOR = 0.5;
-/** probe's `hit` threshold. */
-export const PROBE_FLOOR = 0.5;
+export const NOTE_MATCH_FLOOR = DEFAULT_COVERAGE_THRESHOLD;
+/** probe's `hit` threshold: the same "covered" line as the coverage gate. */
+export const PROBE_FLOOR = DEFAULT_COVERAGE_THRESHOLD;
+
+/** Monotone map of 0-1 onto 0-1 that sends `pivot` to 0.5 (the coverage threshold). */
+export function pivotScale(x: number, pivot: number): number {
+  const v = clamp01(x);
+  return v < pivot ? (0.5 * v) / pivot : 0.5 + (0.5 * (v - pivot)) / (1 - pivot);
+}
 
 /** A short, fixed English stop-word list: these words alone never make a full-text match. */
 const STOP_WORDS = new Set(
   (
     'a an and are as at be but by can could did do does for from had has have he her his how i if ' +
     'in into is it its me my no not of on or our she so than that the their them then there these ' +
-    'they this to was we were what when where which who why will with would you your'
+    'they this to was we were what when where which who why will with would you your ' +
+    // Question fillers (Phase D): words that say how a student asks, not what about.
+    'actually also any anything just really should something still thing things very want'
   ).split(' '),
 );
+
+/**
+ * A light English suffix strip before the prefix match (`'simple'` has no stemmer): "dividing"
+ * becomes `divid:*`, which also finds "divide" and "division". Only widens a match; a term keeps
+ * at least four letters; numbers and words ending in "ss", "is" or "us" are left alone.
+ */
+export function stemTerm(t: string): string {
+  if (/\p{N}/u.test(t) || /(?:ss|is|us)$/.test(t)) return t;
+  for (const suffix of ['ies', 'ing', 'ed', 'es', 's']) {
+    if (t.endsWith(suffix) && t.length - suffix.length >= 4) return t.slice(0, -suffix.length);
+  }
+  return t;
+}
 
 const ModuleIdsSchema = z.array(IdSchema).max(RETRIEVAL_MAX_MODULES);
 const QuerySchema = z.string().max(LIMITS.turnTextMaxLength);
@@ -75,14 +109,39 @@ export interface ProbeInput {
  * letters and digits only, so they carry no tsquery syntax; the whole string is one parameter.
  */
 export function ftsQuery(q: string): string | null {
+  const terms = queryTerms(q);
+  return terms.length === 0 ? null : terms.map((t) => `${t}:*`).join(' | ');
+}
+
+/** The query's distinct full-text terms: letters and digits only, stop words dropped. */
+export function queryTerms(q: string): string[] {
   const terms = new Set<string>();
   for (const m of q.toLowerCase().matchAll(/[\p{L}\p{N}]+/gu)) {
     const t = m[0];
     if (STOP_WORDS.has(t) || (t.length < 2 && !/\p{N}/u.test(t))) continue;
-    terms.add(t);
+    terms.add(stemTerm(t));
     if (terms.size === MAX_TERMS) break;
   }
-  return terms.size === 0 ? null : [...terms].map((t) => `${t}:*`).join(' | ');
+  return [...terms];
+}
+
+/**
+ * How much of the query a chunk answers: the IDF-weighted share of the query's terms it contains.
+ * IDF is over the searched chunks, smoothed so a term no chunk has weighs most: a question whose
+ * rare words the material never mentions scores low even when its common words match.
+ */
+export function termCoverage(
+  matched: readonly string[],
+  df: ReadonlyMap<string, number>,
+  n: number,
+): number {
+  const idf = (t: string) => Math.log((n + 1) / ((df.get(t) ?? 0) + 0.5));
+  let all = 0;
+  for (const w of df.keys()) all += idf(w);
+  let got = 0;
+  for (const t of new Set(matched)) if (df.has(t)) got += idf(t);
+  // `all` > 0: every term's df is at most n, so each idf is positive.
+  return clamp01(got / all);
 }
 
 interface Row {
@@ -101,8 +160,6 @@ interface Ranked extends Row {
   vectorScore: number;
 }
 
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-
 /** Ranks the scope's chunks in `moduleIds` (each also checked to be the teacher's). */
 async function rank(
   db: Db,
@@ -111,16 +168,21 @@ async function rank(
   q: string,
   embedding: number[] | undefined,
 ): Promise<Ranked[]> {
+  const terms = queryTerms(q);
   const tsq = ftsQuery(q);
   if (moduleIds.length === 0 || (tsq === null && embedding === undefined)) return [];
   const owned = db.select({ id: modules.id }).from(modules).where(eq(modules.teacherId, teacherId));
-  const scoped = (extra: SQL) =>
-    and(
+  const scope = sql.join(
+    [
       eq(chunks.teacherId, teacherId),
       inArray(chunks.moduleId, moduleIds),
       inArray(chunks.moduleId, owned),
-      extra,
-    );
+    ],
+    sql` and `,
+  );
+  const scoped = (extra: SQL) => sql`${scope} and ${extra}`;
+  // Terms are letters and digits only (queryTerms), so a space-joined string is a safe array.
+  const termList = sql`string_to_array(${terms.join(' ')}, ' ')`;
   const fields = {
     id: chunks.id,
     teacherId: chunks.teacherId,
@@ -136,8 +198,11 @@ async function rank(
     if (tsq === null) return [];
     const query = sql`to_tsquery('simple', ${tsq})`;
     const raw = sql<number>`ts_rank_cd(${chunks.search}, ${query})::float8`;
+    const matched = sql<
+      string[]
+    >`array(select t from unnest(${termList}) as t where ${chunks.search} @@ to_tsquery('simple', t || ':*'))`;
     return db
-      .select({ ...fields, raw })
+      .select({ ...fields, raw, matched })
       .from(chunks)
       .where(scoped(sql`${chunks.search} @@ ${query}`))
       .orderBy(desc(raw), asc(chunks.id))
@@ -147,14 +212,38 @@ async function rank(
     if (embedding === undefined) return [];
     const v = sql`${vectorToDriver(embedding)}::vector`;
     const distance = sql<number>`(${chunks.embedding} <=> ${v})::float8`;
-    return db
-      .select({ ...fields, distance })
-      .from(chunks)
-      .where(scoped(isNotNull(chunks.embedding)))
-      .orderBy(asc(distance), asc(chunks.id))
-      .limit(PER_SIGNAL);
+    // The id tie-break keeps this an exact scan today (the planner cannot take an HNSW order with
+    // a second sort key). Should it ever use the index, pgvector 0.8's iterative scan keeps going
+    // until the teacher and module filter has filled the list, instead of filtering ef_search
+    // (40) candidates after the scan; SET LOCAL ends with the transaction.
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`set local hnsw.iterative_scan = strict_order`);
+      return tx
+        .select({ ...fields, distance })
+        .from(chunks)
+        .where(scoped(isNotNull(chunks.embedding)))
+        .orderBy(asc(distance), asc(chunks.id))
+        .limit(PER_SIGNAL);
+    });
   };
-  const [byText, byVector] = await Promise.all([textRows(), vectorRows()]);
+  /** Each term's document frequency over the searched chunks, and their count. */
+  const termStats = async (): Promise<{ df: Map<string, number>; n: number }> => {
+    if (tsq === null) return { df: new Map(), n: 0 };
+    const [dfRows, countRows] = await Promise.all([
+      db.execute<{ term: string; df: number }>(
+        sql`select t.term, count(${chunks.id})::int as df from unnest(${termList}) as t(term) left join ${chunks} on ${chunks.search} @@ to_tsquery('simple', t.term || ':*') and ${scope} group by t.term`,
+      ),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(chunks)
+        .where(scope),
+    ]);
+    return {
+      df: new Map(dfRows.rows.map((r) => [r.term, Number(r.df)])),
+      n: Number(countRows[0]?.n ?? 0),
+    };
+  };
+  const [byText, byVector, stats] = await Promise.all([textRows(), vectorRows(), termStats()]);
 
   const fused = new Map<string, Ranked>();
   const entry = (r: Row): Ranked => {
@@ -179,7 +268,8 @@ async function rank(
   byText.forEach((r, i) => {
     const e = entry(r);
     e.rrf += 1 / (RRF_K + i + 1);
-    e.textScore = clamp01(r.raw / (r.raw + TEXT_HALF));
+    const strength = termCoverage(r.matched, stats.df, stats.n) * (r.raw / (r.raw + TEXT_HALF));
+    e.textScore = pivotScale(strength, TEXT_PIVOT);
   });
   byVector.forEach((r, i) => {
     const e = entry(r);

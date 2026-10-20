@@ -430,6 +430,12 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
+      '@edmate/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@edmate/ingest':
+        specifier: workspace:*
+        version: link:../ingest
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

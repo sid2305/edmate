@@ -1,76 +1,263 @@
+# The recall set for the retrieval index (task 5.3; build plan § Ingestion 4).
 # moduleId: the module the student is studying when they ask.
-# expectedModuleId: the module whose notes answer the question.
-# The last four are asked from a free module but are answered only in paid-package modules
+# expectedModuleId and expectedHeadings: the module and the notes heading(s) that answer it. The
+# recall test counts a hit when one of the top 5 chunks sits under one of those headings.
+# outOfCourse: the course does not answer it; these calibrate the coverage threshold.
+# reviewed_by: pending until the lead signs the item.
+# qr-15 to qr-18 are asked from a free module but are answered only in paid-package modules
 # (loops, functions, lists-dicts), so a free student should get the locked reply.
 - id: qr-01
   moduleId: values-variables
   question: Why does input() give me a string even when I type a number?
   expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.6 input() always gives you a string
+  reviewed_by: pending
 - id: qr-02
   moduleId: values-variables
   question: What's the difference between / and // when dividing?
   expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.3 Arithmetic
+  reviewed_by: pending
 - id: qr-03
   moduleId: values-variables
   question: How do I put a variable inside a sentence when I print it?
   expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.4 Working with strings
+  reviewed_by: pending
 - id: qr-04
   moduleId: values-variables
   question: Can a variable name have a dash in it, like my-name?
   expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.2 Variables
+  reviewed_by: pending
 - id: qr-05
   moduleId: conditions
   question: When should I use elif instead of another if?
   expectedModuleId: conditions
+  expectedHeadings:
+    - '2.3 elif: more than two choices'
+  reviewed_by: pending
 - id: qr-06
   moduleId: conditions
   question: Why do I get a SyntaxError when I write if x = 5?
   expectedModuleId: conditions
+  expectedHeadings:
+    - 2.1 Comparisons give True or False
+    - 2.2 if and else
+  reviewed_by: pending
 - id: qr-07
   moduleId: conditions
   question: How do I check two things at once in an if statement?
   expectedModuleId: conditions
+  expectedHeadings:
+    - 2.4 and, or, not
+  reviewed_by: pending
 - id: qr-08
   moduleId: conditions
   question: How do I make a yes or no answer work even if they type YES in capitals?
   expectedModuleId: conditions
+  expectedHeadings:
+    - 2.5 Two everyday checks
+  reviewed_by: pending
 - id: qr-09
   moduleId: loops
   question: Why does range(1, 5) stop at 4?
   expectedModuleId: loops
+  expectedHeadings:
+    - 3.2 range()
+  reviewed_by: pending
 - id: qr-10
   moduleId: loops
   question: How do I stop a loop early?
   expectedModuleId: loops
+  expectedHeadings:
+    - 3.5 break and continue
+  reviewed_by: pending
 - id: qr-11
   moduleId: functions
   question: What does return actually do?
   expectedModuleId: functions
+  expectedHeadings:
+    - 4.3 return sends a value back
+  reviewed_by: pending
 - id: qr-12
   moduleId: functions
   question: Why does my function give back None?
   expectedModuleId: functions
+  expectedHeadings:
+    - 4.4 print is not return
+  reviewed_by: pending
 - id: qr-13
   moduleId: lists-dicts
   question: How do I get the last item of a list?
   expectedModuleId: lists-dicts
+  expectedHeadings:
+    - 5.1 Lists
+  reviewed_by: pending
 - id: qr-14
   moduleId: lists-dicts
   question: How do I avoid a KeyError when a key might not be there?
   expectedModuleId: lists-dicts
+  expectedHeadings:
+    - 5.5 Dictionaries
+  reviewed_by: pending
 - id: qr-15
   moduleId: conditions
   question: How do I keep asking the user for input until they type quit?
   expectedModuleId: loops
+  expectedHeadings:
+    - 3.4 while loops
+  reviewed_by: pending
 - id: qr-16
   moduleId: conditions
   question: How can I add up all the numbers from 1 to 100 without typing them all?
   expectedModuleId: loops
+  expectedHeadings:
+    - 3.3 The accumulator pattern
+  reviewed_by: pending
 - id: qr-17
   moduleId: values-variables
   question: How do I make my own command, like print, that I can use again and again?
   expectedModuleId: functions
+  expectedHeadings:
+    - 4.1 Why functions?
+    - 4.2 Defining and calling
+  reviewed_by: pending
 - id: qr-18
   moduleId: values-variables
   question: How do I store a whole shopping list in one variable?
   expectedModuleId: lists-dicts
+  expectedHeadings:
+    - 5.1 Lists
+    - 5.7 List or dictionary?
+  reviewed_by: pending
+- id: qr-19
+  moduleId: values-variables
+  question: How can I tell whether something is an int or a str?
+  expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.1 Values and types
+  reviewed_by: pending
+- id: qr-20
+  moduleId: values-variables
+  question: How do I turn the text "42" into a number I can do maths with?
+  expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.5 Converting between types
+    - 1.6 input() always gives you a string
+  reviewed_by: pending
+- id: qr-21
+  moduleId: values-variables
+  question: How do I find the remainder when I divide two numbers?
+  expectedModuleId: values-variables
+  expectedHeadings:
+    - 1.3 Arithmetic
+  reviewed_by: pending
+- id: qr-22
+  moduleId: conditions
+  question: Why do I get an IndentationError after my if line?
+  expectedModuleId: conditions
+  expectedHeadings:
+    - 2.2 if and else
+  reviewed_by: pending
+- id: qr-23
+  moduleId: conditions
+  question: How do I check if a number is even or odd?
+  expectedModuleId: conditions
+  expectedHeadings:
+    - 2.5 Two everyday checks
+  reviewed_by: pending
+- id: qr-24
+  moduleId: loops
+  question: My while loop never ends, what is wrong?
+  expectedModuleId: loops
+  expectedHeadings:
+    - 3.4 while loops
+  reviewed_by: pending
+- id: qr-25
+  moduleId: loops
+  question: How do I skip one number in a for loop but keep going?
+  expectedModuleId: loops
+  expectedHeadings:
+    - 3.5 break and continue
+  reviewed_by: pending
+- id: qr-26
+  moduleId: loops
+  question: How do I count backwards from 10 down to 1?
+  expectedModuleId: loops
+  expectedHeadings:
+    - 3.2 range()
+    - 3.4 while loops
+  reviewed_by: pending
+- id: qr-27
+  moduleId: functions
+  question: What is the difference between a parameter and an argument?
+  expectedModuleId: functions
+  expectedHeadings:
+    - 4.2 Defining and calling
+  reviewed_by: pending
+- id: qr-28
+  moduleId: functions
+  question: Why do I get a NameError when I use a variable from inside my function?
+  expectedModuleId: functions
+  expectedHeadings:
+    - 4.8 Variables inside a function are local
+  reviewed_by: pending
+- id: qr-29
+  moduleId: lists-dicts
+  question: How do I add a new item to the end of a list?
+  expectedModuleId: lists-dicts
+  expectedHeadings:
+    - 5.2 Changing a list
+  reviewed_by: pending
+- id: qr-30
+  moduleId: lists-dicts
+  question: How do I go through every key and value in a dictionary?
+  expectedModuleId: lists-dicts
+  expectedHeadings:
+    - 5.6 Looping over a dictionary
+  reviewed_by: pending
+- id: qr-oc-01
+  moduleId: lists-dicts
+  question: How do I read a CSV file in Python?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-02
+  moduleId: functions
+  question: What is a class and how do I make an object from it?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-03
+  moduleId: values-variables
+  question: How do I install a package with pip?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-04
+  moduleId: values-variables
+  question: How do I catch an error with try and except so my program does not crash?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-05
+  moduleId: loops
+  question: How do I draw shapes with turtle graphics?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-06
+  moduleId: functions
+  question: What is recursion?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-07
+  moduleId: lists-dicts
+  question: How do I sort a list of names alphabetically?
+  outOfCourse: true
+  reviewed_by: pending
+- id: qr-oc-08
+  moduleId: conditions
+  question: Who won the last football World Cup?
+  outOfCourse: true
+  reviewed_by: pending

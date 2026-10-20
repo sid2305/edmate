@@ -94,6 +94,16 @@ export const questionAnswers: ContentRule = function questionAnswers(tree) {
   );
 };
 
+/** A notes file's Markdown heading lines, with inline code and emphasis marks removed. */
+function notesHeadings(notes: string): Set<string> {
+  const out = new Set<string>();
+  for (const line of notes.split('\n')) {
+    const m = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(line);
+    if (m?.[1] !== undefined) out.add(m[1].replace(/[`*]/g, '').replace(/\s+/g, ' ').trim());
+  }
+  return out;
+}
+
 /**
  * Rule 6: no dangling references. Every moduleId (question bank, rubric answers, Q&A recall,
  * packages) is a course module; every course module has notes and every notes folder is a
@@ -130,8 +140,20 @@ export const moduleReferences: ContentRule = function moduleReferences(tree) {
     if (!moduleIds.has(r.moduleId)) {
       issues.push(`qa-recall.yaml: ${r.id} moduleId ${notInCourse(r.moduleId)}`);
     }
+    if (!('expectedModuleId' in r)) continue;
     if (!moduleIds.has(r.expectedModuleId)) {
       issues.push(`qa-recall.yaml: ${r.id} expectedModuleId ${notInCourse(r.expectedModuleId)}`);
+      continue;
+    }
+    const notes = tree.notes.get(r.expectedModuleId);
+    if (notes === undefined) continue; // reported above as a module with no notes
+    const headings = notesHeadings(notes);
+    for (const h of r.expectedHeadings) {
+      if (!headings.has(h.trim())) {
+        issues.push(
+          `qa-recall.yaml: ${r.id} expectedHeadings entry "${h}" is not a heading in modules/${r.expectedModuleId}/notes.md`,
+        );
+      }
     }
   }
   for (const [id, n] of duplicates(recall.map((r) => r.id))) {

@@ -1,6 +1,6 @@
-# Task 5.3 handoff: retrieval index (Phase A)
+# Task 5.3 handoff: retrieval index
 
-- **Status:** PARTIAL (Phases A, B and C done; Phase D left)
+- **Status:** DONE except for the B-24 assertion (Phases A–D done; the recorded-vector recall run skips until `packages/db/test/fixtures/demo-embeddings.json` is recorded by the human, Q2)
 - **Branch:** `m5/5.3-retrieval-index` (built on local `build-5.3a`, pushed without force)
 - **Worktree:** `.claude/worktrees/agent-a1d87b646b89373e2`
 - **Plan:** `docs/tasks/5.3/plan.md` (with the lead's answers of 20 Oct 2026)
@@ -204,9 +204,104 @@ $ python3 .githooks/secret-scan.py --all
 3. **Added beyond the plan:** a 4,000-character cap per chunk, a 500-character locator cap, a 10,000-chunk cap per document, insert batches of 500, `embeddedChunks` in the result, an `onEmbedFailed` callback, a check that each batch's vectors are well formed, and a validation error for a document that chunks to nothing.
 4. **The document row is not created here.** `indexDocument` takes the id of a document the caller has already filed (`documents.create`, 8.x upload centre).
 
+## Phase D
+
+- **Status:** done, except the B-24 assertion. Built on local `build-5.3d` (from `origin/m5/5.3-retrieval-index` plus `origin/main`) and pushed to `m5/5.3-retrieval-index` without force. Worktree: `.claude/worktrees/agent-a15e955d06d5fcb2b`.
+- The one gap: the "hybrid with recorded model vectors" recall run skips with a clear message until the human records `packages/db/test/fixtures/demo-embeddings.json` (Q2 fallback).
+
+### What Phase D delivers
+
+- **Recall set (Q1).** `content/demo-teacher/qa-recall.yaml` holds 30 in-course items with heading-level gold (`expectedModuleId`, `expectedHeadings` with one or two notes headings) and 8 out-of-course items (`outOfCourse: true`). Every item is new or changed, so every item has `reviewed_by: pending` for the lead to sign.
+- **Schema and rule 6** (`packages/content`). `QaRecallItemSchema` is a union of in-course and out-of-course items, and both carry `reviewed_by`. Rule 6 also checks that each expected heading is a real heading in that module's `notes.md`.
+- **Recall gate** (`packages/db/test/recall.int.test.ts`). It loads the demo course, indexes the notes through `@edmate/ingest`'s `indexDocument` and the real repositories, and searches each question through the production `retrievalIndexFor` with k = 5 over all demo modules. It prints a per-item table and asserts recall@5 ≥ 0.8 for full text and for hybrid with the hashed test embedder. The recorded-vector run skips until B-24.
+- **Score calibration** (`retrieval.ts`):
+  - The full-text score is now the IDF-weighted share of the query's terms that a chunk contains (`termCoverage`), multiplied by the old `raw / (raw + 0.05)`.
+  - `pivotScale` then maps `TEXT_PIVOT` = 0.30 to 0.5.
+  - Query terms get a light suffix strip (`stemTerm`) and a short list of question-filler stop words.
+  - `PROBE_FLOOR` and `NOTE_MATCH_FLOOR` now import the harness's `DEFAULT_COVERAGE_THRESHOLD`.
+  - RRF ranking is unchanged.
+- **coverageThreshold (Q3).** It stays 0.5 and is now documented as calibrated. The score scale moved to meet the threshold.
+- **HNSW.** The vector query runs in a transaction with `SET LOCAL hnsw.iterative_scan = strict_order`. A new guard test, `retrieval-hnsw.int.test.ts`, uses 1,000 locked chunks nearest the query and 30 allowed ones, and asserts 20 allowed vector results.
+- **ChunkWriter type check** (`packages/db/test/chunk-writer.test.ts`). `Repositories['chunks']` must extend ingest's `ChunkWriter`.
+- **Recording script** (`packages/db/scripts/record-demo-embeddings.ts`): see below.
+
+### Recall and calibration (measured)
+
+| Run | recall@5, heading level | recall@5, module level | misses |
+|---|---|---|---|
+| Full text only | 28/30 = **0.933** | 30/30 = 1.000 | qr-10, qr-17 |
+| Hybrid, hashed test embedder (plumbing only) | 26/30 = **0.867** | 30/30 = 1.000 | qr-07, qr-10, qr-19, qr-25 |
+| Hybrid, recorded model vectors | skipped (B-24) | — | — |
+
+Calibration uses the full-text best score in the top 5, on the final scale (0.5 = `DEFAULT_COVERAGE_THRESHOLD`):
+
+| Set | Range | At or above 0.5 |
+|---|---|---|
+| 30 in-course | 0.448 – 0.98 (below 0.5: qr-05 0.448, qr-02 0.449, qr-16 0.470) | 27/30 = 0.90 |
+| 8 out-of-course | 0 – 0.513 (CSV 0.513; then 0.431, 0.391, 0.354, 0.227, then three at 0) | 1/8 = 0.125 |
+
+- **Raw strength before the pivot:** in-course 0.269–0.983 and out-of-course 0–0.318, so `TEXT_PIVOT` = 0.30.
+- **Phase A score for comparison:** with `raw / (raw + 0.05)` alone, 5 of 8 out-of-course questions cleared 0.5. The test now asserts in-course covered ≥ 0.8 and out-of-course covered ≤ 0.25.
+- **Constants:** `TEXT_PIVOT` 0.30, `TEXT_HALF` 0.05, `VECTOR_ZERO` 0 (provisional until B-24). The threshold, `PROBE_FLOOR` and `NOTE_MATCH_FLOOR` are all 0.5.
+
+### Recording the real vectors (B-24, for the human)
+
+The script never runs in tests or CI. Run it from the repo root with your own key in the environment only:
+
+```bash
+source ~/.nvm/nvm.sh && corepack pnpm turbo run build --filter=@edmate/db...
+EDMATE_OPENAI_API_KEY=<your key> node packages/db/scripts/record-demo-embeddings.ts --live
+```
+
+- **Safeguards.** It refuses without `--live` and without the key (exit 2); both refusals were run here, with no network call. It reads the key only through the gateway's `envKeySource`.
+- **What it does.** It embeds every demo chunk and question in batches of 96 and writes `packages/db/test/fixtures/demo-embeddings.json` in the form `{ model, dimension, entries: [{ text, vector }] }`, rounded to 6 decimals.
+- **After it runs.** Commit the file, and the recorded run stops skipping. Then check the separation and, if needed, set `VECTOR_ZERO`.
+
+### Acceptance evidence (Phase D)
+
+| Item | Command → trimmed output |
+|---|---|
+| Gate | `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=...@edmate/ingest --filter=...@edmate/harness --filter=@edmate/content --force --concurrency=1` → `Tasks: 38 successful, 38 total`; db `590 passed, 3 skipped` |
+| Recall, full text | `recall.int.test.ts` → heading 28/30 = 0.933, module 30/30 |
+| Recall, hashed hybrid | → heading 26/30 = 0.867, module 30/30 |
+| Recall, recorded vectors | skipped: `(SKIPPED until test/fixtures/demo-embeddings.json is recorded: B-24, Q2)` |
+| Coverage (stmts / branch / funcs / lines) | `retrieval.ts` 100 / 97.77 / 100 / 100; harness `coverage.ts` 100; content `rules.ts` 100 / 97.46 / 100 / 100 |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0 |
+| No contracts change | `git diff origin/main -- packages/contracts` → empty |
+
+### HNSW iterative scan: applied, but no test can fail without it
+
+I ran EXPLAIN with sequential scans, sorts and bitmap scans turned off (pgvector 0.8.1):
+- `ORDER BY embedding <=> v` on its own uses the HNSW index scan.
+- The repository orders by `(embedding <=> v)::float8, id`, and that is always a sequential scan plus a sort.
+
+So today's vector search is an exact scan, and the filtered-scan gap cannot happen. The `SET LOCAL` is in place for when the query becomes index-ordered (a performance follow-up), and the guard test pins the 20-candidate property for that day.
+
+### Changes (Phase D)
+
+- `content/demo-teacher/qa-recall.yaml`, plus `packages/content/src/{schema,rules}.ts` with their tests and fixtures.
+- `packages/db/src/repositories/retrieval.ts`.
+- New db tests:
+  - `packages/db/test/{recall.int,retrieval-hnsw.int,retrieval-score,chunk-writer}.test.ts`
+  - `packages/db/test/recall-corpus.ts`
+- `packages/db/scripts/record-demo-embeddings.ts`.
+- `packages/db/package.json`: ingest and gateway added as devDependencies.
+- `packages/db/tsconfig.json`: includes `scripts`, and sets `allowImportingTsExtensions` (noEmit).
+- `packages/harness/src/pedagogy/coverage.ts` (comment only) and its test name.
+
+### Deviations (Phase D)
+
+1. **coverageThreshold stays 0.5.** I mapped the score scale to it instead of moving the threshold. Lowering the threshold to 0.3 would flip the lead-signed grounding eval fixtures, which mark scores of 0.30–0.35 as uncovered.
+2. **The full-text score changed shape, not just its constants.** No setting of the constants alone separated in-course from out-of-course questions.
+3. **`expectedHeadings` is a list**, where the plan said a single locator. Some questions are answered by two sections.
+4. **Each search runs two more small queries** (term document frequencies and the chunk count), in parallel with the text and vector queries.
+5. **The HNSW test is a guard, not a red-then-green test** (see above).
+
 ### Left to do
 
-- **Phase D:** as listed above (recall gate, heading-level gold, calibration, `coverageThreshold`), plus the HNSW `iterative_scan` item. Phase D should also add a type-level check in `packages/db/test` that the `chunks` repository satisfies `@edmate/ingest`'s `ChunkWriter`, since db gains ingest as a devDependency then.
+- B-24: the human records the real vectors, then checks `VECTOR_ZERO`.
+- Lead: sign the 38 recall items (change `reviewed_by: pending` to the lead's name).
+- Performance follow-up: make the vector query index-ordered for large teachers.
 
 ## Decisions
 
@@ -263,3 +358,31 @@ Why: a db error can quote teacher material, so nothing of it is kept. It is not 
 ### 20 Oct 2026 · 5.3 @edmate/ingest depends on @edmate/contracts, with @edmate/harness as a devDependency · decided by tdd-guide · risk: low
 Decided: ingest now imports the `ModelGateway` type from contracts and uses harness's `ScriptedGateway` in tests only. No contracts change.
 Why: the plan's Phase C file list. `Pick<ModelGateway, 'embed'>` keeps the embedder swappable without ingest importing the gateway package.
+
+### 20 Oct 2026 · 5.3 coverageThreshold stays 0.5, now calibrated; the score scale is mapped to it · decided by tdd-guide · risk: high
+Decided: `DEFAULT_COVERAGE_THRESHOLD` stays 0.5 and is no longer provisional. The index maps its full-text score so that 27 of 30 in-course demo questions score at or above 0.5 and 1 of 8 out-of-course questions does. `PROBE_FLOOR` and `NOTE_MATCH_FLOOR` use the same constant. Reviewer: code-reviewer (Q3).
+Why: the threshold and the score scale are one choice. Moving the scale keeps every consumer and the lead-signed grounding eval fixtures valid. The vector side stays provisional until B-24.
+
+### 20 Oct 2026 · 5.3 The full-text score is IDF-weighted term coverage times match strength · decided by tdd-guide · risk: high
+Decided: a chunk's text score is the IDF-weighted share of the query's terms it contains, times `raw / (raw + 0.05)`, then mapped by `pivotScale` with pivot 0.30. IDF is counted over the chunks being searched, using two small extra queries inside the same teacher and module filter.
+Why: with the old score any single matching word gave about 0.9, so 5 of 8 out-of-course questions looked covered.
+
+### 20 Oct 2026 · 5.3 A light suffix strip and question fillers in the full-text terms · decided by tdd-guide · risk: medium
+Decided: a query term drops one ending (ies, ing, ed, es or s) when at least four letters remain. Words ending in ss, is or us, and numbers, keep their ending. Fourteen question fillers join the stop list. The 'simple' tsvector config is unchanged.
+Why: 'simple' has no stemming, so "dividing" missed "divide". Fillers counted as rare missing words under IDF. Both changes are general, not tuned to single items.
+
+### 20 Oct 2026 · 5.3 Recall gold is a list of headings; out-of-course items have no gold · decided by tdd-guide · risk: low
+Decided: in-course items carry `expectedModuleId` and `expectedHeadings`, which rule 6 checks. Out-of-course items carry `outOfCourse: true`. Every item has `reviewed_by: pending` until the lead signs it.
+Why: Q1 asked for heading-level gold. Some questions are answered by two sections.
+
+### 20 Oct 2026 · 5.3 The recall test uses the Q2 fallback for embeddings · decided by tdd-guide · risk: medium
+Decided: the hybrid recall run uses the hashed test embedder, which only tests the plumbing. The recorded-vector run skips until the human runs `record-demo-embeddings.ts --live` once (B-24). The script reads the key only from the environment and never runs in tests or CI.
+Why: Q2 is still open with the human. This is the lead's fallback.
+
+### 20 Oct 2026 · 5.3 HNSW iterative scan is set, though the query stays an exact scan · decided by tdd-guide · risk: low
+Decided: the vector query sets `hnsw.iterative_scan = strict_order` in its own transaction and keeps its distance-then-id order, which the planner serves with an exact scan.
+Why: EXPLAIN shows the feared gap cannot happen with this statement, so no failing test is possible. The setting is ready for an index-ordered query later, and a guard test is in place.
+
+### 20 Oct 2026 · 5.3 db takes ingest and gateway as devDependencies; the script imports .ts directly · decided by tdd-guide · risk: low
+Decided: `@edmate/ingest` (for the recall test and the type check) and `@edmate/gateway` (for the script) are db devDependencies. The db tsconfig allows `.ts` imports (noEmit), so Node 22 runs the script without a build step of its own.
+Why: the plan's Phase D file list, and the recording script must reuse the test's corpus so the texts match exactly.
