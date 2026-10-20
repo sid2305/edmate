@@ -1,0 +1,247 @@
+// Task 5.6 Phase B: `practice.next_item`'s leak proof, strict input and entitlement scoping.
+import { turnContextFull } from '@edmate/contracts/fixtures';
+import type { TurnContext } from '@edmate/contracts';
+import { describe, expect, it } from 'vitest';
+import { toolSpec } from '../pipeline/tools.js';
+import { demoPracticeBank } from './demoPracticeBank.js';
+import { NoPracticeItemError, practiceNextItemTool } from './practice.js';
+import { generatedAnswerKeyFor, type PracticeScope } from './practiceItems.js';
+
+const SCOPE: PracticeScope = {
+  teacherId: turnContextFull.entitlement.teacherId,
+  allowedModuleIds: turnContextFull.entitlement.allowedModuleIds,
+};
+
+/** Every candidate form of `key` the shared matcher reads, folded like it folds text. */
+function serializedContains(value: unknown, key: string): boolean {
+  const json = JSON.stringify(value as object) ?? '';
+  return json.toLowerCase().includes(key.trim().toLowerCase());
+}
+
+describe('practiceNextItemTool', () => {
+  const t = practiceNextItemTool(demoPracticeBank());
+
+  it('is the practice-skill tool, strict input, no answerKey in its output schema', () => {
+    expect(t.tool.name).toBe('practice.next_item');
+    expect(t.tool.skill).toBe('practice');
+    expect(t.tool.output.safeParse({ id: 'x', kind: 'numeric', level: 1, prompt: 'p' }).success)
+      .toBe(true);
+    expect(
+      t.tool.output.safeParse({
+        id: 'x',
+        kind: 'numeric',
+        level: 1,
+        prompt: 'p',
+        answerKey: ['7'],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['empty object', {}, true],
+    ['level 1', { level: 1 }, true],
+    ['level 2', { level: 2 }, true],
+    ['level 3', { level: 3 }, true],
+    ['level 0 (out of range)', { level: 0 }, false],
+    ['level 4 (out of range)', { level: 4 }, false],
+    ['a string level', { level: '1' }, false],
+    ['topicId (model may not choose a topic)', { topicId: 'arithmetic' }, false],
+    ['id (model may not choose an item)', { id: 'demo:arithmetic:1:a' }, false],
+    ['exclude (model may not choose ids)', { exclude: ['x'] }, false],
+    ['an extra key', { level: 1, extra: true }, false],
+    ['null', null, false],
+  ])('input schema: %s → %s', (_label, candidate, ok) => {
+    expect(t.tool.input.safeParse(candidate).success).toBe(ok);
+  });
+
+  it('describes its input to the model as a JSON Schema with no topic or id field', () => {
+    const spec = toolSpec(t) as { inputSchema: { properties: Record<string, unknown> } };
+    expect(Object.keys(spec.inputSchema.properties)).toEqual(['level']);
+  });
+
+  it('runs and returns only { id, kind, level, prompt, options? } — never the key', async () => {
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    expect(out).toEqual(
+      expect.objectContaining({ id: expect.any(String), kind: 'numeric', level: 1 }),
+    );
+    expect(Object.keys(out as object).sort()).toEqual(['id', 'kind', 'level', 'prompt']);
+    expect(out).not.toHaveProperty('answerKey');
+    expect(out).not.toHaveProperty('topicId');
+  });
+
+  it.each([1, 2, 3] as const)(
+    'level %s: no serialized output ever contains its own answer key (bank or generated)',
+    async (level) => {
+      for (let i = 0; i < 20; i++) {
+        const out = await t.tool.run({ level }, turnContextFull);
+        const key = t.answerKeyFor((out as { id: string }).id, SCOPE);
+        expect(key).toBeDefined();
+        for (const k of key ?? []) {
+          expect(serializedContains(out, k)).toBe(false);
+        }
+      }
+    },
+  );
+
+  it('present() strips nothing extra (the output already excludes the key) and names skill practice', async () => {
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    const shown = t.present?.(out, turnContextFull);
+    expect(shown?.skill).toBe('practice');
+    expect(shown?.payload).toEqual(out);
+    const key = t.answerKeyFor((out as { id: string }).id, SCOPE);
+    for (const k of key ?? []) {
+      expect(serializedContains(shown, k)).toBe(false);
+    }
+  });
+
+  it('answerKeyFor: undefined for an id outside scope (another teacher/module)', async () => {
+    const out = await t.tool.run({ level: 1 }, turnContextFull);
+    const outOfScope: PracticeScope = { teacherId: 'tch_other', allowedModuleIds: ['mod_other'] };
+    expect(t.answerKeyFor((out as { id: string }).id, outOfScope)).toBeUndefined();
+  });
+
+  it('answerKeyFor: undefined for an id this bank/generator never produced', () => {
+    expect(t.answerKeyFor('nonsense-id', SCOPE)).toBeUndefined();
+  });
+
+  it('answerKeyFor: a bank item’s key resolves straight from the bank, in scope', () => {
+    const bankScope: PracticeScope = { teacherId: 'tch', allowedModuleIds: ['module-arithmetic'] };
+    expect(t.answerKeyFor('demo:arithmetic:1:a', bankScope)).toEqual(['7']);
+  });
+
+  it('defaults to level 1 when the model names none', async () => {
+    const out = await t.tool.run({}, turnContextFull);
+    expect((out as { level: number }).level).toBe(1);
+  });
+
+  it('toOutput keeps options when the item has them (mcq is unservable today, but the field is wired)', async () => {
+    const withOptions = {
+      pick: () => ({
+        id: 'fixture:opt',
+        topicId: 'x',
+        moduleId: 'mod_test_01',
+        level: 1 as const,
+        kind: 'numeric' as const,
+        prompt: 'p',
+        options: ['a', 'b'],
+      }),
+      answerKeyFor: () => ['a'],
+    };
+    const withOpt = practiceNextItemTool(withOptions);
+    const out = await withOpt.tool.run({ level: 1 }, turnContextFull);
+    expect((out as { options?: string[] }).options).toEqual(['a', 'b']);
+  });
+
+  it('a generated item’s key still resolves even once the bank has nothing at that level in scope', async () => {
+    const empty = practiceNextItemTool(demoPracticeBank([]));
+    const out = await empty.tool.run({ level: 1 }, turnContextFull);
+    const key = empty.answerKeyFor((out as { id: string }).id, SCOPE);
+    expect(key).toEqual(generatedAnswerKeyFor((out as { id: string }).id));
+    expect(key).toBeDefined();
+  });
+
+  it('fails closed (NoPracticeItemError) when the entitlement allows no module at all', async () => {
+    const noModules: TurnContext = {
+      ...turnContextFull,
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [] },
+      retrieved: [],
+    };
+    await expect(t.tool.run({ level: 1 }, noModules)).rejects.toThrow(NoPracticeItemError);
+  });
+});
+
+// The demo bank's own module ids (not the contracts fixtures' 'mod_test_*' — a different
+// teacher's content in these scope tests, on purpose, so a mismatch between the two would show
+// up as "no item" rather than silently matching).
+const MODULE_ARITHMETIC = 'module-arithmetic';
+const MODULE_FRACTIONS = 'module-fractions';
+const MODULE_ALGEBRA = 'module-algebra';
+
+function ctxWith(fields: Partial<TurnContext>): TurnContext {
+  return {
+    ...turnContextFull,
+    entitlement: { ...turnContextFull.entitlement, ...fields.entitlement },
+    retrieved: fields.retrieved ?? [],
+  };
+}
+
+describe('practiceNextItemTool: scope — no item outside the entitlement is ever served', () => {
+  it('a subscription scoped to one module only ever gets that module’s items, bank or generated', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const oneModule = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_FRACTIONS] },
+    });
+    for (let i = 0; i < 10; i++) {
+      for (const level of [1, 2, 3] as const) {
+        const out = await t.tool.run({ level }, oneModule);
+        const id = (out as { id: string }).id;
+        expect(id === 'demo:fractions:1:a' || id === 'demo:fractions:2:a' || id.startsWith('gen:'))
+          .toBe(true);
+        if (id.startsWith('gen:')) expect(id).toContain(`${MODULE_FRACTIONS}:practice`);
+      }
+    }
+  });
+
+  it('prefers the top retrieved chunk’s module over any other allowed module', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const ctx = ctxWith({
+      entitlement: {
+        ...turnContextFull.entitlement,
+        allowedModuleIds: [MODULE_ARITHMETIC, MODULE_FRACTIONS],
+      },
+      retrieved: [{ ...turnContextFull.retrieved[0]!, moduleId: MODULE_FRACTIONS }],
+    });
+    const out = await t.tool.run({ level: 1 }, ctx);
+    expect((out as { id: string }).id).toBe('demo:fractions:1:a');
+  });
+
+  it('falls back to the first allowed module when there is no retrieved chunk', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const ctx = ctxWith({
+      entitlement: {
+        ...turnContextFull.entitlement,
+        allowedModuleIds: [MODULE_ARITHMETIC, MODULE_FRACTIONS],
+      },
+      retrieved: [],
+    });
+    const out = await t.tool.run({ level: 1 }, ctx);
+    expect((out as { id: string }).id).toBe('demo:arithmetic:1:a');
+  });
+
+  it('ignores a top retrieved chunk whose module is not allowed (fails closed to the allowed set)', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const ctx = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+      retrieved: [{ ...turnContextFull.retrieved[0]!, moduleId: MODULE_ALGEBRA }],
+    });
+    const out = await t.tool.run({ level: 1 }, ctx);
+    expect((out as { id: string }).id).toBe('demo:arithmetic:1:a');
+  });
+
+  it('activeModuleId hook: used only when there is no (allowed) top retrieved chunk', async () => {
+    const t = practiceNextItemTool(demoPracticeBank(), {
+      activeModuleId: () => MODULE_FRACTIONS,
+    });
+    const ctx = ctxWith({
+      entitlement: {
+        ...turnContextFull.entitlement,
+        allowedModuleIds: [MODULE_ARITHMETIC, MODULE_FRACTIONS],
+      },
+      retrieved: [],
+    });
+    const out = await t.tool.run({ level: 1 }, ctx);
+    expect((out as { id: string }).id).toBe('demo:fractions:1:a');
+  });
+
+  it('activeModuleId hook: ignored when it names a module outside the entitlement', async () => {
+    const t = practiceNextItemTool(demoPracticeBank(), {
+      activeModuleId: () => 'module-not-allowed',
+    });
+    const ctx = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+      retrieved: [],
+    });
+    const out = await t.tool.run({ level: 1 }, ctx);
+    expect((out as { id: string }).id).toBe('demo:arithmetic:1:a');
+  });
+});
