@@ -513,10 +513,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: planning
   risk: expert
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '3.4'
   milestone: M3
   title: '`buildContext`: history trim, last summary, access-filtered retrieval, locked `probe`, style card, persona'
@@ -1214,9 +1214,9 @@ tasks:
   accept: fuzz test shows no access outside declared scope.
   deps:
   - M3
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m5/5.5-tool-registry-calculator
+  model: plan:sonnet build:opus
 - id: '5.6'
   milestone: M5
   title: 'Practice skill: item selection and generation by topic and level, scoring, `skill` events'
@@ -1995,6 +1995,28 @@ tasks:
   - '5.4'
   status: todo
   risk: risky
+- id: 5.5a
+  milestone: M13
+  title: 'Calculator follow-ups (5.5 review MEDIUM/LOW): refuse implicit multiplication across spaces and after ")" (1 e 2, 2 pi, sqrt(4)pi, (1)(2)); add them to the rejection table and fuzz attacks; fix the sandbox doc comment; drop gcd/lcm or refuse arguments above MAX_SAFE_INTEGER'
+  accept: each listed form is refused with a tested reason; gcd/lcm never return a wrong answer; harness tests pass with 100% coverage on src/tools
+  deps:
+  - '5.5'
+  status: todo
+- id: 3.4c
+  milestone: M13
+  title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as a hit, so coverageGate returns locked instead of climbing the help ladder. Shape the query (student text weighted first or scored separately) and/or give the locked probe a real threshold'
+  accept: a multi-turn same-topic test on allowed content climbs the help ladder and never returns locked; locked content still returns locked; retrieval-leak and locked suites pass
+  deps:
+  - '3.4'
+  status: todo
+  risk: risky
+- id: 3.9a
+  milestone: M13
+  title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3)'
+  accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
+  deps:
+  - '3.9'
+  status: todo
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
