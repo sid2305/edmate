@@ -295,7 +295,7 @@ Decided: `answerKeyFor` recovers the module id from the `<moduleId>:practice` id
 Why: read-only parsing of a tested id convention, kept in Phase B's file list; additive change to a shared seam (5.7 and 5.8 will touch it). The duplicated id regex is deferred to 5.6c.
 risk: low
 
-### 20 Oct 2026 · 5.6 Practice items come only from practice.next_item; keys stay on the server (ADR-0010) · decided by lead (architect review accepted)
+### 20 Oct 2026 · 5.6 Practice items come only from practice.next_item; keys stay on the server (ADR-0010) · decided by lead (architect review accepted; risk: high)
 Decided: ADR-0010 as written: the pack practice@1.1.0 routes every item through the tool, a new set@1.1.0 pins it (set@1.0.0 unchanged), the key is looked up on the server by item id and never reaches the model on the issuing turn or the client, it is saved in HelpState on every outcome, and a held practice key caps the ladder at the practice ceiling. No contracts change.
 Why: a model-written item's answer cannot be protected; this is Decision 1 of the 5.6 plan, reviewed by the architect and accepted by the lead.
 risk: high
