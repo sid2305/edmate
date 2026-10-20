@@ -1224,9 +1224,9 @@ tasks:
   deps:
   - '5.5'
   - M3
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '5.7'
   milestone: M5
   title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'
