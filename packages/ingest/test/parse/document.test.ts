@@ -20,8 +20,17 @@ describe('parseDocument', () => {
     ]);
   });
 
-  it.each(['pdf', 'docx', 'pptx'] as const)(
-    '%s is not implemented yet (Phase B/C) and says so',
+  it('dispatches pdf bytes to the page-numbered parser', async () => {
+    const doc = await parseDocument({
+      kind: 'pdf',
+      bytes: bytesOf('pdf/forces-blank-middle.pdf'),
+      sourceTitle: 'Forces',
+    });
+    expect(doc.units.map((u) => u.locator)).toEqual(['page 1', 'page 3']);
+  });
+
+  it.each(['docx', 'pptx'] as const)(
+    '%s is not implemented yet (Phase C) and says so',
     async (kind) => {
       await expect(
         parseDocument({ kind, bytes: new Uint8Array([1]), sourceTitle: 'x' }),

@@ -58,3 +58,27 @@ export class SectionBuilder {
     this.#lines = [];
   }
 }
+
+/**
+ * The numbered locator strategy for PDF pages and PPTX slides: one unit per page or slide, located
+ * "page 3" or "slide 3" by its real position. Each line is collapsed and blank lines dropped; a
+ * page or slide with no text gives no unit but still counts, so later locators stay true.
+ */
+export function numberedUnits(
+  title: string,
+  label: 'page' | 'slide',
+  pages: readonly (readonly string[])[],
+): ParsedDocument {
+  const units: ParsedUnit[] = [];
+  pages.forEach((lines, i) => {
+    const text = lines
+      .map(collapse)
+      .filter((l) => l !== '')
+      .join('\n');
+    if (text !== '') units.push({ text, locator: `${label} ${String(i + 1)}` });
+  });
+  if (units.length === 0) {
+    throw new IngestError('validation', false, 'the document has no text to learn from');
+  }
+  return { sourceTitle: title, units };
+}

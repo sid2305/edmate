@@ -4,6 +4,7 @@ import { IngestError } from './errors.js';
 import type { WebFetcher } from './fetch/webFetch.js';
 import { htmlTitle, parseHtml } from './parse/html.js';
 import { parseMarkdown } from './parse/markdown.js';
+import { parsePdf } from './parse/pdf.js';
 import { MAX_DOCUMENT_BYTES, type ParsedDocument } from './types.js';
 
 export type DocumentKind = 'pdf' | 'docx' | 'pptx' | 'markdown';
@@ -30,9 +31,10 @@ export function parseDocument(input: DocumentInput): Promise<ParsedDocument> {
       case 'markdown':
         return parseMarkdown(input.bytes, input.sourceTitle);
       case 'pdf':
+        return parsePdf(input.bytes, input.sourceTitle);
       case 'docx':
       case 'pptx':
-        // Task 5.1 Phases B and C.
+        // Task 5.1 Phase C.
         throw new IngestError(
           'unsupported',
           false,
