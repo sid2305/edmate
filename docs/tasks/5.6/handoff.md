@@ -76,7 +76,7 @@ equal to an operand) for about half of seeds; this is nudged once, deterministic
 (`if (a - b === b) a += 1`), proven never to overflow `template.max` — no retry loop, no
 uncoverable defensive branch.
 
-### Phase A decisions
+### Phase A notes (logged under Decisions)
 
 - `keyInPrompt` (practiceItems.ts) is a narrow, local, boundary-aware "is this key a whole
   word/number in this prompt" check, built for self-validating one freshly generated or authored
@@ -168,7 +168,7 @@ typecheck, lint and test (global coverage gate, 100% on `src/tools/**`) all pass
    in scope today (ctx, HelpState) suggests a better default; flagged for Phase C/pedagogy-author
    to revisit once a real level-progression signal exists.
 
-### Phase B decisions
+### Phase B notes (logged under Decisions)
 
 - `answerKeyFor`'s generated-item branch recovers `moduleId` by reading back the `<moduleId>:practice`
   shape `practiceItems.ts`'s `generateItem` always builds its topicId from, rather than exporting a
@@ -285,35 +285,50 @@ write `.claude/blockers.md` from the worktree, so the lead should add it as B-28
 
 ## Decisions
 
-Phase A and B decisions are the bullets under "Phase A decisions" and "Phase B decisions" above (all risk: low); copy them to the log with these.
+### 20 Oct 2026 · 5.6 An item's own prompt is checked with a narrow whole-word key check · decided by tdd-guide
+Decided: `validateItem` uses `keyInPrompt` (practiceItems.ts), a boundary-aware "is this key a whole word or number in the prompt" check, not the shared `revealsAnswerKey` matcher, whose arithmetic grounding flags "What is 2 + 2?" against "4". Blank keys are rejected first. `chooseTopic` takes a non-empty tuple, and the unreachable try/catch around `evaluateExpression` was removed.
+Why: the shared matcher would reject every generated sum item; the full-turn leak checks still use the shared matcher.
+risk: low
 
-### 20 Oct 2026 · 5.6 Practice items come only from practice.next_item; keys stay on the server (ADR-0010) · decided by lead (architect review accepted) · risk: high
+### 20 Oct 2026 · 5.6 answerKeyFor reads the module id back from the generated item id; the registry takes an optional bank · decided by tdd-guide
+Decided: `answerKeyFor` recovers the module id from the `<moduleId>:practice` id shape rather than a new export; `defaultToolRegistry` gets optional `bank` and `practiceOpts` defaulting to `demoPracticeBank()`, so existing callers are unchanged.
+Why: read-only parsing of a tested id convention, kept in Phase B's file list; additive change to a shared seam (5.7 and 5.8 will touch it). The duplicated id regex is deferred to 5.6c.
+risk: low
+
+### 20 Oct 2026 · 5.6 Practice items come only from practice.next_item; keys stay on the server (ADR-0010) · decided by lead (architect review accepted)
 Decided: ADR-0010 as written: the pack practice@1.1.0 routes every item through the tool, a new set@1.1.0 pins it (set@1.0.0 unchanged), the key is looked up on the server by item id and never reaches the model on the issuing turn or the client, it is saved in HelpState on every outcome, and a held practice key caps the ladder at the practice ceiling. No contracts change.
 Why: a model-written item's answer cannot be protected; this is Decision 1 of the 5.6 plan, reviewed by the architect and accepted by the lead.
+risk: high
 
 ### 20 Oct 2026 · 5.6 New keys reach the stream gate mid-attempt through addKeys, not the decision · decided by tdd-guide
 Decided: generate keeps a live list of guarded keys; an issued item's key is added to it and to the gate (`StreamGate.addKeys`), and postGuard gets the union from the runner. The decision that is composed and saved is unchanged.
 Why: putting the key in the decision would put it in the model's prompt on the issuing turn (compose renders `mustNotReveal`).
+risk: high
 
 ### 20 Oct 2026 · 5.6 An item whose key can't be found fails the tool call closed · decided by tdd-guide
 Decided: a new tool fail reason `no_answer_key`; the model sees only `failed` and the pack's "no item ready" path applies.
 Why: the model must never see an item whose key the harness can't protect.
+risk: low
 
 ### 20 Oct 2026 · 5.6 The skill event is checked against earlier keys only · decided by tdd-guide
 Decided: an item's own `skill` payload is checked against the keys guarded before it, not its own key.
 Why: its prompt was already checked against its own key when made, and the arithmetic matcher would drop every generated sum item's event.
+risk: high
 
 ### 20 Oct 2026 · 5.6 Practice fields ride along like groundingAsks; served list capped at 20 · decided by tdd-guide
 Decided: the runner carries the loaded practice fields onto every saved state (decide rebuilds the help state without them); the served list keeps the last 20 ids; a second call or a retry in the same turn leaves out items already issued (corrected in the review fix round: the generator now honours that list).
 Why: same pattern as 4.7's groundingAsks; a bounded list keeps the blob small.
+risk: low
 
 ### 20 Oct 2026 · 5.6 Unreadable stored state plus an issued item saves the state stopped · decided by tdd-guide
 Decided: when the stored help state couldn't be read but an item went out, the runner still saves the new state (with the key) and sets `lockedStopped: true`.
 Why: the key must be saved; an unknown stored stop flag is treated as set (fail closed), as 4.6b does.
+risk: low
 
 ### 20 Oct 2026 · 5.6 Pending prompt packs load; reported, not changed · decided by tdd-guide
 Decided: practice@1.1.0 and set@1.1.0 are committed with `reviewed_by: pending`; the loaders accept it and no validation fails. Nothing was changed in the loaders.
 Why: no other pending pack exists to set a precedent; the sign-off is B-26 and the merge gate.
+risk: medium
 
 ## Fix round (review)
 
@@ -387,4 +402,11 @@ risk: high
 Decided: `PRACTICE_KEYS_MAX_JSON = 2048`; `issuedItem` fails closed when the turn's key union would pass it, or the module id is over `PRACTICE_ID_MAX`.
 Why: with 20 served ids of 200 characters it keeps the saved state under the 8 KB limit, so `serializeSessionHelp` never throws and drops a key.
 risk: low
+
+## Lead decisions (merge)
+
+### 20 Oct 2026 · 5.6 Practice merges with practice@1.1.0 unsigned; matcher false positives go to 5.6b · decided by lead
+Decided: PR #73 merges with practice@1.1.0 and set@1.1.0 at `reviewed_by: pending`; the human signs them through B-26. The pack now says the app shows the item and the model must not repeat it (fed7d54); the code-output rule's last sentence ("Text that the item itself shows may be shown as given") still conflicts with that and is left for the human's sign-off. The arithmetic false positives (the item's own prompt, and later hints that quote the sum) fail closed and go to 5.6b. Review MEDIUM and LOW items go to 5.6c (before any real practice bank). The fix round's two risk: high decisions (shown-text-only key check, hold the rest without addKeys) were re-checked by the architect and accepted.
+Why: MVP first (human, 20 Oct 2026); every remaining gap fails closed, and none lets a key reach the client.
+risk: high
 
