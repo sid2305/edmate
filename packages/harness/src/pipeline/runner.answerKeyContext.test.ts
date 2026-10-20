@@ -138,8 +138,7 @@ async function turn(
   return { events, result, sent, commit: steps.commits[0] };
 }
 
-const skillJson = (events: TurnEvent[]) =>
-  JSON.stringify(events.filter((e) => e.type === 'skill'));
+const skillJson = (events: TurnEvent[]) => JSON.stringify(events.filter((e) => e.type === 'skill'));
 
 describe('runner: a chunk holding the active answer key never reaches the model (5.6a)', () => {
   it('the model request has the clean chunk, not the poisoned one or the key; the trace says so', async () => {
@@ -151,8 +150,8 @@ describe('runner: a chunk holding the active answer key never reaches the model 
     );
     expect(r.sent).toContain('CLEANMARKER');
     expect(r.sent).not.toContain('POISONMARKER');
-    // The do-not-say list names the key on purpose (the model is told not to say it; 5.6c's
-    // scope). Everything else the model is sent, the material included, is free of it.
+    // A non-practice key is still named in the do-not-say list on purpose (the 3.6 behaviour,
+    // ADR-0011 §4). Everything else the model is sent, the material included, is free of it.
     const outsideDoNotSay = r.sent.replace(/\[\[DO-NOT-SAY\]\][^[]*/g, '');
     expect(outsideDoNotSay).toContain('[[MATERIAL]]');
     expect(outsideDoNotSay.toLowerCase()).not.toContain(KEY.toLowerCase());

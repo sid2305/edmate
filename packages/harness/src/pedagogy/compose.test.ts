@@ -46,12 +46,14 @@ function ctx(o: CtxOverrides = {}): TurnContext {
   return ctxWith({ agent, ...o });
 }
 
+/** promptKeys defaults to mustNotReveal: a non-practice key (the 3.6 behaviour). */
 function policy(o: Partial<PolicyResult> = {}): PolicyResult {
   return {
     move: 'ask',
     rung: 0,
     skill: 'coach',
     mustNotReveal: [],
+    promptKeys: o.promptKeys ?? o.mustNotReveal ?? [],
     tools: [],
     maxOutputTokens: 200,
     next: { helpRung: 0, help: helpWith() },
@@ -520,7 +522,7 @@ describe('move instructions', () => {
       policy({ move: 'ask', skill: null, reason: 'fallback' }),
     ];
     for (const p of closed) {
-      const text = prompt(ctx(), { ...p, mustNotReveal: [KEY] });
+      const text = prompt(ctx(), { ...p, mustNotReveal: [KEY], promptKeys: [KEY] });
       expect(text).not.toContain(KEY);
       expect(text).not.toContain('[[DO-NOT-SAY]]');
     }
@@ -534,6 +536,59 @@ describe('move instructions', () => {
     const text = prompt(ctx(), policy({ mustNotReveal: ['x = 5', 'line\nbreak'] }));
     expect(text).toContain('- "x = 5"\n- "line\\nbreak"');
     expect(text.split('x = 5')).toHaveLength(2);
+  });
+});
+
+describe('practice keys stay out of the prompt (5.6c, ADR-0011)', () => {
+  const PRACTICE_KEY = 'PRACTICE_KEY_4c1d';
+  const CARRIED_KEY = 'CARRIED_KEY_9a2b';
+
+  it('renders the do-not-say list from promptKeys only, never from mustNotReveal', () => {
+    const text = prompt(ctx(), policy({ mustNotReveal: [PRACTICE_KEY], promptKeys: [] }));
+    expect(text).not.toContain(PRACTICE_KEY);
+    expect(text).not.toContain('[[DO-NOT-SAY]]');
+  });
+
+  it('a held practice key and a carried key from the real policy: no key, no do-not-say section', () => {
+    const help = helpWith({
+      answerKey: [PRACTICE_KEY],
+      practiceItemId: 'item-1',
+      practiceCarriedKey: [CARRIED_KEY],
+    });
+    const c = ctx();
+    for (const p of [
+      decidePolicy({ ctx: c, turn: turnOf(), help }),
+      decidePolicy({ ctx: c, turn: turnOf('hint_request'), help }),
+      fallbackPolicy(c, help),
+    ]) {
+      expect(p.mustNotReveal).toEqual([PRACTICE_KEY, CARRIED_KEY]);
+      const text = prompt(c, p);
+      expect(text).not.toContain(PRACTICE_KEY);
+      expect(text).not.toContain(CARRIED_KEY);
+      expect(text).not.toContain('[[DO-NOT-SAY]]');
+    }
+  });
+
+  it('a carried key alone is not rendered', () => {
+    const c = ctx();
+    const text = prompt(
+      c,
+      decidePolicy({
+        ctx: c,
+        turn: turnOf(),
+        help: helpWith({ practiceCarriedKey: [CARRIED_KEY] }),
+      }),
+    );
+    expect(text).not.toContain(CARRIED_KEY);
+    expect(text).not.toContain('[[DO-NOT-SAY]]');
+  });
+
+  it('a non-practice key from the real policy is still rendered (3.6 regression)', () => {
+    const c = ctx();
+    const p = decidePolicy({ ctx: c, turn: turnOf(), help: helpWith({ answerKey: ['5/6'] }) });
+    const text = prompt(c, p);
+    expect(text).toContain('[[DO-NOT-SAY]]');
+    expect(text).toContain('- "5/6"');
   });
 });
 

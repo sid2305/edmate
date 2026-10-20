@@ -129,7 +129,10 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
     found = [];
     dropped = new Set(candidates.map((c) => c.id)).size;
   } else {
-    const m = compileAnswerKeys(contextAnswerKeys(help.help.answerKey));
+    // 5.6c (ADR-0011 §3): a carried practice key is dropped by the same rule as `answerKey`.
+    const m = compileAnswerKeys(
+      contextAnswerKeys([...help.help.answerKey, ...(help.help.practiceCarriedKey ?? [])]),
+    );
     const o = dropAnswerKeyChunks(own, m);
     const x = dropAnswerKeyChunks(probe.hit ? [] : ctx, m);
     found = probe.hit ? o.kept : mergeByScore(o.kept, x.kept, RETRIEVAL_K);

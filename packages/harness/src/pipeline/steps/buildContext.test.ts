@@ -253,7 +253,11 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     // dilute the combined query's overlap on main, but the student-only search keeps the score.
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     const history = [
-      msg(1, 'agent', `Let's talk about something totally different for a long while: ${'z'.repeat(200)}`),
+      msg(
+        1,
+        'agent',
+        `Let's talk about something totally different for a long while: ${'z'.repeat(200)}`,
+      ),
     ];
     const b = await run(world({ retrieval: r, history }), ENTITLED, {
       ...demoTurnInput,
@@ -535,6 +539,28 @@ describe('buildContext: answer keys never reach the model context (5.6a)', () =>
     const b = await run(world({ retrieval: r }), withKey([KEY]));
     expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
     expect(b.answerKeyDropped).toBe(2);
+  });
+
+  it('(c2) a carried practice key drops the chunk holding it too (5.6c, ADR-0011 §3)', async () => {
+    const { r } = twoSearches([poisoned, clean], []);
+    const b = await run(world({ retrieval: r }), {
+      ...ENTITLED,
+      helpState: { ...helpWith(['7']), practiceItemId: 'item-2', practiceCarriedKey: [KEY] },
+    });
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(1);
+    expect(b.helpState.practiceCarriedKey).toEqual([KEY]);
+  });
+
+  it('(c3) a short whole-number carried key keeps 5.6a’s exemption', async () => {
+    const seven = chunk('chk_seven', 'there are 7 days in a week', 0.9);
+    const { r } = twoSearches([seven, clean], []);
+    const b = await run(world({ retrieval: r }), {
+      ...ENTITLED,
+      helpState: { ...helpWith([]), practiceCarriedKey: ['7'] },
+    });
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_seven', 'chk_clean']);
+    expect('answerKeyDropped' in b).toBe(false);
   });
 
   it('(d) no held key: output as before, no answerKeyDropped', async () => {

@@ -15,6 +15,8 @@ export const PRACTICE_ID_MAX = 200;
  * so a saved key is never dropped by `serializeSessionHelp` throwing.
  */
 export const PRACTICE_KEYS_MAX_JSON = 2_048;
+/** Most entries in a carried practice key (5.6c, ADR-0011). */
+export const PRACTICE_CARRIED_MAX = 64;
 
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */
@@ -56,6 +58,17 @@ export const HelpStateSchema = z.strictObject({
     .array(z.string().min(1).max(PRACTICE_ID_MAX))
     .max(PRACTICE_SERVED_MAX)
     .exactOptional(),
+  /**
+   * A skipped practice item's key (5.6c, ADR-0011 §2-3): when a turn issues a new item while the
+   * loaded state held an unsolved one, the runner saves the old key here for exactly one turn.
+   * Guarded (policy puts it in `mustNotReveal` on every move, never released) but never in the
+   * prompt, never graded (`classifyAttempt` reads only `answerKey`) and never read by
+   * `holdsPracticeKey`. buildContext drops chunks that hold it. The runner alone sets it and
+   * removes it from every other saved state; `copyHelp` keeps it and `practiceFields` leaves it
+   * out. The JSON of `answerKey` plus this stays within PRACTICE_KEYS_MAX_JSON (the practice
+   * tool's cap counts held keys). Optional, so a blob saved before 5.6c still parses.
+   */
+  practiceCarriedKey: z.array(z.string()).max(PRACTICE_CARRIED_MAX).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -73,6 +86,9 @@ export function copyHelp(h: Readonly<HelpState>): HelpState {
     ...h,
     answerKey: [...h.answerKey],
     ...(h.practiceServed === undefined ? {} : { practiceServed: [...h.practiceServed] }),
+    ...(h.practiceCarriedKey === undefined
+      ? {}
+      : { practiceCarriedKey: [...h.practiceCarriedKey] }),
   };
 }
 
@@ -81,7 +97,10 @@ export function holdsPracticeKey(h: Readonly<HelpState>): boolean {
   return h.practiceItemId !== undefined && h.answerKey.length > 0;
 }
 
-/** The practice fields of `h` (5.6), for carrying them over a state decide rebuilt without them. */
+/**
+ * The practice fields of `h` (5.6), for carrying them over a state decide rebuilt without them.
+ * Never `practiceCarriedKey`: it lasts one turn (5.6c, ADR-0011).
+ */
 export function practiceFields(
   h: Readonly<HelpState>,
 ): Pick<HelpState, 'practiceItemId' | 'practiceModuleId' | 'practiceServed'> {
@@ -131,6 +150,9 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
       ...practiceFields(r.data),
+      ...(r.data.practiceCarriedKey === undefined
+        ? {}
+        : { practiceCarriedKey: r.data.practiceCarriedKey }),
     }),
   };
 }
