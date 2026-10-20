@@ -1271,7 +1271,8 @@ tasks:
   model: null
 - id: 5.6d
   milestone: M13
-  title: '5.6c review LOWs: carried-key entries are z.string().min(1); assemble allow-list test asserts a literal key list; assemble compile-time guard also checks value types; drop the redundant BOM replace in indexDocument; HelpState comment says "one saved turn"; carry a loaded non-practice answerKey when a new item replaces it'
+  title: '5.6c review LOWs: carried-key entries are z.string().min(1); assemble allow-list test asserts a literal key list; assemble compile-time guard also checks value types; drop the redundant BOM replace
+    in indexDocument; HelpState comment says "one saved turn"; carry a loaded non-practice answerKey when a new item replaces it'
   accept: each listed LOW is fixed or closed with a logged reason; harness and ingest tests pass
   deps:
   - 5.6c
@@ -1287,9 +1288,9 @@ tasks:
   deps:
   - '5.6'
   risky: true
-  status: running
+  status: done
   branch: m5/5.6c-practice-followups
-  model: plan:opus build:opus/sonnet
+  model: plan:sonnet build:opus-5.5/medium fix:opus-5.5/medium review:architect-opus,security-opus,ts-opus,code-sonnet
 - id: '5.7'
   milestone: M5
   title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'
@@ -2088,7 +2089,9 @@ tasks:
   branch: m3/3.4c-same-topic-locked
 - id: 1.7d
   milestone: M13
-  title: '1.7b review MEDIUM/LOWs: build-smoke restores packages/content/dist first in a try/finally, checks child.exitCode before waiting for exit and recovers a stale .build-smoke-hidden dir; cpSync with verbatimSymlinks; fix the byCwd comment; assert the fail-closed message in a relocation run; delete the created student and session rows; build-smoke cache: false and its own turbo invocation; age.ts log strip covers C1, U+0085, U+2028/2029 and r.file'
+  title: '1.7b review MEDIUM/LOWs: build-smoke restores packages/content/dist first in a try/finally, checks child.exitCode before waiting for exit and recovers a stale .build-smoke-hidden dir; cpSync with
+    verbatimSymlinks; fix the byCwd comment; assert the fail-closed message in a relocation run; delete the created student and session rows; build-smoke cache: false and its own turbo invocation; age.ts
+    log strip covers C1, U+0085, U+2028/2029 and r.file'
   accept: each listed item is fixed or closed with a logged reason; an interrupted build-smoke run leaves the checkout usable
   deps:
   - 1.7b
@@ -2097,7 +2100,8 @@ tasks:
   model: null
 - id: 1.7e
   milestone: M13
-  title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain next build and re-run build-smoke'
+  title: 'Turbopack for apps/web (1.7b trial): find why Turbopack page-data collection reaches apps/web/vitest.config.ts and the lightningcss native addon, fix it, then switch the build script back to plain
+    next build and re-run build-smoke'
   accept: plain next build succeeds and build-smoke passes on the Turbopack build, or the reason to stay on --webpack is logged
   deps:
   - 1.7b

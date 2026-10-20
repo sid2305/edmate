@@ -10,6 +10,97 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.6c Practice items are teacher-scoped; demo bank teacher is tch_test_01 · decided by tdd-guide
+Decided: `PracticeItem` carries a harness-internal `teacherId`. The demo bank's records all use `DEMO_PRACTICE_TEACHER_ID = 'tch_test_01'`, the contracts fixture teacher. The bank's `pick`/`answerKeyFor`, `pickItem`'s runtime check and the tool's `issuedItem` all refuse an item from another teacher, even when the module id is the same. Generated items take the scope's teacher.
+Why: two teachers can use the same module id. Before this change, only the module was checked (5.6 review MEDIUM).
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c validateItem checks options and the id; only digit-written short numbers are exempt in the id · decided by tdd-guide
+Decided: for every kind, an item is rejected when a key appears in any option, or in its id. The id check skips a key only when it is digits alone and 5.6a's short-number rule exempts it. Number words such as "one" are still checked against the id.
+Why: the plan's tests need `bank:one:a` rejected and `demo:fractions:1:a` accepted, both with key `['1','one']`. Ids contain level digits and operands, so a digit check would refuse good items. A key written in words inside an id is a real leak.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c One bounded generated-id parser; exactly one module; the cap counts held keys · decided by tdd-guide
+Decided: `parseGeneratedId` is now the only reader of generated ids. It enforces the length cap, operands 1–999 with no leading zero, the level's own op, and a non-empty `<moduleId>:practice` topic. `issuedItem` fails closed unless exactly one allowed module resolves the id (duplicate allowed modules are folded first). The HelpState cap counts held, issued and new keys together.
+Why: 5.6 review findings (unbounded operands, two parsers, the first-match module pick). The cap leaves room for Phase B's carried key.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c Context helpers move to pipeline/generate/answerKeyContext.ts · decided by tdd-guide
+Decided: `contextAnswerKeys` and `chunkLeaks` now live in `pipeline/generate/answerKeyContext.ts`, so tools no longer import a pipeline step. `buildContext.ts` imports and re-exports them, with no logic change. The short-number regex is a module constant.
+Why: 5.6a typescript-review LOWs.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c Ingest bank refusal folds title and text, matches more key forms, raw-line shape check · decided by tdd-guide
+Decided: `assertNotAnswerBank` NFKC-folds and strips zero-width/format characters from the title
+and the checked text before every check; the title rule matches path segments and the YAML suffix
+case-insensitively; the shape rule runs on raw source lines (key must start its own line) when the
+caller has them, with a fallback to the looser word-boundary check over parsed units when it does
+not (PDF, DOCX, slides). `indexDocument` passes a markdown source's decoded raw bytes through so
+the line-anchored rule applies there; other source kinds keep the fallback.
+Why: 5.6a's security review found the title and shape checks could be slipped by case, a
+fullwidth letter or an embedded zero-width character, and the word-boundary shape check falsely
+refused ordinary prose mentioning "question:"/"answer:" mid-sentence.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 5.6c Practice keys stay out of the prompt; a skipped item's key is guarded one more turn (ADR-0011) · decided by tdd-guide · risk: high
+Decided: ADR-0011 is written to docs/adr word for word. The composer renders the do-not-say block from `PolicyResult.promptKeys`, which is empty while a practice key or a carried key is held. `mustNotReveal` keeps every key, so the stream gate, postGuard and the tool checks are unchanged. A skipped item's key is saved as `practiceCarriedKey` on the issuing turn only, is guarded on every move (a solution never releases it), is never prompted or graded, and is removed from every other saved state. buildContext drops chunks that hold it. Non-practice keys keep the 3.6 behaviour. No contracts, pack or set change.
+Why: a key in the prompt can be spelled or written in roman numerals by an injected model, and the matcher can miss those forms (5.6 security-reviewer MEDIUM). A skipped item's answer was not guarded on the next turn (5.6 LOW).
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6c assemble builds TurnContext from an allow-list; an unreadable help state gets the real context with no material · decided by tdd-guide
+Decided: `assemble` (now `pipeline/assemble.ts`) copies only `TurnContextSchema`'s keys. A compile-time check fails the typecheck if a TurnContext key has no source. An unreadable help state no longer falls back to `fallbackContext`: it gets the real context with `retrieved: []` (forced in `assemble` too, as defence in depth) and a held reply, and saves no state.
+Why: 5.6a typescript-review MEDIUM. A new runner-only BuiltContext field would have silently sent every turn to the fallback context. The lead accepted Q7.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 5.6c expectNoLeak scans every issued key, skill events and every tier · decided by tdd-guide
+Decided: the practice runner tests check every key issued in the turn (the saved state plus every attempt's generate keys). They scan the trace and the skill events too. On turns where the model never writes the key, they scan every request on every tier, including the judges and route's intent model. Echo tests stay main-tier only (ADR-0011 §5).
+Why: 5.6 review LOW. The old helper checked one key, main tier only.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c fix round: the carried key has no entry cap · decided by tdd-guide
+Decided: `practiceCarriedKey` drops its 64-entry cap. Its size is bounded only by the practice tool's JSON cap (which counts held keys) and `LIMITS.helpStateMaxJsonLength`. ADR-0011 §2's "at most 64 entries" no longer holds; the ADR text is unchanged and its "the saved state always fits" now holds by construction.
+Why: `answerKey` has no entry cap, so 65 or more short keys passed the tool's JSON cap and then made `serializeSessionHelp` throw, saving nothing and leaving the new item's key unguarded (typescript-review HIGH). Counting entries in the tool's cap was the other option; it would refuse items the state can hold.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c fix round: markdown bank refusal accepts markers, emphasis and flow keys · decided by tdd-guide
+Decided: on raw lines, a key may follow any run of markdown list/quote/heading/table markers and opening emphasis, quotes or brackets, or follow "{" or "," (YAML flow key, unquoted only). Lines split on CR, LF or CRLF. A compact JSON array bank (quoted keys after "{") stays the documented 8.x gap.
+Why: the 5.6c raw-line rule replaced main's word-boundary check for markdown, so list, quote, bold, heading, flow-style, tab-marker and CR-only banks were indexed again (security-review MEDIUM regression).
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c a solved item's key is guarded one more turn · decided by lead
+Decided: keep the carried key taken from the loaded state in packages/harness/src/pipeline/runner.ts (review MEDIUM at runner.ts:1144, wontfix). A key solved this turn stays on the do-not-say list for one more saved turn.
+Why: it fails closed: the cost is one extra guarded string, never a leak. Changing it means reading decide's next state, which ADR-0011 did not cover.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6c merge: practice keys out of the prompt (ADR-0011) · decided by lead · risk: high
+Decided: merge PR #77. It changes the harness context path (assemble allow-list, promptKeys, practiceCarriedKey) under ADR-0011, which amends ADR-0010. Architect, security-reviewer (opus), typescript-reviewer (opus) and code-reviewer ran; the fix round was re-verified. LOWs go to 5.6d.
+Why: keys must never reach the model's prompt before a real practice bank ships; the remaining findings are cosmetic or fail closed.
+risk: high
+
+---
+
 ### 20 Oct 2026 · 5.11 no longer waits on all of M3 · decided by lead · risk: low
 Decided: Remove the M3 milestone dependency from 5.11 (outline and style-card drafters in packages/ingest). Keep 5.1 and 5.6a.
 Why: M3's open work is teacher-label hardening (3.11d/3.11e), which the drafters don't touch. Same reasoning as the 5.2 relaxation.
