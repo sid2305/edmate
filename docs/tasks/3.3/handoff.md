@@ -54,21 +54,36 @@ Worktree: `.claude/worktrees/agent-a6dfcb6531960a196`
    gateway's own usage record instead.
 
 ## Decisions
-- `answerKey` items are read as **required parts** of one answer: all matched → `correct`, some →
-  `partial`, none → `wrong`. Numbers are compared by value (fractions, decimals, `1,000`, unicode
-  minus); a decimal with 2+ places matches when it rounds to the key (0.83 for 5/6). Other parts
-  match as whole words.
-- Credit (`correct`/`partial`) needs answer-shaped text (a bare expression, a code block, "I got
-  …", "is it …", a short reply of up to 3 naming words) or a `check_answer` turn; a key match
-  inside a question like "why is it 5/6?" is `none`. With no readable key, answer-shaped text is
-  `wrong` (an attempt that can't be credited), as the plan allowed.
-- `skill_action` turns are always attempt `none` (the skill scores itself, 5.6); `hint_request`,
-  `check_answer` and `skill_action` turns are intent `on_task` unless a hard distress phrase hits.
-- off_topic, meta and misuse rules are deliberately narrow (they make decide redirect); greetings
-  and acks ("hi", "ok", "thanks") are confident `on_task`. Anything no rule hits goes to the model.
-- Romanised Hindi misuse ("homework kar do", "assignment likh do") and answer-seeking ("answer
-  bata do") phrases are in as the pilot safety net only.
-- The model fallback's deadline is an internal constant, 300 ms inside route's 400 ms (lead Q2).
+
+### 20 Oct 2026 · 3.3 how a student's answer is matched to the answer key · decided by tdd-guide
+
+Decided: answer-key items are required parts of one answer. All parts matched gives `correct`, some gives `partial`, none gives `wrong`. Numbers are compared by value (fractions, decimals, `1,000`, unicode minus), and a decimal with 2 or more places matches when it rounds to the key. Other parts match as whole words. Credit needs answer-shaped text or a `check_answer` turn, so a key inside a question ("why is it 5/6?") is `none`. With no readable key, answer-shaped text is `wrong`.
+
+Why: the plan left the matching rule to the builder. Whole-part matching and answer-shaped gating keep a question that quotes the key from counting as an attempt.
+
+---
+
+### 20 Oct 2026 · 3.3 route rules stay narrow; the model handles the rest · decided by tdd-guide
+
+Decided: `skill_action` turns are always attempt `none`, since the skill scores itself (5.6). `hint_request`, `check_answer` and `skill_action` turns are `on_task` unless a hard distress phrase hits. The off_topic, meta and misuse rules are deliberately narrow; greetings and acknowledgements are confident `on_task`; anything no rule hits goes to the model. Romanised Hindi misuse and answer-seeking phrases are included as the pilot safety net only. The model fallback's deadline is an internal 300 ms inside route's 400 ms (lead answer Q2).
+
+Why: off_topic, meta and misuse make decide redirect, so a broad rule would redirect real lesson turns.
+
+---
+
+### 20 Oct 2026 · 3.3 only a hard distress phrase is a confident route distress · decided by lead (risk: high)
+
+Decided: route uses the shared distress keyword tables, but only a hard phrase gives a confident `distress`. A soft phrase is inconclusive and goes to route's model. `route.onFailure` now runs `deps.distressCheck`, so a route failure still escalates on distress keywords. Route's `usage` is always `[]`, because `generateObject` reports no usage (contracts), as with the 4.3 and 4.4 classifiers.
+
+Why: route's `distress` escalates the turn. A soft hit, such as a bare "suicide" in a Hamlet lesson, would escalate even when preGuard's safety-reviewed classifier judged it safe. The runner's last-resort soft checks when preGuard fails are unchanged. The lead accepted these plan deviations at review.
+
+---
+
+### 20 Oct 2026 · 3.3 labelled set uses honest labels; 6 misses left as they are · decided by eval-author
+
+Decided: the 6 turns the rules get wrong are labelled with the correct routing, not changed to match the rule output. Accuracy is 97.0% overall and 96.8% in English. No classifier code changed in Phase B. Narrowing the short-reply fallback and widening phrase coverage are in 3.3a.
+
+Why: the gate is 90%, so there was no pressure to relabel. `attempt` has no effect once intent isn't `on_task` (decide redirects), so the off-task attempt misses don't change the ladder today.
 
 ## Phase B: 200 labelled turns + `route.accuracy.test.ts`
 
@@ -109,7 +124,7 @@ with margin; the test passes outright (not `it.fails`).
    reply is scored `wrong` (uncredited) by the documented rule ("with no readable key, answer-shaped
    text is wrong", Phase A decisions) even when it isn't an attempt at all.
 
-### Decisions
+### Labelling notes
 - These 6 turns are labelled by the semantically correct routing (`none`, not `wrong`/the
   rule's `on_task`), not adjusted to match the rule output: accuracy is 97%/96.8% with that honest
   labelling, well clear of the gate, so there was no pressure to relabel and none was done.

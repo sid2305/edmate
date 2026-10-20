@@ -513,10 +513,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: review
+  status: done
   risk: expert
   branch: m3/3.3-route-intent-attempt
-  model: plan:sonnet build:opus eval:sonnet
+  model: plan:sonnet build:opus eval:sonnet review:sonnet
 - id: '3.4'
   milestone: M3
   title: '`buildContext`: history trim, last summary, access-filtered retrieval, locked `probe`, style card, persona'
