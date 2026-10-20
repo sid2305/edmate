@@ -198,3 +198,14 @@ locked eval suites before merge (pack-change rule).
 - Q5: `tools/**` stays out of risk-paths.txt for now. The lead runs security-reviewer on tool PRs anyway. Revisit at 13.3.
 - Order: Phase A starts once 3.3 Phase B returns, since only one builder runs in packages/harness at a time.
 - Correction from the lead: practice@1.1.0 changes prompt-pack behaviour, so it needs an ADR in docs/adr/ (CLAUDE.md non-negotiable 2), reviewed by architect, security-reviewer and typescript-reviewer and logged `risk: high`. architect drafts the ADR text once pedagogy-author's draft exists; the Phase C builder writes the ADR file and places the pack at content/prompt-packs/practice@1.1.0.md. The named human's sign-off (B-26) is still required.
+
+## Architect review (20 Oct 2026): accepted by the lead
+The full text, including the ADR-0010 draft and the answers to Q-A to Q-D, is in `docs/tasks/5.6/architect-adr-0010.md`. The ADR is numbered 0010 because 0009 is taken by 3.11d; check the number is still free when the file is written. Decision 1 is approved with five conditions, and the lead accepts all of them.
+- **[CRITICAL] Phase B:** the tool output is `{ id, kind, level, prompt, options? }` and never includes the key. The harness looks the key up on the server by item id, through a RegisteredTool hook. Item ids are deterministic, so the key can be recomputed.
+- **[HIGH] Phase C:** add the new key to the stream gate and postGuard as soon as the tool returns, on the same turn. `GenerateResult.practiceAnswerKey` holds the union.
+- **[HIGH] Phase A:** `PracticeBank.pick` takes `{ teacherId, allowedModuleIds }` and enforces them. The model passes no topic and no ids: tool input is strict `{ level?: 1|2|3 }`. The module comes from the top retrieved chunk, else the active item's module, else the first allowed module.
+- **[MEDIUM] Phase C:** the runner writes `next.help.answerKey` on every outcome where the item event went out, resets the ladder fields and records the item id.
+- **[MEDIUM] Phase A:** the bank never serves MCQ or code_output items until the matcher has an answer-context mode (follow-up task 5.6b).
+- **Q-B (Phase C):** apply the practice cap of 3 whenever a practice key is held, whatever skill is chosen, so no turn reaches the solution rung. Add a test where a `solution` move is forced on a practice item and gets capped. The pack says "never at any rung" and depends on this cap.
+- **Q-C:** not a live leak. Before 5.11, task 5.6a makes buildContext drop chunks that reveal the answer key, and the bank is never chunked.
+- **Pack:** the revised draft is at `docs/tasks/5.6/practice@1.1.0.draft.md`, with its change note beside it. It needs the human's sign-off (B-26). Phase C moves it to `content/prompt-packs/practice@1.1.0.md`.
