@@ -22,7 +22,9 @@ Harness 3,266 and evals 345 tests pass (plus the 5 pending sign-offs); the secre
 - [MEDIUM] [fixed] grounding.ts:204 — a judge outage said "not covered" and opened TeacherQuestions. Now `judge_unavailable`: safe reply, no escalation, reported.
 - [MEDIUM] [fixed] grounding.ts:79, testing/groundingJudge.ts:83 — a claim planted in the student's message counted as grounded. Rubric and fake judge fixed.
 - [MEDIUM] [fixed] steps/generate.ts:67 — turns with nothing retrieved or from decide.fallback streamed unchecked. Now held.
-- [MEDIUM] [partly fixed] steps/generate.ts:49 — on well-covered turns an ungrounded sentence can be on screen for seconds before the replace. Decision wording corrected and a `replaced_streamed` trace entry added; lead accepts the residual for the 13+ Python pilot. Client provisional marking deferred to 9.4; hold-all for regulated-subject agents deferred to 4.8.
+- [MEDIUM] [fixed] steps/generate.ts:49 — on well-covered turns an ungrounded sentence can be on screen for seconds before the replace: decision wording corrected and a `replaced_streamed` trace entry added; the lead accepts the residual for the 13+ Python pilot.
+- [MEDIUM] [deferred 9.4] steps/generate.ts:49 — the client marks streamed text as provisional until done and visibly marks a replacement.
+- [MEDIUM] [deferred 4.8] steps/generate.ts:49 — regulated-subject agents hold every teaching turn.
 - [MEDIUM] [deferred 4.8] grounding.ts:129 — redirect replies are not judged; adviceGuard covers redirects.
 - [MEDIUM] [deferred 4.7b] runner.ts:530 — two concurrent turns in one session can exceed the cap by one; no per-session turn serialisation exists. (typescript-reviewer, security-reviewer)
 - [MEDIUM] [deferred 4.7b] grounding.ts:157 — praise next to a correct number, or an agreement phrase outside AGREES plus an unrelated number, still passes Rule C to the judge. (safety re-review)
