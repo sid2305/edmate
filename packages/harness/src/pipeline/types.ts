@@ -285,6 +285,12 @@ export interface BuiltContext {
    * (never false over a stored true). Absent: read fine, or nothing stored yet.
    */
   helpStateUnreadable?: true;
+  /**
+   * How many retrieved chunks were dropped because they reveal the held answer key, or all of
+   * them when the help state is unreadable (5.6a). A count only: never ids, text or keys. Absent
+   * when nothing was dropped.
+   */
+  answerKeyDropped?: number;
 }
 
 /** What decide works from: the context plus the parsed help state (kept out of TurnContext). */

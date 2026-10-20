@@ -6,7 +6,13 @@ import { toolSpec } from '../pipeline/tools.js';
 import { demoPracticeBank } from './demoPracticeBank.js';
 import { NoPracticeItemError, practiceNextItemTool } from './practice.js';
 import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
-import { generatedAnswerKeyFor, type PracticeBank, type PracticeScope } from './practiceItems.js';
+import {
+  generatedAnswerKeyFor,
+  generateItem,
+  type PracticeBank,
+  type PracticeScope,
+} from './practiceItems.js';
+import type { DemoPracticeRecord } from './demoPracticeBank.js';
 
 const SCOPE: PracticeScope = {
   teacherId: turnContextFull.entitlement.teacherId,
@@ -127,7 +133,8 @@ describe('practiceNextItemTool', () => {
         prompt: 'p',
         options: ['a', 'b'],
       }),
-      answerKeyFor: () => ['a'],
+      // 5.6a: not 'a', which the fixture's retrieved chunk holds as a word.
+      answerKeyFor: () => ['qzx'],
     };
     const withOpt = practiceNextItemTool(withOptions);
     const out = await withOpt.tool.run({ level: 1 }, turnContextFull);
@@ -402,5 +409,72 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     const one = base.forSession({ servedItemIds: ['demo:arithmetic:1:a'], heldKeys: ['1'] });
     const p = ((await one.tool.run({ level: 1 }, two)) as { prompt: string }).prompt;
     expect(p).not.toMatch(/(?<![0-9])1(?![0-9])/);
+  });
+});
+
+describe("practiceNextItemTool: no item whose key is in this turn's chunks (5.6a)", () => {
+  const MOD = MODULE_ARITHMETIC;
+  const rec = (id: string, prompt: string, key: string): DemoPracticeRecord => ({
+    item: { id, topicId: 'linear', moduleId: MOD, level: 1, kind: 'numeric', prompt },
+    answerKey: [key],
+  });
+  const RECS = [
+    rec('fx:a', 'Solve for x: x - 1000 = 3321.', '4321'),
+    rec('fx:b', 'Solve for y: y - 2000 = 3456.', '5456'),
+  ];
+  const chunkWith = (text: string, field: 'text' | 'title' | 'locator' = 'text') => {
+    const base = turnContextFull.retrieved[0]!;
+    return {
+      ...base,
+      moduleId: MOD,
+      text: field === 'text' ? text : base.text,
+      source: {
+        ...base.source,
+        ...(field === 'title' ? { title: text } : {}),
+        ...(field === 'locator' ? { locator: text } : {}),
+      },
+    };
+  };
+  const ctxOf = (chunks: ReturnType<typeof chunkWith>[]) =>
+    ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MOD] },
+      retrieved: chunks,
+    });
+  const idOf = (out: unknown) => (out as { id: string }).id;
+
+  it('a bank item whose key is in a retrieved chunk is skipped for the next valid one', async () => {
+    const t = practiceNextItemTool(demoPracticeBank(RECS));
+    expect(idOf(await t.tool.run({ level: 1 }, ctxOf([chunkWith('nothing here')])))).toBe('fx:a');
+    for (const field of ['text', 'title', 'locator'] as const) {
+      const ctx = ctxOf([chunkWith('so x is 4,321 then', field)]);
+      expect(idOf(await t.tool.run({ level: 1 }, ctx))).toBe('fx:b');
+    }
+  });
+
+  it('a generated item whose key is in a chunk moves on to the next variant', async () => {
+    // Level 3 products: find a generated item with a 3-digit key (short keys are not checked).
+    const scope: PracticeScope = { teacherId: SCOPE.teacherId, allowedModuleIds: [MOD] };
+    const before: string[] = [];
+    let target = generateItem(scope, 3, before);
+    while (target !== undefined && (target.answerKey[0] ?? '').length < 3) {
+      before.push(target.item.id);
+      target = generateItem(scope, 3, before);
+    }
+    expect(target).toBeDefined();
+    const key = target!.answerKey[0]!;
+    const t = practiceNextItemTool(demoPracticeBank([]), { exclude: before });
+    expect(idOf(await t.tool.run({ level: 3 }, ctxOf([chunkWith('no numbers')])))).toBe(
+      target!.item.id,
+    );
+    const ctx = ctxOf([chunkWith(`the product is ${key}`)]);
+    const out = await t.tool.run({ level: 3 }, ctx);
+    expect(idOf(out)).not.toBe(target!.item.id);
+    expect(t.issuedItem(out, ctx)?.answerKey).not.toEqual([key]);
+  });
+
+  it('a short numeric key in a chunk does not refuse the item (lead answer, 20 Oct)', async () => {
+    const t = practiceNextItemTool(demoPracticeBank([rec('fx:s', 'What is 3 + 4?', '7')]));
+    const ctx = ctxOf([chunkWith('there are 7 days')]);
+    expect(idOf(await t.tool.run({ level: 1 }, ctx))).toBe('fx:s');
   });
 });

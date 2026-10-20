@@ -18,7 +18,8 @@ import type { Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
 import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
 import { HarnessError } from '../pipeline/errors.js';
-import { revealsAnswerKey } from '../pipeline/generate/answerKey.js';
+import { compileAnswerKeys, revealsAnswerKey } from '../pipeline/generate/answerKey.js';
+import { chunkLeaks, contextAnswerKeys } from '../pipeline/steps/buildContext.js';
 import type { IssuedItem, RegisteredTool, ToolSessionState } from '../pipeline/tools.js';
 import {
   generatedAnswerKeyFor,
@@ -167,7 +168,13 @@ export function practiceNextItemTool(
         module === undefined ? scope : { ...scope, allowedModuleIds: [module] };
       const level = args.level ?? DEFAULT_LEVEL;
       const held = opts.heldKeys ?? [];
-      const accept = (item: PracticeItem) => !revealsAnswerKey(shownText(item), held);
+      // 5.6a: the turn's chunks are already in the model's context, so an item whose own key
+      // (short numbers aside, contextAnswerKeys) shows in any of them is refused too.
+      const accept = (item: PracticeItem, answerKey: readonly string[]) => {
+        if (revealsAnswerKey(shownText(item), held)) return false;
+        const m = compileAnswerKeys(contextAnswerKeys(answerKey));
+        return m.empty || !ctx.retrieved.some((c) => chunkLeaks(c, m));
+      };
       const picked = pickItem(bank, narrowed, level, opts.exclude ?? [], profileOf(ctx), accept);
       if (picked === undefined) return Promise.reject(new NoPracticeItemError());
       return Promise.resolve(toOutput(picked.item));

@@ -50,6 +50,58 @@ Deviations:
   case-sensitive, still requiring both keys of a pair present. This is verified against every demo
   bank file (refused) and every demo notes.md (not refused), plus the worksheet case in Q4.
 
+## Phase A
+
+Status: DONE
+
+- Branch: `m5/5.6a-keys-out-of-context` (built on `work-5.6aA`)
+- Worktree: `.claude/worktrees/agent-a16faa17ec58c0e14`
+- Builder: tdd-guide
+
+### Acceptance evidence
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --force --concurrency=1`
+  → `Test Files 107 passed (107)`, `Tests 4770 passed (4770)`, `Tasks: 10 successful, 10 total`
+- Coverage of touched files: `buildContext.ts` 100% lines (95.7% branches; the two uncovered
+  lines are the old `mergeByScore` sort branches), `practice.ts` 100%, `practiceItems.ts` 100%,
+  `runner.ts` 99.5% lines.
+- `python3 .githooks/secret-scan.py --all` → clean.
+- Active key (acceptance 1): `runner.answerKeyContext.test.ts` runs the real buildContext, decide,
+  generate and postGuard with the scripted gateway. The main model request holds the clean
+  chunk's marker and the `[[MATERIAL]]` block, never the poisoned chunk's marker, and never the
+  key outside the do-not-say list. The trace holds exactly one
+  `{ name: 'answerKeyContext', ok: false, action: 'drop' }` and no marker or key.
+- Bank key (acceptance 2): `practice.test.ts` (bank item skipped for the next when its key is in
+  a chunk's text, title or locator; a generated variant moves on; a short numeric key does not
+  refuse), `practiceItems.test.ts` (`accept` gets the key; all refused → `undefined`, which the
+  tool turns into `NoPracticeItemError`), and the runner test (a chunk holding the bank item's
+  key makes the tool issue a generated, key-free item).
+- `buildContext.test.ts` cases (a)–(i) from the plan; (i) now shows the lead's short-key rule.
+  The 3.4c locked and dilution tests are unchanged and green.
+
+### Changes
+- `pipeline/steps/buildContext.ts`: `contextAnswerKeys` (drops short numeric keys),
+  `chunkLeaks` (text, source title, locator), `dropAnswerKeyChunks`; the filter runs on `own` and
+  `ctx` before `mergeByScore`/`fit`; an unreadable help state gives no chunks; `answerKeyDropped`.
+- `pipeline/types.ts`, `pipeline/results.ts`: `BuiltContext.answerKeyDropped?: number` (int ≥ 1).
+- `pipeline/runner.ts`: one `answerKeyContext` guard entry when chunks were dropped;
+  `assemble` strips `answerKeyDropped` (TurnContext is strict).
+- `tools/practiceItems.ts`: `AcceptItem` is `(item, answerKey) => boolean`.
+- `tools/practice.ts`: `accept` also refuses an item whose key leaks in any `ctx.retrieved` chunk.
+- Tests: `buildContext.test.ts`, `practice.test.ts`, `practiceItems.test.ts`, new
+  `runner.answerKeyContext.test.ts`.
+
+### Deviations
+- `assemble` in `runner.ts` deletes `answerKeyDropped` before the strict `TurnContextSchema`
+  parse (not in the plan; without it every drop turned into the fallback context).
+- An existing `practice.test.ts` fixture used the key `'a'`, which the contracts fixture chunk
+  holds as a word; it is now `'qzx'` so that test still checks `options`.
+- The do-not-say block of the system prompt still names the active key (by design today; the
+  prompt change is 5.6c). The runner test checks everything outside that block.
+- With no material left, the plan's "every candidate blocked → NoPracticeItemError" can't be
+  shown through the tool with real generated items (their keys are mostly short numbers, which
+  are not checked); it is shown at `pickItem` level, and the tool's existing fail-closed test
+  covers the error mapping.
+
 ## Decisions
 
 ### 20 Oct 2026 · 5.6a ingest refuses practice banks and answer keys · decided by tdd-guide
@@ -65,3 +117,13 @@ against all five demo question-bank/rubric-answers pairs and all five demo notes
 the Q4 worksheet case (a capitalised or unmatched lowercase "Answer:"/"answer:" line is not
 refused).
 risk: high
+
+### 20 Oct 2026 · 5.6a answer-key chunks dropped before the model sees them · decided by tdd-guide · risk: high
+Decided: buildContext drops every retrieved chunk whose text, source title or locator reveals the held answer key (shared `answerKey.ts` matcher), before the merge and the fit, so clean chunks fill the slots. On a locked hit a dropped own chunk is not backfilled from the context search (3.4c unchanged). An unreadable help state gives no chunks that turn. The runner records one `answerKeyContext` guard entry (`ok: false, action: 'drop'`), no count or text. `practice.next_item` also refuses an item whose own key shows in any of this turn's chunks, then tries the next bank item or generated variant, else fails closed. Short numeric keys ("1", "7", "42") are not used for either check: a key is skipped when it reads as a whole number of one or two digits, in digits or in words ("one", "forty-two"); 3+ digit numbers, decimals, fractions, negatives and any text key are used. The stream gate and postGuard still hold every key.
+Why: the lead's answer of 20 Oct. A short key would drop almost every chunk and push hints to ask-teacher, and a chunk that happens to hold "7" doesn't give an item's answer away. Number words count as their value, otherwise the demo key ["1", "one"] would still drop every chunk with a "1". The bank itself is never indexed (Phase B).
+risk: high
+
+### 20 Oct 2026 · 5.6a answerKeyDropped stays out of TurnContext · decided by tdd-guide
+Decided: `BuiltContext.answerKeyDropped` is a runner-only count; `assemble` strips it before the strict `TurnContextSchema` parse, and only the guard entry reaches the trace.
+Why: TurnContext is a strict contracts schema (no contracts change allowed), and the count is only needed to decide whether to log the drop.
+risk: low

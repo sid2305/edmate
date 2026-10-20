@@ -481,6 +481,11 @@ class Turn {
 
     const bc = check(bcRaw, BuiltContextSchema);
     this.trace.step('buildContext', bc.ms, bc.ok ? 'ok' : 'fallback');
+    // 5.6a: chunks that reveal the held answer key were dropped before the model saw them. One
+    // entry, name and verdict only: never the count, ids, text or keys.
+    if (bc.ok && bc.value.answerKeyDropped !== undefined) {
+      this.trace.addGuards([{ name: 'answerKeyContext', ok: false, action: 'drop' }]);
+    }
 
     // 5. Escalate beats block: a distressed student always gets the caring reply.
     const preAlert = pg.ok && pg.value.result === 'escalate' ? pg.value.alert : undefined;
@@ -1241,6 +1246,8 @@ function assemble(
   // TurnContext, which goes to the model, events and traces (ADR-0005). It goes to decide apart.
   const raw: Record<string, unknown> = { ...e, ...b, intent, attempt };
   delete raw.helpState;
+  // 5.6a: a runner-only count, reported in the trace, not part of TurnContext.
+  delete raw.answerKeyDropped;
   const parsed = TurnContextSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
