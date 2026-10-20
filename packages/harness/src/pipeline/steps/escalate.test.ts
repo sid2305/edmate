@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { indiaLocalePackWithHelplines } from '../../testing/distressLocaleFixtures.js';
 import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
-import { LAST_RESORT_DISTRESS_REPLY } from '../runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
 import type { Entitled, StepEnv } from '../types.js';
 import { buildCaringReply, escalate } from './escalate.js';
 

@@ -160,6 +160,12 @@ Tasks:    33 successful, 34 total   Failed: @edmate/evals#test (only: suites.tes
 
 Flake seen, not fixed (pre-existing, outside this round's diff): `apps/worker/test/alert.int.test.ts`'s two Redis-backoff tests failed once under full-turbo parallel load (`ECONNREFUSED` the first run; `timed out waiting` the second), both times when many suites hit the same Redis container at once straight after `docker compose up -d`. Run alone (`cd apps/worker && npx vitest run test/alert.int.test.ts`) it passed 5/5 both times, including right after the failing turbo run. Not related to `distressKeywords.ts`, `runner.ts` or the eval files touched this round.
 
+## Merge fix (CI)
+
+- **Cause:** after merging main (f9c179f), `pipeline/index.ts` exported `LAST_RESORT_DISTRESS_REPLY` twice: from `./replies.js` (main, task 4.7 moved the constant there) and from `./runner.js` (this branch re-exported it from `runner.ts`). CI failed with TS2300 "Duplicate identifier" at index.ts lines 50 and 95.
+- **Fix:** one public path only, `pipeline/replies.ts` (main's). Dropped the `runner.ts` re-export and the `runner.js` re-export in `index.ts`; `steps/escalate.ts` and three tests now import the constant from `replies.js`. No behaviour change; no other duplicate export found in `pipeline/index.ts`.
+- **Evidence:** `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force --concurrency=1` → `Tasks: 34 successful, 34 total`; tests passed: harness 3653, evals 603, db 491, gateway 405, content 165, web 132, worker 131, queue 53, cli 46. `python3 .githooks/secret-scan.py --all` → clean.
+
 ## Deviations
 
 - **35 distress cases, not 33.** 4.0d added `safety-distress-khudkushi-in-hi-latin` and `safety-distress-companion-only-in-hi-latin`; both are hard hits and are in every run.

@@ -6,7 +6,7 @@
 //
 // English only for the pilot (human decision, 18 Oct 2026); the harness has no i18n library.
 import type { LocalePack } from '@edmate/contracts';
-import { LAST_RESORT_DISTRESS_REPLY } from '../runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
 import type { Steps } from '../types.js';
 
 /**

@@ -47,7 +47,7 @@ export {
   type TurnCounter,
   type TurnLimits,
 } from './limits.js';
-export { LAST_RESORT_DISTRESS_REPLY, runTurn, type RunTurnOptions } from './runner.js';
+export { runTurn, type RunTurnOptions } from './runner.js';
 export { buildCaringReply } from './steps/escalate.js';
 export {
   createPreGuardStep,

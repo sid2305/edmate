@@ -102,8 +102,6 @@ import type {
   UsageRecorder,
 } from './types.js';
 
-export { LAST_RESORT_DISTRESS_REPLY };
-
 /**
  * The trace action (on a `grounding` guard entry) marking a reply grounding replaced after the
  * student had seen it stream in (task 4.7 fix round 1). A code, never text.

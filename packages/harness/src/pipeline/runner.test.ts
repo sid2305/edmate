@@ -55,7 +55,8 @@ import {
   StepNotImplementedError,
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
-import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
+import { runTurn } from './runner.js';
 import { STEP_NAMES, STEP_SPEC } from './spec.js';
 import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
