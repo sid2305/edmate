@@ -44,6 +44,12 @@ export const scriptedObjectIntent = {
   usage: usageSmall,
 } satisfies ScriptedObjectCall;
 
+/** route's intent fallback (3.3): same shape as `scriptedObjectIntent`, a real `Intent` value. */
+export const scriptedObjectRouteIntent = {
+  value: { intent: 'off_topic' },
+  usage: usageSmall,
+} satisfies ScriptedObjectCall;
+
 export const scriptedEmbedPair = {
   vectors: [
     [0.1, 0.2, 0.3],
