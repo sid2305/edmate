@@ -167,8 +167,9 @@ class Basics(GateCase):
 
 # One sample path per risk group and the reviewers it needs (from risk-paths.txt).
 GROUPS = [
-    ("packages/harness/src/guardrails/g.ts", ("safety-reviewer",)),
-    ("content/locales/in/pack.yaml", ("safety-reviewer",)),
+    # Safety group: code-reviewer only until the pilot gate (MVP first, 20 Oct 2026); 13.3 restores safety-reviewer.
+    ("packages/harness/src/guardrails/g.ts", ("code-reviewer",)),
+    ("content/locales/in/pack.yaml", ("code-reviewer",)),
     ("packages/harness/src/access/filter.ts", ("security-reviewer",)),
     ("packages/payments/src/ledger.ts", ("security-reviewer",)),
     ("apps/web/app/api/webhooks/pay.ts", ("security-reviewer",)),
@@ -221,6 +222,8 @@ class RiskyGroups(GateCase):
                         text = review(*kept)
                         if missing == "typescript-reviewer":
                             text = text.replace("typescript-reviewer", "code-reviewer")
+                        elif missing == "code-reviewer":  # also a default in review()
+                            text = text.replace("code-reviewer, ", "")
                         self.make(self.files(path), review=text, handoff=HIGH)
                         code, out = self.gate(*args, env=env)
                         self.assertEqual(code, 1, out)
@@ -253,13 +256,15 @@ class RiskyGroups(GateCase):
         self.assertIn("risk: high", out)
 
     def test_union_across_groups(self):
-        files = {"packages/contracts/src/x.ts": "x\n", "content/skills/s.md": "x\n", **SAFETY_REVIEW}
-        self.make(files, review=review("architect", "security-reviewer"), handoff=HIGH)
+        files = {"packages/contracts/src/x.ts": "x\n", "content/skills/s.md": "x\n"}
+        # review() always lists code-reviewer, which the skills group now needs; write the line by hand.
+        text = "# r — APPROVE\nReviewers: typescript-reviewer, architect, security-reviewer\n"
+        self.make(files, review=text, handoff=HIGH)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
-        self.assertIn("missing safety-reviewer", out)
+        self.assertIn("missing code-reviewer", out)
         self.fresh()
-        self.make(files, review=review("architect", "security-reviewer", "safety-reviewer"), handoff=HIGH)
+        self.make(files, review=review("architect", "security-reviewer"), handoff=HIGH)
         self.assertEqual(self.gate()[0], 0)
 
     def test_reviewer_word_match(self):
@@ -276,17 +281,19 @@ class RiskyGroups(GateCase):
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         self.assertEqual(self.gate()[0], 1)
 
-    def test_safety_path_needs_safety_review(self):
-        self.make({"apps/worker/src/alerts/a.ts": "x\n"}, review=review("safety-reviewer"), handoff=HIGH)
+    # Until the pilot gate the safety group needs no safety-review.md (MVP first, 20 Oct 2026). When 13.3
+    # restores `safety-reviewer` in risk-paths.txt, these two flip back to code 1 + "safety-review.md is missing".
+    def test_safety_path_passes_without_safety_review(self):
+        self.make({"apps/worker/src/alerts/a.ts": "x\n"}, review=review("code-reviewer"), handoff=HIGH)
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("safety-review.md is missing", out)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("safety-review.md", out)
 
-    def test_locales_need_safety_review(self):
-        self.make({"content/locales/in/p.yaml": "x\n"}, review=review("safety-reviewer"), handoff=HIGH)
+    def test_locales_pass_without_safety_review(self):
+        self.make({"content/locales/in/p.yaml": "x\n"}, review=review("code-reviewer"), handoff=HIGH)
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("safety-review.md is missing", out)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("safety-review.md", out)
 
     def test_destructive_migration(self):
         files = {"packages/db/migrations/0002.sql": "DROP TABLE students;\n"}
@@ -327,11 +334,12 @@ class FixRound1(GateCase):
             git(self.repo.root, "branch", "-D", B)
 
     def test_non_ascii_path_is_risky(self):
-        self.make({"content/prompt-packs/caf\u00e9.md": "x\n"}, handoff=HIGH)
+        self.make({"content/prompt-packs/caf\u00e9.md": "x\n"},
+                  review="# r \u2014 APPROVE\nReviewers: typescript-reviewer\n", handoff=HIGH)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
         self.assertIn("risky content/prompt-packs/caf\u00e9.md", out)
-        self.assertIn("missing safety-reviewer", out)
+        self.assertIn("missing code-reviewer", out)
 
     def test_rename_out_of_risky_path(self):
         self.repo.write("packages/contracts/src/x.ts", "export const x = 1;\n")

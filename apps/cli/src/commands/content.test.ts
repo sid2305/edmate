@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { CONTENT_USAGE, runContentCommand } from './content.js';
 const FIXTURES = new URL('../../../../packages/content/test/fixtures', import.meta.url).pathname;
 const VALID = join(FIXTURES, 'valid');
 const BROKEN = join(FIXTURES, 'broken-all');
+const LOCALES = join(FIXTURES, 'locales', 'valid');
 
 function capture() {
   const out: string[] = [];
@@ -63,6 +64,47 @@ describe('edmate content validate', () => {
     const { io, err } = capture();
     expect(runContentCommand(['validate', dir], io, { cwd: '/' })).toBe(1);
     expect(err.join('')).toMatch(/: 1 issue\n {2}- qa-recall\.yaml: invalid content:\n {4}/);
+  });
+
+  it('validates a locale-packs directory: exits 0 when valid', () => {
+    const { io, out } = capture();
+    expect(runContentCommand(['validate', LOCALES], io, { cwd: '/' })).toBe(0);
+    expect(out.join('')).toBe(`edmate content validate: ${LOCALES}: ok\n`);
+  });
+
+  it('a locale pack missing a field or with a pending helpline exits 1 and names each issue', () => {
+    const dir = tempDir();
+    cpSync(LOCALES, dir, { recursive: true });
+    const xx = join(dir, 'XX.yaml');
+    writeFileSync(
+      xx,
+      readFileSync(xx, 'utf8')
+        .replace('verifiedBy: Example Reviewer', 'verifiedBy: pending')
+        .replace(/^ {2}grievance: .*\n/m, ''),
+    );
+    const g = join(dir, 'global.yaml');
+    writeFileSync(g, readFileSync(g, 'utf8').replace(/^ {2}minAge: .*\n/m, ''));
+    const { io, out, err } = capture();
+    expect(runContentCommand(['validate', dir], io, { cwd: '/' })).toBe(1);
+    const text = err.join('');
+    expect(text).toMatch(/: 3 issues\n/);
+    expect(text).toMatch(/- XX\.yaml: invalid locale pack:[\s\S]*compliance\.grievance/);
+    expect(text).toMatch(/- global\.yaml: invalid locale pack:[\s\S]*compliance\.minAge/);
+    // Both files failed to load, so the default-pack rule reports it missing too.
+    expect(text).toContain('- global.yaml: missing; the default pack is required');
+    expect(out).toEqual([]);
+
+    // Fix the fields: the pending helpline is what remains.
+    cpSync(LOCALES, dir, { recursive: true });
+    writeFileSync(
+      xx,
+      readFileSync(xx, 'utf8').replace('verifiedBy: Example Reviewer', 'verifiedBy: pending'),
+    );
+    const again = capture();
+    expect(runContentCommand(['validate', dir], again.io, { cwd: '/' })).toBe(1);
+    expect(again.err.join('')).toContain(
+      ': 1 issue\n  - XX.yaml: helpline "Example Helpline": verifiedBy is "pending"\n',
+    );
   });
 
   it('resolves a relative dir against cwd', () => {

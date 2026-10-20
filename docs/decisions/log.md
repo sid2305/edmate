@@ -10,6 +10,82 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 3.10 Fix round 2: worker 'error' listener, real-worker integration test, structural-check bypasses closed, overclaims reworded · risk: medium
+Decided: `checkSafeRegexGuarded` attaches `worker.on('error', ...)` right after spawning (swallowed: the guard already reports unsafe at the ceiling either way), closing a host-process crash when a worker threw after `Atomics.wait` already returned. `safeRegexGuardIntegration.test.ts` builds the package with its own `tsc` and imports the compiled `dist` so one test exercises the real `Worker`/`Atomics`/`MessagePort` protocol end to end, not a mock or the no-`dist` fallback. `unrolledOverlap` (`safeRegex.ts`) now treats a `{1}` quantifier as unquantified, unwraps a one-branch plain group before the adjacency scan, and no longer lets a possibly-empty term between groups reset the scan. A fourth shape the re-review raised, `a?`×25 then `a`×25 with no group at all, is left to the timing probe and the load-path ceiling (the real IN mobile pattern has that same optional-then-mandatory shape and must not be flagged); a test proves the probe and the ceiling both catch it. ADR-0008 and this handoff are reworded where they overstated the structural check as a proof ("matching the quantified case's ambiguity exactly", "provably safe"); the ADR now also documents the `existsSync` in-process fallback (no ceiling, test-only today) and a strictness note that `(a|b)(a|b)` is refused even though it is not itself exponential. `received.message as string[]` is replaced with a runtime shape check.
+Why: typescript-reviewer and architect re-review of PR #57's fix round 1 found the crash path untested and still possible, the real worker protocol untested, three ways to dodge the unrolled-overlap scan structurally, and wording that claimed more certainty than a heuristic check can give.
+Alternatives: skip the real-worker test and rely on the mocked protocol test alone (rejected: a mock can drift from the real `Atomics`/`MessagePort` behaviour without anyone noticing); catch `a?`×25/`a`×25 structurally too (rejected: no rule the authors could find distinguishes it from the real IN mobile pattern's own optional-then-mandatory shape without also flagging that pattern).
+Reviewers: typescript-reviewer, architect (both raised findings in this round).
+Reversible: yes; no stored data depends on any of these changes, only which patterns validate and how the guard's failure modes are documented.
+
+---
+
+### 20 Oct 2026 · 3.10 Safe-regex structural check also refuses an unrolled ambiguous alternation; timing probe derives units from the pattern; a hard wall-clock ceiling guards the load/validate path · risk: high
+Decided: the structural check refuses not only an alternation whose branches overlap under an explicit repeating quantifier, but also two or more adjacent, unquantified copies of the same alternation group, or of groups whose branches overlap each other -- a manually unrolled ambiguity is exactly as dangerous once the compiled pattern runs. The timing probe's adversarial inputs are built from every distinct literal character and class/escape sample the pattern itself uses, in addition to the existing generic alphabet. `edmate content validate` and start-up `loadLocalePacks` (never the per-turn PII scrub) run the whole check inside a `node:worker_threads` worker with a roughly 2-second hard wall-clock ceiling; a pattern that does not answer in time is terminated and reported unsafe. All four real IN patterns and the global pack still pass.
+Why: security review of PR #57 found `'(x|xx)'.repeat(25) + 'z'` and `'(a|aa)'.repeat(25) + 'z'` passed the round-0 check yet took 0.5–4.7 s to run; a pack author (or anyone who can propose a pack) could spell an exponential-backtracking pattern out longhand to dodge a check gated only on an explicit quantifier. Pack patterns run on every student message in `piiScrub`, so any pattern that reaches that path needs more than one check that happens to catch the shapes its author anticipated: the structural check is a conservative heuristic over the pattern's written shape, the timing probe and the load-path ceiling are the backstop for what it misses, and the per-turn scrub path itself has no check and no ceiling at all (see "Fix round 2" and ADR-0008 for what this does and does not guarantee).
+Alternatives: keep the quantifier-gated check and rely on the timing probe alone to catch an unrolled pattern (rejected: the probe's own fixed generic alphabet could miss a pattern ambiguous only on a character outside it, and a probe-only defence has no structural explanation for pack authors); add the `safe-regex` npm package (still a new dependency, the same Q1 answer as round 0); cap total validate-time instead of per-pattern (rejected: one slow pattern would still block every other pack's validation).
+Reviewers: security-reviewer (raised it), architect, typescript-reviewer (ADR-0008 addendum, the worker-protocol design in `safeRegexGuard.ts`).
+Reversible: yes, with a new ADR note; no stored data depends on the stricter rule, only which packs validate.
+
+---
+
+### 19 Oct 2026 · 3.10 LocalePack gains sign-off fields and a parental-consent flag (ADR-0008) · risk: high
+Decided: each helpline gets required `verifiedBy` (a name or handle, never an email, at most 200 characters) and `verifiedOn` (a calendar date). `compliance` gets a required `parentalConsentRequired` boolean. The pack gets an optional `reviewedBy` / `reviewedOn` pair for the compliance block. The literal `pending` is valid in the schema; the content rules report it, and the runtime loader never serves a helpline that carries it. The build plan's Core contracts text and the spec-type tests are updated to match.
+Why: the task asks for "human-verified helplines and compliance". Code could not tell a verified helpline from a guessed one, and the consent rule differs per market (US no, India yes for 13 to 17).
+Alternatives: one pack-level sign-off only; a side file for verification; making the schema reject `pending` (the pack could not be committed honestly); hard-coding consent per country.
+Reviewers: architect, security-reviewer, typescript-reviewer (contracts, ADR); safety-reviewer (helpline refusal, `content/locales/`, the `piiScrub.test.ts` extraction under `packages/harness/src/guardrails/`); security-reviewer also for the `.claude/skills/locale-context` doc.
+Reversible: yes, with a new ADR; no stored data uses these fields yet.
+
+---
+
+### 19 Oct 2026 · 3.10 At runtime an unverified helpline is removed from its pack; the pack and its PII patterns are kept · decided by the team lead · risk: high
+Decided: `loadLocalePacks` serves each pack with every unverified helpline (a blank or `pending` number, or a `pending` verifier) removed, and reports each removed helpline once (market, helpline name, reason codes; never the number). A pack left with no helplines gets the frame's country-neutral line (local emergency services, someone you trust); its PII patterns and other fields are used. A pack that fails the schema or its PII-pattern checks (gu, safe-regex) is refused whole and its market gets the default pack; loading throws only without a usable default pack. `pickLocalePack` removes unverified helplines again (defence in depth). Pending compliance fields (`grievance`, `reviewedBy`) do not block runtime use: they are for the published privacy notice, which is not built yet. `edmate content validate` still fails on every pending value, so the human sign-off stays visible.
+Why: the first build refused the whole pack (lead revision 4), which would have dropped India's Aadhaar, PAN, UPI and Indian-mobile PII patterns until sign-off, a privacy regression. Removing only the helplines gives the same crisis wording without that loss. Lead decision on the build review, 19 Oct 2026; replaces the earlier "refuse the whole pack" decision. ADR-0008 updated to match.
+Alternatives: refuse the whole pack until every helpline is verified (the first build; rejected for the PII regression); refuse only at `edmate content validate` (rejected: an unverified number could reach a crisis reply).
+Reviewers: safety-reviewer (helpline removal, `content/locales/`), architect, security-reviewer, typescript-reviewer (ADR-0008).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.10 Safe-regex check: strict structure first, timing second; one-character lookbehinds allowed · risk: medium
+Decided: a hand-written parser (no dependency) refuses a quantifier inside a group that repeats (`*`, `+`, `{n,m}` with m > 1), an alternation under a repeat whose branches don't each start with a distinct literal character, any backreference, and any lookbehind wider than one character. Clean patterns then run over adversarial inputs from 32 to 8,192 characters (100 ms budget per attempt; flagged only when 3 attempts all go over, so a busy machine can't fail a good pattern). The check runs at validate and load time, never per turn. The Aadhaar pattern is rewritten without its backreference and nested quantifier; it matched identically on 200,011 strings.
+Why: lead revision 2 (structure first, strict is fine). The real IN patterns need one-character lookbehinds to bound a number without redacting its neighbour, so a total lookbehind ban would fail the acceptance line "the real IN pack passes 4.2's PII pipeline test".
+Alternatives: ban every lookbehind (breaks the IN patterns); the `safe-regex` npm package (a new dependency, Q1); timing only (can hang on an exponential pattern).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.10 Packs are English-only during the pilot · risk: low
+Decided: both packs list `languages: [en]`, and a validation rule requires exactly `[en]` while the pilot policy holds.
+Why: the 18 Oct 2026 English-only pilot decision and B-14 (crisis replies stay English). The plan's draft had `[en, hi]`.
+Alternatives: `[en, hi]` describing the market rather than the pilot.
+Reversible: yes; drop the rule when the policy changes.
+
+---
+
+### 19 Oct 2026 · 3.10 Ship only the default and IN packs; en-US waits for M10 · risk: medium
+Decided: this task ships `global.yaml` and `IN.yaml`. The `en-US` pack is a follow-up once task 10.1 settles US payment and tax details.
+Why: the open-decisions table lists 3.10 as blocked only for "first pack", and the accept line names only the IN pack.
+Alternatives: a partial US pack now.
+Reversible: yes; adding a pack is additive.
+
+---
+
+### 19 Oct 2026 · 3.10 IN pack committed with `pending` values; `edmate content validate content/locales` fails until a person signs off · risk: medium
+Decided: `IN.yaml` ships with the helpline number, its verifier, the grievance contact and the compliance reviewer set to `pending`; the Tele-MANAS number is not committed. The validate command exits 1 on the real directory by design; unit tests use fixtures, and the real-directory tests hold before and after sign-off.
+Why: lead revision 5 and rule 5 (public repo; agents never invent contacts or numbers).
+Alternatives: commit the PRD's number as a candidate (rejected by the lead).
+Reversible: yes; a person fills in the values.
+
+---
+
+### 20 Oct 2026 · MVP first: M4 polish parked, safety review once at the pilot gate, the lead signs eval cases · decided by you · risk: high
+Decided: M4 is done once 4.0–4.8 merge. 4.9 and the follow-ups the safety reviews raised (4.2d, 4.3b, 4.3c, 4.3d, 4.4b, 4.4c, 4.4d, 4.4e, 4.5b, 4.7b) move to M13. Until the pilot gate, `safety-reviewer` does not run on PRs (`risk-paths.txt` asks for `code-reviewer` on the safety group; the PR still logs `risk: high`), and a PR gets one fix round: a HIGH still open becomes a board task, only a CRITICAL goes to the human. Eval cases are reviewed and signed by the lead (`reviewed_by: lead`), not the human; prompt packs and templates still need a named human. Task 13.3 restores `safety-reviewer` and runs one whole-system safety review before real students. Next: 5.1 → 5.3 → 5.4 → 5.6, then a thin teacher-upload and student-chat slice.
+Why: M4 was planned as 10 tasks and grew to 28 through safety-review follow-ups and fix rounds, while M5–M9 (the product) had not started; no student could talk to a teacher's agent. The five core guards (PII, distress, moderation/jailbreak, answer leak, locked leak) are built or merging, which is what a public repo with 13+ users needs; the rest is polish. The human's sign-off on every eval case was a recurring bottleneck.
+Alternatives: keep running safety-reviewer per PR and only park 4.9; skip M4 entirely (rejected: the core guards are done and needed).
+Reversible: yes; move the tasks back to M4, restore `safety-reviewer` in `risk-paths.txt`, and require a human in `reviewed_by` again.
+
+---
+
 ### 19 Oct 2026 · 0.15 Merge gate checks the handoff Status line · decided by lead · risk: high
 Decided: `merge_gate.py` now reads `docs/tasks/<id>/handoff.md`'s `Status:` line (plain or bold, e.g. `Status: DONE` or `- **Status:** DONE`) and fails the merge unless it says DONE; `PARTIAL`, `BLOCKED` or a missing line fails with a clear message, even if `review.md` is APPROVE.
 Why: nothing previously stopped a `PARTIAL`/`BLOCKED` handoff from merging once its review was approved, so an unfinished build could pass the gate.
