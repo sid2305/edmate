@@ -179,50 +179,166 @@ python3 .githooks/secret-scan.py --all → exit 0
 - Load notices with `readPrivacyNoticesDir` and show `pickPrivacyNotice(market, ...)`; record its
   `version`. An unsigned notice still loads (`noticeSigned` tells you), as pending packs do.
 
-### Decisions
-- **risk: high** — Phase B edits `.claude/skills/merge-gate/risk-paths.txt` (`.claude/**`,
-  security-reviewer required) and touches `content/locales/US.yaml` and the new
-  `content/legal/**` (code-reviewer group).
-  Decided: `content/legal/**` joins the code-reviewer (student safety) group.
-  Why: the notice is the text a learner or parent consents to, so a change to it needs review.
-- Decided: a pack's waiver of consent counts only when `reviewedBy` is set and not `pending`
-  (any case, trimmed); `global.yaml` has no sign-off, so it can never waive.
-  Why: plan Design 3, failing closed: an unsigned pack can't relax consent.
-- Decided: `agePolicyResolver` never throws; with no packs at all it gives
-  `{ minAge: 13, consentRequired: true }`.
-  Why: the age rule must not depend on a pack loading; the strict default is safe.
-- Decided: a notice also fails validation while its body holds `[PLACEHOLDER]`, even if signed.
-  Why: a signature on the placeholder text must not pass it as the real notice.
-- Decided: US.yaml leaves `privacyLaw` `pending` as well as `dataRegion` and `grievance`, and
-  uses `America/New_York` as its reference time zone.
-  Why: which US laws apply is for counsel, not an agent; the time zone is a neutral default.
-- Decided: an unsigned notice still loads for runtime (like pending packs); `noticeSigned` is
-  exported so Phase C or launch checks can refuse it.
-  Why: the gate needs some text to build against; validation keeps the gap visible.
-- Decided: notice `version` is 1-64 letters, digits, `.`, `_` or `-`.
-  Why: it is stored in `consents.version` (Phase A accepts at most 64 characters).
-
 ## Decisions
-- **risk: high** — Phase A touches the risky paths `packages/db/src/identity/**` and
-  `packages/db/src/repositories/ports.ts` (security group; security-reviewer required;
-  database-reviewer and typescript-reviewer recommended by the plan). `learnerClear` is a
-  **required** option on `EntitlementStoreOptions`, so every composition root must say how it
-  blocks a learner held at the age gate; it is asked fresh on every `subscription` resolve.
-- `recordAgeAnswer` is for students only: a teacher or staff user gets `scope`, so the under-age
-  erase can never delete a teacher or staff account (teacher age checks come with vetting).
-- "Answered" means `birth_year` is set (not `age_confirmed_at`): demo and pre-1.7 rows had
-  `age_confirmed_at` without a year.
-- The birth year must not be after the current UTC year (a future year is `invalid`), on top of
-  the 1900-2100 column check.
-- The under-age erase deletes only the user's sign-in rows and consents. Any other row pointing at
-  the user (e.g. a platform audit row) makes the whole erase fail with nothing changed, rather
-  than deleting data the store doesn't own.
-- A learner below a market minimum raised after their answer reads `parent_needed` (blocked from
-  the agent, not sent back to a gate they can't re-answer); staff resolve it (12.1).
-- A live parental consent is any version with `granted_by = 'parent'` and no `withdrawn_at`;
-  a `parental` row granted by `self` never counts.
-- Market format in the store is `global` or two capital letters; which markets exist (packs) is
-  the injected policy's and the web gate's business (Phase B/C).
+
+### 20 Oct 2026 · 1.7 learnerClear gates every subscription resolve · decided by tdd-guide · risk: high
+Decided: `learnerClear` is a **required** option on `EntitlementStoreOptions`; every composition
+root must say how it blocks a learner held at the age gate, and it is asked fresh on every
+`subscription` resolve.
+Why: Phase A touches the risky paths `packages/db/src/identity/**` and
+`packages/db/src/repositories/ports.ts` (security group; security-reviewer required;
+database-reviewer and typescript-reviewer recommended by the plan).
+risk: high
+
+### 20 Oct 2026 · 1.7 under-age erase never touches teacher or staff accounts · decided by tdd-guide
+Decided: `recordAgeAnswer` is for students only: a teacher or staff user gets `scope`, so the
+under-age erase can never delete a teacher or staff account.
+Why: teacher age checks come with vetting.
+risk: low
+
+### 20 Oct 2026 · 1.7 "answered" means a stored birth year · decided by tdd-guide
+Decided: "Answered" means `birth_year` is set, not `age_confirmed_at`.
+Why: demo and pre-1.7 rows had `age_confirmed_at` without a year.
+risk: low
+
+### 20 Oct 2026 · 1.7 birth year can't be in the future · decided by tdd-guide
+Decided: The birth year must not be after the current UTC year (a future year is `invalid`), on
+top of the 1900-2100 column check.
+Why: the 1900-2100 column check alone would still accept a birth year that's in the future.
+risk: low
+
+### 20 Oct 2026 · 1.7 erase stays scoped to sign-in rows and consents · decided by tdd-guide
+Decided: The under-age erase deletes only the user's sign-in rows and consents.
+Why: any other row pointing at the user (e.g. a platform audit row) makes the whole erase fail
+with nothing changed, rather than deleting data the store doesn't own.
+risk: low
+
+### 20 Oct 2026 · 1.7 a raised minimum reads parent_needed, not a re-answer · decided by tdd-guide
+Decided: A learner below a market minimum raised after their answer reads `parent_needed`.
+Why: blocked from the agent, not sent back to a gate they can't re-answer; staff resolve it (12.1).
+risk: low
+
+### 20 Oct 2026 · 1.7 a live parental consent must be parent-granted · decided by tdd-guide
+Decided: A live parental consent is any version with `granted_by = 'parent'` and no
+`withdrawn_at`; a `parental` row granted by `self` never counts.
+Why: a parent's own standing must come from the parent, not from the student answering for them.
+risk: low
+
+### 20 Oct 2026 · 1.7 market format: global or two capital letters · decided by tdd-guide
+Decided: Market format in the store is `global` or two capital letters.
+Why: which markets exist (packs) is the injected policy's and the web gate's business (Phase B/C).
+risk: low
+
+### 20 Oct 2026 · 1.7 content/legal joins the code-reviewer group · decided by tdd-guide · risk: high
+Decided: `content/legal/**` joins the code-reviewer (student safety) group.
+Why: Phase B edits `.claude/skills/merge-gate/risk-paths.txt` (`.claude/**`, security-reviewer
+required) and touches `content/locales/US.yaml` and the new `content/legal/**`; the notice is the
+text a learner or parent consents to, so a change to it needs review.
+risk: high
+
+### 20 Oct 2026 · 1.7 consent waiver needs a signed-off pack · decided by tdd-guide
+Decided: A pack's waiver of consent counts only when `reviewedBy` is set and not `pending` (any
+case, trimmed); `global.yaml` has no sign-off, so it can never waive.
+Why: plan Design 3, failing closed: an unsigned pack can't relax consent.
+risk: low
+
+### 20 Oct 2026 · 1.7 agePolicyResolver fails closed, never throws · decided by tdd-guide
+Decided: `agePolicyResolver` never throws; with no packs at all it gives
+`{ minAge: 13, consentRequired: true }`.
+Why: the age rule must not depend on a pack loading; the strict default is safe.
+risk: low
+
+### 20 Oct 2026 · 1.7 a signed placeholder notice still fails validation · decided by tdd-guide
+Decided: A notice also fails validation while its body holds `[PLACEHOLDER]`, even if signed.
+Why: a signature on the placeholder text must not pass it as the real notice.
+risk: low
+
+### 20 Oct 2026 · 1.7 US.yaml leaves privacy law to counsel · decided by tdd-guide
+Decided: US.yaml leaves `privacyLaw` `pending` as well as `dataRegion` and `grievance`, and uses
+`America/New_York` as its reference time zone.
+Why: which US laws apply is for counsel, not an agent; the time zone is a neutral default.
+risk: low
+
+### 20 Oct 2026 · 1.7 unsigned notices still load for runtime · decided by tdd-guide
+Decided: An unsigned notice still loads for runtime (like pending packs); `noticeSigned` is
+exported so Phase C or launch checks can refuse it.
+Why: the gate needs some text to build against; validation keeps the gap visible.
+risk: low
+
+### 20 Oct 2026 · 1.7 notice version format matches consents.version · decided by tdd-guide
+Decided: Notice `version` is 1-64 letters, digits, `.`, `_` or `-`.
+Why: it is stored in `consents.version` (Phase A accepts at most 64 characters).
+risk: low
+
+### 20 Oct 2026 · 1.7 Phase C touches auth and identity risk paths · decided by tdd-guide · risk: high
+Decided: Phase C's work lives in `apps/web/src/auth/**` and again in
+`packages/db/src/identity/**`.
+Why: both are in the security group, so security-reviewer review is required.
+risk: high
+
+### 20 Oct 2026 · 1.7 a blocked erase still locks the learner out · decided by tdd-guide
+Decided: A blocked under-age erase (another row points at the user) is `not_found`, and the web
+treats it like under-age: block cookie, session cleared and deleted; the account stays for staff
+to erase (12.1).
+Why: the learner must be shut out at once even when the erase can't finish.
+risk: low
+
+### 20 Oct 2026 · 1.7 a blocked erase can be re-answered until staff act · decided by tdd-guide
+Decided: Accept that after a blocked erase the row has no birth year, so another browser could
+answer again until staff act.
+Why: rare (only when a foreign row exists) and staff see it; a schema flag needs more scope.
+risk: low
+
+### 20 Oct 2026 · 1.7 re-submitting the age form is a no-op · decided by tdd-guide
+Decided: An already-answered learner who submits again gets their current standing back and
+nothing is written.
+Why: a second tab must not see an error or change the record.
+risk: low
+
+### 20 Oct 2026 · 1.7 web also rejects a future birth year · decided by tdd-guide
+Decided: The web rejects a birth year after the current UTC year as a validation error.
+Why: the same neutral message as any bad answer; the store also rejects it.
+risk: low
+
+### 20 Oct 2026 · 1.7 content load failure fails closed for students only · decided by tdd-guide
+Decided: If content/ can't be loaded, student requests fail with 500; teacher and staff are
+unaffected.
+Why: fail closed for learners without taking the whole site down.
+risk: low
+
+### 20 Oct 2026 · 1.7 block cookie carries no identifying value · decided by tdd-guide
+Decided: The block cookie value is the constant `'1'`, httpOnly, Lax, 24 h, `__Host-` over https.
+Why: it must not identify the person or the answer.
+risk: low
+
+### 20 Oct 2026 · 1.7 birth year field stays neutral, no autofill · decided by tdd-guide
+Decided: The birth year field has `autoComplete="off"`, no default and no min/max.
+Why: a neutral screen that hints at no cut-off.
+risk: low
+
+### 20 Oct 2026 · 1.7 notice version is server-recorded, not client-sent · decided by tdd-guide
+Decided: The page shows the notice version as text; the form never carries it.
+Why: the server records the version it showed, never one the browser sends.
+risk: low
+
+### 20 Oct 2026 · 1.7 fix round touches auth, identity and a migration · decided by tdd-guide · risk: high
+Decided: Fix round 1's work is again in `apps/web/src/auth/**` and `packages/db/src/identity/**`,
+and adds a migration.
+Why: both source paths are in the security group (security-reviewer required).
+risk: high
+
+### 20 Oct 2026 · 1.7 blocked erase shuts out every session, not just the request that tried it · decided by tdd-guide · risk: high
+Decided: a blocked erase is a new learner standing (`under_age` via `age_blocked_at`), not a retry
+state — it fails every clearance forever, from any browser or device, until staff clear it (12.1);
+the `signIn` callback refuses it outright, including a fresh sign-in with no cookie of its own.
+Why: the original gap was exactly this — a device or sign-in with no block cookie could still
+re-answer the gate. Marking the account itself, not the browser, closes that for every path in.
+risk: high
+
+### 20 Oct 2026 · 1.7 Merge Phases A–C; the web-build HIGH goes to 1.7b and parental consent to 1.7c · decided by lead · risk: high
+Decided: PR #71 merges Phases A–C. The security re-check's new HIGH goes to 1.7b, which starts right after this merge and is a dependency of 9.1. That HIGH: `next build --webpack` (apps/web/package.json) can't load the safe-regex worker, so the IN pack is refused and India drops out of the age gate (fails safe). Phase D, parental consent, becomes 1.7c, blocked on B-27 Q1, and 13–17 learners stay blocked until then. Two LOWs are accepted as wontfix: apps/web/app/welcome/age/page.tsx shows the placeholder notice until it is signed (B-27 Q2 gates launch), and apps/web/test/memory-identity.ts keeps its lazy import (test-only). The other LOWs go to 1.7a.
+Why: one fix round per PR (human, 20 Oct 2026); every open gap fails closed, and nothing is deployed yet.
+risk: high
 
 ## Phase C
 
@@ -274,31 +390,6 @@ Worktree: `.claude/worktrees/agent-adec93b092b6d8089`
 - `ageGateView` and `ageNotice` added for the page; the plan didn't name them.
 - The block cookie is also enforced at sign-in (the plan named only the gate).
 - The Dockerfile copies `content/` into the runtime image.
-
-### Decisions
-- **risk: high** — Phase C touches `apps/web/src/auth/**` (security group; security-reviewer
-  required) and again `packages/db/src/identity/**`.
-- Decided: a blocked under-age erase (another row points at the user) is `not_found`, and the web
-  treats it like under-age: block cookie, session cleared and deleted; the account stays for
-  staff to erase (12.1).
-  Why: the learner must be shut out at once even when the erase can't finish.
-- Decided: accept that after a blocked erase the row has no birth year, so another browser could
-  answer again until staff act.
-  Why: rare (only when a foreign row exists) and staff see it; a schema flag needs more scope.
-- Decided: an already-answered learner who submits again gets their current standing back and
-  nothing is written.
-  Why: a second tab must not see an error or change the record.
-- Decided: the web rejects a birth year after the current UTC year as a validation error.
-  Why: the same neutral message as any bad answer; the store also rejects it.
-- Decided: if content/ can't be loaded, student requests fail with 500; teacher and staff are
-  unaffected.
-  Why: fail closed for learners without taking the whole site down.
-- Decided: the block cookie value is the constant `'1'`, httpOnly, Lax, 24 h, `__Host-` over https.
-  Why: it must not identify the person or the answer.
-- Decided: the birth year field has `autoComplete="off"`, no default and no min/max.
-  Why: a neutral screen that hints at no cut-off.
-- Decided: the page shows the notice version as text; the form never carries it.
-  Why: the server records the version it showed, never one the browser sends.
 
 ## Fix round 1 (security-reviewer, HIGH)
 
@@ -356,15 +447,3 @@ back the *whole* transaction, including the sign-in rows we'd already deleted, l
      with `next build --webpack`: a clean build. `apps/web/package.json`'s `build` script now runs
      `next build --webpack` (see `next.config.ts` for the full note); this is a bundler choice, not
      a tech-stack change.
-
-### Decisions
-- **risk: high** — fix round 1 touches `apps/web/src/auth/**` and `packages/db/src/identity/**`
-  again (security group; security-reviewer required), and adds a migration.
-
-### 20 Oct 2026 · 1.7 blocked erase shuts out every session, not just the request that tried it · decided by tdd-guide
-Decided: a blocked erase is a new learner standing (`under_age` via `age_blocked_at`), not a retry
-state — it fails every clearance forever, from any browser or device, until staff clear it (12.1);
-the `signIn` callback refuses it outright, including a fresh sign-in with no cookie of its own.
-Why: the original gap was exactly this — a device or sign-in with no block cookie could still
-re-answer the gate. Marking the account itself, not the browser, closes that for every path in.
-risk: high
