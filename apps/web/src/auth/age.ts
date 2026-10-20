@@ -66,7 +66,14 @@ export function loadAgeContent(
   pickPrivacyNotice(ELSEWHERE, notices);
   const { packs, refused } = loadLocalePacks(join(dir, 'locales'));
   for (const r of refused) {
-    log(`[auth] age gate: refused locale pack ${r.file}: ${r.reasons.join('; ')}`);
+    // Fix round (security review of PR #76): `r.reasons` are loader-generated messages, but for a
+    // YAML/schema parse failure they can echo a snippet of the pack file. An unescaped control
+    // character (a raw newline) in one would split this into more than one log line; stripping
+    // control characters keeps each refusal to the single line the build-smoke test (and anyone
+    // reading the log) expects.
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+    const reasons = r.reasons.map((reason) => reason.replace(/[\u0000-\u001f\u007f]/g, ' '));
+    log(`[auth] age gate: refused locale pack ${r.file}: ${reasons.join('; ')}`);
   }
   const markets = [...packs.keys()].filter((m) => m !== ELSEWHERE).sort();
   return {

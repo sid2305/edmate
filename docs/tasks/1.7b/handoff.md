@@ -55,10 +55,9 @@ $ python3 .githooks/secret-scan.py --all
 ```
 
 Repro check (TDD red→green): temporarily stashed only the fix in `safeRegexGuard.ts`, rebuilt, and
-reran the build-smoke test — it failed with the exact symptom described above (`TypeError: The
-"path" argument must be of type string or an instance of URL. Received an instance of URL`,
-surfaced during Next's "collect page data" build step). Restored the fix, rebuilt, reran — green
-again.
+reran the build-smoke test — it failed for the symptom described above: every locale pack
+(including `IN`) was reported unsafe and refused, `loadAgeContent` served only `global`, and the
+page never contained `value="IN"`. Restored the fix, rebuilt, reran — green again.
 
 ## Turbopack trial
 Per the lead's answer, trialed a plain `next build` (no `--webpack`) after the fix. Result: it
@@ -88,7 +87,100 @@ comment is updated to record this finding.
 None from the plan; the lead's answers in the plan file were followed as written (keep
 `--webpack`, one server start for the build-smoke test, named reviewers).
 
+## Fix round
+
+Three HIGH findings (security-reviewer, typescript-reviewer) fixed:
+
+1. **Relocated/bundled worker fails open in production.** `next build --webpack` still bundles
+   `@edmate/content` into the app's own server chunk (`serverExternalPackages` does not stop it for
+   a pnpm workspace package; its real path sits outside any `node_modules` tree). Bundled,
+   `import.meta.url` is rewritten to the build machine's own absolute path, which does not exist in
+   the Docker image or any relocated standalone copy -- the worker then silently falls back to the
+   unbounded in-process check. Fixed with three parts:
+   - `packages/content/src/safeRegexGuard.ts`: `getWorkerFile()` tries the real sibling path first
+     (unchanged, correct for the unbundled `dist` -- this package's own tests, `edmate content
+     validate`), then falls back to an explicit `EDMATE_CONTENT_WORKER_DIR` env var rather than
+     guessing from `process.cwd()` (tried first; dropped because Next's standalone `server.js`
+     calls `process.chdir(__dirname)` before anything else runs, so the server's cwd is always its
+     own directory, not the server root this package would need to assume).
+   - `checkSafeRegexGuarded` now fails closed, not open, whenever the worker file cannot be found
+     *and* `NODE_ENV=production`: every pattern is reported unsafe, logged once (not once per
+     check). The existing no-dist, non-production fallback (this package's own tests) is unchanged.
+   - `apps/web/next.config.ts`: `serverExternalPackages: ['@edmate/content']` (kept even though it
+     does not fully externalize the package here -- a pnpm-monorepo gap, not something this config
+     closes) and `outputFileTracingIncludes` for `packages/content/dist/**`, so the standalone
+     output's own copy of the worker and its sibling `safeRegex.js` import are both actually
+     present to be found. `apps/web/Dockerfile` sets `EDMATE_CONTENT_WORKER_DIR=/app/packages/
+     content/dist`, the image's own known, deterministic layout.
+2. **The smoke test ran the build in place, so it could not have caught (1).**
+   `apps/web/test/build-smoke.test.ts` now copies `.next/standalone` to a throwaway temp directory
+   and renames this checkout's own `packages/content/dist` out of the way for the duration of the
+   test, so the only `dist` the spawned server can possibly use is the one inside the copy. The
+   `'IN'` assertion is also now proof the worker ran *from the copy*: if relocation had broken it,
+   the new production fail-closed path would refuse `'IN'` along with `'ZZ'`, not just `'ZZ'` --
+   confirmed by running the test red (worker file deliberately absent from the copy; both patterns
+   refused with the "failing closed" reason) and green (fixed) during this fix round.
+3. **No `child.on('error', ...)` listener on the spawned server.** A spawn failure (ENOENT, EACCES,
+   ...) fires an `'error'` event; with no listener, Node treats it as an uncaught exception and
+   crashes the whole vitest/CI process. `beforeAll` now attaches a listener that records the error
+   and surfaces it as a normal thrown error from `beforeAll` (a clean test failure) instead.
+
+Also fixed (LOW):
+- `apps/web/src/auth/age.ts`: refusal reasons are stripped of control characters before logging, so
+  an unescaped newline in a loader-generated message can't split one refusal into more than one log
+  line.
+- This handoff's original repro text (quoting the cross-realm `URL` error from a different bug)
+  corrected to match the actual symptom of this task's own root cause.
+
+Verified (rebuilt `@edmate/content` and `@edmate/web`, Postgres via `docker compose -f docker/
+compose.yaml -f packages/db/test/compose.port.yaml up -d postgres redis`):
+```
+$ TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate \
+  corepack pnpm turbo run typecheck lint test --filter=@edmate/content... --filter=@edmate/web...
+ Tasks:    34 successful, 34 total
+```
+```
+$ TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate \
+  corepack pnpm turbo run build-smoke --filter=@edmate/web --force
+@edmate/web:build-smoke:  ✓ test/build-smoke.test.ts (1 test) 1925ms
+ Tasks:    9 successful, 9 total
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(exit 0, no output)
+```
+
 ## Decisions
+
+### 20 Oct 2026 · 1.7b fix round: a missing/relocated safe-regex worker fails closed in production · decided by builder · risk: high
+Decided: `checkSafeRegexGuarded` (`packages/content/src/safeRegexGuard.ts`) now reports every
+pattern unsafe, logged once, whenever the compiled worker file cannot be found *and*
+`process.env.NODE_ENV === 'production'`, instead of taking the unbounded in-process fallback meant
+for dev and this package's own tests. `getWorkerFile()` also stops trying to derive a relocated
+worker's path from `process.cwd()` (Next's standalone `server.js` chdirs to its own directory
+before anything runs, making that guess wrong) and instead reads an explicit
+`EDMATE_CONTENT_WORKER_DIR` env var, set by `apps/web/Dockerfile` to the image's own known layout
+and by the build-smoke test to its relocated copy's layout.
+Why: a production web build (`next build --webpack`) still bundles `@edmate/content` into the
+app's own server chunk despite `serverExternalPackages` (a pnpm-monorepo gap in that Next option,
+not something fixable from this config), and the bundled module's `import.meta.url` is rewritten to
+the build machine's own absolute path -- wrong everywhere else, including the Docker image this app
+ships in and any relocated standalone output. Without this fix, a missing worker in production
+silently ran the full regex check with no wall-clock limit at all, on exactly the path (loading and
+validating locale packs, including real PII patterns) this guard exists to protect -- failing open,
+not closed. This changes the age gate's effective behaviour on a risky path
+(`apps/web/src/auth/**` depends on `@edmate/content`'s locale-pack loading).
+risk: high
+
+### 20 Oct 2026 · 1.7b fix round: build-smoke test relocates the build to prove the worker survives it · decided by builder
+Decided: `apps/web/test/build-smoke.test.ts` now copies `.next/standalone` to a temp directory and
+hides this checkout's own `packages/content/dist` for the duration of the test, instead of running
+the build in place.
+Why: running the build in place let the bundled chunk's baked build-machine path still resolve, so
+the original test could never have caught the bug the security review found (it is specific to
+relocation: the Docker image, or any standalone copy moved elsewhere). Relocating in the test is
+the only way to exercise what actually ships.
+risk: low
 
 ### 20 Oct 2026 · 1.7b worker path built without `new URL(<literal>, import.meta.url)` · decided by builder
 Decided: `getWorkerFile()` in `packages/content/src/safeRegexGuard.ts` now builds the worker's path
