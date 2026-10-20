@@ -56,35 +56,41 @@ async function collect(events: AsyncIterable<TurnEvent>): Promise<TurnEvent[]> {
 }
 
 describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
-  it('runs one teacher_preview turn over the real demo-teacher content to done', async () => {
-    const gateway = scriptedChatGateway();
-    const setup = await buildChatDeps({
-      env: {},
-      market: 'global',
-      packageId: 'free',
-      source: 'teacher_preview',
-      gateway,
-    });
+  it(
+    'runs one teacher_preview turn over the real demo-teacher content to done',
+    // Real demo-teacher content + a full harness turn; on CI the first-import cost of the
+    // harness (mathjs, access) can eat most of the default 5000ms budget. See 5.5a follow-up.
+    async () => {
+      const gateway = scriptedChatGateway();
+      const setup = await buildChatDeps({
+        env: {},
+        market: 'global',
+        packageId: 'free',
+        source: 'teacher_preview',
+        gateway,
+      });
 
-    const input: TurnInput = {
-      agentId: setup.agentId,
-      sessionId: setup.sessionId,
-      studentId: setup.studentId,
-      kind: 'message',
-      text: 'What is a variable?',
-      lang: 'en',
-      clientTs: new Date().toISOString(),
-    };
+      const input: TurnInput = {
+        agentId: setup.agentId,
+        sessionId: setup.sessionId,
+        studentId: setup.studentId,
+        kind: 'message',
+        text: 'What is a variable?',
+        lang: 'en',
+        clientTs: new Date().toISOString(),
+      };
 
-    const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
-    const events = await collect(run.events);
-    const result = await run.finished;
+      const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
+      const events = await collect(run.events);
+      const result = await run.finished;
 
-    expect(events.some((e) => e.type === 'error')).toBe(false);
-    expect(events.at(-1)?.type).toBe('done');
-    expect(result.background).toEqual([]);
-    expect(result.trace?.steps.some((s) => s.name === 'generate' && s.outcome === 'ok')).toBe(true);
-  });
+      expect(events.some((e) => e.type === 'error')).toBe(false);
+      expect(events.at(-1)?.type).toBe('done');
+      expect(result.background).toEqual([]);
+      expect(result.trace?.steps.some((s) => s.name === 'generate' && s.outcome === 'ok')).toBe(true);
+    },
+    20000,
+  );
 
   it('locks a module outside the free package (no model call reaches generate)', async () => {
     const gateway = scriptedChatGateway();

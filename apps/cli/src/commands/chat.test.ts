@@ -112,22 +112,28 @@ describe('edmate chat: missing key', () => {
 });
 
 describe('edmate chat: a scripted multi-turn session', () => {
-  it('streams a free-package reply with sources, then locks a module outside the free package', async () => {
-    const rec = capture();
-    const code = await runChatCommand(
-      ['--package', 'free', '--source', 'teacher_preview'],
-      rec.io,
-      { env: {}, cwd: '.', gateway: scriptedChatGateway(2) },
-      linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
-    );
-    expect(code).toBe(0);
-    const text = rec.out.join('');
-    expect(rec.err).toEqual([]);
-    expect(text).toContain('A variable stores a value');
-    expect(text).toContain('[sources:');
-    expect(text).toContain('[locked');
-    expect(text).toContain('bye');
-  });
+  it(
+    'streams a free-package reply with sources, then locks a module outside the free package',
+    // Real demo-teacher content + a full harness turn; on CI the first-import cost of the
+    // harness (mathjs, access) can eat most of the default 5000ms budget. See 5.5a follow-up.
+    async () => {
+      const rec = capture();
+      const code = await runChatCommand(
+        ['--package', 'free', '--source', 'teacher_preview'],
+        rec.io,
+        { env: {}, cwd: '.', gateway: scriptedChatGateway(2) },
+        linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
+      );
+      expect(code).toBe(0);
+      const text = rec.out.join('');
+      expect(rec.err).toEqual([]);
+      expect(text).toContain('A variable stores a value');
+      expect(text).toContain('[sources:');
+      expect(text).toContain('[locked');
+      expect(text).toContain('bye');
+    },
+    20000,
+  );
 
   it('skips a blank line and keeps prompting', async () => {
     const rec = capture();
