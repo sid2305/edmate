@@ -68,11 +68,29 @@ export function checkSafeRegexGuarded(
     port2.close();
     return checkSafeRegex(source, opts); // could not even start a worker: in-process, tests only
   }
+  // `Atomics.wait` blocks this thread's event loop, so a worker's 'error' event (it threw inside
+  // `checkSafeRegex`, or crashed some other way) is always queued and delivered only after the
+  // wait already returned -- there is no way for this listener to preempt or shorten the wait. It
+  // exists only so that later delivery finds a listener: with none, Node treats the event as an
+  // uncaught exception and crashes the host process (fix round 2, typescript-reviewer). The guard
+  // already reports the pattern as unsafe either way: the flag was never notified, so the ceiling
+  // branch below fires regardless of whether the worker threw or is merely still running.
+  worker.on('error', () => undefined);
   Atomics.wait(flag, 0, 0, wallClockMs);
   const answered = Atomics.load(flag, 0) === 1;
   const received = answered ? receiveMessageOnPort(port1) : undefined;
   void worker.terminate();
   port1.close();
-  if (received !== undefined) return received.message as string[];
+  if (received !== undefined) return messageShape(received.message);
   return [`exceeded the ${wallClockMs} ms hard limit for the load/validate path (terminated)`];
+}
+
+/**
+ * `received.message` crossed a `MessagePort` from another thread, so nothing guarantees its shape
+ * at the type level. An unexpected shape is reported as unsafe rather than trusted (fix round 2,
+ * typescript-reviewer): the safe default when the check could not be completed as expected.
+ */
+function messageShape(message: unknown): string[] {
+  if (Array.isArray(message) && message.every((m) => typeof m === 'string')) return message;
+  return ['the worker answered with an unexpected shape'];
 }

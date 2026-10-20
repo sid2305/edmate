@@ -234,26 +234,64 @@ function oneCharWide(alts: readonly Term[][]): boolean {
 }
 
 /**
+ * `{1}` (min 1, max 1) matches its atom exactly once: no different from no quantifier at all, but
+ * a pack author (or an attacker) could spell it onto an alternation group to dodge a check gated
+ * on `quant === null` (fix round 2, architect re-review).
+ */
+function isEffectivelyUnquantified(quant: Quant | null): boolean {
+  return quant === null || (quant.min === 1 && quant.max === 1);
+}
+
+/**
+ * A quantifier that can match zero characters (`?`, `*`, `{0,n}`). Such a term can vanish from the
+ * match entirely, so it does not break the adjacency of an ambiguous alternation on either side of
+ * it (fix round 2, architect re-review: `(a|aa)b?(a|aa)...` is just as ambiguous as
+ * `(a|aa)(a|aa)...` with `b?` deleted).
+ */
+function canMatchEmpty(quant: Quant | null): boolean {
+  return quant !== null && quant.min === 0;
+}
+
+/**
+ * Unwraps a plain group that holds exactly one unquantified branch of exactly one unquantified
+ * term, recursively: `((a|aa))` is no different from `(a|aa)` for the purpose of spotting an
+ * unrolled ambiguous alternation (fix round 2, architect re-review).
+ */
+function unwrapSingleBranch(atom: Atom): Atom {
+  if (
+    atom.kind === 'group' &&
+    atom.type === 'plain' &&
+    atom.alts.length === 1 &&
+    atom.alts[0]?.length === 1 &&
+    isEffectivelyUnquantified((atom.alts[0][0] as Term).quant)
+  ) {
+    return unwrapSingleBranch((atom.alts[0][0] as Term).atom);
+  }
+  return atom;
+}
+
+/**
  * Two or more adjacent, unquantified alternation groups whose branches overlap each other are an
  * ambiguous repeat spelled out longhand (`(x|xx)(x|xx)...` instead of `(x|xx)+`): just as
  * dangerous to backtrack, and not caught by the quantifier-gated check above (fix round 1,
- * security review of PR #57). Flags once per run of 2+, not once per adjacent pair.
+ * security review of PR #57). Flags once per run of 2+, not once per adjacent pair. Fix round 2
+ * also treats a `{1}` quantifier as no quantifier, unwraps a one-branch plain group first, and
+ * lets a term that can match zero characters sit between groups without breaking the run.
  */
 function unrolledOverlap(alt: readonly Term[]): boolean {
   let branches: Term[][] = [];
   let groups = 0;
   const flushed = (): boolean => groups >= 2 && branchesOverlap(branches);
   for (const term of alt) {
-    const isAltGroup =
-      term.quant === null &&
-      term.atom.kind === 'group' &&
-      term.atom.type === 'plain' &&
-      term.atom.alts.length > 1;
-    if (isAltGroup) {
-      branches = [...branches, ...(term.atom as { alts: Term[][] }).alts];
-      groups++;
-      continue;
+    if (isEffectivelyUnquantified(term.quant)) {
+      const inner = unwrapSingleBranch(term.atom);
+      if (inner.kind === 'group' && inner.type === 'plain' && inner.alts.length > 1) {
+        branches = [...branches, ...inner.alts];
+        groups++;
+        continue;
+      }
     }
+    if (canMatchEmpty(term.quant)) continue;
     if (flushed()) return true;
     branches = [];
     groups = 0;

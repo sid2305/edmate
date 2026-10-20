@@ -14,7 +14,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-type Behavior = 'answers' | 'silent' | 'throw';
+type Behavior = 'answers' | 'silent' | 'throw' | 'crash';
 
 let behavior: Behavior = 'answers';
 let answerPayload: string[] = [];
@@ -35,6 +35,13 @@ class FakeWorker extends EventEmitter {
       pendingMessage = answerPayload;
       Atomics.store(flag, 0, 1);
       Atomics.notify(flag, 0);
+    }
+    if (behavior === 'crash') {
+      // The flag is never notified: this models a worker that threw inside `checkSafeRegex`
+      // (fix round 2, typescript-reviewer) -- the main thread still waits out the ceiling, then
+      // this queued 'error' event fires asynchronously, after `Atomics.wait` has already
+      // returned. With no listener attached, Node treats an unhandled 'error' event as fatal.
+      queueMicrotask(() => this.emit('error', new Error('boom, inside the worker')));
     }
   }
   terminate(): void {
@@ -112,5 +119,24 @@ describe('checkSafeRegexGuarded (mocked worker protocol)', () => {
     ]);
     expect(performance.now() - start).toBeGreaterThanOrEqual(40);
     expect(terminateCalls).toBe(1);
+  });
+
+  it('a worker that throws is reported unsafe, and the later queued error does not crash the process', async () => {
+    behavior = 'crash';
+    expect(checkSafeRegexGuarded('a', {}, 40)).toEqual([
+      'exceeded the 40 ms hard limit for the load/validate path (terminated)',
+    ]);
+    // The 'error' event was queued inside the constructor but fires only after this call
+    // returns. With no listener it would be an uncaught exception; awaiting a microtask here
+    // lets it fire inside this test (which would fail, or crash the process, without the fix).
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it('relays a shape it does not recognise as unsafe rather than trusting it', () => {
+    answerPayload = { oops: true } as unknown as string[];
+    expect(checkSafeRegexGuarded('a', {}, 50)).toEqual([
+      'the worker answered with an unexpected shape',
+    ]);
   });
 });

@@ -79,7 +79,10 @@ Fixed in `packages/content/src/safeRegex.ts`, `safeRegexGuard.ts`, `safeRegexWor
    the same alternation group, or of groups whose branches overlap each other (not only an
    alternation gated by an explicit `*`/`+`/`{n,m>1}`). `packages/content/src/safeRegex.test.ts`
    adds both repro patterns plus `(ab|ac)(ab|ac)x` and `(a|b)(b|c)x` (overlapping but not identical
-   groups), and confirms two *non*-overlapping adjacent groups still pass.
+   groups), and confirms two adjacent groups still pass when every branch across both starts with
+   a distinct literal character -- the check's narrow, structural definition of "non-overlapping",
+   not a general guarantee that any two safe-looking adjacent groups pass (see ADR-0008's
+   strictness note: `(a|b)(b|c)x` is refused even though it is not itself exponential).
 2. **Timing probe:** `extractProbeUnits(source)` walks the parsed pattern and collects every
    distinct literal character and class/escape sample it uses (`\d`→`1`, `[a-z]`→`a`, `\s`→`' '`,
    …); `checkSafeRegex` adds these to the generic `PROBE_UNITS` alphabet. The 3-attempts rule is
@@ -135,11 +138,100 @@ Evidence:
 - `distress/in` eval cases expect Tele-MANAS in the reply; with the committed pack (helpline pending) they will see the country-neutral line instead until the human signs off. Check this when 4.3's evals run against real packs.
 - An `en-US` pack waits for the M10 payments task (10.1), as the plan says.
 
+## Fix round 2
+
+Re-review of PR #57 (typescript-reviewer, architect): two HIGH findings on the worker-ceiling
+guard, one MEDIUM on the structural check, one MEDIUM wording overclaim, one LOW on an unchecked
+type assertion.
+
+1. **[HIGH] No `'error'` listener on the spawned worker.** `checkSafeRegexGuarded` blocks on
+   `Atomics.wait`; if `checkSafeRegex` threw inside the worker (for example a `RangeError` from
+   `''.repeat(Infinity)` when a pattern's probe unit is somehow empty), the worker's queued
+   `'error'` event fired only after `Atomics.wait` returned, with no listener attached -- Node
+   treats that as an uncaught exception and crashes the host process. Fixed: `worker.on('error', ()
+   => undefined)` right after construction. The guard already reports the pattern as unsafe either
+   way (the flag was never notified, so the ceiling branch fires); the listener exists only so the
+   later delivery finds something to swallow it. `safeRegexGuardWorker.test.ts` adds a `'crash'`
+   behaviour that emits `'error'` on a queued microtask (modelling the worker dying after this
+   call already returned) and asserts the test itself does not throw.
+2. **[HIGH] No test ran the real `Worker`/`Atomics`/`MessagePort` protocol.** The existing tests
+   either take the no-`dist` in-process fallback (`safeRegexGuard.test.ts`) or mock
+   `node:worker_threads` (`safeRegexGuardWorker.test.ts`); neither spawns a real worker. Added
+   `safeRegexGuardIntegration.test.ts`: a `beforeAll` builds this package with its own
+   `tsc -p tsconfig.build.json` (skipped if `dist/safeRegexWorkerEntry.js` already exists, so a
+   second local run doesn't rebuild for nothing), then dynamically imports the compiled
+   `dist/safeRegexGuard.js` so `checkSafeRegexGuarded` takes the real-worker branch. Three cases,
+   ceiling 300 ms, small inputs, deterministic in CI (every case either answers fast or is designed
+   to never answer at all): a safe pattern answers fast; a worker that throws
+   (`{ units: [''] }` makes `probeTiming` call `''.repeat(Infinity)`) is reported unsafe at the
+   ceiling, not a crash (the regression check for finding 1); the anchored `a?`×25 then `a`×25
+   pattern (see finding 3) is terminated and reported near the 300 ms ceiling, not stalled far past
+   it.
+3. **[MEDIUM] Three cheap bypasses of `unrolledOverlap`.** A `{1}` quantifier (matches its atom
+   exactly once, no different from no quantifier) was not treated as unquantified; a plain group
+   holding exactly one unquantified branch of one unquantified term (`((a|aa))`) was not unwrapped
+   before the scan; and a term that can match zero characters (`?`, `*`, `{0,n}`) sitting between
+   two alternation groups reset the scan's accumulator, breaking the adjacency the scan looks for,
+   even though such a term can vanish from the match entirely. Fixed in `safeRegex.ts`:
+   `isEffectivelyUnquantified` (`quant === null` or `{min:1,max:1}`), `unwrapSingleBranch`
+   (recursive), and `canMatchEmpty` (a quantifier with `min === 0` no longer resets the run).
+   `safeRegex.test.ts` adds `(a|aa){1}`, `((a|aa))` and `(a|aa)b?`, each repeated 25 times, as
+   refused. A fourth shape from the re-review, `a?`×25 then `a`×25 (no group, no alternation at
+   all), is **not** caught structurally: the real IN mobile pattern
+   (`(?:\+?91[ \-]?|0)?[6-9]\d{9}`) has exactly that optional-then-mandatory shape without being
+   dangerous, and a rule general enough to catch the bare version would also flag it. Left to the
+   timing probe and the load-path ceiling; `safeRegex.test.ts` adds a test proving `checkSafeRegex`
+   catches it on the real clock (anchored with `^`/`$`, so the engine cannot return a cheap
+   successful substring match and must explore the full failure space -- the plan's literal
+   unanchored version returns a quick match on realistic inputs and is not caught, which the
+   handoff now says plainly), and `safeRegexGuardIntegration.test.ts` proves the ceiling terminates
+   it when even the probe would not finish in time.
+4. **[MEDIUM] ADR-0008 and this handoff overclaimed what the structural check guarantees.**
+   "Matching the quantified case's ambiguity exactly" and "not weaker for being spelled out
+   longhand" (ADR-0008) and "provably safe" (handoff line 142, now reworded) overstated a
+   heuristic as a proof. Reworded both documents: the structural check is a conservative heuristic
+   over the pattern's written shape; the timing probe and the load-path ceiling are the backstop
+   for what it misses; the per-turn PII scrub path has no check and no ceiling of its own, so
+   residual risk from a pattern class nothing anticipates sits entirely there. ADR-0008 also now
+   documents the `existsSync` / worker-start in-process fallback explicitly (no ceiling at all;
+   true only when this package runs straight from TypeScript source with no build step, which is
+   this package's own test run today, never production) and a strictness note: `(a|b)(a|b)` and
+   `(\d|x)(y|z)` are refused even though neither is itself exponential, because the scan cannot
+   tell a genuinely safe two-branch sequence from the start of a dangerous one, and because a false
+   positive refuses the whole market pack (point 6 of the decision), not just a warning. Fixed
+   handoff.md:82 (this file), which said "two non-overlapping adjacent groups still pass" without
+   naming the check's narrow, structural definition of "non-overlapping".
+5. **[LOW] `received.message as string[]`.** The message crossed a `MessagePort` from another
+   thread, so nothing guarantees its shape at the type level. Replaced the assertion with
+   `messageShape()`, a runtime check (`Array.isArray` and every element `typeof === 'string'`); an
+   unexpected shape is now reported as `['the worker answered with an unexpected shape']` rather
+   than trusted. `safeRegexGuardWorker.test.ts` adds a case that returns a non-array payload.
+
+Evidence:
+
+| Check | Command → trimmed output |
+|---|---|
+| Content package, isolated | `vitest run --coverage` (packages/content) → `Test Files 19 passed (19)`, `Tests 301 passed (301)` (292 round-1 baseline + 9 new); `safeRegex.ts` 97.65/94.81/100/99.42, both above the 80% gate. |
+| Real worker integration | `safeRegexGuardIntegration.test.ts` alone, with and without a pre-existing `dist`: `Test Files 1 passed (1)`, `Tests 3 passed (3)`, ~1.7 s cold (includes the `tsc` build) / well under 1 s warm. |
+| Full gate | infra up (`docker compose … up -d --wait postgres redis`); `corepack pnpm turbo run typecheck lint test --filter=...@edmate/contracts --force --concurrency=1` → `Tasks: 37 successful, 37 total`. |
+| ADR headings | `python3 docs/adr/check-headings.py` → no output, exit 0. |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → no output, exit 0. |
+
+Not done (left to the lead, per this round's instructions): fail-closed-on-missing-worker behaviour,
+and a smoke test of the built CLI.
+
 ## Decisions
+
+### 20 Oct 2026 · 3.10 Fix round 2: worker 'error' listener, real-worker integration test, structural-check bypasses closed, overclaims reworded · risk: medium
+Decided: `checkSafeRegexGuarded` attaches `worker.on('error', ...)` right after spawning (swallowed: the guard already reports unsafe at the ceiling either way), closing a host-process crash when a worker threw after `Atomics.wait` already returned. `safeRegexGuardIntegration.test.ts` builds the package with its own `tsc` and imports the compiled `dist` so one test exercises the real `Worker`/`Atomics`/`MessagePort` protocol end to end, not a mock or the no-`dist` fallback. `unrolledOverlap` (`safeRegex.ts`) now treats a `{1}` quantifier as unquantified, unwraps a one-branch plain group before the adjacency scan, and no longer lets a possibly-empty term between groups reset the scan. A fourth shape the re-review raised, `a?`×25 then `a`×25 with no group at all, is left to the timing probe and the load-path ceiling (the real IN mobile pattern has that same optional-then-mandatory shape and must not be flagged); a test proves the probe and the ceiling both catch it. ADR-0008 and this handoff are reworded where they overstated the structural check as a proof ("matching the quantified case's ambiguity exactly", "provably safe"); the ADR now also documents the `existsSync` in-process fallback (no ceiling, test-only today) and a strictness note that `(a|b)(a|b)` is refused even though it is not itself exponential. `received.message as string[]` is replaced with a runtime shape check.
+Why: typescript-reviewer and architect re-review of PR #57's fix round 1 found the crash path untested and still possible, the real worker protocol untested, three ways to dodge the unrolled-overlap scan structurally, and wording that claimed more certainty than a heuristic check can give.
+Alternatives: skip the real-worker test and rely on the mocked protocol test alone (rejected: a mock can drift from the real `Atomics`/`MessagePort` behaviour without anyone noticing); catch `a?`×25/`a`×25 structurally too (rejected: no rule the authors could find distinguishes it from the real IN mobile pattern's own optional-then-mandatory shape without also flagging that pattern).
+Reviewers: typescript-reviewer, architect (both raised findings in this round).
+Reversible: yes; no stored data depends on any of these changes, only which patterns validate and how the guard's failure modes are documented.
 
 ### 20 Oct 2026 · 3.10 Safe-regex structural check also refuses an unrolled ambiguous alternation; timing probe derives units from the pattern; a hard wall-clock ceiling guards the load/validate path · risk: high
 Decided: the structural check refuses not only an alternation whose branches overlap under an explicit repeating quantifier, but also two or more adjacent, unquantified copies of the same alternation group, or of groups whose branches overlap each other -- a manually unrolled ambiguity is exactly as dangerous once the compiled pattern runs. The timing probe's adversarial inputs are built from every distinct literal character and class/escape sample the pattern itself uses, in addition to the existing generic alphabet. `edmate content validate` and start-up `loadLocalePacks` (never the per-turn PII scrub) run the whole check inside a `node:worker_threads` worker with a roughly 2-second hard wall-clock ceiling; a pattern that does not answer in time is terminated and reported unsafe. All four real IN patterns and the global pack still pass.
-Why: security review of PR #57 found `'(x|xx)'.repeat(25) + 'z'` and `'(a|aa)'.repeat(25) + 'z'` passed the round-0 check yet took 0.5–4.7 s to run; a pack author (or anyone who can propose a pack) could spell an exponential-backtracking pattern out longhand to dodge a check gated only on an explicit quantifier. Pack patterns run on every student message in `piiScrub`, so any pattern that reaches that path must be provably safe, not merely safe against the specific shapes the first check's author anticipated.
+Why: security review of PR #57 found `'(x|xx)'.repeat(25) + 'z'` and `'(a|aa)'.repeat(25) + 'z'` passed the round-0 check yet took 0.5–4.7 s to run; a pack author (or anyone who can propose a pack) could spell an exponential-backtracking pattern out longhand to dodge a check gated only on an explicit quantifier. Pack patterns run on every student message in `piiScrub`, so any pattern that reaches that path needs more than one check that happens to catch the shapes its author anticipated: the structural check is a conservative heuristic over the pattern's written shape, the timing probe and the load-path ceiling are the backstop for what it misses, and the per-turn scrub path itself has no check and no ceiling at all (see "Fix round 2" and ADR-0008 for what this does and does not guarantee).
 Alternatives: keep the quantifier-gated check and rely on the timing probe alone to catch an unrolled pattern (rejected: the probe's own fixed generic alphabet could miss a pattern ambiguous only on a character outside it, and a probe-only defence has no structural explanation for pack authors); add the `safe-regex` npm package (still a new dependency, the same Q1 answer as round 0); cap total validate-time instead of per-pattern (rejected: one slow pattern would still block every other pack's validation).
 Reviewers: security-reviewer (raised it), architect, typescript-reviewer (ADR-0008 addendum, the worker-protocol design in `safeRegexGuard.ts`).
 Reversible: yes, with a new ADR note; no stored data depends on the stricter rule, only which packs validate.

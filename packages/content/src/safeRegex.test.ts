@@ -29,6 +29,10 @@ describe('structuralIssues', () => {
     ['(a|aa)'.repeat(25) + 'z', OVERLAP],
     ['(ab|ac)(ab|ac)x', OVERLAP],
     ['(a|b)(b|c)x', OVERLAP], // groups whose branches overlap each other, not identical groups
+    // fix round 2 (architect re-review): cheap bypasses of the unrolled-overlap scan.
+    ['(a|aa){1}'.repeat(25) + 'z', OVERLAP], // a {1} quantifier is no quantifier at all
+    ['((a|aa))'.repeat(25) + 'z', OVERLAP], // a plain one-branch group wrapping the alternation
+    ['(a|aa)b?'.repeat(25) + 'z', OVERLAP], // an optional term interleaved between groups
     ['(a)\\1', BACKREF],
     ['(?<n>a)\\k<n>', BACKREF],
     ['(?<=ab)x', BEHIND],
@@ -155,5 +159,16 @@ describe('checkSafeRegex', () => {
 
   it('a source that does not compile with gu is not its concern (reported elsewhere)', () => {
     expect(checkSafeRegex('\\a')).toEqual([]);
+  });
+
+  // fix round 2 (architect re-review): `a?` x25 then `a` x25 is a classic catastrophic pattern
+  // with no group and no alternation, so the structural check cannot catch it without false
+  // positives on ordinary optional-then-literal patterns (the real IN mobile pattern has one).
+  // Anchored so the engine must explore the full failure space instead of returning a cheap
+  // substring match; the timing probe catches it on the real clock, well within budget.
+  it('the timing probe (not the structural check) catches `a?` x25 then `a` x25, anchored', () => {
+    const source = '^' + 'a?'.repeat(25) + 'a'.repeat(25) + '$';
+    expect(structuralIssues(source)).toEqual([]);
+    expect(checkSafeRegex(source)).toEqual(['took longer than 100 ms on a probe input']);
   });
 });
