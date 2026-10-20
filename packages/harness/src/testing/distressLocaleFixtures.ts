@@ -6,5 +6,13 @@ import { demoLocalePack } from '@edmate/contracts/fixtures';
 
 export const indiaLocalePackWithHelplines: LocalePack = {
   ...demoLocalePack,
-  helplines: [{ name: 'Tele-MANAS', number: '14416', kind: 'mental_health' }],
+  helplines: [
+    {
+      name: 'Tele-MANAS',
+      number: '14416',
+      kind: 'mental_health',
+      verifiedBy: 'test pack',
+      verifiedOn: '2026-01-01',
+    },
+  ],
 };

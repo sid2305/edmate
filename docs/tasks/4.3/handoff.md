@@ -272,6 +272,17 @@ Why: a check the runner cannot see must not count as a pass.
 Alternatives: a separate tag outside `expect`; skip it in the generic runner.
 Reversible: Yes.
 
+## Sync with main after 3.10 (CI)
+
+Merged `origin/main` (task 3.10, ADR-0008 locale-pack verification) into this branch; no conflicts.
+3.10 added required `verifiedBy`/`verifiedOn` fields to `LocalePack.helplines` (`packages/contracts/src/locale.ts`).
+Fixed the two test-only helpline literals this broke (not behaviour): `packages/harness/src/testing/distressLocaleFixtures.ts`
+(`indiaLocalePackWithHelplines`) and three helpline literals in `packages/harness/src/pipeline/steps/escalate.test.ts`, each
+given `verifiedBy: 'test pack'`, `verifiedOn: '2026-01-01'` (obviously-fake test values). These fixtures are used directly as
+in-memory `LocalePack` objects in tests, not loaded through 3.10's `localeLoader` (which strips unverified helplines from
+files), so no behaviour conflict. Gate: `turbo run typecheck lint test --filter=...@edmate/contracts --force
+--concurrency=1` — 37/37 tasks pass (contracts 335, harness 3655, evals 603 tests, all green). Secret scan clean.
+
 ## Follow-ups (not in this PR)
 
 - 4.3b (board): a session distress flag for the retract-joke check-in, and the scrub-failure distress reply using `fallbackReplies.distress` with the pack's helplines.
