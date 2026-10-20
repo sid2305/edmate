@@ -1144,9 +1144,9 @@ tasks:
   accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
   deps:
   - M3
-  status: running
+  status: review
   branch: m5/5.1-document-ingestion
-  model: plan:sonnet buildA:opus
+  model: plan:sonnet buildA:opus buildBC:opus review:sonnet
 - id: '5.2'
   milestone: M5
   title: 'Video ingestion: upload → transcription → timestamped chunks'
@@ -1167,9 +1167,9 @@ tasks:
   - '1.8'
   - '5.1'
   - M3
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '5.4'
   milestone: M5
   title: 'Access filter: filtered `search`, code-only `probe`, entitlement-filtered tool registry, package-versioned caches'
@@ -1942,3 +1942,14 @@ tasks:
   needs_decision: null
   branch: m4/4.3a-test-timeouts
   model: plan:lead build:haiku
+- id: 5.1b
+  milestone: M13
+  title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on budget overflow; keep pdfjs-dist''s optional @napi-rs/canvas native build out of installs'
+  accept: 'the four LOWs in docs/tasks/5.1/review.md are fixed with tests where behaviour changes; the ingest gate passes'
+  deps:
+  - GATE
+  - '5.1'
+  status: todo
+  needs_decision: null
+  branch: null
+  model: null
