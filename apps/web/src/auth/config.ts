@@ -1,12 +1,16 @@
-// Auth.js configuration (task 1.3) as a pure factory: tests inject the identity store, env, the
-// provider's fetch and the log sink. Google only (the email magic link is 1.4), database sessions.
+// Auth.js configuration (tasks 1.3, 1.4) as a pure factory: tests inject the identity store, env,
+// the provider's fetch, the mail sender, the sign-in limiter and the log sink. Google and/or the
+// email magic link, database sessions.
 import type { IdentityStore, Role } from '@edmate/db';
 import { customFetch, type NextAuthConfig, type Session } from 'next-auth';
 import Google, { type GoogleProfile } from 'next-auth/providers/google';
 import { toAuthAdapter, type EdmateAdapterUser } from './adapter';
 import { describeError } from './describe-error';
+import { EMAIL_PROVIDER_ID, emailProvider } from './email';
 import type { AuthEnv } from './env';
 import type { CookieReader, Principal } from './guard';
+import type { MailSender } from './mail';
+import type { HeaderReader, SignInLimiter } from './rate-limit';
 
 // The browser-visible session (`/api/auth/session`, and `auth()` if it is ever used) carries only
 // the user's id and role.
@@ -30,7 +34,28 @@ export interface AuthConfigDeps {
    * The request being handled (NextAuth's per-request config). The signIn callback reads its
    * session cookie; without one, sign-in is refused (fail closed).
    */
-  request?: { cookies: CookieReader };
+  request?: { cookies: CookieReader; headers: HeaderReader };
+  /** Email magic link: how links are mailed and how requests are limited (needed iff env.email). */
+  emailSignIn?: { mail: MailSender; limiter: SignInLimiter };
+}
+
+/** Where an over-limit link request goes: the same for both limits and for every address. */
+export const RATE_LIMITED_PATH = '/api/auth/error?error=RateLimited';
+
+/**
+ * Where Auth.js may send the browser: a same-origin target on AUTH_URL, else AUTH_URL's origin.
+ * It compares with `appUrl`, never Auth.js's `baseUrl`, which can follow a forwarded host. The
+ * check is on the parsed result, so `//host`, `/\host`, `javascript:` and tab or newline tricks
+ * that the URL parser folds into another origin all land on the app origin.
+ */
+export function safeRedirect(url: string, appUrl: URL): string {
+  const origin = appUrl.origin;
+  try {
+    const target = new URL(url, origin);
+    return target.origin === origin ? target.toString() : origin;
+  } catch {
+    return origin;
+  }
 }
 
 /**
@@ -79,26 +104,25 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
         options: { httpOnly: true, sameSite: 'lax', path: '/', secure },
       },
     },
-    providers: [
-      Google({
-        clientId: env.googleId,
-        clientSecret: env.googleSecret,
-        allowDangerousEmailAccountLinking: false,
-        // Auth.js defaults to PKCE only; state and nonce add CSRF and replay protection.
-        checks: ['pkce', 'state', 'nonce'],
-        // Only these fields reach createUser (no photo). Auth.js itself passes emailVerified: null
-        // for OAuth users; the signIn callback below is what requires Google's email_verified.
-        profile(p: GoogleProfile) {
-          return { id: p.sub, email: p.email, name: p.name ?? '' };
-        },
-        ...(deps.providerFetch ? { [customFetch]: deps.providerFetch } : {}),
-      }),
-    ],
+    providers: providers(deps),
     callbacks: {
-      // Google must vouch for the address; nothing else signs in yet. While a session is live,
-      // only that user's own Google account may sign in: Auth.js would otherwise link a new
-      // Google account to the signed-in user (a sibling on a shared device opening A's account).
-      async signIn({ account, profile }) {
+      // Email link requests are rate-limited here, before any token or mail exists; Auth.js passes
+      // a stand-in user for an unknown address, so nothing below branches on whether one exists.
+      // Google must vouch for the address. While a session is live, only that user's own Google
+      // account may sign in: Auth.js would otherwise link a new Google account to the signed-in
+      // user (a sibling on a shared device opening A's account).
+      async signIn({ account, profile, email }) {
+        if (account?.provider === EMAIL_PROVIDER_ID && account.type === 'email') {
+          // The link callback: Auth.js has already used up the single-use token.
+          if (email?.verificationRequest !== true) return true;
+          // A server action has no request (and so no IP): refused, fail closed.
+          if (!deps.request || !deps.emailSignIn) return false;
+          const allowed = await deps.emailSignIn.limiter.allow({
+            email: account.providerAccountId,
+            headers: deps.request.headers,
+          });
+          return allowed ? true : RATE_LIMITED_PATH;
+        }
         if (account?.provider !== 'google') return false;
         const p = profile as Partial<GoogleProfile> | undefined;
         const verified =
@@ -108,6 +132,9 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
         if (!current) return true;
         const owner = await identity.getUserByAccount(account.provider, account.providerAccountId);
         return owner?.id === current.userId;
+      },
+      redirect({ url }) {
+        return safeRedirect(url, env.url);
       },
       // `/api/auth/session` is readable by the browser: id and role only, no email or name.
       session({ session, user }): Session {
@@ -125,4 +152,39 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
       debug() {},
     },
   };
+}
+
+/** Only the configured providers: Google, the email magic link, or both. */
+function providers(deps: AuthConfigDeps): NextAuthConfig['providers'] {
+  const { env } = deps;
+  const list: NextAuthConfig['providers'] = [];
+  if (env.google) {
+    list.push(
+      Google({
+        clientId: env.google.id,
+        clientSecret: env.google.secret,
+        allowDangerousEmailAccountLinking: false,
+        // Auth.js defaults to PKCE only; state and nonce add CSRF and replay protection.
+        checks: ['pkce', 'state', 'nonce'],
+        // Only these fields reach createUser (no photo). Auth.js itself passes emailVerified: null
+        // for OAuth users; the signIn callback below is what requires Google's email_verified.
+        profile(p: GoogleProfile) {
+          return { id: p.sub, email: p.email, name: p.name ?? '' };
+        },
+        ...(deps.providerFetch ? { [customFetch]: deps.providerFetch } : {}),
+      }),
+    );
+  }
+  if (env.email) {
+    if (!deps.emailSignIn) throw new Error('email sign-in needs a mail sender and a limiter');
+    list.push(
+      emailProvider({
+        origin: env.url,
+        from: env.email.from,
+        mail: deps.emailSignIn.mail,
+        ...(deps.log ? { log: deps.log } : {}),
+      }),
+    );
+  }
+  return list;
 }

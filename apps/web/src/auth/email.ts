@@ -132,14 +132,21 @@ export function emailProvider(deps: EmailProviderDeps): EmailConfig {
     from: deps.from,
     maxAge: LINK_MAX_AGE_S,
     normalizeIdentifier: normalizeEmail,
-    async sendVerificationRequest(params: EmailProviderSendVerificationRequestParams) {
-      try {
-        const link = rebuildLink(params.url, deps.origin);
-        await deps.mail.send({ to: params.identifier, ...renderSignInMail(link) });
-      } catch (error) {
-        log(`[auth] sign-in mail failed: ${describeError(error)}`);
-        throw new MailSendError();
-      }
+    sendVerificationRequest(params: EmailProviderSendVerificationRequestParams) {
+      const sending = (async () => {
+        try {
+          const link = rebuildLink(params.url, deps.origin);
+          await deps.mail.send({ to: params.identifier, ...renderSignInMail(link) });
+        } catch (error) {
+          log(`[auth] sign-in mail failed: ${describeError(error)}`);
+          throw new MailSendError();
+        }
+      })();
+      // Auth.js awaits a hash before it joins this promise, so a fast failure would otherwise be
+      // an unhandled rejection (which can end the Node process). Marking it handled here doesn't
+      // swallow it: Auth.js's own Promise.all still receives the rejection.
+      sending.catch(() => {});
+      return sending;
     },
   };
 }

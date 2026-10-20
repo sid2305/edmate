@@ -195,6 +195,23 @@ describe('emailProvider', () => {
     expect(lines.join()).not.toContain('student1');
   });
 
+  it('a failure joined late (Auth.js hashes first) is not an unhandled rejection, and still rejects', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const mail = memoryMail({ fail: new Error('down') });
+      const p = emailProvider({ origin: ORIGIN, from: 'x@example.test', mail, log: () => {} });
+      const pending = p.sendVerificationRequest(params(`https://app.example.test${CALLBACK}`));
+      // Let the failure settle and the event loop turn before anyone awaits it.
+      await new Promise((r) => setTimeout(r, 5));
+      await expect(pending).rejects.toBeInstanceOf(MailSendError);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+  });
+
   it('logs to console.error by default, and a non-Error throw as "non-error"', async () => {
     const original = console.error;
     const lines: unknown[] = [];
