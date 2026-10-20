@@ -411,3 +411,27 @@ Verified locally (infra up via `docker compose -f docker/compose.yaml -f package
   passed, 3 skipped. `leakCheck SLO: p95 3.8 ms, p99 4.8 ms`.
 - Same command at default turbo concurrency (mimics CI): also 8/8 tasks green.
 - `python3 .githooks/secret-scan.py --all`: clean.
+
+## Sync with main (20 Oct)
+
+Merged `origin/main` (4.4 #47, 0.11 #65, 0.13 #63, plus board/decision-log commits) into
+`m5/5.3-retrieval-index` at `6565154` (merged over branch head `3560690`).
+
+- `packages/db/src/repositories/index.ts`: additive conflict only — HEAD added the
+  `retrieval.js` import and `retrieval: guardAll(...)` entry/export block, main added
+  `safety-events.js`'s `safetyEventsRepo` import and `safetyEvents: guardAll(...)` entry. Kept
+  both sides, no behaviour change.
+- `docs/board/tasks.yaml`, `docs/decisions/log.md`: no conflict markers after the merge; main's
+  state came through as-is (nothing from this branch to re-apply here).
+- `packages/db/vitest.config.ts`, `apps/worker/vitest.config.ts`: no conflict; both still set
+  `fileParallelism: false` after the merge.
+- `pnpm-lock.yaml`: no conflict and no diff from the merge; `corepack pnpm install` reported the
+  lockfile already up to date, so it was left as-is.
+- `packages/harness`: no conflicting files; merged clean.
+
+Gate after the merge (infra up via
+`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres redis`):
+`turbo run typecheck lint test --filter=...@edmate/db --filter=...@edmate/harness --filter=@edmate/ingest --force --concurrency=1`
+→ 38/38 tasks successful. `python3 .githooks/secret-scan.py --all`: clean.
+
+Pushed `sync-5.3` to `origin/m5/5.3-retrieval-index` (no force) at `6565154`.
