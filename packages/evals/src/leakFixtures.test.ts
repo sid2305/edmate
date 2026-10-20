@@ -391,7 +391,9 @@ async function runCase(
     steps: [say(`Fine: ${keys.join(' / ')}`), used],
   });
 
+  // grounding (4.7) is not under test here: its judge says "grounded".
   const t = testDeps({
+    judge: 'grounded',
     script: { stream: scripts },
     overrides: {
       tools: memoryToolRegistry([

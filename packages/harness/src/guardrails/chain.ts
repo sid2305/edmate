@@ -61,12 +61,22 @@ export interface GuardOutcomeEvent {
   cause?: GuardFailureCause | 'rewrite_unverified';
 }
 
+/** Which guard run a slice is asked for (`index`: the guard's position in the chain). */
+export interface GuardSliceRequest {
+  name: string;
+  pass: 1 | 2;
+  index: number;
+}
+
 export interface GuardChainOptions {
   phase: GuardPhase;
   /** The injected clock; each guard's time slice runs on it. */
   clock: Clock;
-  /** Each guard's own time slice in ms (not shared across the chain). Non-positive fails. */
-  timeoutMs: number;
+  /**
+   * Each guard's own time slice in ms: one number for every guard, or (task 4.7) a function asked
+   * right before each run. Non-positive, invalid or a throw fails that guard (`timeout`).
+   */
+  timeoutMs: number | ((at: GuardSliceRequest) => number);
   /** The calling step's cancel token: it cancels the in-flight guard and fails the chain. */
   cancel?: CancelToken;
   /** Called once per guard run. A throw, or a returned promise that rejects, is ignored. */
@@ -195,7 +205,18 @@ export async function runGuardChain<Ctx>(
   const entries = snapshot(phase, guards);
   if (!Array.isArray(entries)) return fail(1, entries);
 
-  const runOne = (e: Entry<Ctx>, input: string) =>
+  const sliceOf = (at: GuardSliceRequest): number => {
+    const t = opts.timeoutMs;
+    if (typeof t !== 'function') return t;
+    try {
+      const ms: unknown = t(at);
+      return typeof ms === 'number' ? ms : Number.NaN;
+    } catch {
+      return Number.NaN;
+    }
+  };
+
+  const runOne = (e: Entry<Ctx>, input: string, ms: number) =>
     runWithTimeout(
       async (slice) => {
         // The guard's token fires on its slice ending or on the step being cancelled.
@@ -211,18 +232,18 @@ export async function runGuardChain<Ctx>(
         const raw = await Promise.race([e.run.call(e.self, input, ctx, linked.token), stepStop]);
         return GuardRunSchema.safeParse(raw);
       },
-      opts.timeoutMs,
+      ms,
       opts.clock,
     );
 
   /** One pass over every guard: a final result, or whether any guard rewrote. */
   const runPass = async (pass: 1 | 2): Promise<GuardChainResult | boolean> => {
     let rewrote = false;
-    for (const e of entries) {
+    for (const [index, e] of entries.entries()) {
       const { name } = e;
       if (stepCancelled()) return fail(pass, { name, cause: 'cancelled' });
 
-      const timed = await runOne(e, text);
+      const timed = await runOne(e, text, sliceOf({ name, pass, index }));
       if (timed.status === 'timeout') return fail(pass, { name, cause: 'timeout' });
       if (timed.status === 'error') {
         if (timed.error === STEP_CANCELLED) return fail(pass, { name, cause: 'cancelled' });

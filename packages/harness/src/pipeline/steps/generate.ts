@@ -25,6 +25,7 @@ import { citedSources } from '../generate/citations.js';
 import { SkillEventDropped, skillEvent } from '../generate/skillEvent.js';
 import { revealsAnswerKey } from '../generate/answerKey.js';
 import { answerLeakStreamGate } from '../generate/streamGate.js';
+import { DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
 import { HarnessError } from '../errors.js';
 import { runToolLoop } from '../generate/toolLoop.js';
 import { noTools, offeredTools } from '../tools.js';
@@ -45,6 +46,38 @@ function lockedEvent(pkg: TurnContext['pkg']): Extract<TurnEvent, { type: 'locke
     : { type: 'locked' };
 }
 
+/** How close to the coverage threshold a turn's best chunk must be for its reply to be held. */
+export const HOLD_MARGIN = 0.1;
+/** Moves that teach (grounding judges them). */
+const TEACHING_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
+  'ask',
+  'hint',
+  'worked_example',
+  'explain',
+  'solution',
+  'check',
+]);
+
+/**
+ * Whether the reply is held, not streamed, until postGuard passes it (task 4.7, lead answer 13):
+ * an ask_teacher turn, or a teaching turn whose best scored chunk is under the coverage threshold
+ * plus HOLD_MARGIN, where grounding is most likely to replace the reply. Fix round 1: also a
+ * teaching turn with nothing retrieved, or one decide.fallback chose (`fromFallback`), since that
+ * path never ran the coverage gate. A teaching turn whose chunks are all unscored still streams.
+ */
+export function holdsReply(
+  ctx: Pick<TurnContext, 'retrieved'>,
+  move: PedagogyDecision['move'],
+  threshold: number = DEFAULT_COVERAGE_THRESHOLD,
+  fromFallback = false,
+): boolean {
+  if (move === 'ask_teacher') return true;
+  if (!TEACHING_MOVES.has(move)) return false;
+  if (fromFallback || ctx.retrieved.length === 0) return true;
+  const scores = ctx.retrieved.flatMap((c) => (c.score === undefined ? [] : [c.score]));
+  return scores.length > 0 && Math.max(...scores) < threshold + HOLD_MARGIN;
+}
+
 /** A cited source's title or locator held the answer key, so it was not sent. Fixed text only. */
 export class SourceDropped extends HarnessError {
   override readonly name = 'SourceDropped';
@@ -62,7 +95,11 @@ export interface GenerateOptions {
 /** The generate step; `opts` exists for tests that swap the locked check. */
 export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
   const lockedCheckOf = opts.lockedCheck ?? lockedCheckFor;
-  return async (env, { ctx, decision, sources, lockedStopped, onLockedTrip }, emit) => {
+  return async (
+    env,
+    { ctx, decision, sources, lockedStopped, onLockedTrip, fromFallback },
+    emit,
+  ) => {
     const { deps } = env;
     // Before anything is shown: a turn already at its ceiling makes no call and shows nothing.
     env.usage.checkBeforeCall();
@@ -75,6 +112,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     );
 
     const lockedCheck = lockedCheckOf(env, ctx);
+    const held = holdsReply(ctx, decision.move, undefined, fromFallback === true);
 
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     const { draft, raw, locked } = await runToolLoop({
@@ -86,7 +124,10 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       cancel: env.cancel,
       usage: env.usage,
       gate,
-      show: (text) => emit({ type: 'token', text }),
+      // A held reply is still gated and checked as it streams; it is only not shown yet.
+      show: (text) => {
+        if (!held) emit({ type: 'token', text });
+      },
       onToolOutput: async (entry, output) => {
         const e = await skillEvent(entry, output, ctx, decision.mustNotReveal, lockedCheck);
         if (e instanceof SkillEventDropped) env.report(e);
@@ -112,6 +153,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       raw,
       withheld: gate.tripped === true,
       ...(locked === undefined ? {} : { locked }),
+      ...(held ? { held } : {}),
     };
   };
 }

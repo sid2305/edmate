@@ -10,7 +10,7 @@ import {
   demoStyleCard,
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
-import type { PedagogyDecision, RetrievalIndex } from '@edmate/contracts';
+import type { ModelRequest, PedagogyDecision, RetrievalIndex } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
 import { refusingGateway } from '../pipeline/turnGateway.js';
@@ -34,6 +34,12 @@ import {
   unusedPort,
 } from './memoryPorts.js';
 import { scriptedStreamText } from './gatewayFixtures.js';
+import {
+  GROUNDED_VERDICT,
+  judgeGateway,
+  type JudgeVerdict,
+  UNGROUNDED_VERDICT,
+} from './groundingJudge.js';
 import { fixturePromptPackLibrary } from './promptPackFixtures.js';
 import { type GatewayScript, ScriptedGateway } from './scriptedGateway.js';
 import { type SpyGateway, spyGateway } from './spyGateway.js';
@@ -280,6 +286,8 @@ export interface TestDeps {
   log: MemoryTurnLog;
   /** Calls to ports the happy path never uses (stores); should stay empty. */
   portCalls: string[];
+  /** grounding judge requests the fake judge answered (empty without `judge`). */
+  judged: ModelRequest[];
 }
 
 /**
@@ -296,6 +304,13 @@ export function testDeps(
     usage?: MemoryUsageMeter;
     alerts?: MemoryAlertSink;
     log?: MemoryTurnLog;
+    /**
+     * Answers grounding's judge requests (4.7) outside the script and the spy: a fixed verdict or a
+     * function of the request (`overlapJudge`). Absent: they reach the script like any request.
+     */
+    judge?: 'grounded' | 'ungrounded' | JudgeVerdict;
+    /** Virtual time each judge answer takes. */
+    judgeDelayMs?: number;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
   } = {},
@@ -310,10 +325,23 @@ export function testDeps(
   const alerts = opts.alerts ?? memoryAlertSink();
   const log = opts.log ?? memoryTurnLog();
   const portCalls: string[] = [];
+  const j = opts.judge;
+  const verdict: JudgeVerdict | undefined =
+    j === 'grounded' ? () => GROUNDED_VERDICT : j === 'ungrounded' ? () => UNGROUNDED_VERDICT : j;
+  const judged =
+    verdict === undefined
+      ? undefined
+      : judgeGateway(gateway, verdict, {
+          clock,
+          ...(opts.judgeDelayMs === undefined ? {} : { delayMs: opts.judgeDelayMs }),
+        });
   const deps: PipelineDeps = {
     clock,
     ids,
-    gatewayFor: (spec) => gateway.gatewayFor(spec),
+    gatewayFor: (spec) => {
+      const tg = gateway.gatewayFor(spec);
+      return judged === undefined ? tg : { ...tg, gateway: judged };
+    },
     priceUsage: (u) => u.costMicroUsd,
     log,
     entitlements: unusedPort('entitlements', portCalls),
@@ -336,5 +364,16 @@ export function testDeps(
     promptPacks: fixturePromptPackLibrary,
     ...opts.overrides,
   };
-  return { deps, clock, ids, gateway, traces, usage, alerts, log, portCalls };
+  return {
+    deps,
+    clock,
+    ids,
+    gateway,
+    traces,
+    usage,
+    alerts,
+    log,
+    portCalls,
+    judged: judged?.judged ?? [],
+  };
 }

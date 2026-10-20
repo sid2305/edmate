@@ -284,6 +284,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.15'
+  milestone: M7
+  title: 'Token budget for the agent team (usage analysis, 19 Oct 2026): builders make fewer, bigger calls and stop at about 150 calls with Status: PARTIAL; the planner splits big tasks into phases; fresh
+    fixers per fix round; short returns; the lead keeps its context small; auto-compact at 200k (CLAUDE_CODE_AUTO_COMPACT_WINDOW); the merge gate requires the handoff Status to be DONE; builders run as
+    1 Opus + 1 Sonnet at once'
+  accept: the agent files and team-lead skill carry the rules; the gate fails a PARTIAL or BLOCKED handoff (tests); settings.json sets the compaction window.
+  deps: []
+  status: done
+  branch: m7/0.15-token-budget
+  model: null
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
@@ -562,7 +572,7 @@ tasks:
   - '2.6'
   - '3.6'
   - M0
-  status: running
+  status: review
   needs_decision:
   - pilot-market
   risk: risky
@@ -616,7 +626,7 @@ tasks:
   deps:
   - '4.7'
   - 3.11b
-  status: todo
+  status: review
   branch: null
   model: null
 - id: '3.12'
@@ -970,8 +980,11 @@ tasks:
   model: null
 - id: 4.3d
   milestone: M4
-  title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the rope is ready" at least soft); the code-word window shrinks to 1-2 words and drops everyday words (list, print, object, field, stack, queue, element); method-ready negatives apply only to rope and blade, never pills, tablets, poison or noose; "hopeless" alone feeds the hopelessness family'
-  accept: each phrase is a unit test (hit or negative) and a pending case; "i have pills and nothing matters anymore, my list of reasons is empty" stays hard; no regression on the distress and near-miss suites.
+  title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the
+    rope is ready" at least soft); the code-word window shrinks to 1-2 words and drops everyday words (list, print, object, field, stack, queue, element); method-ready negatives apply only to rope and blade,
+    never pills, tablets, poison or noose; "hopeless" alone feeds the hopelessness family'
+  accept: each phrase is a unit test (hit or negative) and a pending case; "i have pills and nothing matters anymore, my list of reasons is empty" stays hard; no regression on the distress and near-miss
+    suites.
   deps:
   - '4.3'
   status: todo
@@ -993,10 +1006,11 @@ tasks:
   milestone: M4
   title: 'lockedLeak follow-ups (4.6b fix-round re-review): markdown emphasis inside words (l**o**op, ~~, backticks) padded in the rendered reading; known-miss notes for <a<b>, a < inside a quoted value,
     --!> comments and non-ASCII tag names; a failed or timed-out post-guard step counts as a locked trip; a corrupt stored help state is reported once'
-  accept: each item has a unit test; the markdown in-word case (locked-loops-md-inword-bold-en, pending) trips; the three human-approved cases parked in docs/tasks/4.6/pending-cases/ (B-19) move into evals/suites/locked with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
+  accept: each item has a unit test; the markdown in-word case (locked-loops-md-inword-bold-en, pending) trips; the three human-approved cases parked in docs/tasks/4.6/pending-cases/ (B-19) move into evals/suites/locked
+    with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
-  status: todo
+  status: running
   branch: null
   model: null
 - id: '4.7'
@@ -1008,7 +1022,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: done
   risk: risky
   branch: m4/4.7-grounding
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
@@ -1035,7 +1049,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
   branch: null
   model: null

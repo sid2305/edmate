@@ -1,4 +1,6 @@
 // Tasks 4.5 and 4.6: the postGuard step. Keys and material are synthetic ("16", retrievalWorld).
+// These tests run lockedLeak and answerLeak alone (`twoGuards`); grounding (4.7) and the default
+// chain are in postGuard.grounding.test.ts.
 import type { GuardResult, PedagogyDecision, RetrievalIndex, Usage } from '@edmate/contracts';
 import {
   demoPedagogyDecision,
@@ -8,10 +10,19 @@ import {
   usageSmall,
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
-import { ANSWER_LEAK_SAFE_HINT, type PostGuardCtx } from '../../guardrails/answerLeak.js';
+import {
+  ANSWER_LEAK_SAFE_HINT,
+  createAnswerLeakGuard,
+  type PostGuardCtx,
+} from '../../guardrails/answerLeak.js';
 import type { Guard } from '../../guardrails/guard.js';
-import { LockedLeakDetected, lockedReplyText } from '../../guardrails/lockedLeak.js';
+import {
+  createLockedLeakGuard,
+  LockedLeakDetected,
+  lockedReplyText,
+} from '../../guardrails/lockedLeak.js';
 import { GUARD_ORDER } from '../../guardrails/order.js';
+import { postGuards } from '../../guardrails/postGuards.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
 import { fakeGuard } from '../../testing/guardFixtures.js';
@@ -24,12 +35,16 @@ import { STEP_SPEC } from '../spec.js';
 import type { StepEnv } from '../types.js';
 import {
   createPostGuard,
+  PASS2_WEIGHT,
+  POST_GUARD_BUDGET_MS,
   POST_GUARD_MARGIN_MS,
   PostGuardFailed,
-  postGuard,
   postGuardSliceMs,
   REWRITE_SYSTEM,
 } from './postGuard.js';
+
+/** The 4.5/4.6 chain: lockedLeak then answerLeak, no grounding. */
+const postGuard = createPostGuard([createLockedLeakGuard(), createAnswerLeakGuard()]);
 
 const KEY = '16';
 const decision: PedagogyDecision = { ...demoPedagogyDecision, mustNotReveal: [KEY] };
@@ -322,34 +337,59 @@ describe('postGuard: chain outcomes (fake guards)', () => {
   });
 });
 
-describe('postGuard: time', () => {
-  it('each guard’s slice is the budget less the margin over two passes of every guard', () => {
-    const budget = (STEP_SPEC.postGuard.timeoutMs as number) - POST_GUARD_MARGIN_MS;
-    expect(postGuardSliceMs(1)).toBe(budget / 2);
-    expect(postGuardSliceMs(6)).toBe(Math.floor(budget / 12));
-    expect(postGuardSliceMs(0)).toBe(budget / 2);
+describe('postGuard: time (weighted slices, task 4.7)', () => {
+  it('the budget is the step budget less the margin', () => {
+    expect(POST_GUARD_BUDGET_MS).toBe(
+      (STEP_SPEC.postGuard.timeoutMs as number) - POST_GUARD_MARGIN_MS,
+    );
+  });
+
+  it('pass 1: the weight’s share of what is left, with pass 2 held in reserve', () => {
+    const w = [2, 3, 4];
+    // 1800 * 2 / (9 + 3)
+    expect(postGuardSliceMs(1_800, w, { pass: 1, index: 0 })).toBe(300);
+    // 1500 * 3 / (7 + 3)
+    expect(postGuardSliceMs(1_500, w, { pass: 1, index: 1 })).toBe(450);
+    // 1000 * 4 / (4 + 3)
+    expect(postGuardSliceMs(1_000, w, { pass: 1, index: 2 })).toBe(571);
+    expect(PASS2_WEIGHT).toBe(1);
+  });
+
+  it('pass 2: an even share of what is left among the guards still to run', () => {
+    expect(postGuardSliceMs(900, [2, 3, 4], { pass: 2, index: 0 })).toBe(300);
+    expect(postGuardSliceMs(900, [2, 3, 4], { pass: 2, index: 2 })).toBe(900);
+  });
+
+  it('nothing left, or a bad position: no slice (the guard fails closed)', () => {
+    expect(postGuardSliceMs(0, [1], { pass: 1, index: 0 })).toBe(0);
+    expect(postGuardSliceMs(-5, [1], { pass: 2, index: 0 })).toBe(0);
+    expect(postGuardSliceMs(Number.NaN, [1], { pass: 1, index: 0 })).toBe(0);
+    expect(postGuardSliceMs(100, [], { pass: 1, index: 0 })).toBe(100);
+    expect(postGuardSliceMs(100, [], { pass: 2, index: 0 })).toBe(100);
   });
 
   it('a 6-guard chain that rewrites and uses almost all of every slice ends inside the step', async () => {
     const s = setup();
-    const slice = postGuardSliceMs(6);
+    const started = s.clock.now();
     const slow = (name: string, first: GuardResult): Guard<PostGuardCtx> => {
       let calls = 0;
       return fakeGuard<PostGuardCtx>(name, 'post', async () => {
-        await s.clock.sleep(slice - 1);
+        // Use all but 1 ms of the slice this guard was given (worked out the same way).
+        const w = GUARD_ORDER.post.map((n) => postGuards.weight(n));
+        const pass = calls < 1 ? 1 : 2;
+        const index = GUARD_ORDER.post.indexOf(name);
+        const left = POST_GUARD_BUDGET_MS - (s.clock.now() - started);
+        await s.clock.sleep(postGuardSliceMs(left, w, { pass, index }) - 1);
         return calls++ === 0 ? first : { ok: true };
       });
     };
-    const names = GUARD_ORDER.post;
-    const guards = names.map((n, i) =>
+    const guards = GUARD_ORDER.post.map((n, i) =>
       slow(n, i === 0 ? { ok: false, action: 'rewrite', text: 'r', reason: 'x' } : { ok: true }),
     );
-    const t0 = s.clock.now();
     const r = await s.run('draft', {}, createPostGuard(guards));
     expect(r).toMatchObject({ result: 'replace', text: 'r' });
     expect(r.guards).toHaveLength(12);
-    expect(s.clock.now() - t0).toBe(12 * (slice - 1));
-    expect(s.clock.now() - t0).toBeLessThan(STEP_SPEC.postGuard.timeoutMs as number);
+    expect(s.clock.now() - started).toBeLessThan(POST_GUARD_BUDGET_MS);
   });
 
   it('a hanging guard times out at its slice and fails closed', async () => {
@@ -359,7 +399,8 @@ describe('postGuard: time', () => {
     expect(await s.run('draft', {}, createPostGuard([hang]))).toMatchObject({
       text: TEST_SAFE_REPLY,
     });
-    expect(s.clock.now() - t0).toBe(postGuardSliceMs(1));
+    // tone weighs 1: 1800 * 1 / (1 + 1).
+    expect(s.clock.now() - t0).toBe(POST_GUARD_BUDGET_MS / 2);
   });
 });
 

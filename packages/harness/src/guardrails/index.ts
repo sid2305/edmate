@@ -3,10 +3,23 @@
 export {
   ANSWER_LEAK_SAFE_HINT,
   createAnswerLeakGuard,
+  type GroundingJudge,
+  type JudgeReply,
+  type JudgeRequest,
   type LeakRewrite,
   type LockedCheck,
   type PostGuardCtx,
 } from './answerLeak.js';
+export {
+  askTeacherReplyText,
+  createGroundingGuard,
+  GROUNDING_JUDGE_SYSTEM,
+  GROUNDING_REASONS,
+  type GroundingOptions,
+  groundingJudgeRequest,
+  parseGroundingVerdict,
+  PREMISE_CORRECTION_REPLY,
+} from './grounding.js';
 export {
   type GuardBlockCause,
   type GuardChainOptions,
@@ -14,6 +27,7 @@ export {
   type GuardFailure,
   type GuardFailureCause,
   type GuardOutcomeEvent,
+  type GuardSliceRequest,
   runGuardChain,
 } from './chain.js';
 export {
@@ -84,5 +98,10 @@ export {
   stringLeaves,
 } from './lockedMatch.js';
 export { postGuards } from './postGuards.js';
-export { GuardRegistry, GuardRegistryError } from './registry.js';
+export {
+  GuardRegistry,
+  GuardRegistryError,
+  MAX_GUARD_WEIGHT,
+  type RegisterOptions,
+} from './registry.js';
 export { digitValue, type FoldedText, foldText, isDecimalDigit, isFormatChar } from './textFold.js';

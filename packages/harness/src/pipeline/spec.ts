@@ -69,6 +69,13 @@ export const ALERT_RETRY_MAX_MS = 30_000;
 export const TEACHER_QUESTION_TIMEOUT_MS = 500;
 
 /**
+ * At most this many TeacherQuestions per session come from the grounding guard (task 4.7, lead
+ * answer 8); past it the student gets the ask-teacher reply only. decide's own ask_teacher turns
+ * are not capped here.
+ */
+export const GROUNDING_ASKS_PER_SESSION = 3;
+
+/**
  * How long `finished` waits for model stream closes (iterator `return()`) that generate started,
  * so their failures are reported before the background log is written.
  */

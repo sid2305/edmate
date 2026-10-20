@@ -78,6 +78,17 @@ export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualCloc
 export { type MemoryToolRegistry, memoryToolRegistry, testTool } from './memoryToolRegistry.js';
 export { type SpyGateway, spyGateway } from './spyGateway.js';
 export {
+  GROUNDED_VERDICT,
+  type JudgeGateway,
+  judgeGateway,
+  type JudgeInput,
+  type JudgeVerdict,
+  overlapGrounded,
+  overlapJudge,
+  readJudgeRequest,
+  UNGROUNDED_VERDICT,
+} from './groundingJudge.js';
+export {
   scriptedEmbedPair,
   scriptedObjectIntent,
   scriptedStreamProviderError,
