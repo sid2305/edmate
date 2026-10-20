@@ -11,6 +11,10 @@ const AUTH_VARS = [
   'AUTH_GOOGLE_SECRET',
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
+  // Email magic link (task 1.4): an SMTP URL or Redis from the shell must never be used.
+  'EMAIL_SERVER',
+  'EMAIL_FROM',
+  'REDIS_URL',
 ];
 
 beforeEach(() => {

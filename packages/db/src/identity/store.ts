@@ -1,12 +1,18 @@
 // Identity store (task 1.3): the one path sign-in uses to read and write users, linked accounts
-// and database sessions. See README.md for its rules; it is deliberately not a repository.
+// and database sessions; since 1.4 also email sign-in links. See README.md for its rules; it is deliberately not a repository.
 import { and, eq, gt } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { authAccounts, authSessions, platformAuditLog, users } from '../schema/index.js';
+import {
+  authAccounts,
+  authSessions,
+  authVerificationTokens,
+  platformAuditLog,
+  users,
+} from '../schema/index.js';
 import { guarded, RepositoryError, translateWrite } from '../repositories/errors.js';
 import { IdSchema, parseArg } from '../repositories/scope.js';
-import { hashSessionToken } from './token-hash.js';
+import { hashSessionToken, hashToken } from './token-hash.js';
 
 export const ROLES = ['student', 'teacher', 'staff'] as const;
 
@@ -25,6 +31,13 @@ export interface IdentityUser {
 
 export interface IdentitySession {
   userId: string;
+  expires: Date;
+}
+
+/** An email sign-in link as the store hands it back: never the token or its hash. */
+export interface IdentityVerificationToken {
+  /** The lower-cased address. */
+  identifier: string;
   expires: Date;
 }
 
@@ -64,6 +77,23 @@ export interface IdentityStore {
   updateSession(token: string, expires: Date): Promise<IdentitySession | null>;
   deleteSession(token: string): Promise<void>;
   /**
+   * Stores a new email sign-in link as `sha256(token)` and, in the same statement, replaces any
+   * earlier link for that address: only the newest link works (README rule 11).
+   */
+  createVerificationToken(input: {
+    identifier: string;
+    token: string;
+    expires: Date;
+  }): Promise<IdentityVerificationToken>;
+  /**
+   * Uses a link: an atomic delete, so of two concurrent uses only one gets the row. An unknown
+   * token, one for another address, or an expired one is `null`; an expired row is still deleted.
+   */
+  useVerificationToken(input: {
+    identifier: string;
+    token: string;
+  }): Promise<IdentityVerificationToken | null>;
+  /**
    * The only way a role changes. `by` must be exactly `operator` or a current staff user (else
    * `scope`). Writes a `role.grant` row to `platform_audit_log` in the same transaction.
    */
@@ -71,7 +101,7 @@ export interface IdentityStore {
 }
 
 export interface IdentityStoreOptions {
-  /** Clock for session expiry (tests). */
+  /** Clock for session and sign-in link expiry (tests). */
   now?: () => Date;
 }
 
@@ -90,6 +120,8 @@ const NewAccount = z.strictObject({
   provider: Provider,
   providerAccountId: ProviderAccountId,
 });
+const NewVerificationToken = z.strictObject({ identifier: Email, token: Token, expires: When });
+const UseVerificationToken = z.strictObject({ identifier: Email, token: Token });
 const Grant = z.strictObject({
   userId: IdSchema,
   role: RoleSchema,
@@ -220,6 +252,44 @@ function storeMethods(db: Db, now: () => Date) {
     async deleteSession(token: unknown): Promise<void> {
       const hash = hashSessionToken(parseArg(Token, token, 'identity.deleteSession'));
       await db.delete(authSessions).where(eq(authSessions.sessionTokenHash, hash));
+    },
+
+    async createVerificationToken(input: unknown): Promise<IdentityVerificationToken> {
+      const method = 'identity.createVerificationToken';
+      const v = parseArg(NewVerificationToken, input, method);
+      const tokenHash = hashToken(v.token);
+      // One row per address (unique identifier): the upsert swaps in the new hash in one atomic
+      // statement, so concurrent requests can't leave two live links for one address.
+      await translateWrite(method, () =>
+        db
+          .insert(authVerificationTokens)
+          .values({ identifier: v.identifier, tokenHash, expiresAt: v.expires })
+          .onConflictDoUpdate({
+            target: authVerificationTokens.identifier,
+            set: { tokenHash, expiresAt: v.expires },
+          }),
+      );
+      return { identifier: v.identifier, expires: v.expires };
+    },
+
+    async useVerificationToken(input: unknown): Promise<IdentityVerificationToken | null> {
+      const v = parseArg(UseVerificationToken, input, 'identity.useVerificationToken');
+      // DELETE … RETURNING is atomic: of two concurrent clicks only one gets the row.
+      const [row] = await db
+        .delete(authVerificationTokens)
+        .where(
+          and(
+            eq(authVerificationTokens.identifier, v.identifier),
+            eq(authVerificationTokens.tokenHash, hashToken(v.token)),
+          ),
+        )
+        .returning({
+          identifier: authVerificationTokens.identifier,
+          expires: authVerificationTokens.expiresAt,
+        });
+      // An expired link is used up all the same, and reads as no link.
+      if (!row || row.expires.getTime() <= now().getTime()) return null;
+      return row;
     },
 
     async grantRole(input: unknown): Promise<IdentityUser> {
