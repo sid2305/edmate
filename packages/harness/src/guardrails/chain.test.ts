@@ -806,10 +806,11 @@ describe('runGuardChain: per-guard slices (task 4.7)', () => {
     const res = await run([a, b]);
     expect(res.outcome).toBe('ok');
     expect(asked).toEqual([
-      { name: 'lockedLeak', pass: 1, index: 0 },
-      { name: 'grounding', pass: 1, index: 1 },
-      { name: 'lockedLeak', pass: 2, index: 0 },
-      { name: 'grounding', pass: 2, index: 1 },
+      { name: 'lockedLeak', pass: 1, index: 0, text: 'hello' },
+      // Each guard is told the text it is about to check (4.8 fix round 1).
+      { name: 'grounding', pass: 1, index: 1, text: 'r' },
+      { name: 'lockedLeak', pass: 2, index: 0, text: 'r' },
+      { name: 'grounding', pass: 2, index: 1, text: 'r' },
     ]);
   });
 

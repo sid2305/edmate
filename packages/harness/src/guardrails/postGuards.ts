@@ -4,6 +4,7 @@
 // Weights (task 4.7, lead answer 1): a guard that makes a model or port call gets a larger share
 // of the post budget than a rules-only one (default 1). postGuard computes each slice from the
 // budget still left (steps/postGuard.ts). Provisional; tuned with live latency in 7.x (with 4.4b).
+import { createAdviceGuard } from './adviceGuard.js';
 import { createAnswerLeakGuard, type PostGuardCtx } from './answerLeak.js';
 import { createGroundingGuard } from './grounding.js';
 import { createLockedLeakGuard } from './lockedLeak.js';
@@ -16,3 +17,6 @@ postGuards.register(createLockedLeakGuard(), { weight: 2 });
 postGuards.register(createAnswerLeakGuard(), { weight: 3 });
 // One small-tier judge call on most replies.
 postGuards.register(createGroundingGuard(), { weight: 4 });
+// One small-tier judge call, and on a hit one rewrite, only when the turn holds a decision signal
+// (task 4.8). postGuard counts it as rules-only (weight 1) on a turn with none.
+postGuards.register(createAdviceGuard(), { weight: 4 });

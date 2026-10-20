@@ -81,6 +81,8 @@ function setup(
     lockedStopped?: boolean;
     onLockedTrip?: () => void;
     step?: Steps['generate'];
+    /** The student's (scrubbed) message; default demoTurnInput's. */
+    text?: string;
   } = {},
 ) {
   const clock = virtualClock();
@@ -96,7 +98,7 @@ function setup(
   const reported: unknown[] = [];
   const recorded: Usage[] = [];
   const env: StepEnv = {
-    input: demoTurnInput,
+    input: o.text === undefined ? demoTurnInput : { ...demoTurnInput, text: o.text },
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_x',
@@ -218,14 +220,27 @@ describe('generate: events in order', () => {
     },
   );
 
-  it.each(['ask', 'explain', 'check', 'redirect'] as const)(
-    '%s sends no hint_rung',
-    async (move) => {
-      const s = setup([[say('x'), used]], { decision: { move } });
-      await s.run();
-      expect(types(s.events)).toEqual(['token']);
-    },
-  );
+  it.each(['ask', 'explain', 'check'] as const)('%s sends no hint_rung', async (move) => {
+    const s = setup([[say('x'), used]], { decision: { move } });
+    await s.run();
+    expect(types(s.events)).toEqual(['token']);
+  });
+
+  it('redirect sends no hint_rung and holds its text for postGuard (4.8 fix round 1)', async () => {
+    const s = setup([[say('Back to '), say('Python.'), used]], { decision: { move: 'redirect' } });
+    const r = await s.run();
+    expect(types(s.events)).toEqual([]);
+    expect(r).toMatchObject({ draft: 'Back to Python.', held: true });
+  });
+
+  it('4.8 fix round 1: a regulated topic in the student message holds the reply', () => {
+    const scored = { retrieved: [{ ...demoChunkScored, score: 0.9 }] };
+    expect(holdsReply(scored, 'explain', undefined, false, 'my head hurts, what helps?')).toBe(
+      true,
+    );
+    expect(holdsReply(scored, 'explain', undefined, false, 'landlord sent a renewal')).toBe(true);
+    expect(holdsReply(scored, 'explain', undefined, false, 'how do loops work?')).toBe(false);
+  });
 
   it('ask_teacher sends no hint_rung and holds its text for postGuard (4.7)', async () => {
     const s = setup([[say('It has gone '), say('to your teacher.'), used]], {
@@ -270,11 +285,16 @@ describe('holdsReply (4.7, lead answer 13)', () => {
     expect(holdsReply(at(0.65), 'explain', 0.6)).toBe(true);
   });
 
-  it('streams teaching turns whose chunks are all unscored, and redirect or locked turns', () => {
+  it('streams teaching turns whose chunks are all unscored, and locked turns', () => {
     expect(holdsReply(at(undefined), 'check')).toBe(false);
-    expect(holdsReply(at(0.1), 'redirect')).toBe(false);
     expect(holdsReply(at(0.1), 'locked')).toBe(false);
-    expect(holdsReply(at(), 'redirect')).toBe(false);
+  });
+
+  it('4.8 fix round 1: holds every redirect move, on every agent, whatever the student asked', () => {
+    expect(holdsReply(at(0.1), 'redirect')).toBe(true);
+    expect(holdsReply(at(), 'redirect')).toBe(true);
+    expect(holdsReply(at(0.9), 'redirect', undefined, false, 'what is a good stock?')).toBe(true);
+    expect(holdsReply(at(0.9), 'redirect', undefined, false, 'hello')).toBe(true);
   });
 
   it('holds a teaching turn with nothing retrieved, or one decide.fallback chose (fix round 1)', () => {
@@ -282,7 +302,7 @@ describe('holdsReply (4.7, lead answer 13)', () => {
     expect(holdsReply(at(), 'ask')).toBe(true);
     expect(holdsReply(at(0.9), 'ask', undefined, true)).toBe(true);
     expect(holdsReply(at(undefined), 'ask', undefined, true)).toBe(true);
-    expect(holdsReply(at(0.9), 'redirect', undefined, true)).toBe(false);
+    expect(holdsReply(at(0.9), 'locked', undefined, true)).toBe(false);
   });
 
   it('a decide.fallback turn is held by the step (fromFallback)', async () => {
@@ -290,6 +310,55 @@ describe('holdsReply (4.7, lead answer 13)', () => {
     const r = await s.run({ fromFallback: true });
     expect(r).toMatchObject({ held: true });
     expect(types(s.events)).toEqual([]);
+  });
+
+  it('4.8: holds every move of a regulated-subject agent (lead decision)', () => {
+    const moves = [
+      'ask',
+      'hint',
+      'worked_example',
+      'explain',
+      'solution',
+      'check',
+      'redirect',
+      'locked',
+      'ask_teacher',
+    ] as const;
+    for (const subject of ['investing', 'health', 'law'] as const) {
+      for (const move of moves) {
+        expect(holdsReply({ ...at(0.99), agent: { regulatedSubject: subject } }, move)).toBe(true);
+      }
+    }
+    expect(holdsReply({ ...at(0.99), agent: {} }, 'hint')).toBe(false);
+  });
+
+  it('4.8: holds any move when the student asks for a decision (adviceGuard pre-filter)', () => {
+    expect(holdsReply(at(0.99), 'redirect', undefined, false, 'Should I buy this stock?')).toBe(
+      true,
+    );
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'Konsi tablet le lun?')).toBe(true);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'क्या मुझे लोन लेना चाहिए?')).toBe(true);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'How do loops work?')).toBe(false);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, '')).toBe(false);
+  });
+
+  it('4.8: the step streams no token for a regulated agent or a decision request', async () => {
+    const advice = 'You should take 500mg now.';
+    const regulated = setup([[say(advice), used]], {
+      decision: { move: 'explain' },
+      ctx: { ...ctx, agent: { ...ctx.agent, regulatedSubject: 'health' } },
+    });
+    expect(await regulated.run()).toMatchObject({ held: true, draft: advice });
+    expect(types(regulated.events)).toEqual([]);
+
+    const asked = setup([[say(advice), used]], {
+      decision: { move: 'redirect' },
+      text: 'What medicine should I take for a headache?',
+    });
+    expect(await asked.run()).toMatchObject({ held: true });
+    const streamed = asked.events.flatMap((e) => (e.type === 'token' ? [e.text] : []));
+    expect(streamed.join('')).not.toContain('500mg');
+    expect(streamed).toEqual([]);
   });
 
   it('no sources event when nothing is cited, or only out-of-range numbers', async () => {

@@ -333,10 +333,27 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
+- id: 1.4b
+  milestone: M13
+  title: 'Magic-link hardening before the pilot (1.4 plan Q3): bind the link to the requesting browser with a cookie and add a confirm page, so link scanners and login CSRF on the GET callback can''t sign
+    a user in'
+  accept: a link opened in a different browser or by a prefetching scanner does not sign in; the confirm page posts with CSRF; auth tests pass
+  deps:
+  - '1.4'
+  status: todo
+  risk: risky
+- id: 1.4c
+  milestone: M13
+  title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
+  accept: a user who signed up by link can then sign in with Google on the same verified address; an unverified Google email never links; auth tests pass
+  deps:
+  - '1.4'
+  status: todo
+  risk: risky
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -758,9 +775,9 @@ tasks:
     skill states the new rules.
   deps:
   - '0.7'
-  status: running
+  status: review
   branch: m7/0.13-agent-efficiency
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet buildA:sonnet
 - id: '0.14'
   milestone: M7
   title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
@@ -1109,10 +1126,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.8-advice-guard
-  model: build:opus fix1:opus
+  model: plan:sonnet build:opus review:sonnet fix:sonnet
 - id: '4.9'
   milestone: M13
   title: '`personaBoundary` and `tone`'
@@ -1942,6 +1959,15 @@ tasks:
   needs_decision: null
   branch: m4/4.3a-test-timeouts
   model: plan:lead build:haiku review:sonnet
+- id: 4.4f
+  milestone: M13
+  title: 'Moderation/jailbreak follow-ups (4.4 review LOWs): narrow withheldCode/code to the SafetyEventCode subset; expectTypeOf links for the queue and db safety-event enums; build the alert before recording
+    the event in moderationIn; remove the classifier cancel listener; explicit block() return type; test indentation'
+  accept: the six LOWs in docs/tasks/4.4/review.md are fixed with tests where behaviour changes; the harness gate passes
+  deps:
+  - GATE
+  - '4.4'
+  status: todo
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on

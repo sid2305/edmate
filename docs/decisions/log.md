@@ -10,6 +10,75 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.8 merged: adviceGuard post guard wired · decided by lead (plan revisions) · risk: high
+Decided: `adviceGuard` runs on every agent. It uses English personal-directive and identity rules, a small-tier judge (fail closed) for ambiguous or non-English replies, one rule-checked rewrite, and a fixed fallback. The disclaimer is deterministic and word for word, from the locale pack or the frame's generic text, and is shared with the system prompt. Regulated-subject agents and decision requests are held, not streamed. Redirect replies are judged too. Reviewed by safety-reviewer (plus security-reviewer, typescript-reviewer and silent-failure-hunter, as requested).
+Why: PRD regulated-subject rule and signed safety rule 5; lead answers 1–12 and the 4.7 safety review.
+Alternatives: run only on regulated agents (rejected by the lead).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 the redirect review case is added as pending · decided by lead (case), tdd-guide (fixture spec) · risk: medium
+Decided: `advice-grounding-redirect-hi-latin` is in `evals/suites/advice` with `reviewed_by: pending`, so `suites.test.ts` fails on exactly that line until the human signs. It passes the offline gate, caught by the judge layer.
+Why: the human signs eval cases (4.5/4.7 precedent).
+Alternatives: keep it out of the suite (the 4.6 posture).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 adviceGuard's time budget · decided by tdd-guide · risk: low
+Decided: the judge timeout reuses grounding's 600 ms. The rewrite runs only when at least 200 ms of the slice is left. On a turn with no decision request, no signal and no hard hit, adviceGuard weighs as a rules-only guard, so the other guards keep their time.
+Why: plan Q3 and lead answer 11; the four-call stacking test and the fixture latency run stay inside 2 s.
+Alternatives: a fixed weight on every turn (takes time away from grounding on ordinary turns).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 built-in English redirect reply · decided by tdd-guide · risk: low
+Decided: when the locale gives no usable `redirect` text, adviceGuard uses a built-in English reply. It names no helpline or contact, and a locale failure is reported.
+Why: the redirect fallback must always exist; English-only pilot.
+Alternatives: the safe reply (doesn't steer back to the course).
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: wider judge coverage · decided by lead (brief), tdd-guide (patterns) · risk: high
+Decided:
+- A regulated-subject agent sends every reply that isn't a fixed text to the judge.
+- On every agent, a sentence-start imperative, a bare number or a proper-noun product is a weak signal that also sends the reply to the judge.
+- A money, health or law topic in the student message holds the stream and sends the reply to the judge. It does not add the disclaimer to a clean reply on its own; only a decision request does.
+- Every redirect move is held.
+- A rewrite with a dose, a promise or a named product is rejected.
+Why: safety-review issues 1–6. The stream must not show advice that the judge would have caught later.
+Alternatives:
+- Judge only on signals (the round-0 design; it missed bare directives).
+- Add the disclaimer on every regulated-topic turn (too noisy for clean answers).
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: per-text slice weights · decided by tdd-guide · risk: low
+Decided: postGuard weighs each guard's time slice on the text current at that guard. Earlier guards reserve adviceGuard's judge time only for strong signals (non-English, modal, dose, promise, role-play, domain words) or a regulated agent or topic. Weak signals alone don't reserve it.
+Why: numbers are common in ordinary replies. Reserving judge time for them shrank other guards' rewrite slices below their floor. The latency run stays at 1200 ms of 2000 ms.
+Alternatives: a fixed reservation on every turn.
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: disclaimer locale-gap metric and narrower fake judge · decided by tdd-guide · risk: low
+Decided:
+- When a regulated agent's locale pack has no disclaimer for its subject, postGuard reports `DisclaimerLocaleGap` with the subject code only (no text, no PII) and keeps using the generic disclaimer.
+- The test-only `markerJudge` no longer flags a bare "karo". It flags only a legal or money verb plus "karo", or "daal ke bhool jao".
+Why:
+- The silent-failure HIGH.
+- The broad "karo" marker made a grounding case pass for the wrong reason (`grounding-fileio-hi-latin`).
+Alternatives:
+- Fail the turn on a gap (too harsh: the generic disclaimer is safe).
+- Change the grounding count (hides the cause).
+Reversible: yes.
+
+---
+
 ### 5.1 New ingest dependencies: markdown-it 15.0.3 and cheerio 1.2.0 · decided by tdd-guide (lead pre-approved the library choice, no ADR) · risk: medium
 Decided: add `markdown-it` 15.0.3 (MIT, ships its own types) and `cheerio` 1.2.0 (MIT) to `packages/ingest`. Versions are the current npm `latest`, checked with `corepack pnpm view <pkg> version license` on 20 Oct 2026. HTML parsing imports `cheerio/slim` (htmlparser2), so the main entry's `fromURL`/undici network code is never loaded. Dev dependencies use the repo's existing pins (vitest 5.0.5, @vitest/coverage-v8 5.0.5, @types/node 22.20.5).
 Why: these are the plan's Phase A libraries. Both are MIT, pure JS, and give the block and heading structure the locators need.

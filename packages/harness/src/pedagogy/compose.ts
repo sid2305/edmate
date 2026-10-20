@@ -9,6 +9,8 @@
 // Locked material (ADR-0003): every retrieved chunk is checked against the entitlement before
 // anything is rendered; one outside it throws LockedMaterialError, whose message names no text.
 import type { AgentConfig, Chunk, Lang, SourceRef, TurnContext } from '@edmate/contracts';
+import { fenced, inline } from './dataText.js';
+import { resolveDisclaimer } from './disclaimer.js';
 import type { PolicyResult } from './policy.js';
 import {
   type FrameSection,
@@ -102,23 +104,7 @@ export function replyLanguage(lang: Lang, agent: Pick<AgentConfig, 'languages'>)
   return isPilotLanguages(agent.languages) && agent.languages.includes(lang) ? lang : 'en';
 }
 
-/** The fixed delimiters around data blocks (material, style card, learner summary). */
-export const DATA_OPEN = '<<<';
-export const DATA_CLOSE = '>>>';
-
-/** Breaks any run of 3+ `<` or `>` in data, so data can never close its own delimiter. */
-function neutralise(text: string): string {
-  return text.replace(/<{3,}|>{3,}/g, (m) => m.split('').join(' '));
-}
-
-function fenced(text: string): string {
-  return `${DATA_OPEN}\n${neutralise(text)}\n${DATA_CLOSE}`;
-}
-
-/** One line of data: whitespace collapsed (no line breaks to fake a new section). */
-function inline(text: string): string {
-  return neutralise(text).replace(/\s+/g, ' ').trim();
-}
+export { DATA_CLOSE, DATA_OPEN } from './dataText.js';
 
 function checkScope(ctx: TurnContext): void {
   const e = ctx.entitlement;
@@ -209,10 +195,9 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
 
   const subject = ctx.agent.regulatedSubject;
   if (!distress && subject !== undefined) {
-    const own = ctx.locale.regulatedDisclaimers[subject];
     parts.push(
       renderTemplate(f.disclaimer, {
-        disclaimer: own === undefined ? f['generic-disclaimer'] : inline(own),
+        disclaimer: resolveDisclaimer(subject, ctx.locale, f['generic-disclaimer']),
       }),
     );
   }
