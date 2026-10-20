@@ -10,6 +10,11 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.11 no longer waits on all of M3 · decided by lead · risk: low
+Decided: Remove the M3 milestone dependency from 5.11 (outline and style-card drafters in packages/ingest). Keep 5.1 and 5.6a.
+Why: M3's open work is teacher-label hardening (3.11d/3.11e), which the drafters don't touch. Same reasoning as the 5.2 relaxation.
+risk: low
+
 ### 20 Oct 2026 · 5.6a ingest refuses practice banks and answer keys · decided by tdd-guide
 Decided: `indexDocument` calls `assertNotAnswerBank(sourceTitle, units)` on every parsed source,
 after parsing and before chunking, refusing by title (a `question-bank`/`rubric-answers` path
