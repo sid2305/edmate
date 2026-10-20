@@ -35,6 +35,13 @@ import {
 } from './memoryPorts.js';
 import { scriptedStreamText } from './gatewayFixtures.js';
 import {
+  ADVICE_VERDICT,
+  type AdviceVerdict,
+  adviceJudgeGateway,
+  CLEAN_ADVICE_VERDICT,
+  markerJudge,
+} from './adviceJudge.js';
+import {
   GROUNDED_VERDICT,
   judgeGateway,
   type JudgeVerdict,
@@ -288,6 +295,8 @@ export interface TestDeps {
   portCalls: string[];
   /** grounding judge requests the fake judge answered (empty without `judge`). */
   judged: ModelRequest[];
+  /** adviceGuard judge requests the fake advice judge answered (empty with `adviceJudge: 'script'`). */
+  adviceJudged: ModelRequest[];
 }
 
 /**
@@ -311,6 +320,13 @@ export function testDeps(
     judge?: 'grounded' | 'ungrounded' | JudgeVerdict;
     /** Virtual time each judge answer takes. */
     judgeDelayMs?: number;
+    /**
+     * Answers adviceGuard's judge requests (4.8) outside the script and the spy. Default: the
+     * non-circular `markerJudge`. `'script'`: they reach the script like any request.
+     */
+    adviceJudge?: 'clean' | 'advice' | 'script' | AdviceVerdict;
+    /** Virtual time each advice judge answer takes. */
+    adviceJudgeDelayMs?: number;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
   } = {},
@@ -335,12 +351,29 @@ export function testDeps(
           clock,
           ...(opts.judgeDelayMs === undefined ? {} : { delayMs: opts.judgeDelayMs }),
         });
+  const a = opts.adviceJudge ?? markerJudge;
+  const adviceVerdict: AdviceVerdict | undefined =
+    a === 'clean'
+      ? () => CLEAN_ADVICE_VERDICT
+      : a === 'advice'
+        ? () => ADVICE_VERDICT
+        : a === 'script'
+          ? undefined
+          : a;
+  const advised =
+    adviceVerdict === undefined
+      ? undefined
+      : adviceJudgeGateway(judged ?? gateway, adviceVerdict, {
+          clock,
+          ...(opts.adviceJudgeDelayMs === undefined ? {} : { delayMs: opts.adviceJudgeDelayMs }),
+        });
+  const outer = advised ?? judged;
   const deps: PipelineDeps = {
     clock,
     ids,
     gatewayFor: (spec) => {
       const tg = gateway.gatewayFor(spec);
-      return judged === undefined ? tg : { ...tg, gateway: judged };
+      return outer === undefined ? tg : { ...tg, gateway: outer };
     },
     priceUsage: (u) => u.costMicroUsd,
     log,
@@ -375,5 +408,6 @@ export function testDeps(
     log,
     portCalls,
     judged: judged?.judged ?? [],
+    adviceJudged: advised?.adviceJudged ?? [],
   };
 }

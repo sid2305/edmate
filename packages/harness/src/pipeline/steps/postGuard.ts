@@ -29,6 +29,18 @@
 // `ungrounded` (read from the guard's own result, never by comparing text) and the chain then
 // passed, the result carries `escalateToTeacher` and the runner opens the TeacherQuestion.
 //
+// Advice (4.8): this step builds adviceGuard's judge and its one rewrite (both bounded small-tier
+// calls inside adviceGuard's slice; the rewrite is skipped for the fixed fallback when too little
+// of the slice is left), the disclaimer's generic text from the pinned prompt-pack set, the
+// locale's redirect reply, and tells the guard when the chain is on its verification pass (it
+// runs its rules only then). adviceGuard's fallback and redirect reply join the fixed texts every
+// guard passes. adviceGuard never escalates. adviceGuard weighs as a rules-only guard on a turn
+// where nothing could send its reply to the judge (no decision request, signal or hard hit), so
+// the other guards keep their time on ordinary turns.
+//
+// A verification-pass block by lockedLeak (a rewrite that came back holding locked material)
+// gives the locked reply, as a first-pass hit does.
+//
 // Time (4.7, lead answer 1): slices are weighted (postGuards.ts). Right before each guard runs,
 // its slice is its weight's share of the budget still left, with pass 2 (every guard at
 // PASS2_WEIGHT) held in reserve, so a full chain always ends inside the step. The rewrite and the
@@ -38,9 +50,21 @@ import {
   ANSWER_LEAK_SAFE_HINT,
   type GroundingJudge,
   type JudgeReply,
+  type JudgeRequest,
   type LeakRewrite,
   type PostGuardCtx,
 } from '../../guardrails/answerLeak.js';
+import {
+  ADVICE_REASONS,
+  adviceFallbackText,
+  adviceRedirectReplyText,
+  adviceSignal,
+  decisionRequest,
+  regulatedTopic,
+  strongAdviceSignal,
+  disclaimerFor,
+  personalDirective,
+} from '../../guardrails/adviceGuard.js';
 import {
   type GuardChainResult,
   type GuardFailure,
@@ -52,7 +76,14 @@ import { askTeacherReplyText, GROUNDING_REASONS } from '../../guardrails/groundi
 import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
-import { GroundingJudgeUnavailable, HarnessError } from '../errors.js';
+import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
+import { disclaimerGap } from '../../pedagogy/disclaimer.js';
+import {
+  AdviceJudgeUnavailable,
+  DisclaimerLocaleGap,
+  GroundingJudgeUnavailable,
+  HarnessError,
+} from '../errors.js';
 import { compileAnswerKeys } from '../generate/answerKey.js';
 import { StreamReader } from '../generate/streamReader.js';
 import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
@@ -78,6 +109,12 @@ export const JUDGE_SHARE = 0.9;
 export const GROUNDING_JUDGE_MAX_OUTPUT_TOKENS = 20;
 /** Every guard's weight on the verification pass (it re-checks; the calls are mostly done). */
 export const PASS2_WEIGHT = 1;
+/** adviceGuard's judge timeout: the same as grounding's (4.8 plan Q3; tuned live in 7.x). */
+export const ADVICE_JUDGE_TIMEOUT_MS = GROUNDING_JUDGE_TIMEOUT_MS;
+/** adviceGuard's rewrite runs only when at least this much of its slice is left (lead answer 11). */
+export const ADVICE_REWRITE_MIN_MS = 200;
+/** What adviceGuard's rewrite leaves unused at the end of its slice, so the guard returns in time. */
+export const ADVICE_SLICE_MARGIN_MS = 10;
 
 /**
  * The fixed instruction for the one small-tier rewrite. It names no key: the draft already holds
@@ -180,9 +217,9 @@ function rewriter(env: StepEnv, budgetMs: () => number) {
 }
 
 /**
- * grounding's judge: small tier, the guard's fixed rubric, never throws. Remembered per request for
- * the turn, so the verification pass re-checks the same text without a second call (its usage was
- * already counted, so a remembered answer carries none).
+ * A judge (grounding's, adviceGuard's): small tier, the guard's fixed rubric, never throws.
+ * Remembered per request for the turn, so the verification pass re-checks the same text without a
+ * second call (its usage was already counted, so a remembered answer carries none).
  */
 function judgeFor(env: StepEnv, budgetMs: () => number): GroundingJudge {
   const seen = new Map<string, Promise<JudgeReply>>();
@@ -206,6 +243,28 @@ function judgeFor(env: StepEnv, budgetMs: () => number): GroundingJudge {
   };
 }
 
+/**
+ * adviceGuard's one rewrite: small tier, its fixed instruction, never throws. With under
+ * ADVICE_REWRITE_MIN_MS left it makes no call (the guard then sends its fixed fallback).
+ */
+function adviceRewriter(env: StepEnv, budgetMs: () => number) {
+  return async (req: JudgeRequest, cancel: CancelToken): Promise<LeakRewrite> => {
+    const ms = budgetMs();
+    if (ms < ADVICE_REWRITE_MIN_MS) return { text: undefined, usage: [] };
+    return smallCall(
+      env,
+      {
+        tier: 'small',
+        system: req.system,
+        messages: [{ role: 'user', content: req.user }],
+        maxOutputTokens: REWRITE_MAX_OUTPUT_TOKENS,
+      },
+      ms,
+      cancel,
+    );
+  };
+}
+
 /** A fixed text from the locale is usable when it is non-empty and within the model-text cap. */
 function usable(text: unknown): text is string {
   return typeof text === 'string' && text.trim() !== '' && text.length <= LIMITS.modelTextMaxLength;
@@ -220,6 +279,52 @@ export function askTeacherReplyFor(env: StepEnv): string {
     env.report(error);
   }
   return askTeacherReplyText();
+}
+
+/** The redirect reply: the locale's, else the built-in English one. A failure never hides it. */
+export function redirectReplyFor(env: StepEnv): string {
+  try {
+    const text: unknown = env.deps.fallbackReplies.redirect?.(env.input.lang);
+    if (usable(text)) return text;
+  } catch (error) {
+    env.report(error);
+  }
+  return adviceRedirectReplyText();
+}
+
+/**
+ * The pinned prompt-pack set's generic disclaimer; none (adviceGuard then uses its built-in copy
+ * of frame@1.0.0's text) when it can't be read. Not reported: generate resolved this same set
+ * before postGuard runs and fails the turn when it can't, so a miss here is a step test's.
+ */
+function genericDisclaimerFor(env: StepEnv, ctx: TurnContext): string | undefined {
+  try {
+    const set = resolvePromptPackSet(env.deps.promptPacks, ctx.agent.promptPackVersion);
+    const text: unknown = set.frame['generic-disclaimer'];
+    return usable(text) ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Whether anything in this turn could send the reply to adviceGuard's judge or rewrite. With
+ * `strongOnly`, the weak signals (a number, an imperative, a proper noun: fix round 1) don't count.
+ */
+function adviceMayCall(
+  text: string,
+  studentText: string | undefined,
+  regulated: boolean,
+  strongOnly = false,
+): boolean {
+  const student = studentText ?? '';
+  return (
+    regulated ||
+    personalDirective(text) ||
+    decisionRequest(student) ||
+    regulatedTopic(student) ||
+    (strongOnly ? strongAdviceSignal(text) : adviceSignal(text))
+  );
 }
 
 /** A locale text, when it is usable; a throw is reported and gives none. */
@@ -247,9 +352,17 @@ function fixedTextsFor(env: StepEnv, ctx: TurnContext): { safe?: string; texts: 
   return safe === undefined ? { texts } : { safe, texts };
 }
 
-/** Wraps grounding so the step reads its reason code (never its text) for the escalation. */
-function watched(g: Guard<PostGuardCtx>, reasons: string[]): Guard<PostGuardCtx> {
-  if (g.name !== 'grounding') return g;
+/** The guards whose reason codes (never their text) the step reads. */
+const WATCHED: ReadonlySet<string> = new Set(['grounding', 'adviceGuard']);
+
+/**
+ * Wraps grounding and adviceGuard so the step reads their reason codes (never their text): for
+ * grounding's escalation and both judges' outage metrics.
+ */
+function watched(g: Guard<PostGuardCtx>, reasons: Map<string, string[]>): Guard<PostGuardCtx> {
+  if (!WATCHED.has(g.name)) return g;
+  const own: string[] = [];
+  reasons.set(g.name, own);
   return {
     name: g.name,
     phase: g.phase,
@@ -259,7 +372,7 @@ function watched(g: Guard<PostGuardCtx>, reasons: string[]): Guard<PostGuardCtx>
       const res: unknown = (r as { result?: unknown } | null | undefined)?.result;
       if (typeof res === 'object' && res !== null && 'reason' in res) {
         const reason: unknown = res.reason;
-        if (typeof reason === 'string') reasons.push(reason);
+        if (typeof reason === 'string') own.push(reason);
       }
       return r;
     },
@@ -267,8 +380,9 @@ function watched(g: Guard<PostGuardCtx>, reasons: string[]): Guard<PostGuardCtx>
 }
 
 const answerLeakHit = (g: GuardTrace): boolean => g.name === 'answerLeak' && !g.ok;
+/** A locked hit: on the first pass a rewrite, on the verification pass a block (4.8). */
 const lockedLeakHit = (g: GuardTrace): boolean =>
-  g.name === 'lockedLeak' && !g.ok && g.action === 'rewrite';
+  g.name === 'lockedLeak' && !g.ok && (g.action === 'rewrite' || g.action === 'block');
 
 /** The postGuard step over `guards` (default: the registered post-phase guards). */
 export function createPostGuard(
@@ -311,19 +425,51 @@ export function createPostGuard(
     }
 
     // Each guard's slice is worked out right before it runs; the rewrite and the judge read it.
-    const weights = guards.map((g) => postGuards.weight(g.name));
-    const started = env.deps.clock.now();
+    // adviceGuard weighs as rules-only when nothing this turn could reach its judge or rewrite,
+    // read on the text as it stands when each slice is worked out. Fix round 1: the guards before
+    // it reserve its judge's time only for a strong signal; the weak ones (any number, an
+    // imperative, a proper noun) are in most teaching replies and count only for its own slice.
+    const regulated = ctx.agent.regulatedSubject !== undefined;
+    const weightsFor = (text: string, own: boolean): number[] => {
+      const adviceRules = !adviceMayCall(text, studentText, regulated, !own);
+      return guards.map((g) =>
+        g.name === 'adviceGuard' && adviceRules ? PASS2_WEIGHT : postGuards.weight(g.name),
+      );
+    };
+    const clock = env.deps.clock;
+    const started = clock.now();
     const slices = new Map<string, number>();
+    const sliceStarts = new Map<string, number>();
+    let pass: 1 | 2 = 1;
     const sliceOf = (at: GuardSliceRequest): number => {
-      const left = POST_GUARD_BUDGET_MS - (env.deps.clock.now() - started);
+      pass = at.pass;
+      const left = POST_GUARD_BUDGET_MS - (clock.now() - started);
+      const weights = weightsFor(at.text ?? subject, at.name === 'adviceGuard');
       const ms = postGuardSliceMs(left, weights, at);
       slices.set(at.name, ms);
+      sliceStarts.set(at.name, clock.now());
       return ms;
     };
     const share = (name: string, part: number): number =>
       Math.floor((slices.get(name) ?? 0) * part);
-    const reasons: string[] = [];
+    /** What is left of a guard's slice, less a margin so the guard returns inside it. */
+    const leftOf = (name: string): number =>
+      (slices.get(name) ?? 0) -
+      (clock.now() - (sliceStarts.get(name) ?? clock.now())) -
+      ADVICE_SLICE_MARGIN_MS;
+    const reasons = new Map<string, string[]>();
     const fixed = fixedTextsFor(env, ctx);
+    const genericDisclaimer = genericDisclaimerFor(env, ctx);
+    const redirectReply = redirectReplyFor(env);
+    const disclaimer = disclaimerFor(
+      genericDisclaimer === undefined ? { ctx } : { ctx, genericDisclaimer },
+    );
+    const fixedTexts = [...fixed.texts, adviceFallbackText(disclaimer), redirectReply];
+    // Metric, code only: a regulated agent's market has no disclaimer for its subject.
+    const subjectCode = ctx.agent.regulatedSubject;
+    if (subjectCode !== undefined && disclaimerGap(subjectCode, ctx.locale)) {
+      env.report(new DisclaimerLocaleGap(subjectCode));
+    }
     const x: PostGuardCtx = {
       ctx,
       decision,
@@ -336,8 +482,15 @@ export function createPostGuard(
         Math.min(GROUNDING_JUDGE_TIMEOUT_MS, share('grounding', JUDGE_SHARE)),
       ),
       askTeacherReply: askTeacherReplyFor(env),
-      fixedTexts: fixed.texts,
+      fixedTexts,
       ...(fixed.safe === undefined ? {} : { safeReply: fixed.safe }),
+      adviceJudge: judgeFor(env, () =>
+        Math.min(ADVICE_JUDGE_TIMEOUT_MS, share('adviceGuard', JUDGE_SHARE)),
+      ),
+      adviceRewrite: adviceRewriter(env, () => leftOf('adviceGuard')),
+      ...(genericDisclaimer === undefined ? {} : { genericDisclaimer }),
+      redirectReply,
+      verifying: () => pass === 2,
     };
     const r: GuardChainResult = await runGuardChain(
       guards.map((g) => watched(g, reasons)),
@@ -347,21 +500,25 @@ export function createPostGuard(
     );
     const { guards: trace, usage } = r;
     if (trace.some(lockedLeakHit)) env.report(new LockedLeakDetected('reply'));
-    // A metric, code only: the judge gave no answer and the turn got the safe reply.
-    if (reasons.includes(GROUNDING_REASONS.judgeUnavailable)) {
+    const grounding = reasons.get('grounding') ?? [];
+    // Metrics, code only: a judge gave no answer and the turn got a fixed reply.
+    if (grounding.includes(GROUNDING_REASONS.judgeUnavailable)) {
       env.report(new GroundingJudgeUnavailable());
+    }
+    if (reasons.get('adviceGuard')?.includes(ADVICE_REASONS.judgeUnavailable) === true) {
+      env.report(new AdviceJudgeUnavailable());
     }
     switch (r.outcome) {
       case 'ok': {
         // A known leak that no guard rewrote is never shown: fail to the hint.
         if (leaked && r.text === subject) return hint(trace, usage);
         if (r.text === draft) return { result: 'ok', guards: trace, usage };
-        const escalate = reasons.includes(GROUNDING_REASONS.ungrounded);
+        const escalate = grounding.includes(GROUNDING_REASONS.ungrounded);
         return {
           result: 'replace',
           text: r.text,
           ...(escalate ? { escalateToTeacher: true as const } : {}),
-          ...(reasons.length > 0 ? { groundingRewrote: true as const } : {}),
+          ...(grounding.length > 0 ? { groundingRewrote: true as const } : {}),
           guards: trace,
           usage,
         };
@@ -375,6 +532,10 @@ export function createPostGuard(
         }
         break;
       case 'block':
+        // A rewrite (adviceGuard's, 4.8) that came back holding locked material.
+        if (r.blockedBy === 'lockedLeak') {
+          return { result: 'replace', text: lockedReply, guards: trace, usage };
+        }
         if (leaked || r.blockedBy === 'answerLeak' || trace.some(answerLeakHit)) {
           return hint(trace, usage);
         }

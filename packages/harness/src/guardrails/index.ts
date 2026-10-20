@@ -11,6 +11,27 @@ export {
   type PostGuardCtx,
 } from './answerLeak.js';
 export {
+  ADVICE_FALLBACK_REPLY,
+  ADVICE_JUDGE_SYSTEM,
+  ADVICE_REASONS,
+  ADVICE_REWRITE_SYSTEM,
+  adviceFallbackText,
+  type AdviceGuardOptions,
+  adviceJudgeRequest,
+  adviceRedirectReplyText,
+  adviceRewriteRequest,
+  adviceSignal,
+  adviceVerdictClean,
+  createAdviceGuard,
+  decisionRequest,
+  regulatedTopic,
+  strongAdviceSignal,
+  weakAdviceSignal,
+  DEFAULT_GENERIC_DISCLAIMER,
+  disclaimerFor,
+  personalDirective,
+} from './adviceGuard.js';
+export {
   askTeacherReplyText,
   createGroundingGuard,
   GROUNDING_JUDGE_SYSTEM,
