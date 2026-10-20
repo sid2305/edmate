@@ -2043,11 +2043,20 @@ tasks:
   risk: risky
   model: plan:opus build:sonnet
   branch: m3/3.4c-same-topic-locked
+- id: 3.4d
+  milestone: M13
+  title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper'
+  accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
+  deps:
+  - 3.4c
+  status: todo
+  branch: null
+  model: null
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
     document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3); edmate chat reloads the saved help state each turn so the ladder can
-    climb (found by the 3.4c planner)'
+    climb (found by the 3.4c planner); re-test the reported same-topic phrasing ("I still don''t get it") on the db index'
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'
