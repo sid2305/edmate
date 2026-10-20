@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 0.15 Merge gate checks the handoff Status line · decided by lead · risk: high
+Decided: `merge_gate.py` now reads `docs/tasks/<id>/handoff.md`'s `Status:` line (plain or bold, e.g. `Status: DONE` or `- **Status:** DONE`) and fails the merge unless it says DONE; `PARTIAL`, `BLOCKED` or a missing line fails with a clear message, even if `review.md` is APPROVE.
+Why: nothing previously stopped a `PARTIAL`/`BLOCKED` handoff from merging once its review was approved, so an unfinished build could pass the gate.
+Alternatives: trust the reviewer to catch a non-DONE handoff by eye; add a separate `--status` flag instead of reading the file.
+Reversible: yes, revert the regex check in `evaluate()`.
+
+---
+
+### 19 Oct 2026 · 0.15 Every session compacts at 200k tokens · decided by lead · risk: high
+Decided: `.claude/settings.json` sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to 200000, so the lead and every subagent compact at about 200k tokens of context instead of near the 1M window.
+Why: calls with more than 200k tokens of context were 60% of all usage (measured 19 Oct 2026 over 11,900 calls); every call re-sends the whole context. A simulation on those calls: a 200k cap leaves about 63% of today's usage, 250k about 69%; 200k is the standard window and avoids any long-context price premium.
+Alternatives: per-agent `autoCompactWindow` (needs Claude Code v2.1.296); `CLAUDE_CODE_DISABLE_1M_CONTEXT`; no cap.
+Reversible: yes; remove the `env` entry.
+
+---
+
+### 19 Oct 2026 · 0.15 Fix rounds go to a fresh agent with a short brief · decided by lead · risk: medium
+Decided: CRITICAL and HIGH findings go to a fresh fixer with the findings and the plan, handoff and review paths; the original builder is continued only if its run took under about 60 calls.
+Why: a finished builder carries 300k+ tokens into every call, while a fresh fixer starts at about 10k. This replaces the old rule to always continue the same builder.
+Alternatives: keep continuing the same builder.
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 0.15 Builds are sized to about 150 tool calls · decided by lead · risk: medium
+Decided: the planner splits big tasks into phases with a fresh builder each, and a builder that passes about 150 calls stops at a green commit with `Status: PARTIAL` and a "Left to do" list.
+Why: cost grows with calls × context, so two half-length builds cost about half as much as one long one.
+Alternatives: one builder per task regardless of size.
+Reversible: yes.
+
+---
+
 ### 19 Oct 2026 · 4.7 merged: the grounding post guard is wired (coverage backstop, citation validity, number recompute, small-tier judge with an ask-teacher fallback) · decided by lead (plan and plan-review answers) and tdd-guide (build) · risk: high
 Decided: grounding runs after lockedLeak and answerLeak. Ungrounded replies, or replies with a made-up citation, become the ask-teacher reply and open a TeacherQuestion. Wrong numbers are fixed surgically, and a student's wrong premise gets a whole-reply correction prompt. It was reviewed by safety-reviewer, security-reviewer, typescript-reviewer and silent-failure-hunter (names to be confirmed in review.md).
 Why: the accept bar is "none answered from general knowledge", which rules alone cannot meet for related-but-uncovered topics.
