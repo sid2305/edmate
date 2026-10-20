@@ -1343,9 +1343,9 @@ tasks:
   deps:
   - 5.6a
   - '5.1'
-  status: running
+  status: done
   branch: m5/5.11-outline-style-drafters
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet-5/medium fix:sonnet-5/medium review:code-sonnet,ts-sonnet
 - id: 5.11a
   milestone: M5
   title: '5.11 review follow-ups: draftOutline and draftStyleCard treat the real gateway''s schema failure (GatewayError code validation, packages/gateway/src/adapters/errors.ts) as IngestError validation,
@@ -2143,7 +2143,7 @@ tasks:
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
-    the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper'
+    the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper; apps/cli sameTopic.test.ts "three same-topic allowed turns" flaked once in CI (turn ended in error, passed on re-run, PR #78, 20 Oct 2026): find the cause'
   accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
   deps:
   - 3.4c

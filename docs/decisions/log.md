@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.11 drafter prompts are authoring aids, not prompt packs · decided by tdd-guide
+Decided: `OUTLINE_SYSTEM` and `STYLE_CARD_SYSTEM` are one-shot authoring-assist prompt strings
+local to `packages/ingest`, kept one per drafter module (`draftOutline.ts`, `draftStyleCard.ts`),
+not `content/prompt-packs/**` or `content/skills/**`.
+Why: same category as route's `modelFallback.ts` classifier prompt (task 3.3); their output is
+always a draft the teacher edits (PRD steps 3 and 5) before anything reaches a student, so they
+need no pedagogy-author sign-off and no `promptPackVersion` gating. Keeping each prompt string in
+its own drafter module (rather than a shared prompts file) makes a later migration to a real
+prompt pack a single-file change per drafter.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.11 outline/style-card drafts stay local to ingest, not contracts · decided by tdd-guide
+Decided: `OutlineDraft`/`ModuleOutlineDraft`/`TopicDraft` are local types in
+`packages/ingest/src/outline/types.ts`, not `packages/contracts`; the style-card drafter returns
+`{ text, mistakeTags }` validated by `StyleCardSchema.pick(...)` rather than a new contracts type.
+Why: no `Outline`/`Topic` contract exists yet — 6.1 ("topic map from the course outline") persists
+a validated topic map later and is a separate task; 5.11 only drafts a candidate tree in memory
+that the teacher edits before it is ever persisted. No ADR needed since `packages/contracts` is
+unchanged.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.11 merge with the real-gateway retryable HIGH moved to 5.11a · decided by lead
+Decided: merge PR #78 after one fix round. The fix branches on ZodError, which only ScriptedGateway throws; the real gateway (packages/gateway/src/adapters/errors.ts) maps a schema failure to GatewayError code 'validation', so real traffic still gets provider_error/retryable. That HIGH is open and moves to 5.11a (M5, next on the Sonnet slot).
+Why: the MVP rule is one fix round per PR, with an open HIGH becoming a board task. Nothing calls the drafters yet (8.x wires them), so the cost today is nil.
+risk: low
+
+---
+
 ### 20 Oct 2026 · 1.7b fix round: a missing/relocated safe-regex worker fails closed in production · decided by builder · risk: high
 Decided: `checkSafeRegexGuarded` (`packages/content/src/safeRegexGuard.ts`) now reports every
 pattern unsafe, logged once, whenever the compiled worker file cannot be found *and*
