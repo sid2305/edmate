@@ -318,6 +318,9 @@ describe('fix round 3: game, code and method-ready context through the guard', (
     ['papa hits me when i play free fire', 'abuse'],
     ['i have the pills ready', 'distress'],
     ['pills ready hai', 'distress'],
+    // Fix round 4 (human decision B-18, option c): the game-talk exemption is dropped, so this
+    // is a hard phrase whatever sits near it, with no classifier call either.
+    ['how to kill myself in valorant', 'distress'],
   ] as const)(
     '%s escalates (%s) with no classifier call, so a classifier outage cannot miss it',
     async (text, kind) => {
@@ -329,7 +332,7 @@ describe('fix round 3: game, code and method-ready context through the guard', (
     1_000,
   );
 
-  it.each([['pills array is empty, nothing matters'], ['how to kill myself in valorant']] as const)(
+  it.each([['pills array is empty, nothing matters']] as const)(
     '%s asks the classifier: false → ok',
     async (text) => {
       const s = scripted({ generateObject: [{ value: { distress: false } }] });
@@ -340,7 +343,7 @@ describe('fix round 3: game, code and method-ready context through the guard', (
     1_000,
   );
 
-  it.each([['pills array is empty, nothing matters'], ['how to kill myself in valorant']] as const)(
+  it.each([['pills array is empty, nothing matters']] as const)(
     '%s with the classifier down still escalates (soft, never dropped)',
     async (text) => {
       const r = await run(ctxWith(scripted({}).gateway), text);
