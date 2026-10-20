@@ -30,6 +30,41 @@ The gate is `packages/evals/src/adviceFixtures.test.ts`: 42 tests, all pass.
 
 Harness coverage: adviceGuard.ts, disclaimer.ts, grounding.ts and compose.ts are at 100%. postGuard.ts has 100% lines and 92% branches. The new `adviceJudge.test.ts` covers the fake judge's pass-through paths.
 
+### Fix round 1
+
+Branch `fix-4.8-r1` from `origin/m4/4.8-advice-guard`, pushed to `m4/4.8-advice-guard`. It fixes every [open] finding in `review.md` (safety issues 1–6, the silent-failure HIGH and the grounding mutation). Issue 7 is deferred to 4.8b.
+
+- Same infra, then `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force --concurrency=1`:
+  - harness: 78 files, 3602 tests pass. Coverage 99.46% lines; adviceGuard.ts and disclaimer.ts are at 100%.
+  - evals: 391 pass, 1 fails. The failure is `suites.test.ts`, listing exactly the 5 pending advice cases (the 4.7 one plus the 4 new ones). That is allowed until the human signs them.
+- `adviceFixtures.test.ts`: 46 tests, all pass.
+  - 37 cases (32 signed, 5 pending), 13/12/12.
+  - The 4 new cases are checked streamed and final on both agents. The sign-it case also checks each of its two bad sentences alone.
+  - Mutations:
+    - guard off: 37 of 37 fail;
+    - judge always clean / no signal: exactly the 23 judge-only cases fail;
+    - rules off: exactly the rule-only cases fail;
+    - rules and judge off: 37 of 37 fail.
+  - Latency: `advice postGuard step (judges 450 ms, rewrite 300 ms, 74 turns): max 1200 ms of 2000 ms`.
+- `groundingFixtures.test.ts`: the "judge always grounded" mutation fails 25 again, including `grounding-fileio-hi-latin`.
+  - The cause was the fake `markerJudge`, not 4.8: it flagged the bare "karo" in that case's bad reply ("use karo") as advice. adviceGuard then replaced the reply, so the case passed.
+  - `karo` is now flagged only after a legal or money verb ("sue karo", "invest karo"), or as "daal ke bhool jao".
+- Changes:
+  - `adviceGuard.ts`:
+    - a regulated agent judges every non-fixed reply;
+    - weak signals on all agents: a sentence-start imperative, a number, or a proper-noun product;
+    - a regulated topic in the student message (money, health, law, in English, romanised Hindi or Devanagari) sends the reply to the judge;
+    - the imperative window includes the verb, so "sign it" and "file a case" match;
+    - a rewrite with a dose, a promise or a named product is rejected;
+    - wider identity, promise, Hinglish and request patterns, with light leetspeak folding.
+  - `generate.ts`: redirect moves and regulated-topic turns are held.
+  - `postGuard.ts`:
+    - reports `DisclaimerLocaleGap` (the subject code only);
+    - each guard's slice is weighed on the text current at that point, and earlier guards reserve adviceGuard's judge time only for strong signals.
+  - `chain.ts`: a slice request carries `text`.
+  - `disclaimer.ts`: `disclaimerGap`.
+  - 4 new `evals/suites/advice` cases, all `reviewed_by: pending`.
+
 ## Changes
 
 - `packages/harness/src/guardrails/adviceGuard.ts` (new), in this order:
@@ -84,4 +119,35 @@ Reversible: yes.
 Decided: when the locale gives no usable `redirect` text, adviceGuard uses a built-in English reply. It names no helpline or contact, and a locale failure is reported.
 Why: the redirect fallback must always exist; English-only pilot.
 Alternatives: the safe reply (doesn't steer back to the course).
+Reversible: yes.
+
+### 20 Oct 2026 · 4.8 fix round 1: wider judge coverage · decided by lead (brief), tdd-guide (patterns) · risk: high
+Decided:
+- A regulated-subject agent sends every reply that isn't a fixed text to the judge.
+- On every agent, a sentence-start imperative, a bare number or a proper-noun product is a weak signal that also sends the reply to the judge.
+- A money, health or law topic in the student message holds the stream and sends the reply to the judge. It does not add the disclaimer to a clean reply on its own; only a decision request does.
+- Every redirect move is held.
+- A rewrite with a dose, a promise or a named product is rejected.
+Why: safety-review issues 1–6. The stream must not show advice that the judge would have caught later.
+Alternatives:
+- Judge only on signals (the round-0 design; it missed bare directives).
+- Add the disclaimer on every regulated-topic turn (too noisy for clean answers).
+Reversible: yes.
+
+### 20 Oct 2026 · 4.8 fix round 1: per-text slice weights · decided by tdd-guide · risk: low
+Decided: postGuard weighs each guard's time slice on the text current at that guard. Earlier guards reserve adviceGuard's judge time only for strong signals (non-English, modal, dose, promise, role-play, domain words) or a regulated agent or topic. Weak signals alone don't reserve it.
+Why: numbers are common in ordinary replies. Reserving judge time for them shrank other guards' rewrite slices below their floor. The latency run stays at 1200 ms of 2000 ms.
+Alternatives: a fixed reservation on every turn.
+Reversible: yes.
+
+### 20 Oct 2026 · 4.8 fix round 1: disclaimer locale-gap metric and narrower fake judge · decided by tdd-guide · risk: low
+Decided:
+- When a regulated agent's locale pack has no disclaimer for its subject, postGuard reports `DisclaimerLocaleGap` with the subject code only (no text, no PII) and keeps using the generic disclaimer.
+- The test-only `markerJudge` no longer flags a bare "karo". It flags only a legal or money verb plus "karo", or "daal ke bhool jao".
+Why:
+- The silent-failure HIGH.
+- The broad "karo" marker made a grounding case pass for the wrong reason (`grounding-fileio-hi-latin`).
+Alternatives:
+- Fail the turn on a gap (too harsh: the generic disclaimer is safe).
+- Change the grounding count (hides the cause).
 Reversible: yes.
