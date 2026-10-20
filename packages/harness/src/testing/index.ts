@@ -31,6 +31,14 @@ export {
   OUT_OF_SCOPE_TEXT,
   retrievalWorld,
 } from './memoryRetrieval.js';
+export {
+  CONTRACT,
+  CONTRACT_LOCKED_SPAN,
+  contractWorld,
+  type MakeRetrieval,
+  RETRIEVAL_CONTRACT,
+  type RetrievalContractCase,
+} from './retrievalContract.js';
 export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
 export {
   PII_SCRUB_CASES,

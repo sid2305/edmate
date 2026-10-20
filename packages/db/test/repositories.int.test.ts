@@ -307,6 +307,15 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     }),
     owners: (x: { hit: boolean; t: string }) => (x.hit ? [x.t] : []),
   },
+  'retrieval.material': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    // leakCheck's source: every chunk text of the scope teacher, never another teacher's.
+    call: (r, scope) => r.retrieval.material(scope),
+    random: (r, _scope, rid) => r.retrieval.material({ teacherId: rid }),
+    owners: (rows: { text: string }[]) => rows.flatMap((x) => markers(x.text)),
+  },
   'retrieval.revision': {
     scope: 'teacher',
     op: 'read',

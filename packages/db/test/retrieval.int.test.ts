@@ -472,12 +472,7 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       });
     });
 
-    it('leakCheck is a fail-closed stub until Phase B', async () => {
-      const index = retrievalIndexFor(repos);
-      expect(
-        await index.leakCheck(['anything'], { teacherId: RA, allowedModuleIds: ALLOWED }),
-      ).toEqual({ hit: true });
-    });
+    // leakCheck has its own suite: retrieval-leak.int.test.ts (Phase B).
   });
 
   describe('writes', () => {

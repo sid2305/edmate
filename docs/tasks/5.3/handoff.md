@@ -1,6 +1,6 @@
 # Task 5.3 handoff: retrieval index (Phase A)
 
-- **Status:** PARTIAL (Phase A done; Phases B–D left)
+- **Status:** PARTIAL (Phases A and B done; Phases C and D left)
 - **Branch:** `m5/5.3-retrieval-index` (built on local `build-5.3a`, pushed without force)
 - **Worktree:** `.claude/worktrees/agent-a1d87b646b89373e2`
 - **Plan:** `docs/tasks/5.3/plan.md` (with the lead's answers of 20 Oct 2026)
@@ -63,10 +63,88 @@ Local run note: the integration suites need the test port override, `docker comp
 
 ## Left to do
 
-- **Phase B:** leakCheck with an LRU cache keyed by `teacherId | revision | owned allowed ids`, built with `lockedIndex` from `@edmate/harness` (which moves to `dependencies`). It needs `leakTimeoutMs` (fail closed) and a background cold build. Also the shared contract list `packages/harness/src/testing/retrievalContract.ts`, run by `memoryRetrieval.test.ts` and by `packages/db/test/retrieval-leak.int.test.ts` (fail-closed injections, no logging, SLO p95 ≤ 50 ms / p99 ≤ 100 ms, cache cleared on a revision bump).
+- **Phase B:** done (see "Phase B" below).
 - **Phase C:** in `packages/ingest`: the chunker (≤ 300 words, never crosses a unit, no overlap, heading kept on the first chunk), `indexDocument` (embed batches of 96, failure leaves NULL embeddings) and the hashed test embedder. Read `docs/tasks/5.1/handoff.md` on main first.
 - **Phase D:** the recall test on the demo Q&A set (heading-level gold, about 30 in-course items plus about 8 out-of-course items marked `reviewed_by: pending`, per Q1). Calibrate `TEXT_HALF`, `VECTOR_ZERO`, `NOTE_MATCH_FLOOR`, `PROBE_FLOOR` and `coverageThreshold` (Q3 = yes, code-reviewer, `risk: high`). The "with embeddings" assertion waits on B-24 (Q2).
-- **For Phase B/D to check:** HNSW with WHERE filters filters after the index scan (ef_search 40), so a large teacher with a small allowed set could get fewer than 20 vector candidates. pgvector 0.8's `hnsw.iterative_scan` (set per transaction) is the likely fix. The demo corpus is far below the point where this shows.
+- **For Phase D to check (Phase A review MEDIUM):** HNSW with WHERE filters filters after the index scan (ef_search 40), so a large teacher with a small allowed set could get fewer than 20 vector candidates. pgvector 0.8's `hnsw.iterative_scan` (set per transaction) is the likely fix. The demo corpus is far below the point where this shows. Phase B tried and could not make a red test (see "Phase B").
+
+## Phase B
+
+- **Status:** Phase B done; Status stays PARTIAL. Left to do: Phases C and D.
+- **Builder:** tdd-guide, local branch `build-5.3b`, pushed to `m5/5.3-retrieval-index`.
+
+### What Phase B delivers
+
+- **Real leakCheck** in `retrievalIndexFor` (`packages/db/src/repositories/retrieval.ts`), per ADR-0007. It checks the scope and candidates before any SQL: a malformed scope rejects with `RepositoryError('scope')` and malformed candidates with `RepositoryError('invalid')`; the error message names only the method and the kind. It reads the revision first. Then it takes the locked index for `(teacherId, revision, sorted allowed ids)` from the cache, or builds it from the teacher's own material with the shared `lockedIndex` from `@edmate/harness`. How the index works:
+  - modules outside the allowed list are locked, draft and unpackaged ones included;
+  - spans that also appear in an allowed module are ignored;
+  - each module's chunks are joined in `(document_id, id)` order.
+
+  The whole call races `leakTimeoutMs` (100 ms default). A timeout or any error gives `{ hit: true }`. A cold build that loses the race keeps running, so the next call is warm.
+- **New repository method `retrieval.material(scope)`** returns every chunk text of the teacher's own modules, ordered by module, document and chunk. The teacher filter and the module-ownership subquery are in the same statement. It has an isolation `CASES` entry.
+- **`leakCache.ts`**, an LRU of 64:
+  - concurrent callers share one in-flight build;
+  - a failed build is never cached;
+  - a build is dropped after `leakBuildTimeoutMs` (30 s);
+  - a newer revision drops the teacher's older entries, and a late build of an older revision is not stored.
+- **Shared contract** `packages/harness/src/testing/retrievalContract.ts` (`RETRIEVAL_CONTRACT`, `contractWorld`, `CONTRACT`; exported from `@edmate/harness/testing`; no vitest import). It has 11 cases:
+  - one boolean;
+  - shared folding;
+  - complement, including draft modules;
+  - allowed duplicate ignored;
+  - cross-chunk span;
+  - per teacher;
+  - foreign allowed ids don't widen;
+  - malformed scope or candidates reject;
+  - never logs or echoes a candidate, on success and failure paths;
+  - search scope;
+  - probe keys and teacher.
+
+  `memoryRetrieval.test.ts` runs the list unchanged, and so does `packages/db/test/retrieval-leak.int.test.ts`.
+- **New options on `retrievalIndexFor`:** `leakTimeoutMs`, `leakBuildTimeoutMs` and `onLeakFallback(code)` (`leak_timeout` / `leak_failed`; a callback that throws is ignored).
+- **`@edmate/harness` moved** from `devDependencies` to `dependencies` of `@edmate/db`. This makes no cycle: harness depends only on contracts and zod.
+
+### Acceptance evidence (Phase B)
+
+| Item | Command → trimmed output |
+|---|---|
+| Gate | `corepack pnpm turbo run typecheck lint test --filter=...@edmate/db --filter=...@edmate/harness --force --concurrency=1` → `Tasks: 34 successful, 34 total` |
+| Test counts | `@edmate/db: Tests 564 passed (564)`; `@edmate/harness: Tests 3666 passed (3666)`; `@edmate/web: Tests 132 passed`; `@edmate/worker: Tests 121 passed, 10 skipped` |
+| Coverage of new code | `leakCache.ts 100 / 100 / 100 / 100`, `retrieval.ts 100 / 100 / 100 / 100` (stmts / branch / funcs / lines) |
+| Shared contract | The same 11 cases pass in `memoryRetrieval.test.ts` and in `retrieval-leak.int.test.ts` (on Postgres) |
+| Fails closed | `retrieval-leak.int.test.ts` "fails closed":<br>• the revision or material read throws → `{ hit: true }` (`leak_failed`)<br>• a hung database → `{ hit: true }` after 30 ms (`leak_timeout`)<br>• a closed pool → `{ hit: true }`<br>• a failed build is not cached<br>• a cold build slower than the timeout → `{ hit: true }`, then warm (one material load)<br>• a build that never ends is dropped after `leakBuildTimeoutMs`<br>• a counter that throws changes nothing<br>• a malformed scope or candidate list rejects with zero database calls |
+| Never logs candidates | A contract case spies on `console.*`, `process.stdout/stderr.write` and every error message, stack and cause. The candidate marker appears nowhere. |
+| Ownership | Contract case "per teacher". Contract case "allowed ids of another teacher's modules do not widen the allowed set": B's module holds A's locked span and is named as allowed for A, and the span still hits. Grid case `retrieval.material` in `repositories.int.test.ts`. |
+| SLO | `retrieval-leak.int.test.ts` "SLO": 50 modules × 20 chunks (about 35,000 words, about 10× the demo notes' 3,100), 8,000-character replies through `lockedCandidates`, 300 warm calls → `leakCheck SLO: p95 5.3 ms, p99 5.8 ms` (local run; asserted ≤ 50 / ≤ 100) |
+| Cache cleared on a revision | Test "a new locked chunk hits without re-creating the adapter; a new allowed copy clears it":<br>1. starts at `{ hit: false }`;<br>2. `documents.create` alone: still false;<br>3. a locked chunk is inserted: true;<br>4. the same words are added to an allowed module: false. |
+| Cache unit | `test/leak-cache.test.ts`, 9 tests: key, shared builds, failures not stored, build timeout, revision drop, late old build, LRU order |
+| No contracts change | `git diff origin/main --stat -- packages/contracts` → empty |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0 |
+
+### Changes (Phase B)
+
+- New: `packages/harness/src/testing/retrievalContract.ts`, `packages/db/src/repositories/leakCache.ts`, `packages/db/test/leak-cache.test.ts`, `packages/db/test/retrieval-leak.int.test.ts`.
+- Changed in `packages/db`:
+  - `src/repositories/retrieval.ts`: the real leakCheck, `retrieval.material` and the new options.
+  - `src/repositories/index.ts`: exports `LeakFallback`.
+  - `src/repositories/README.md`: a leakCheck paragraph.
+  - `test/repositories.int.test.ts`: the `retrieval.material` case.
+  - `test/retrieval.int.test.ts`: Phase A's stub test removed, with a pointer to the new suite.
+  - `package.json` and `pnpm-lock.yaml`: harness moved to `dependencies`.
+- Changed in `packages/harness`: `src/testing/index.ts` (exports) and `src/testing/memoryRetrieval.test.ts` (runs the contract).
+
+### Deviations (Phase B)
+
+1. **The cache key uses the allowed ids as given (sorted, deduplicated), not only the owned ones.** Finding the owned subset needs another query before the cache lookup. Foreign ids can't widen anything: the material query returns only this teacher's modules, so a foreign id matches no chunk. They only make a different key.
+2. **Fail-closed injections are in the db suite, not in the shared contract.** Only an adapter with a database can be broken that way. When the in-memory test double is configured with an Error it rejects, and the harness already treats that as closed. The contract covers ADR-0007 points 1–4 plus the search and probe scope.
+3. **New repository method `retrieval.material(scope)`.** The plan's file list doesn't name it. leakCheck needs the teacher's text through the guarded repository surface, the same way search and probe get theirs.
+4. **`leakBuildTimeoutMs` and `onLeakFallback` are new options.** The first stops a hung query from pinning a cache key forever. The second mirrors `onEmbedFallback`, so a fail-closed leakCheck can be counted without logging.
+5. **`leakCache.ts` never calls a Map's delete method.** `scope.test.ts` bans that text anywhere in `src/repositories`. Entries are removed by rebuilding the maps (64 entries at most), and LRU order comes from a use counter.
+6. **The contract cases on Postgres use `leakTimeoutMs: 5_000`.** They test matching, not latency. The SLO test uses the 100 ms default.
+
+### HNSW filtered scan (lead note): not done, moved to Phase D
+
+I tried to make a red test: 1,000 locked chunks on the query's axis plus 1,000 allowed chunks off it, with the far module allowed. Postgres chose a sequential scan plus a sort, which is exact, so the test passed with no fix. With `enable_seqscan=off, enable_sort=off`, a plain filtered query did use `chunks_embedding_hnsw_idx`. The repository's own statement (with the ownership subquery) still came back complete, so I found no red test within budget. The candidate fix is still `SET LOCAL hnsw.iterative_scan = strict_order` (compose runs pgvector 0.8.1) in the vector query's transaction. Proving it red first needs a larger corpus or an EXPLAIN of the real statement.
 
 ## Decisions
 
@@ -87,3 +165,23 @@ Full text: `raw / (raw + 0.05)` over `ts_rank_cd`. Vector: cosine similarity, cl
 
 ### A taken document id is `not_found`, a repeated chunk `ord` is `invalid`
 Document ids are global and chosen by the caller, so `not_found` gives no existence oracle. Chunk ids come from a document the teacher already owns, so a duplicate is the teacher's own conflict.
+
+### 20 Oct 2026 · 5.3 Production leakCheck per ADR-0007, cache keyed by material revision · decided by tdd-guide · risk: high
+Decided: leakCheck checks the scope and candidates before any SQL and reads the revision. It then takes or builds the locked index for (teacher, revision, sorted allowed ids), using the shared lockedIndex from @edmate/harness over the teacher's own material (new guarded method retrieval.material). The call races leakTimeoutMs (100 ms), and a timeout or any error gives { hit: true }. A cold build keeps running in the background.
+Why: ADR-0007 points 1–7 and the acceptance line. This is a new read path for locked teacher material, so security-reviewer and code-reviewer are required (risk group "access filter").
+
+### 20 Oct 2026 · 5.3 The cache key keeps the allowed ids as given, not only the owned ones · decided by tdd-guide · risk: medium
+Decided: the key is teacherId, revision and the sorted, deduplicated allowedModuleIds. The material query enforces ownership instead.
+Why: filtering to owned ids first costs an extra query per call. A foreign id matches none of the teacher's chunks, so it can only split the cache and never widens the allowed set (a contract case shows this).
+
+### 20 Oct 2026 · 5.3 Fail-closed injections live in the db suite; the shared contract covers ADR-0007 points 1–4 · decided by tdd-guide · risk: low
+Decided: the contract list has no database-failure cases. retrieval-leak.int.test.ts injects repositories that throw, hang or sit on a closed pool.
+Why: only a real adapter has a database to break. When the in-memory double is configured to reject, the harness already treats that as closed.
+
+### 20 Oct 2026 · 5.3 leakBuildTimeoutMs (30 s) and onLeakFallback added to retrievalIndexFor · decided by tdd-guide · risk: low
+Decided: a background build is dropped after 30 s, so a hung query can't pin a key. Each fail-closed answer reports leak_timeout or leak_failed to an optional callback, never a candidate or the error.
+Why: without a build deadline, one hung query would keep every later call on that key failing closed. The callback mirrors onEmbedFallback, so ops can count fallbacks without logging.
+
+### 20 Oct 2026 · 5.3 HNSW iterative scan left for Phase D · decided by tdd-guide · risk: low
+Decided: Phase B makes no change to the vector query. The lead's MEDIUM stays open under Phase D.
+Why: at test sizes Postgres picks an exact scan, so no red test could be made within budget. The gap affects recall, not leakage.

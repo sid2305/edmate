@@ -2,6 +2,7 @@
 // § Ingestion 4; ADR-0003, ADR-0007). Both signals filter by teacher and allowed module in the
 // same statement, before ranking; there is no unfiltered search.
 import { type Chunk, type ChunkKind, LIMITS, type RetrievalIndex } from '@edmate/contracts';
+import { type LockedIndex, lockedIndex } from '@edmate/harness';
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -10,6 +11,7 @@ import { vectorToDriver } from '../schema/_shared.js';
 import { EmbeddingSchema } from './chunks.js';
 import { RepositoryError } from './errors.js';
 import type { Repositories } from './index.js';
+import { leakCacheKey, LeakIndexCache } from './leakCache.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 /** Most module ids one call may name (a teacher's whole course fits many times over). */
@@ -250,6 +252,25 @@ export function retrievalRepo(db: Db) {
       return { hit: best >= PROBE_FLOOR, score: best };
     },
 
+    /**
+     * Every chunk text of the teacher's own modules, ordered by module, then document, then chunk
+     * (chunk ids sort in document order). leakCheck builds its locked index from this; it is
+     * never returned through the RetrievalIndex port.
+     */
+    async material(scope: TeacherScope): Promise<{ moduleId: string; text: string }[]> {
+      const method = 'retrieval.material';
+      const { teacherId } = teacherScope(scope, method);
+      const owned = db
+        .select({ id: modules.id })
+        .from(modules)
+        .where(eq(modules.teacherId, teacherId));
+      return db
+        .select({ moduleId: chunks.moduleId, text: chunks.text })
+        .from(chunks)
+        .where(and(eq(chunks.teacherId, teacherId), inArray(chunks.moduleId, owned)))
+        .orderBy(asc(chunks.moduleId), asc(chunks.documentId), asc(chunks.id));
+    },
+
     /** The teacher's material revision: 0 before any write, +1 per document or chunk write. */
     async revision(scope: TeacherScope): Promise<number> {
       const method = 'retrieval.revision';
@@ -284,7 +305,18 @@ export interface RetrievalIndexOptions {
   embedTimeoutMs?: number;
   /** Told the fixed code of each fallback; never the query or the error. */
   onEmbedFallback?: (code: EmbedFallback) => void;
+  /** How long leakCheck may take before it answers `{ hit: true }` (fail closed). */
+  leakTimeoutMs?: number;
+  /** How long a background build of a locked index may run before it is dropped. */
+  leakBuildTimeoutMs?: number;
+  /** Told the fixed code each time leakCheck fails closed; never a candidate or the error. */
+  onLeakFallback?: (code: LeakFallback) => void;
 }
+
+/** Why leakCheck answered `{ hit: true }` without matching. */
+export type LeakFallback = 'leak_timeout' | 'leak_failed';
+
+const CandidatesSchema = z.array(z.string());
 
 const PortSearchScopeSchema = z.strictObject({
   teacherId: IdSchema,
@@ -295,13 +327,25 @@ const PortProbeScopeSchema = z.strictObject({ teacherId: IdSchema, moduleIds: Mo
 /**
  * The production RetrievalIndex over the repositories. The scope is validated before the query
  * is embedded; an embed that fails, times out or returns a bad vector falls back to full text.
- * leakCheck is a fail-closed stub (`{ hit: true }`) until task 5.3 Phase B.
+ *
+ * leakCheck (ADR-0007): the scope and candidates are validated (malformed rejects), then the
+ * teacher's revision is read and the locked index for (teacher, revision, allowed ids) is taken
+ * from an LRU cache, or built from the teacher's own material with the shared `lockedIndex`:
+ * each module's chunks joined in order, modules outside `allowedModuleIds` locked, the rest
+ * allowed. Another teacher's module ids in the allowed list match none of this teacher's chunks,
+ * so they can't widen anything. The whole call races `leakTimeoutMs`; a timeout or any error is
+ * `{ hit: true }`. A build that loses the race keeps running, so the next call is warm. Nothing
+ * here logs; a fallback reports only its fixed code.
  */
 export function retrievalIndexFor(
   repos: Repositories,
   opts: RetrievalIndexOptions = {},
 ): RetrievalIndex {
   const timeoutMs = opts.embedTimeoutMs ?? 800;
+  const leakTimeoutMs = opts.leakTimeoutMs ?? 100;
+  const leakCache = new LeakIndexCache<LockedIndex>(
+    opts.leakBuildTimeoutMs === undefined ? {} : { buildTimeoutMs: opts.leakBuildTimeoutMs },
+  );
 
   const fallback = (code: EmbedFallback): undefined => {
     try {
@@ -311,6 +355,40 @@ export function retrievalIndexFor(
     }
     return undefined;
   };
+
+  const leakClosed = (code: LeakFallback): { hit: boolean } => {
+    try {
+      opts.onLeakFallback?.(code);
+    } catch {
+      // A failing counter must not open the check.
+    }
+    return { hit: true };
+  };
+
+  async function buildLockedIndex(teacherId: string, allowed: string[]): Promise<LockedIndex> {
+    const rows = await repos.retrieval.material({ teacherId });
+    const byModule = new Map<string, string[]>();
+    for (const r of rows) {
+      const texts = byModule.get(r.moduleId) ?? [];
+      texts.push(r.text);
+      byModule.set(r.moduleId, texts);
+    }
+    const allowedSet = new Set(allowed);
+    const inside: string[] = [];
+    const outside: string[] = [];
+    for (const [moduleId, texts] of byModule) {
+      (allowedSet.has(moduleId) ? inside : outside).push(texts.join('\n'));
+    }
+    return lockedIndex(outside, inside);
+  }
+
+  async function lockedIndexFor(teacherId: string, allowed: string[]): Promise<LockedIndex> {
+    // Revision first, material second: a write in between makes the index newer than its key,
+    // never older, so a cached index never misses material its key promises.
+    const revision = await repos.retrieval.revision({ teacherId });
+    const key = leakCacheKey(teacherId, revision, allowed);
+    return leakCache.get(key, () => buildLockedIndex(teacherId, allowed));
+  }
 
   async function embedQuery(q: string): Promise<number[] | undefined> {
     const embedder = opts.embedder;
@@ -353,8 +431,29 @@ export function retrievalIndexFor(
       );
       return { hit, score: s };
     },
-    leakCheck() {
-      return Promise.resolve({ hit: true });
+    async leakCheck(candidates, scope) {
+      const method = 'retrievalIndex.leakCheck';
+      const parsed = PortSearchScopeSchema.safeParse(scope);
+      if (!parsed.success) throw new RepositoryError('scope', method);
+      const list = CandidatesSchema.safeParse(candidates);
+      if (!list.success) throw new RepositoryError('invalid', method);
+      const { teacherId, allowedModuleIds } = parsed.data;
+      const work = lockedIndexFor(teacherId, allowedModuleIds);
+      // A build that loses the race finishes in the background; its failure is already closed.
+      work.catch(() => undefined);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), leakTimeoutMs);
+      });
+      try {
+        const index = await Promise.race([work, timeout]);
+        if (index === 'timeout') return leakClosed('leak_timeout');
+        return { hit: index.hits(list.data) };
+      } catch {
+        return leakClosed('leak_failed');
+      } finally {
+        clearTimeout(timer);
+      }
     },
   };
 }

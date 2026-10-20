@@ -141,7 +141,20 @@ the same way over the scope's own `moduleIds` and returns only `{ hit, score }` 
 production `RetrievalIndex`: it validates the port scope before embedding the query, and an
 embedder that throws, times out (800 ms default) or returns a bad vector falls back to full text,
 reporting only a fixed code (`embed_failed` / `embed_timeout` / `embed_invalid`), never the
-query or the error. `leakCheck` returns `{ hit: true }` (fail closed) until 5.3 Phase B.
+query or the error.
+
+**leakCheck (ADR-0007).** `retrieval.material(scope)` returns every chunk text of the teacher's own
+modules, ordered by module, document and chunk; only leakCheck reads it, and it never leaves the
+adapter. leakCheck rejects a malformed scope (`scope`) or candidate list (`invalid`) before any
+SQL, then reads the revision and takes the locked index for (teacher, revision, sorted allowed
+ids) from an LRU cache of 64 (`leakCache.ts`), or builds it with the shared `lockedIndex` from
+`@edmate/harness`: modules outside `allowedModuleIds` are locked (draft and unpackaged ones
+included), a span also in an allowed module is ignored. Another teacher's module ids in the
+allowed list match none of this teacher's chunks, so they widen nothing. The call races
+`leakTimeoutMs` (100 ms default); a timeout or any error is `{ hit: true }`, reported to
+`onLeakFallback` as `leak_timeout` / `leak_failed` only. A cold build that loses the race keeps
+running (dropped after `leakBuildTimeoutMs`, 30 s), so the next call is warm. A newer revision
+drops the teacher's older entries; a failed build is never cached. Nothing here logs.
 
 ## Package surface
 

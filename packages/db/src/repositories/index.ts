@@ -121,6 +121,7 @@ export {
 } from './chunks.js';
 export {
   type EmbedFallback,
+  type LeakFallback,
   NOTE_MATCH_FLOOR,
   PROBE_FLOOR,
   RETRIEVAL_MAX_MODULES,
