@@ -374,8 +374,11 @@ describe('postGuard: time (weighted slices, task 4.7)', () => {
     const slow = (name: string, first: GuardResult): Guard<PostGuardCtx> => {
       let calls = 0;
       return fakeGuard<PostGuardCtx>(name, 'post', async () => {
-        // Use all but 1 ms of the slice this guard was given (worked out the same way).
-        const w = GUARD_ORDER.post.map((n) => postGuards.weight(n));
+        // Use all but 1 ms of the slice this guard was given (worked out the same way: 'draft'
+        // holds no advice signal, so adviceGuard weighs as rules-only, 4.8).
+        const w = GUARD_ORDER.post.map((n) =>
+          n === 'adviceGuard' ? PASS2_WEIGHT : postGuards.weight(n),
+        );
         const pass = calls < 1 ? 1 : 2;
         const index = GUARD_ORDER.post.indexOf(name);
         const left = POST_GUARD_BUDGET_MS - (s.clock.now() - started);

@@ -760,7 +760,7 @@ tasks:
   - '0.7'
   status: running
   branch: m7/0.13-agent-efficiency
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet buildA:sonnet
 - id: '0.14'
   milestone: M7
   title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
@@ -1109,10 +1109,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.8-advice-guard
-  model: build:opus fix1:opus
+  model: plan:sonnet build:opus review:sonnet fix:sonnet
 - id: '4.9'
   milestone: M13
   title: '`personaBoundary` and `tone`'
@@ -1144,9 +1144,9 @@ tasks:
   accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
   deps:
   - M3
-  status: running
+  status: done
   branch: m5/5.1-document-ingestion
-  model: plan:sonnet buildA:opus
+  model: plan:sonnet buildA:opus buildBC:opus review:sonnet
 - id: '5.2'
   milestone: M5
   title: 'Video ingestion: upload → transcription → timestamped chunks'
@@ -1167,9 +1167,9 @@ tasks:
   - '1.8'
   - '5.1'
   - M3
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m5/5.3-retrieval-index
+  model: plan:opus buildA:opus
 - id: '5.4'
   milestone: M5
   title: 'Access filter: filtered `search`, code-only `probe`, entitlement-filtered tool registry, package-versioned caches'
@@ -1921,8 +1921,32 @@ tasks:
   model: null
 - id: 5.1a
   milestone: M13
-  title: 'Web-link fetch follow-up (5.1 Phase A open question): the public-address check resolves the host separately from the connection, so a host whose DNS answer changes between the two (DNS rebinding) could reach a private address; pin the connection to the checked address (custom lookup/agent) where the app is assembled. The allowlist limits it until then'
+  title: 'Web-link fetch follow-up (5.1 Phase A open question): the public-address check resolves the host separately from the connection, so a host whose DNS answer changes between the two (DNS rebinding)
+    could reach a private address; pin the connection to the checked address (custom lookup/agent) where the app is assembled. The allowlist limits it until then'
   accept: a test where the second DNS answer is private fails closed; the connection uses the address that passed the check
+  deps:
+  - GATE
+  - '5.1'
+  status: todo
+  needs_decision: null
+  branch: null
+  model: null
+- id: 4.3a
+  milestone: M4
+  title: 'CI flake from 4.3: preGuard.test.ts sets a 1_000 ms per-test timeout and "classifier false → ok" took 1142 ms on a CI runner (PR #60, run 39440391131). Raise these per-test timeouts to the package
+    default (or 5_000) so a slow runner cannot fail an unrelated PR'
+  accept: 'no test sets a per-test timeout under 5_000 ms (today: evals distressEscalate, harness escalate, costCeiling, preGuard, distressDetect, distressKeywords; queue alertSink); the suites pass'
+  deps:
+  - '4.3'
+  status: done
+  needs_decision: null
+  branch: m4/4.3a-test-timeouts
+  model: plan:lead build:haiku review:sonnet
+- id: 5.1b
+  milestone: M13
+  title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
+    budget overflow; keep pdfjs-dist''s optional @napi-rs/canvas native build out of installs'
+  accept: the four LOWs in docs/tasks/5.1/review.md are fixed with tests where behaviour changes; the ingest gate passes
   deps:
   - GATE
   - '5.1'

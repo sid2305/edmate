@@ -80,7 +80,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
     const r = defaultPreGuardRegistry();
     expect(r.missing()).toEqual([]);
     expect(r.ordered().map((g) => g.name)).toEqual(['distressDetect', 'moderationIn', 'jailbreak']);
-  }, 1_000);
+  }, 5_000);
 
   it('hard keyword → escalate with the guard alert; no model call', async () => {
     const { env } = envWith('i want to kill myself', { transcripts: memoryTranscriptStore() });
@@ -91,7 +91,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       guards: [{ name: 'distressDetect', ok: false, action: 'escalate' }],
       usage: [],
     });
-  }, 1_000);
+  }, 5_000);
 
   it('every classifier says no → ok', async () => {
     const t = testDeps({
@@ -116,7 +116,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       ],
       usage: [],
     });
-  }, 1_000);
+  }, 5_000);
 
   it('a moderation rule hit → block with the code reply and one safety event (the turn id)', async () => {
     const sink = memorySafetyEventSink();
@@ -147,7 +147,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
         source: 'rule',
       },
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it('the bullying case: distressDetect does not escalate it; block + misuse alert (lead answer 2)', async () => {
     const { env } = envWith(
@@ -162,7 +162,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       alert: { kind: 'misuse', level: 'alert', sessionId: demoTurnInput.sessionId },
     });
     expect(r.guards[0]).toEqual({ name: 'distressDetect', ok: true });
-  }, 1_000);
+  }, 5_000);
 
   it('a jailbreak rule hit → block by jailbreak with its reply; one strike', async () => {
     const sink = memorySafetyEventSink();
@@ -181,7 +181,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
     expect(sink.recorded.map((e) => [e.guard, e.code, e.source])).toEqual([
       ['jailbreak', 'jailbreak_override', 'rule'],
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it('self-harm with distress scripted false → escalate from moderationIn (lead answer 1)', async () => {
     const sink = memorySafetyEventSink();
@@ -200,7 +200,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       ],
     });
     expect(sink.recorded).toEqual([]);
-  }, 1_000);
+  }, 5_000);
 
   it('a failed safety-event write → the chain fails (thrown), never ok', async () => {
     const { env } = envWith(
@@ -209,7 +209,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       { generateObject: [{ value: { distress: false } }] },
     );
     await expect(preGuard(env, entitled)).rejects.toBeInstanceOf(PreGuardChainFailedError);
-  }, 1_000);
+  }, 5_000);
 
   it('no keyword + classifier throws → PreGuardChainFailedError without the text', async () => {
     const secret = 'how do i reverse a list SECRET-TEXT';
@@ -225,7 +225,7 @@ describe('preGuard (default registry: distressDetect, moderationIn, jailbreak)',
       cause: 'error',
       errorName: 'ScriptedGatewayError',
     });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('createPreGuardStep: outcome mapping', () => {
@@ -245,7 +245,7 @@ describe('createPreGuardStep: outcome mapping', () => {
       guards: [{ name: 'moderationIn', ok: false, action: 'block' }],
       usage: [],
     });
-  }, 1_000);
+  }, 5_000);
 
   it('escalate from any pre guard passes its alert through', async () => {
     const step = createPreGuardStep(
@@ -253,7 +253,7 @@ describe('createPreGuardStep: outcome mapping', () => {
     );
     const { env } = envWith('hello', { transcripts: memoryTranscriptStore() });
     expect(await step(env, entitled)).toMatchObject({ result: 'escalate', alert: demoSafetyAlert });
-  }, 1_000);
+  }, 5_000);
 
   it('an empty registry fails closed (throws)', async () => {
     const step = createPreGuardStep(reg());
@@ -261,7 +261,7 @@ describe('createPreGuardStep: outcome mapping', () => {
     await expect(step(env, entitled)).rejects.toThrow(
       'preGuard: guard chain failed ((empty chain): empty)',
     );
-  }, 1_000);
+  }, 5_000);
 
   it('the guards get the ctx: entitlement, session, lang, locale, earlier student turns', async () => {
     const seen: PreGuardCtx[] = [];
@@ -293,14 +293,14 @@ describe('createPreGuardStep: outcome mapping', () => {
     expect(seen[0]?.recentStudentTurns).toBeInstanceOf(Promise);
     expect(await seen[0]?.recentStudentTurns).toEqual(['first', 'second']);
     expect(await seen[0]?.packageNames).toEqual([demoPackagePaid.name]);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('teacherPackageNames (fix round MEDIUM 5)', () => {
   it('without the dep: only the student\'s own package', async () => {
     const { env } = envWith('x');
     expect(await teacherPackageNames(env, entitled)).toEqual([demoPackagePaid.name]);
-  }, 1_000);
+  }, 5_000);
 
   it('reads all of the teacher\'s names by the entitlement teacher; own first, no duplicates', async () => {
     const asked: string[] = [];
@@ -316,7 +316,7 @@ describe('teacherPackageNames (fix round MEDIUM 5)', () => {
       'Job Ready',
     ]);
     expect(asked).toEqual([demoEntitlementSubscription.teacherId]);
-  }, 1_000);
+  }, 5_000);
 
   it('a failed or malformed read: own name only, reported without text', async () => {
     const failing = envWith('x', {
@@ -333,7 +333,7 @@ describe('teacherPackageNames (fix round MEDIUM 5)', () => {
     expect(odd.reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: package names unavailable (malformed)',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it(`a read slower than ${HISTORY_TIMEOUT_MS} ms: own name only, reported`, async () => {
     const t = testDeps();
@@ -355,7 +355,7 @@ describe('teacherPackageNames (fix round MEDIUM 5)', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: package names unavailable (timeout)',
     ]);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('recentStudentTurns', () => {
@@ -367,7 +367,7 @@ describe('recentStudentTurns', () => {
     }
     const { env } = envWith('x', { transcripts });
     expect(await recentStudentTurns(env)).toEqual(['s3', 's4', 's5']);
-  }, 1_000);
+  }, 5_000);
 
   it('a withheld student message is read back as "[earlier message blocked: <code>]", never its text (fix round 2)', async () => {
     const transcripts = memoryTranscriptStore();
@@ -380,7 +380,7 @@ describe('recentStudentTurns', () => {
       '[earlier message blocked: jailbreak_override]',
       '[earlier message blocked]',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it('a failing history read → [] (the classifier still runs) and is reported without text', async () => {
     const failing: TranscriptStore = {
@@ -392,7 +392,7 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (TypeError)',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it('a malformed history result → [] and reported', async () => {
     const odd = {
@@ -404,7 +404,7 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (malformed)',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it(`a history read slower than ${HISTORY_TIMEOUT_MS} ms → [] and reported`, async () => {
     const t = testDeps();
@@ -427,5 +427,5 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (timeout)',
     ]);
-  }, 1_000);
+  }, 5_000);
 });

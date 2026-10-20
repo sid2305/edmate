@@ -38,6 +38,7 @@ describe('answerLeak', () => {
       'lockedLeak',
       'answerLeak',
       'grounding',
+      'adviceGuard',
     ]);
   });
 
@@ -141,8 +142,10 @@ describe('answerLeak', () => {
     expect(r.guards).toEqual([
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: false, action: 'rewrite' },
+      { name: 'adviceGuard', ok: true },
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
+      { name: 'adviceGuard', ok: true },
     ]);
   });
 });

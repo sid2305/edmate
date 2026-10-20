@@ -16,7 +16,8 @@ export interface PiiScrubCtx {
 /** Compiled patterns per pack array: packs are loaded once and reused across turns. */
 const compiled = new WeakMap<readonly string[], RegExp[]>();
 
-function patternsOf(locale: LocalePack): RegExp[] {
+/** The locale pack's PII patterns, compiled once per pack (also used by adviceGuard, 4.8). */
+export function patternsOf(locale: Pick<LocalePack, 'piiPatterns'>): RegExp[] {
   const sources = locale.piiPatterns;
   let res = compiled.get(sources);
   if (res === undefined) {

@@ -173,6 +173,30 @@ export class GroundingJudgeUnavailable extends HarnessError {
 }
 
 /**
+ * adviceGuard's judge gave no answer (outage, timeout, cost ceiling) and the turn got its fixed
+ * fallback (task 4.8). A metric, not a failure: fixed text, no turn text.
+ */
+export class AdviceJudgeUnavailable extends HarnessError {
+  override readonly name = 'AdviceJudgeUnavailable';
+
+  constructor() {
+    super('advice judge unavailable: sent the fixed advice fallback');
+  }
+}
+
+/**
+ * A regulated-subject agent's locale pack has no disclaimer for its subject, so the turn used the
+ * generic one (task 4.8 fix round 1). A metric, not a failure: the subject code only, no turn text.
+ */
+export class DisclaimerLocaleGap extends HarnessError {
+  override readonly name = 'DisclaimerLocaleGap';
+
+  constructor(readonly subject: 'investing' | 'health' | 'law') {
+    super(`no locale disclaimer for regulated subject ${subject}: used the generic one`);
+  }
+}
+
+/**
  * A grounding escalation could open no TeacherQuestion: the live open and commit's fallback both
  * failed (task 4.7 fix round 1). The cause's error name only, never text.
  */

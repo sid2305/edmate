@@ -278,5 +278,5 @@ describe('the scores', () => {
       expect(score[m].heldOut).toBe(heldOut.length);
       expect(score[m].nearMiss).toBe(nearMisses.length);
     }
-  }, 1_000);
+  }, 5_000);
 });

@@ -3,21 +3,37 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Parsers, chunker, transcription adapter, outline drafter (empty until M4).",
+  "description": "Parsers, chunker, transcription adapter, outline drafter.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "cheerio": "1.2.0",
+    "fast-xml-parser": "5.11.2",
+    "jszip": "3.10.2",
+    "mammoth": "1.13.0",
+    "markdown-it": "15.0.3",
+    "pdfjs-dist": "6.4.299"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
   }
 }
