@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@edmate/contracts": "workspace:*",
+    "mathjs": "15.2.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
