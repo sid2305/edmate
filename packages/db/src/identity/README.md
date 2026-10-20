@@ -59,6 +59,12 @@ three, so sign-in does not use a repository. It uses this small store, which has
     live parental consent: `kind = 'parental'`, `granted_by = 'parent'`, `withdrawn_at` null), or
     `clear`. A learner below a minimum raised after their answer reads `parent_needed`, never
     `clear`. The entitlement store's required `learnerClear` (ports.ts) is the agent-use block.
+    A broken policy (a minimum that is not finite or above 18) throws: the call fails, nobody is
+    erased, and the learner stays blocked. With the `noticeVersion(market)` option (the web wires
+    it from the notices it loads), an answer naming any other version is `invalid`. An under-age
+    erase blocked by a row the store does not own is `not_found` with nothing changed; the web
+    closes that browser's session and staff erase the account (12.1). `learnerStatus` is for
+    students only: a teacher or staff user is `scope`.
 
 `@edmate/db` exports `createIdentityStore`, and `openDatabase()` returns `{ repos, identity,
 close }`. Only `apps/web/src/auth/**` should use `identity`.

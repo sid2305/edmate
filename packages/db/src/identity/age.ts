@@ -36,11 +36,16 @@ export function youngestAge(birthYear: number, now: Date): number {
 }
 
 /**
- * Fails closed: the minimum is never below 13 (a NaN minimum reads as 13), and only an explicit
- * `consentRequired: false` waives parental consent.
+ * Fails closed: the minimum is never below 13, and only an explicit `consentRequired: false`
+ * waives parental consent. A minimum that is not finite or is above `CONSENT_AGE` is a broken
+ * policy: it throws, so the caller fails and the learner stays blocked; it never erases anyone.
  */
 function minAgeOf(policy: AgePolicy): number {
-  return policy.minAge > PLATFORM_MIN_AGE ? policy.minAge : PLATFORM_MIN_AGE;
+  const { minAge } = policy;
+  if (!Number.isFinite(minAge) || minAge > CONSENT_AGE) {
+    throw new Error('age policy: bad minAge');
+  }
+  return minAge > PLATFORM_MIN_AGE ? minAge : PLATFORM_MIN_AGE;
 }
 
 export interface AgeInput {

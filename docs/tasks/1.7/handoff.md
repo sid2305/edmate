@@ -1,6 +1,6 @@
 # 1.7 handoff: age and consent per locale pack
 
-Status: DONE (Phases A and B; Phases C and D are separate builds)
+Status: DONE (Phases A, B and C; Phase D is a separate build)
 Branch: `m1/1.7-age-consent` (Phase A pushed from local `work-1.7a`)
 Worktree: Phase A `.claude/worktrees/agent-aed49ec632426e386` (under the repo root)
 
@@ -223,3 +223,79 @@ python3 .githooks/secret-scan.py --all → exit 0
   a `parental` row granted by `self` never counts.
 - Market format in the store is `global` or two capital letters; which markets exist (packs) is
   the injected policy's and the web gate's business (Phase B/C).
+
+## Phase C
+
+Status: DONE (Phase C only; Phase D, parental consent, is a separate build)
+Branch: `m1/1.7-age-consent` (pushed from local `work-1.7c`, on top of Phases A and B)
+Worktree: `.claude/worktrees/agent-adec93b092b6d8089`
+
+### What was built
+- **`apps/web/src/auth/policy.ts`**: per-route clearance (`none | age | agent`, default `age`)
+  through `ruleFor(method, path)`; `agent` on POST /api/subscriptions, POST /api/sessions and
+  POST /api/sessions/**.
+- **`apps/web/src/auth/guard.ts`**: `GuardDeps.learnerStatus`; `resolvePrincipal` returns the
+  principal plus the learner's standing (null for teacher and staff, who are never asked). A
+  student not cleared for the route gets 403 `forbidden` with a neutral message; `requireRole`
+  redirects pages to `/welcome/age`. A user gone from the store is 401; other lookup failures 500.
+- **`apps/web/src/auth/age.ts`** (new): `loadAgeContent(dir)` (packs, policies, notices; throws if
+  any notice is unusable or there is no global one), `submitAgeAnswer` (strict form parse, the
+  notice version taken from the server's content, under-age → block cookie + session cookie
+  cleared + session row deleted), `ageGateView`, block cookie name and 24 h max age.
+- **`apps/web/src/auth/config.ts`**: the `signIn` callback refuses any sign-in (Google or email)
+  from a browser holding the block cookie.
+- **`apps/web/src/auth/index.ts`**: content loaded lazily from `EDMATE_CONTENT_DIR` (default
+  `../../content`); `openDatabase` gets the policy and notice-version resolvers; exports
+  `submitAgeAnswer`, `ageGateView`, `ageNotice`.
+- **`apps/web/app/welcome/age/page.tsx` + `actions.ts`**: step 1 country select (empty
+  placeholder), step 2 the notice text and version (plain text) and a birth year field with no
+  default, no min/max, `autoComplete="off"`; error text is generic.
+- **Carry-forward from the Phase A review**: `minAgeOf` throws on a non-finite or > 18 minimum
+  (the store returns `failed`, erases no one); store option `noticeVersion(market)` rejects a
+  mismatched version as `invalid` before the transaction; a blocked under-age erase is
+  `not_found` (rolled back); `learnerStatus` is `scope` for non-students;
+  `openDatabase(env, { identity })` passes the age options.
+- **Dockerfile**: copies `content/locales` and `content/legal` and sets `EDMATE_CONTENT_DIR`.
+
+### Evidence
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web... --filter=@edmate/db...
+  --force --concurrency=1` → `Tasks: 34 successful, 34 total`; db `Tests 663 passed | 3
+  skipped`; web `Tests 336 passed | 4 skipped`; web coverage `src/auth | 100 | 100 | 100 | 100`.
+- `age-flow.test.ts` (end to end through the Auth.js handlers): locked after sign-in on every
+  student route; under 13 erased, signed out, 401, Google retry refused; the ambiguous year counts
+  as 12; IN/US 13-17 blocked only from agent routes; adult clear; the form cannot set the notice
+  version; a blocked erase still closes and blocks the browser.
+- Secret scan `--all` → clean.
+
+### Deviations
+- `test/fake-google.ts` extracted from `flow.test.ts` so the age flow test can share it.
+- `openDatabase` gained an optional second `options` parameter (db package, not contracts).
+- `errors.ts` gained an `errorBody(code, message)` helper; the codes are unchanged.
+- `ageGateView` and `ageNotice` added for the page; the plan didn't name them.
+- The block cookie is also enforced at sign-in (the plan named only the gate).
+- The Dockerfile copies `content/` into the runtime image.
+
+### Decisions
+- **risk: high** — Phase C touches `apps/web/src/auth/**` (security group; security-reviewer
+  required) and again `packages/db/src/identity/**`.
+- Decided: a blocked under-age erase (another row points at the user) is `not_found`, and the web
+  treats it like under-age: block cookie, session cleared and deleted; the account stays for
+  staff to erase (12.1).
+  Why: the learner must be shut out at once even when the erase can't finish.
+- Decided: accept that after a blocked erase the row has no birth year, so another browser could
+  answer again until staff act.
+  Why: rare (only when a foreign row exists) and staff see it; a schema flag needs more scope.
+- Decided: an already-answered learner who submits again gets their current standing back and
+  nothing is written.
+  Why: a second tab must not see an error or change the record.
+- Decided: the web rejects a birth year after the current UTC year as a validation error.
+  Why: the same neutral message as any bad answer; the store also rejects it.
+- Decided: if content/ can't be loaded, student requests fail with 500; teacher and staff are
+  unaffected.
+  Why: fail closed for learners without taking the whole site down.
+- Decided: the block cookie value is the constant `'1'`, httpOnly, Lax, 24 h, `__Host-` over https.
+  Why: it must not identify the person or the answer.
+- Decided: the birth year field has `autoComplete="off"`, no default and no min/max.
+  Why: a neutral screen that hints at no cut-off.
+- Decided: the page shows the notice version as text; the form never carries it.
+  Why: the server records the version it showed, never one the browser sends.

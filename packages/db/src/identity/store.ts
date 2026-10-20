@@ -120,13 +120,15 @@ export interface IdentityStore {
    * The age gate (1.7, README rule 12), once per student: a second answer is `invalid`, a
    * non-student is `scope`. Under the market's minimum it erases the user and its sign-in rows in
    * one transaction and stores nothing (`under_age`). Otherwise it stores the birth year, market
-   * and time, and a `privacy_notice` consent at `noticeVersion`, granted by `self`.
+   * and time, and a `privacy_notice` consent at `noticeVersion`, granted by `self`. With the
+   * `noticeVersion` option, a version other than the one shown for the market is `invalid`. An
+   * erase blocked by a row the store does not own is `not_found`, with nothing changed.
    */
   recordAgeAnswer(input: AgeAnswer): Promise<{ status: AgeAnswerStatus }>;
   /**
    * A learner's standing, read fresh: `age_needed` before the answer, `parent_needed` for 13-17
    * in a market that requires consent until a live parental consent (granted by `parent`, not
-   * withdrawn), else `clear`. An unknown user is `not_found`.
+   * withdrawn), else `clear`. An unknown user is `not_found`; a teacher or staff user is `scope`.
    */
   learnerStatus(userId: string): Promise<AgeStatus>;
 }
@@ -136,6 +138,11 @@ export interface IdentityStoreOptions {
   now?: () => Date;
   /** The age rule of a market (1.7); defaults to 13+ with consent required for 13-17. */
   agePolicy?: (market: string) => AgePolicy;
+  /**
+   * The privacy-notice version the server shows for a market (1.7). When set, an age answer with
+   * any other version is `invalid` and changes nothing. The web wires it from the loaded notices.
+   */
+  noticeVersion?: (market: string) => string;
 }
 
 const Email = z.string().trim().toLowerCase().pipe(z.email().max(320));
@@ -178,7 +185,13 @@ function first<T>(rows: T[]): T {
   return rows[0] as T;
 }
 
-function storeMethods(db: Db, now: () => Date, agePolicy: (market: string) => AgePolicy) {
+interface StoreConfig {
+  now: () => Date;
+  agePolicy: (market: string) => AgePolicy;
+  noticeVersion: ((market: string) => string) | undefined;
+}
+
+function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
   const Answer = z.strictObject({
     userId: IdSchema,
     market: Market,
@@ -406,6 +419,10 @@ function storeMethods(db: Db, now: () => Date, agePolicy: (market: string) => Ag
     async recordAgeAnswer(input: unknown): Promise<{ status: AgeAnswerStatus }> {
       const method = 'identity.recordAgeAnswer';
       const a = parseArg(Answer, input, method);
+      // The version must be the one the server shows for this market, never one the form chose.
+      if (noticeVersion && noticeVersion(a.market) !== a.noticeVersion) {
+        throw new RepositoryError('invalid', method);
+      }
       return db.transaction(async (tx) => {
         // Locked, so of two concurrent answers the second sees the first.
         const [user] = await tx
@@ -433,7 +450,10 @@ function storeMethods(db: Db, now: () => Date, agePolicy: (market: string) => Ag
               .where(eq(authVerificationTokens.identifier, user.email));
           }
           await tx.delete(consents).where(eq(consents.userId, a.userId));
-          await tx.delete(users).where(eq(users.id, a.userId));
+          // A row the store does not own still pointing at the user (a foreign key) blocks the
+          // erase: it comes back as `not_found` (the account can't be kept open) and the whole
+          // transaction rolls back. The web closes the session; staff erase the account (12.1).
+          await translateWrite(method, () => tx.delete(users).where(eq(users.id, a.userId)));
           return { status };
         }
         await tx
@@ -456,11 +476,13 @@ function storeMethods(db: Db, now: () => Date, agePolicy: (market: string) => Ag
       const method = 'identity.learnerStatus';
       const id = parseArg(IdSchema, userId, method);
       const [user] = await db
-        .select({ market: users.market, birthYear: users.birthYear })
+        .select({ role: users.role, market: users.market, birthYear: users.birthYear })
         .from(users)
         .where(eq(users.id, id))
         .limit(1);
       if (!user) throw new RepositoryError('not_found', method);
+      // The age gate is for students; teacher and staff age checks come with vetting.
+      if (user.role !== 'student') throw new RepositoryError('scope', method);
       if (user.birthYear === null) return 'age_needed';
       const status = ageStatus({
         birthYear: user.birthYear,
@@ -488,7 +510,10 @@ function guardAll<T extends Methods>(methods: T): T {
 
 /** The identity store over a database (see README.md). */
 export function createIdentityStore(db: Db, options: IdentityStoreOptions = {}): IdentityStore {
-  const now = options.now ?? (() => new Date());
-  const agePolicy = options.agePolicy ?? (() => DEFAULT_AGE_POLICY);
-  return guardAll(storeMethods(db, now, agePolicy)) as unknown as IdentityStore;
+  const config: StoreConfig = {
+    now: options.now ?? (() => new Date()),
+    agePolicy: options.agePolicy ?? (() => DEFAULT_AGE_POLICY),
+    noticeVersion: options.noticeVersion,
+  };
+  return guardAll(storeMethods(db, config)) as unknown as IdentityStore;
 }

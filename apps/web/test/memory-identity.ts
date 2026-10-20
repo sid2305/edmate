@@ -12,6 +12,12 @@ async function ageRule() {
   return { ageStatus: db.ageStatus, defaultPolicy: db.DEFAULT_AGE_POLICY };
 }
 
+/** The real store's error for the age methods (loaded lazily, as above). */
+async function repoError(kind: 'not_found' | 'scope' | 'invalid', method: string) {
+  const { RepositoryError } = await import('@edmate/db');
+  return new RepositoryError(kind, `identity.${method}`);
+}
+
 /** A consents row as the fake keeps it (1.7). */
 export interface MemoryConsent {
   userId: string;
@@ -34,6 +40,11 @@ export interface MemoryIdentity extends IdentityStore {
   /** Every createStudent input, as received. */
   created: unknown[];
   linked: unknown[];
+  /**
+   * When true, an under-age erase is blocked (as a row the store doesn't own would block it):
+   * `recordAgeAnswer` throws `not_found` and changes nothing (1.7 carry-forward).
+   */
+  blockErase: boolean;
 }
 
 export function memoryIdentity(
@@ -65,7 +76,8 @@ export function memoryIdentity(
         c.withdrawnAt === null,
     );
 
-  return {
+  const self: MemoryIdentity = {
+    blockErase: false,
     users,
     accounts,
     sessions,
@@ -160,9 +172,10 @@ export function memoryIdentity(
     },
     async recordAgeAnswer({ userId, market, birthYear, noticeVersion }) {
       const u = users.get(userId);
-      if (!u) throw new Error('identity.recordAgeAnswer: not_found');
-      if (u.role !== 'student') throw new Error('identity.recordAgeAnswer: scope');
-      if (ages.has(userId)) throw new Error('identity.recordAgeAnswer: invalid');
+      if (!u) throw await repoError('not_found', 'recordAgeAnswer');
+      if (u.role !== 'student') throw await repoError('scope', 'recordAgeAnswer');
+      if (ages.has(userId)) throw await repoError('invalid', 'recordAgeAnswer');
+      if (birthYear > now().getUTCFullYear()) throw await repoError('invalid', 'recordAgeAnswer');
       const { ageStatus, defaultPolicy } = await ageRule();
       const status = ageStatus({
         birthYear,
@@ -171,6 +184,7 @@ export function memoryIdentity(
         now: now(),
       });
       if (status === 'under_age') {
+        if (self.blockErase) throw await repoError('not_found', 'recordAgeAnswer');
         // Erase the user and every sign-in row, as the real store does in one transaction.
         users.delete(userId);
         for (const [k, id] of accounts) if (id === userId) accounts.delete(k);
@@ -192,7 +206,9 @@ export function memoryIdentity(
       return { status };
     },
     async learnerStatus(userId) {
-      if (!users.has(userId)) throw new Error('identity.learnerStatus: not_found');
+      const u = users.get(userId);
+      if (!u) throw await repoError('not_found', 'learnerStatus');
+      if (u.role !== 'student') throw await repoError('scope', 'learnerStatus');
       const a = ages.get(userId);
       if (!a) return 'age_needed';
       const { ageStatus, defaultPolicy } = await ageRule();
@@ -205,4 +221,5 @@ export function memoryIdentity(
       return status === 'under_age' ? 'parent_needed' : status;
     },
   };
+  return self;
 }

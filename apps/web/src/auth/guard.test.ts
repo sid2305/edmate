@@ -2,10 +2,11 @@
 // {anonymous, student, teacher, staff}: 200 when allowed, 401 `unauthorized` with no session, 403
 // `forbidden` for a wrong role or a method the row doesn't list. Unmatched paths are denied.
 import { ErrorCodeSchema } from '@edmate/contracts';
-import type { Role } from '@edmate/db';
+import { RepositoryError, type AgeStatus, type Role } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import {
+  AGE_GATE_PATH,
   createGuard,
   GUARD,
   type CookieReader,
@@ -14,7 +15,16 @@ import {
   type Principal,
   type RoleContext,
 } from './guard';
-import { METHODS, policyFor, ROUTE_POLICY, sameAccess, type Access, type Method } from './policy';
+import {
+  METHODS,
+  policyFor,
+  ROUTE_POLICY,
+  ruleFor,
+  sameAccess,
+  type Access,
+  type Clearance,
+  type Method,
+} from './policy';
 
 const ORIGIN = 'http://localhost:8080';
 type Who = 'anonymous' | Role;
@@ -32,6 +42,7 @@ function deps(over: Partial<GuardDeps> = {}): GuardDeps {
       const who = c.get('who')?.value as Role | undefined;
       return who ? PRINCIPALS[who] : null;
     },
+    learnerStatus: async () => 'clear',
     allowedOrigin: ORIGIN,
     ...over,
   };
@@ -373,5 +384,151 @@ describe('policy table', () => {
     expect(policyFor('POST', '/api/webhooks/payments')).toBe('provider');
     expect(policyFor('GET', '/api/webhooks/payments')).toBeNull();
     expect(policyFor('post', '/api/staff/reports')).toEqual(['staff']);
+  });
+});
+
+// Task 1.7: a student's age-gate standing x the route's clearance. `age_needed` is refused on every
+// student route; `parent_needed` only on `agent` routes (starting a session, subscribing).
+describe('age clearance x route matrix (1.7)', () => {
+  const STATUSES: readonly AgeStatus[] = ['age_needed', 'parent_needed', 'clear'];
+  const want = (status: AgeStatus, clearance: Clearance) =>
+    status === 'age_needed' || (status === 'parent_needed' && clearance === 'agent') ? 403 : 200;
+
+  for (const row of ROUTE_POLICY) {
+    if (typeof row.access === 'string' || !row.access.includes('student')) continue;
+    for (const method of row.methods) {
+      const path = sample(row.pattern);
+      it(`${method} ${path}`, async () => {
+        for (const status of STATUSES) {
+          const learnerStatus = vi.fn(async () => status);
+          const guard = createGuard(() => deps({ learnerStatus }), noPages);
+          const handler = vi.fn(() => new Response('ok'));
+          const res = await guard.withRole(['student'], handler)(request(method, path, 'student'));
+          const expected = want(status, ruleFor(method, path)!.clearance);
+          expect(res.status, status).toBe(expected);
+          expect(learnerStatus).toHaveBeenCalledWith('usr_student');
+          if (expected === 403) {
+            expect(handler).not.toHaveBeenCalled();
+            expect(await errorOf(res)).toMatchObject({ code: 'forbidden', retryable: false });
+          }
+        }
+      });
+    }
+  }
+
+  it('agent routes are starting a session and subscribing; the rest need the age answer only', () => {
+    expect(ruleFor('POST', '/api/sessions')?.clearance).toBe('agent');
+    expect(ruleFor('POST', '/api/sessions/s_1/turns')?.clearance).toBe('agent');
+    expect(ruleFor('POST', '/api/subscriptions')?.clearance).toBe('agent');
+    expect(ruleFor('PATCH', '/api/subscriptions/sub_1')?.clearance).toBe('age');
+    expect(ruleFor('GET', '/api/me/progress')?.clearance).toBe('age');
+    expect(ruleFor('DELETE', '/api/me')?.clearance).toBe('age');
+    expect(ruleFor('GET', '/api/studio/x')?.clearance).toBe('age');
+    expect(ruleFor('GET', '/api/nowhere')).toBeNull();
+    for (const row of ROUTE_POLICY) {
+      if (row.clearance !== undefined) expect(row.access, row.pattern).toEqual(['student']);
+    }
+  });
+
+  it('teachers and staff are never asked for an age answer', async () => {
+    const learnerStatus = vi.fn(async (): Promise<AgeStatus> => 'age_needed');
+    const guard = createGuard(() => deps({ learnerStatus }), noPages);
+    const studio = guard.withRole(['teacher'], () => new Response('ok'));
+    expect((await studio(request('GET', '/api/studio/x', 'teacher'))).status).toBe(200);
+    const staff = guard.withRole(['staff'], () => new Response('ok'));
+    expect((await staff(request('GET', '/api/staff/reports', 'staff'))).status).toBe(200);
+    expect(learnerStatus).not.toHaveBeenCalled();
+  });
+
+  it('a learner erased since the session was read is signed out (401); other failures are 500', async () => {
+    const gone = createGuard(
+      () =>
+        deps({
+          learnerStatus: async () => {
+            throw new RepositoryError('not_found', 'identity.learnerStatus');
+          },
+        }),
+      noPages,
+    );
+    const route = gone.withRole(['student'], () => new Response('ok'));
+    const res = await route(request('GET', '/api/me/progress', 'student'));
+    expect(res.status).toBe(401);
+    expect((await errorOf(res)).code).toBe('unauthorized');
+
+    for (const error of [
+      new RepositoryError('failed', 'identity.learnerStatus'),
+      new Error('age policy: bad minAge'),
+    ]) {
+      const broken = createGuard(
+        () =>
+          deps({
+            learnerStatus: async () => {
+              throw error;
+            },
+          }),
+        noPages,
+      );
+      const r = await broken.withRole(
+        ['student'],
+        () => new Response('ok'),
+      )(request('GET', '/api/me/progress', 'student'));
+      expect(r.status).toBe(500);
+      expect((await errorOf(r)).code).toBe('provider_error');
+    }
+  });
+
+  describe('requireRole', () => {
+    function page() {
+      const redirect = vi.fn((url: string): never => {
+        throw new Error(`REDIRECT ${url}`);
+      });
+      const pageDeps: PageDeps = {
+        cookies: async () => ({
+          get: (name: string) => (name === 'who' ? { value: 'student' } : undefined),
+        }),
+        redirect,
+        notFound: () => {
+          throw new Error('NOT_FOUND');
+        },
+      };
+      return { pageDeps, redirect };
+    }
+    const guardWith = (status: AgeStatus) => {
+      const p = page();
+      return {
+        ...p,
+        guard: createGuard(
+          () => deps({ learnerStatus: async () => status }),
+          () => p.pageDeps,
+        ),
+      };
+    };
+
+    it('sends a learner with no age answer to the age gate, except on the gate itself', async () => {
+      const { guard } = guardWith('age_needed');
+      await expect(guard.requireRole(['student'])).rejects.toThrow(`REDIRECT ${AGE_GATE_PATH}`);
+      await expect(guard.requireRole(['student'], { clearance: 'agent' })).rejects.toThrow(
+        `REDIRECT ${AGE_GATE_PATH}`,
+      );
+      expect(await guard.requireRole(['student'], { clearance: 'none' })).toEqual(
+        PRINCIPALS.student,
+      );
+    });
+
+    it('a learner waiting for a parent may open age pages, not agent pages', async () => {
+      const { guard } = guardWith('parent_needed');
+      expect(await guard.requireRole(['student'])).toEqual(PRINCIPALS.student);
+      await expect(guard.requireRole(['student'], { clearance: 'agent' })).rejects.toThrow(
+        `REDIRECT ${AGE_GATE_PATH}`,
+      );
+    });
+
+    it('a clear learner opens every page', async () => {
+      const { guard, redirect } = guardWith('clear');
+      expect(await guard.requireRole(['student'], { clearance: 'agent' })).toEqual(
+        PRINCIPALS.student,
+      );
+      expect(redirect).not.toHaveBeenCalled();
+    });
   });
 });

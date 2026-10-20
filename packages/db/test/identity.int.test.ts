@@ -771,7 +771,8 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
         [`pal_${(n += 1)}`, u.id],
       );
       await identity.createSession(token('kept'), u.id, later());
-      expect(await kindOf(() => answer(u.id, 2014))).not.toBe('ok');
+      // A known code (never a raw driver error): the web treats it as a closed account.
+      expect(await kindOf(() => answer(u.id, 2014))).toBe('not_found');
       expect(await userRow(u.id)).toEqual({
         market: 'global',
         birth_year: null,
@@ -843,6 +844,42 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       await identity.grantRole({ userId: t.id, role: 'teacher', by: OPERATOR });
       expect(await kindOf(() => answer(t.id, 2014))).toBe('scope');
       expect(await identity.getUser(t.id)).not.toBeNull();
+      // learnerStatus is for students only (the web gate never asks for other roles).
+      expect(await kindOf(() => aged.learnerStatus(t.id))).toBe('scope');
+      const s = await student();
+      await identity.grantRole({ userId: s.id, role: 'staff', by: OPERATOR });
+      expect(await kindOf(() => aged.learnerStatus(s.id))).toBe('scope');
+    });
+
+    it('with a noticeVersion option, only the version the server shows for that market is taken', async () => {
+      const shown = (market: string) => (market === 'IN' ? 'in-3' : 'global-1');
+      const store = createIdentityStore(handle.db, {
+        now: () => NOW,
+        agePolicy: policy,
+        noticeVersion: shown,
+      });
+      const u = await student();
+      const at = (market: string, noticeVersion: string, birthYear = 1990) =>
+        store.recordAgeAnswer({ userId: u.id, market, birthYear, noticeVersion });
+      expect(await kindOf(() => at('IN', 'draft-0'))).toBe('invalid');
+      expect(await kindOf(() => at('IN', 'global-1'))).toBe('invalid');
+      // A wrong version on an under-13 answer erases nothing.
+      expect(await kindOf(() => at('IN', 'x', 2020))).toBe('invalid');
+      expect(await userRow(u.id)).toMatchObject({ birth_year: null });
+      expect(await at('IN', 'in-3')).toEqual({ status: 'clear' });
+      expect(await consentRows(u.id)).toEqual([expect.objectContaining({ version: 'in-3' })]);
+    });
+
+    it('a broken market policy fails the call and erases no one', async () => {
+      const broken = createIdentityStore(handle.db, {
+        now: () => NOW,
+        agePolicy: () => ({ minAge: Number.NaN, consentRequired: true }),
+      });
+      const u = await student();
+      expect(await kindOf(() => answer(u.id, 2020, 'IN', broken))).toBe('failed');
+      expect(await userRow(u.id)).toMatchObject({ birth_year: null });
+      await answer(u.id, 2010);
+      expect(await kindOf(() => broken.learnerStatus(u.id))).toBe('failed');
     });
 
     it('a learner below a market minimum raised after they answered is not cleared', async () => {
@@ -901,6 +938,31 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     const opened = openDatabase({ DATABASE_URL: TEST_URL });
     try {
       expect(await opened.identity.getUser('usr_missing')).toBeNull();
+    } finally {
+      await opened.close();
+    }
+  });
+
+  it('openDatabase passes the age policy and notice versions to the identity store', async () => {
+    const opened = openDatabase(
+      { DATABASE_URL: TEST_URL },
+      {
+        identity: {
+          agePolicy: () => ({ minAge: 13, consentRequired: false }),
+          noticeVersion: () => 'v-open',
+        },
+      },
+    );
+    try {
+      const u = await opened.identity.createStudent({
+        email: email('open'),
+        emailVerifiedAt: null,
+        name: 'Learner',
+      });
+      const at = (noticeVersion: string) =>
+        opened.identity.recordAgeAnswer({ userId: u.id, market: 'US', birthYear: 2010, noticeVersion });
+      expect(await kindOf(() => at('draft-0'))).toBe('invalid');
+      expect(await at('v-open')).toEqual({ status: 'clear' });
     } finally {
       await opened.close();
     }

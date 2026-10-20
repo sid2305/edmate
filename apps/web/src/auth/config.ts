@@ -5,6 +5,7 @@ import type { IdentityStore, Role } from '@edmate/db';
 import { customFetch, type NextAuthConfig, type Session } from 'next-auth';
 import Google, { type GoogleProfile } from 'next-auth/providers/google';
 import { toAuthAdapter, type EdmateAdapterUser } from './adapter';
+import { ageBlockCookieName } from './age';
 import { describeError } from './describe-error';
 import { EMAIL_PROVIDER_ID, emailProvider } from './email';
 import type { AuthEnv } from './env';
@@ -112,6 +113,8 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
       // account may sign in: Auth.js would otherwise link a new Google account to the signed-in
       // user (a sibling on a shared device opening A's account).
       async signIn({ account, profile, email }) {
+        // A browser that gave an under-age answer is refused for 24 hours (1.7, age.ts).
+        if (deps.request?.cookies.get(ageBlockCookieName(secure))) return false;
         if (account?.provider === EMAIL_PROVIDER_ID && account.type === 'email') {
           // The link callback: Auth.js has already used up the single-use token.
           if (email?.verificationRequest !== true) return true;

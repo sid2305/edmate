@@ -85,10 +85,25 @@ describe('ageStatus', () => {
 
   it('fails closed on a bad policy: the floor stays 13 and consent stays required', () => {
     expect(status(2013, { minAge: 10, consentRequired: false })).toBe('under_age');
-    expect(status(2013, { minAge: Number.NaN, consentRequired: false })).toBe('under_age');
     const loose = { minAge: 13, consentRequired: 'no' } as unknown as AgePolicy;
     expect(status(2010, loose)).toBe('parent_needed');
     const missing = { minAge: 13 } as unknown as AgePolicy;
     expect(status(2010, missing)).toBe('parent_needed');
+  });
+
+  it('throws on a minimum that is not finite or above the consent age (never erases on it)', () => {
+    for (const minAge of [Number.NaN, Infinity, -Infinity, CONSENT_AGE + 1, 99]) {
+      expect(() => status(1990, { minAge, consentRequired: true }), String(minAge)).toThrow(
+        'bad minAge',
+      );
+      expect(() => status(2020, { minAge, consentRequired: true }), String(minAge)).toThrow();
+    }
+    expect(status(2010, { minAge: CONSENT_AGE, consentRequired: true })).toBe('under_age');
+    expect(status(1990, { minAge: CONSENT_AGE, consentRequired: true })).toBe('clear');
+    // No birth year: still no answer, the policy is not read.
+    const bad = { minAge: Number.NaN, consentRequired: true };
+    expect(ageStatus({ birthYear: null, policy: bad, parentConsent: false, now: NOW })).toBe(
+      'age_needed',
+    );
   });
 });

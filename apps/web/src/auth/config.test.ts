@@ -38,7 +38,10 @@ function emailEnv(withGoogle: boolean) {
     EMAIL_FROM: 'Edmate <sign-in@example.test>',
     REDIS_URL: 'redis://127.0.0.1:6379',
     ...(withGoogle
-      ? { AUTH_GOOGLE_ID: 'test-client.apps.example', AUTH_GOOGLE_SECRET: 'test-google-client-value' }
+      ? {
+          AUTH_GOOGLE_ID: 'test-client.apps.example',
+          AUTH_GOOGLE_SECRET: 'test-google-client-value',
+        }
       : {}),
   });
 }
@@ -72,7 +75,9 @@ describe('safeRedirect', () => {
   it('the redirect callback compares with AUTH_URL, not the (forwardable) baseUrl', async () => {
     const c = createAuthConfig({ identity, env: envFor('http://localhost:8080', 'true') });
     const redirect = (url: string, baseUrl: string) => c.callbacks!.redirect!({ url, baseUrl });
-    expect(await redirect('https://evil.test/x', 'https://evil.test')).toBe('http://localhost:8080');
+    expect(await redirect('https://evil.test/x', 'https://evil.test')).toBe(
+      'http://localhost:8080',
+    );
     expect(await redirect('/teachers', 'https://evil.test')).toBe('http://localhost:8080/teachers');
   });
 });
@@ -104,7 +109,12 @@ describe('providers by env', () => {
 
 describe('signIn callback: email', () => {
   const account = (over: Partial<Account> = {}) =>
-    ({ provider: 'email', type: 'email', providerAccountId: 'link@example.test', ...over }) as Account;
+    ({
+      provider: 'email',
+      type: 'email',
+      providerAccountId: 'link@example.test',
+      ...over,
+    }) as Account;
   const xff = new Headers({ 'x-forwarded-for': '203.0.113.7' });
 
   function make(allowed: boolean | Error, request: boolean = true) {
@@ -285,6 +295,41 @@ describe('createAuthConfig', () => {
       ['no account', null, { email: 'a@example.test', email_verified: true }],
     ])('refuses %s', async (_label, account, profile) => {
       expect(await signIn(account, profile)).toBe(false);
+    });
+
+    it('refuses every sign-in from a browser the age gate closed (1.7), before any lookup', async () => {
+      for (const secure of [false, true]) {
+        const url = secure ? 'https://edmate.example' : 'http://localhost:8080';
+        const blockName = secure ? '__Host-edmate.age-block' : 'edmate.age-block';
+        const allow = vi.fn(async () => true);
+        const blocked = createAuthConfig({
+          identity,
+          env: { ...envFor(url), email: emailEnv(false).email! },
+          emailSignIn: { mail: memoryMail(), limiter: { allow } },
+          request: {
+            cookies: { get: (n: string) => (n === blockName ? { value: '1' } : undefined) },
+            headers: NO_HEADERS,
+          },
+        });
+        const call = (account: Partial<Account>, extra: object = {}) =>
+          blocked.callbacks!.signIn!({ user: {} as User, account: account as Account, ...extra });
+        expect(
+          await call(
+            { provider: 'google', providerAccountId: 'g' },
+            { profile: { email: 'a@example.test', email_verified: true } },
+          ),
+        ).toBe(false);
+        expect(
+          await call(
+            { provider: 'email', type: 'email', providerAccountId: 'a@example.test' },
+            { email: { verificationRequest: true } },
+          ),
+        ).toBe(false);
+        expect(
+          await call({ provider: 'email', type: 'email', providerAccountId: 'a@example.test' }),
+        ).toBe(false);
+        expect(allow).not.toHaveBeenCalled();
+      }
     });
 
     it('fails closed with no request to read the current session from', async () => {
