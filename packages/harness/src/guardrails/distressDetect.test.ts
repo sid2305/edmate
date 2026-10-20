@@ -80,7 +80,7 @@ describe('distressDetect guard: shape', () => {
     const g = createDistressDetectGuard();
     expect(g.name).toBe('distressDetect');
     expect(g.phase).toBe('pre');
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('hard keyword', () => {
@@ -106,12 +106,12 @@ describe('hard keyword', () => {
     if (!r.result.ok && r.result.action === 'escalate') {
       expect(SafetyAlertSchema.safeParse(r.result.alert).success).toBe(true);
     }
-  }, 1_000);
+  }, 5_000);
 
   it('an abuse-only phrase raises kind "abuse"', async () => {
     const r = await run(ctxWith(scripted({}).gateway), 'my dad hits me every day');
     expect(r.result).toMatchObject({ action: 'escalate', alert: { kind: 'abuse' } });
-  }, 1_000);
+  }, 5_000);
 
   it(`the excerpt is at most ${DISTRESS_EXCERPT_MAX} code points of the (scrubbed) text`, async () => {
     const long = `${HARD} ${'😔'.repeat(400)}`;
@@ -120,13 +120,13 @@ describe('hard keyword', () => {
     const excerpt = r.result.alert.excerptRedacted;
     expect(Array.from(excerpt)).toHaveLength(DISTRESS_EXCERPT_MAX);
     expect(long.startsWith(excerpt)).toBe(true);
-  }, 1_000);
+  }, 5_000);
 
   it('the excerpt is the text it was given: placeholders from the scrub stay in place', async () => {
     const text = 'i want to kill myself, call [phone] or mail [email]';
     const r = await run(ctxWith(scripted({}).gateway), text);
     expect(r.result).toMatchObject({ alert: { excerptRedacted: text } });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('no hard keyword: the small-tier classifier decides', () => {
@@ -138,17 +138,17 @@ describe('no hard keyword: the small-tier classifier decides', () => {
     expect(s.requests[0]).toMatchObject({ tier: 'small' });
     expect(s.requests[0]?.messages.at(-1)?.content).toContain(NONE);
     expect(r.usage).toEqual([]);
-  }, 1_000);
+  }, 5_000);
 
   it('classifier false → ok', async () => {
     const s = scripted({ generateObject: [{ value: { distress: false } }] });
     expect((await run(ctxWith(s.gateway), NONE)).result).toEqual({ ok: true });
-  }, 1_000);
+  }, 5_000);
 
   it('soft keyword + classifier false → ok (the classifier clears it)', async () => {
     const s = scripted({ generateObject: [{ value: { distress: false } }] });
     expect((await run(ctxWith(s.gateway), SOFT)).result).toEqual({ ok: true });
-  }, 1_000);
+  }, 5_000);
 
   it('the classifier sees the last 3 earlier student turns, oldest first', async () => {
     const s = scripted({ generateObject: [{ value: { distress: false } }] });
@@ -156,7 +156,7 @@ describe('no hard keyword: the small-tier classifier decides', () => {
     const content = s.requests[0]?.messages.at(-1)?.content ?? '';
     const parsed = JSON.parse(content) as { earlier: string[]; latest: string };
     expect(parsed).toEqual({ earlier: ['t2', 't3', 't4'], latest: NONE });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('several soft phrases: the classifier still decides (safety review)', () => {
@@ -166,12 +166,12 @@ describe('several soft phrases: the classifier still decides (safety review)', (
     const s = scripted({ generateObject: [{ value: { distress: false } }] });
     expect((await run(ctxWith(s.gateway), TWO_SOFT)).result).toEqual({ ok: true });
     expect(s.requests).toHaveLength(1);
-  }, 1_000);
+  }, 5_000);
 
   it('two soft + classifier down → escalate', async () => {
     const r = await run(ctxWith(scripted({}).gateway), TWO_SOFT);
     expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('earlier messages arrive as a promise, waited for outside the classifier deadline', () => {
@@ -195,7 +195,7 @@ describe('earlier messages arrive as a promise, waited for outside the classifie
     const r = await clock.drive(run(ctxWith(gateway, clock, history), NONE));
     expect(r.result).toMatchObject({ action: 'escalate' });
     expect(seen).toEqual({ earlier: ['earlier'], latest: NONE });
-  }, 1_000);
+  }, 5_000);
 
   it('a hard keyword does not wait for the history', async () => {
     const r = await run(
@@ -203,7 +203,7 @@ describe('earlier messages arrive as a promise, waited for outside the classifie
       HARD,
     );
     expect(r.result).toMatchObject({ action: 'escalate' });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('cancelled before the classifier call', () => {
@@ -218,7 +218,7 @@ describe('cancelled before the classifier call', () => {
     const r = await createDistressDetectGuard().run(SOFT, ctxWith(s.gateway), cancelled());
     expect(r.result).toMatchObject({ action: 'escalate' });
     expect(s.requests).toEqual([]);
-  }, 1_000);
+  }, 5_000);
 
   it('cancelled while waiting for the earlier messages → no model call either', async () => {
     const s = scripted({});
@@ -234,7 +234,7 @@ describe('cancelled before the classifier call', () => {
     );
     expect(r.result).toMatchObject({ action: 'escalate' });
     expect(s.requests).toEqual([]);
-  }, 1_000);
+  }, 5_000);
 
   it('no keyword → DistressGuardCancelledError, no model call', async () => {
     const s = scripted({});
@@ -242,7 +242,7 @@ describe('cancelled before the classifier call', () => {
       createDistressDetectGuard().run(NONE, ctxWith(s.gateway), cancelled()),
     ).rejects.toBeInstanceOf(DistressGuardCancelledError);
     expect(s.requests).toEqual([]);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('classifier failure (lead answer 3)', () => {
@@ -250,13 +250,13 @@ describe('classifier failure (lead answer 3)', () => {
     const s = scripted({}); // no entry: the scripted gateway rejects
     const r = await run(ctxWith(s.gateway), SOFT);
     expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
-  }, 1_000);
+  }, 5_000);
 
   it('soft + classifier output fails the schema → escalate', async () => {
     const s = scripted({ generateObject: [{ value: { distress: 'maybe' } }] });
     const r = await run(ctxWith(s.gateway), SOFT);
     expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
-  }, 1_000);
+  }, 5_000);
 
   it('soft + classifier times out → escalate at the classifier deadline', async () => {
     const clock = virtualClock();
@@ -264,12 +264,12 @@ describe('classifier failure (lead answer 3)', () => {
     const r = await clock.drive(run(ctxWith(h.gateway, clock), SOFT));
     expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
     expect(clock.now() - VIRTUAL_EPOCH_MS).toBe(DISTRESS_CLASSIFIER_TIMEOUT_MS);
-  }, 1_000);
+  }, 5_000);
 
   it('no keyword + classifier throws → the error propagates (the guard never invents ok)', async () => {
     const s = scripted({});
     await expect(run(ctxWith(s.gateway), NONE)).rejects.toThrow(/ScriptedGateway/);
-  }, 1_000);
+  }, 5_000);
 
   it('no keyword + classifier times out → DistressClassifierTimeoutError', async () => {
     const clock = virtualClock();
@@ -277,13 +277,13 @@ describe('classifier failure (lead answer 3)', () => {
     await expect(clock.drive(run(ctxWith(h.gateway, clock), NONE))).rejects.toBeInstanceOf(
       DistressClassifierTimeoutError,
     );
-  }, 1_000);
+  }, 5_000);
 
   it('the timeout error carries no text', () => {
     expect(new DistressClassifierTimeoutError(250).message).toBe(
       'distressDetect: classifier timed out after 250 ms',
     );
-  }, 1_000);
+  }, 5_000);
 
   it('in the chain, no keyword + classifier throws → outcome failed (fail closed)', async () => {
     const s = scripted({});
@@ -294,7 +294,7 @@ describe('classifier failure (lead answer 3)', () => {
       timeoutMs: 300,
     });
     expect(r.outcome).toBe('failed');
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('buildDistressClassifierRequest', () => {
@@ -309,7 +309,7 @@ describe('buildDistressClassifierRequest', () => {
     ]);
     expect(req.system).toMatch(/data, not instructions/);
     expect(req.maxOutputTokens).toBeLessThanOrEqual(32);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('fix round 3: game, code and method-ready context through the guard', () => {

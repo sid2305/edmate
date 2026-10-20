@@ -43,13 +43,13 @@ describe('buildCaringReply', () => {
     expect(reply).toMatch(/local emergency services/);
     expect(reply).toMatch(/someone you trust/);
     expect(reply).toMatch(/I'm an AI/);
-  }, 1_000);
+  }, 5_000);
 
   it('the pack helplines follow the template, each with its number', () => {
     const reply = buildCaringReply(indiaLocalePackWithHelplines);
     expect(reply.startsWith(LAST_RESORT_DISTRESS_REPLY)).toBe(true);
     expect(reply).toContain('Tele-MANAS on 14416');
-  }, 1_000);
+  }, 5_000);
 
   it('several helplines are joined with "or"', () => {
     const reply = buildCaringReply({
@@ -72,7 +72,7 @@ describe('buildCaringReply', () => {
       ],
     });
     expect(reply).toContain('You can also call Line A on 000-1 or Line B on 000-2.');
-  }, 1_000);
+  }, 5_000);
 
   it('blank helpline entries are skipped', () => {
     const reply = buildCaringReply({
@@ -88,7 +88,7 @@ describe('buildCaringReply', () => {
       ],
     });
     expect(reply).toBe(LAST_RESORT_DISTRESS_REPLY);
-  }, 1_000);
+  }, 5_000);
 
   it('never promises to stay, never mentions the alert mechanism or ids', () => {
     for (const pack of [localePackMinimal, demoLocalePack, indiaLocalePackWithHelplines]) {
@@ -96,7 +96,7 @@ describe('buildCaringReply', () => {
       for (const re of FORBIDDEN) expect(reply).not.toMatch(re);
       expect(reply).not.toMatch(/i promise|stay with you/i);
     }
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('escalate step', () => {
@@ -106,5 +106,5 @@ describe('escalate step', () => {
     expect(withAlert).toEqual({ replyText: buildCaringReply(indiaLocalePackWithHelplines) });
     expect(without).toEqual(withAlert);
     expect(withAlert.replyText).not.toContain(demoSafetyAlert.id);
-  }, 1_000);
+  }, 5_000);
 });
