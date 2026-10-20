@@ -197,3 +197,4 @@ locked eval suites before merge (pack-change rule).
 - Q4: trust the caller's `topicId`; 6.1 adds validation.
 - Q5: `tools/**` stays out of risk-paths.txt for now. The lead runs security-reviewer on tool PRs anyway. Revisit at 13.3.
 - Order: Phase A starts once 3.3 Phase B returns, since only one builder runs in packages/harness at a time.
+- Correction from the lead: practice@1.1.0 changes prompt-pack behaviour, so it needs an ADR in docs/adr/ (CLAUDE.md non-negotiable 2), reviewed by architect, security-reviewer and typescript-reviewer and logged `risk: high`. architect drafts the ADR text once pedagogy-author's draft exists; the Phase C builder writes the ADR file and places the pack at content/prompt-packs/practice@1.1.0.md. The named human's sign-off (B-26) is still required.
