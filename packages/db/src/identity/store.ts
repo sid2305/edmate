@@ -1,18 +1,26 @@
 // Identity store (task 1.3): the one path sign-in uses to read and write users, linked accounts
 // and database sessions; since 1.4 also email sign-in links. See README.md for its rules; it is deliberately not a repository.
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
   authAccounts,
   authSessions,
   authVerificationTokens,
+  consents,
   platformAuditLog,
   users,
 } from '../schema/index.js';
 import { guarded, RepositoryError, translateWrite } from '../repositories/errors.js';
 import { IdSchema, parseArg } from '../repositories/scope.js';
 import { hashSessionToken, hashToken } from './token-hash.js';
+import {
+  type AgeAnswerStatus,
+  type AgePolicy,
+  ageStatus,
+  type AgeStatus,
+  DEFAULT_AGE_POLICY,
+} from './age.js';
 
 export const ROLES = ['student', 'teacher', 'staff'] as const;
 
@@ -47,6 +55,16 @@ export interface GrantRoleInput {
   /** The staff user who granted it, or `operator` for the CLI with no staff account yet. */
   by: string;
   reason?: string;
+}
+
+/** The learner's one answer at the age gate (1.7). */
+export interface AgeAnswer {
+  userId: string;
+  /** A market with a locale pack (`IN`, `US`, …), or `global` for "somewhere else". */
+  market: string;
+  birthYear: number;
+  /** The version of the privacy notice the learner was shown and accepted. */
+  noticeVersion: string;
 }
 
 export interface IdentityStore {
@@ -98,11 +116,26 @@ export interface IdentityStore {
    * `scope`). Writes a `role.grant` row to `platform_audit_log` in the same transaction.
    */
   grantRole(input: GrantRoleInput): Promise<IdentityUser>;
+  /**
+   * The age gate (1.7, README rule 12), once per student: a second answer is `invalid`, a
+   * non-student is `scope`. Under the market's minimum it erases the user and its sign-in rows in
+   * one transaction and stores nothing (`under_age`). Otherwise it stores the birth year, market
+   * and time, and a `privacy_notice` consent at `noticeVersion`, granted by `self`.
+   */
+  recordAgeAnswer(input: AgeAnswer): Promise<{ status: AgeAnswerStatus }>;
+  /**
+   * A learner's standing, read fresh: `age_needed` before the answer, `parent_needed` for 13-17
+   * in a market that requires consent until a live parental consent (granted by `parent`, not
+   * withdrawn), else `clear`. An unknown user is `not_found`.
+   */
+  learnerStatus(userId: string): Promise<AgeStatus>;
 }
 
 export interface IdentityStoreOptions {
   /** Clock for session and sign-in link expiry (tests). */
   now?: () => Date;
+  /** The age rule of a market (1.7); defaults to 13+ with consent required for 13-17. */
+  agePolicy?: (market: string) => AgePolicy;
 }
 
 const Email = z.string().trim().toLowerCase().pipe(z.email().max(320));
@@ -129,6 +162,9 @@ const Grant = z.strictObject({
   reason: z.string().min(1).max(500).optional(),
 });
 
+const Market = z.string().regex(/^(?:[A-Z]{2}|global)$/);
+const NoticeVersion = z.string().min(1).max(64);
+
 const userColumns = {
   id: users.id,
   role: users.role,
@@ -142,7 +178,37 @@ function first<T>(rows: T[]): T {
   return rows[0] as T;
 }
 
-function storeMethods(db: Db, now: () => Date) {
+function storeMethods(db: Db, now: () => Date, agePolicy: (market: string) => AgePolicy) {
+  const Answer = z.strictObject({
+    userId: IdSchema,
+    market: Market,
+    // A year that has not come yet is no birth year.
+    birthYear: z
+      .number()
+      .int()
+      .min(1900)
+      .max(2100)
+      .refine((y) => y <= now().getUTCFullYear()),
+    noticeVersion: NoticeVersion,
+  });
+
+  /** A live parental consent: granted by a parent and not withdrawn (any notice version). */
+  async function hasParentConsent(q: Pick<Db, 'select'>, userId: string): Promise<boolean> {
+    const rows = await q
+      .select({ id: consents.id })
+      .from(consents)
+      .where(
+        and(
+          eq(consents.userId, userId),
+          eq(consents.kind, 'parental'),
+          eq(consents.grantedBy, 'parent'),
+          isNull(consents.withdrawnAt),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
   async function userWhere(where: ReturnType<typeof eq>): Promise<IdentityUser | null> {
     const [row] = await db.select(userColumns).from(users).where(where).limit(1);
     return row ?? null;
@@ -336,6 +402,75 @@ function storeMethods(db: Db, now: () => Date) {
         return row;
       });
     },
+
+    async recordAgeAnswer(input: unknown): Promise<{ status: AgeAnswerStatus }> {
+      const method = 'identity.recordAgeAnswer';
+      const a = parseArg(Answer, input, method);
+      return db.transaction(async (tx) => {
+        // Locked, so of two concurrent answers the second sees the first.
+        const [user] = await tx
+          .select({ role: users.role, email: users.email, birthYear: users.birthYear })
+          .from(users)
+          .where(eq(users.id, a.userId))
+          .for('update');
+        if (!user) throw new RepositoryError('not_found', method);
+        if (user.role !== 'student') throw new RepositoryError('scope', method);
+        if (user.birthYear !== null) throw new RepositoryError('invalid', method);
+        const status = ageStatus({
+          birthYear: a.birthYear,
+          policy: agePolicy(a.market),
+          parentConsent: await hasParentConsent(tx, a.userId),
+          now: now(),
+        });
+        if (status === 'under_age') {
+          // Erase at once (README rule 10, 12): the sign-in rows, any consent, then the user.
+          // A row this store does not own (e.g. an audit row) makes the whole erase fail.
+          await tx.delete(authSessions).where(eq(authSessions.userId, a.userId));
+          await tx.delete(authAccounts).where(eq(authAccounts.userId, a.userId));
+          if (user.email !== null) {
+            await tx
+              .delete(authVerificationTokens)
+              .where(eq(authVerificationTokens.identifier, user.email));
+          }
+          await tx.delete(consents).where(eq(consents.userId, a.userId));
+          await tx.delete(users).where(eq(users.id, a.userId));
+          return { status };
+        }
+        await tx
+          .update(users)
+          .set({ birthYear: a.birthYear, market: a.market, ageConfirmedAt: now() })
+          .where(eq(users.id, a.userId));
+        await translateWrite(method, () =>
+          tx.insert(consents).values({
+            userId: a.userId,
+            kind: 'privacy_notice',
+            version: a.noticeVersion,
+            grantedBy: 'self',
+          }),
+        );
+        return { status };
+      });
+    },
+
+    async learnerStatus(userId: unknown): Promise<AgeStatus> {
+      const method = 'identity.learnerStatus';
+      const id = parseArg(IdSchema, userId, method);
+      const [user] = await db
+        .select({ market: users.market, birthYear: users.birthYear })
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+      if (!user) throw new RepositoryError('not_found', method);
+      if (user.birthYear === null) return 'age_needed';
+      const status = ageStatus({
+        birthYear: user.birthYear,
+        policy: agePolicy(user.market),
+        parentConsent: await hasParentConsent(db, id),
+        now: now(),
+      });
+      // Below a minimum the market raised after the answer: never clear (staff decide, 12.1).
+      return status === 'under_age' ? 'parent_needed' : status;
+    },
   };
 }
 
@@ -354,5 +489,6 @@ function guardAll<T extends Methods>(methods: T): T {
 /** The identity store over a database (see README.md). */
 export function createIdentityStore(db: Db, options: IdentityStoreOptions = {}): IdentityStore {
   const now = options.now ?? (() => new Date());
-  return guardAll(storeMethods(db, now)) as unknown as IdentityStore;
+  const agePolicy = options.agePolicy ?? (() => DEFAULT_AGE_POLICY);
+  return guardAll(storeMethods(db, now, agePolicy)) as unknown as IdentityStore;
 }

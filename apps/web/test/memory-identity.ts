@@ -1,8 +1,25 @@
 // An in-memory IdentityStore with the real store's rules (role forced to student, one account per
 // provider id, expired sessions read as null, only grantRole changes a role, one single-use sign-in
-// link per address). The real store is
+// link per address; since 1.7 one age answer per student, an under-age answer erasing the user and
+// its sign-in rows, and the learner status). The real store is
 // tested on Postgres in packages/db/test/identity.int.test.ts.
-import type { GrantRoleInput, IdentityStore, IdentityUser } from '@edmate/db';
+// Types only at the top: some tests mock '@edmate/db' with this fake, so the age rule is loaded
+// lazily, when a method runs, to avoid a cycle through the mock.
+import type { AgePolicy, GrantRoleInput, IdentityStore, IdentityUser } from '@edmate/db';
+
+async function ageRule() {
+  const db = await import('@edmate/db');
+  return { ageStatus: db.ageStatus, defaultPolicy: db.DEFAULT_AGE_POLICY };
+}
+
+/** A consents row as the fake keeps it (1.7). */
+export interface MemoryConsent {
+  userId: string;
+  kind: string;
+  version: string;
+  grantedBy: 'self' | 'parent';
+  withdrawnAt: Date | null;
+}
 
 export interface MemoryIdentity extends IdentityStore {
   users: Map<string, IdentityUser>;
@@ -11,17 +28,25 @@ export interface MemoryIdentity extends IdentityStore {
   /** Sign-in links by lower-cased address (the real store keeps only a hash). */
   links: Map<string, { token: string; expires: Date }>;
   grants: GrantRoleInput[];
+  /** Age answers by user id (1.7): the stored birth year and market. */
+  ages: Map<string, { birthYear: number; market: string }>;
+  consents: MemoryConsent[];
   /** Every createStudent input, as received. */
   created: unknown[];
   linked: unknown[];
 }
 
-export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdentity {
+export function memoryIdentity(
+  now: () => Date = () => new Date(),
+  agePolicy?: (market: string) => AgePolicy,
+): MemoryIdentity {
   const users = new Map<string, IdentityUser>();
   const accounts = new Map<string, string>();
   const sessions = new Map<string, { userId: string; expires: Date }>();
   const links = new Map<string, { token: string; expires: Date }>();
   const grants: GrantRoleInput[] = [];
+  const ages = new Map<string, { birthYear: number; market: string }>();
+  const consents: MemoryConsent[] = [];
   const created: unknown[] = [];
   const linked: unknown[] = [];
   let next = 0;
@@ -31,6 +56,14 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
   };
   const byEmail = (email: string) =>
     [...users.values()].find((u) => u.email === email.trim().toLowerCase()) ?? null;
+  const parentConsent = (userId: string) =>
+    consents.some(
+      (c) =>
+        c.userId === userId &&
+        c.kind === 'parental' &&
+        c.grantedBy === 'parent' &&
+        c.withdrawnAt === null,
+    );
 
   return {
     users,
@@ -38,6 +71,8 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
     sessions,
     links,
     grants,
+    ages,
+    consents,
     created,
     linked,
     async createStudent(input) {
@@ -122,6 +157,52 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
       grants.push(input);
       u.role = input.role;
       return { ...u };
+    },
+    async recordAgeAnswer({ userId, market, birthYear, noticeVersion }) {
+      const u = users.get(userId);
+      if (!u) throw new Error('identity.recordAgeAnswer: not_found');
+      if (u.role !== 'student') throw new Error('identity.recordAgeAnswer: scope');
+      if (ages.has(userId)) throw new Error('identity.recordAgeAnswer: invalid');
+      const { ageStatus, defaultPolicy } = await ageRule();
+      const status = ageStatus({
+        birthYear,
+        policy: agePolicy ? agePolicy(market) : defaultPolicy,
+        parentConsent: parentConsent(userId),
+        now: now(),
+      });
+      if (status === 'under_age') {
+        // Erase the user and every sign-in row, as the real store does in one transaction.
+        users.delete(userId);
+        for (const [k, id] of accounts) if (id === userId) accounts.delete(k);
+        for (const [t, s] of sessions) if (s.userId === userId) sessions.delete(t);
+        if (u.email) links.delete(u.email);
+        for (let i = consents.length - 1; i >= 0; i -= 1) {
+          if (consents[i]?.userId === userId) consents.splice(i, 1);
+        }
+        return { status };
+      }
+      ages.set(userId, { birthYear, market });
+      consents.push({
+        userId,
+        kind: 'privacy_notice',
+        version: noticeVersion,
+        grantedBy: 'self',
+        withdrawnAt: null,
+      });
+      return { status };
+    },
+    async learnerStatus(userId) {
+      if (!users.has(userId)) throw new Error('identity.learnerStatus: not_found');
+      const a = ages.get(userId);
+      if (!a) return 'age_needed';
+      const { ageStatus, defaultPolicy } = await ageRule();
+      const status = ageStatus({
+        birthYear: a.birthYear,
+        policy: agePolicy ? agePolicy(a.market) : defaultPolicy,
+        parentConsent: parentConsent(userId),
+        now: now(),
+      });
+      return status === 'under_age' ? 'parent_needed' : status;
     },
   };
 }

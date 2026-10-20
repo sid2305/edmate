@@ -88,6 +88,8 @@ describe('buildDemoSeed', () => {
       expect(s.email).toMatch(/^demo-student-\d{2}@example\.invalid$/);
       expect(s.market).toBe('global');
       expect(s.ageConfirmedAt).toBeInstanceOf(Date);
+      // A fictional adult year (1.7): past the age gate, needing no parent.
+      expect(s.birthYear).toBe(1990);
     }
     const teachers = seed.users.filter((u) => u.role === 'teacher');
     expect(teachers.map((t) => t.id)).toEqual([DEMO_IDS.teacher]);

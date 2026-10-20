@@ -10,7 +10,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { inArray } from 'drizzle-orm';
-import { checkPilotLanguages, loadDemoTeacherContent, type DemoTeacherContent } from '@edmate/content';
+import {
+  checkPilotLanguages,
+  loadDemoTeacherContent,
+  type DemoTeacherContent,
+} from '@edmate/content';
 import {
   AgentConfigSchema,
   PackageConfigSchema,
@@ -73,6 +77,8 @@ export interface SeedOptions {
 
 /** A fixed instant, so re-runs build identical rows. */
 const SEED_TIME = new Date('2026-01-01T00:00:00.000Z');
+/** A fictional adult birth year for every demo user (1.7): no real person's data. */
+const DEMO_BIRTH_YEAR = 1990;
 /** Period end for live subscriptions: far enough out that the demo never lapses. */
 const LIVE_PERIOD_END = new Date('2099-12-31T00:00:00.000Z');
 
@@ -152,14 +158,15 @@ export function buildDemoSeed(content: DemoTeacherContent): DemoSeed {
     const n = pad(i + 1);
     return {
       id: `demo-student-${n}`,
-      // RFC 2606 reserved domain: never deliverable. Fictional; aged 13+ by attestation only (1.7
-      // adds age and consent records).
+      // RFC 2606 reserved domain: never deliverable. Fictional, and a fictional adult birth year
+      // so the demo learners are past the age gate (1.7).
       email: `demo-student-${n}@example.invalid`,
       name: `Demo Student ${n}`,
       locale: 'en',
       market: 'global',
       role: 'student' as const,
       ageConfirmedAt: SEED_TIME,
+      birthYear: DEMO_BIRTH_YEAR,
     };
   });
 
@@ -173,6 +180,7 @@ export function buildDemoSeed(content: DemoTeacherContent): DemoSeed {
         market: 'global',
         role: 'teacher',
         ageConfirmedAt: SEED_TIME,
+        birthYear: DEMO_BIRTH_YEAR,
       },
       ...students,
     ],
