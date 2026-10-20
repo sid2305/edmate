@@ -386,3 +386,28 @@ Why: EXPLAIN shows the feared gap cannot happen with this statement, so no faili
 ### 20 Oct 2026 · 5.3 db takes ingest and gateway as devDependencies; the script imports .ts directly · decided by tdd-guide · risk: low
 Decided: `@edmate/ingest` (for the recall test and the type check) and `@edmate/gateway` (for the script) are db devDependencies. The db tsconfig allows `.ts` imports (noEmit), so Node 22 runs the script without a build step of its own.
 Why: the plan's Phase D file list, and the recording script must reuse the test's corpus so the texts match exactly.
+
+## CI fix (leak SLO test)
+
+CI run 39451742293's node job failed `retrieval-leak.int.test.ts`'s SLO (ADR-0007 point 6): p95 measured
+72.568 ms against the 50 ms budget. Every other test (589) passed.
+
+Root cause: `lockedIndexFor` reads the teacher's material revision (a real Postgres round trip) on
+every `leakCheck` call, even when the locked-index itself is served warm from the LRU cache — the
+adapter's warm path is never free of the database, by design (point 7's cache key needs a fresh
+revision read to invalidate correctly). `@edmate/db`'s vitest config ran its ~17 integration test
+files across parallel workers, each opening its own Postgres pool; under CI's shared runner that
+contention stretched the revision round trip past the 50/100 ms budget on a warm run, the same
+class of flake task 4.4 found and fixed in `apps/worker` (`fileParallelism: false`). It is
+contention, not new work on the warm path: locally, isolated, the same call measures low single
+digit milliseconds.
+
+Fix: `packages/db/vitest.config.ts` now sets `fileParallelism: false`, so this package's test files
+run one at a time instead of racing each other and the rest of the turbo run for CPU and Postgres
+connections. `leakCheck`'s behaviour and the 50/100 ms SLO are unchanged.
+
+Verified locally (infra up via `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres redis`):
+- `turbo run typecheck lint test --filter=@edmate/db --force --concurrency=1`: 34 files, 590
+  passed, 3 skipped. `leakCheck SLO: p95 3.8 ms, p99 4.8 ms`.
+- Same command at default turbo concurrency (mimics CI): also 8/8 tasks green.
+- `python3 .githooks/secret-scan.py --all`: clean.
