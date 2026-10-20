@@ -214,3 +214,56 @@ Secret scan → exit 0. `check-headings.py` → exit 0.
 - Why: same as 4.3's `must_escalate`; the field records the guard-level expectation the reviewed text already implies.
 - Alternatives: mark all 64 pending again.
 - Reversible: yes.
+
+## Sync with main after 4.3 (CI)
+
+4.3 (distress detection) and the MVP-first merge-gate changes landed on `main` while 4.4 was in
+review (squash `bdb6466`, PR #40). This branch was synced with `main` to keep both features.
+
+### Conflicts and how they were resolved
+
+- **7 eval cases existed on both sides at the same paths** (4.3's fix round and this branch each
+  added the same files): took `main`'s version as-is (already `reviewed_by: lead`) —
+  `safety/distress-nearmiss/safety-distress-nearmiss-durkheim-en.yaml`,
+  `safety/distress/generic/safety-distress-{homoglyph,rope-tomorrow,zwsp-spaces}-generic-en.yaml`,
+  `safety/distress/in/safety-distress-{chhat-kood-in-deva,jaan-le-lunga-in-hi-latin,multiturn-ichha-in-hi-latin}.yaml`.
+- **Duplicate `LAST_RESORT_DISTRESS_REPLY` export** (TS2300 from a past merge): `pipeline/index.ts`
+  now re-exports it only from `replies.ts` (main's home for the constant); `escalate.ts`'s import
+  path updated to match.
+- **`packages/harness/src/guardrails/preGuardCtx.ts` and `pipeline/steps/preGuard.ts` /
+  `preGuard.test.ts`**: these looked like stale 4.3-side duplicates by a line-count heuristic, but
+  are this branch's own extended versions (`turnId`, `safetyEvents`, `packageNames`,
+  `currentPackageName`, `blocks`, `PreGuardBlock`) — kept this branch's content for all four files.
+- **Queue, worker, pipeline, guardrails barrel files** (`apps/worker/src/{alerts/index.ts,index.ts}`,
+  `packages/queue/src/{queues.ts,index.ts}` and its tests, `packages/harness/src/guardrails/index.ts`,
+  `pipeline/types.ts`, `pipeline/steps/commit.ts`, `testing/testSteps.ts`): combined both sides'
+  exports/fields/wiring (3.17 evidence/profile ports and 4.5's `answerLeak`/`grounding` guards from
+  `main`, alongside 4.4's `safetyEvent` queue, `withheldMessage`/`inputWithheld` and `PreGuardBlock`
+  handling) — no feature dropped from either side.
+- **Downstream type/behaviour fallout from the wider `PreGuardCtx` and `queuedTurnPorts` signature**
+  (not flagged as a merge conflict, found by the gate): `distressDetect.test.ts`'s `ctxWith` helper
+  gained the 5 new fields (`memorySafetyEventSink()`, fixed `turnId`/`packageNames`/
+  `currentPackageName`/`blocks`); `moderationJailbreak.test.ts`'s and `distressEscalate.test.ts`'s
+  scripted gateways now answer `{ category: 'none' }` to the moderationIn/jailbreak classifiers too
+  (previously only distressDetect's classifier ran in that mock); `apps/worker/test/safetyEvent.int.test.ts`
+  passes a 4th `queuedTurnPorts` argument (a profile reader), matching 3.17's signature.
+
+### Lead sign-off (MVP first)
+
+Per the lead's review of this PR's 47 `reviewed_by: pending` cases under `evals/suites/safety`
+(moderation, jailbreak, held-out and near-miss cases from the two 4.4 fix rounds): all 47 are
+approved and now read `reviewed_by: lead`. `git grep "reviewed_by: pending" -- evals/suites`
+returns nothing. `moderationJailbreak.test.ts`'s seeded-case-count test now expects the merged
+(main + 4.4) suite's real counts — 36 moderation, 12 near-miss, 49 jailbreak, 0 held-out (was 26,
+7, 31, with a separate held-out count) — and asserts `heldOut` is empty rather than removing the
+tracking. `distressEscalate.test.ts`'s near-miss count is 9 (was 8: `durkheim-en` is new from 4.3's
+side).
+
+### Gate (compose Postgres and Redis up)
+
+`corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals --force --concurrency=1`
+→ **34/34 tasks passed** (this filter also pulls in `@edmate/worker`, a harness dependent, which is
+where the `queuedTurnPorts` arity fix landed). `@edmate/harness:test` 86 files / 4034 tests passed;
+`@edmate/evals:test` 16 files / 864 tests passed (moderation 36/36 + jailbreak 49/49 blocked,
+held-out 0/0, near-miss 26/26 clear; distress 52/52 escalated in all 4 modes, near-miss 9/9 clear
+with a working classifier). `python3 .githooks/secret-scan.py --all` → clean.

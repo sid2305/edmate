@@ -176,10 +176,13 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('26 moderation true positives, 7 near-misses, 31 jailbreak cases (reviewed)', () => {
-    expect(seededMod).toHaveLength(26);
-    expect(seededNear).toHaveLength(7);
-    expect(seededJb).toHaveLength(31);
+  it('36 moderation true positives, 12 near-misses, 49 jailbreak cases (all reviewed, none pending)', () => {
+    expect(seededMod).toHaveLength(36);
+    expect(seededNear).toHaveLength(12);
+    expect(seededJb).toHaveLength(49);
+    // MVP first: the lead signed off every held-out case (4.4 sync with main after 4.3); none
+    // is reviewed_by: pending any more.
+    expect(heldOut).toHaveLength(0);
   }, 5_000);
 
   it.each(nearMisses.map((c) => [c.evalCase.id, c] as const))(

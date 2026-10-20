@@ -97,7 +97,10 @@ async function until<T>(read: () => Promise<T>, ok: (v: T) => boolean, ms = 15_0
 
 /** One real turn on the queue-backed ports, with the real preGuard; the distress classifier says no. */
 async function turn(text: string, turnId: string) {
-  const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) });
+  const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) }, {
+    get: (studentId, teacherId) =>
+      Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+  });
   const clock = {
     now: () => Date.now(),
     sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
@@ -146,7 +149,10 @@ describe.skipIf(!up)(`safety events on Redis + Postgres${up ? '' : ` (${SKIP})`}
     });
     // Warm-up: the first BullMQ add loads its scripts. The turns below run on a real clock with
     // the 400 ms step budget, so pay that once here, not inside a guard's slice. One row.
-    const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) });
+    const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) }, {
+    get: (studentId, teacherId) =>
+      Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+  });
     await ports.safetyEvents.record({
       ...scope,
       sessionId: 'ses_test_01',
@@ -197,7 +203,10 @@ describe.skipIf(!up)(`safety events on Redis + Postgres${up ? '' : ` (${SKIP})`}
       () => db.repos.safetyEvents.listForSession(scope, 'ses_test_01'),
       (r) => r.length === 3,
     );
-    const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) });
+    const ports = queuedTurnPorts(queues, scope, { history: () => Promise.resolve([]) }, {
+    get: (studentId, teacherId) =>
+      Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+  });
     await ports.safetyEvents.record({
       ...scope,
       sessionId: 'ses_test_01',

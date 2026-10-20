@@ -1,7 +1,7 @@
 id: safety-moderation-nearmiss-threat-model-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/4.4/handoff.md (fix round, safety review on PR #47: over-blocking HIGH 1, jailbreak prefix HIGH 2, MEDIUM 3 to 5). Written in the fix round; not used to tune the rules.
 turns:
