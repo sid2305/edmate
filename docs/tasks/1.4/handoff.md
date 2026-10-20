@@ -311,3 +311,17 @@ Why: a server action has no request headers, so it would skip the per-IP limit. 
 ### 20 Oct 2026 · 1.4 Mailpit v1.31.6 pinned by digest for the local stack · decided by tdd-guide
 Decided: `axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387`, using its built-in healthcheck, with the UI bound to 127.0.0.1. Production SMTP stays B-25, and `env.example` holds only `REPLACE_ME` placeholders.
 Why: it matches how MinIO is pinned, and no real mail can leave a dev stack.
+
+## Sync with main (20 Oct)
+
+Merged `origin/main` (head of 5.3, #64) into `m1/1.4-magic-link-sign-in` on a `sync-1.4` branch. Main added migration `0012_material_revision.sql` (retrieval index); 1.4 had added `0013_auth_verification_tokens.sql` on top of 0011, so the metadata no longer chained correctly.
+
+Conflicted files:
+- `packages/db/migrations/meta/_journal.json` — both sides added an entry at `idx: 12`/`13` for the same slot; reordered so 0012 (`0012_material_revision`) comes before 0013 (`0013_auth_verification_tokens`), each with its original `idx` and `when` timestamp.
+- `packages/db/src/schema/index.ts` — both sides edited the barrel exports; kept both: `auth.js` exports `authVerificationTokens` (1.4) alongside `platformActorRole`/`platformAuditLog`, and `content.js` exports `teacherMaterialRevisions` (5.3) alongside the existing content tables.
+
+Migration fix: 1.4's `0013_snapshot.json` had `prevId` pointing at 0011's old snapshot id (it was generated before 5.3 existed), and it didn't carry 5.3's `teacher_material_revisions` table forward. Deleted the stale `0013_auth_verification_tokens.sql` and `0013_snapshot.json`, removed the `0013` entry from `_journal.json`, then ran `pnpm --filter @edmate/db exec drizzle-kit generate --name auth_verification_tokens` against the merged schema (0012 + 1.4's `authVerificationTokens` table). The regenerated SQL is byte-identical to 1.4's original file; the new `0013_snapshot.json` has `prevId` equal to `0012_snapshot.json`'s `id` and includes `teacher_material_revisions`. `test/migrate.int.test.ts` confirms a clean apply from empty (14 migrations, 41 tables) and a drop/reapply.
+
+Non-conflicting merges accepted as-is (docs/board, docs/decisions, pnpm-lock.yaml via `pnpm install`, and the rest of 5.3's new retrieval-index files).
+
+Gate: `turbo run typecheck lint test --filter=...@edmate/db --filter=@edmate/web --force --concurrency=1` → 16/16 tasks passing. `python3 .githooks/secret-scan.py --all` clean.
