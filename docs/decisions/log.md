@@ -10,6 +10,61 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 3.9 CLI retrieval adapter allowlisted in access audit rule 4 · decided by build-error-resolver
+
+Decided: `apps/cli/src/commands/chat/retrieval.ts` is added to `packages/db/test/access-audit.test.ts`'s
+`INDEX_IMPLEMENTERS` allowlist, until 3.9a moves the CLI from this dev-only lexical adapter to the db
+index.
+
+Why: the file is a thin `RetrievalIndex` adapter that delegates every access decision to the harness's
+`memoryRetrieval` test double (lead answer 3.9 Q3) and contains no access logic of its own, matching
+the allowlist's existing exemptions for the port's other non-db implementers; 5.4's new access audit
+(rule 4) otherwise flags it as an unlisted `RetrievalIndex` implementer.
+
+---
+
+### 20 Oct 2026 · 3.9 ProfileStore test double not exported from harness/testing · decided by tdd-guide
+
+Decided: write a small local `ProfileStore` in `apps/cli/src/commands/chat/deps.ts` instead of
+importing the harness's `memoryProfileStore`, and leave `packages/harness/src/testing/index.ts`
+unedited.
+
+Why: `packages/harness` is out of scope for this task (another builder is editing it concurrently
+for 5.4), and the plan's Phase A file list already assumed every port listed would come from
+`@edmate/harness/testing`'s public barrel — this one port was missed. A follow-up board task should
+export `memoryProfileStore` from that barrel so `apps/cli` (and any other harness/testing consumer)
+can use the canonical one instead of a duplicate.
+
+---
+
+### 20 Oct 2026 · 3.9 retrieval.ts delegates to the harness's memoryRetrieval · decided by tdd-guide
+
+Decided: `apps/cli/src/commands/chat/retrieval.ts` builds `Chunk[]` from the demo teacher's module
+notes and passes them straight to `@edmate/harness/testing`'s `memoryRetrieval({ chunks })`, rather
+than writing a second lexical/word-overlap matcher from scratch.
+
+Why: lead answer Q3 requires the CLI's index to implement the `RetrievalIndex` port and contain no
+access logic of its own; `memoryRetrieval` already does exactly that (it trusts the caller's
+`scope` argument for every `search`/`probe`/`leakCheck` call and makes no independent access
+decision), and the harness publishes it from `@edmate/harness/testing` for reuse. Reimplementing the
+same word-overlap logic in `apps/cli` would duplicate the port's one safety-relevant property
+(trusting the caller's scope) in two places, which is a worse place for a bug to hide.
+
+---
+
+### 20 Oct 2026 · 3.9 real locale/prompt packs, fixture fallback · decided by tdd-guide
+
+Decided: `world.ts` tries the real `content/locales/*.yaml` and `content/prompt-packs/set@*.yaml`
+first and only falls back to the `@edmate/contracts/fixtures`/`@edmate/harness/testing` fixture
+packs if the real load throws, recording which source was used (`'real' | 'fixture'`) on the return
+value.
+
+Why: lead answer Q2 asked for the real packs to be tried first, with the fixture packs as a safety
+net, so `edmate chat` behaves like production whenever the real content is present, but a test or a
+checkout missing the content directory still gets a valid (if thinner) pack rather than throwing.
+
+---
+
 ### 20 Oct 2026 · 5.5 Calculator allow-list is a tokenizer · decided by tdd-guide
 Decided: The calculator checks input with a tokenizer allow-list (ASCII numbers, `+ - * / ^ % ( ) ,`, spaces and tabs, and names from two named lists, with rules for where each name may appear), not with the plan's strip-then-character-class check.
 Why: The planned check let `pi.e` reach mathjs's member access. The tokenizer closes that gap and also refuses glued forms like `2pi` and `1e+5`, which keeps scientific notation unsupported as Q1 decided.

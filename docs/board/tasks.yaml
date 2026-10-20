@@ -587,9 +587,9 @@ tasks:
   - '4.5'
   - '4.3'
   - '4.4'
-  status: running
+  status: done
   branch: m3/3.9-cli-chat
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet fix:sonnet
 - id: '3.10'
   milestone: M3
   title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
