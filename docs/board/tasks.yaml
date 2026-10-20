@@ -758,9 +758,9 @@ tasks:
     skill states the new rules.
   deps:
   - '0.7'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/0.13-agent-efficiency
+  model: plan:sonnet build:sonnet
 - id: '0.14'
   milestone: M7
   title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
