@@ -1204,10 +1204,10 @@ tasks:
   deps:
   - '5.3'
   - M3
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '5.5'
   milestone: M5
   title: Tool registry and sandboxed calculator
@@ -1980,7 +1980,7 @@ tasks:
 - id: 5.3a
   milestone: M13
   title: 'Retrieval follow-ups (5.3 review MEDIUM/LOW): HNSW-usable vector query (inner ORDER BY distance LIMIT with scope, outer id tie-break) and a guard test that can fail; batch the termStats IDF queries;
-    cap leakCache entry memory; CandidatesSchema .max(); scoped harness subpath import in db; to_tsquery robustness for unusual Unicode terms; Node version note in record-demo-embeddings.ts; widen the out-of-course
+    scoped harness subpath import in db; Node version note in record-demo-embeddings.ts; widen the out-of-course
     calibration set and add a recalibration path per course'
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
