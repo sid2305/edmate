@@ -587,9 +587,9 @@ tasks:
   - '4.5'
   - '4.3'
   - '4.4'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m3/3.9-cli-chat
+  model: plan:sonnet build:sonnet
 - id: '3.10'
   milestone: M3
   title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
@@ -1204,10 +1204,10 @@ tasks:
   deps:
   - '5.3'
   - M3
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: plan:opus
+  branch: m5/5.4-access-filter
+  model: plan:opus build:opus
 - id: '5.5'
   milestone: M5
   title: Tool registry and sandboxed calculator
@@ -1980,8 +1980,7 @@ tasks:
 - id: 5.3a
   milestone: M13
   title: 'Retrieval follow-ups (5.3 review MEDIUM/LOW): HNSW-usable vector query (inner ORDER BY distance LIMIT with scope, outer id tie-break) and a guard test that can fail; batch the termStats IDF queries;
-    scoped harness subpath import in db; Node version note in record-demo-embeddings.ts; widen the out-of-course
-    calibration set and add a recalibration path per course'
+    scoped harness subpath import in db; Node version note in record-demo-embeddings.ts; widen the out-of-course calibration set and add a recalibration path per course'
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
   - '5.3'
