@@ -284,6 +284,14 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.15'
+  milestone: M7
+  title: 'Token budget for the agent team (usage analysis, 19 Oct 2026): builders make fewer, bigger calls and stop at about 150 calls with Status: PARTIAL; the planner splits big tasks into phases; fresh fixers per fix round; short returns; the lead keeps its context small; auto-compact at 200k (CLAUDE_CODE_AUTO_COMPACT_WINDOW); the merge gate requires the handoff Status to be DONE; builders run as 1 Opus + 1 Sonnet at once'
+  accept: the agent files and team-lead skill carry the rules; the gate fails a PARTIAL or BLOCKED handoff (tests); settings.json sets the compaction window.
+  deps: []
+  status: review
+  branch: m7/0.15-token-budget
+  model: null
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
