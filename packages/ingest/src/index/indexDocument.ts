@@ -2,10 +2,11 @@
 // text finds them even when embedding fails; embedding failure is reported to an optional callback
 // (a fixed code, never text) and the call still resolves. A storage failure rejects with a fixed
 // IngestError that keeps nothing of the cause (it may quote teacher material).
-import type { ModelGateway } from '@edmate/contracts';
+import type { ModelGateway, TranscribeInput, Transcriber } from '@edmate/contracts';
 import { chunkDocument } from '../chunk/chunker.js';
 import { parseDocument, type DocumentInput } from '../document.js';
 import { IngestError } from '../errors.js';
+import { parseVideoTranscript } from '../parse/video.js';
 import type { ParsedDocument } from '../types.js';
 import type { ChunkDraft, ChunkWriter, ChunkWriterScope } from './types.js';
 
@@ -25,6 +26,8 @@ export interface IndexDocumentDeps {
   /** No embedder: chunks are stored for full text only. */
   readonly embedder?: Pick<ModelGateway, 'embed'>;
   readonly onEmbedFailed?: (code: EmbedFailure) => void;
+  /** Required only for a `VideoSource`; absent otherwise. */
+  readonly transcriber?: Transcriber;
 }
 
 /** A document already parsed (e.g. a web link), and whether it is located by heading path. */
@@ -34,11 +37,18 @@ export interface ParsedSource {
   readonly headings: boolean;
 }
 
+/** A recording (task 2.7's `TranscribeInput`) to transcribe, chunk and index like any other source. */
+export interface VideoSource {
+  readonly kind: 'video';
+  readonly sourceTitle: string;
+  readonly recording: TranscribeInput;
+}
+
 export interface IndexDocumentInput {
   readonly scope: ChunkWriterScope;
   /** A document the scope's teacher already filed under one of their modules. */
   readonly documentId: string;
-  readonly source: DocumentInput | ParsedSource;
+  readonly source: DocumentInput | ParsedSource | VideoSource;
 }
 
 export interface IndexDocumentResult {
@@ -50,6 +60,28 @@ export interface IndexDocumentResult {
 
 function storeFailed(): IngestError {
   return new IngestError('provider_error', false, 'the chunks could not be stored');
+}
+
+/**
+ * Transcribes a `VideoSource`'s recording into a `ParsedDocument`. Any transcriber rejection
+ * (network, provider or malformed-script) becomes a fixed, non-leaking `IngestError`: the cause
+ * is discarded, same as `storeFailed()`, so nothing of the (possibly sensitive) failure reaches a
+ * log line or a thrown error's message/stack/cause.
+ */
+async function parseVideo(
+  deps: IndexDocumentDeps,
+  source: VideoSource,
+): Promise<ParsedDocument> {
+  if (deps.transcriber === undefined) {
+    throw new IngestError('validation', false, 'no transcriber configured');
+  }
+  let transcript;
+  try {
+    transcript = await deps.transcriber.transcribe(source.recording);
+  } catch {
+    throw new IngestError('provider_error', true, 'the recording could not be transcribed');
+  }
+  return parseVideoTranscript(transcript, source.sourceTitle);
 }
 
 async function store<T>(write: () => Promise<T>): Promise<T> {
@@ -110,12 +142,16 @@ export async function indexDocument(
   input: IndexDocumentInput,
 ): Promise<IndexDocumentResult> {
   const { scope, documentId, source } = input;
-  const drafts: ChunkDraft[] =
-    source.kind === 'parsed'
-      ? chunkDocument(source.document, { headings: source.headings })
-      : chunkDocument(await parseDocument(source), {
-          headings: source.kind === 'markdown' || source.kind === 'docx',
-        });
+  let drafts: ChunkDraft[];
+  if (source.kind === 'parsed') {
+    drafts = chunkDocument(source.document, { headings: source.headings });
+  } else if (source.kind === 'video') {
+    drafts = chunkDocument(await parseVideo(deps, source), { headings: false });
+  } else {
+    drafts = chunkDocument(await parseDocument(source), {
+      headings: source.kind === 'markdown' || source.kind === 'docx',
+    });
+  }
   if (drafts.length === 0) {
     throw new IngestError('validation', false, 'the document has no text to learn from');
   }
