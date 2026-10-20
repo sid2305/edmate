@@ -1144,7 +1144,7 @@ tasks:
   accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
   deps:
   - M3
-  status: review
+  status: done
   branch: m5/5.1-document-ingestion
   model: plan:sonnet buildA:opus buildBC:opus review:sonnet
 - id: '5.2'

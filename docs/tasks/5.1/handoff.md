@@ -112,5 +112,5 @@ Why: the package has no contracts dependency yet, and `unsupported` is not a con
 Reversible: yes.
 
 ### 20 Oct 2026 · 5.1 subpath imports left as they are (typescript-reviewer LOW, wontfix)
-- Decided: no change to packages/ingest/package.json for the reviewer's unverified cheerio/slim and pdfjs-dist/legacy subpath resolution; the ingest typecheck (code-reviewer's local gate and CI) resolves both.
-- Why: the reviewer's sandbox had no node_modules; the gate is the real check.
+Decided: no change to packages/ingest/package.json for the reviewer's unverified cheerio/slim and pdfjs-dist/legacy subpath resolution; the ingest typecheck (code-reviewer's local gate and CI) resolves both.
+Why: the reviewer's sandbox had no node_modules; the gate is the real check.
