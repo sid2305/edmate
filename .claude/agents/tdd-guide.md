@@ -19,7 +19,7 @@ isolation: worktree
   - Search narrowly: `grep -rn <pattern> <dir>` on the package you're changing, not the repo; add `-m 20` or `| head -40` when a match could be broad.
   - While iterating, run only the affected test file (`corepack pnpm vitest run <path>`); run the full `turbo run typecheck lint test --filter=<pkg>...` once before the handoff. Trim output: `2>&1 | tail -40`, and grep failures instead of printing whole reports.
   - Prefer Edit for small changes; Write re-sends the whole file.
-  - **Stop early when it's big.** If you pass about 150 tool calls, or the work is clearly bigger than the plan, stop at a green, committed state and write the handoff with `Status: PARTIAL` plus a short "Left to do" list. The lead starts a fresh agent for the rest, which is cheaper than carrying this context further.
+  - **Stop early when it's big.** If you pass about 150 tool calls, or the work is clearly bigger than the plan, stop at a green, committed state and write the handoff with `Status: PARTIAL` plus a short "Left to do" list. A `PARTIAL` handoff still needs the full `turbo run typecheck lint test --filter=<pkg>...` green and a clean `python3 .githooks/secret-scan.py --all` before the commit — never commit a red or unscanned state just to stop early. The lead starts a fresh agent for the rest, which is cheaper than carrying this context further.
 
 
 ## Prompt Defense Baseline

@@ -91,6 +91,40 @@ class Basics(GateCase):
         self.assertEqual(code, 1)
         self.assertIn("review.md is missing", out)
 
+    def test_status_missing_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("no 'Status:' line", out)
+
+    def test_status_partial_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\nStatus: PARTIAL\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("Status is 'PARTIAL', not DONE", out)
+
+    def test_status_blocked_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n- **Status:** BLOCKED (waiting on human)\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("not DONE", out)
+
+    def test_status_bold_done_passes(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n- **Status:** DONE (fix round 1 applied)\n\n## Decisions\nNone\n")
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_status_composite_subtask_done_passes(self):
+        # A parent handoff covering lettered sub-tasks in one composite status line (e.g. 4.0).
+        handoff = "# h\n**Status:** 9.9b DONE (PR #1); 9.9a DONE pending sign-off\n\n## Decisions\nNone\n"
+        self.make({"apps/cli.ts": "x\n"}, handoff=handoff)
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_status_partial_in_prose_not_matched(self):
+        # Mentioning another status word mid-sentence (not as a Status: line) must not confuse the check.
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\nDecided: builders stop at `Status: PARTIAL` mid-build.\n"
+        self.make({"apps/cli.ts": "x\n"}, handoff=handoff)
+        self.assertEqual(self.gate()[0], 0)
+
     def test_changes_requested(self):
         self.make({"apps/cli.ts": "x\n"}, review="# 9.9 review — CHANGES_REQUESTED\nReviewers: code-reviewer\n")
         code, out = self.gate()
@@ -238,7 +272,7 @@ class RiskyGroups(GateCase):
         self.assertNotIn("missing typescript-reviewer", out)
 
     def test_risk_high_outside_decisions_ignored(self):
-        handoff = "# h\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note · risk: high\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note · risk: high\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         self.assertEqual(self.gate()[0], 1)
 
@@ -404,14 +438,14 @@ class FixRound1(GateCase):
         self.assertEqual(self.gate()[0], 1)
 
     def test_risk_high_must_end_heading(self):
-        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
         self.assertIn("risk: high", out)
 
     def test_risk_high_trailing_space_ok(self):
-        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 x · risk: high  \nDecided: x.\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\n### 18 Oct 2026 · 9.9 x · risk: high  \nDecided: x.\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         self.assertEqual(self.gate()[0], 0)
 
@@ -447,7 +481,7 @@ class Wontfix(GateCase):
         self.assertEqual(self.gate()[0], 1)
 
     def test_entry_outside_decisions_section(self):
-        handoff = "# h\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note\ncli.ts is long\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note\ncli.ts is long\n"
         self.make({"apps/cli.ts": "x\n"}, review=self.REVIEW, handoff=handoff)
         self.assertEqual(self.gate()[0], 1)
 
