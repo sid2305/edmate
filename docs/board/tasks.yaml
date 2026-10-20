@@ -1051,8 +1051,8 @@ tasks:
   - '4.1'
   status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m4/4.8-advice-guard
+  model: plan:sonnet build:opus-5.5/medium
 - id: '4.9'
   milestone: M4
   title: '`personaBoundary` and `tone`'
