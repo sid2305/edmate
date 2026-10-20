@@ -1,5 +1,6 @@
 // An in-memory IdentityStore with the real store's rules (role forced to student, one account per
-// provider id, expired sessions read as null, only grantRole changes a role). The real store is
+// provider id, expired sessions read as null, only grantRole changes a role, one single-use sign-in
+// link per address). The real store is
 // tested on Postgres in packages/db/test/identity.int.test.ts.
 import type { GrantRoleInput, IdentityStore, IdentityUser } from '@edmate/db';
 
@@ -7,6 +8,8 @@ export interface MemoryIdentity extends IdentityStore {
   users: Map<string, IdentityUser>;
   accounts: Map<string, string>;
   sessions: Map<string, { userId: string; expires: Date }>;
+  /** Sign-in links by lower-cased address (the real store keeps only a hash). */
+  links: Map<string, { token: string; expires: Date }>;
   grants: GrantRoleInput[];
   /** Every createStudent input, as received. */
   created: unknown[];
@@ -17,6 +20,7 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
   const users = new Map<string, IdentityUser>();
   const accounts = new Map<string, string>();
   const sessions = new Map<string, { userId: string; expires: Date }>();
+  const links = new Map<string, { token: string; expires: Date }>();
   const grants: GrantRoleInput[] = [];
   const created: unknown[] = [];
   const linked: unknown[] = [];
@@ -32,6 +36,7 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
     users,
     accounts,
     sessions,
+    links,
     grants,
     created,
     linked,
@@ -97,6 +102,19 @@ export function memoryIdentity(now: () => Date = () => new Date()): MemoryIdenti
     },
     async deleteSession(token) {
       sessions.delete(token);
+    },
+    async createVerificationToken({ identifier, token, expires }) {
+      const id = identifier.trim().toLowerCase();
+      // One row per address: a new link replaces the old one.
+      links.set(id, { token, expires });
+      return { identifier: id, expires };
+    },
+    async useVerificationToken({ identifier, token }) {
+      const id = identifier.trim().toLowerCase();
+      const l = links.get(id);
+      if (!l || l.token !== token) return null;
+      links.delete(id);
+      return l.expires > now() ? { identifier: id, expires: l.expires } : null;
     },
     async grantRole(input) {
       const u = users.get(input.userId);

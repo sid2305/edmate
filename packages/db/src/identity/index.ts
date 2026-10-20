@@ -7,5 +7,6 @@ export {
   type IdentityStore,
   type IdentityStoreOptions,
   type IdentityUser,
+  type IdentityVerificationToken,
   type Role,
 } from './store.js';

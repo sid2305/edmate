@@ -7,3 +7,10 @@ import { createHash } from 'node:crypto';
 export function hashSessionToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }
+
+/**
+ * The stored form of an email sign-in token (1.4): the same hex SHA-256. Auth.js already hands
+ * the store `sha256(rawToken + AUTH_SECRET)`, so the database holds a hash of a hash, and the
+ * rule "never a raw token" does not depend on Auth.js.
+ */
+export const hashToken = hashSessionToken;

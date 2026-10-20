@@ -1,6 +1,7 @@
 // Task 1.3: the identity store on a real Postgres 16 (see test/pg.ts; skipped locally without
 // one, fails in CI). New users are always students, only grantRole changes a role (with an audit
 // row in the same transaction), session tokens are stored hashed, and driver errors are scrubbed.
+// Task 1.4: magic-link verification tokens are stored hashed, single use, newest only per address.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
@@ -11,7 +12,7 @@ import {
   RepositoryError,
   type IdentityStore,
 } from '../src/index.js';
-import { hashSessionToken } from '../src/identity/token-hash.js';
+import { hashSessionToken, hashToken } from '../src/identity/token-hash.js';
 import { expectScrubbed } from './scrub.js';
 import {
   createDatabase,
@@ -455,6 +456,166 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     });
   });
 
+  describe('verification tokens (1.4 magic links)', () => {
+    const MIN = 60_000;
+    const soon = () => new Date(Date.now() + 15 * MIN);
+
+    async function rowsFor(identifier: string) {
+      const { rows } = await raw.query<Record<string, unknown>>(
+        `select * from auth_verification_tokens where identifier = $1`,
+        [identifier],
+      );
+      return rows;
+    }
+
+    it('stores only the SHA-256 of the token, under the lower-cased address', async () => {
+      const addr = email('link');
+      const t = token('link');
+      const expires = soon();
+      const made = await identity.createVerificationToken({
+        identifier: `  ${addr.toUpperCase()} `,
+        token: t,
+        expires,
+      });
+      expect(made).toEqual({ identifier: addr, expires });
+      const rows = await rowsFor(addr);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.token_hash).toBe(hashToken(t));
+      expect(Object.keys(rows[0] ?? {}).sort()).toEqual(
+        ['created_at', 'expires_at', 'id', 'identifier', 'token_hash', 'updated_at'].sort(),
+      );
+      expect(JSON.stringify(rows)).not.toContain(t);
+    });
+
+    it('is single use: the first use returns it, the second is null and the row is gone', async () => {
+      const addr = email('once');
+      const t = token('once');
+      const expires = soon();
+      await identity.createVerificationToken({ identifier: addr, token: t, expires });
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).toEqual({
+        identifier: addr,
+        expires,
+      });
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('two concurrent uses: exactly one wins', async () => {
+      const addr = email('race');
+      const t = token('race');
+      await identity.createVerificationToken({ identifier: addr, token: t, expires: soon() });
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          identity.useVerificationToken({ identifier: addr, token: t }),
+        ),
+      );
+      expect(results.filter((r) => r !== null)).toHaveLength(1);
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('an expired token reads as null and is still deleted (injected clock)', async () => {
+      let clock = new Date('2026-10-20T10:00:00Z');
+      const store = createIdentityStore(handle.db, { now: () => clock });
+      const addr = email('expired');
+      const t = token('expired');
+      await store.createVerificationToken({
+        identifier: addr,
+        token: t,
+        expires: new Date('2026-10-20T10:15:00Z'),
+      });
+      clock = new Date('2026-10-20T10:15:00Z');
+      expect(await store.useVerificationToken({ identifier: addr, token: t })).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('needs the matching address: the right token for another address is null and kept', async () => {
+      const addr = email('bound');
+      const t = token('bound');
+      await identity.createVerificationToken({ identifier: addr, token: t, expires: soon() });
+      expect(
+        await identity.useVerificationToken({ identifier: email('other'), token: t }),
+      ).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(1);
+      expect(await identity.useVerificationToken({ identifier: addr, token: token('x') })).toBeNull();
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).not.toBeNull();
+    });
+
+    it('a new link replaces older ones for that address only', async () => {
+      const a = email('newest');
+      const b = email('bystander');
+      const [a1, a2, b1] = [token('a1'), token('a2'), token('b1')];
+      await identity.createVerificationToken({ identifier: a, token: a1, expires: soon() });
+      await identity.createVerificationToken({ identifier: b, token: b1, expires: soon() });
+      await identity.createVerificationToken({ identifier: a, token: a2, expires: soon() });
+      expect(await rowsFor(a)).toHaveLength(1);
+      expect(await identity.useVerificationToken({ identifier: a, token: a1 })).toBeNull();
+      expect(await identity.useVerificationToken({ identifier: a, token: a2 })).not.toBeNull();
+      expect(await identity.useVerificationToken({ identifier: b, token: b1 })).not.toBeNull();
+    });
+
+    it('concurrent new links for one address leave exactly one live token', async () => {
+      const addr = email('burst');
+      const toks = Array.from({ length: 6 }, (_, i) => token(`burst${i}`));
+      await Promise.all(
+        toks.map((t) =>
+          identity.createVerificationToken({ identifier: addr, token: t, expires: soon() }),
+        ),
+      );
+      const rows = await rowsFor(addr);
+      expect(rows).toHaveLength(1);
+      const live = toks.filter((t) => hashToken(t) === rows[0]?.token_hash);
+      expect(live).toHaveLength(1);
+    });
+
+    it('rejects bad input as invalid before any SQL', async () => {
+      const ok = { identifier: email('bad'), token: token('bad'), expires: soon() };
+      const bad: unknown[] = [
+        { ...ok, identifier: 'not-an-email' },
+        { ...ok, identifier: 'a@example.test, b@example.test' },
+        { ...ok, token: 'short' },
+        { ...ok, token: 42 },
+        { ...ok, expires: '2026-10-20' },
+        { ...ok, extra: true },
+        null,
+      ];
+      for (const input of bad) {
+        expect(
+          await kindOf(() =>
+            identity.createVerificationToken(input as Parameters<IdentityStore['createVerificationToken']>[0]),
+          ),
+        ).toBe('invalid');
+      }
+      const useBad: unknown[] = [
+        { identifier: 'nope', token: ok.token },
+        { identifier: ok.identifier, token: 'short' },
+        { identifier: ok.identifier, token: ok.token, expires: ok.expires },
+        undefined,
+      ];
+      for (const input of useBad) {
+        expect(
+          await kindOf(() =>
+            identity.useVerificationToken(input as Parameters<IdentityStore['useVerificationToken']>[0]),
+          ),
+        ).toBe('invalid');
+      }
+      expect(await rowsFor(ok.identifier)).toHaveLength(0);
+    });
+
+    it('indexes identifier (unique) and expires_at, with no foreign key to users', async () => {
+      const { rows } = await raw.query<{ indexname: string; indexdef: string }>(
+        `select indexname, indexdef from pg_indexes where tablename = 'auth_verification_tokens'`,
+      );
+      const defs = Object.fromEntries(rows.map((r) => [r.indexname, r.indexdef]));
+      expect(defs.auth_verification_tokens_identifier_key).toMatch(/UNIQUE.*\(identifier\)/);
+      expect(defs.auth_verification_tokens_token_hash_key).toMatch(/UNIQUE.*\(token_hash\)/);
+      expect(defs.auth_verification_tokens_expires_at_idx).toMatch(/\(expires_at\)/);
+      const fks = await raw.query(
+        `select 1 from pg_constraint where conrelid = 'auth_verification_tokens'::regclass and contype = 'f'`,
+      );
+      expect(fks.rowCount).toBe(0);
+    });
+  });
+
   it('indexes auth_sessions.expires_at and allows one account per provider per user', async () => {
     const { rows } = await raw.query<{ indexname: string; indexdef: string }>(
       `select indexname, indexdef from pg_indexes where tablename in ('auth_sessions', 'auth_accounts')`,
@@ -478,6 +639,20 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       await store.getSessionAndUser(t).catch((e: unknown) => e),
       'identity.getSessionAndUser',
       [t, hashSessionToken(t)],
+    );
+    const addr = 'link.private.person@example.test';
+    const lt = token('scrub-link');
+    expectScrubbed(
+      await store
+        .createVerificationToken({ identifier: addr, token: lt, expires: later() })
+        .catch((e: unknown) => e),
+      'identity.createVerificationToken',
+      [addr, lt, hashToken(lt)],
+    );
+    expectScrubbed(
+      await store.useVerificationToken({ identifier: addr, token: lt }).catch((e: unknown) => e),
+      'identity.useVerificationToken',
+      [addr, lt, hashToken(lt)],
     );
   });
 
