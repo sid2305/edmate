@@ -10,6 +10,132 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 5.3 Production RetrievalIndex search/probe and chunk writes in `packages/db/src/repositories`, ownership-checked, material revision bumped in the same transaction · risk: high
+Writes use `INSERT … SELECT` from the owner row (documents from `modules`; chunks from `documents` joined to `modules`), plus a scoped all-or-nothing `UPDATE` for embeddings. Search and probe filter by teacher, allowed modules and module ownership in the same statement, before ranking. These are new access paths for teacher material, so security-reviewer is required (risk group "access filter"). leakCheck stays `{ hit: true }` until Phase B.
+
+---
+
+### Search and probe are a guarded `retrieval` repository; `retrievalIndexFor(repos, opts)` adapts it · risk: high
+The plan had `retrievalIndexFor(db, …)`. It now takes repositories, so every method gets `guarded()` driver-error scrubbing and isolation `CASES`, and nothing outside `@edmate/db/internal` needs a raw handle. Adds `retrieval.revision(scope)`.
+
+---
+
+### A "matching" teacher note is one found by full text, or by vector with score ≥ 0.5 · risk: high
+In hybrid mode the vector side always returns its top 20, so an unrelated note would otherwise jump to the top. This is provisional; Phase D calibrates the 0.5.
+
+---
+
+### Revision table keeps the repo's `id` primary key, unique on `teacher_id`
+The schema test requires a text `id` primary key on every table. Additive migration 0012.
+
+---
+
+### Provisional score calibration
+Full text: `raw / (raw + 0.05)` over `ts_rank_cd`. Vector: cosine similarity, clamped to 0–1. `PROBE_FLOOR` = 0.5. All are placeholders until Phase D measures the demo set.
+
+---
+
+### A taken document id is `not_found`, a repeated chunk `ord` is `invalid`
+Document ids are global and chosen by the caller, so `not_found` gives no existence oracle. Chunk ids come from a document the teacher already owns, so a duplicate is the teacher's own conflict.
+
+---
+
+### 20 Oct 2026 · 5.3 Production leakCheck per ADR-0007, cache keyed by material revision · decided by tdd-guide · risk: high
+Decided: leakCheck checks the scope and candidates before any SQL and reads the revision. It then takes or builds the locked index for (teacher, revision, sorted allowed ids), using the shared lockedIndex from @edmate/harness over the teacher's own material (new guarded method retrieval.material). The call races leakTimeoutMs (100 ms), and a timeout or any error gives { hit: true }. A cold build keeps running in the background.
+Why: ADR-0007 points 1–7 and the acceptance line. This is a new read path for locked teacher material, so security-reviewer and code-reviewer are required (risk group "access filter").
+
+---
+
+### 20 Oct 2026 · 5.3 The cache key keeps the allowed ids as given, not only the owned ones · decided by tdd-guide · risk: medium
+Decided: the key is teacherId, revision and the sorted, deduplicated allowedModuleIds. The material query enforces ownership instead.
+Why: filtering to owned ids first costs an extra query per call. A foreign id matches none of the teacher's chunks, so it can only split the cache and never widens the allowed set (a contract case shows this).
+
+---
+
+### 20 Oct 2026 · 5.3 Fail-closed injections live in the db suite; the shared contract covers ADR-0007 points 1–4 · decided by tdd-guide · risk: low
+Decided: the contract list has no database-failure cases. retrieval-leak.int.test.ts injects repositories that throw, hang or sit on a closed pool.
+Why: only a real adapter has a database to break. When the in-memory double is configured to reject, the harness already treats that as closed.
+
+---
+
+### 20 Oct 2026 · 5.3 leakBuildTimeoutMs (30 s) and onLeakFallback added to retrievalIndexFor · decided by tdd-guide · risk: low
+Decided: a background build is dropped after 30 s, so a hung query can't pin a key. Each fail-closed answer reports leak_timeout or leak_failed to an optional callback, never a candidate or the error.
+Why: without a build deadline, one hung query would keep every later call on that key failing closed. The callback mirrors onEmbedFallback, so ops can count fallbacks without logging.
+
+---
+
+### 20 Oct 2026 · 5.3 HNSW iterative scan left for Phase D · decided by tdd-guide · risk: low
+Decided: Phase B makes no change to the vector query. The lead's MEDIUM stays open under Phase D.
+Why: at test sizes Postgres picks an exact scan, so no red test could be made within budget. The gap affects recall, not leakage.
+
+---
+
+### 20 Oct 2026 · 5.3 The section heading leads the first chunk, taken from the locator · decided by tdd-guide · risk: low
+Decided: 5.1's units carry their heading only in the locator, so the chunker (with `headings: true`) puts the locator's last step on its own line at the start of a section's first chunk. It adds none to text located by the source title, none to page or slide documents, and none for a heading over 30 words. A heading that itself contains " > " keeps only its last part.
+Why: the plan wants the heading on the first chunk for full-text recall, and the heading is still source text, so the module text leakCheck joins stays true to the source. Changing 5.1's unit text instead would alter its locator contract.
+
+---
+
+### 20 Oct 2026 · 5.3 Chunk size caps: 300 words, 4,000 characters, 500-character locator, 10,000 chunks per document · decided by tdd-guide · risk: low
+Decided: a chunk holds at most 300 words and 4,000 characters (a run with no spaces is cut by characters). A locator over 500 characters keeps its last 499 characters after an ellipsis. A document that chunks to more than 10,000 pieces is `IngestError('input_too_large')` before anything is written.
+Why: 4,000 characters keeps any chunk inside the embedding model's input limit, even for long URLs or formulas. The db's locator column takes 500 characters and chunk ids hold a 4-digit ord.
+
+---
+
+### 20 Oct 2026 · 5.3 Storage failure is a fixed, non-retryable IngestError; embedding failure is not an error · decided by tdd-guide · risk: medium
+Decided: any `insertMany` or `setEmbeddings` rejection, or a wrong id count, becomes `IngestError('provider_error', false, 'the chunks could not be stored')` with no cause. An embedding failure (a throw or rejection, or malformed vectors) stops embedding, keeps the batches already written, reports `embed_failed` or `embed_malformed` to an optional callback and resolves with `embedded: false`.
+Why: a db error can quote teacher material, so nothing of it is kept. It is not marked retryable because earlier insert batches may already be stored, and re-running would hit the repeated-ord `invalid` error; re-indexing needs the delete path (8.x). Full text still finds unembedded chunks, so a missing embedding should not fail the upload.
+
+---
+
+### 20 Oct 2026 · 5.3 @edmate/ingest depends on @edmate/contracts, with @edmate/harness as a devDependency · decided by tdd-guide · risk: low
+Decided: ingest now imports the `ModelGateway` type from contracts and uses harness's `ScriptedGateway` in tests only. No contracts change.
+Why: the plan's Phase C file list. `Pick<ModelGateway, 'embed'>` keeps the embedder swappable without ingest importing the gateway package.
+
+---
+
+### 20 Oct 2026 · 5.3 coverageThreshold stays 0.5, now calibrated; the score scale is mapped to it · decided by tdd-guide · risk: high
+Decided: `DEFAULT_COVERAGE_THRESHOLD` stays 0.5 and is no longer provisional. The index maps its full-text score so that 27 of 30 in-course demo questions score at or above 0.5 and 1 of 8 out-of-course questions does. `PROBE_FLOOR` and `NOTE_MATCH_FLOOR` use the same constant. Reviewer: code-reviewer (Q3).
+Why: the threshold and the score scale are one choice. Moving the scale keeps every consumer and the lead-signed grounding eval fixtures valid. The vector side stays provisional until B-24.
+
+---
+
+### 20 Oct 2026 · 5.3 The full-text score is IDF-weighted term coverage times match strength · decided by tdd-guide · risk: high
+Decided: a chunk's text score is the IDF-weighted share of the query's terms it contains, times `raw / (raw + 0.05)`, then mapped by `pivotScale` with pivot 0.30. IDF is counted over the chunks being searched, using two small extra queries inside the same teacher and module filter.
+Why: with the old score any single matching word gave about 0.9, so 5 of 8 out-of-course questions looked covered.
+
+---
+
+### 20 Oct 2026 · 5.3 A light suffix strip and question fillers in the full-text terms · decided by tdd-guide · risk: medium
+Decided: a query term drops one ending (ies, ing, ed, es or s) when at least four letters remain. Words ending in ss, is or us, and numbers, keep their ending. Fourteen question fillers join the stop list. The 'simple' tsvector config is unchanged.
+Why: 'simple' has no stemming, so "dividing" missed "divide". Fillers counted as rare missing words under IDF. Both changes are general, not tuned to single items.
+
+---
+
+### 20 Oct 2026 · 5.3 Recall gold is a list of headings; out-of-course items have no gold · decided by tdd-guide · risk: low
+Decided: in-course items carry `expectedModuleId` and `expectedHeadings`, which rule 6 checks. Out-of-course items carry `outOfCourse: true`. Every item has `reviewed_by: pending` until the lead signs it.
+Why: Q1 asked for heading-level gold. Some questions are answered by two sections.
+
+---
+
+### 20 Oct 2026 · 5.3 The recall test uses the Q2 fallback for embeddings · decided by tdd-guide · risk: medium
+Decided: the hybrid recall run uses the hashed test embedder, which only tests the plumbing. The recorded-vector run skips until the human runs `record-demo-embeddings.ts --live` once (B-24). The script reads the key only from the environment and never runs in tests or CI.
+Why: Q2 is still open with the human. This is the lead's fallback.
+
+---
+
+### 20 Oct 2026 · 5.3 HNSW iterative scan is set, though the query stays an exact scan · decided by tdd-guide · risk: low
+Decided: the vector query sets `hnsw.iterative_scan = strict_order` in its own transaction and keeps its distance-then-id order, which the planner serves with an exact scan.
+Why: EXPLAIN shows the feared gap cannot happen with this statement, so no failing test is possible. The setting is ready for an index-ordered query later, and a guard test is in place.
+
+---
+
+### 20 Oct 2026 · 5.3 db takes ingest and gateway as devDependencies; the script imports .ts directly · decided by tdd-guide · risk: low
+Decided: `@edmate/ingest` (for the recall test and the type check) and `@edmate/gateway` (for the script) are db devDependencies. The db tsconfig allows `.ts` imports (noEmit), so Node 22 runs the script without a build step of its own.
+Why: the plan's Phase D file list, and the recording script must reuse the test's corpus so the texts match exactly.
+
+---
+
 ### 20 Oct 2026 · 0.11 Agent files follow the lead-approved merge policy, MVP-first eval sign-off and the English-only pilot · decided by tdd-guide · risk: high
 Decided: Updated safety-reviewer, eval-author, pedagogy-author and the locale-context skill so no agent file tells reviewers to require human approval; the lead decides every merge per rule 6, and logs it. Prompt packs, skill templates and persona templates still need a named human's sign-off (rule 7); during the MVP the lead signs eval cases (`reviewed_by: lead`). Default eval, pedagogy and locale-context guidance is English only for the pilot (18 Oct 2026 decision); safety and guard eval cases keep Hindi, Devanagari and Hinglish input as a safety net.
 Why: These three decisions (lead-approved merge policy, English-only pilot, MVP-first eval sign-off) were made in the decision log and MEMORY.md but several agent files still referenced the old human-sign-off and multilingual-by-default language, which would mislead agents reading their own instructions.
