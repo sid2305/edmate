@@ -6,10 +6,16 @@
 // `checkSafeRegexGuarded` looks for its compiled worker file next to its own module
 // (`import.meta.url`), so the only way to make it take the real-worker branch is to run it from a
 // build: `beforeAll` compiles this package with `tsc -p tsconfig.build.json` (the package's own
-// build script), then the test dynamically imports the compiled `dist/safeRegexGuard.js`. The
-// ceiling is kept short (300 ms) and the inputs small, so the whole file runs in well under a
-// second and is deterministic in CI: every case here either answers fast or is designed to never
-// answer at all (a real worker cannot finish inside the ceiling), never a close race.
+// build script), then the test dynamically imports the compiled `dist/safeRegexGuard.js`. The two
+// "terminated" cases below pass a short 300 ms ceiling and the inputs are designed to never answer
+// inside it -- a real worker cannot finish them in time, so a slow/noisy CI runner only makes the
+// termination happen (correctly) sooner relative to real work, never a false pass. The "answers
+// fast" case passes the library's own default ceiling (2,000 ms, see `safeRegexGuard.ts`) instead
+// of a tight one: this test spawns a real `node:worker_threads` worker from inside a vitest worker
+// thread, and under CI's heavy per-file worker isolation (many nested worker threads scheduled at
+// once) that spawn + round trip can occasionally take longer than a tight budget even though the
+// check itself is trivial -- a 300 ms ceiling here was a false-positive source (CI: the real work
+// took 437 ms once), not a real hang. The production default ceiling itself is untouched.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -52,9 +58,13 @@ afterAll(() => {
 
 describe('checkSafeRegexGuarded, a real spawned worker', () => {
   it('a safe pattern answers fast, through the real worker protocol', () => {
+    // No explicit ceiling: the library's own default (2,000 ms) absorbs CI scheduling noise from
+    // nested worker threads. `toEqual([])` already proves the worker answered before any ceiling
+    // (a terminated check always returns an "exceeded" message); `toBeLessThan` here is a loose
+    // sanity bound, not the thing under test.
     const start = performance.now();
-    expect(checkSafeRegexGuarded('\\d{4}x', {}, 300)).toEqual([]);
-    expect(performance.now() - start).toBeLessThan(300);
+    expect(checkSafeRegexGuarded('\\d{4}x', {})).toEqual([]);
+    expect(performance.now() - start).toBeLessThan(2_000);
   });
 
   it('a worker that throws inside the check is reported unsafe, not a crash', () => {
