@@ -29,7 +29,7 @@ describe('buildDemoSeed', () => {
       teacherId: DEMO_IDS.teacher,
       courseId: 'python-basics-demo',
       styleCardId: DEMO_IDS.styleCard,
-      promptPackVersion: '1.0.0',
+      promptPackVersion: '1.1.0',
       languages: ['en'],
     });
     // Provisional: the same policy as the gateway's DEFAULT_MODEL_POLICY (2.3), no fallback.

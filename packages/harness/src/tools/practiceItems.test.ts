@@ -14,7 +14,9 @@ import {
 } from './practiceItems.js';
 
 /** A tiny in-test bank over fixed records: the caller only ever asks by scope/level. */
-function fixedBank(records: readonly { item: PracticeItem; answerKey: readonly string[] }[]): PracticeBank {
+function fixedBank(
+  records: readonly { item: PracticeItem; answerKey: readonly string[] }[],
+): PracticeBank {
   return {
     pick(scope, level, exclude) {
       const allowed = new Set(scope.allowedModuleIds);

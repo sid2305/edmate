@@ -182,7 +182,10 @@ function generateArithmeticItem(
  * outline yet, Q4), or `undefined` when `scope` allows no module at all (fail closed, architect
  * review point 1 — the generator never serves outside scope either).
  */
-export function generateItem(scope: PracticeScope, level: PracticeLevel): PickedPracticeItem | undefined {
+export function generateItem(
+  scope: PracticeScope,
+  level: PracticeLevel,
+): PickedPracticeItem | undefined {
   const moduleId = scope.allowedModuleIds[0];
   if (moduleId === undefined) return undefined;
   return generateArithmeticItem(`${moduleId}:practice`, moduleId, level);

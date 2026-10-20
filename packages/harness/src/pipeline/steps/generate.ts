@@ -17,6 +17,12 @@
 // entitlement's teacher and allowed modules. Each sentence is checked before it is shown, each
 // tool output before the model sees it, each skill payload before it is sent; the result says
 // when the stream withheld text (`locked`), and postGuard then replaces the whole reply.
+//
+// Practice items (5.6, ADR-0010): an item tool's copy is bound to the session's practice state
+// for this attempt. The moment it issues an item, the tool loop has looked its key up on the
+// server; generate adds it, on the same turn, to the stream gate, to the list later tool outputs,
+// skill payloads and sources are checked against, and to `practiceAnswerKey` (postGuard gets it
+// through the runner). The key is never put in the model's prompt on this turn.
 import type { AgentConfig, PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
 import { decisionRequest, regulatedTopic } from '../../guardrails/adviceGuard.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
@@ -110,7 +116,17 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
   const lockedCheckOf = opts.lockedCheck ?? lockedCheckFor;
   return async (
     env,
-    { ctx, decision, sources, lockedStopped, onLockedTrip, fromFallback },
+    {
+      ctx,
+      decision,
+      sources,
+      lockedStopped,
+      onLockedTrip,
+      fromFallback,
+      practice,
+      issuedKeys,
+      onPracticeItem,
+    },
     emit,
   ) => {
     const { deps } = env;
@@ -118,10 +134,28 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     env.usage.checkBeforeCall();
     const set = resolvePromptPackSet(deps.promptPacks, ctx.agent.promptPackVersion);
     const request = buildModelRequest({ ctx, decision, input: env.input, set });
-    const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement);
+    /** The served ids, live: an item issued this attempt is not served again by a later call. */
+    const served = [...(practice?.servedItemIds ?? [])];
+    const session = practice === undefined ? undefined : { ...practice, servedItemIds: served };
+    const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement).map((r) =>
+      session !== undefined && r.forSession !== undefined ? r.forSession(session) : r,
+    );
     const studentText = env.input.text;
+    /** Every key guarded this attempt: the decision's, then each practice item's as it comes. */
+    const guarded: string[] = [...decision.mustNotReveal];
+    /** This attempt's issued practice keys (GenerateResult.practiceAnswerKey). */
+    const issued: string[] = [];
+    const guard = (keys: readonly string[]) => {
+      const fresh = keys.filter((k) => !guarded.includes(k));
+      guarded.push(...fresh);
+      return fresh;
+    };
+    guard(issuedKeys ?? []);
+    const gateDecision = { ...decision, mustNotReveal: [...guarded] };
     const gate = (deps.streamGate ?? answerLeakStreamGate)(
-      studentText === undefined ? { ctx, decision } : { ctx, decision, studentText },
+      studentText === undefined
+        ? { ctx, decision: gateDecision }
+        : { ctx, decision: gateDecision, studentText },
     );
 
     const lockedCheck = lockedCheckOf(env, ctx);
@@ -141,13 +175,22 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       show: (text) => {
         if (!held) emit({ type: 'token', text });
       },
-      onToolOutput: async (entry, output) => {
-        const e = await skillEvent(entry, output, ctx, decision.mustNotReveal, lockedCheck);
+      onToolOutput: async (entry, output, item) => {
+        // The item's own payload is checked against the keys guarded before it: its prompt was
+        // validated against its own key when the item was made (validateItem).
+        const before = [...guarded];
+        if (item !== undefined) {
+          gate.addKeys?.(guard(item.answerKey));
+          for (const k of item.answerKey) if (!issued.includes(k)) issued.push(k);
+          served.push(item.itemId);
+          onPracticeItem?.(item);
+        }
+        const e = await skillEvent(entry, output, ctx, before, lockedCheck);
         if (e instanceof SkillEventDropped) env.report(e);
         else if (e !== undefined) emit(e);
       },
       report: env.report,
-      mustNotReveal: decision.mustNotReveal,
+      mustNotReveal: guarded,
       lockedCheck,
       holdAll: lockedStopped === true,
       ...(onLockedTrip === undefined ? {} : { onLocked: onLockedTrip }),
@@ -155,7 +198,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     });
 
     const cited = citedSources(draft, sources).filter((s) => {
-      const leaks = revealsAnswerKey([s.title, s.locator], decision.mustNotReveal);
+      const leaks = revealsAnswerKey([s.title, s.locator], guarded);
       if (leaks) env.report(new SourceDropped());
       return !leaks;
     });
@@ -167,6 +210,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       withheld: gate.tripped === true,
       ...(locked === undefined ? {} : { locked }),
       ...(held ? { held } : {}),
+      ...(issued.length > 0 ? { practiceAnswerKey: issued } : {}),
     };
   };
 }

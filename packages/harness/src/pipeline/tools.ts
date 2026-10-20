@@ -22,6 +22,33 @@ export interface RegisteredTool {
   tool: Tool<unknown, unknown>;
   /** Optional: turns a checked output into a `skill` event (5.5/M6). */
   present?(output: unknown, ctx: TurnContext): SkillPresentation | undefined;
+  /**
+   * Optional (5.6, ADR-0010): this turn's copy of the tool, bound to the session's practice state
+   * (items already served, the active item's module). generate calls it once per attempt.
+   */
+  forSession?(s: ToolSessionState): RegisteredTool;
+  /**
+   * Optional (5.6, ADR-0010): for a tool that issues items with a server-side answer key, the
+   * item a checked output names and its key, looked up on the server by item id within the
+   * turn's entitlement. Never part of the output the model sees. `undefined` fails the call
+   * closed (the model never sees an item whose key the harness can't protect).
+   */
+  issuedItem?(output: unknown, ctx: TurnContext): IssuedItem | undefined;
+}
+
+/** The session's practice state a tool may read (5.6): never model-chosen. */
+export interface ToolSessionState {
+  /** Item ids already served this session (the exclude list). */
+  servedItemIds: readonly string[];
+  /** The active item's module, if the session has one. */
+  activeModuleId?: string;
+}
+
+/** An item a tool issued (5.6): server-side only, it holds the answer key. */
+export interface IssuedItem {
+  itemId: string;
+  moduleId: string;
+  answerKey: readonly string[];
 }
 
 export interface ToolRegistry {

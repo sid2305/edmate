@@ -24,8 +24,9 @@ describe('practiceNextItemTool', () => {
   it('is the practice-skill tool, strict input, no answerKey in its output schema', () => {
     expect(t.tool.name).toBe('practice.next_item');
     expect(t.tool.skill).toBe('practice');
-    expect(t.tool.output.safeParse({ id: 'x', kind: 'numeric', level: 1, prompt: 'p' }).success)
-      .toBe(true);
+    expect(
+      t.tool.output.safeParse({ id: 'x', kind: 'numeric', level: 1, prompt: 'p' }).success,
+    ).toBe(true);
     expect(
       t.tool.output.safeParse({
         id: 'x',
@@ -175,8 +176,9 @@ describe('practiceNextItemTool: scope — no item outside the entitlement is eve
       for (const level of [1, 2, 3] as const) {
         const out = await t.tool.run({ level }, oneModule);
         const id = (out as { id: string }).id;
-        expect(id === 'demo:fractions:1:a' || id === 'demo:fractions:2:a' || id.startsWith('gen:'))
-          .toBe(true);
+        expect(
+          id === 'demo:fractions:1:a' || id === 'demo:fractions:2:a' || id.startsWith('gen:'),
+        ).toBe(true);
         if (id.startsWith('gen:')) expect(id).toContain(`${MODULE_FRACTIONS}:practice`);
       }
     }
@@ -243,5 +245,93 @@ describe('practiceNextItemTool: scope — no item outside the entitlement is eve
     });
     const out = await t.tool.run({ level: 1 }, ctx);
     expect((out as { id: string }).id).toBe('demo:arithmetic:1:a');
+  });
+});
+
+describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR-0010)', () => {
+  const two = ctxWith({
+    entitlement: {
+      ...turnContextFull.entitlement,
+      allowedModuleIds: [MODULE_ARITHMETIC, MODULE_FRACTIONS],
+    },
+    retrieved: [],
+  });
+  const idOf = (out: unknown) => (out as { id: string }).id;
+
+  it('exclude: a served bank item is not served again (a generated one takes its place)', async () => {
+    const t = practiceNextItemTool(demoPracticeBank(), { exclude: ['demo:arithmetic:1:a'] });
+    const id = idOf(await t.tool.run({ level: 1 }, two));
+    expect(id).not.toBe('demo:arithmetic:1:a');
+    expect(id).toContain(`${MODULE_ARITHMETIC}:practice`);
+  });
+
+  it('forSession binds the served list and the active module, and keeps the hooks', async () => {
+    const base = practiceNextItemTool(demoPracticeBank());
+    const bound = base.forSession({ servedItemIds: [], activeModuleId: MODULE_FRACTIONS });
+    expect(bound.tool.name).toBe('practice.next_item');
+    expect(idOf(await bound.tool.run({ level: 1 }, two))).toBe('demo:fractions:1:a');
+    const served = base.forSession({ servedItemIds: ['demo:arithmetic:1:a'] });
+    expect(idOf(await served.tool.run({ level: 1 }, two))).not.toBe('demo:arithmetic:1:a');
+    expect(served.issuedItem).toBeTypeOf('function');
+  });
+
+  it('forSession with no active module falls back to the options hook, then the first module', async () => {
+    const hooked = practiceNextItemTool(demoPracticeBank(), {
+      activeModuleId: () => MODULE_FRACTIONS,
+    }).forSession({ servedItemIds: [] });
+    expect(idOf(await hooked.tool.run({ level: 1 }, two))).toBe('demo:fractions:1:a');
+    const plain = practiceNextItemTool(demoPracticeBank()).forSession({ servedItemIds: [] });
+    expect(idOf(await plain.tool.run({ level: 1 }, two))).toBe('demo:arithmetic:1:a');
+  });
+
+  it('issuedItem: a bank item gives its id, its module and its key, looked up on the server', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const fr = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_FRACTIONS] },
+    });
+    const out = await t.tool.run({ level: 2 }, fr);
+    expect(t.issuedItem(out, fr)).toEqual({
+      itemId: 'demo:fractions:2:a',
+      moduleId: MODULE_FRACTIONS,
+      answerKey: ['1/2'],
+    });
+    expect(serializedContains(out, '1/2')).toBe(false);
+  });
+
+  it('issuedItem: the module is the one allowed module the id resolves in', () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const out = { id: 'demo:fractions:1:a', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(t.issuedItem(out, two)?.moduleId).toBe(MODULE_FRACTIONS);
+  });
+
+  it('issuedItem: a generated item gives the generator’s key and its module', async () => {
+    const t = practiceNextItemTool(demoPracticeBank(), { exclude: ['demo:arithmetic:1:a'] });
+    const out = await t.tool.run({ level: 1 }, two);
+    const id = idOf(out);
+    expect(t.issuedItem(out, two)).toEqual({
+      itemId: id,
+      moduleId: MODULE_ARITHMETIC,
+      answerKey: [...(generatedAnswerKeyFor(id) ?? [])],
+    });
+  });
+
+  it('issuedItem: undefined (fail closed) for an invalid output, an unknown id or one outside the scope', () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const arith = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+    });
+    const item = (id: string) => ({ id, kind: 'numeric', level: 1, prompt: 'p' });
+    expect(t.issuedItem({ id: 'demo:arithmetic:1:a' }, arith)).toBeUndefined();
+    expect(t.issuedItem(item('no-such-item'), arith)).toBeUndefined();
+    expect(t.issuedItem(item('demo:fractions:1:a'), arith)).toBeUndefined();
+    expect(t.issuedItem(item(`gen:${MODULE_FRACTIONS}:practice:1:2+3`), arith)).toBeUndefined();
+  });
+
+  it('issuedItem: an empty key fails closed too (an item that can’t be protected)', () => {
+    const bank = demoPracticeBank();
+    const empty = { ...bank, answerKeyFor: () => [] };
+    const t = practiceNextItemTool(empty);
+    const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(t.issuedItem(out, two)).toBeUndefined();
   });
 });

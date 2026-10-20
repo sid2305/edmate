@@ -98,6 +98,7 @@ export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   withheld: z.boolean().exactOptional(),
   locked: z.enum(['hit', 'failed']).exactOptional(),
   held: z.boolean().exactOptional(),
+  practiceAnswerKey: z.array(z.string()).readonly().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [

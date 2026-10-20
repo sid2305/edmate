@@ -10,7 +10,11 @@ export {
   evaluateExpression,
   CALCULATOR_MAX_EXPRESSION_LENGTH,
 } from './sandbox.js';
-export { demoPracticeBank, DEMO_PRACTICE_RECORDS, type DemoPracticeRecord } from './demoPracticeBank.js';
+export {
+  demoPracticeBank,
+  DEMO_PRACTICE_RECORDS,
+  type DemoPracticeRecord,
+} from './demoPracticeBank.js';
 export {
   NoPracticeItemError,
   practiceNextItemTool,

@@ -64,10 +64,16 @@ describe('demoPracticeBank: scoped reads (architect review point 1)', () => {
   it('answerKeyFor refuses a key when the item is outside the scope asked for', () => {
     const bank = demoPracticeBank();
     expect(
-      bank.answerKeyFor('demo:arithmetic:1:a', { teacherId: 't', allowedModuleIds: ['module-fractions'] }),
+      bank.answerKeyFor('demo:arithmetic:1:a', {
+        teacherId: 't',
+        allowedModuleIds: ['module-fractions'],
+      }),
     ).toBeUndefined();
     expect(
-      bank.answerKeyFor('demo:arithmetic:1:a', { teacherId: 't', allowedModuleIds: ['module-arithmetic'] }),
+      bank.answerKeyFor('demo:arithmetic:1:a', {
+        teacherId: 't',
+        allowedModuleIds: ['module-arithmetic'],
+      }),
     ).toEqual(['7']);
   });
 
@@ -78,8 +84,12 @@ describe('demoPracticeBank: scoped reads (architect review point 1)', () => {
 
   it('never serves the mcq or code_output fixture records (point 4)', () => {
     const bank = demoPracticeBank();
-    expect(bank.pick({ teacherId: 't', allowedModuleIds: ['module-algebra'] }, 3, [])).toBeUndefined();
-    expect(bank.pick({ teacherId: 't', allowedModuleIds: ['module-python'] }, 1, [])).toBeUndefined();
+    expect(
+      bank.pick({ teacherId: 't', allowedModuleIds: ['module-algebra'] }, 3, []),
+    ).toBeUndefined();
+    expect(
+      bank.pick({ teacherId: 't', allowedModuleIds: ['module-python'] }, 1, []),
+    ).toBeUndefined();
   });
 });
 
@@ -105,7 +115,7 @@ describe('demoPracticeBank: topic choice (architect review point 2)', () => {
     expect(item?.topicId).not.toBe('arithmetic');
   });
 
-  it('falls back to the bank\'s own order when no profile is given', () => {
+  it("falls back to the bank's own order when no profile is given", () => {
     const bank = demoPracticeBank();
     const item = bank.pick(scopeAll, 2, []);
     expect(item?.topicId).toBe('arithmetic');
@@ -114,13 +124,23 @@ describe('demoPracticeBank: topic choice (architect review point 2)', () => {
 
 describe('demoPracticeBank via pickItem', () => {
   it('is tried before the generator, when both have something', () => {
-    const picked = pickItem(demoPracticeBank(), { teacherId: 't', allowedModuleIds: ['module-arithmetic'] }, 1, []);
+    const picked = pickItem(
+      demoPracticeBank(),
+      { teacherId: 't', allowedModuleIds: ['module-arithmetic'] },
+      1,
+      [],
+    );
     expect(picked?.item.id).toBe('demo:arithmetic:1:a');
     expect(picked?.answerKey).toEqual(['7']);
   });
 
   it('falls through to the generator for a (scope, level) it lacks', () => {
-    const picked = pickItem(demoPracticeBank(), { teacherId: 't', allowedModuleIds: ['module-arithmetic'] }, 3, []);
+    const picked = pickItem(
+      demoPracticeBank(),
+      { teacherId: 't', allowedModuleIds: ['module-arithmetic'] },
+      3,
+      [],
+    );
     expect(picked?.item.moduleId).toBe('module-arithmetic');
     expect(picked?.item.kind).toBe('numeric');
   });

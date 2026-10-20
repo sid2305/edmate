@@ -11,13 +11,13 @@
 //     postGuard and `GenerateResult.practiceAnswerKey` (Decision 1).
 //   - `run` reads its scope only from `ctx.entitlement` (teacherId, allowedModuleIds). The module
 //     comes from this turn's top retrieved chunk, else the active item's module, else the first
-//     allowed module. The active-item tier is a hook (`activeModuleId`) that returns `undefined`
-//     until Phase C's HelpState carries an active item id reachable from a turn — there is no
-//     such state yet to read, so that tier is a documented no-op for now, not a guess.
+//     allowed module. Phase C: generate binds each turn's copy to the session's practice state
+//     (`forSession`: the active item's module and the served ids, kept in HelpState), and looks
+//     each issued item's key up through `issuedItem` the moment the tool returns.
 import type { Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
 import { HarnessError } from '../pipeline/errors.js';
-import type { RegisteredTool } from '../pipeline/tools.js';
+import type { IssuedItem, RegisteredTool, ToolSessionState } from '../pipeline/tools.js';
 import {
   generatedAnswerKeyFor,
   pickItem,
@@ -114,6 +114,8 @@ export interface PracticeToolOptions {
    * read.
    */
   activeModuleId?(ctx: TurnContext): string | undefined;
+  /** Item ids the bank should not serve again (the session's served list, 5.6 Phase C). */
+  exclude?: readonly string[];
 }
 
 export interface PracticeRegisteredTool extends RegisteredTool {
@@ -125,6 +127,8 @@ export interface PracticeRegisteredTool extends RegisteredTool {
    * can serve inside `scope` (fail closed: no key, nothing gets added).
    */
   answerKeyFor(itemId: string, scope: PracticeScope): readonly string[] | undefined;
+  forSession(s: ToolSessionState): PracticeRegisteredTool;
+  issuedItem(output: unknown, ctx: TurnContext): IssuedItem | undefined;
 }
 
 /**
@@ -151,20 +155,40 @@ export function practiceNextItemTool(
       const narrowed: PracticeScope =
         module === undefined ? scope : { ...scope, allowedModuleIds: [module] };
       const level = args.level ?? DEFAULT_LEVEL;
-      const picked = pickItem(bank, narrowed, level, [], profileOf(ctx));
+      const picked = pickItem(bank, narrowed, level, opts.exclude ?? [], profileOf(ctx));
       if (picked === undefined) return Promise.reject(new NoPracticeItemError());
       return Promise.resolve(toOutput(picked.item));
     },
   };
+  const answerKeyFor = (itemId: string, scope: PracticeScope): readonly string[] | undefined => {
+    const fromBank = bank.answerKeyFor(itemId, scope);
+    if (fromBank !== undefined) return fromBank;
+    const moduleId = generatedItemModuleId(itemId);
+    if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
+    return generatedAnswerKeyFor(itemId);
+  };
   return {
     tool: tool as Tool<unknown, unknown>,
     present: (out) => ({ skill: 'practice', payload: out }),
-    answerKeyFor(itemId, scope) {
-      const fromBank = bank.answerKeyFor(itemId, scope);
-      if (fromBank !== undefined) return fromBank;
-      const moduleId = generatedItemModuleId(itemId);
-      if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
-      return generatedAnswerKeyFor(itemId);
+    answerKeyFor,
+    forSession: (s) =>
+      practiceNextItemTool(bank, {
+        exclude: s.servedItemIds,
+        activeModuleId: (ctx) => s.activeModuleId ?? opts.activeModuleId?.(ctx),
+      }),
+    // The key is looked up on the server by item id, inside the turn's entitlement (ADR-0010 §3);
+    // the module is the one allowed module the id resolves in.
+    issuedItem(out, ctx) {
+      const parsed = output.safeParse(out);
+      if (!parsed.success) return undefined;
+      const itemId = parsed.data.id;
+      const scope = scopeOf(ctx);
+      const answerKey = answerKeyFor(itemId, scope);
+      if (answerKey === undefined || answerKey.length === 0) return undefined;
+      const moduleId = scope.allowedModuleIds.find(
+        (m) => answerKeyFor(itemId, { ...scope, allowedModuleIds: [m] }) !== undefined,
+      ) as string;
+      return { itemId, moduleId, answerKey: [...answerKey] };
     },
   };
 }

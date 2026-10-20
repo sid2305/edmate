@@ -29,7 +29,15 @@ import {
 } from '@edmate/contracts';
 import type { z } from 'zod';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
-import { type HelpState, type SessionHelp, withGroundingAsks } from '../pedagogy/helpState.js';
+import {
+  copyHelp,
+  type HelpState,
+  INITIAL_HELP_STATE,
+  PRACTICE_SERVED_MAX,
+  practiceFields,
+  type SessionHelp,
+  withGroundingAsks,
+} from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -81,6 +89,7 @@ import {
 } from './spec.js';
 import { openTeacherQuestion } from './teacherQuestion.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
+import type { IssuedItem, ToolSessionState } from './tools.js';
 import { TraceBuilder } from './trace.js';
 import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
 import type {
@@ -203,6 +212,13 @@ class Turn {
   private lockedTrip = false;
   /** decide.fallback chose the decision: generate holds the reply (4.7 fix round 1). */
   private decideFellBack = false;
+  /** The help state as loaded (null: not loaded), for carrying practice fields over (5.6). */
+  private loadedHelp: SessionHelp | null = null;
+  /**
+   * Practice items issued this turn, in order, any attempt (5.6, ADR-0010 §4). Server-side only:
+   * they hold the answer keys. finish() saves them on every outcome.
+   */
+  private readonly issued: IssuedItem[] = [];
 
   constructor(
     private readonly input: TurnInput,
@@ -482,7 +498,14 @@ class Turn {
     }
     if (pg.ok && pg.value.result === 'block' && pg.value.reply !== undefined) {
       // moderationIn / jailbreak (4.4): the code's own reply, plus a misuse alert if one came.
-      return this.sendBlockReply(e, scrubbed, intent, pg.value.reply, pg.value.alert, pg.value.code);
+      return this.sendBlockReply(
+        e,
+        scrubbed,
+        intent,
+        pg.value.reply,
+        pg.value.alert,
+        pg.value.code,
+      );
     }
     if (!pg.ok || pg.value.result === 'block') {
       this.endWithError(pg.ok ? PRE_GUARD_BLOCKED : PRE_GUARD_FAILED);
@@ -514,6 +537,7 @@ class Turn {
       ctx = assemble(e, built, intent, attempt);
     }
     this.loadedStop = helpLoaded ? built.helpState.lockedStopped === true : null;
+    this.loadedHelp = helpLoaded ? { rung: built.helpRung, help: built.helpState } : null;
     if (ctx === null) {
       this.endWithError({ code: 'no_access', retryable: false });
       return this.finish(e, { outcome: 'error', input: scrubbed, intent }, intent, 'redirect');
@@ -553,6 +577,12 @@ class Turn {
       decision,
       decided.sources,
       this.loadedStop !== false,
+      {
+        servedItemIds: built.helpState.practiceServed ?? [],
+        ...(built.helpState.practiceModuleId === undefined
+          ? {}
+          : { activeModuleId: built.helpState.practiceModuleId }),
+      },
     );
     if (gen !== CANCELLED && !('code' in gen) && gen.locked !== undefined) this.lockedTrip = true;
     if (gen === CANCELLED || 'code' in gen) {
@@ -863,6 +893,7 @@ class Turn {
     decision: PedagogyDecision,
     sources: SourceRef[],
     lockedStopped: boolean,
+    practice: ToolSessionState,
   ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
@@ -888,6 +919,16 @@ class Turn {
               lockedStopped,
               onLockedTrip: () => {
                 this.lockedTrip = true;
+              },
+              // A retry neither serves an earlier attempt's item again (5.6) ...
+              practice: {
+                ...practice,
+                servedItemIds: [...practice.servedItemIds, ...this.issued.map((i) => i.itemId)],
+              },
+              // ... nor lets its key out: it guards those keys from its first word.
+              ...(this.issued.length > 0 ? { issuedKeys: this.issuedKeys() } : {}),
+              onPracticeItem: (item) => {
+                this.issued.push(item);
               },
               ...(this.decideFellBack ? { fromFallback: true as const } : {}),
             },
@@ -929,9 +970,16 @@ class Turn {
     sources: SourceRef[],
   ): Promise<{ replyText: string; escalateToTeacher: boolean } | { alert: SafetyAlert }> {
     const { draft } = gen;
+    // Every practice key issued this turn is checked too (5.6, ADR-0010 §4). Only the guards see
+    // it: the decision that is saved and composed is unchanged.
+    const keys = this.issuedKeys();
+    const guarded =
+      keys.length === 0
+        ? decision
+        : { ...decision, mustNotReveal: [...new Set([...decision.mustNotReveal, ...keys])] };
     const x = {
       ctx,
-      decision,
+      decision: guarded,
       draft,
       sources,
       ...(gen.raw === undefined ? {} : { raw: gen.raw }),
@@ -994,7 +1042,7 @@ class Turn {
     alertDelivered?: Promise<void>,
   ): Promise<TurnRunResult> {
     const record: CommitRecord = {
-      ...this.withStopFlag(rec),
+      ...this.withStopFlag(this.withPractice(rec)),
       turnId: this.turnId,
       // The original input's session id: set even when the scrub failed and `input` is null.
       sessionId: this.input.sessionId,
@@ -1042,6 +1090,11 @@ class Turn {
    */
   private withStopFlag<R extends { next?: SessionHelp }>(rec: R): R {
     if (rec.next === undefined) return rec;
+    // 5.6: practice items went out but the stored state could not be read. Their keys must still
+    // be saved, so this state is saved stopped (fail closed: true over an unknown stored flag).
+    if (this.loadedStop === null && this.issued.length > 0) {
+      return { ...rec, next: { ...rec.next, help: { ...rec.next.help, lockedStopped: true } } };
+    }
     if (this.loadedStop === null) {
       const out = { ...rec };
       delete out.next;
@@ -1049,6 +1102,44 @@ class Turn {
     }
     const lockedStopped = this.loadedStop || this.lockedTrip;
     return { ...rec, next: { ...rec.next, help: { ...rec.next.help, lockedStopped } } };
+  }
+
+  /** The union of this turn's issued practice keys, in order (5.6). */
+  private issuedKeys(): string[] {
+    return [...new Set(this.issued.flatMap((i) => i.answerKey))];
+  }
+
+  /**
+   * The practice state to save (5.6, ADR-0010 §4). The practice fields of the loaded state ride
+   * along on every saved state (decide's ladder rebuilds it without them, as for groundingAsks).
+   * When an item went out this turn, on any outcome, the saved state holds its key (the union of
+   * this turn's), starts a fresh problem (rung 0, ladder fields reset), marks the last item active
+   * and records the ids served. A turn that saves no state otherwise saves the loaded one.
+   */
+  private withPractice<R extends { next?: SessionHelp }>(rec: R): R {
+    const loaded = this.loadedHelp;
+    if (this.issued.length === 0) {
+      if (rec.next === undefined || loaded === null) return rec;
+      const help = { ...practiceFields(loaded.help), ...copyHelp(rec.next.help) };
+      return { ...rec, next: { ...rec.next, help } };
+    }
+    const base = rec.next ?? loaded ?? { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
+    const prior = loaded?.help.practiceServed ?? [];
+    const ids = [...new Set(this.issued.map((i) => i.itemId))];
+    const last = this.issued[this.issued.length - 1] as IssuedItem;
+    const help: HelpState = {
+      ...base.help,
+      stuckTurns: 0,
+      attemptLogged: false,
+      pendingCheck: false,
+      answerKey: this.issuedKeys(),
+      practiceItemId: last.itemId,
+      practiceModuleId: last.moduleId,
+      practiceServed: [...prior.filter((id) => !ids.includes(id)), ...ids].slice(
+        -PRACTICE_SERVED_MAX,
+      ),
+    };
+    return { ...rec, next: { rung: 0, help } };
   }
 
   /**

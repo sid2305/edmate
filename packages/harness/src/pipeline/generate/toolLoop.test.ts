@@ -11,7 +11,7 @@ import { TurnAbort, TurnCancelled } from '../errors.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { LockedCheckFailed, LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { lockedIndex } from '../../guardrails/lockedMatch.js';
-import type { RegisteredTool } from '../tools.js';
+import type { IssuedItem, RegisteredTool } from '../tools.js';
 import type { UsageRecorder } from '../types.js';
 import { passThroughGate } from './streamGate.js';
 import {
@@ -83,8 +83,11 @@ function setup(
     },
     gate: passThroughGate({ ctx: turnContextFull, decision: { ...demoDecision } }),
     show: (t: string) => void shown.push(t),
-    onToolOutput: (r: RegisteredTool, output: unknown): void | Promise<void> =>
-      void outputs.push({ name: r.tool.name, output }),
+    onToolOutput: (
+      r: RegisteredTool,
+      output: unknown,
+      _issued?: IssuedItem,
+    ): void | Promise<void> => void outputs.push({ name: r.tool.name, output }),
     report: (e: unknown) => void reported.push(e),
     mustNotReveal: o.mustNotReveal ?? [],
     lockedCheck: o.lockedCheck ?? (() => Promise.resolve(false)),
@@ -689,7 +692,9 @@ describe('runToolLoop: locked material (4.6)', () => {
     for (const lockedCheck of [
       ((texts) => Promise.resolve(texts.length > 1)) as LockedCheck,
       ((texts) =>
-        texts.length > 1 ? Promise.reject(new Error('down')) : Promise.resolve(false)) as LockedCheck,
+        texts.length > 1
+          ? Promise.reject(new Error('down'))
+          : Promise.resolve(false)) as LockedCheck,
     ]) {
       let told = 0;
       const s = setup(
@@ -759,14 +764,16 @@ describe('runToolLoop: locked material (4.6)', () => {
   // reply, `clock.drive` rejects with "deadlock" instead of resolving, and this test fails.
   it('many single-sentence chunks in one round: the virtual clock still settles (worst case)', async () => {
     const CHUNKS = 400;
-    const steps = [
-      ...Array.from({ length: CHUNKS }, (_, i) => say(`word${String(i)}. `)),
-      used,
-    ];
+    const steps = [...Array.from({ length: CHUNKS }, (_, i) => say(`word${String(i)}. `)), used];
     const s = setup([steps], { lockedCheck: () => Promise.resolve(false) });
     const out = await s.run();
     expect(out.locked).toBeUndefined();
-    expect(s.shown.join('')).toBe(steps.filter((c) => c.type === 'text').map((c) => c.text).join(''));
+    expect(s.shown.join('')).toBe(
+      steps
+        .filter((c) => c.type === 'text')
+        .map((c) => c.text)
+        .join(''),
+    );
   }, 10_000);
 
   it('waits for an async onToolOutput before the next call', async () => {
@@ -790,4 +797,68 @@ describe('runToolLoop: locked material (4.6)', () => {
     await s.run();
     expect(order).toEqual(['model called', 'output handled', 'model called']);
   }, 5_000);
+});
+
+describe('runToolLoop: issued items (5.6, ADR-0010)', () => {
+  // Synthetic items and keys.
+  const failures = (r: unknown[]) =>
+    r.filter((e): e is ToolFailed => e instanceof ToolFailed).map((e) => [e.reason, e.causeName]);
+
+  const withIssued = (issuedItem: NonNullable<RegisteredTool['issuedItem']>): RegisteredTool => ({
+    ...calculator,
+    issuedItem,
+  });
+
+  it('passes the issued item (with its key) to onToolOutput; the model sees only the output', async () => {
+    const item = { itemId: 'item-1', moduleId: 'mod-1', answerKey: ['5/6'] };
+    const s = setup([[call('c1')], [say('Try it.')]], { tools: [withIssued(() => item)] });
+    const got: unknown[] = [];
+    s.input.onToolOutput = (_r, _o, issued) => void got.push(issued);
+    await s.run();
+    expect(got).toEqual([item]);
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: true, output: { value: '5/6' } },
+    ]);
+    expect(failures(s.reported)).toEqual([]);
+  });
+
+  it('no key for the item: the call fails closed as `no_answer_key`, the model sees `failed`', async () => {
+    const s = setup([[call('c1')], [say('Sorry.')]], { tools: [withIssued(() => undefined)] });
+    const got: unknown[] = [];
+    s.input.onToolOutput = (_r, o) => void got.push(o);
+    await s.run();
+    expect(got).toEqual([]);
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(failures(s.reported)).toEqual([['no_answer_key', undefined]]);
+  });
+
+  it('a lookup that throws fails closed too, naming only the error', async () => {
+    const s = setup([[call('c1')], [say('Sorry.')]], {
+      tools: [
+        withIssued(() => {
+          throw new RangeError('hidden detail');
+        }),
+      ],
+    });
+    await s.run();
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(failures(s.reported)).toEqual([['no_answer_key', 'RangeError']]);
+    expect(JSON.stringify(s.spy.requests)).not.toContain('hidden detail');
+  });
+
+  it('mustNotReveal is read at each call: a key added after one call fails a later output holding it', async () => {
+    const keys: string[] = [];
+    const s = setup([[call('c1'), call('c2')], [say('Ok.')]], { mustNotReveal: keys });
+    s.input.onToolOutput = () => void keys.push('5/6');
+    await s.run();
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: true, output: { value: '5/6' } },
+      { id: 'c2', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(failures(s.reported)).toEqual([['answer_key', undefined]]);
+  });
 });

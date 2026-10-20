@@ -22,7 +22,7 @@ import {
 import { type CancelToken, type Clock, linkCancel } from '../clock.js';
 import { errorName, HarnessError, TurnCancelled } from '../errors.js';
 import { runWithTimeout } from '../timeout.js';
-import { type RegisteredTool, toolSpec } from '../tools.js';
+import { type IssuedItem, type RegisteredTool, toolSpec } from '../tools.js';
 import type { UsageRecorder } from '../types.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { stringLeaves } from '../../guardrails/lockedMatch.js';
@@ -59,7 +59,14 @@ export class ToolCallNotOfferedError extends HarnessError {
 
 /** Why a tool call failed, as reported (the model sees only `failed` or `timed_out`). */
 export type ToolFailReason =
-  'failed' | 'timed_out' | 'invalid_output' | 'not_json' | 'too_large' | 'answer_key' | 'locked';
+  | 'failed'
+  | 'timed_out'
+  | 'invalid_output'
+  | 'not_json'
+  | 'too_large'
+  | 'answer_key'
+  | 'locked'
+  | 'no_answer_key';
 
 /** A tool call failed. Names the tool, a fixed reason and the thrown error's name, never a message. */
 export class ToolFailed extends HarnessError {
@@ -87,10 +94,16 @@ export interface ToolLoopInput {
   gate: StreamGate;
   /** Shows a piece of text to the student (a `token` event). */
   show(text: string): void;
-  /** A tool ran and its output passed every check (awaited before the next call). */
-  onToolOutput(entry: RegisteredTool, output: unknown): void | Promise<void>;
+  /**
+   * A tool ran and its output passed every check (awaited before the next call). `issued` is the
+   * item it issued, with its server-side key (5.6), for a tool with `issuedItem`.
+   */
+  onToolOutput(entry: RegisteredTool, output: unknown, issued?: IssuedItem): void | Promise<void>;
   report(error: unknown): void;
-  /** The decision's do-not-say list: a tool output holding one is `failed`. */
+  /**
+   * The do-not-say list: a tool output holding one is `failed`. Read at each call, so keys the
+   * caller adds mid-attempt (a practice item's, 5.6) count for later calls in the same attempt.
+   */
   mustNotReveal: readonly string[];
   /**
    * The locked check (4.6, required): run on each sentence before it is shown and on each tool
@@ -226,8 +239,24 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
         results.push(fail(out));
         continue;
       }
+      // An item tool (5.6, ADR-0010): its key is looked up on the server by item id before the
+      // model sees the item. No key: the call fails closed, as the item could not be protected.
+      let issued: IssuedItem | undefined;
+      if (entry.issuedItem !== undefined) {
+        let causeName: string | undefined;
+        try {
+          issued = entry.issuedItem(out.value, i.ctx);
+        } catch (error) {
+          causeName = errorName(error);
+        }
+        if (issued === undefined) {
+          i.report(new ToolFailed(entry.tool.name, 'no_answer_key', causeName));
+          results.push(fail('failed'));
+          continue;
+        }
+      }
       results.push({ id: c.id, name: c.name, ok: true, output: out.value });
-      await i.onToolOutput(entry, out.value);
+      await i.onToolOutput(entry, out.value, issued);
     }
     extra.push(toolCallsMessage(roundText, records), toolResultsMessage(results));
   }
