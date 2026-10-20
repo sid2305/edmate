@@ -109,6 +109,10 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Build, typecheck, lint, test
         run: corepack pnpm turbo run build typecheck lint test
+      # Runs the real, built web app (apps/web/.next/standalone) against real Postgres: the only
+      # way to catch a bundler bug that source-level tests can't see (task 1.7b).
+      - name: 'Build smoke (apps/web: the age gate on a real production build)'
+        run: corepack pnpm turbo run build-smoke --filter=@edmate/web
 
   python-harness:
     runs-on: ubuntu-latest

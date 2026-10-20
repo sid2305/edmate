@@ -48,15 +48,33 @@ export interface AgeContent {
 /**
  * Loads the locale packs (`<dir>/locales`) and privacy notices (`<dir>/legal/privacy-notice`).
  * Throws when either can't be used: the gate must not run without the notice it records.
+ *
+ * `log` (default `console.error`, matching `close()` below) gets one line per refused pack: the
+ * file and its reasons only (already non-PII codes/messages -- the same strings `loadLocalePacks`
+ * puts in the thrown `Error` for the default-pack case). The gate itself does not change
+ * behaviour: a refused pack's market still falls back to the default pack, same as before.
  */
-export function loadAgeContent(dir: string): AgeContent {
+export function loadAgeContent(
+  dir: string,
+  log: (line: string) => void = (line) => console.error(line),
+): AgeContent {
   const { notices, errors } = readPrivacyNoticesDir(join(dir, 'legal', 'privacy-notice'));
   if (errors.length > 0) {
     throw new Error(`privacy notices: ${errors.length} unusable file(s)`);
   }
   // Fails here, not on first use, when there is no default notice.
   pickPrivacyNotice(ELSEWHERE, notices);
-  const { packs } = loadLocalePacks(join(dir, 'locales'));
+  const { packs, refused } = loadLocalePacks(join(dir, 'locales'));
+  for (const r of refused) {
+    // Fix round (security review of PR #76): `r.reasons` are loader-generated messages, but for a
+    // YAML/schema parse failure they can echo a snippet of the pack file. An unescaped control
+    // character (a raw newline) in one would split this into more than one log line; stripping
+    // control characters keeps each refusal to the single line the build-smoke test (and anyone
+    // reading the log) expects.
+    // eslint-disable-next-line no-control-regex -- stripping control characters is the point
+    const reasons = r.reasons.map((reason) => reason.replace(/[\u0000-\u001f\u007f]/g, ' '));
+    log(`[auth] age gate: refused locale pack ${r.file}: ${reasons.join('; ')}`);
+  }
   const markets = [...packs.keys()].filter((m) => m !== ELSEWHERE).sort();
   return {
     markets: Object.freeze([...markets, ELSEWHERE]),

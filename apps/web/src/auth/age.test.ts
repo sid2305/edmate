@@ -112,6 +112,86 @@ describe('loadAgeContent (real content/)', () => {
     writeFileSync(join(dir, 'legal', 'privacy-notice', 'global.md'), 'no front matter');
     expect(() => loadAgeContent(dir)).toThrow(/privacy notice/);
   });
+
+  it('logs one line naming the file and reasons for a refused pack, keeps serving the good markets', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-age-'));
+    mkdirSync(join(dir, 'legal', 'privacy-notice'), { recursive: true });
+    mkdirSync(join(dir, 'locales'));
+    // A usable default notice and a usable default pack (1.7's gate needs both to load at all).
+    writeFileSync(
+      join(dir, 'legal', 'privacy-notice', 'global.md'),
+      '---\nversion: draft-0\nmarket: global\nreviewedBy: pending\nreviewedOn: "2026-10-20"\n---\n[PLACEHOLDER]\n',
+    );
+    writeFileSync(
+      join(dir, 'locales', 'global.yaml'),
+      [
+        'market: global',
+        'languages: [en]',
+        'timezone: UTC',
+        'currency: { code: USD, format: "$#,##0.00" }',
+        'payments: { methods: [], provider: tbd }',
+        'helplines: []',
+        'compliance:',
+        '  privacyLaw: "n/a"',
+        '  minAge: 13',
+        '  dataRegion: "n/a"',
+        '  grievance: "n/a"',
+        '  parentalConsentRequired: true',
+        'regulatedDisclaimers:',
+        '  investing: "n/a"',
+        'piiPatterns: []',
+      ].join('\n'),
+    );
+    // A second pack, refused for a bad schema (missing required fields entirely).
+    writeFileSync(join(dir, 'locales', 'FR.yaml'), 'market: FR\n');
+
+    const log: string[] = [];
+    const content = loadAgeContent(dir, (line) => log.push(line));
+    expect(content.markets).toEqual(['global']);
+    expect(log).toHaveLength(1);
+    expect(log[0]).toContain('FR.yaml');
+    expect(log[0]).not.toContain('@'); // no PII: just file + schema/validation reasons
+  });
+
+  it('with no logger, a refused pack goes to console.error by name only', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-age-'));
+    mkdirSync(join(dir, 'legal', 'privacy-notice'), { recursive: true });
+    mkdirSync(join(dir, 'locales'));
+    writeFileSync(
+      join(dir, 'legal', 'privacy-notice', 'global.md'),
+      '---\nversion: draft-0\nmarket: global\nreviewedBy: pending\nreviewedOn: "2026-10-20"\n---\n[PLACEHOLDER]\n',
+    );
+    writeFileSync(
+      join(dir, 'locales', 'global.yaml'),
+      [
+        'market: global',
+        'languages: [en]',
+        'timezone: UTC',
+        'currency: { code: USD, format: "$#,##0.00" }',
+        'payments: { methods: [], provider: tbd }',
+        'helplines: []',
+        'compliance:',
+        '  privacyLaw: "n/a"',
+        '  minAge: 13',
+        '  dataRegion: "n/a"',
+        '  grievance: "n/a"',
+        '  parentalConsentRequired: true',
+        'regulatedDisclaimers:',
+        '  investing: "n/a"',
+        'piiPatterns: []',
+      ].join('\n'),
+    );
+    writeFileSync(join(dir, 'locales', 'FR.yaml'), 'market: FR\n');
+
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      loadAgeContent(dir);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]?.[0]).toContain('FR.yaml');
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe('submitAgeAnswer', () => {

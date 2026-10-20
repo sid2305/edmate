@@ -1,0 +1,24 @@
+# Fixture only (task 1.7b build smoke test): never read by production or `edmate content validate`.
+# A market pack with real, structurally-safe PII patterns (the same shape as content/locales/IN.yaml).
+# Proves the fix: a correctly-loaded worker reports these as safe fast, not "unsafe" by a timed-out
+# ceiling (the 1.7b bug: every pattern was reported unsafe because the worker never loaded, and this
+# pack was refused whole).
+market: IN
+languages: [en]
+timezone: Asia/Kolkata
+currency: { code: INR, format: "₹#,##,##0.00" }
+payments: { methods: [], provider: tbd }
+helplines: []
+compliance:
+  privacyLaw: "n/a (fixture)"
+  minAge: 13
+  dataRegion: "n/a (fixture)"
+  grievance: "n/a (fixture)"
+  parentalConsentRequired: true
+regulatedDisclaimers:
+  investing: "n/a (fixture)"
+piiPatterns:
+  - '(?<!\d)(?!(?:19|20)\d\d[ -]?(?:19|20)\d\d[ -]?(?:19|20)\d\d[ -]?(?!\d))\d{4}(?:\d{8}| \d{4} \d{4}|-\d{4}-\d{4})(?!\d)'
+  - '(?<![A-Za-z0-9])[A-Za-z]{5}\d{4}[A-Za-z](?![A-Za-z0-9])'
+  - '(?<![\w.\-@])[\w.\-]{2,256}@[A-Za-z][A-Za-z0-9]{1,63}(?![\w.\-@])'
+  - '(?<![\d+])(?:\+?91[ \-]?|0)?[6-9]\d{9}(?!\d)'
