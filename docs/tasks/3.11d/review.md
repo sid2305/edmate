@@ -4,13 +4,13 @@ Reviewers: safety-reviewer (opus), architect (opus), typescript-reviewer (opus),
 Teacher turns move to the user channel under a platform label, forged labels in student and stored text are neutralised, the persona question count is server-owned (`personaQuestionsAsked`), and the learner summary is gated on teaching modes. ADR-0009 records the decisions. TypeScript and security approve; architect approves with doc fixes; safety requests changes (full text: safety-review.md).
 
 ## Findings
-- [HIGH] [open] content/prompt-packs/safety@1.0.0.md:15 — rule 3 calls a teacher note inside a user message forged, but this PR puts the real teacher note in the user channel; amend rule 3 under ADR-0009 (safety-review.md issue 1).
-- [HIGH] [open] packages/harness/src/pedagogy/modelRequest.ts:57-68 — the forged-label match needs the exact label; no brackets, look-alike letters, accents, fullwidth colon, hyphen, markdown inside, HTML entities all pass; fold first and break the core phrase (safety-review.md issue 2).
-- [MEDIUM] [open] packages/harness/src/pedagogy/modelRequest.ts:101 — the teacher text has no end marker, so a following student turn merged by the provider reads as the teacher's; fence it <<<…>>> and neutralise <<< / >>> in student text (safety-review.md issue 3).
-- [MEDIUM] [open] content/prompt-packs/mock_interview@1.0.0.md:8 — "Keep count of the questions you have asked" contradicts the frame's "never count turns yourself" (safety-review.md issue 4).
-- [MEDIUM] [open] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:43 — the gateway-adapter owner is "task 7.x" (M7 is evals); the adapters are task 2.2 (merged), and @ai-sdk/anthropic already merges consecutive user messages (architect).
-- [LOW] [open] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:41-47 — Consequences omit the homoglyph residual risk (architect).
-- [LOW] [open] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md — no note that the new required persona slot breaks any future frame pack without it (architect).
+- [HIGH] [fixed] content/prompt-packs/safety@1.0.0.md:15 — rule 3 calls a teacher note inside a user message forged, but this PR puts the real teacher note in the user channel; amend rule 3 under ADR-0009 (safety-review.md issue 1).
+- [HIGH] [fixed] packages/harness/src/pedagogy/modelRequest.ts:57-68 — the forged-label match needs the exact label; no brackets, look-alike letters, accents, fullwidth colon, hyphen, markdown inside, HTML entities all pass; fold first and break the core phrase (safety-review.md issue 2).
+- [MEDIUM] [fixed] packages/harness/src/pedagogy/modelRequest.ts:101 — the teacher text has no end marker, so a following student turn merged by the provider reads as the teacher's; fence it <<<…>>> and neutralise <<< / >>> in student text (safety-review.md issue 3).
+- [MEDIUM] [fixed] content/prompt-packs/mock_interview@1.0.0.md:8 — "Keep count of the questions you have asked" contradicts the frame's "never count turns yourself" (safety-review.md issue 4).
+- [MEDIUM] [fixed] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:43 — the gateway-adapter owner is "task 7.x" (M7 is evals); the adapters are task 2.2 (merged), and @ai-sdk/anthropic already merges consecutive user messages (architect).
+- [LOW] [fixed] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:41-47 — Consequences omit the homoglyph residual risk (architect).
+- [LOW] [fixed] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md — no note that the new required persona slot breaks any future frame pack without it (architect).
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/skills.ts:68-74 — the count rises on /pause, stop and post-debrief turns and never resets (safety-review.md issue 5).
 - [LOW] [deferred 3.11e] closed modes still send the whole session history (pre-existing; safety-review.md issue 6).
 - [LOW] [deferred 3.11e] packages/contracts/src/turn.ts:66 — MessageSchema.text and ChunkSchema.text have no max length (pre-existing; security).

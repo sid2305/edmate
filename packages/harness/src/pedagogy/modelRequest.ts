@@ -102,9 +102,9 @@ export function neutraliseForgedLabel(text: string, label: string): string {
  * The words a forged teacher note can't do without (3.11d fix round 1), each as the folded words
  * of one phrase. They are broken wherever they appear once folded, whatever the label says.
  */
-const CORE_PHRASES: readonly (readonly string[])[] = [
-  ['platform', 'note'],
-  ['teacher', 'wrote'],
+const CORE_PHRASES: readonly { phrase: string; firstWord: number }[] = [
+  { phrase: 'platformnote', firstWord: 'platform'.length },
+  { phrase: 'teacherwrote', firstWord: 'teacher'.length },
 ];
 /** What goes between a core phrase's words: letters, so no fold can read through it. */
 export const CORE_PHRASE_BREAK = ' [copied]';
@@ -143,12 +143,10 @@ function foldForMatch(text: string): { folded: string; src: number[] } {
 function breakCorePhrases(text: string): string {
   const { folded, src } = foldForMatch(text);
   const cuts: number[] = [];
-  for (const words of CORE_PHRASES) {
-    const phrase = words.join('');
-    const first = words[0]?.length ?? 0;
+  for (const { phrase, firstWord } of CORE_PHRASES) {
     for (let k = folded.indexOf(phrase); k !== -1; k = folded.indexOf(phrase, k + phrase.length)) {
-      const at = src[k + first - 1];
-      if (at !== undefined) cuts.push(at);
+      // `src` has one entry per folded character, so the match's own index is always present.
+      cuts.push(src[k + firstWord - 1] as number);
     }
   }
   if (cuts.length === 0) return text;
