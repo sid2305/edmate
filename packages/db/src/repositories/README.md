@@ -146,15 +146,34 @@ query or the error.
 **leakCheck (ADR-0007).** `retrieval.material(scope)` returns every chunk text of the teacher's own
 modules, ordered by module, document and chunk; only leakCheck reads it, and it never leaves the
 adapter. leakCheck rejects a malformed scope (`scope`) or candidate list (`invalid`) before any
-SQL, then reads the revision and takes the locked index for (teacher, revision, sorted allowed
-ids) from an LRU cache of 64 (`leakCache.ts`), or builds it with the shared `lockedIndex` from
-`@edmate/harness`: modules outside `allowedModuleIds` are locked (draft and unpackaged ones
-included), a span also in an allowed module is ignored. Another teacher's module ids in the
-allowed list match none of this teacher's chunks, so they widen nothing. The call races
+SQL (at most `LEAK_CANDIDATES_MAX` candidates of `LEAK_CANDIDATE_MAX_LENGTH` characters, 4x the
+harness's largest legitimate batch), then reads the revision and the teacher's module ids
+together and takes the locked index for (teacher, revision, sorted **owned** allowed ids) from an
+LRU cache of 64 (`leakCache.ts`), or builds it with the shared `lockedIndex` from
+`@edmate/harness`: modules outside the owned allowed set are locked (draft and unpackaged ones
+included), a span also in an allowed module is ignored. Another teacher's or an unknown module id
+in the allowed list is dropped before the key, so it widens nothing and shares the owned key
+(task 5.4). The call races
 `leakTimeoutMs` (100 ms default); a timeout or any error is `{ hit: true }`, reported to
 `onLeakFallback` as `leak_timeout` / `leak_failed` only. A cold build that loses the race keeps
 running (dropped after `leakBuildTimeoutMs`, 30 s), so the next call is warm. A newer revision
 drops the teacher's older entries; a failed build is never cached. Nothing here logs.
+
+**Full-text terms.** Each query term goes to `to_tsquery` as a quoted literal (`'term':*`,
+`tsTerm`), so no character, Unicode or tsquery syntax, can make the query raise.
+
+**The cache rule (task 5.4, ADR-0003 point 6).** A cache that holds anything derived from teacher
+material or an entitlement is keyed by everything that decides access: the package id and version,
+or the exact owned allowed-module set, plus the material revision for material. The inventory is
+the harness `promptCacheKey` and the `leakCache` here; adding a cache means adding it to this list
+and to `harness/src/access/index.ts`.
+
+**No unfiltered search (task 5.4).** `test/access-audit.test.ts` reads every package's and app's
+source and fails when: the `chunks` table is named outside the schema, `internal.ts` and the
+`chunks` / `retrieval` repositories; `retrieval.ts` gains a read of `chunks` (the count is pinned)
+or has one whose statement lacks the scope; anything but `retrieval.ts` calls `.material(`; a file
+off the allowlist implements `RetrievalIndex`; or harness code outside `access/scopedRetrieval.ts`
+searches or probes the index (`.leakCheck(` only in `guardrails/lockedLeak.ts`).
 
 ## Package surface
 

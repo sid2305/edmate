@@ -12,7 +12,7 @@ import {
   retrievalIndexFor,
   type EmbedFallback,
 } from '../src/index.js';
-import { ftsQuery } from '../src/repositories/retrieval.js';
+import { ftsQuery, tsTerm } from '../src/repositories/retrieval.js';
 import { EMBEDDING_DIMENSIONS } from '../src/schema/index.js';
 import { everything, expectScrubbed } from './scrub.js';
 import {
@@ -377,7 +377,38 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       ]);
       const words = Array.from({ length: 40 }, (_, i) => `w${i}x`);
       expect(ftsQuery(words.join(' '))?.split(' | ')).toHaveLength(32);
-      expect(ftsQuery('Photosynthesis, the LEAF 7 a')).toBe('photosynthesis:* | leaf:* | 7:*');
+      expect(ftsQuery('Photosynthesis, the LEAF 7 a')).toBe(
+        "'photosynthesis':* | 'leaf':* | '7':*",
+      );
+    });
+
+    it('unusual Unicode never raises: every term is a quoted tsquery literal (5.4)', async () => {
+      // tsTerm quotes any text, so even tsquery syntax, spaces and quotes parse as a literal.
+      expect(tsTerm("a'b\\c")).toBe("'a''b\\\\c':*");
+      const hostile = ["it's", 'a b', '!', '&', '|', '(', ')', ':', '<', '\\', ' ', '\t', '　'];
+      for (const t of hostile) {
+        await expect(
+          raw.query(`select to_tsquery('simple', $1)`, [
+            hostile.map(tsTerm).join(' | ') + ` | ${tsTerm(t)}`,
+          ]),
+        ).resolves.toBeDefined();
+      }
+      // Letters and digits of many scripts and forms, through the whole search.
+      const queries = [
+        'ǅungla ǈubav ǋ ﬁsh ﬂow ŉ ǰ İstanbul ß straße',
+        'ⅷ Ⅻ ² ³ ١٢٣ ४५ 𝟙𝟚 ⓐⓑ ᵃᵇ ª º µ',
+        'ㅤ ﾠ ᅟ ⴰⵣ กข 日本語 नमस्ते مرحبا שלום Ελληνικά кириллица',
+        'áé ö x‍y z​q ‮abc ﻿bom 𐐨𐐩',
+        `${'é'.repeat(3000)} ${'a'.repeat(2100)} photosynthesis`,
+      ];
+      const index = ftsOnly();
+      for (const q of queries) {
+        const got = await index.search(q, { teacherId: RA, allowedModuleIds: ALLOWED }, 5);
+        for (const c of got) expect(ALLOWED).toContain(c.moduleId);
+        await index.probe(q, { teacherId: RA, moduleIds: [MOD.locked] });
+      }
+      const last = await index.search(queries[4]!, { teacherId: RA, allowedModuleIds: ALLOWED }, 5);
+      expect(last.length).toBeGreaterThan(0);
     });
 
     it('a query of stop words only still searches by vector', async () => {

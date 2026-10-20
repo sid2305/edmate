@@ -105,12 +105,21 @@ export interface ProbeInput {
 }
 
 /**
- * Prefix tsquery (`term:* | term:*`) from the query's words, or null when none is left. Terms are
- * letters and digits only, so they carry no tsquery syntax; the whole string is one parameter.
+ * One term as a quoted tsquery prefix literal (`'term':*`), with `'` and `\\` escaped (5.4).
+ * Quoted, any text parses as a literal: tsquery syntax, spaces or a character the Postgres parser
+ * reads differently from JavaScript can't raise (every code point was checked on Postgres 16).
+ */
+export function tsTerm(t: string): string {
+  return `'${t.replace(/\\/g, '\\\\').replace(/'/g, "''")}':*`;
+}
+
+/**
+ * Prefix tsquery (`'term':* | 'term':*`) from the query's words, or null when none is left. Each
+ * term is quoted (tsTerm); the whole string is one parameter.
  */
 export function ftsQuery(q: string): string | null {
   const terms = queryTerms(q);
-  return terms.length === 0 ? null : terms.map((t) => `${t}:*`).join(' | ');
+  return terms.length === 0 ? null : terms.map(tsTerm).join(' | ');
 }
 
 /** The query's distinct full-text terms: letters and digits only, stop words dropped. */
@@ -181,8 +190,10 @@ async function rank(
     sql` and `,
   );
   const scoped = (extra: SQL) => sql`${scope} and ${extra}`;
-  // Terms are letters and digits only (queryTerms), so a space-joined string is a safe array.
+  // Terms are letters and digits only (queryTerms), so a space-joined string is a safe array, and
+  // `termQuery` quotes each one like tsTerm (no quote or backslash can be in it to escape).
   const termList = sql`string_to_array(${terms.join(' ')}, ' ')`;
+  const termQuery = (t: SQL) => sql`to_tsquery('simple', '''' || ${t} || ''':*')`;
   const fields = {
     id: chunks.id,
     teacherId: chunks.teacherId,
@@ -200,7 +211,7 @@ async function rank(
     const raw = sql<number>`ts_rank_cd(${chunks.search}, ${query})::float8`;
     const matched = sql<
       string[]
-    >`array(select t from unnest(${termList}) as t where ${chunks.search} @@ to_tsquery('simple', t || ':*'))`;
+    >`array(select t from unnest(${termList}) as t where ${chunks.search} @@ ${termQuery(sql`t`)})`;
     return db
       .select({ ...fields, raw, matched })
       .from(chunks)
@@ -231,7 +242,7 @@ async function rank(
     if (tsq === null) return { df: new Map(), n: 0 };
     const [dfRows, countRows] = await Promise.all([
       db.execute<{ term: string; df: number }>(
-        sql`select t.term, count(${chunks.id})::int as df from unnest(${termList}) as t(term) left join ${chunks} on ${chunks.search} @@ to_tsquery('simple', t.term || ':*') and ${scope} group by t.term`,
+        sql`select t.term, count(${chunks.id})::int as df from unnest(${termList}) as t(term) left join ${chunks} on ${chunks.search} @@ ${termQuery(sql`t.term`)} and ${scope} group by t.term`,
       ),
       db
         .select({ n: sql<number>`count(*)::int` })
@@ -406,7 +417,18 @@ export interface RetrievalIndexOptions {
 /** Why leakCheck answered `{ hit: true }` without matching. */
 export type LeakFallback = 'leak_timeout' | 'leak_failed';
 
-const CandidatesSchema = z.array(z.string());
+/**
+ * Most candidates one leakCheck takes, and the longest one (5.4). The harness's largest
+ * legitimate batch comes from one 16 KB text (LIMITS.skillPayloadMaxJsonLength): at most about
+ * 16,400 characters per candidate, and about 220 candidates when a 4,000-character student message
+ * splits it (test/retrieval-leak.int.test.ts measures both). The caps leave at least 4x headroom.
+ */
+export const LEAK_CANDIDATES_MAX = 2_048;
+export const LEAK_CANDIDATE_MAX_LENGTH = 65_536;
+
+const CandidatesSchema = z
+  .array(z.string().max(LEAK_CANDIDATE_MAX_LENGTH))
+  .max(LEAK_CANDIDATES_MAX);
 
 const PortSearchScopeSchema = z.strictObject({
   teacherId: IdSchema,
@@ -419,7 +441,8 @@ const PortProbeScopeSchema = z.strictObject({ teacherId: IdSchema, moduleIds: Mo
  * is embedded; an embed that fails, times out or returns a bad vector falls back to full text.
  *
  * leakCheck (ADR-0007): the scope and candidates are validated (malformed rejects), then the
- * teacher's revision is read and the locked index for (teacher, revision, allowed ids) is taken
+ * teacher's revision and owned module ids are read and the locked index for (teacher, revision,
+ * owned allowed ids) is taken
  * from an LRU cache, or built from the teacher's own material with the shared `lockedIndex`:
  * each module's chunks joined in order, modules outside `allowedModuleIds` locked, the rest
  * allowed. Another teacher's module ids in the allowed list match none of this teacher's chunks,
@@ -455,6 +478,7 @@ export function retrievalIndexFor(
     return { hit: true };
   };
 
+  /** Builds from the teacher's material; `allowed` is already the owned allowed set. */
   async function buildLockedIndex(teacherId: string, allowed: string[]): Promise<LockedIndex> {
     const rows = await repos.retrieval.material({ teacherId });
     const byModule = new Map<string, string[]>();
@@ -473,11 +497,20 @@ export function retrievalIndexFor(
   }
 
   async function lockedIndexFor(teacherId: string, allowed: string[]): Promise<LockedIndex> {
-    // Revision first, material second: a write in between makes the index newer than its key,
-    // never older, so a cached index never misses material its key promises.
-    const revision = await repos.retrieval.revision({ teacherId });
-    const key = leakCacheKey(teacherId, revision, allowed);
-    return leakCache.get(key, () => buildLockedIndex(teacherId, allowed));
+    // Revision (and the owned module ids) first, material second: a write in between makes the
+    // index newer than its key, never older, so a cached index never misses material its key
+    // promises. A module created in between is not in `owned`, so it is built as locked (closed).
+    // The key and the build use only the allowed ids the teacher owns (5.4): every package version
+    // with the same owned allowed set shares one entry, and foreign or unknown ids can't fill the
+    // cache with copies.
+    const [revision, ownedIds] = await Promise.all([
+      repos.retrieval.revision({ teacherId }),
+      repos.modules.ids({ teacherId }),
+    ]);
+    const ownedSet = new Set(ownedIds);
+    const owned = allowed.filter((id) => ownedSet.has(id));
+    const key = leakCacheKey(teacherId, revision, owned);
+    return leakCache.get(key, () => buildLockedIndex(teacherId, owned));
   }
 
   async function embedQuery(q: string): Promise<number[] | undefined> {

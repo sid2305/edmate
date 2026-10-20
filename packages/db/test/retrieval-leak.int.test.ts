@@ -2,7 +2,7 @@
 // shared RetrievalIndex contract, fail-closed injections, cache invalidation on a material
 // revision, and the latency SLO. Synthetic text only; no model is called.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Chunk } from '@edmate/contracts';
+import { type Chunk, LIMITS } from '@edmate/contracts';
 import { lockedCandidates } from '@edmate/harness';
 import { prng, RETRIEVAL_CONTRACT } from '@edmate/harness/testing';
 import pg from 'pg';
@@ -10,6 +10,8 @@ import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   createRepositories,
+  LEAK_CANDIDATE_MAX_LENGTH,
+  LEAK_CANDIDATES_MAX,
   type LeakFallback,
   type Repositories,
   RepositoryError,
@@ -37,16 +39,32 @@ async function loadWorld(world: readonly Chunk[]): Promise<void> {
   await raw.query('truncate table users cascade');
   const teachers = [...new Set(world.map((c) => c.teacherId))];
   if (teachers.length === 0) return;
-  await handle.db.insert(s.users).values(
-    teachers.map((id) => ({ id, name: 'Teacher', locale: 'en', market: 'test', role: 'teacher' as const })),
-  );
+  await handle.db
+    .insert(s.users)
+    .values(
+      teachers.map((id) => ({
+        id,
+        name: 'Teacher',
+        locale: 'en',
+        market: 'test',
+        role: 'teacher' as const,
+      })),
+    );
   await handle.db
     .insert(s.courses)
     .values(teachers.map((t) => ({ id: `crs_${t}`, teacherId: t, title: 'Course', order: 0 })));
   const mods = new Map(world.map((c) => [c.moduleId, c.teacherId]));
-  await handle.db.insert(s.modules).values(
-    [...mods].map(([id, t], i) => ({ id, teacherId: t, courseId: `crs_${t}`, title: id, order: i })),
-  );
+  await handle.db
+    .insert(s.modules)
+    .values(
+      [...mods].map(([id, t], i) => ({
+        id,
+        teacherId: t,
+        courseId: `crs_${t}`,
+        title: id,
+        order: i,
+      })),
+    );
   const docs = new Map<string, Chunk[]>();
   for (const c of world) docs.set(c.documentId, [...(docs.get(c.documentId) ?? []), c]);
   for (const [docId, cs] of docs) {
@@ -266,6 +284,112 @@ describe.skipIf(!up)(`leakCheck on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
       ]);
       expect(await r.leakCheck([fresh], SCOPE)).toEqual({ hit: false });
       expect(await r.leakCheck([SPAN], SCOPE)).toEqual({ hit: true });
+    });
+  });
+
+  describe('the cache is keyed by the owned allowed set (5.4, ADR-0003 point 6)', () => {
+    const M2 = 'mod_leak_m2';
+    const SPAN2 = 'seven paper cranes folded slowly beside the window ledge';
+    const withM2 = (): Chunk[] => [
+      ...world(),
+      {
+        id: 'c3',
+        teacherId: T,
+        documentId: 'doc_leak_m2',
+        moduleId: M2,
+        kind: 'material',
+        text: `Second lesson: ${SPAN2}.`,
+        source: { title: 'M2', locator: 'p1', kind: 'material' },
+      },
+    ];
+
+    it('package v2 dropping a module: its span hits on v2 without re-creating the adapter', async () => {
+      await loadWorld(withM2());
+      const r = retrievalIndexFor(repos, { leakTimeoutMs: 5_000 });
+      const v1 = { teacherId: T, allowedModuleIds: [OPEN, M2] };
+      const v2 = { teacherId: T, allowedModuleIds: [OPEN] };
+      expect(await r.leakCheck([SPAN2], v1)).toEqual({ hit: false });
+      expect(await r.leakCheck([SPAN2], v1)).toEqual({ hit: false });
+      expect(await r.leakCheck([SPAN2], v2)).toEqual({ hit: true });
+      // And back: v1's entry still answers for v1.
+      expect(await r.leakCheck([SPAN2], v1)).toEqual({ hit: false });
+      expect(await r.leakCheck([SPAN], v1)).toEqual({ hit: true });
+    });
+
+    it('foreign, unknown and repeated ids share the owned key: one build', async () => {
+      await loadWorld(withM2());
+      let loads = 0;
+      const material = (scope: { teacherId: string }) => {
+        loads += 1;
+        return repos.retrieval.material(scope);
+      };
+      const r = retrievalIndexFor(withRetrieval({ material }), { leakTimeoutMs: 5_000 });
+      const owned = { teacherId: T, allowedModuleIds: [OPEN] };
+      const noisy = {
+        teacherId: T,
+        allowedModuleIds: ['mod_rb_foreign', OPEN, 'mod_nowhere', OPEN],
+      };
+      expect(await r.leakCheck([SPAN], owned)).toEqual({ hit: true });
+      expect(await r.leakCheck([SPAN], noisy)).toEqual({ hit: true });
+      expect(await r.leakCheck(['clean words'], noisy)).toEqual({ hit: false });
+      expect(loads).toBe(1);
+      // Many distinct foreign lists still fill one entry, not one each.
+      for (let i = 0; i < 10; i += 1) {
+        await r.leakCheck(['clean words'], { teacherId: T, allowedModuleIds: [OPEN, `mod_x${i}`] });
+      }
+      expect(loads).toBe(1);
+    });
+
+    it('a failed read of the owned module ids is { hit: true }', async () => {
+      await loadWorld(withM2());
+      const codes: LeakFallback[] = [];
+      const boom = () => Promise.reject(new Error('db down'));
+      const broken = { ...repos, modules: { ...repos.modules, ids: boom } };
+      const r = retrievalIndexFor(broken, { onLeakFallback: (c) => codes.push(c) });
+      expect(await r.leakCheck(['clean words'], SCOPE)).toEqual({ hit: true });
+      expect(codes).toEqual(['leak_failed']);
+    });
+  });
+
+  describe('candidates are capped (5.4)', () => {
+    it('the largest legitimate batch passes; one over the cap is invalid before any database call', async () => {
+      await loadWorld(world());
+      const r = retrievalIndexFor(repos, { leakTimeoutMs: 5_000 });
+      // The harness's largest legitimate batches: one 16 KB text (skillPayloadMaxJsonLength, the
+      // largest the harness checks at once) gives the longest candidate; the same text with a
+      // 4,000-character student message owning every other 8-token window gives the most.
+      const toks = Array.from({ length: 4_000 }, (_, i) => String.fromCharCode(0x4e00 + i));
+      const text = toks.join(' ').slice(0, LIMITS.skillPayloadMaxJsonLength);
+      const owned: string[] = [];
+      for (let k = 0; k * 16 + 8 < toks.length; k += 1)
+        owned.push(toks.slice(k * 16, k * 16 + 8).join(' '));
+      const student = owned.join(' . ').slice(0, LIMITS.turnTextMaxChars);
+      const longest = lockedCandidates([text]);
+      const most = lockedCandidates([text], student);
+      expect(Math.max(...longest.map((c) => c.length)) * 4).toBeLessThanOrEqual(
+        LEAK_CANDIDATE_MAX_LENGTH,
+      );
+      expect(most.length * 4).toBeLessThanOrEqual(LEAK_CANDIDATES_MAX);
+      expect(await r.leakCheck(longest, SCOPE)).toEqual({ hit: false });
+      expect(await r.leakCheck(most, SCOPE)).toEqual({ hit: false });
+      // Exactly at the caps still passes.
+      const max = Array.from({ length: LEAK_CANDIDATES_MAX }, (_, i) => `clean ${i}`);
+      max[0] = 'y '.repeat(LEAK_CANDIDATE_MAX_LENGTH / 2);
+      expect(await r.leakCheck(max, SCOPE)).toEqual({ hit: false });
+
+      let calls = 0;
+      const count = () => {
+        calls += 1;
+        return Promise.resolve(0);
+      };
+      const guarded = retrievalIndexFor(withRetrieval({ revision: count }));
+      await expect(guarded.leakCheck([...max, 'x'], SCOPE)).rejects.toMatchObject({
+        kind: 'invalid',
+      });
+      await expect(
+        guarded.leakCheck(['x'.repeat(LEAK_CANDIDATE_MAX_LENGTH + 1)], SCOPE),
+      ).rejects.toMatchObject({ kind: 'invalid' });
+      expect(calls).toBe(0);
     });
   });
 

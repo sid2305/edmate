@@ -4,9 +4,9 @@
 // before 3.11/5.8, so it is left out (3.5's skill rules fall back to coach).
 // Any throw (a store down, an index that widens the scope) sends the runner to its
 // `fallbackContext`, which takes the ask_teacher path.
-import type { Chunk, Entitlement } from '@edmate/contracts';
+import type { Chunk } from '@edmate/contracts';
+import { scopedRetrieval } from '../../access/scopedRetrieval.js';
 import { loadSessionHelp } from '../../pedagogy/helpState.js';
-import { HarnessError } from '../errors.js';
 import type { Steps } from '../types.js';
 import { isWithheld } from '../policies.js';
 import { historyChars, historyTrim } from './historyTrim.js';
@@ -25,25 +25,11 @@ export const HISTORY_MAX_CHARS = 16_000;
 /** Chunks asked for per turn (provisional; 5.3/5.4 may change it). */
 export const RETRIEVAL_K = 5;
 
-/** The index returned a chunk outside the entitlement's scope: refused, never passed on. */
-export class RetrievalScopeError extends HarnessError {
-  override readonly name = 'RetrievalScopeError';
-}
-
 /**
- * Defence in depth (ADR-0003): the index is asked only for the allowed modules, and every chunk
- * it returns is checked again. One stray chunk fails the step instead of being dropped quietly,
- * so the trace shows the fallback. The error names ids only, never chunk text.
+ * The index returned a chunk outside the entitlement's scope (defence in depth, ADR-0003): the
+ * check lives in `access/scopedRetrieval.ts` (5.4) and is re-exported here.
  */
-function checkScope(chunks: readonly Chunk[], e: Entitlement): Chunk[] {
-  const allowed = new Set(e.allowedModuleIds);
-  for (const c of chunks) {
-    if (c.teacherId !== e.teacherId || !allowed.has(c.moduleId)) {
-      throw new RetrievalScopeError(`chunk ${c.id} is outside the entitlement's scope`);
-    }
-  }
-  return chunks.slice(0, RETRIEVAL_K);
-}
+export { RetrievalScopeError } from '../../access/scopedRetrieval.js';
 
 /** Chunks in rank order whose text fits in `budget`; one that doesn't fit is skipped. */
 function fit(chunks: readonly Chunk[], budget: number): Chunk[] {
@@ -72,26 +58,17 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
   const kept = fetched.filter((m) => !isWithheld(m));
   const history = historyTrim(kept, HISTORY_MAX_CHARS);
   const q = retrievalQuery(input, kept);
-  const [found, probe] = await Promise.all([
-    q === ''
-      ? Promise.resolve([])
-      : deps.retrieval.search(
-          q,
-          { teacherId: e.teacherId, allowedModuleIds: [...e.allowedModuleIds] },
-          RETRIEVAL_K,
-        ),
-    q === '' || e.lockedModuleIds.length === 0
-      ? Promise.resolve(undefined)
-      : deps.retrieval.probe(q, { teacherId: e.teacherId, moduleIds: [...e.lockedModuleIds] }),
-  ]);
-  const retrieved = fit(checkScope(found, e), MAX_CONTEXT_CHARS - historyChars(history));
+  // The access filter (5.4): the scope comes from the entitlement, every chunk is re-checked (one
+  // stray chunk throws RetrievalScopeError) and the probe passes on `{ hit, score }` only.
+  const scoped = scopedRetrieval(deps.retrieval, e);
+  const [found, probe] = await Promise.all([scoped.search(q, RETRIEVAL_K), scoped.probeLocked(q)]);
+  const retrieved = fit(found, MAX_CONTEXT_CHARS - historyChars(history));
   const help = loadSessionHelp(s.helpState);
   return {
     profile,
     history,
     retrieved,
-    // Only a real `true` counts; nothing else from the probe result is read (no text, ADR-0003).
-    lockedHit: probe?.hit === true,
+    lockedHit: probe.hit,
     helpRung: help.rung,
     helpState: help.help,
     // 4.6b fix round 1: a stored blob that could not be read may hold lockedStopped true.
