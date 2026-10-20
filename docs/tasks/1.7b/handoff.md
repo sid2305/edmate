@@ -215,3 +215,8 @@ plan file says to keep `--webpack` and log Turbopack re-adoption as a follow-up,
 tool or dependency — Next.js ships both bundlers with the current toolchain), so this does not
 trigger CLAUDE.md rule 2's ADR requirement.
 risk: low
+
+### 20 Oct 2026 · 1.7b merge: safe-regex worker survives a relocated build · decided by lead · risk: high
+Decided: merge PR #76. It touches apps/web/src/auth/** and .github/** (risky groups). security-reviewer (opus), typescript-reviewer and code-reviewer ran, and the fix round was re-verified by fresh security and TypeScript passes. The smoke-test MEDIUM and the LOWs go to 1.7d; the Turbopack revert goes to 1.7e.
+Why: a relocated build now fails closed instead of running an unbounded in-process check; the remaining findings are test hygiene and log tidying.
+risk: high
