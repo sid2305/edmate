@@ -50,6 +50,7 @@ const RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'fx:linear:1:a',
+      teacherId: 'tch_test_01',
       topicId: 'linear',
       moduleId: 'mod_test_01',
       level: 1,
@@ -61,6 +62,7 @@ const RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'fx:linear:1:b',
+      teacherId: 'tch_test_01',
       topicId: 'linear',
       moduleId: 'mod_test_02',
       level: 1,

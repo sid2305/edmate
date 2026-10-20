@@ -4,7 +4,8 @@
 //
 //   1. Scoped reads: every bank read takes a `PracticeScope` (`{ teacherId, allowedModuleIds }`,
 //      the same shape as `TurnContext.entitlement`'s scope fields) and returns only items whose
-//      `moduleId` is in it. `answerKeyFor` re-checks the scope before returning a key.
+//      `moduleId` is in it and whose `teacherId` is the scope's (5.6c). `answerKeyFor` re-checks
+//      the scope before returning a key.
 //   2. The model chooses no topic and no item id: `PracticeBank.pick` picks the topic itself
 //      (lowest mastery first if a `LearnerPracticeProfile` is given, else the bank's own order —
 //      "outline order" once 6.1/5.11 exist; today the fixture's own array order).
@@ -16,6 +17,7 @@
 import { evaluateExpression } from './sandbox.js';
 import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
 import { normaliseForMatch } from '../pipeline/generate/answerKey.js';
+import { contextAnswerKeys } from '../pipeline/generate/answerKeyContext.js';
 
 /** Difficulty tier (distinct from the help-ladder rung in `pedagogy/ladder.ts`). */
 export type PracticeLevel = 1 | 2 | 3;
@@ -33,6 +35,11 @@ export const SERVABLE_KINDS: ReadonlySet<PracticeItemKind> = new Set(['numeric',
 /** The model-visible item shape: never the answer key (architect review point 3). */
 export interface PracticeItem {
   readonly id: string;
+  /**
+   * The teacher whose content this is (5.6c): an item is served only inside its own teacher's
+   * scope. Harness-internal: the tool's output never copies it.
+   */
+  readonly teacherId: string;
   /** An opaque string, echoed unchanged; 5.6 does not validate it against a real outline (Q4). */
   readonly topicId: string;
   /** The module this item belongs to, for entitlement scoping (architect review point 1). */
@@ -75,7 +82,8 @@ export interface PracticeBank {
   /**
    * Picks the next item inside `scope`: the bank chooses which topic (lowest mastery first if
    * `profile` is given, else its own order), never the caller. Never returns an item whose
-   * `moduleId` is outside `scope.allowedModuleIds`, or whose kind is not in `SERVABLE_KINDS`.
+   * `moduleId` is outside `scope.allowedModuleIds`, whose `teacherId` is not `scope.teacherId`
+   * (5.6c), or whose kind is not in `SERVABLE_KINDS`.
    */
   pick(
     scope: PracticeScope,
@@ -99,7 +107,8 @@ export const BANK_TRIES = 20;
 export const GEN_VARIANTS = 64;
 
 /**
- * Whether an item may be served (5.6 review): a servable kind, inside `scope`, an id short enough
+ * Whether an item may be served (5.6 review): a servable kind, inside `scope` (its module and, 5.6c,
+ * its teacher, checked here too in case a bank ignores the teacher), an id short enough
  * for HelpState, not excluded, its key passes `validateItem` and the caller accepts it.
  */
 function servable(
@@ -111,6 +120,7 @@ function servable(
   const { item, answerKey } = picked;
   return (
     SERVABLE_KINDS.has(item.kind) &&
+    item.teacherId === scope.teacherId &&
     scope.allowedModuleIds.includes(item.moduleId) &&
     item.id.length <= PRACTICE_ID_MAX &&
     !exclude.includes(item.id) &&
@@ -172,8 +182,42 @@ const TEMPLATES: Record<PracticeLevel, Template> = {
   3: { op: '*', min: 2, max: 12 },
 };
 
-/** `gen:<topicId>:<level>:<a><op><b>` — enough to recompute the answer from the id alone. */
-const GEN_ID = /^gen:(.*):([123]):(\d+)([+\-*])(\d+)$/;
+/**
+ * `gen:<moduleId>:practice:<level>:<a><op><b>` — enough to recompute the answer from the id alone.
+ * Operands are 1–999 with no leading zero, which covers every template (the subtraction nudge
+ * included) and bounds what `evaluateExpression` is ever asked (5.6c).
+ */
+const GEN_ID = /^gen:(.+):([123]):([1-9]\d{0,2})([+\-*])([1-9]\d{0,2})$/;
+const PRACTICE_TOPIC_SUFFIX = ':practice';
+
+/** A generated item id, read back by `parseGeneratedId`. */
+export interface GeneratedId {
+  readonly topicId: string;
+  readonly moduleId: string;
+  readonly level: PracticeLevel;
+  readonly a: number;
+  readonly op: Template['op'];
+  readonly b: number;
+}
+
+/**
+ * The one parser for generated item ids (5.6c). `undefined` unless `id` is at most
+ * PRACTICE_ID_MAX long, its operands are 1–999 with no leading zero, its op is its level's
+ * template op, and its topic is `<non-empty moduleId>:practice` (the only shape `generateItem`
+ * makes). A module id may itself hold `:`.
+ */
+export function parseGeneratedId(id: string): GeneratedId | undefined {
+  if (id.length > PRACTICE_ID_MAX) return undefined;
+  const m = GEN_ID.exec(id);
+  if (m === null) return undefined;
+  const [, topicId = '', levelText, a, op, b] = m;
+  const level = Number(levelText) as PracticeLevel;
+  if (op !== TEMPLATES[level].op) return undefined;
+  if (!topicId.endsWith(PRACTICE_TOPIC_SUFFIX)) return undefined;
+  const moduleId = topicId.slice(0, -PRACTICE_TOPIC_SUFFIX.length);
+  if (moduleId === '') return undefined;
+  return { topicId, moduleId, level, a: Number(a), op, b: Number(b) };
+}
 
 /**
  * Deterministic numeric/arithmetic fallback item for (topicId, level) (Q1), split from its answer
@@ -181,6 +225,7 @@ const GEN_ID = /^gen:(.*):([123]):(\d+)([+\-*])(\d+)$/;
  * sandbox (`evaluateExpression`), the same one the calculator tool uses.
  */
 function generateArithmeticItem(
+  teacherId: string,
   topicId: string,
   moduleId: string,
   level: PracticeLevel,
@@ -209,6 +254,7 @@ function generateArithmeticItem(
   return {
     item: {
       id: `gen:${topicId}:${level}:${a}${template.op}${b}`,
+      teacherId,
       topicId,
       moduleId,
       level,
@@ -235,7 +281,13 @@ export function generateItem(
   const moduleId = scope.allowedModuleIds[0];
   if (moduleId === undefined) return undefined;
   for (let v = 0; v < GEN_VARIANTS; v++) {
-    const picked = generateArithmeticItem(`${moduleId}:practice`, moduleId, level, v);
+    const picked = generateArithmeticItem(
+      scope.teacherId,
+      `${moduleId}${PRACTICE_TOPIC_SUFFIX}`,
+      moduleId,
+      level,
+      v,
+    );
     if (servable(picked, scope, exclude, accept)) return picked;
   }
   return undefined;
@@ -244,14 +296,14 @@ export function generateItem(
 /**
  * Recomputes a generated item's answer key from its id alone (architect review point 3: "the
  * answer key can be recomputed on the server from the id"), or `undefined` for an id this
- * generator did not produce. `GEN_ID` only ever matches plain digit operands and one of `+ - *`,
- * so `evaluateExpression` here can never throw (no retry/catch needed, and none left uncovered).
+ * generator did not produce. `parseGeneratedId` only passes operands of 1–999 and one of `+ - *`,
+ * so `evaluateExpression` here gets a small, bounded integer expression and cannot throw (no
+ * retry/catch needed, and none left uncovered).
  */
 export function generatedAnswerKeyFor(itemId: string): readonly string[] | undefined {
-  const m = GEN_ID.exec(itemId);
-  if (m === null) return undefined;
-  const [, , , a, op, b] = m;
-  return [evaluateExpression(`${a} ${op} ${b}`)];
+  const g = parseGeneratedId(itemId);
+  if (g === undefined) return undefined;
+  return [evaluateExpression(`${String(g.a)} ${g.op} ${String(g.b)}`)];
 }
 
 /**
@@ -281,6 +333,11 @@ function keyInPrompt(prompt: string, key: string): boolean {
  * "bare" key equal to one of the option's own visible texts (rather than an opaque id) is also
  * rejected: the option text is shown regardless of kind, so the key must never be indistinguishable
  * from it (architect review point 4).
+ *
+ * 5.6c: for every kind, a key in any option is rejected too (options are shown), and so is a key in
+ * the item id (the model sees the id), except a short whole number written in digits: ids hold the
+ * level digit and generated operands, so "1" must not reject `demo:fractions:1:a`. Number words
+ * ("one") are still checked against the id.
  */
 export function validateItem(item: PracticeItem, answerKey: readonly string[]): boolean {
   if (answerKey.length === 0) return false;
@@ -289,6 +346,11 @@ export function validateItem(item: PracticeItem, answerKey: readonly string[]): 
     const optionTexts = new Set((item.options ?? []).map((o) => normaliseForMatch(o)));
     if (answerKey.some((k) => optionTexts.has(normaliseForMatch(k)))) return false;
   }
+  const options = item.options ?? [];
+  if (answerKey.some((k) => options.some((o) => keyInPrompt(o, k)))) return false;
+  const exempt = new Set(answerKey.filter((k) => /^\s*\d+\s*$/.test(k)));
+  for (const k of contextAnswerKeys([...exempt])) exempt.delete(k);
+  if (answerKey.some((k) => !exempt.has(k) && keyInPrompt(item.id, k))) return false;
   if (item.kind === 'code_output') return true;
   return !answerKey.some((k) => keyInPrompt(item.prompt, k));
 }

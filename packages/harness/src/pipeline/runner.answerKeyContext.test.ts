@@ -58,6 +58,7 @@ const RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'fx:linear:1:a',
+      teacherId: 'tch_test_01',
       topicId: 'linear',
       moduleId: demoChunk.moduleId,
       level: 1,
