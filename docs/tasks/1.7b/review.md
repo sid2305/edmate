@@ -17,4 +17,5 @@ The fix round (ddcf930) was verified by fresh security-reviewer (opus) and types
 - [LOW] [deferred 1.7d] turbo.json — the build-smoke task has no cache: false.
 - [LOW] [deferred 1.7d] apps/web/src/auth/age.ts:75 — the log strip misses C1, U+0085 and U+2028/2029, and r.file is not stripped.
 - [LOW] [fixed] packages/content/src/safeRegexGuard.ts:52 — the inlined build path is no longer the only path used; the env var is the deploy path.
+- [HIGH] [fixed] .github/workflows/ci.yml:114 — the build-smoke step name had an unquoted ": ", so GitHub could not parse the workflow and CI never ran. The lead quoted the name (no behaviour change).
 - [LOW] [fixed] docs/tasks/1.7b/handoff.md:52 — the repro text now matches the root cause.
