@@ -1214,9 +1214,9 @@ tasks:
   accept: fuzz test shows no access outside declared scope.
   deps:
   - M3
-  status: running
+  status: done
   branch: m5/5.5-tool-registry-calculator
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:opus/sonnet
 - id: '5.6'
   milestone: M5
   title: 'Practice skill: item selection and generation by topic and level, scoring, `skill` events'

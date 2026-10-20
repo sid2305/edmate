@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.5 Calculator allow-list is a tokenizer · decided by tdd-guide
+Decided: The calculator checks input with a tokenizer allow-list (ASCII numbers, `+ - * / ^ % ( ) ,`, spaces and tabs, and names from two named lists, with rules for where each name may appear), not with the plan's strip-then-character-class check.
+Why: The planned check let `pi.e` reach mathjs's member access. The tokenizer closes that gap and also refuses glued forms like `2pi` and `1e+5`, which keeps scientific notation unsupported as Q1 decided.
+
+---
+
+### 20 Oct 2026 · 5.5 Allowed calculator functions · decided by tdd-guide
+Decided: The calculator allows abs acos asin atan cbrt ceil cos exp floor gcd hypot lcm log log10 log2 max min mod pow round sign sin sqrt tan and the constants pi and e. Nothing slow on a large argument (factorial, gamma, combinations, isPrime and similar) and nothing that builds matrices, units, strings or functions.
+Why: The lead's Q2 answer asked for a named list and for refusing anything that could make evaluate slow. These cover numeric checks in feedback and grounding.
+
+---
+
+### 20 Oct 2026 · 5.5 mathjs runs in predictable number mode · decided by tdd-guide
+Decided: The restricted mathjs instance uses `number: 'number'` and `predictable: true`, and only a plain number result is returned. Infinity and NaN come back as strings.
+Why: Without predictable mode `sqrt(-1)` returns a Complex object. Plain numbers also make overflow return Infinity at once instead of running slowly.
+
+---
+
+### 20 Oct 2026 · 5.5 Calculator length constant is renamed · decided by tdd-guide
+Decided: The 200-character cap is exported as `CALCULATOR_MAX_EXPRESSION_LENGTH`.
+Why: The harness barrel already exports a `MAX_EXPRESSION_LENGTH` (64) from the grounding arithmetic checker. Reusing the name would clash.
+
+---
+
+### 20 Oct 2026 · 5.5 Harness-wide no-eval lint and full coverage for tools · decided by tdd-guide
+Decided: The harness ESLint config adds `no-eval`, `no-implied-eval` and `no-new-func`. `src/tools/**` must have 100% coverage.
+Why: The sandbox handles model-chosen input. These checks keep code-from-text out of the harness, and they keep every sandbox branch tested as later tools land there.
+
+---
+
 ### 20 Oct 2026 · 5.4 Access filter consolidated in harness/access (scoped retrieval, tool filter) · decided by tdd-guide · risk: high
 Decided: every turn-time read of the retrieval index goes through `access/scopedRetrieval.ts`, which fixes the scope from the entitlement, re-checks each chunk (teacher, allowed, not locked), rebuilds it with only the Chunk fields and passes on only a fresh `{ hit, score }` from the probe. The tool filter moved to `access/tools.ts` with re-exports from `pipeline/tools.ts`.
 Why: the build plan's access filter and ADR-0003 want one reviewed place for it; keeping only known fields and a fresh probe object means a buggy or hostile index cannot smuggle text through extra keys.
