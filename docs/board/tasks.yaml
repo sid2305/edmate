@@ -1333,9 +1333,9 @@ tasks:
   deps:
   - 5.6a
   - '5.1'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m5/5.11-outline-style-drafters
+  model: plan:sonnet build:sonnet
 - id: 6.0b
   milestone: M6
   title: 'DPDP gate for learner memory (logged decision, 18 Oct 2026; raised again by 3.17): before any India pilot, decide and enforce what learner memory (mastery, mistakes, summaries, evidence) may be
