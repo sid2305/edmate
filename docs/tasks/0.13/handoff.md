@@ -163,3 +163,35 @@ Alternatives: run `safety-reviewer` on every safety-path plan now, ahead of 13.3
 with the standing MVP-first decision (20 Oct 2026) that `safety-reviewer` doesn't run per PR until
 the pilot gate.
 Reversible: yes — a prose-only change to a skill file; no code depends on its exact wording.
+
+## Fix round 1
+
+1. **[HIGH] closeout.py:117 `branch_is_merged()` used ancestry only, so a squash-merged branch
+   (how every Edmate PR actually merges) was never recognized as merged.** Changed the
+   `test_closeout.py` fixture to a real `git merge --squash` + commit (not `--no-ff`), confirmed
+   it went red, then rewrote `branch_is_merged()`: keep the ancestry check (`git branch --merged`)
+   as a fast path, and fall back to `git merge-tree --write-tree main <branch>` producing the same
+   tree as `main^{tree}` — if merging would change nothing, the branch's content is already on
+   main. Also switched the branch delete from `git branch -d` to `-D`, since plain `-d` only knows
+   the ancestry check and refuses every squash-merged branch on its own; `-D` is safe here because
+   `branch_is_merged()` already verified it. Added/kept tests: `test_removes_worktree_and_deletes_merged_branch`,
+   `test_no_worktree_still_deletes_merged_branch` (now exercise the squash case),
+   `test_refuses_to_delete_unmerged_branch` (kept, still refuses a branch with new commits).
+
+2. **[LOW] SKILL.md:50-54.** Dropped the sentence restating the one-fix-round cap under step 3
+   ("Fix rounds stay capped at **one per PR**..."); step 5 already states it. Kept the safety-path
+   plan-review rule intact.
+
+3. **[LOW] merge_gate.py:300.** Added `env_non_negative(name, default, cast)`: parses
+   `MERGE_GATE_PR_WAIT_SECONDS`/`MERGE_GATE_PR_RETRIES`, clamping to `>= 0` and falling back to the
+   built-in default (2.0s / 3 retries) for a missing, unparseable, or negative value. Added
+   `test_bad_retries_env_falls_back_to_default_and_still_retries` (non-numeric and negative
+   `MERGE_GATE_PR_RETRIES`, confirms the gate still retries through a flaky `gh` instead of
+   crashing or giving up).
+
+4. **[LOW] closeout.py:109.** `main()` now rejects a task id containing `/`, `\`, or `..` with a
+   clear "bad task id ... must not contain" message before touching the filesystem. Added
+   `test_rejects_task_id_with_path_characters`.
+
+Checks: `python3 -m unittest discover .claude/tests` — 150 tests, all green. `python3
+.githooks/secret-scan.py --all` — clean.

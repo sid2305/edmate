@@ -28,12 +28,16 @@ class CloseoutCase(RepoCase):
         super().setUp()
         # Simulate a merged PR: the task branch exists, carries the handoff/review, and is
         # merged into main (so docs/tasks/9.9/handoff.md is on main, as closeout expects).
+        # Edmate always merges with `gh pr merge --squash`, so the branch tip is never an
+        # ancestor of main -- use a real squash merge here (not --no-ff) so the ancestry
+        # trap can't mask a broken branch_is_merged().
         git(self.repo.root, "checkout", "-q", "-b", "m9/9.9-x")
         self.repo.write("docs/tasks/9.9/handoff.md", HANDOFF)
         self.repo.write("docs/tasks/9.9/review.md", REVIEW)
         self.repo.commit("9.9 work")
         git(self.repo.root, "checkout", "-q", "main")
-        git(self.repo.root, "merge", "-q", "--no-ff", "-m", "merge 9.9", "m9/9.9-x")
+        git(self.repo.root, "merge", "-q", "--squash", "m9/9.9-x")
+        git(self.repo.root, "commit", "-q", "--no-verify", "-m", "squash merge 9.9")
 
     def closeout(self, *args):
         r = self.repo.script("closeout", *args)
@@ -83,6 +87,12 @@ class Basics(CloseoutCase):
         self.assertEqual(code, 0, out)
         self.assertIn("unmerged commits", out)
         self.assertNotEqual(git(self.repo.root, "branch", "--list", "m9/9.9-x-unmerged"), "")
+
+    def test_rejects_task_id_with_path_characters(self):
+        for bad in ("../etc/passwd", "9.9/../x", "a/b", "a\\b"):
+            code, out = self.closeout(bad)
+            self.assertEqual(code, 1, out)
+            self.assertIn("bad task id", out)
 
     def test_board_not_done_when_decisions_missing_from_log(self):
         # If board.py refuses (e.g. decisions not actually written), closeout reports the

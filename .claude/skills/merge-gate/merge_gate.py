@@ -279,6 +279,20 @@ def evaluate(task, branch, pr=None):
     return 0, lines
 
 
+def env_non_negative(name, default, cast):
+    """`cast(os.environ[name])`, clamped to >= 0; falls back to `default` for a value that's
+    missing, unparseable, or negative -- a bad MERGE_GATE_PR_WAIT_SECONDS/_RETRIES must never
+    hang or crash the gate."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
 def pr_head(pr):
     """(code, branch, oid, local, error) for PR `pr`'s current head, or (1, ..., error) if `gh`
     or git fail. A fresh call each time, since this is retried to ride out a `gh pr view` race."""
@@ -304,8 +318,8 @@ def main(argv):
         # `gh pr view` can briefly lag just after a push, reporting a stale headRefOid (false
         # positive seen 18 Oct). Retry a bounded number of times before failing; tests set
         # MERGE_GATE_PR_WAIT_SECONDS=0 so this never slows the suite down.
-        wait = float(os.environ.get("MERGE_GATE_PR_WAIT_SECONDS", "2"))
-        retries = int(os.environ.get("MERGE_GATE_PR_RETRIES", "3"))
+        wait = env_non_negative("MERGE_GATE_PR_WAIT_SECONDS", 2.0, float)
+        retries = env_non_negative("MERGE_GATE_PR_RETRIES", 3, int)
         code = branch = oid = local = err = None
         for attempt in range(retries + 1):
             code, branch, oid, local, err = pr_head(pr)

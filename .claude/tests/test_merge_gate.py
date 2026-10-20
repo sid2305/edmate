@@ -450,6 +450,16 @@ class FixRound1(GateCase):
         self.assertEqual(code, 1, out)
         self.assertIn("PR head 0000000", out)
 
+    def test_bad_retries_env_falls_back_to_default_and_still_retries(self):
+        # A malformed or negative MERGE_GATE_PR_RETRIES/_WAIT_SECONDS must not crash the gate or
+        # turn off retrying -- it falls back to the built-in default (retries=3).
+        self.make({"apps/cli.ts": "x\n"})
+        for bad in ("not-a-number", "-1"):
+            env = self.gh_env_flaky(fail_times=1)
+            env["MERGE_GATE_PR_RETRIES"] = bad
+            code, out = self.gate("--pr", "5", env=env)
+            self.assertEqual(code, 0, out)
+
     def test_destructive_migrations(self):
         cases = {
             "packages/db/migrations/0002.sql": "ALTER TABLE students DROP COLUMN email;",

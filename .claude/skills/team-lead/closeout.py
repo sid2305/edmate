@@ -110,14 +110,35 @@ def worktree_for_branch(root, branch):
 
 
 def branch_is_merged(root, branch):
+    """True if `branch` is fully merged into main -- i.e. merging it now would change nothing.
+
+    Edmate merges every PR with `gh pr merge --squash`, so the branch tip is never an ancestor
+    of main and a plain `git branch --merged` check always says "not merged". Keep that ancestry
+    check as a fast path (true merges and fast-forwards), but fall back to comparing the tree a
+    merge of `branch` into main would produce against main's own tree: if they're equal, the
+    branch's content is already on main (a squash merge, or any other history-breaking merge),
+    so there's nothing left to merge and the branch is safe to delete. A branch with new,
+    unmerged commits still produces a different tree and is correctly refused.
+    """
     code, out = sh(root, "git", "branch", "--merged", "main", "--list", branch)
-    return code == 0 and bool(out.strip())
+    if code == 0 and out.strip():
+        return True
+    code, tree = sh(root, "git", "merge-tree", "--write-tree", "main", branch)
+    if code != 0:
+        return False
+    code, main_tree = sh(root, "git", "rev-parse", "main^{tree}")
+    if code != 0:
+        return False
+    return tree.strip() == main_tree.strip()
 
 
 def main(argv):
     if not argv:
         sys.exit(__doc__)
     task_id = argv[0]
+    if "/" in task_id or "\\" in task_id or ".." in task_id:
+        print(f"bad task id {task_id!r}: must not contain '/', '\\\\' or '..'")
+        return 1
     remote = "--remote" in argv[1:]
     root = repo_root()
 
@@ -141,7 +162,10 @@ def main(argv):
             if code:
                 print(f"could not remove worktree {wt}: {out}")
         if branch_is_merged(root, branch_name):
-            code, out = sh(root, "git", "branch", "-d", branch_name)
+            # -D, not -d: branch_is_merged() already verified the branch's content is fully on
+            # main (ancestry or tree-equality). Plain `git branch -d` only knows the ancestry
+            # check and refuses every squash-merged branch, which is how every Edmate PR merges.
+            code, out = sh(root, "git", "branch", "-D", branch_name)
             if code:
                 print(f"could not delete branch {branch_name}: {out}")
             elif remote:

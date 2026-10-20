@@ -50,8 +50,6 @@ The human picks your own model (the main session); opus is recommended for the l
 Safety-path tasks (guardrails, safety/locked evals, prompt packs, access) get a plan review before the
 branch is created, not only after the build: until the pilot gate (13.3) the lead reads `plan.md` with a
 `safety-reviewer` eye before delegating the build; from 13.3 on, `safety-reviewer` itself reviews the plan.
-Fix rounds stay capped at **one per PR**: a HIGH still open after that round becomes a `[deferred <id>]`
-board task, not a second round (step 5).
 1. **Plan:** brief the `planner` with the exact files it should read (spec section, the task's existing
    code, one or two sibling tasks' handoffs) rather than "read everything"; tell it to skip exhaustive
    fixture reads (it names the shape it needs, not every example). `planner` writes
