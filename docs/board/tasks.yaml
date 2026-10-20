@@ -633,7 +633,8 @@ tasks:
   milestone: M3
   title: 'Teacher-label follow-ups (3.11d reviews): the persona count rises on /pause, stop and post-debrief turns, never resets on a new role-play or persona, and is saved when the turn errors, is cancelled
     or gets the safe reply (reset on role-play start; render "question N of M" or "all asked: debrief now"); compose.test.ts tautological history test and the unreachable "question 0 of 5" pin; closed modes
-    still send the whole session history; MessageSchema.text and ChunkSchema.text have no max length; eval schema fields for teacher turns, skills and personas, then the parked forged-note cases'
+    still send the whole session history; MessageSchema.text and ChunkSchema.text have no max length; eval schema fields for teacher turns, skills and personas, then the parked forged-note cases; the core-phrase
+    pass skips spans the exact-label pass already spaced out (a pasted label gets "[copied]" twice today)'
   accept: each item has a unit test; a restarted role-play opens at question 1; an errored persona turn leaves the count unchanged; the forged-note eval cases are written as reviewed_by pending.
   deps:
   - 3.11d
@@ -1143,9 +1144,9 @@ tasks:
   accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
   deps:
   - M3
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m5/5.1-document-ingestion
+  model: plan:sonnet buildA:opus
 - id: '5.2'
   milestone: M5
   title: 'Video ingestion: upload → transcription → timestamped chunks'
