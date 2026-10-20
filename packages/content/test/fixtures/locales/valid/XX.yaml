@@ -1,0 +1,23 @@
+# A made-up market (XX is a user-assigned ISO code): the helpline is fictional, not routable.
+market: XX
+languages: [en]
+timezone: UTC
+currency: { code: XXX, format: "#,##0.00" }
+payments: { methods: [], provider: tbd }
+helplines:
+  - name: Example Helpline
+    number: 000-000-0000
+    kind: mental_health
+    verifiedBy: Example Reviewer
+    verifiedOn: "2026-01-01"
+compliance:
+  privacyLaw: Example Privacy Act
+  minAge: 13
+  dataRegion: test-region
+  grievance: Example grievance desk
+  parentalConsentRequired: true
+reviewedBy: Example Reviewer
+reviewedOn: "2026-01-01"
+regulatedDisclaimers: {}
+piiPatterns:
+  - 'ID-\d{3}(?!\d)'
