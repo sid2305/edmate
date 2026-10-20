@@ -18,6 +18,8 @@ evals/suites/safety/**
 evals/suites/locked/**
 apps/worker/src/alerts/**
 content/locales/**
+# Privacy notices: the text a learner (or parent) consents to, by version (task 1.7)
+content/legal/**
 # Teaching policy, prompt-pack parsing and the system-prompt composer, and the prompt-pack
 # loader (task 3.6, lead answer Q5: what reaches the model and how distress turns are worded)
 packages/harness/src/pedagogy/**

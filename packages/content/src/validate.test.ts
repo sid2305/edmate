@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   BROKEN_ALL,
   copyLocalesValid,
+  copyNoticesValid,
   copyValid,
   edit,
   LOCALES_VALID,
+  NOTICES_VALID,
   tempDir,
   VALID,
 } from './test-helpers.js';
@@ -81,6 +83,24 @@ describe('validateContentDir', () => {
     expect(validateContentDir(missing)).toEqual({
       ok: false,
       issues: [`${missing}: no such content directory`],
+    });
+  });
+
+  it('passes a signed privacy-notices directory', () => {
+    expect(validateContentDir(NOTICES_VALID)).toEqual({ ok: true, issues: [] });
+  });
+
+  it('fails a privacy notice left "pending", with file errors collected too', () => {
+    const dir = copyNoticesValid();
+    edit(dir, 'XX.md', (s) => s.replace('reviewedBy: Example Reviewer', 'reviewedBy: pending'));
+    edit(dir, 'global.md', (s) => s.replace('market: global', 'market: XX'));
+    expect(validateContentDir(dir)).toEqual({
+      ok: false,
+      issues: [
+        'global.md: market "XX" does not match the file name (expected "global")',
+        'global.md: missing; the default notice is required (it serves every market without one)',
+        'XX.md: reviewedBy is "pending"; a named person must sign this notice',
+      ],
     });
   });
 });

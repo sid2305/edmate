@@ -28,6 +28,7 @@ import {
   testSteps,
 } from '@edmate/harness/testing';
 import { afterAll, describe, expect, it } from 'vitest';
+import { agePolicyFor, agePolicyResolver } from './agePolicy.js';
 import { readLocalePacksDir } from './localeLoader.js';
 import { checkLocalePacks } from './localeRules.js';
 import {
@@ -96,9 +97,9 @@ describe('content/locales', () => {
   const all = readLocalePacksDir(LOCALES);
   const loaded = loadLocalePacks(LOCALES);
 
-  it('every file loads, and the default and India packs are there', () => {
+  it('every file loads, and the default, India and US packs are there', () => {
     expect(all.errors).toEqual([]);
-    expect([...all.packs.keys()]).toEqual(['IN', DEFAULT_LOCALE_MARKET]);
+    expect([...all.packs.keys()]).toEqual(['IN', 'US', DEFAULT_LOCALE_MARKET]);
   });
 
   it('the default pack passes every rule on its own and has no helpline to verify', () => {
@@ -123,6 +124,43 @@ describe('content/locales', () => {
         expect(h.verifiedBy.toLowerCase()).not.toContain('pending');
       }
     }
+  });
+});
+
+// Task 1.7 Phase B: the US pack is a draft. It says US learners 13-17 need no parental consent,
+// but until a named person signs its compliance block that waiver is ignored (fail closed).
+describe('content/locales: the age rule per market (task 1.7)', () => {
+  const all = readLocalePacksDir(LOCALES);
+  const US = all.packs.get('US') as LocalePack;
+
+  it('the US pack is an unsigned draft: no helplines, nothing filled in for a person to check', () => {
+    expect(US.compliance.minAge).toBe(13);
+    expect(US.compliance.parentalConsentRequired).toBe(false);
+    expect(US.reviewedBy).toBe('pending');
+    expect(US.helplines).toEqual([]);
+    expect(US.compliance.dataRegion).toBe('pending');
+    expect(US.compliance.grievance).toBe('pending');
+    expect(checkLocalePacks(new Map([['US', US]]))).toEqual(
+      expect.arrayContaining(['US.yaml: reviewedBy is "pending"']),
+    );
+  });
+
+  it('every committed pack, signed or not, keeps the floor of 13', () => {
+    for (const pack of all.packs.values()) expect(agePolicyFor(pack).minAge).toBeGreaterThanOrEqual(13);
+  });
+
+  it('while unsigned, the US waiver does not apply: every market needs consent', () => {
+    const policy = agePolicyResolver(loadLocalePacks(LOCALES).packs);
+    for (const market of ['IN', 'US', DEFAULT_LOCALE_MARKET, 'ZZ']) {
+      expect(policy(market)).toEqual({ minAge: 13, consentRequired: true });
+    }
+  });
+
+  it('once a person signs the US pack, its waiver applies (shown on a signed copy)', () => {
+    expect(agePolicyFor({ ...US, reviewedBy: 'A Reviewer' })).toEqual({
+      minAge: 13,
+      consentRequired: false,
+    });
   });
 });
 

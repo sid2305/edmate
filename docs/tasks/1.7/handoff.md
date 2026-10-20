@@ -1,6 +1,6 @@
 # 1.7 handoff: age and consent per locale pack
 
-Status: DONE (Phase A only; Phases B, C and D are separate builds)
+Status: DONE (Phases A and B; Phases C and D are separate builds)
 Branch: `m1/1.7-age-consent` (Phase A pushed from local `work-1.7a`)
 Worktree: Phase A `.claude/worktrees/agent-aed49ec632426e386` (under the repo root)
 
@@ -107,6 +107,100 @@ python3 .githooks/secret-scan.py --all → exit 0
   `withdrawn_at` on that row (or bump the version) rather than insert.
 - `learnerStatus` throws `not_found` for an erased user; the web guard should treat that as
   signed out.
+
+## Phase B
+
+Status: DONE (Phase B only)
+Branch: `m1/1.7-age-consent` (pushed from local `work-1.7b`, on top of Phase A)
+Worktree: `.claude/worktrees/agent-a92de1622ae957e53`
+
+### What was built (packages/content, content/, one CLI usage text)
+- **`packages/content/src/agePolicy.ts`** (new): `PLATFORM_MIN_AGE = 13`, `PackAgePolicy`
+  (same shape as @edmate/db's `AgePolicy`), frozen `DEFAULT_AGE_POLICY`, `complianceSigned(pack)`,
+  `agePolicyFor(pack)` → `{ minAge: max(minAge, 13), consentRequired }`, and
+  `agePolicyResolver(packs)` → `(market) => policy` (own pack, else `global`, else the default).
+  Fails closed: consent is waived only when the pack says `false` **and** `reviewedBy` is set
+  and not `pending`; a malformed `minAge` reads as 13.
+- **`packages/content/src/privacyNotices.ts`** (new): strict front-matter schema (`version`,
+  `market`, `reviewedBy`, `reviewedOn`), `parsePrivacyNotice`, `readPrivacyNoticesDir`,
+  `isPrivacyNoticesDir`, `noticeSigned`, `checkPrivacyNotices` (default `global.md` present; no
+  `pending` signer; no `[PLACEHOLDER]` body), `noticeCoverageIssues(packMarkets, notices)`,
+  `pickPrivacyNotice(market, notices)` (falls back to `global`).
+- **`validate.ts`**: a directory of `<market>.md` files is validated as privacy notices.
+- **`index.ts`**: exports both modules. `localePacks.ts`: header comment updated.
+- **`content/locales/US.yaml`** (draft): `minAge: 13`, `parentalConsentRequired: false`,
+  `reviewedBy: pending`, no helplines, `privacyLaw`/`dataRegion`/`grievance` `pending`.
+- **`content/legal/privacy-notice/{global,IN,US}.md`**: placeholders at `version: draft-0`,
+  `reviewedBy: pending`, body marked `[PLACEHOLDER]` and "not legal text".
+- **`.claude/skills/merge-gate/risk-paths.txt`**: `content/legal/**` added to the code-reviewer
+  group.
+- **`apps/cli/src/commands/content.ts`**: usage text mentions the privacy-notice directory.
+
+### Evidence
+Tests were written first and run red (missing `agePolicy.js` / `privacyNotices.js`; 2 new
+`validate.test.ts` cases failing).
+- `agePolicy.test.ts` (12): signed/unsigned × true/false, `pending` in any case, the 13 floor,
+  a 16 kept, NaN/13.5/-1 → 13, the resolver's fallbacks.
+- `privacyNotices.test.ts` (32): schema accept/refuse cases (extra field, email signer, bad date,
+  long version...), parsing (CRLF, no/unclosed front matter, bad YAML, empty body, market vs
+  file name), directory errors collected, `pending` and `[PLACEHOLDER]` fail, coverage, pick.
+- `realLocales.test.ts`: IN, US and global load; the US draft is unsigned; every committed
+  market (and an unknown one) resolves to `{ minAge: 13, consentRequired: true }`; a signed copy
+  of US waives consent.
+- `realPrivacyNotices.test.ts`: one notice per pack market and no extra; each unsigned one is a
+  `draft-0` placeholder and `content validate` fails on it.
+- `noFixtureProse.test.ts` also scans `content/legal`.
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/content... --force --concurrency=1
+  @edmate/content:test: Test Files 22 passed (22); Tests 370 passed (370)
+  @edmate/content:test: All files 99.31 | 95.43 | 100 | 99.86; agePolicy.ts 100/100/100/100;
+    privacyNotices.ts 100 | 94.73 | 100 | 100
+  Tasks: 14 successful, 14 total
+corepack pnpm turbo run typecheck lint test --filter=@edmate/cli --force --concurrency=1
+  @edmate/cli:test: Tests 81 passed (81); Tasks: 8 successful, 8 total
+corepack pnpm turbo run typecheck lint test --filter=@edmate/db --force --concurrency=1
+  @edmate/db:test: Tests 355 passed | 307 skipped (no local Postgres); Tasks: 8 successful
+edmate content validate content/legal/privacy-notice → 6 issues (pending + [PLACEHOLDER] × 3)
+edmate content validate content/locales → fails, US.yaml among the issues (as intended)
+python3 .githooks/secret-scan.py --all → exit 0
+```
+
+### Deviations
+- Extra, beyond the plan: `agePolicyResolver`, `pickPrivacyNotice`, the `[PLACEHOLDER]` rule,
+  `realPrivacyNotices.test.ts` and the CLI usage line.
+- "One notice per pack market" is checked by `noticeCoverageIssues` and the real-content test,
+  not by `content validate` (each validate run sees one directory; it does not reach across to
+  `content/locales`).
+- apps/web was not re-run: it uses only @edmate/db, which builds on content's unchanged exports.
+
+### Notes for Phase C
+- Wire `agePolicy: agePolicyResolver(loadLocalePacks(dir).packs)` into the identity store.
+- Load notices with `readPrivacyNoticesDir` and show `pickPrivacyNotice(market, ...)`; record its
+  `version`. An unsigned notice still loads (`noticeSigned` tells you), as pending packs do.
+
+### Decisions
+- **risk: high** — Phase B edits `.claude/skills/merge-gate/risk-paths.txt` (`.claude/**`,
+  security-reviewer required) and touches `content/locales/US.yaml` and the new
+  `content/legal/**` (code-reviewer group).
+  Decided: `content/legal/**` joins the code-reviewer (student safety) group.
+  Why: the notice is the text a learner or parent consents to, so a change to it needs review.
+- Decided: a pack's waiver of consent counts only when `reviewedBy` is set and not `pending`
+  (any case, trimmed); `global.yaml` has no sign-off, so it can never waive.
+  Why: plan Design 3, failing closed: an unsigned pack can't relax consent.
+- Decided: `agePolicyResolver` never throws; with no packs at all it gives
+  `{ minAge: 13, consentRequired: true }`.
+  Why: the age rule must not depend on a pack loading; the strict default is safe.
+- Decided: a notice also fails validation while its body holds `[PLACEHOLDER]`, even if signed.
+  Why: a signature on the placeholder text must not pass it as the real notice.
+- Decided: US.yaml leaves `privacyLaw` `pending` as well as `dataRegion` and `grievance`, and
+  uses `America/New_York` as its reference time zone.
+  Why: which US laws apply is for counsel, not an agent; the time zone is a neutral default.
+- Decided: an unsigned notice still loads for runtime (like pending packs); `noticeSigned` is
+  exported so Phase C or launch checks can refuse it.
+  Why: the gate needs some text to build against; validation keeps the gap visible.
+- Decided: notice `version` is 1-64 letters, digits, `.`, `_` or `-`.
+  Why: it is stored in `consents.version` (Phase A accepts at most 64 characters).
 
 ## Decisions
 - **risk: high** — Phase A touches the risky paths `packages/db/src/identity/**` and
