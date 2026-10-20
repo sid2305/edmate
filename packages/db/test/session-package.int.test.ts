@@ -20,7 +20,7 @@ import {
   type StudentScope,
   turnConfigStoreFor,
 } from '../src/index.js';
-import { EVAL_STUDENT, locales, packMarket, seedAccess } from './access-seed.js';
+import { EVAL_STUDENT, learnerClear, locales, packMarket, seedAccess } from './access-seed.js';
 import { ids, packageConfig } from './isolation-seed.js';
 import {
   createDatabase,
@@ -42,7 +42,7 @@ let raw: pg.Client;
 
 const AT = '2026-10-18T10:00:00.000Z';
 const ONE_A: StudentScope = { studentId: 'stu_1', teacherId: 'tch_a' };
-const SUB = { market: 'IN', packMarket } satisfies EntitlementStoreOptions;
+const SUB = { market: 'IN', packMarket, learnerClear } satisfies EntitlementStoreOptions;
 const input: TurnInput = { ...demoTurnInput, studentId: 'stu_1', agentId: 'agt_a' };
 type EntitlementSource = Entitlement['source'];
 

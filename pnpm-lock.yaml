@@ -221,6 +221,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@edmate/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@edmate/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

@@ -8,8 +8,10 @@
 //   - A pack that fails the schema, or whose PII patterns fail the gu or safe-regex check, is
 //     refused whole; its market gets the default pack.
 //   - Pending compliance text (grievance, reviewedBy) does not block runtime use: it feeds the
-//     published privacy notice, which is not built yet. `edmate content validate` still fails on
-//     every pending value, so the human sign-off stays visible.
+//     privacy notice (`content/legal/privacy-notice`, task 1.7). A pending `reviewedBy` does
+//     change one thing: the pack cannot waive parental consent (`agePolicyFor`, fails closed).
+//     `edmate content validate` still fails on every pending value, so the human sign-off stays
+//     visible.
 //   - Without a usable default pack, loading throws: there is no safe fallback without it.
 import type { LocalePack } from '@edmate/contracts';
 import { readLocalePacksDir } from './localeLoader.js';

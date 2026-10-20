@@ -2,11 +2,14 @@
 // work without AUTH_*), reads env lazily on the first auth call, and fails closed when it can't.
 // ioredis and nodemailer are faked: no socket is opened.
 import type { EventEmitter } from 'node:events';
+import type { AgePolicy } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MemoryIdentity } from '../../test/memory-identity';
 import { REDIS_READY_TIMEOUT_MS } from './redis-ready';
 
 const fakes = vi.hoisted(() => ({
+  db: [] as Array<{ options: unknown; identity: MemoryIdentity }>,
   redis: [] as Array<{ url: string; options: Record<string, unknown>; take: unknown[][] }>,
   transports: [] as Array<{ options: Record<string, unknown>; sent: Record<string, unknown>[] }>,
 }));
@@ -37,7 +40,14 @@ vi.mock('@edmate/db', async (importOriginal) => {
   const { memoryIdentity } = await import('../../test/memory-identity');
   return {
     ...(await importOriginal<object>()),
-    openDatabase: () => ({ identity: memoryIdentity() }),
+    openDatabase: (
+      _env: unknown,
+      options: { identity?: { agePolicy?: (m: string) => AgePolicy } } = {},
+    ) => {
+      const identity = memoryIdentity(undefined, options.identity?.agePolicy);
+      fakes.db.push({ options, identity });
+      return { identity };
+    },
   };
 });
 
@@ -51,7 +61,10 @@ vi.mock('nodemailer', () => ({
   },
 }));
 
-const pageCookies = vi.fn(async () => ({ get: (_name: string) => undefined, set: vi.fn() }));
+const pageCookies = vi.fn(async () => ({
+  get: (_name: string): { value: string } | undefined => undefined,
+  set: vi.fn(),
+}));
 const pageHeaders = vi.fn(async () => new Headers({ host: 'localhost:8080' }));
 vi.mock('next/headers', () => ({ cookies: pageCookies, headers: pageHeaders }));
 vi.mock('next/navigation', () => ({
@@ -181,9 +194,9 @@ describe('src/auth wiring', () => {
   it('signIn refuses the email provider: links go only through the rate-limited route', async () => {
     setEmailOnlyEnv();
     const auth = await load();
-    await expect(auth.signIn('email', { email: 'a@example.test', redirect: false })).rejects.toThrow(
-      'email sign-in goes through /api/auth/signin/email only',
-    );
+    await expect(
+      auth.signIn('email', { email: 'a@example.test', redirect: false }),
+    ).rejects.toThrow('email sign-in goes through /api/auth/signin/email only');
     expect(fakes.redis).toHaveLength(0);
   });
 
@@ -197,7 +210,10 @@ describe('src/auth wiring', () => {
       url: 'redis://redis.example.test:6379',
       options: { maxRetriesPerRequest: 1, enableOfflineQueue: false },
     });
-    expect(fakes.transports[0]?.options).toMatchObject({ requireTLS: false, socketTimeout: 10_000 });
+    expect(fakes.transports[0]?.options).toMatchObject({
+      requireTLS: false,
+      socketTimeout: 10_000,
+    });
   });
 
   it(
@@ -221,7 +237,9 @@ describe('src/auth wiring', () => {
       expect(fakes.redis[0]?.take).toHaveLength(2);
       expect(fakes.transports[0]?.sent).toHaveLength(1);
       expect(fakes.transports[0]?.sent[0]).toMatchObject({ to: 'cold@example.test' });
-      expect(String(fakes.transports[0]?.sent[0]?.text)).toContain(`${ORIGIN}/api/auth/callback/email?`);
+      expect(String(fakes.transports[0]?.sent[0]?.text)).toContain(
+        `${ORIGIN}/api/auth/callback/email?`,
+      );
     },
     AUTH_IMPORT_TIMEOUT_MS,
   );
@@ -246,6 +264,66 @@ describe('src/auth wiring', () => {
     },
     REDIS_READY_TIMEOUT_MS + AUTH_IMPORT_TIMEOUT_MS,
   );
+
+  it('the age gate: rules and notice versions from content/, cookies through next/headers', async () => {
+    setAuthEnv();
+    fakes.db.length = 0;
+    const auth = await load();
+    expect(await auth.ageGateView()).toEqual({ state: 'sign_in' });
+    const { options, identity } = fakes.db[0]!;
+    const wired = (
+      options as {
+        identity: { agePolicy(m: string): unknown; noticeVersion(m: string): string };
+      }
+    ).identity;
+    expect(wired.agePolicy('IN')).toEqual({ minAge: 13, consentRequired: true });
+    expect(wired.noticeVersion('IN')).toBe('draft-0');
+    expect(auth.ageNotice('US')).toMatchObject({ market: 'US', version: 'draft-0' });
+
+    // A signed-in student: the guard asks for the standing; the action records the answer.
+    const u = await identity.createStudent({
+      email: 'w@example.test',
+      emailVerifiedAt: null,
+      name: 'W',
+    });
+    const sid = 'sid'.padEnd(32, '1');
+    await identity.createSession(sid, u.id, new Date(Date.now() + 60_000));
+    const set = vi.fn();
+    const jar = {
+      get: (name: string) => (name === 'authjs.session-token' ? { value: sid } : undefined),
+      set,
+    };
+    pageCookies.mockImplementation(async () => jar);
+    const route = auth.withRole(['student'], () => new Response('ok'));
+    const me = () =>
+      route(
+        new NextRequest(`${ORIGIN}/api/me/progress`, {
+          headers: { cookie: `authjs.session-token=${sid}` },
+        }),
+      );
+    expect((await me()).status).toBe(403);
+    expect(await auth.ageGateView()).toMatchObject({ state: 'ask' });
+    expect(await auth.submitAgeAnswer({ market: 'IN', birthYear: '2015' })).toEqual({
+      status: 'closed',
+    });
+    expect(set).toHaveBeenCalledWith(
+      'edmate.age-block',
+      '1',
+      expect.objectContaining({ httpOnly: true }),
+    );
+    expect((await me()).status).toBe(401);
+    pageCookies.mockImplementation(async () => ({
+      get: (_name: string) => undefined,
+      set: vi.fn(),
+    }));
+  });
+
+  it('the age gate fails loudly when content/ is missing', async () => {
+    setAuthEnv();
+    vi.stubEnv('EDMATE_CONTENT_DIR', '/nonexistent/edmate-content');
+    const auth = await load();
+    expect(() => auth.ageNotice('IN')).toThrow();
+  });
 
   it('signIn and signOut delegate to Auth.js', async () => {
     setAuthEnv();

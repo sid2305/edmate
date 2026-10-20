@@ -5,6 +5,7 @@ import type { IdentityStore, Role } from '@edmate/db';
 import { customFetch, type NextAuthConfig, type Session } from 'next-auth';
 import Google, { type GoogleProfile } from 'next-auth/providers/google';
 import { toAuthAdapter, type EdmateAdapterUser } from './adapter';
+import { ageBlockCookieName } from './age';
 import { describeError } from './describe-error';
 import { EMAIL_PROVIDER_ID, emailProvider } from './email';
 import type { AuthEnv } from './env';
@@ -69,6 +70,18 @@ export function sessionCookieName(secure: boolean): string {
 /** Session tokens Auth.js issues are UUIDs; anything far outside that is not looked up. */
 const TOKEN = /^[A-Za-z0-9_-]{16,512}$/;
 
+/**
+ * Blocked forever (1.7 fix round 1): an under-13 erase a foreign row blocked. An unknown user, or
+ * one that isn't a student (`not_found`/`scope`), is not this case; the caller handles it.
+ */
+async function isAgeBlocked(identity: IdentityStore, userId: string): Promise<boolean> {
+  try {
+    return (await identity.learnerStatus(userId)) === 'under_age';
+  } catch {
+    return false;
+  }
+}
+
 /** Reads the principal for a session cookie from the identity store (role read fresh each time). */
 export function principalFromIdentity(identity: IdentityStore, cookieName: string) {
   return async (cookies: CookieReader): Promise<Principal | null> => {
@@ -112,9 +125,15 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
       // account may sign in: Auth.js would otherwise link a new Google account to the signed-in
       // user (a sibling on a shared device opening A's account).
       async signIn({ account, profile, email }) {
+        // A browser that gave an under-age answer is refused for 24 hours (1.7, age.ts).
+        if (deps.request?.cookies.get(ageBlockCookieName(secure))) return false;
         if (account?.provider === EMAIL_PROVIDER_ID && account.type === 'email') {
-          // The link callback: Auth.js has already used up the single-use token.
-          if (email?.verificationRequest !== true) return true;
+          // The link callback: Auth.js has already used up the single-use token. A learner
+          // blocked forever (1.7 fix round 1) gets no further sign-in, from any link.
+          if (email?.verificationRequest !== true) {
+            const owner = await identity.getUserByEmail(account.providerAccountId);
+            return owner ? !(await isAgeBlocked(identity, owner.id)) : true;
+          }
           // A server action has no request (and so no IP): refused, fail closed.
           if (!deps.request || !deps.emailSignIn) return false;
           const allowed = await deps.emailSignIn.limiter.allow({
@@ -125,13 +144,26 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
         }
         if (account?.provider !== 'google') return false;
         const p = profile as Partial<GoogleProfile> | undefined;
-        const verified =
-          p?.email_verified === true && typeof p.email === 'string' && p.email.length > 0;
-        if (!verified || !deps.request) return false;
+        const googleEmail = p?.email;
+        if (
+          p?.email_verified !== true ||
+          typeof googleEmail !== 'string' ||
+          googleEmail.length === 0
+        ) {
+          return false;
+        }
+        if (!deps.request) return false;
+        const linkedOwner = await identity.getUserByAccount(
+          account.provider,
+          account.providerAccountId,
+        );
+        // A blocked erase (fix round 1) deletes the linked account row along with every other
+        // sign-in row, so the account must also be found by email to be refused by id.
+        const owner = linkedOwner ?? (await identity.getUserByEmail(googleEmail));
+        if (owner && (await isAgeBlocked(identity, owner.id))) return false;
         const current = await currentPrincipal(deps.request.cookies);
         if (!current) return true;
-        const owner = await identity.getUserByAccount(account.provider, account.providerAccountId);
-        return owner?.id === current.userId;
+        return linkedOwner?.id === current.userId;
       },
       redirect({ url }) {
         return safeRedirect(url, env.url);

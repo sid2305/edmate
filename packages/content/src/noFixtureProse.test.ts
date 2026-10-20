@@ -12,6 +12,7 @@ const DIRS = [
   join(REPO_ROOT, 'content/prompt-packs'),
   join(REPO_ROOT, 'content/skills'),
   join(REPO_ROOT, 'content/locales'), // task 3.10
+  join(REPO_ROOT, 'content/legal'), // task 1.7
 ];
 
 function listFiles(dir: string): string[] {

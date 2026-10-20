@@ -2,17 +2,33 @@
 // pool, and (with email sign-in) the Redis client and SMTP transport are created on the first auth
 // call, so `/api/health` and `next build` work without AUTH_* set.
 // Only this folder imports next-auth (lint rule in @edmate/config/eslint/app).
+import { resolve as resolvePath } from 'node:path';
 import { openDatabase, type IdentityStore } from '@edmate/db';
 import { Redis } from 'ioredis';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import NextAuth, { type NextAuthResult } from 'next-auth';
 import type { NextRequest } from 'next/server';
-import { createAuthConfig, principalFromIdentity, sessionCookieName, type AuthConfigDeps } from './config';
+import {
+  ageGateView as viewAgeGate,
+  loadAgeContent,
+  submitAgeAnswer as answerAge,
+  type AgeAnswerResult,
+  type AgeContent,
+  type AgeGateDeps,
+  type AgeGateView,
+  type AgeNotice,
+} from './age';
+import {
+  createAuthConfig,
+  principalFromIdentity,
+  sessionCookieName,
+  type AuthConfigDeps,
+} from './config';
 import { describeError } from './describe-error';
 import { EMAIL_PROVIDER_ID } from './email';
 import { readAuthEnv, type AuthEnv } from './env';
-import { createGuard, type GuardDeps } from './guard';
+import { createGuard, resolvePrincipal, type GuardDeps } from './guard';
 import { smtpMailSender } from './mail';
 import { createSignInLimiter, redisSignInCounters } from './rate-limit';
 import { readyCounters } from './redis-ready';
@@ -25,6 +41,18 @@ interface Runtime {
 }
 
 let runtime: Runtime | undefined;
+let ageContent: AgeContent | undefined;
+
+/**
+ * Locale packs and privacy notices for the age gate (1.7), loaded on first use from
+ * EDMATE_CONTENT_DIR, else the repo's `content/` (Next runs from apps/web). If they can't be
+ * loaded, every age check fails (500) and learners stay blocked; other roles are unaffected.
+ */
+function getAgeContent(): AgeContent {
+  const dir = process.env.EDMATE_CONTENT_DIR?.trim() || resolvePath(process.cwd(), '../../content');
+  ageContent ??= loadAgeContent(dir);
+  return ageContent;
+}
 
 /**
  * The email magic link's mail sender and rate limiter. The Redis client fails fast in an outage
@@ -33,7 +61,10 @@ let runtime: Runtime | undefined;
  */
 function emailSignIn(env: AuthEnv): AuthConfigDeps['emailSignIn'] {
   if (!env.email) return undefined;
-  const redis = new Redis(env.email.redisUrl, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+  const redis = new Redis(env.email.redisUrl, {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+  });
   // ioredis errors can quote the host; log the name only. A take during an outage rejects.
   redis.on('error', (error: unknown) => console.error(`[auth] redis ${describeError(error)}`));
   return {
@@ -53,7 +84,13 @@ function emailSignIn(env: AuthEnv): AuthConfigDeps['emailSignIn'] {
 function getRuntime(): Runtime {
   if (runtime) return runtime;
   const env = readAuthEnv(process.env);
-  const { identity } = openDatabase();
+  const { identity } = openDatabase(undefined, {
+    identity: {
+      agePolicy: (market) => getAgeContent().agePolicy(market),
+      // The store takes only the version the server shows for the market.
+      noticeVersion: (market) => getAgeContent().notice(market).version,
+    },
+  });
   const email = emailSignIn(env);
   runtime = {
     env,
@@ -69,6 +106,7 @@ function getRuntime(): Runtime {
     ),
     guard: {
       getPrincipal: principalFromIdentity(identity, sessionCookieName(env.secureCookies)),
+      learnerStatus: (userId) => identity.learnerStatus(userId),
       allowedOrigin: env.url.origin,
     },
   };
@@ -99,4 +137,39 @@ export const { withRole, publicRoute, providerRoute, requireRole } = createGuard
   () => ({ cookies, redirect, notFound }),
 );
 
+/** The age gate's dependencies over the request's cookies (server action or component). */
+async function ageGateDeps(): Promise<AgeGateDeps> {
+  const rt = getRuntime();
+  const jar = await cookies();
+  return {
+    cookies: {
+      get: (name) => jar.get(name),
+      set: (name, value, options) => {
+        jar.set(name, value, options);
+      },
+    },
+    resolve: (c) => resolvePrincipal(rt.guard, c),
+    identity: rt.identity,
+    content: getAgeContent(),
+    secureCookies: rt.env.secureCookies,
+    sessionCookie: sessionCookieName(rt.env.secureCookies),
+  };
+}
+
+/** The age gate's server action (app/welcome/age/actions.ts): see age.ts. */
+export async function submitAgeAnswer(input: unknown): Promise<AgeAnswerResult> {
+  return answerAge(input, await ageGateDeps());
+}
+
+/** What the age gate page shows. */
+export async function ageGateView(): Promise<AgeGateView> {
+  return viewAgeGate(await ageGateDeps());
+}
+
+/** The privacy notice the server shows for a market (its version is the one recorded). */
+export function ageNotice(market: string): AgeNotice {
+  return getAgeContent().notice(market);
+}
+
+export type { AgeAnswerResult, AgeGateView, AgeNotice } from './age';
 export type { Principal, RoleContext } from './guard';

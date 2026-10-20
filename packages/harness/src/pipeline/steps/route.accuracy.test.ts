@@ -96,7 +96,6 @@ describe('route.accuracy', () => {
     for (const turn of labelledTurns) {
       const env = buildEnv(turn);
       const s = buildEntitled(turn);
-      // eslint-disable-next-line no-await-in-loop -- 200 small, independent, in-process calls.
       const result = await route.run(env, s);
       const ok = result.intent === turn.intent && result.attempt === turn.attempt;
       if (turn.english) englishTotal += 1;

@@ -30,8 +30,20 @@ import { fileURLToPath } from 'node:url';
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 import { checkSafeRegex, type TimingOptions } from './safeRegex.js';
 
-const WORKER_URL = new URL('./safeRegexWorkerEntry.js', import.meta.url);
-const WORKER_PATH = fileURLToPath(WORKER_URL);
+// Resolved lazily, not at module load (1.7 fix round 1): a bundler that evaluates this module
+// outside its own realm (Next's build-time "collect page data" step, reached once the age gate,
+// task 1.7, imports the locale loader) can hand `import.meta.url` back as a URL from a different
+// realm, and Node's `fileURLToPath` rejects that with ERR_INVALID_ARG_TYPE even though it reads
+// as a URL. Nothing here runs until the first real check, well after module load.
+let workerFile: { url: URL; path: string } | undefined;
+
+function getWorkerFile(): { url: URL; path: string } {
+  if (!workerFile) {
+    const url = new URL('./safeRegexWorkerEntry.js', import.meta.url);
+    workerFile = { url, path: fileURLToPath(url) };
+  }
+  return workerFile;
+}
 
 /** Only the plain-data parts of `TimingOptions`: `now` is a function and cannot cross a worker boundary. */
 function serializableOpts(opts: TimingOptions): TimingOptions {
@@ -53,13 +65,14 @@ export function checkSafeRegexGuarded(
   opts: TimingOptions = {},
   wallClockMs = 2_000,
 ): string[] {
-  if (!existsSync(WORKER_PATH)) return checkSafeRegex(source, opts); // no compiled worker file on disk: in-process, tests only
+  const file = getWorkerFile();
+  if (!existsSync(file.path)) return checkSafeRegex(source, opts); // no compiled worker file on disk: in-process, tests only
 
   const flag = new Int32Array(new SharedArrayBuffer(4));
   const { port1, port2 } = new MessageChannel();
   let worker: Worker;
   try {
-    worker = new Worker(WORKER_URL, {
+    worker = new Worker(file.url, {
       workerData: { source, opts: serializableOpts(opts), port: port2, flag },
       transferList: [port2],
     });

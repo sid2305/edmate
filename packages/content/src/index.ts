@@ -52,4 +52,28 @@ export {
   structuralIssues,
   type TimingOptions,
 } from './safeRegex.js';
+// Age and consent (task 1.7): the per-market age rule and the privacy notices.
+export {
+  agePolicyFor,
+  agePolicyResolver,
+  complianceSigned,
+  DEFAULT_AGE_POLICY,
+  type PackAgePolicy,
+  PLATFORM_MIN_AGE,
+} from './agePolicy.js';
+export {
+  checkPrivacyNotices,
+  isPrivacyNoticesDir,
+  noticeCoverageIssues,
+  noticeSigned,
+  parsePrivacyNotice,
+  pickPrivacyNotice,
+  PLACEHOLDER_MARKER,
+  type PrivacyNotice,
+  PrivacyNoticeError,
+  type PrivacyNoticeFrontMatter,
+  PrivacyNoticeFrontMatterSchema,
+  type PrivacyNotices,
+  readPrivacyNoticesDir,
+} from './privacyNotices.js';
 export { validateContentDir, type ValidationResult } from './validate.js';

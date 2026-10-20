@@ -26,7 +26,7 @@ import {
   retrievalIndexFor,
   SEARCH_MAX_K,
 } from '../src/index.js';
-import { EVAL_STUDENT, packMarket, seedAccess } from './access-seed.js';
+import { EVAL_STUDENT, learnerClear, packMarket, seedAccess } from './access-seed.js';
 import { ids, packageConfig, teacherId } from './isolation-seed.js';
 import { scriptedVector } from './retrieval-seed.js';
 import {
@@ -286,6 +286,7 @@ describe.skipIf(!up)(
       const preview = entitlementStoreFor(repos, {
         market: 'IN',
         packMarket,
+        learnerClear,
         preview: { packageId: ids.pkg('A') },
       });
 
@@ -305,6 +306,7 @@ describe.skipIf(!up)(
         const evalStore = entitlementStoreFor(repos, {
           market: 'IN',
           packMarket,
+          learnerClear,
           eval: { teacherId: A, packageId: ids.pkg('A'), version: pinned, market: 'US' },
         });
         const resolved: [string, Entitlement | null, number][] = [
