@@ -250,8 +250,9 @@ interface LocalePack {
   market: string; languages: Lang[]; timezone: string;            // IANA, e.g. 'Asia/Kolkata'
   currency: { code: string; format: string };
   payments: { methods: string[]; provider: string };
-  helplines: { name: string; number: string; kind: string }[];
-  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
+  helplines: { name: string; number: string; kind: string; verifiedBy: string; verifiedOn: string }[];   // verifiedBy: the person who checked the line (a name or handle, never an email); verifiedOn: YYYY-MM-DD; a loaded pack refuses the literal 'pending' (ADR-0008)
+  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string; parentalConsentRequired: boolean };   // parentalConsentRequired: learners under 18 need verifiable parental consent in this market (ADR-0008)
+  reviewedBy?: string; reviewedOn?: string;                       // sign-off for the compliance block, both or neither; same formats as verifiedBy / verifiedOn (ADR-0008)
   regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
 }
 
