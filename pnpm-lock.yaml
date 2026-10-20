@@ -196,13 +196,13 @@ importers:
       '@edmate/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
     devDependencies:
       '@edmate/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@edmate/harness':
-        specifier: workspace:*
-        version: link:../../packages/harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
