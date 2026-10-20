@@ -616,7 +616,7 @@ tasks:
   deps:
   - '4.7'
   - 3.11b
-  status: running
+  status: review
   branch: null
   model: null
 - id: '3.12'
@@ -1000,7 +1000,7 @@ tasks:
     with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
-  status: todo
+  status: running
   branch: null
   model: null
 - id: '4.7'
