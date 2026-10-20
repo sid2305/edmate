@@ -26,9 +26,9 @@ After fix round 1: the safety re-check (opus) closes issues 1, 2, 3, 5 and 6 and
 - [LOW] [deferred 4.8b] the redirect text's "an adult you trust" reads oddly for 18+ students (safety).
 
 ### silent-failure-hunter (sonnet) — mergeable with fixes; no fail-open paths
-- [HIGH] packages/harness/src/pedagogy/disclaimer.ts:18-19 — resolveDisclaimer falls back to the generic English disclaimer with no report when a regulated agent's locale pack has no entry for its subject (schema-valid partialRecord). Fix: report a code-only locale-gap metric when subject is set and the pack entry is missing.
-- [MEDIUM] packages/harness/src/guardrails/adviceGuard.ts:347-356 — one catch around scrubPii and the judge collapses a local scrub bug and a judge outage into judge_unavailable with no cause. Fix: report errorName(error) or a distinct cause.
-- [MEDIUM] packages/harness/src/guardrails/adviceGuard.ts:379-395 — the rewrite catch discards errors with no reason or metric. Fix: an advice_rewrite_failed reason/metric like judgeUnavailable.
+- [HIGH] [fixed] packages/harness/src/pedagogy/disclaimer.ts:18-19 — resolveDisclaimer falls back to the generic English disclaimer with no report when a regulated agent's locale pack has no entry for its subject (schema-valid partialRecord). Fix: report a code-only locale-gap metric when subject is set and the pack entry is missing.
+- [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:347-356 — one catch around scrubPii and the judge collapses a local scrub bug and a judge outage into judge_unavailable with no cause. Fix: report errorName(error) or a distinct cause.
+- [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:379-395 — the rewrite catch discards errors with no reason or metric. Fix: an advice_rewrite_failed reason/metric like judgeUnavailable.
 
 ### typescript-reviewer (sonnet) — APPROVE
 No findings: import purity holds, judge and rewrite calls never throw and fail closed, time budgets match plan Q3, strict verdict schema, verification pass idempotent.
