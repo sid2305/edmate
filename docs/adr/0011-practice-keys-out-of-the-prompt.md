@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Amends ADR-0010 (Consequences bullet 1, and §4's last link: "then `mustNotReveal`" now means the guards, not the prompt).
+Proposed. Amends ADR-0010 (Consequences bullet 2, and §4's last link: "then `mustNotReveal`" now means the guards, not the prompt).
 
 ## Date
 
@@ -10,7 +10,7 @@ Proposed. Amends ADR-0010 (Consequences bullet 1, and §4's last link: "then `mu
 
 ## Context
 
-ADR-0010 keeps a practice item's answer key on the server. On the turn that issues the item, the model never sees the key. On every later turn, though, the composer renders `mustNotReveal` into the model's do-not-say block (compose.ts, the 3.6 design), so the raw key is in the system prompt. The answer matcher (pipeline/generate/answerKey.ts) can miss a key the model spells out ("s-e-v-e-n") or writes another way ("VII"). A prompt injection that asks the model to spell its do-not-say list could then get the key past the stream gate and postGuard. This was raised in the 5.6 review (security-reviewer, MEDIUM compose.ts:220), and ADR-0010 Consequences bullet 1 names this follow-up.
+ADR-0010 keeps a practice item's answer key on the server. On the turn that issues the item, the model never sees the key. On every later turn, though, the composer renders `mustNotReveal` into the model's do-not-say block (compose.ts, the 3.6 design), so the raw key is in the system prompt. The answer matcher (pipeline/generate/answerKey.ts) can miss a key the model spells out ("s-e-v-e-n") or writes another way ("VII"). A prompt injection that asks the model to spell its do-not-say list could then get the key past the stream gate and postGuard. This was raised in the 5.6 review (security-reviewer, MEDIUM compose.ts:220), and ADR-0010 Consequences bullet 2 names this follow-up.
 
 A second gap (5.6 review, LOW runner.ts:1135): when a new item replaces one the student never solved, the runner overwrites `HelpState.answerKey` with the new item's keys. On the next turn the skipped item's answer is not guarded at all.
 
