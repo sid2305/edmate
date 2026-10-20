@@ -1,13 +1,19 @@
 // Worker process entrypoint: opens Redis and the database, then runs the no-op worker, the turn
 // queues' workers (meter, commit; task 3.8), the scheduled cost alarm (2.5, scheduled in 3.8) and
-// the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged).
+// the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged) and
+// the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows).
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
 import { openDatabase } from '@edmate/db';
 import { ALERT_QUEUE, DEAD_LETTER_QUEUE } from '@edmate/queue';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { createCostAlarmWorker, logCostAlarmSink, scheduleCostAlarm } from './alarms/index.js';
-import { createAlertWorker, logAlertNotifier, redisAckStore } from './alerts/index.js';
+import {
+  createAlertWorker,
+  createSafetyEventWorker,
+  logAlertNotifier,
+  redisAckStore,
+} from './alerts/index.js';
 import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
 import { describeError, jsonLog } from './log.js';
@@ -48,7 +54,14 @@ const alert = createAlertWorker({
   log,
   autorun: true,
 });
-const workers = [noop, turn.meter, turn.commit, costAlarm, alert];
+const safetyEvent = createSafetyEventWorker({
+  connection,
+  repos: db.repos,
+  deadLetter,
+  log,
+  autorun: true,
+});
+const workers = [noop, turn.meter, turn.commit, costAlarm, alert, safetyEvent];
 
 noop.on('error', (error) => {
   log({ level: 'error', event: 'worker.error', queue: noop.name, error: describeError(error) });

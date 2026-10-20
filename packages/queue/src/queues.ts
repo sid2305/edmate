@@ -7,6 +7,8 @@
 // - `edmate-dead-letter`: jobs that failed for good (attempts used up, or a permanent error).
 // - `edmate-safety-alert`: SafetyAlerts (task 4.3): tell the trust team, then page on-call every
 //   15 minutes until someone acknowledges the alert.
+// - `edmate-safety-event`: moderationIn and jailbreak blocks (task 4.4, ADR-0006): one
+//   safety_events row each, ids and a fixed code only.
 //
 // BullMQ refuses `:` in a custom job id, so the parts are joined with `.` (contracts ids never
 // contain one).
@@ -16,6 +18,7 @@ import {
   EvidenceEventSchema,
   MessageSchema,
   SafetyAlertSchema,
+  SafetyEventCodeSchema,
   TurnTraceSchema,
   UsageSchema,
 } from '@edmate/contracts';
@@ -26,6 +29,7 @@ export const METER_QUEUE = 'edmate-turn-meter';
 export const COMMIT_QUEUE = 'edmate-turn-commit';
 export const DEAD_LETTER_QUEUE = 'edmate-dead-letter';
 export const ALERT_QUEUE = 'edmate-safety-alert';
+export const SAFETY_EVENT_QUEUE = 'edmate-safety-event';
 
 export const JOB = {
   usage: 'usage.record',
@@ -36,6 +40,7 @@ export const JOB = {
   evidence: 'evidence.apply',
   alertRaise: 'alert.raise',
   alertEscalateCheck: 'alert.escalate_check',
+  safetyEventRecord: 'safety_event.record',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -79,6 +84,8 @@ export const jobId = {
   alertRaise: (alertId: string) => `${alertId}.alert`,
   /** One id per round, so each 15-minute check can schedule the next one. */
   alertEscalate: (alertId: string, round: number) => `${alertId}.escalate.${round}`,
+  /** ADR-0006's dedupe key `${turnId}:${guard}`, with `.` (BullMQ refuses `:`). */
+  safetyEvent: (turnId: string, guard: SafetyEventGuard) => `${turnId}.${guard}.safety`,
 };
 
 // ---- safety alerts (task 4.3) -----------------------------------------------------------------
@@ -226,3 +233,32 @@ export function bindScope(scope: JobScope, adapter: string): JobScope {
   if (!r.success) throw new TypeError(`${adapter}: invalid scope`);
   return r.data;
 }
+
+// ---- safety events (task 4.4, ADR-0006) -------------------------------------------------------
+
+const SafetyEventGuardSchema = z.enum(['moderationIn', 'jailbreak']);
+export type SafetyEventGuard = z.infer<typeof SafetyEventGuardSchema>;
+const SafetyEventSourceSchema = z.enum(['rule', 'classifier']);
+
+/** `SafetyEventSink.record`'s argument, strict: ids, the guard, a fixed code and the source. */
+export const SafetyEventSchema = z.strictObject({
+  studentId: Id,
+  teacherId: Id,
+  sessionId: Id,
+  turnId: Id,
+  guard: SafetyEventGuardSchema,
+  code: SafetyEventCodeSchema,
+  source: SafetyEventSourceSchema,
+});
+export type SafetyEvent = z.infer<typeof SafetyEventSchema>;
+
+/** The job: the event with its student x teacher as the scope the worker writes under. */
+export const SafetyEventJobSchema = z.strictObject({
+  scope: Scope,
+  sessionId: Id,
+  turnId: Id,
+  guard: SafetyEventGuardSchema,
+  code: SafetyEventCodeSchema,
+  source: SafetyEventSourceSchema,
+});
+export type SafetyEventJob = z.infer<typeof SafetyEventJobSchema>;

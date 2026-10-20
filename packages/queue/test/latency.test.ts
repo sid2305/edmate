@@ -28,7 +28,7 @@ describe('reply latency with a slow database', () => {
     const meter = fakeQueue({ onAdd: slowWorker });
     const commit = fakeQueue({ onAdd: slowWorker });
     const ports = queuedTurnPorts(
-      { meter, commit, alert: fakeQueue() },
+      { meter, commit, alert: fakeQueue(), safetyEvent: fakeQueue() },
       { studentId: 'stu_test_01', teacherId: 'tch_test_01' },
       { history: () => Promise.resolve([]) },
       { get: (studentId, teacherId) => Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }) },

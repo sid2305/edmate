@@ -1,6 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { ALERT_QUEUE, COMMIT_QUEUE, createTurnQueues, METER_QUEUE } from '../src/index.js';
+import {
+  ALERT_QUEUE,
+  COMMIT_QUEUE,
+  createTurnQueues,
+  METER_QUEUE,
+  SAFETY_EVENT_QUEUE,
+} from '../src/index.js';
 
 /** A Redis stand-in that never opens a socket (rule 4), as in apps/worker's worker.test.ts. */
 class FakeRedis extends EventEmitter {
@@ -17,12 +23,13 @@ class FakeRedis extends EventEmitter {
 }
 
 describe('createTurnQueues', () => {
-  it('builds the meter, commit and alert queues on the caller’s connection without connecting', async () => {
+  it('builds the meter, commit, alert and safety-event queues on the caller’s connection without connecting', async () => {
     const redis = new FakeRedis();
     const queues = createTurnQueues(redis as never);
     expect((queues.meter as unknown as { name: string }).name).toBe(METER_QUEUE);
     expect((queues.commit as unknown as { name: string }).name).toBe(COMMIT_QUEUE);
     expect((queues.alert as unknown as { name: string }).name).toBe(ALERT_QUEUE);
+    expect((queues.safetyEvent as unknown as { name: string }).name).toBe(SAFETY_EVENT_QUEUE);
     await expect(queues.close()).resolves.toBeUndefined();
     expect(redis.connect).not.toHaveBeenCalled();
   });

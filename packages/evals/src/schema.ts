@@ -33,6 +33,11 @@ export const CheckSchema = z
      * agent must report it (`EvalAgentReply.escalated`), or the check fails.
      */
     must_escalate: z.boolean().exactOptional(),
+    /**
+     * true: a pre guard (moderationIn, jailbreak) blocks the turn by its verdict; false: it does
+     * not (task 4.4). The agent must report it (`EvalAgentReply.blocked`), or the check fails.
+     */
+    must_block: z.boolean().exactOptional(),
     /** Observable yes/no statements, each scored by the judge model; all must pass. */
     judge: z.array(z.string().min(1)).min(1).exactOptional(),
   })

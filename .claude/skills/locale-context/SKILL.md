@@ -1,6 +1,6 @@
 ---
 name: locale-context
-description: Edmate is country-neutral. Everything that depends on a country lives in a locale pack, never in code or prompts. That covers language and script, currency and number formats, distress helplines, regulated-subject disclaimers, privacy and age rules, payment methods, and grievance contacts. Use when writing prompt packs, guards (distress, PII, advice), pricing and payments code, eval cases in other languages, or adding a launch market.
+description: Edmate is country-neutral. Everything that depends on a country lives in a locale pack, never in code or prompts. That covers language and script, currency and number formats, distress helplines, regulated-subject disclaimers, privacy and age rules, payment methods, and grievance contacts. Use when writing prompt packs, guards (distress, PII, advice), pricing and payments code, eval cases (English only during the pilot), or adding a launch market.
 ---
 
 # Locale context
@@ -51,5 +51,7 @@ At runtime (`loadLocalePacks` / `pickLocalePack`) an unverified helpline is neve
 - **Helpline:** Tele-MANAS 14416 (already cited in the PRD). Verify the number and source before launch.
 - **Law:** DPDP Act 2023 and Rules 2025; IT Rules 2021 grievance officer.
 - **PII patterns:** Indian mobile numbers, Aadhaar-like 12-digit numbers, PAN, UPI IDs.
+
+During the pilot (18 Oct 2026), only English teaching and prompt-pack content are new. Safety eval cases may use Hindi/Hinglish input.
 
 A pack's helplines, legal lines and tax lines must be checked by a human before that market launches. Agents may draft a pack, but each helpline's `verifiedBy` and the pack's `reviewedBy` stay `pending` until a person signs off.

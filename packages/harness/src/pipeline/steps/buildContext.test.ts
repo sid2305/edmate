@@ -37,6 +37,7 @@ import {
   RETRIEVAL_K,
   RetrievalScopeError,
 } from './buildContext.js';
+import { WITHHELD_MESSAGE, withheldMessage } from '../policies.js';
 import { historyChars } from './historyTrim.js';
 
 const ENTITLED: Entitled = {
@@ -127,6 +128,17 @@ describe('buildContext: history', () => {
     const b = await run(w);
     expect(w.historyCalls).toEqual([['ses_test_01', HISTORY_FETCH_LIMIT]]);
     expect(b.history).toEqual(history);
+  });
+
+  it('a withheld (blocked) student message is dropped from the history and the query (4.4 fix round)', async () => {
+    const history = [
+      msg(0, 'student', withheldMessage('jailbreak_override')),
+      msg(1, 'student', WITHHELD_MESSAGE),
+      msg(2, 'agent', 'My rules stay the same.'),
+      msg(3, 'student', 'what is a list'),
+    ];
+    const b = await run(world({ history }));
+    expect(b.history.map((m) => m.text)).toEqual(['My rules stay the same.', 'what is a list']);
   });
 
   it('a long history is trimmed oldest first and keeps the latest message', async () => {

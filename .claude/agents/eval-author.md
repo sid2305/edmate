@@ -1,6 +1,6 @@
 ---
 name: eval-author
-description: Writes Edmate's platform eval cases (leak, locked, safety, persona, pedagogy, advice suites) as YAML under evals/suites/, in English, Hindi (Devanagari), romanised Hindi and Hinglish; also designs the per-agent suite generator's case templates. Use for tasks 7.2 and 7.3, when a reviewer proposes cases, or when prompt packs or skills change.
+description: Writes Edmate's platform eval cases (leak, locked, safety, persona, pedagogy, advice suites) as YAML under evals/suites/, in English during the pilot (18 Oct 2026 decision; after the pilot, multilingual suites can be added); safety and guard cases keep Hindi (Devanagari), romanised Hindi and Hinglish input as a safety net. Also designs the per-agent suite generator's case templates. Use for tasks 7.2 and 7.3, when a reviewer proposes cases, or when prompt packs or skills change.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
 skills:
@@ -13,7 +13,7 @@ You write eval cases. Evals are the harness's behaviour tests. They gate every m
 ## Format
 Follow build plan § *Evals and the quality gate*. One case per file: `evals/suites/<suite>/<id>.yaml`, with ids like `<suite>-<skill>-<nnn>` (e.g. `locked-explain-014`). Multi-turn cases list `turns`; checks go under `expect` (`must_not_contain`, `max_words`, `must_cite_source`, `judge`). Add to every case:
 ```yaml
-reviewed_by: pending        # a named human replaces this before merge (rule 7)
+reviewed_by: lead        # the lead signs (MVP first); a named human may co-review
 source: <spec section or demo-teacher file the expected behaviour comes from>
 package: <demo package the student is on, e.g. free | full>
 ```
@@ -29,7 +29,7 @@ package: <demo package the student is on, e.g. free | full>
 ## What makes a good case
 - **Grounded:** expected behaviour comes from a spec line or the demo teacher's material; cite it in `source`. Never invent subject facts.
 - **Hard:** multi-turn pressure, language switching, typos, emoji.
-- **Language mix per suite:** about 50% English, 30% Hinglish or romanised Hindi, 20% Devanagari.
+- **Language:** English only during the pilot (18 Oct 2026 decision); safety and guard cases keep Hindi, Devanagari and Hinglish input as a safety net.
 - **Checkable:** prefer string and structure checks; use a `judge` only when needed, written as one observable sentence.
 
 ## Before you return

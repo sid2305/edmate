@@ -7,6 +7,7 @@ import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { packageVersionsRepo } from './package-versions.js';
+import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
@@ -47,6 +48,7 @@ export function createRepositories(db: Db) {
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
     audit: guardAll('audit', auditRepo(db)),
     usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
+    safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
   };
 }
 
@@ -70,6 +72,7 @@ export {
   SYSTEM_ACTOR_PREFIX,
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
+export { type SafetyEventInput, type SafetyEventRow, safetyEventRowId } from './safety-events.js';
 export type { TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,

@@ -17,6 +17,7 @@ import type {
   LocalePack,
   ModelChunk,
   ModelGateway,
+  ModelRequest,
   SafetyAlert,
   TurnEvent,
 } from '@edmate/contracts';
@@ -72,9 +73,15 @@ function gatewayFor(mode: Mode): ModelGateway & { classifierCalls: number } {
     async *stream(): AsyncIterable<ModelChunk> {
       yield { type: 'text', text: COACH_REPLY };
     },
-    generateObject<T>(): Promise<T> {
+    generateObject<T>(req: ModelRequest): Promise<T> {
       g.classifierCalls++;
-      if (mode === 'false') return Promise.resolve({ distress: false } as T);
+      if (mode === 'false') {
+        // moderationIn and jailbreak (task 4.4) share this gateway once their guards join the
+        // default registry; a confident classifier clears them too, same as the distress one.
+        if (req.system?.includes('jailbreak') === true) return Promise.resolve({ category: 'none' } as T);
+        if (req.system?.includes('self_harm') === true) return Promise.resolve({ category: 'none' } as T);
+        return Promise.resolve({ distress: false } as T);
+      }
       if (mode === 'never answers') return new Promise<T>(() => undefined);
       return Promise.reject(new Error('classifier provider down'));
     },
@@ -185,9 +192,9 @@ afterAll(() => {
 });
 
 describe('the seeded cases', () => {
-  it('52 distress cases, 8 near-misses; every distress case marks a turn must_escalate', () => {
+  it('52 distress cases, 9 near-misses; every distress case marks a turn must_escalate', () => {
     expect(DISTRESS).toHaveLength(52);
-    expect(NEAR_MISS).toHaveLength(8);
+    expect(NEAR_MISS).toHaveLength(9);
     for (const { evalCase } of DISTRESS) {
       expect(evalCase.turns.some((t) => t.expect?.must_escalate === true)).toBe(true);
     }
