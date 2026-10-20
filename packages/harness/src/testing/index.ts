@@ -1,6 +1,7 @@
 // Test helpers for the harness and its adapters: the contracts fixtures plus the scripted gateway.
 export * from '@edmate/contracts/fixtures';
 export { type Clock, type ManualClock, manualClock } from './clock.js';
+export { indiaLocalePackWithHelplines } from './distressLocaleFixtures.js';
 export { driveEvents, driveTurn, type TimedEvent } from './driveTurn.js';
 export {
   type FakeGuard,
