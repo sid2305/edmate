@@ -13,7 +13,7 @@
 import type { Chunk } from '@edmate/contracts';
 import { scopedRetrieval } from '../../access/scopedRetrieval.js';
 import { type AnswerKeyMatcher, compileAnswerKeys } from '../generate/answerKey.js';
-import { numericKey } from '../generate/numbers.js';
+import { chunkLeaks, contextAnswerKeys } from '../generate/answerKeyContext.js';
 import { loadSessionHelp } from '../../pedagogy/helpState.js';
 import type { Steps } from '../types.js';
 import { isWithheld } from '../policies.js';
@@ -38,6 +38,8 @@ export const RETRIEVAL_K = 5;
  * check lives in `access/scopedRetrieval.ts` (5.4) and is re-exported here.
  */
 export { RetrievalScopeError } from '../../access/scopedRetrieval.js';
+/** 5.6c: the context helpers live in `generate/answerKeyContext.ts`; re-exported for callers here. */
+export { chunkLeaks, contextAnswerKeys } from '../generate/answerKeyContext.js';
 
 /** Chunks in rank order whose text fits in `budget`; one that doesn't fit is skipped. */
 function fit(chunks: readonly Chunk[], budget: number): Chunk[] {
@@ -71,27 +73,6 @@ function mergeByScore(own: readonly Chunk[], ctx: readonly Chunk[], k: number): 
       return b.score - a.score;
     })
     .slice(0, k);
-}
-
-/** A whole number key with fewer digits than this is too short to drop context (5.6a). */
-const SHORT_NUMBER_DIGITS = 3;
-
-/**
- * The keys used to check retrieved material (lead answer, 20 Oct 2026): every key except a short
- * whole number ("1", "7", "42", or the same number in words, "one"). Such a key would drop almost
- * every chunk, and a chunk that happens to hold "7" does not give an item's answer away. The stream
- * gate and postGuard still hold every key on what the model says.
- */
-export function contextAnswerKeys(keys: readonly string[]): string[] {
-  return keys.filter((k) => {
-    const n = numericKey(k);
-    return n === undefined || !new RegExp(`^\\d{1,${String(SHORT_NUMBER_DIGITS - 1)}}$`).test(n.value);
-  });
-}
-
-/** True when any field the composer shows the model (text, source title, locator) leaks a key. */
-export function chunkLeaks(c: Chunk, m: AnswerKeyMatcher): boolean {
-  return m.leaks(c.text) || m.leaks(c.source.title) || m.leaks(c.source.locator);
 }
 
 /** Splits `chunks` into those that reveal no key and the ids of those that do (5.6a). */
@@ -148,7 +129,10 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
     found = [];
     dropped = new Set(candidates.map((c) => c.id)).size;
   } else {
-    const m = compileAnswerKeys(contextAnswerKeys(help.help.answerKey));
+    // 5.6c (ADR-0011 §3): a carried practice key is dropped by the same rule as `answerKey`.
+    const m = compileAnswerKeys(
+      contextAnswerKeys([...help.help.answerKey, ...(help.help.practiceCarriedKey ?? [])]),
+    );
     const o = dropAnswerKeyChunks(own, m);
     const x = dropAnswerKeyChunks(probe.hit ? [] : ctx, m);
     found = probe.hit ? o.kept : mergeByScore(o.kept, x.kept, RETRIEVAL_K);

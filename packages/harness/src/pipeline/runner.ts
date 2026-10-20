@@ -19,7 +19,6 @@ import {
   type SafetyAlert,
   type SourceRef,
   type TurnContext,
-  TurnContextSchema,
   type TurnEvent,
   TurnEventSchema,
   type TurnInput,
@@ -32,12 +31,14 @@ import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
 import {
   copyHelp,
   type HelpState,
+  holdsPracticeKey,
   INITIAL_HELP_STATE,
   PRACTICE_SERVED_MAX,
   practiceFields,
   type SessionHelp,
   withGroundingAsks,
 } from '../pedagogy/helpState.js';
+import { assemble } from './assemble.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -94,7 +95,6 @@ import { TraceBuilder } from './trace.js';
 import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
 import type {
   BackgroundTask,
-  BuiltContext,
   CommitRecord,
   DecideResult,
   Emit,
@@ -1125,25 +1125,38 @@ class Turn {
   private withPractice<R extends { next?: SessionHelp }>(rec: R): R {
     const loaded = this.loadedHelp;
     if (this.issued.length === 0) {
-      if (rec.next === undefined || loaded === null) return rec;
-      const help = { ...practiceFields(loaded.help), ...copyHelp(rec.next.help) };
+      if (rec.next === undefined) return rec;
+      // 5.6c (ADR-0011 §2): a carried key lasts one turn. decide's `copyHelp` keeps the field, so
+      // it is removed here explicitly, never left to `practiceFields`.
+      const help = withoutCarried({
+        ...(loaded === null ? {} : practiceFields(loaded.help)),
+        ...copyHelp(rec.next.help),
+      });
       return { ...rec, next: { ...rec.next, help } };
     }
     const base = rec.next ?? loaded ?? { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
     const prior = loaded?.help.practiceServed ?? [];
     const ids = [...new Set(this.issued.map((i) => i.itemId))];
     const last = this.issued[this.issued.length - 1] as IssuedItem;
+    const answerKey = this.issuedKeys();
+    // 5.6c (ADR-0011 §2): the loaded item was replaced unsolved, so its key is guarded one more
+    // turn. Never merged into `answerKey`, which grades only the new item.
+    const carried =
+      loaded !== null && holdsPracticeKey(loaded.help)
+        ? loaded.help.answerKey.filter((k) => !answerKey.includes(k))
+        : [];
     const help: HelpState = {
-      ...base.help,
+      ...withoutCarried(base.help),
       stuckTurns: 0,
       attemptLogged: false,
       pendingCheck: false,
-      answerKey: this.issuedKeys(),
+      answerKey,
       practiceItemId: last.itemId,
       practiceModuleId: last.moduleId,
       practiceServed: [...prior.filter((id) => !ids.includes(id)), ...ids].slice(
         -PRACTICE_SERVED_MAX,
       ),
+      ...(carried.length === 0 ? {} : { practiceCarriedKey: carried }),
     };
     return { ...rec, next: { rung: 0, help } };
   }
@@ -1236,18 +1249,9 @@ function scrubFailure(r: TimedResult<Scrubbed>): ScrubFailedError {
   });
 }
 
-function assemble(
-  e: Entitled,
-  b: BuiltContext,
-  intent: Intent,
-  attempt: TurnContext['attempt'],
-): TurnContext | null {
-  // The help state (raw on Entitled, parsed on BuiltContext) holds `answerKey`: it never enters
-  // TurnContext, which goes to the model, events and traces (ADR-0005). It goes to decide apart.
-  const raw: Record<string, unknown> = { ...e, ...b, intent, attempt };
-  delete raw.helpState;
-  // 5.6a: a runner-only count, reported in the trace, not part of TurnContext.
-  delete raw.answerKeyDropped;
-  const parsed = TurnContextSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
+/** `h` without a carried practice key (5.6c, ADR-0011 §2): the runner sets it on the issuing turn only. */
+function withoutCarried(h: HelpState): HelpState {
+  const out = { ...h };
+  delete out.practiceCarriedKey;
+  return out;
 }

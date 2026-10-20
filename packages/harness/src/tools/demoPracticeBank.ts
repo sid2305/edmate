@@ -19,6 +19,12 @@ export interface DemoPracticeRecord {
   readonly answerKey: readonly string[];
 }
 
+/**
+ * The teacher every demo record belongs to (5.6c): the contracts fixture teacher, so the default
+ * registry serves demo items only inside that teacher's scope.
+ */
+export const DEMO_PRACTICE_TEACHER_ID = 'tch_test_01';
+
 const MODULE_ARITHMETIC = 'module-arithmetic';
 const MODULE_FRACTIONS = 'module-fractions';
 const MODULE_ALGEBRA = 'module-algebra';
@@ -29,6 +35,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'demo:arithmetic:1:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'arithmetic',
       moduleId: MODULE_ARITHMETIC,
       level: 1,
@@ -40,6 +47,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'demo:arithmetic:2:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'arithmetic',
       moduleId: MODULE_ARITHMETIC,
       level: 2,
@@ -51,6 +59,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'demo:fractions:1:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'fractions',
       moduleId: MODULE_FRACTIONS,
       level: 1,
@@ -64,6 +73,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'demo:fractions:2:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'fractions',
       moduleId: MODULE_FRACTIONS,
       level: 2,
@@ -75,6 +85,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
   {
     item: {
       id: 'demo:algebra:2:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'algebra',
       moduleId: MODULE_ALGEBRA,
       level: 2,
@@ -87,6 +98,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
     // Not servable (SERVABLE_KINDS excludes 'mcq'): kept to prove the bank's filter works.
     item: {
       id: 'demo:algebra:3:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'algebra',
       moduleId: MODULE_ALGEBRA,
       level: 3,
@@ -100,6 +112,7 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
     // Not servable (SERVABLE_KINDS excludes 'code_output'): kept for the same reason.
     item: {
       id: 'demo:python:1:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
       topicId: 'python-loops',
       moduleId: MODULE_PYTHON,
       level: 1,
@@ -123,8 +136,8 @@ function chooseTopic(
 }
 
 /**
- * A `PracticeBank` over `records`: every read is scoped to `allowedModuleIds` (architect review
- * point 1), and the bank — never the caller — chooses the topic (point 2).
+ * A `PracticeBank` over `records`: every read is scoped to the teacher (5.6c) and to
+ * `allowedModuleIds` (architect review point 1), and the bank — never the caller — chooses the topic (point 2).
  */
 export function demoPracticeBank(
   records: readonly DemoPracticeRecord[] = DEMO_PRACTICE_RECORDS,
@@ -140,6 +153,7 @@ export function demoPracticeBank(
       const allowed = new Set(scope.allowedModuleIds);
       const candidates = records.filter(
         (r) =>
+          r.item.teacherId === scope.teacherId &&
           allowed.has(r.item.moduleId) &&
           r.item.level === level &&
           SERVABLE_KINDS.has(r.item.kind) &&
@@ -153,7 +167,7 @@ export function demoPracticeBank(
     },
     answerKeyFor(itemId: string, scope: PracticeScope) {
       const record = byId.get(itemId);
-      if (record === undefined) return undefined;
+      if (record === undefined || record.item.teacherId !== scope.teacherId) return undefined;
       if (!scope.allowedModuleIds.includes(record.item.moduleId)) return undefined;
       return record.answerKey;
     },

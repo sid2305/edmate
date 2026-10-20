@@ -19,10 +19,11 @@ import { z } from 'zod';
 import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
 import { HarnessError } from '../pipeline/errors.js';
 import { compileAnswerKeys, revealsAnswerKey } from '../pipeline/generate/answerKey.js';
-import { chunkLeaks, contextAnswerKeys } from '../pipeline/steps/buildContext.js';
+import { chunkLeaks, contextAnswerKeys } from '../pipeline/generate/answerKeyContext.js';
 import type { IssuedItem, RegisteredTool, ToolSessionState } from '../pipeline/tools.js';
 import {
   generatedAnswerKeyFor,
+  parseGeneratedId,
   pickItem,
   type PracticeBank,
   type PracticeItem,
@@ -51,19 +52,6 @@ export class NoPracticeItemError extends HarnessError {
 
 /** The level when the model names none (provisional, like Phase A's Q1 generation scope). */
 const DEFAULT_LEVEL: PracticeLevel = 1;
-
-/**
- * A generated item's id carries its module in the topicId slot, as `<moduleId>:practice`
- * (`practiceItems.ts`'s `generateItem`, which always calls with that exact topicId shape). Reads
- * it back only to re-check scope here — recomputing the key stays `generatedAnswerKeyFor`'s job
- * alone, never duplicated.
- */
-const GENERATED_TOPIC = /^gen:(.*):[123]:\d+[+\-*]\d+$/;
-function generatedItemModuleId(itemId: string): string | undefined {
-  const topicId = GENERATED_TOPIC.exec(itemId)?.[1];
-  if (topicId === undefined || !topicId.endsWith(':practice')) return undefined;
-  return topicId.slice(0, -':practice'.length);
-}
 
 function scopeOf(ctx: TurnContext): PracticeScope {
   return {
@@ -183,7 +171,7 @@ export function practiceNextItemTool(
   const answerKeyFor = (itemId: string, scope: PracticeScope): readonly string[] | undefined => {
     const fromBank = bank.answerKeyFor(itemId, scope);
     if (fromBank !== undefined) return fromBank;
-    const moduleId = generatedItemModuleId(itemId);
+    const moduleId = parseGeneratedId(itemId)?.moduleId;
     if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
     return generatedAnswerKeyFor(itemId);
   };
@@ -199,8 +187,9 @@ export function practiceNextItemTool(
         ...(s.issuedKeys === undefined ? {} : { issuedKeys: s.issuedKeys }),
       }),
     // The key is looked up on the server by item id, inside the turn's entitlement (ADR-0010 §3);
-    // the module is the one allowed module the id resolves in. Fails closed (undefined) when the
-    // ids or the turn's key union would not fit the saved HelpState (5.6 review).
+    // the module is the one allowed module the id resolves in (exactly one, 5.6c). Fails closed
+    // (undefined) when the ids, or the held keys plus the turn's issued keys plus this key (5.6c,
+    // so a carried key always fits), would not fit the saved HelpState (5.6 review).
     issuedItem(out, ctx) {
       const parsed = output.safeParse(out);
       if (!parsed.success) return undefined;
@@ -208,11 +197,14 @@ export function practiceNextItemTool(
       const scope = scopeOf(ctx);
       const answerKey = answerKeyFor(itemId, scope);
       if (answerKey === undefined || answerKey.length === 0) return undefined;
-      const moduleId = scope.allowedModuleIds.find(
+      const modules = [...new Set(scope.allowedModuleIds)].filter(
         (m) => answerKeyFor(itemId, { ...scope, allowedModuleIds: [m] }) !== undefined,
       );
+      const moduleId = modules.length === 1 ? modules[0] : undefined;
       if (moduleId === undefined || moduleId.length > PRACTICE_ID_MAX) return undefined;
-      const union = [...new Set([...(opts.issuedKeys ?? []), ...answerKey])];
+      const union = [
+        ...new Set([...(opts.heldKeys ?? []), ...(opts.issuedKeys ?? []), ...answerKey]),
+      ];
       if (JSON.stringify(union).length > PRACTICE_KEYS_MAX_JSON) return undefined;
       return { itemId, moduleId, answerKey: [...answerKey], shown: shownText(parsed.data) };
     },

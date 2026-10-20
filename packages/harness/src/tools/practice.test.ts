@@ -113,7 +113,7 @@ describe('practiceNextItemTool', () => {
   });
 
   it('answerKeyFor: a bank item’s key resolves straight from the bank, in scope', () => {
-    const bankScope: PracticeScope = { teacherId: 'tch', allowedModuleIds: ['module-arithmetic'] };
+    const bankScope: PracticeScope = { ...SCOPE, allowedModuleIds: ['module-arithmetic'] };
     expect(t.answerKeyFor('demo:arithmetic:1:a', bankScope)).toEqual(['7']);
   });
 
@@ -126,6 +126,7 @@ describe('practiceNextItemTool', () => {
     const withOptions = {
       pick: () => ({
         id: 'fixture:opt',
+        teacherId: SCOPE.teacherId,
         topicId: 'x',
         moduleId: 'mod_test_01',
         level: 1 as const,
@@ -380,20 +381,83 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
   });
 
   it('issuedItem: fails closed when the key union would push HelpState over its limit', () => {
+    // One allowed module: a bank that resolves every id would resolve it in both of `two`'s.
+    const one = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+    });
     const big = 'k'.repeat(PRACTICE_KEYS_MAX_JSON);
     const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [big] };
     const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
-    expect(practiceNextItemTool(bank).issuedItem(out, two)).toBeUndefined();
+    expect(practiceNextItemTool(bank).issuedItem(out, one)).toBeUndefined();
     // The session's earlier keys count too.
     const half = 'h'.repeat(PRACTICE_KEYS_MAX_JSON / 2);
     const halfBank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [half] };
     const fresh = practiceNextItemTool(halfBank).forSession({ servedItemIds: [] });
-    expect(fresh.issuedItem?.(out, two)).toBeDefined();
+    expect(fresh.issuedItem?.(out, one)).toBeDefined();
     const full = practiceNextItemTool(halfBank).forSession({
       servedItemIds: [],
       issuedKeys: ['x'.repeat(PRACTICE_KEYS_MAX_JSON / 2)],
     });
-    expect(full.issuedItem?.(out, two)).toBeUndefined();
+    expect(full.issuedItem?.(out, one)).toBeUndefined();
+  });
+
+  it("issuedItem: undefined for a bank id under another teacher's scope (5.6c)", () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const other = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, teacherId: 'tch_other' },
+    });
+    const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(t.issuedItem(out, { ...other, entitlement: { ...other.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] } })).toBeUndefined();
+    expect(t.issuedItem(out, two)).toBeDefined();
+  });
+
+  it('issuedItem: undefined when the id resolves in two allowed modules (5.6c)', () => {
+    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => ['5'] };
+    const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(practiceNextItemTool(bank).issuedItem(out, two)).toBeUndefined();
+  });
+
+  it('issuedItem: a generated id resolves through the one parser, in its own module only', () => {
+    const t = practiceNextItemTool(demoPracticeBank([]));
+    const item = (id: string) => ({ id, kind: 'numeric', level: 1, prompt: 'p' });
+    expect(t.issuedItem(item(`gen:${MODULE_FRACTIONS}:practice:1:2+3`), two)).toMatchObject({
+      moduleId: MODULE_FRACTIONS,
+      answerKey: ['5'],
+    });
+    // A 4-digit operand, or the wrong op for the level, is not a generated id.
+    expect(t.issuedItem(item(`gen:${MODULE_FRACTIONS}:practice:1:2000+3`), two)).toBeUndefined();
+    expect(t.issuedItem(item(`gen:${MODULE_FRACTIONS}:practice:1:2*3`), two)).toBeUndefined();
+  });
+
+  it('run under another teacher with the same module never serves the bank item (5.6c)', async () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const other = ctxWith({
+      entitlement: {
+        ...turnContextFull.entitlement,
+        teacherId: 'tch_other',
+        allowedModuleIds: [MODULE_ARITHMETIC],
+      },
+    });
+    for (const level of [1, 2, 3] as const) {
+      const out = await t.tool.run({ level }, other);
+      expect(idOf(out)).toMatch(/^gen:module-arithmetic:practice:/);
+    }
+  });
+
+  it('issuedItem: the cap counts held keys too (5.6c)', () => {
+    const half = 'h'.repeat(PRACTICE_KEYS_MAX_JSON / 2);
+    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [half] };
+    const arith = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+    });
+    const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
+    const base = practiceNextItemTool(bank);
+    expect(base.forSession({ servedItemIds: [] }).issuedItem(out, arith)).toBeDefined();
+    const held = base.forSession({
+      servedItemIds: [],
+      heldKeys: ['x'.repeat(PRACTICE_KEYS_MAX_JSON / 2)],
+    });
+    expect(held.issuedItem(out, arith)).toBeUndefined();
   });
 
   it('forSession heldKeys: never serves an item whose prompt shows a held key', async () => {
@@ -415,7 +479,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
 describe("practiceNextItemTool: no item whose key is in this turn's chunks (5.6a)", () => {
   const MOD = MODULE_ARITHMETIC;
   const rec = (id: string, prompt: string, key: string): DemoPracticeRecord => ({
-    item: { id, topicId: 'linear', moduleId: MOD, level: 1, kind: 'numeric', prompt },
+    item: { id, teacherId: SCOPE.teacherId, topicId: 'linear', moduleId: MOD, level: 1, kind: 'numeric', prompt },
     answerKey: [key],
   });
   const RECS = [
@@ -460,15 +524,15 @@ describe("practiceNextItemTool: no item whose key is in this turn's chunks (5.6a
       before.push(target.item.id);
       target = generateItem(scope, 3, before);
     }
-    expect(target).toBeDefined();
-    const key = target!.answerKey[0]!;
+    const key = target?.answerKey[0];
+    if (target === undefined || key === undefined) throw new Error('no 3-digit generated key');
     const t = practiceNextItemTool(demoPracticeBank([]), { exclude: before });
     expect(idOf(await t.tool.run({ level: 3 }, ctxOf([chunkWith('no numbers')])))).toBe(
-      target!.item.id,
+      target.item.id,
     );
     const ctx = ctxOf([chunkWith(`the product is ${key}`)]);
     const out = await t.tool.run({ level: 3 }, ctx);
-    expect(idOf(out)).not.toBe(target!.item.id);
+    expect(idOf(out)).not.toBe(target.item.id);
     expect(t.issuedItem(out, ctx)?.answerKey).not.toEqual([key]);
   });
 

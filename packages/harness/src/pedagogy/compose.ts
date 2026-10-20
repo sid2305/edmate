@@ -215,12 +215,13 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   );
   // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and
   // only on teaching turns: a closed mode (locked, ask_teacher, redirect, distress, fallback)
-  // never discusses the problem, so it gets no answer key at all. postGuard still receives
-  // `mustNotReveal` on the decision.
-  if (teaching && policy.mustNotReveal.length > 0) {
+  // never discusses the problem, so it gets no answer key at all. Only `promptKeys` is rendered,
+  // never `mustNotReveal`: a practice key or a carried key never enters the prompt (5.6c,
+  // ADR-0011), and the guards get the full `mustNotReveal` on the decision.
+  if (teaching && policy.promptKeys.length > 0) {
     parts.push(
       renderTemplate(f['do-not-say'], {
-        do_not_say: policy.mustNotReveal.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
+        do_not_say: policy.promptKeys.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
       }),
     );
   }

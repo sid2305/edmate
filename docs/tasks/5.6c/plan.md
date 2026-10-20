@@ -269,3 +269,11 @@ Yes. The pack files do not change, but what the composer puts in the model's pro
 - Q1–Q8: all accepted as recommended. Q3's three out-of-scope items go into ADR-0011 as stated. For Q8, use raw lines only if indexDocument can pass the raw text without a wider change; otherwise leave the prose false refusal as a LOW.
 - Order: Phase A (harness, opus) and Phase C (ingest, sonnet, once a Sonnet slot frees) run in parallel on the same branch, each running `git pull --rebase` before pushing. Phase B starts after A merges into the branch and the architect's ADR-0011 text is in docs/tasks/5.6c/adr-0011-draft.md.
 - Reviewers: code-reviewer, typescript-reviewer (opus), security-reviewer, architect (for docs/adr/**). Every phase writes its own section in handoff.md under a single `## Decisions` heading.
+
+## Architect plan review (20 Oct 2026)
+The final ADR-0011 text is in docs/tasks/5.6c/adr-0011-draft.md. Phase B writes it to docs/adr/ word for word, and it applies the conditions in its section 6. The architect found the design sound with these changes, which the lead accepts:
+- [HIGH] packages/harness/src/pipeline/steps/buildContext.ts:151 — chunk dropping must read `[...answerKey, ...(practiceCarriedKey ?? [])]`, so a chunk holding the carried key never reaches the model. The lead allows this one-line logic change in buildContext.ts, overriding the plan's "import-only" note.
+- [MEDIUM] helpState.ts `copyHelp` copies every field. The runner must delete `practiceCarriedKey` explicitly on every saved state except the issuing turn, including `...base.help`.
+- [MEDIUM] policy.ts `fallbackPolicy`: both branches set `promptKeys` and put the carried key in `mustNotReveal`, through one helper shared with `finish`.
+- [LOW] `promptKeys` is empty when `holdsPracticeKey(help)` or any carried key is held.
+- ADR-0010: Status becomes "Proposed. Amended by ADR-0011.", and Consequences bullet 1 points to ADR-0011.

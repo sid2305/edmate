@@ -249,12 +249,71 @@ describe('practice fields (5.6, ADR-0010)', () => {
   });
 });
 
+describe('practiceCarriedKey: a skipped item key, guarded one more turn (5.6c, ADR-0011)', () => {
+  const CARRIED = {
+    ...VALID,
+    practiceItemId: 'item-2',
+    practiceServed: ['item-1', 'item-2'],
+    practiceCarriedKey: ['7', 'seven'],
+  };
+
+  it('parses and round-trips through serialise', () => {
+    const s = parseSessionHelp(CARRIED);
+    expect(s.help.practiceCarriedKey).toEqual(['7', 'seven']);
+    expect(serializeSessionHelp(s)).toEqual(CARRIED);
+    expect(loadSessionHelp(CARRIED).unreadable).toBe(false);
+  });
+
+  it('a blob saved before 5.6c parses without it', () => {
+    const s = parseSessionHelp(VALID);
+    expect(s.help).not.toHaveProperty('practiceCarriedKey');
+    expect(loadSessionHelp(VALID).unreadable).toBe(false);
+  });
+
+  it('a non-string entry is unreadable; no entry cap of its own (5.6c fix round)', () => {
+    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: [7] })).toEqual(DEFAULT);
+    expect(loadSessionHelp({ ...VALID, practiceCarriedKey: [7] }).unreadable).toBe(true);
+    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: undefined })).toEqual(DEFAULT);
+    // As many entries as answerKey may hold: the JSON caps bound it, not an entry count.
+    const many = Array.from({ length: 65 }, (_, i) => `k${i}`);
+    expect(
+      parseSessionHelp({ ...VALID, practiceCarriedKey: many }).help.practiceCarriedKey,
+    ).toEqual(many);
+    const saved = serializeSessionHelp({
+      rung: 0,
+      help: { ...parseSessionHelp(VALID).help, practiceCarriedKey: many },
+    });
+    expect(saved.practiceCarriedKey).toEqual(many);
+  });
+
+  it('copyHelp keeps it, copied, so it never aliases', () => {
+    const h = parseSessionHelp(CARRIED).help;
+    const c = copyHelp(h);
+    expect(c.practiceCarriedKey).toEqual(['7', 'seven']);
+    expect(c.practiceCarriedKey).not.toBe(h.practiceCarriedKey);
+  });
+
+  it('practiceFields leaves it out (the runner drops it explicitly too)', () => {
+    const f = practiceFields(parseSessionHelp(CARRIED).help);
+    expect(f).not.toHaveProperty('practiceCarriedKey');
+  });
+
+  it('holdsPracticeKey never reads it', () => {
+    const h = parseSessionHelp({ ...CARRIED, answerKey: [] }).help;
+    expect(holdsPracticeKey(h)).toBe(false);
+  });
+});
+
 describe('practice limits fit the stored blob (5.6 review)', () => {
-  it('a state at every practice limit still serialises under LIMITS.helpStateMaxJsonLength', () => {
+  it('a state at every practice limit, with a carried key, still serialises under LIMITS.helpStateMaxJsonLength', () => {
     const id = 'i'.repeat(PRACTICE_ID_MAX);
-    // One key whose JSON array is exactly PRACTICE_KEYS_MAX_JSON long.
-    const key = 'k'.repeat(PRACTICE_KEYS_MAX_JSON - 4);
-    expect(JSON.stringify([key]).length).toBe(PRACTICE_KEYS_MAX_JSON);
+    // The JSON of answerKey plus practiceCarriedKey is exactly PRACTICE_KEYS_MAX_JSON long.
+    const half = PRACTICE_KEYS_MAX_JSON / 2;
+    const key = 'k'.repeat(half - 4);
+    const carried = 'c'.repeat(half - 4);
+    expect(JSON.stringify([key]).length + JSON.stringify([carried]).length).toBe(
+      PRACTICE_KEYS_MAX_JSON,
+    );
     const out = serializeSessionHelp({
       rung: 4,
       help: {
@@ -267,6 +326,7 @@ describe('practice limits fit the stored blob (5.6 review)', () => {
         practiceItemId: id,
         practiceModuleId: id,
         practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),
+        practiceCarriedKey: [carried],
       },
     });
     expect(JSON.stringify(out).length).toBeLessThanOrEqual(LIMITS.helpStateMaxJsonLength);

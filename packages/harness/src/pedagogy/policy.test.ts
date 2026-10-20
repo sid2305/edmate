@@ -219,6 +219,96 @@ describe('purity and determinism', () => {
   });
 });
 
+describe('promptKeys and the carried key (5.6c, ADR-0011)', () => {
+  const key = ['5/6', 'five sixths'];
+  const practice = { answerKey: ['7'], practiceItemId: 'item-2' };
+  const carried = { practiceCarriedKey: ['4321'] };
+  const solutionTurn = {
+    ctx: ctxWith({ helpRung: 3, pkg: { finalAnswers: 'allowed' } }),
+    turn: turnOf('hint_request'),
+  } as const;
+
+  it('a non-practice key is in both lists (the 3.6 behaviour)', () => {
+    const r = decidePolicy(base({ help: helpWith({ answerKey: key }) }));
+    expect(r.mustNotReveal).toEqual(key);
+    expect(r.promptKeys).toEqual(key);
+    expect(r.promptKeys).not.toBe(r.mustNotReveal);
+  });
+
+  it('a held practice key and a carried key are guarded, never prompted', () => {
+    const r = decidePolicy(base({ help: helpWith({ ...practice, ...carried }) }));
+    expect(r.mustNotReveal).toEqual(['7', '4321']);
+    expect(r.promptKeys).toEqual([]);
+  });
+
+  it('a held practice key alone: guarded, never prompted', () => {
+    const r = decidePolicy(base({ help: helpWith(practice) }));
+    expect(r.mustNotReveal).toEqual(['7']);
+    expect(r.promptKeys).toEqual([]);
+  });
+
+  it('any carried key empties promptKeys, even next to a non-practice key', () => {
+    const r = decidePolicy(base({ help: helpWith({ answerKey: key, ...carried }) }));
+    expect(r.mustNotReveal).toEqual([...key, '4321']);
+    expect(r.promptKeys).toEqual([]);
+  });
+
+  it('a carried key already in answerKey is listed once', () => {
+    const r = decidePolicy(base({ help: helpWith({ ...practice, practiceCarriedKey: ['7'] }) }));
+    expect(r.mustNotReveal).toEqual(['7']);
+  });
+
+  it('a solution move releases a non-practice key but keeps a carried key', () => {
+    const r = decidePolicy(
+      base({ ...solutionTurn, help: helpWith({ answerKey: key, ...carried }) }),
+    );
+    expect(r.move).toBe('solution');
+    expect(r.mustNotReveal).toEqual(['4321']);
+    expect(r.promptKeys).toEqual([]);
+  });
+
+  it('closed moves keep the carried key too', () => {
+    for (const o of [
+      { intent: 'misuse' as const },
+      { retrieved: [] },
+      { intent: 'distress' as const },
+    ]) {
+      const r = decidePolicy(base({ ctx: ctxWith(o), help: helpWith(carried) }));
+      expect(r.mustNotReveal).toEqual(['4321']);
+      expect(r.promptKeys).toEqual([]);
+    }
+  });
+
+  it('fallbackPolicy keeps the carried key on both branches, distress included', () => {
+    for (const intent of ['on_task', 'distress'] as const) {
+      const r = fallbackPolicy(ctxWith({ intent }), helpWith({ ...practice, ...carried }));
+      expect(r.mustNotReveal).toEqual(['7', '4321']);
+      expect(r.promptKeys).toEqual([]);
+    }
+    const plain = fallbackPolicy(ctxWith(), helpWith({ answerKey: key }));
+    expect(plain.promptKeys).toEqual(key);
+  });
+
+  it('promptKeys is always a subset of mustNotReveal', () => {
+    const helps = [
+      helpWith(),
+      helpWith({ answerKey: key }),
+      helpWith(practice),
+      helpWith(carried),
+      helpWith({ ...practice, ...carried }),
+    ];
+    for (const help of helps) {
+      for (const r of [
+        decidePolicy(base({ help })),
+        decidePolicy(base({ ...solutionTurn, help })),
+        fallbackPolicy(ctxWith(), help),
+      ]) {
+        for (const k of r.promptKeys) expect(r.mustNotReveal).toContain(k);
+      }
+    }
+  });
+});
+
 describe('fallbackPolicy', () => {
   it('a distress turn falls back to redirect with the distress reason, not ask', () => {
     const help = helpWith({ answerKey: ['42'] });
@@ -228,6 +318,7 @@ describe('fallbackPolicy', () => {
       rung: 0,
       skill: null,
       mustNotReveal: ['42'],
+      promptKeys: ['42'],
       tools: [],
       maxOutputTokens: 150,
       next: { helpRung: 2, help },
@@ -244,6 +335,7 @@ describe('fallbackPolicy', () => {
       rung: 3,
       skill: null,
       mustNotReveal: [],
+      promptKeys: [],
       tools: [],
       maxOutputTokens: 200,
       next: { helpRung: 4, help: INITIAL_HELP_STATE },

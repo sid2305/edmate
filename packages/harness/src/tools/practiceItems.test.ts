@@ -5,6 +5,7 @@ import { prng } from '../testing/prng.js';
 import {
   GEN_VARIANTS,
   generatedAnswerKeyFor,
+  parseGeneratedId,
   generateItem,
   pickItem,
   SERVABLE_KINDS,
@@ -40,6 +41,7 @@ function fixedBank(
 
 const BANK_ITEM: PracticeItem = {
   id: 'bank:1',
+  teacherId: 'teacher-1',
   topicId: 'fractions',
   moduleId: 'module-fractions',
   level: 2,
@@ -193,6 +195,75 @@ describe('pickItem', () => {
   });
 });
 
+describe('teacher scope (5.6c)', () => {
+  /** A bank that ignores teacherId (a careless or buggy bank): scope checks are the caller's. */
+  const teacherBlind: PracticeBank = {
+    pick: (scope, level, exclude) =>
+      [BANK_ITEM].find(
+        (i) =>
+          scope.allowedModuleIds.includes(i.moduleId) &&
+          i.level === level &&
+          !exclude.includes(i.id),
+      ),
+    answerKeyFor: (id) => (id === BANK_ITEM.id ? ['1/2'] : undefined),
+  };
+
+  it("never serves another teacher's bank item with the same module id; the generator steps in", () => {
+    const other: PracticeScope = { ...SCOPE, teacherId: 'teacher-2' };
+    const picked = pickItem(teacherBlind, other, 2, []);
+    expect(picked?.item.id).not.toBe(BANK_ITEM.id);
+    expect(picked?.item.id).toMatch(/^gen:module-fractions:practice:2:/);
+    expect(picked?.item.teacherId).toBe('teacher-2');
+    // The same bank serves its own teacher.
+    expect(pickItem(teacherBlind, SCOPE, 2, [])?.item).toEqual(BANK_ITEM);
+  });
+
+  it("a generated item carries the scope's teacherId", () => {
+    expect(generateItem({ teacherId: 'tch-9', allowedModuleIds: ['m1'] }, 3)?.item.teacherId).toBe(
+      'tch-9',
+    );
+  });
+});
+
+describe('parseGeneratedId (5.6c: one bounded parser)', () => {
+  it.each([
+    ['gen:m1:practice:1:3+4', { topicId: 'm1:practice', moduleId: 'm1', level: 1, a: 3, op: '+', b: 4 }],
+    ['gen:m1:practice:2:87-43', { topicId: 'm1:practice', moduleId: 'm1', level: 2, a: 87, op: '-', b: 43 }],
+    ['gen:m1:practice:3:12*11', { topicId: 'm1:practice', moduleId: 'm1', level: 3, a: 12, op: '*', b: 11 }],
+    ['gen:a:b:c:practice:1:1+999', { topicId: 'a:b:c:practice', moduleId: 'a:b:c', level: 1, a: 1, op: '+', b: 999 }],
+  ])('parses %s', (id, want) => {
+    expect(parseGeneratedId(id)).toEqual(want);
+  });
+
+  it.each([
+    ['a 4-digit operand', 'gen:m1:practice:1:1000+4'],
+    ['a leading zero', 'gen:m1:practice:1:03+4'],
+    ['a zero operand', 'gen:m1:practice:1:0+4'],
+    ['the wrong op for level 1', 'gen:m1:practice:1:3*4'],
+    ['the wrong op for level 2', 'gen:m1:practice:2:30+4'],
+    ['the wrong op for level 3', 'gen:m1:practice:3:3-4'],
+    ['a topic without :practice', 'gen:m1:1:3+4'],
+    ['an empty module id', 'gen::practice:1:3+4'],
+    ['level 4', 'gen:m1:practice:4:3+4'],
+    ['a bank id', 'demo:arithmetic:1:a'],
+    ['an id over PRACTICE_ID_MAX', `gen:${'m'.repeat(PRACTICE_ID_MAX)}:practice:1:3+4`],
+  ])('rejects %s', (_label, id) => {
+    expect(parseGeneratedId(id)).toBeUndefined();
+  });
+
+  it('every generated id parses back to its own module and level', () => {
+    for (const level of LEVELS) {
+      const picked = generateItem({ teacherId: 't', allowedModuleIds: ['a:b'] }, level)!;
+      expect(parseGeneratedId(picked.item.id)).toMatchObject({ moduleId: 'a:b', level });
+    }
+  });
+
+  it('generatedAnswerKeyFor: undefined for a 25-digit operand id (bounded operands)', () => {
+    expect(generatedAnswerKeyFor(`gen:m1:practice:1:${'9'.repeat(25)}+1`)).toBeUndefined();
+    expect(generatedAnswerKeyFor('gen:m1:practice:3:3-4')).toBeUndefined();
+  });
+});
+
 describe('pickItem validates every item at runtime (5.6 review)', () => {
   /** A bank that hands out its records in order, ignoring kind (a careless or buggy bank). */
   function carelessBank(
@@ -318,6 +389,7 @@ describe('validateItem', () => {
   it('rejects an item with an empty answerKey', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -330,6 +402,7 @@ describe('validateItem', () => {
   it('rejects an item whose only answer form the matcher could never catch (blank)', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -342,6 +415,7 @@ describe('validateItem', () => {
   it('rejects an item whose key appears verbatim inside its own prompt', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -354,6 +428,7 @@ describe('validateItem', () => {
   it('accepts a code_output item whose key legitimately appears in the prompt', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -377,6 +452,7 @@ describe('validateItem', () => {
   it('accepts an mcq item with no options field at all (nothing to collide with)', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -389,6 +465,7 @@ describe('validateItem', () => {
   it('accepts a well-formed mcq item whose key is an opaque option id, not its text', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -402,6 +479,7 @@ describe('validateItem', () => {
   it('rejects an mcq item whose key is a bare label equal to one of the option texts', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,
@@ -413,9 +491,44 @@ describe('validateItem', () => {
     expect(validateItem(item, ['7'])).toBe(false);
   });
 
+  const short = (fields: Partial<PracticeItem>): PracticeItem => ({
+    id: 'x',
+    teacherId: 't',
+    topicId: 't',
+    moduleId: 'm',
+    level: 1,
+    kind: 'short',
+    prompt: 'Pick a value.',
+    ...fields,
+  });
+
+  it.each(['short', 'numeric', 'mcq', 'code_output'] as const)(
+    'rejects a %s item whose key is in one of its options (5.6c)',
+    (kind) => {
+      const item = short({ kind, options: ['maybe Warm', 'cold'] });
+      expect(validateItem(item, ['opt-1', 'Warm'])).toBe(false);
+      expect(validateItem({ ...item, options: ['hot', 'cold'] }, ['opt-1', 'Warm'])).toBe(true);
+    },
+  );
+
+  it('rejects an id holding a non-exempt key (5.6c)', () => {
+    // Only a short whole number written in digits is exempt in an id: the word "one" is checked.
+    expect(validateItem(short({ id: 'bank:one:a' }), ['1', 'one'])).toBe(false);
+    expect(validateItem(short({ id: 'bank:1:a' }), ['1', 'one'])).toBe(true);
+    expect(validateItem(short({ id: 'bank:42:a' }), ['42'])).toBe(true);
+    expect(validateItem(short({ id: 'bank:warm:a' }), ['Warm'])).toBe(false);
+    expect(validateItem(short({ id: 'bank:4321:a' }), ['4321'])).toBe(false);
+    expect(validateItem(short({ id: 'bank:43210:a' }), ['4321'])).toBe(true);
+  });
+
+  it('accepts an id holding only exempt short numeric keys (demo:fractions:1:a with 1/one)', () => {
+    expect(validateItem(short({ id: 'demo:fractions:1:a' }), ['1', 'one'])).toBe(true);
+  });
+
   it('accepts a well-formed numeric item', () => {
     const item: PracticeItem = {
       id: 'x',
+      teacherId: 't',
       topicId: 't',
       moduleId: 'm',
       level: 1,

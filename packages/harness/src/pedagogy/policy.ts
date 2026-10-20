@@ -49,7 +49,13 @@ export interface PolicyResult {
   rung: Rung;
   /** For the composer's skill pack; null for locked, ask_teacher, redirect and the fallback. */
   skill: Skill | null;
+  /** Every key the guards hold (stream gate, postGuard, tool checks); decide copies it. */
   mustNotReveal: string[];
+  /**
+   * The keys the composer may render in the do-not-say block (5.6c, ADR-0011 §1): always a subset
+   * of `mustNotReveal`, and empty whenever a practice key or a carried key is held. No guard reads it.
+   */
+  promptKeys: string[];
   tools: ToolName[];
   maxOutputTokens: number;
   /** For commit (3.8) to persist. */
@@ -97,7 +103,7 @@ export function fallbackPolicy(
       move: 'redirect',
       rung: 0,
       skill: null,
-      mustNotReveal: [...help.answerKey],
+      ...keysFor(help, false),
       tools: [],
       maxOutputTokens: maxOutputTokensFor('redirect', null),
       next: { helpRung: ctx.helpRung, help: copyHelp(help) },
@@ -108,7 +114,7 @@ export function fallbackPolicy(
     move: 'ask',
     rung: Math.min(ctx.helpRung, effectiveCeiling(ctx.pkg)) as Rung,
     skill: null,
-    mustNotReveal: [...help.answerKey],
+    ...keysFor(help, false),
     tools: [],
     maxOutputTokens: maxOutputTokensFor('ask', null),
     next: { helpRung: ctx.helpRung, help: copyHelp(help) },
@@ -131,13 +137,30 @@ function finish(
     skill: s.skill,
     // A solution is the one move allowed to state the answer (never reached with finalAnswers
     // never). A practice item's key is never released, whatever the move (5.6, ADR-0010 §5).
-    mustNotReveal:
-      s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' && !holdsPracticeKey(i.help)
-        ? []
-        : [...i.help.answerKey],
+    ...keysFor(
+      i.help,
+      s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' && !holdsPracticeKey(i.help),
+    ),
     tools: [...new Set(names)],
     maxOutputTokens: maxOutputTokensFor(s.move, s.skill),
     next: s.next,
     reason: s.reason,
   };
+}
+
+/**
+ * The guarded keys and the prompt's keys (5.6c, ADR-0011), one rule for `finish` and both
+ * `fallbackPolicy` branches. `release` drops `answerKey` (a solution move); a carried key is
+ * never released. `promptKeys` is empty while a practice key or a carried key is held, so neither
+ * ever reaches the model's prompt; otherwise it is `mustNotReveal` (no carried key to remove).
+ */
+function keysFor(
+  help: Readonly<HelpState>,
+  release: boolean,
+): Pick<PolicyResult, 'mustNotReveal' | 'promptKeys'> {
+  const answer = release ? [] : [...help.answerKey];
+  const carried = (help.practiceCarriedKey ?? []).filter((k) => !answer.includes(k));
+  const mustNotReveal = [...answer, ...carried];
+  const hidden = holdsPracticeKey(help) || (help.practiceCarriedKey ?? []).length > 0;
+  return { mustNotReveal, promptKeys: hidden ? [] : [...mustNotReveal] };
 }

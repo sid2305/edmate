@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Proposed. Amended by ADR-0011.
 
 ## Date
 
@@ -39,7 +39,7 @@ Task 5.6 must show "items map to the outline's topics; answer keys never reach t
 ## Consequences
 
 - A topic with no bank item and no generator template shows "no item ready". Bank coverage becomes content work (5.11, 8.x).
-- On later turns the raw key sits in the model's do-not-say block (compose.ts:220, the 3.6 design). "Never model-visible" holds only for the turn that issues the item. On those later turns the client is protected only by the stream gate and postGuard, and the answer matcher can miss a key the model spells out or writes another way (for example "s-e-v-e-n" or roman numerals "VII"), so a prompt injection that asks the model to spell its do-not-say list could get the key to the client. A follow-up task keeps practice keys out of the prompt and guards them with the gate and postGuard only.
+- On later turns the raw key sits in the model's do-not-say block (compose.ts:220, the 3.6 design). "Never model-visible" holds only for the turn that issues the item. On those later turns the client is protected only by the stream gate and postGuard, and the answer matcher can miss a key the model spells out or writes another way (for example "s-e-v-e-n" or roman numerals "VII"), so a prompt injection that asks the model to spell its do-not-say list could get the key to the client. A follow-up task keeps practice keys out of the prompt and guards them with the gate and postGuard only. Done in task 5.6c: see [ADR-0011](0011-practice-keys-out-of-the-prompt.md).
 - An MCQ key that is a bare label ("B") makes the gate trip whenever the options are shown again, and fails any later MCQ tool output (`answer_key`). A code-output key appears in its own prompt. Both kinds stay out of the served bank until the matcher has an answer-context-only key mode (follow-up task).
 - If a new item's prompt contains the previous key, the call fails closed and the student sees "no item ready".
 - The answer matcher evaluates arithmetic, so a reply that restates a generated arithmetic item ("What is 3 + 4?") counts as revealing its key: the gate trips and the student gets the safe hint instead of the reply (fail closed). The `skill` event already shows the item to the student. The pack now says the app shows the item and the model does not repeat it (fed7d54); the matcher ignoring the item's own prompt, and its hint false positives, are follow-up task 5.6b.
