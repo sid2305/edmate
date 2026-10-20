@@ -325,18 +325,19 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('the one remaining stub (route.run) throws StepNotImplementedError', async () => {
+  it('no stub is left: route.run (3.3) classifies instead of throwing StepNotImplementedError', async () => {
     const t = testDeps();
     const env = {
-      input: demoTurnInput,
+      input: { ...demoTurnInput, kind: 'message' as const, text: 'ok' },
       deps: t.deps,
       cancel: { cancelled: false, onCancel: () => undefined },
       turnId: 'turn_x',
       ...stepEnvExtras(),
     };
     const anyArg = {} as never;
-    const calls: (() => unknown)[] = [() => defaultSteps.route.run(env, anyArg)];
-    for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
+    const r = await defaultSteps.route.run(env, anyArg).catch((e: unknown) => e);
+    expect(r).not.toBeInstanceOf(StepNotImplementedError);
+    expect(r).toEqual({ intent: 'on_task', attempt: 'none', usage: [] });
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
       intent: 'on_task',
       attempt: 'none',
