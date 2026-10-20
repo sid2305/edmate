@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · MVP first: M4 polish parked, safety review once at the pilot gate, the lead signs eval cases · decided by you · risk: high
+Decided: M4 is done once 4.0–4.8 merge. 4.9 and the follow-ups the safety reviews raised (4.2d, 4.3b, 4.3c, 4.3d, 4.4b, 4.4c, 4.4d, 4.4e, 4.5b, 4.7b) move to M13. Until the pilot gate, `safety-reviewer` does not run on PRs (`risk-paths.txt` asks for `code-reviewer` on the safety group; the PR still logs `risk: high`), and a PR gets one fix round: a HIGH still open becomes a board task, only a CRITICAL goes to the human. Eval cases are reviewed and signed by the lead (`reviewed_by: lead`), not the human; prompt packs and templates still need a named human. Task 13.3 restores `safety-reviewer` and runs one whole-system safety review before real students. Next: 5.1 → 5.3 → 5.4 → 5.6, then a thin teacher-upload and student-chat slice.
+Why: M4 was planned as 10 tasks and grew to 28 through safety-review follow-ups and fix rounds, while M5–M9 (the product) had not started; no student could talk to a teacher's agent. The five core guards (PII, distress, moderation/jailbreak, answer leak, locked leak) are built or merging, which is what a public repo with 13+ users needs; the rest is polish. The human's sign-off on every eval case was a recurring bottleneck.
+Alternatives: keep running safety-reviewer per PR and only park 4.9; skip M4 entirely (rejected: the core guards are done and needed).
+Reversible: yes; move the tasks back to M4, restore `safety-reviewer` in `risk-paths.txt`, and require a human in `reviewed_by` again.
+
+---
+
 ### 19 Oct 2026 · 0.15 Merge gate checks the handoff Status line · decided by lead · risk: high
 Decided: `merge_gate.py` now reads `docs/tasks/<id>/handoff.md`'s `Status:` line (plain or bold, e.g. `Status: DONE` or `- **Status:** DONE`) and fails the merge unless it says DONE; `PARTIAL`, `BLOCKED` or a missing line fails with a clear message, even if `review.md` is APPROVE.
 Why: nothing previously stopped a `PARTIAL`/`BLOCKED` handoff from merging once its review was approved, so an unfinished build could pass the gate.
