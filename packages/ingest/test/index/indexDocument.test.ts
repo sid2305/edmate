@@ -206,6 +206,28 @@ describe('indexDocument', () => {
     expect(writer.inserts).toEqual([]);
   });
 
+  it('5.6a: refuses a question-bank source, writer and embedder never called', async () => {
+    const writer = recordingWriter();
+    const embedder = countingEmbedder(hashedEmbedder());
+    const err = await indexDocument(
+      { writer, embedder },
+      {
+        scope,
+        documentId: 'doc-bank',
+        source: {
+          kind: 'markdown',
+          bytes: new TextEncoder().encode('- id: q1\n  question: |\n    What is a loop?\n  answer: |\n    do-not-leak-this-key\n'),
+          sourceTitle: 'content/demo-teacher/question-bank/loops.yaml',
+        },
+      },
+    ).catch((e: unknown) => e);
+    expect((err as IngestError).code).toBe('validation');
+    expect(writer.inserts).toEqual([]);
+    expect(embedder.calls).toEqual([]);
+    const json = JSON.stringify((err as IngestError).toJSON());
+    expect(json).not.toContain('do-not-leak-this-key');
+  });
+
   describe('embedding failure leaves NULL embeddings and never throws', () => {
     const cases: [string, Pick<ModelGateway, 'embed'>, 'embed_failed' | 'embed_malformed'][] = [
       ['rejects', { embed: () => Promise.reject(new Error(LOCKED_TEXT)) }, 'embed_failed'],
