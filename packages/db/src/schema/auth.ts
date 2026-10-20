@@ -1,6 +1,6 @@
 // Sign-in tables (task 1.3): linked OAuth accounts, database sessions and the platform audit log.
-// Prefixed `auth_` because the learning `sessions` table already exists. Verification tokens
-// (email magic link) are 1.4's.
+// Prefixed `auth_` because the learning `sessions` table already exists. Email magic-link
+// verification tokens were added in 1.4.
 import { index, jsonb, pgEnum, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { id, timestamps, tstz } from './_shared.js';
 import { users } from './users.js';
@@ -53,6 +53,30 @@ export const authSessions = pgTable(
     index('auth_sessions_user_id_idx').on(t.userId),
     // For sweeping expired sessions (retention, 13.4).
     index('auth_sessions_expires_at_idx').on(t.expiresAt),
+  ],
+);
+
+/**
+ * An email sign-in link (task 1.4). Only a SHA-256 of the token is stored, so a copy of the
+ * database holds no usable link. One row per address (unique `identifier`): a new link replaces
+ * the old one, and using a link deletes its row. No foreign key to `users`, because the address
+ * may not belong to a user yet.
+ */
+export const authVerificationTokens = pgTable(
+  'auth_verification_tokens',
+  {
+    id: id(),
+    /** The lower-cased email address the link was sent to. */
+    identifier: text('identifier').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: tstz('expires_at').notNull(),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('auth_verification_tokens_identifier_key').on(t.identifier),
+    uniqueIndex('auth_verification_tokens_token_hash_key').on(t.tokenHash),
+    // For sweeping expired links (retention, 13.4).
+    index('auth_verification_tokens_expires_at_idx').on(t.expiresAt),
   ],
 );
 

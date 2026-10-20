@@ -10,6 +10,186 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.5 Calculator allow-list is a tokenizer · decided by tdd-guide
+Decided: The calculator checks input with a tokenizer allow-list (ASCII numbers, `+ - * / ^ % ( ) ,`, spaces and tabs, and names from two named lists, with rules for where each name may appear), not with the plan's strip-then-character-class check.
+Why: The planned check let `pi.e` reach mathjs's member access. The tokenizer closes that gap and also refuses glued forms like `2pi` and `1e+5`, which keeps scientific notation unsupported as Q1 decided.
+
+---
+
+### 20 Oct 2026 · 5.5 Allowed calculator functions · decided by tdd-guide
+Decided: The calculator allows abs acos asin atan cbrt ceil cos exp floor gcd hypot lcm log log10 log2 max min mod pow round sign sin sqrt tan and the constants pi and e. Nothing slow on a large argument (factorial, gamma, combinations, isPrime and similar) and nothing that builds matrices, units, strings or functions.
+Why: The lead's Q2 answer asked for a named list and for refusing anything that could make evaluate slow. These cover numeric checks in feedback and grounding.
+
+---
+
+### 20 Oct 2026 · 5.5 mathjs runs in predictable number mode · decided by tdd-guide
+Decided: The restricted mathjs instance uses `number: 'number'` and `predictable: true`, and only a plain number result is returned. Infinity and NaN come back as strings.
+Why: Without predictable mode `sqrt(-1)` returns a Complex object. Plain numbers also make overflow return Infinity at once instead of running slowly.
+
+---
+
+### 20 Oct 2026 · 5.5 Calculator length constant is renamed · decided by tdd-guide
+Decided: The 200-character cap is exported as `CALCULATOR_MAX_EXPRESSION_LENGTH`.
+Why: The harness barrel already exports a `MAX_EXPRESSION_LENGTH` (64) from the grounding arithmetic checker. Reusing the name would clash.
+
+---
+
+### 20 Oct 2026 · 5.5 Harness-wide no-eval lint and full coverage for tools · decided by tdd-guide
+Decided: The harness ESLint config adds `no-eval`, `no-implied-eval` and `no-new-func`. `src/tools/**` must have 100% coverage.
+Why: The sandbox handles model-chosen input. These checks keep code-from-text out of the harness, and they keep every sandbox branch tested as later tools land there.
+
+---
+
+### 20 Oct 2026 · 5.4 Access filter consolidated in harness/access (scoped retrieval, tool filter) · decided by tdd-guide · risk: high
+Decided: every turn-time read of the retrieval index goes through `access/scopedRetrieval.ts`, which fixes the scope from the entitlement, re-checks each chunk (teacher, allowed, not locked), rebuilds it with only the Chunk fields and passes on only a fresh `{ hit, score }` from the probe. The tool filter moved to `access/tools.ts` with re-exports from `pipeline/tools.ts`.
+Why: the build plan's access filter and ADR-0003 want one reviewed place for it; keeping only known fields and a fresh probe object means a buggy or hostile index cannot smuggle text through extra keys.
+
+---
+
+### 20 Oct 2026 · 5.4 Cache rule and inventory recorded in access/index.ts · decided by tdd-guide · risk: high
+Decided: a cache of anything derived from teacher material or an entitlement is keyed by the package id and version or the exact owned allowed-module set, plus the material revision for material. The inventory is `promptCacheKey` and the db `leakCache` (keyed in Phase B on teacher, material revision and owned allowed ids, per the lead's Q1 answer). No new cache added.
+Why: ADR-0003 point 6 (package-versioned caches) without a contracts change.
+
+---
+
+### 20 Oct 2026 · 5.4 Property sizes and seeds · decided by tdd-guide · risk: low
+Decided: seed 20261020; 2,000 index-level iterations, 200 whole turns, 2,000 tool-registry iterations. All three print a tally of outcomes.
+Why: the plan's sizes; together they run in under a second locally, so CI time is not a concern.
+
+---
+
+### 20 Oct 2026 · 5.4 100% coverage threshold for harness access · decided by tdd-guide · risk: low
+Decided: `vitest.config.ts` enforces 100% for `src/access/**`, as it does for guardrails and pedagogy.
+Why: the Definition of done requires 100% on `packages/harness/src/access/`; a threshold keeps it from slipping.
+
+---
+
+### 20 Oct 2026 · 5.4 leakCache keyed by teacher, material revision and owned allowed ids · decided by tdd-guide · risk: high
+Decided: leakCheck reads the revision and the teacher's module ids together, and keys and builds the locked index only on the allowed ids the teacher owns. Foreign, unknown and repeated ids drop out, so every list with the same owned set shares one cache entry. A module added between the reads counts as locked. A failed ids read fails closed.
+Why: the lead's Q1 answer. A package version decides access only through its owned allowed set, so this key changes whenever access changes, which meets ADR-0003 point 6 without a contracts change. It also stops junk ids from filling the 64-entry cache (the 5.3 MEDIUM).
+
+---
+
+### 20 Oct 2026 · 5.4 leakCheck candidate caps · decided by tdd-guide · risk: medium
+Decided: at most 2,048 candidates of 65,536 characters each; more is `invalid` before any SQL.
+Why: the largest legitimate batches measured from the harness (one 16 KB text: a 16,383-character candidate; split by a 4,000-character student message: about 220 candidates) with at least 4x headroom. The test fails if the harness ever produces a batch over a quarter of the caps.
+
+---
+
+### 20 Oct 2026 · 5.4 Full-text terms quoted in to_tsquery · decided by tdd-guide · risk: low
+Decided: every term goes to `to_tsquery` as a quoted literal (`'term':*`).
+Why: Q4 fold-in. A sweep of every code point on Postgres 16 shows the quoted form never raises, whatever the term filter lets through later. Matching is unchanged; the recall gate is still green.
+
+---
+
+### 20 Oct 2026 · 5.4 Static no-unfiltered-search audit allowlists · decided by tdd-guide · risk: high
+Decided: `test/access-audit.test.ts` pins five rules with named allowlists. The `chunks` table is named only in the schema, `internal.ts` and the chunks/retrieval repositories. `retrieval.ts` reads it exactly 5 times, each read scoped. Only `retrieval.ts` calls `.material(` (the lead's Q2). Only db `retrieval.ts`, three harness testing helpers and the port declaration implement `RetrievalIndex`. Harness search, probe and leakCheck calls happen only in `access/scopedRetrieval.ts` and `guardrails/lockedLeak.ts`, plus the testing helpers named in the allowlist.
+Why: the acceptance requires that no unfiltered search exists anywhere. Any new read path fails CI until a reviewer adds it to an allowlist.
+
+---
+
+### 20 Oct 2026 · 5.4 Postgres property sizes and seeds · decided by tdd-guide · risk: low
+Decided: seeds 20261020 (300 random scopes) and 20261022 (20 package versions, each resolved through preview and eval, 5 searches each). Both print a tally and assert minimum counts, so neither can pass with nothing checked.
+Why: the plan's 300 iterations. The run takes about 3 s.
+
+---
+
+### 20 Oct 2026 · 1.4 Magic-link tokens: hashed, single use by atomic delete, one live link per address · decided by tdd-guide · risk: high
+Decided: `auth_verification_tokens` stores only `sha256(token)`, where the token is the value Auth.js passes in (already `sha256(raw + AUTH_SECRET)`), so the database holds a hash of a hash. Using a link is one `DELETE … WHERE identifier AND token_hash … RETURNING`, so two concurrent clicks can't both win, and an expired row is deleted and read as `null`. The store never returns the token or its hash. The table has no FK to `users`.
+Why: a copy of the database must hold no usable sign-in link, and single use has to hold under races without depending on Auth.js. This is the identity path (`packages/db/src/identity/**`), so it is risk: high.
+
+---
+
+### 20 Oct 2026 · 1.4 One row per address via a unique identifier and an upsert, instead of delete-then-insert · decided by tdd-guide
+Decided: `identifier` is unique, and `createVerificationToken` is one `INSERT … ON CONFLICT (identifier) DO UPDATE` that swaps in the new hash and expiry. The plan had "delete earlier tokens for that identifier in the same transaction" with a plain index on `identifier`.
+Why: under READ COMMITTED, two concurrent delete-then-insert transactions can both insert and leave two live links. The upsert keeps "only the newest link works" atomic, and a test with 6 concurrent creates leaves exactly one row. The unique index also serves the identifier lookups.
+
+---
+
+### 20 Oct 2026 · 1.4 Migration numbered 0013 · decided by tdd-guide
+Decided: the migration is `0013_auth_verification_tokens` (journal idx 13). Open PR #64 (5.3) already uses `0012_material_revision`.
+Why: it avoids a file and snapshot collision with 5.3. Whichever PR merges second fixes the snapshot chain and journal order.
+
+---
+
+### 20 Oct 2026 · 1.4 Web's in-memory identity fake updated in Phase A · decided by tdd-guide
+Decided: `apps/web/test/memory-identity.ts` gains the two link methods now, mirroring the store's rules (one link per address, single use, expired → `null` but consumed).
+Why: the fake implements `IdentityStore`, so the web typecheck fails without them. It's a test-only change; Phase C builds on it.
+
+---
+
+### 20 Oct 2026 · 1.4 Generic `type: 'email'` provider, not the Nodemailer provider · decided by tdd-guide
+Decided: `emailProvider()` returns a plain Auth.js `EmailConfig` (`id: 'email'`, `type: 'email'`) with our own `sendVerificationRequest`. It doesn't use `next-auth/providers/nodemailer`.
+Why: `@auth/core@0.41.3` declares `EmailConfig` as a public type, and its send path (`send-token.js`) only calls `normalizeIdentifier`, `generateVerificationToken` and `sendVerificationRequest` on the provider. The Nodemailer provider would add a `server` config the port doesn't need. nodemailer 8.0.11 is pinned, which is inside Auth.js's peer range (`^7.0.7 || ^8.0.5`); the latest, 10.x, is outside it.
+
+---
+
+### 20 Oct 2026 · 1.4 A forged host is rebased, not refused · decided by tdd-guide
+Decided: `rebuildLink` puts Auth.js's path and query on AUTH_URL's origin whatever host Auth.js saw. It throws, with no mail, only when the path isn't `/api/auth/callback/email`.
+Why: this is what the plan's Design says ("keeps only its pathname + search, rebuilt on env.url.origin"). The Tests-first line ("a forged host and a foreign path both throw") reads as a shorthand for that. Refusing a forged host would also break a legitimate sign-in that reaches the app through a second hostname.
+
+---
+
+### 20 Oct 2026 · 1.4 Address rules: NFKC first, double quote refused, apostrophe allowed · decided by tdd-guide
+Decided: `normalizeEmail` applies NFKC before any check, as Auth.js's own default normaliser does, so a fullwidth `＠` becomes a second `@` and is refused. "A quote" in the plan is the double quote, which RFC 5322 uses for quoted local parts and parser-confusion tricks. The apostrophe stays allowed (`o'brien@…`) because `z.email()` accepts it and real addresses use it. Non-ASCII local parts are refused because `z.email()` is ASCII only.
+Why: it matches Auth.js's hardening and doesn't lock out real names. The address is HTML-escaped in the link anyway.
+
+---
+
+### 20 Oct 2026 · 1.4 Sign-in mail failures throw a bare `MailSendError` · decided by tdd-guide
+Decided: `sendVerificationRequest` logs `[auth] sign-in mail failed: <error name>` through `describeError` (moved out of `config.ts` unchanged) and rethrows a new `MailSendError` with a fixed message and no `cause`.
+Why: nodemailer errors can quote addresses. Rethrowing the original would hand them to Auth.js's logger and error path. Auth.js still gives every address its generic `EmailSignin` redirect.
+
+---
+
+### 20 Oct 2026 · 1.4 IPv4-mapped IPv6 counts as the IPv4 address; zone IDs dropped · decided by tdd-guide
+Decided: `::ffff:a.b.c.d` is bucketed as `a.b.c.d`, and `fe80::1%eth0` loses its `%eth0` before bucketing. Other IPv6 addresses, including NAT64 `64:ff9b::…`, go by their /64. An address with a port or brackets is `unknown`.
+Why: a dual-stack listener can report one client in either form, and both should share a bucket. Caddy's `X-Forwarded-For` holds bare IPs, so anything else is unexpected and falls into the shared, limiting bucket.
+
+---
+
+### 20 Oct 2026 · 1.4 Email sign-in wired: limited in the signIn callback, waits for Redis, redirects pinned to AUTH_URL · decided by tdd-guide · risk: high
+Decided: the `email` provider is listed only when `EMAIL_SERVER` + `EMAIL_FROM` (+ `REDIS_URL`) are set, and building it without a mail sender and a limiter throws. Each link request is counted in the `signIn` callback on Auth.js's normalised address. Over the limit it redirects to `/api/auth/error?error=RateLimited`, the same for known and unknown addresses. Every count first waits up to 3 s for Redis `ready`; on a timeout it fails closed (`AccessDenied`, no token, no mail). Every redirect is pinned to AUTH_URL's origin by parsing it.
+Why: the plan's design plus the lead's answers (bounded cold-start wait, fail closed, identical responses). This is the sign-in path, so it is risk: high.
+
+---
+
+### 20 Oct 2026 · 1.4 `redisUrl` lives inside `AuthEnv.email` · decided by tdd-guide
+Decided: `AuthEnv.email` is `{ server, from, redisUrl }`, not a separate optional `redisUrl` field as the plan sketched.
+Why: the type then says "email implies Redis", so the wiring has no unreachable "email but no Redis" branch. The env rule is the same.
+
+---
+
+### 20 Oct 2026 · 1.4 A bad address or a mail failure shows the generic `Configuration` error · decided by tdd-guide
+Decided: accept Auth.js's mapping. `InvalidEmailError` and `MailSendError` are not AuthErrors, so Auth.js redirects to `error=Configuration` (not `EmailSignin`, as the Phase B note assumed). Neither creates a token or sends mail.
+Why: the page is identical for every address and leaks nothing. Remapping would mean wrapping Auth.js's errors for no security gain. Friendlier copy belongs to the sign-in UI.
+
+---
+
+### 20 Oct 2026 · 1.4 The mail-send promise is marked handled before Auth.js joins it · decided by tdd-guide
+Decided: `sendVerificationRequest` attaches a no-op `catch` to its promise and returns that same promise, so the rejection still reaches Auth.js.
+Why: `@auth/core` 0.41.3 starts the send, awaits `createHash`, and only then joins it. A fast SMTP failure was an unhandled rejection, which Node can treat as fatal. A test proves the error still propagates.
+
+---
+
+### 20 Oct 2026 · 1.4 Switching to a new address by link leaves the old session row until it expires · decided by tdd-guide
+Decided: accept Auth.js's behaviour. Signed in as A, a link for an existing user B deletes A's session. A link for a new address creates the user and replaces the cookie, but A's session row stays until it expires. Both cases are tested.
+Why: the browser no longer holds A's token, so that browser can't use the row, and it expires within 30 days. Deleting it would need adapter side effects that carry more risk than they save. The plan's "Auth.js deletes that session first" holds only for existing users. So `packages/db/src/identity/store.ts` gets no session sweep on an address switch; sign-out-everywhere is later work.
+
+---
+
+### 20 Oct 2026 · 1.4 `signIn('email')` from server code is refused · decided by tdd-guide
+Decided: the exported `signIn` rejects for the `email` provider.
+Why: a server action has no request headers, so it would skip the per-IP limit. Email sign-in goes only through `/api/auth/signin/email`.
+
+---
+
+### 20 Oct 2026 · 1.4 Mailpit v1.31.6 pinned by digest for the local stack · decided by tdd-guide
+Decided: `axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387`, using its built-in healthcheck, with the UI bound to 127.0.0.1. Production SMTP stays B-25, and `env.example` holds only `REPLACE_ME` placeholders.
+Why: it matches how MinIO is pinned, and no real mail can leave a dev stack.
+
+---
+
 ### 5.3 Production RetrievalIndex search/probe and chunk writes in `packages/db/src/repositories`, ownership-checked, material revision bumped in the same transaction · risk: high
 Writes use `INSERT … SELECT` from the owner row (documents from `modules`; chunks from `documents` joined to `modules`), plus a scoped all-or-nothing `UPDATE` for embeddings. Search and probe filter by teacher, allowed modules and module ownership in the same statement, before ranking. These are new access paths for teacher material, so security-reviewer is required (risk group "access filter"). leakCheck stays `{ hit: true }` until Phase B.
 

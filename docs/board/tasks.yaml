@@ -333,10 +333,10 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: running
+  status: done
   risk: risky
   branch: m1/1.4-magic-link-sign-in
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus/sonnet fix:sonnet
 - id: 1.4b
   milestone: M13
   title: 'Magic-link hardening before the pilot (1.4 plan Q3): bind the link to the requesting browser with a cookie and add a confirm page, so link scanners and login CSRF on the GET callback can''t sign
@@ -513,10 +513,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: todo
+  status: running
   risk: expert
-  branch: null
-  model: null
+  branch: m3/3.3-route-intent-attempt
+  model: plan:sonnet build:opus
 - id: '3.4'
   milestone: M3
   title: '`buildContext`: history trim, last summary, access-filtered retrieval, locked `probe`, style card, persona'
@@ -587,9 +587,9 @@ tasks:
   - '4.5'
   - '4.3'
   - '4.4'
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m3/3.9-cli-chat
+  model: plan:sonnet build:sonnet
 - id: '3.10'
   milestone: M3
   title: 'Locale packs: schema, loader and validation; a safe default pack; the first pack for the pilot market with human-verified helplines and compliance'
@@ -1204,19 +1204,19 @@ tasks:
   deps:
   - '5.3'
   - M3
-  status: planning
+  status: done
   risk: risky
-  branch: null
-  model: plan:opus
+  branch: m5/5.4-access-filter
+  model: plan:opus build:opus review:opus/sonnet
 - id: '5.5'
   milestone: M5
   title: Tool registry and sandboxed calculator
   accept: fuzz test shows no access outside declared scope.
   deps:
   - M3
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m5/5.5-tool-registry-calculator
+  model: plan:sonnet build:opus review:opus/sonnet
 - id: '5.6'
   milestone: M5
   title: 'Practice skill: item selection and generation by topic and level, scoring, `skill` events'
@@ -1980,11 +1980,45 @@ tasks:
 - id: 5.3a
   milestone: M13
   title: 'Retrieval follow-ups (5.3 review MEDIUM/LOW): HNSW-usable vector query (inner ORDER BY distance LIMIT with scope, outer id tie-break) and a guard test that can fail; batch the termStats IDF queries;
-    scoped harness subpath import in db; Node version note in record-demo-embeddings.ts; widen the out-of-course
-    calibration set and add a recalibration path per course'
+    scoped harness subpath import in db; Node version note in record-demo-embeddings.ts; widen the out-of-course calibration set and add a recalibration path per course'
   accept: each item in docs/tasks/5.3/review.md marked [deferred 5.3a] is fixed or explicitly declined in the decision log, with tests where behaviour changes; the db gate passes
   deps:
   - '5.3'
+  status: todo
+- id: 5.4a
+  milestone: M13
+  title: 'Access-filter follow-ups (5.4 review MEDIUM/LOW): audit rule 1 also catches db.query.chunks, namespace imports and public.chunks SQL; rule 2 needs a real scope filter; rule 5 covers apps/* once
+    wired; wider file scan; zod Chunk schema in scopedRetrieval, copy then check, safe id in errors, finite k; whole-turn property test of the access tools filter; cap total leak-candidate characters; comment
+    on the always-on modules.ids read; fix the flaky updatedAt clock-skew assertion in packages/db/test/migrate.int.test.ts'
+  accept: each new audit rule is shown failing on a fixture; scopedRetrieval refuses wrong-typed fields; migrate.int has no clock-skew flake; db and harness tests pass
+  deps:
+  - '5.4'
+  status: todo
+  risk: risky
+- id: 5.5a
+  milestone: M13
+  title: 'Calculator follow-ups (5.5 review MEDIUM/LOW): refuse implicit multiplication across spaces and after ")" (1 e 2, 2 pi, sqrt(4)pi, (1)(2)); add them to the rejection table and fuzz attacks; fix
+    the sandbox doc comment; drop gcd/lcm or refuse arguments above MAX_SAFE_INTEGER'
+  accept: each listed form is refused with a tested reason; gcd/lcm never return a wrong answer; harness tests pass with 100% coverage on src/tools
+  deps:
+  - '5.5'
+  status: todo
+- id: 3.4c
+  milestone: M13
+  title: 'Same-topic turns degrade to locked (3.9 report): retrievalQuery.ts appends the last agent reply, diluting overlap below the 0.5 coverage threshold while probe() counts any locked score > 0 as
+    a hit, so coverageGate returns locked instead of climbing the help ladder. Shape the query (student text weighted first or scored separately) and/or give the locked probe a real threshold'
+  accept: a multi-turn same-topic test on allowed content climbs the help ladder and never returns locked; locked content still returns locked; retrieval-leak and locked suites pass
+  deps:
+  - '3.4'
+  status: todo
+  risk: risky
+- id: 3.9a
+  milestone: M13
+  title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
+    document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3)'
+  accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
+  deps:
+  - '3.9'
   status: todo
 - id: 5.3b
   milestone: M13

@@ -1,5 +1,6 @@
-// Auth.js adapter over the identity store (task 1.3): only what Google sign-in with database
-// sessions needs. Roles, photos, OAuth tokens and any extra profile field never reach the store.
+// Auth.js adapter over the identity store (tasks 1.3, 1.4): only what Google and email magic-link
+// sign-in with database sessions need. Roles, photos, OAuth tokens and any extra profile field
+// never reach the store.
 import type { IdentityStore, IdentityUser, Role } from '@edmate/db';
 import type { Adapter, AdapterSession, AdapterUser } from 'next-auth/adapters';
 
@@ -90,7 +91,19 @@ export function toAuthAdapter(identity: IdentityStore): Adapter {
       await identity.deleteSession(sessionToken);
     },
 
-    // Never called by Google sign-in; account deletion is 13.x and goes through its own path.
+    // Email magic link (task 1.4). Auth.js passes `sha256(raw + AUTH_SECRET)`; the store keeps only
+    // a hash of that and never returns it, so the token Auth.js handed in is echoed back.
+    async createVerificationToken({ identifier, token, expires }) {
+      const created = await identity.createVerificationToken({ identifier, token, expires });
+      return { identifier: created.identifier, expires: created.expires, token };
+    },
+
+    async useVerificationToken({ identifier, token }) {
+      const used = await identity.useVerificationToken({ identifier, token });
+      return used ? { identifier: used.identifier, expires: used.expires, token } : null;
+    },
+
+    // Never called by Google or email sign-in; account deletion is 13.x and goes through its own path.
     deleteUser: () => unsupported('deleteUser'),
     unlinkAccount: () => unsupported('unlinkAccount'),
   };

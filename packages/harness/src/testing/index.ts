@@ -26,6 +26,16 @@ export {
   twoTeacherWorld,
 } from './memoryAccess.js';
 export {
+  junkProbeRetrieval,
+  MARKED_MODULES,
+  MARKED_TEACHERS,
+  MARKED_VOCAB,
+  markedWorld,
+  markOf,
+  textLeakingRetrieval,
+  wideningRetrieval,
+} from './hostileRetrieval.js';
+export {
   type MemoryRetrieval,
   memoryRetrieval,
   OUT_OF_SCOPE_TEXT,
@@ -40,11 +50,7 @@ export {
   type RetrievalContractCase,
 } from './retrievalContract.js';
 export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
-export {
-  PII_SCRUB_CASES,
-  type PiiScrubCase,
-  piiScrubCaseFailures,
-} from './piiScrubCases.js';
+export { PII_SCRUB_CASES, type PiiScrubCase, piiScrubCaseFailures } from './piiScrubCases.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,
