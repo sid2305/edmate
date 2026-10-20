@@ -392,12 +392,32 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: running
+  status: review
   needs_decision:
   - min-age
   risk: risky
   branch: m1/1.7-age-consent
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus/sonnet
+- id: 1.7b
+  milestone: M1
+  title: 'Web build loads the safe-regex worker (1.7 security re-check HIGH): with next build --webpack the worker is copied without its import, so IN.yaml''s PII patterns time out, the IN pack is refused and loadAgeContent drops it silently; load @edmate/content from dist with the worker beside it (or a path webpack leaves alone), log refused packs in loadAgeContent, add a build smoke test that loads the packs and serves IN'
+  accept: a production web build serves the IN pack at the age gate, the regex guard still times out an unsafe pattern in that build, and a refused pack is logged
+  deps:
+  - '1.7'
+  risky: true
+  status: todo
+  branch: null
+  model: null
+- id: 1.7c
+  milestone: M1
+  title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key)'
+  accept: as in docs/tasks/1.7/plan.md Phase D
+  deps:
+  - '1.7'
+  risky: true
+  status: blocked
+  branch: null
+  model: null
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -1181,10 +1201,9 @@ tasks:
   deps:
   - '2.7'
   - '5.1'
-  - M3
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m5/5.2-video-ingest
+  model: plan:sonnet build:sonnet
 - id: '5.3'
   milestone: M5
   title: Chunking, embeddings, full-text fallback, hybrid ranking with teacher notes first; chunks tagged teacher → course → module
@@ -1224,9 +1243,9 @@ tasks:
   deps:
   - '5.5'
   - M3
-  status: running
+  status: done
   branch: m5/5.6-practice-skill
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet/opus arch:opus review:opus/opus/sonnet fix:opus
 - id: 5.6a
   milestone: M5
   title: 'Answer keys out of retrieved context (5.6 architect Q-C): buildContext drops, and reports, any retrieved chunk where revealsAnswerKey is true; an ingest rule that the practice bank and its keys
@@ -1241,10 +1260,22 @@ tasks:
 - id: 5.6b
   milestone: M13
   title: 'Answer-context mode for the matcher (5.6 architect MEDIUM): MCQ bare-label keys and code_output keys that appear in their own prompt can be checked without tripping the leak gate, so the bank
-    can serve those kinds'
+    can serve those kinds; the matcher also ignores the active item''s own prompt (a reply restating a generated sum item "What is 3 + 4?" currently counts as saying the answer, 5.6 Phase C)'
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
+  status: todo
+  branch: null
+  model: null
+- id: 5.6c
+  milestone: M5
+  title: '5.6 review follow-ups (before any real practice bank): PracticeBank requires a teacherId scope check (records carry teacherId, a teacher-only test); keep practice keys out of the model''s do-not-say
+    prompt and guard them with the stream gate and postGuard only (spelled and roman forms leak); carry a skipped item''s key for one turn; expectNoLeak scans skill events and the generated key; bound GEN_ID
+    operands; validateItem also checks the item''s options and id against its own key; exactly one allowed module resolves an item id (5.6 architect re-check)'
+  accept: a bank pick for another teacher with the same module id returns nothing; no practice key text appears in any model request; the listed tests pass
+  deps:
+  - '5.6'
+  risky: true
   status: todo
   branch: null
   model: null
@@ -1597,6 +1628,7 @@ tasks:
   title: App shell, mobile-first layouts (360 px up), next-intl, auth
   accept: Lighthouse accessibility ≥ 95 at 360 px.
   deps:
+  - 1.7b
   - GATE
   - '1.3'
   - '1.7'
@@ -2039,13 +2071,37 @@ tasks:
   accept: a multi-turn same-topic test on allowed content climbs the help ladder and never returns locked; locked content still returns locked; retrieval-leak and locked suites pass
   deps:
   - '3.4'
-  status: planning
+  status: done
   risk: risky
-  model: plan:opus
+  model: plan:opus build:sonnet review:opus/sonnet
+  branch: m3/3.4c-same-topic-locked
+- id: 1.7a
+  milestone: M13
+  title: 'Age and consent follow-ups (1.7 review MEDIUM/LOW): content validate flags minAge outside 13-18; refuse an unsigned privacy notice in production (the signed flag is unused); a default-deny clearance
+    or a coverage test for pages and server actions behind requireRole; log errors in the age gate catch blocks and catch resolve() failures in ageGateView; comment that the ageStatus overload narrowing
+    is a runtime guarantee; NOT VALID plus VALIDATE for the 0014 checks at scale'
+  accept: each item has a test or a logged decision; production refuses a pending notice
+  deps:
+  - '1.7'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
+- id: 3.4d
+  milestone: M13
+  title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
+    the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper'
+  accept: removing locked precedence fails the coverage test through the gate assertion, not only through the module check; mergeByScore ties are ordered by id
+  deps:
+  - 3.4c
+  status: todo
+  branch: null
+  model: null
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
-    document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3); edmate chat reloads the saved help state each turn so the ladder can climb (found by the 3.4c planner)'
+    document the no-op memoryProfileStore; zod-parse the chat flags; switch the CLI lexical index to the db retrieval index (3.9 Q3); edmate chat reloads the saved help state each turn so the ladder can
+    climb (found by the 3.4c planner); re-test the reported same-topic phrasing ("I still don''t get it") on the db index'
   accept: Ctrl+C mid-stream exits cleanly with bye; a new TurnEvent variant fails typecheck; no raw console.error in apps/cli/src/commands/chat; cli tests pass
   deps:
   - '3.9'

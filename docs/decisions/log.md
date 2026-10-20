@@ -10,6 +10,151 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.6 Item tools are key-checked on the text they show, not their JSON · decided by tdd-guide
+Decided: for a tool with `issuedItem`, the do-not-say check on its output and on its skill payload reads only the item's prompt and options (`IssuedItem.shown`); the locked check still reads every leaf. Other tools keep the whole-JSON check.
+Why: the JSON's `"level":1` and the id matched a held key "1", so after one item every later item failed and practice got stuck; the id and level are server-made and never hold an answer the prompt doesn't show.
+risk: high
+
+### 20 Oct 2026 · 5.6 The generator varies operands to honour the exclude list and held keys · decided by tdd-guide
+Decided: `generateItem` tries up to 64 deterministic variants (variant 0 is the old item) and serves the first that is not excluded, passes `validateItem` and shows no held key; none valid fails closed. The bank is asked at most 20 times before the generator.
+Why: a fixed item per module and level repeated and then failed; bounded loops keep it deterministic and fail closed.
+risk: low
+
+### 20 Oct 2026 · 5.6 An issued item with a gate that can't take keys holds the rest of the attempt · decided by tdd-guide
+Decided: `addKeys` stays optional on `StreamGate`; when an item is issued and the gate has none, generate shows no more text and returns `withheld: true`, so postGuard replaces the reply with the safe hint.
+Why: fail closed without forcing every test gate to implement `addKeys`; production's answer-leak gate has it.
+risk: high
+
+### 20 Oct 2026 · 5.6 Practice keys per turn are capped at 2,048 characters of JSON · decided by tdd-guide
+Decided: `PRACTICE_KEYS_MAX_JSON = 2048`; `issuedItem` fails closed when the turn's key union would pass it, or the module id is over `PRACTICE_ID_MAX`.
+Why: with 20 served ids of 200 characters it keeps the saved state under the 8 KB limit, so `serializeSessionHelp` never throws and drops a key.
+risk: low
+
+### 20 Oct 2026 · 5.6 Practice merges with practice@1.1.0 unsigned; matcher false positives go to 5.6b · decided by lead
+Decided: PR #73 merges with practice@1.1.0 and set@1.1.0 at `reviewed_by: pending`; the human signs them through B-26. The pack now says the app shows the item and the model must not repeat it (fed7d54); the code-output rule's last sentence ("Text that the item itself shows may be shown as given") still conflicts with that and is left for the human's sign-off. The arithmetic false positives (the item's own prompt, and later hints that quote the sum) fail closed and go to 5.6b. Review MEDIUM and LOW items go to 5.6c (before any real practice bank). The fix round's two risk: high decisions (shown-text-only key check, hold the rest without addKeys) were re-checked by the architect and accepted.
+Why: MVP first (human, 20 Oct 2026); every remaining gap fails closed, and none lets a key reach the client.
+risk: high
+
+### 20 Oct 2026 · 5.6 An item's own prompt is checked with a narrow whole-word key check · decided by tdd-guide
+Decided: `validateItem` uses `keyInPrompt` (practiceItems.ts), a boundary-aware "is this key a whole word or number in the prompt" check, not the shared `revealsAnswerKey` matcher, whose arithmetic grounding flags "What is 2 + 2?" against "4". Blank keys are rejected first. `chooseTopic` takes a non-empty tuple, and the unreachable try/catch around `evaluateExpression` was removed.
+Why: the shared matcher would reject every generated sum item; the full-turn leak checks still use the shared matcher.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6 answerKeyFor reads the module id back from the generated item id; the registry takes an optional bank · decided by tdd-guide
+Decided: `answerKeyFor` recovers the module id from the `<moduleId>:practice` id shape rather than a new export; `defaultToolRegistry` gets optional `bank` and `practiceOpts` defaulting to `demoPracticeBank()`, so existing callers are unchanged.
+Why: read-only parsing of a tested id convention, kept in Phase B's file list; additive change to a shared seam (5.7 and 5.8 will touch it). The duplicated id regex is deferred to 5.6c.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6 Practice items come only from practice.next_item; keys stay on the server (ADR-0010) · decided by lead (architect review accepted) · risk: high
+Decided: ADR-0010 as written: the pack practice@1.1.0 routes every item through the tool, a new set@1.1.0 pins it (set@1.0.0 unchanged), the key is looked up on the server by item id and never reaches the model on the issuing turn or the client, it is saved in HelpState on every outcome, and a held practice key caps the ladder at the practice ceiling. No contracts change.
+Why: a model-written item's answer cannot be protected; this is Decision 1 of the 5.6 plan, reviewed by the architect and accepted by the lead.
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6 New keys reach the stream gate mid-attempt through addKeys, not the decision · decided by tdd-guide
+Decided: generate keeps a live list of guarded keys; an issued item's key is added to it and to the gate (`StreamGate.addKeys`), and postGuard gets the union from the runner. The decision that is composed and saved is unchanged.
+Why: putting the key in the decision would put it in the model's prompt on the issuing turn (compose renders `mustNotReveal`).
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6 An item whose key can't be found fails the tool call closed · decided by tdd-guide
+Decided: a new tool fail reason `no_answer_key`; the model sees only `failed` and the pack's "no item ready" path applies.
+Why: the model must never see an item whose key the harness can't protect.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6 The skill event is checked against earlier keys only · decided by tdd-guide
+Decided: an item's own `skill` payload is checked against the keys guarded before it, not its own key.
+Why: its prompt was already checked against its own key when made, and the arithmetic matcher would drop every generated sum item's event.
+risk: high
+
+---
+
+### 20 Oct 2026 · 5.6 Practice fields ride along like groundingAsks; served list capped at 20 · decided by tdd-guide
+Decided: the runner carries the loaded practice fields onto every saved state (decide rebuilds the help state without them); the served list keeps the last 20 ids; a second call or a retry in the same turn leaves out items already issued (corrected in the review fix round: the generator now honours that list).
+Why: same pattern as 4.7's groundingAsks; a bounded list keeps the blob small.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6 Unreadable stored state plus an issued item saves the state stopped · decided by tdd-guide
+Decided: when the stored help state couldn't be read but an item went out, the runner still saves the new state (with the key) and sets `lockedStopped: true`.
+Why: the key must be saved; an unknown stored stop flag is treated as set (fail closed), as 4.6b does.
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.6 Pending prompt packs load; reported, not changed · decided by tdd-guide
+Decided: practice@1.1.0 and set@1.1.0 are committed with `reviewed_by: pending`; the loaders accept it and no validation fails. Nothing was changed in the loaders.
+Why: no other pending pack exists to set a precedent; the sign-off is B-26 and the merge gate.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 5.2 starts before M3 closes · decided by lead
+
+Decided: 5.2 (video ingestion) no longer waits on the whole of M3. What's left open in M3 is 3.11d and 3.11e, teacher-label hardening, which ingestion doesn't use. 5.2 still depends on 2.7 and 5.1.
+Why: MVP first (human, 20 Oct 2026). 5.2 blocks the teacher-upload slice (8.x), and the open M3 work doesn't touch ingestion.
+risk: low
+
+### 20 Oct 2026 · 3.4c locked probe and precedence run on the student's own words · decided by tdd-guide
+Decided: the locked probe and the locked-precedence check in `buildContext` run on the student's
+own words only (`retrievalQueries(...).student`); the agent-widened query is used only to add
+coverage via `mergeByScore`, and only when the student's own words don't hit locked material.
+Why: this is the smallest change that keeps locked-content protection exactly as strict as before
+(judged on undiluted words) while fixing the same-topic degrade; a diluted or inflated locked
+verdict from the agent's own reply text would be a safety regression either way.
+risk: high
+
+---
+
+### 20 Oct 2026 · 3.4c no probe threshold in the in-memory index · decided by tdd-guide
+Decided: `memoryRetrieval.probe`/`scopedRetrieval.probeLocked` keep `hit: score > 0`; no threshold
+was added here.
+Why: the in-memory scorer has no stop words, so a 0.5 floor would turn a real locked request
+("Teach me loops please" scores 0.25) into `ask_teacher`, weakening locked protection in the CLI
+and in harness tests. The db adapter already has its own calibrated `PROBE_FLOOR = 0.5`, which is
+the production threshold; this task is out of bounds for `packages/db/**`.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c one extra search call per turn with agent history · decided by tdd-guide
+Decided: `buildContext` now runs up to two searches plus one probe concurrently (via
+`Promise.all`), instead of one search plus one probe. On a locked turn the widened search's result is discarded rather
+skipped (packages/harness/src/pipeline/steps/buildContext.ts); this is accepted, not fixed (3.4c review LOW, wontfix).
+Why: needed to keep the student-only query and the agent-widened query separate; the extra call
+only happens when there is an agent message in history, runs in parallel with the others inside
+buildContext's existing 300 ms budget, and on the db index is one more query embedding per turn.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c finding for 3.9a: edmate chat never reloads saved help state · decided by tdd-guide
+Decided: not fixed here (explicitly out of bounds per the plan). `apps/cli/src/commands/chat/deps.ts`
+composes `memoryTurnConfigStore(world)`, which reads the world's fixed session row and never looks
+at what `memorySessionStateStore.saveHelpState` wrote, so the CLI's help ladder never climbs across
+turns in practice. `sameTopic.test.ts` works around this with in-test plumbing
+(`withHelpStateReload`) to prove the harness-level fix climbs correctly.
+Why: logging as a finding for 3.9a, per the plan's explicit scope boundary.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c filler follow-ups still lock on the CLI's in-memory index until 3.9a · decided by lead
+Decided: a follow-up with no topic words ("I still don't get it", after "I don't know what a variable is") still ends `locked` through `edmate chat`. This is because the in-memory index has no stop words and no probe floor. It is accepted for now, and 3.9a closes it by moving the CLI to the db index, which has both.
+Why: the code review reproduced it on the branch. The db index is what students use in production. Adding a threshold to the in-memory probe would stop real locked requests from locking (the planner's analysis).
+risk: low
+
+---
+
 ### 20 Oct 2026 · 3.3 how a student's answer is matched to the answer key · decided by tdd-guide
 
 Decided: answer-key items are required parts of one answer. All parts matched gives `correct`, some gives `partial`, none gives `wrong`. Numbers are compared by value (fractions, decimals, `1,000`, unicode minus), and a decimal with 2 or more places matches when it rounds to the key. Other parts match as whole words. Credit needs answer-shaped text or a `check_answer` turn, so a key inside a question ("why is it 5/6?") is `none`. With no readable key, answer-shaped text is `wrong`.
@@ -17,6 +162,8 @@ Decided: answer-key items are required parts of one answer. All parts matched gi
 Why: the plan left the matching rule to the builder. Whole-part matching and answer-shaped gating keep a question that quotes the key from counting as an attempt.
 
 ---
+
+
 
 ---
 
@@ -28,6 +175,8 @@ Why: off_topic, meta and misuse make decide redirect, so a broad rule would redi
 
 ---
 
+
+
 ---
 
 ### 20 Oct 2026 · 3.3 only a hard distress phrase is a confident route distress · decided by lead (risk: high)
@@ -37,6 +186,8 @@ Decided: route uses the shared distress keyword tables, but only a hard phrase g
 Why: route's `distress` escalates the turn. A soft hit, such as a bare "suicide" in a Hamlet lesson, would escalate even when preGuard's safety-reviewed classifier judged it safe. The runner's last-resort soft checks when preGuard fails are unchanged. The lead accepted these plan deviations at review.
 
 ---
+
+
 
 ---
 

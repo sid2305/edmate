@@ -44,7 +44,7 @@ import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
 import type { StreamGateFactory } from './generate/streamGate.js';
 import type { TurnLimits } from './limits.js';
-import type { ToolRegistry } from './tools.js';
+import type { IssuedItem, ToolRegistry, ToolSessionState } from './tools.js';
 
 /** Who a turn's model calls are billed to: always from the entitlement, never the input. */
 export type TurnBilling = Parameters<UsageMeter['record']>[1];
@@ -330,6 +330,11 @@ export interface GenerateResult {
    * threshold): the runner sends it after postGuard passes it.
    */
   held?: boolean;
+  /**
+   * The answer keys of every practice item this attempt issued (5.6, ADR-0010 §4): the union,
+   * looked up on the server by item id. Server-side only; absent when no item was issued.
+   */
+  practiceAnswerKey?: readonly string[];
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -457,6 +462,21 @@ export interface Steps {
       onLockedTrip?: () => void;
       /** decide.fallback chose the decision (4.7 fix round 1): generate holds the reply. */
       fromFallback?: true;
+      /**
+       * The session's practice state (5.6): bound to each item tool for this attempt (served ids
+       * for the exclude list, the active item's module). Absent: none.
+       */
+      practice?: ToolSessionState;
+      /**
+       * Keys of practice items an earlier attempt of this turn issued (5.6): guarded from the
+       * start, like the decision's own, but never put in the model's prompt.
+       */
+      issuedKeys?: readonly string[];
+      /**
+       * Called at once when a practice item is issued, before its `skill` event goes out, so the
+       * runner saves its key on every outcome, even when the attempt then fails (5.6).
+       */
+      onPracticeItem?: (item: IssuedItem) => void;
     },
     emit: Emit,
   ): Promise<GenerateResult>;

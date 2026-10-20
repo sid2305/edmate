@@ -196,3 +196,12 @@ Each phase's handoff logs a `risk: high` decision. Not touched: contracts, ADRs,
   - (b) Ask before sign-in, so no email ever reaches the database first. Breaks email links opened
     in another browser.
   - **Recommend (a)**, unless counsel says COPPA/DPDP need (b).
+
+## Phase A review carry-forward (lead, 20 Oct 2026)
+security-reviewer (opus), database-reviewer and typescript-reviewer all APPROVED Phase A, with no CRITICAL or HIGH findings. These small items are added to **Phase C's** scope because Phase C is the first caller:
+1. `noticeVersion` comes from the notice the server loaded for that market, never from form input. The store also rejects a version that doesn't match an injected `noticeVersion(market)`.
+2. The under-13 erase is wrapped in `translateWrite`/`guarded`, so a blocking row comes back as a `RepositoryError` with a known code, never a raw driver error. Phase C handles that error like `under_age`: sign out, set the block cookie, and leave the account for staff to erase (12.1).
+3. `ageStatus` throws, and the learner stays blocked, when `minAge` is not finite or is above `CONSENT_AGE`. A bad policy must never erase students.
+4. The in-memory fake (`apps/web/test/memory-identity.ts`) gets a `blockErase` switch so the error path in item 2 is tested.
+5. `learnerStatus` is scoped to students, or its behaviour for teacher and staff accounts is documented and tested.
+Phase D: a parent re-consenting to the same notice version after a withdrawal clears `withdrawn_at` on the existing row (unique on user, kind, version).

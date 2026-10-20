@@ -9,7 +9,7 @@
 import type { Skill, ToolName, TurnContext, TurnInput } from '@edmate/contracts';
 import { maxOutputTokensFor, type Move } from './budgets.js';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
-import { copyHelp, type HelpState, INITIAL_HELP_STATE } from './helpState.js';
+import { copyHelp, type HelpState, holdsPracticeKey, INITIAL_HELP_STATE } from './helpState.js';
 import { effectiveCeiling, type Rung } from './ladder.js';
 import { selectSkill, type SkillStep, skillStep } from './skills.js';
 
@@ -129,9 +129,12 @@ function finish(
     move: s.move,
     rung: s.rung,
     skill: s.skill,
-    // A solution is the one move allowed to state the answer (never reached with finalAnswers never).
+    // A solution is the one move allowed to state the answer (never reached with finalAnswers
+    // never). A practice item's key is never released, whatever the move (5.6, ADR-0010 §5).
     mustNotReveal:
-      s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' ? [] : [...i.help.answerKey],
+      s.move === 'solution' && i.ctx.pkg.finalAnswers !== 'never' && !holdsPracticeKey(i.help)
+        ? []
+        : [...i.help.answerKey],
     tools: [...new Set(names)],
     maxOutputTokens: maxOutputTokensFor(s.move, s.skill),
     next: s.next,

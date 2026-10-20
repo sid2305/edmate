@@ -91,8 +91,8 @@ const MODEL_POLICY: ModelPolicy = {
     main: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   },
 };
-// PROVISIONAL: the first prompt-pack set; 3.11 publishes it.
-const PROMPT_PACK_VERSION = '1.0.0';
+// PROVISIONAL: the prompt-pack set; 3.11 published 1.0.0, 5.6 moves the seed to 1.1.0 (ADR-0010).
+const PROMPT_PACK_VERSION = '1.1.0';
 
 type SubscriptionKind = { package: 'free' | 'paid'; status: 'active' | 'paused' | 'ended' };
 
