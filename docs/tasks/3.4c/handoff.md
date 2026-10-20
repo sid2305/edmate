@@ -151,3 +151,8 @@ turns in practice. `sameTopic.test.ts` works around this with in-test plumbing
 (`withHelpStateReload`) to prove the harness-level fix climbs correctly.
 Why: logging as a finding for 3.9a, per the plan's explicit scope boundary.
 risk: low
+
+### 20 Oct 2026 · 3.4c filler follow-ups still lock on the CLI's in-memory index until 3.9a · decided by lead
+Decided: a follow-up with no topic words ("I still don't get it", after "I don't know what a variable is") still ends `locked` through `edmate chat`. This is because the in-memory index has no stop words and no probe floor. It is accepted for now, and 3.9a closes it by moving the CLI to the db index, which has both.
+Why: the code review reproduced it on the branch. The db index is what students use in production. Adding a threshold to the in-memory probe would stop real locked requests from locking (the planner's analysis).
+risk: low
