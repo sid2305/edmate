@@ -31,6 +31,25 @@ export {
   type WebFetcher,
   type WebFetcherOptions,
 } from './fetch/webFetch.js';
+export {
+  buildOutlineModuleRequest,
+  draftOutline,
+  OUTLINE_SYSTEM,
+} from './outline/draftOutline.js';
+export type {
+  ModuleOutlineDraft,
+  OutlineChunkInput,
+  OutlineDraft,
+  OutlineModuleInput,
+  TopicDraft,
+} from './outline/types.js';
+export {
+  buildStyleCardRequest,
+  draftStyleCard,
+  STYLE_CARD_SYSTEM,
+  type DraftStyleCardInput,
+  type StyleCardDraft,
+} from './styleCard/draftStyleCard.js';
 export { htmlTitle, parseHtml } from './parse/html.js';
 export { parseMarkdown } from './parse/markdown.js';
 export { parseDocx } from './parse/docx.js';
