@@ -1214,9 +1214,9 @@ tasks:
   accept: fuzz test shows no access outside declared scope.
   deps:
   - M3
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '5.6'
   milestone: M5
   title: 'Practice skill: item selection and generation by topic and level, scoring, `skill` events'
@@ -1985,6 +1985,16 @@ tasks:
   deps:
   - '5.3'
   status: todo
+- id: 5.4a
+  milestone: M13
+  title: 'Access-filter follow-ups (5.4 review MEDIUM/LOW): audit rule 1 also catches db.query.chunks, namespace imports and public.chunks SQL; rule 2 needs a real scope filter; rule 5 covers apps/* once
+    wired; wider file scan; zod Chunk schema in scopedRetrieval, copy then check, safe id in errors, finite k; whole-turn property test of the access tools filter; cap total leak-candidate characters; comment
+    on the always-on modules.ids read; fix the flaky updatedAt clock-skew assertion in packages/db/test/migrate.int.test.ts'
+  accept: each new audit rule is shown failing on a fixture; scopedRetrieval refuses wrong-typed fields; migrate.int has no clock-skew flake; db and harness tests pass
+  deps:
+  - '5.4'
+  status: todo
+  risk: risky
 - id: 5.3b
   milestone: M13
   title: 'Real-embedding recall for the demo course (after B-24): record the demo vectors with the real embedder, enable the skipped "with embeddings" recall@5 assertion, and recalibrate VECTOR_ZERO against
