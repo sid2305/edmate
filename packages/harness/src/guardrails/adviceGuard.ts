@@ -12,10 +12,12 @@
 //      recommendation near a regulated action, product or dose; a promised outcome; or a
 //      professional-identity claim ("as your doctor", "I'm not your lawyer, but"). Referral phrasing
 //      ("talk to a doctor") is exempt.
-//   2. Pre-filter (cheap): a decision request in the scrubbed student message ("should I", "konsi",
-//      "डाल दूं", "pretend") or a decision signal in the reply (modal words, a dose, a promise, a
-//      role-play marker, romanised Hindi imperatives, any non-Latin letter, a domain word). No
-//      signal: ok, with no judge call and no disclaimer.
+//   2. Pre-filter (cheap): a regulated-subject agent (its every reply is judged: fix round 1), a
+//      decision request in the scrubbed student message ("should I", "konsi", "डाल दूं",
+//      "pretend", "kahan lagaun", "can I stop") or a decision signal in the reply (modal words, a
+//      dose, a promise, a role-play marker, romanised Hindi imperatives, any non-Latin letter, a
+//      domain word, a sentence-start imperative, any number, a proper-noun product). No signal: ok,
+//      with no judge call and no disclaimer.
 //   3. The judge (bounded small tier, `PostGuardCtx.adviceJudge`): the scrubbed student message and
 //      the PII-scrubbed reply in their own fenced blocks, a fixed rubric, strict JSON. Only
 //      `{"personalAdvice": false}` is clean; any other answer is advice. No answer at all (outage,
@@ -25,7 +27,7 @@
 //   4. Advice found: on a `redirect` turn the redirect reply (no rewrite: a redirect teaches
 //      nothing). Otherwise one bounded rewrite of the scrubbed draft into concept teaching; it is
 //      accepted only when the rules pass it (no directive, no non-Latin letter, no romanised Hindi
-//      imperative), else the fixed fallback. The chain's verification pass then re-checks it with
+//      imperative, no dose, no promise, no named product), else the fixed fallback. The chain's verification pass then re-checks it with
 //      every post guard (answer keys, locked material).
 //   5. The disclaimer (a plain string operation): appended after a blank line to a rewrite, and to
 //      a clean reply when a regulated-subject agent was asked for a decision, unless the text holds
@@ -147,18 +149,18 @@ const rx = (source: string) => new RegExp(source, 'u');
 const rxg = (source: string) => new RegExp(source, 'gu');
 
 /** A regulated action, product, dose or legal step. */
-const REGULATED = String.raw`(?:invest\w*|buy\w*|sell\w*|stocks?|shares|equit(?:y|ies)|(?:mutual |index )?funds?|etfs?|crypto\w*|coins?|bitcoin|tokens?|loans?|emis?|credit cards?|debt|savings|portfolio|trad(?:e|es|ing)|forex|insurance|medic(?:ine|ines|ation|ations)|meds|tablets?|pills?|capsules?|doses?|dosage|drugs?|antibiotics?|paracetamol|ibuprofen|aspirin|syrup|\d+(?:\.\d+)? ?(?:mg|mcg|ml|milligrams?)|sue|suing|lawsuit|court|legal action|file (?:a )?(?:case|complaint|suit)|sign (?:it|the|this|that)|contract|clause|evict\w*|landlord|settle\w*|plead\w*|testify)\b`;
+const REGULATED = String.raw`(?:invest\w*|buy\w*|sell\w*|stocks?|shares|equit(?:y|ies)|(?:mutual |index )?funds?|etfs?|crypto\w*|coins?|bitcoin|tokens?|loans?|emis?|credit cards?|debt|savings|portfolio|trad(?:e|es|ing)|forex|insurance|medic(?:ine|ines|ation|ations)|meds|tablets?|pills?|capsules?|doses?|dosage|drugs?|antibiotics?|paracetamol|ibuprofen|aspirin|syrup|\d+(?:\.\d+)? ?(?:mg|mcg|ml|milligrams?)|sue|suing|lawsuit|court|legal action|file (?:a |the |your )?(?:case|complaint|suit|lawsuit)|sign (?:it|this|that|here|the (?:contract|agreement|lease|papers?|documents?|deal|renewal|notice|form))|contract|clause|evict\w*|landlord|settle\w*|plead\w*|testify)\b`;
 const REGULATED_RX = rx(String.raw`(?<![\p{L}\p{N}])${REGULATED}`);
 
 /** Second-person directives and first-person recommendations. */
 const DIRECTIVE_RX = rxg(
   String.raw`(?<![\p{L}])(?:you (?:should|must|need to|have to|ought to|had better|will want to)|you'd better|you'll want to|i (?:would |'d )?(?:strongly )?(?:recommend|suggest|advise)|my (?:advice|recommendation|pick|suggestion) (?:is|would be)|if i were you|go ahead and)(?![\p{L}])`,
 );
-/** An imperative at the start of a sentence, after an optional "yes,". */
+/** An imperative at the start of a sentence, after an optional "yes," and "just" or "don't". */
 const IMPERATIVE_RX = rxg(
-  String.raw`(?:^|[.!?;:\n] ?|, )(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
+  String.raw`(?:^|[.!?;:\n] ?|, )(?:(?:yes|yeah|ok|okay|sure|honestly|so),? )?(?:(?:just|don't|do not|never) )?(take|buy|sell|invest|put|move|stop taking|start taking|keep taking|give (?:them|him|her|it)|sue|sign|file)(?![\p{L}])`,
 );
-/** Verbs that are a regulated step on their own. */
+/** Verbs that are a regulated step on their own ("sign" and "file" need their object: 4.8 fix 1). */
 const SELF_REGULATED = new Set(['buy', 'sell', 'invest', 'sue']);
 /** A referral right after the directive: "you should talk to a doctor". */
 const REFERRAL_RX = rx(
@@ -173,13 +175,17 @@ function windowAfter(s: string, end: number): string {
   return stop < 0 ? rest : rest.slice(0, stop);
 }
 
+/** Up to 3 words between the parts of a claim or promise ("a certified financial planner"). */
+const UP_TO_3 = String.raw`(?: [\p{L}'-]+){0,3}?`;
+/** Up to 3 adverbs ("you'll definitely win", "you will most likely get"). */
+const ADVERBS = String.raw`(?: (?:\w+ly|for sure|100%|still|also|then|even|just|never|not|so|most|almost|very)){0,3}?`;
 const PROFESSION = String.raw`(?:(?:own |personal )?(?:financial (?:advis[oe]r|planner)|investment advis[oe]r|advis[oe]r|lawyer|attorney|advocate|solicitor|counsel|doctor|physician|pharmacist|psychiatrist|therapist))`;
 /** A professional-identity claim or act. */
 const IDENTITY_RX = rx(
   [
-    String.raw`(?<![\p{L}])i(?: am|'m|'ll be| will be) (?:your|a|an) ${PROFESSION}`,
-    String.raw`(?<![\p{L}])i(?: am|'m) not (?:your|a|an) ${PROFESSION},? but`,
-    String.raw`(?<![\p{L}])(?:acting|speaking|talking|writing) as (?:your|a|an) ${PROFESSION}`,
+    String.raw`(?<![\p{L}])i(?: am|'m|'ll be| will be) (?:your|a|an)${UP_TO_3} ${PROFESSION}`,
+    String.raw`(?<![\p{L}])i(?: am|'m) not (?:your|a|an)${UP_TO_3} ${PROFESSION},? but`,
+    String.raw`(?<![\p{L}])(?:acting|speaking|talking|writing) as (?:your|a|an)${UP_TO_3} ${PROFESSION}`,
     String.raw`(?<![\p{L}])as your ${PROFESSION}`,
     String.raw`(?<![\p{L}])i(?: would| 'd|'d)? (?:diagnose|prescribe)(?![\p{L}])`,
     String.raw`(?<![\p{L}])my (?:diagnosis|prescription)(?![\p{L}])`,
@@ -193,7 +199,7 @@ const PROMISE_RX = rx(
     String.raw`(?:double|returns?|profit|money|savings|rich|win)[^.!?\n]{0,60}guarantee`,
     String.raw`double your (?:money|savings|investment)`,
     String.raw`(?<![\p{L}])(?:this|it|that)(?: \w+)? is (?:completely |totally |100% )?risk[- ]free`,
-    String.raw`(?<![\p{L}])you(?:'ll| will| won't| will not)(?: not| never)? (?:win|lose|get sued|be sued|go to jail|be cured|get better)(?![\p{L}])`,
+    String.raw`(?<![\p{L}])you(?:'ll| will| won't| will not)${ADVERBS} (?:win|lose|get sued|be sued|go to jail|be cured|get better|get (?:\w+ ){0,2}(?:deposit|money|refund)(?: back)?)(?![\p{L}])`,
   ].join('|'),
 );
 
@@ -212,7 +218,9 @@ export function personalDirective(text: string): boolean {
   for (const m of s.matchAll(IMPERATIVE_RX)) {
     const verb = m[1] as string;
     if (SELF_REGULATED.has(verb)) return true;
-    if (REGULATED_RX.test(windowAfter(s, m.index + m[0].length))) return true;
+    // The window starts at the verb, so "sign it" and "file the case" can match (4.8 fix 1).
+    const end = m.index + m[0].length;
+    if (REGULATED_RX.test(verb + windowAfter(s, end))) return true;
   }
   return false;
 }
@@ -221,7 +229,7 @@ export function personalDirective(text: string): boolean {
 const NON_LATIN_RX = /(?=\p{L})\P{Script=Latin}/u;
 /** Romanised Hindi imperatives and verdicts (lead answer 3). */
 const HINGLISH_RX = rx(
-  String.raw`(?<![\p{L}])(?:haan|ha+n ji|le lo|lelo|le lijiye|le lena|daal do|daalo|dalo|daal de|kar do|kardo|karo|kijiye|kar lo|khareed\w*|kharid\w*|bech do|becho|de do|dedo|lagao|chahiye|pakka)(?![\p{L}])`,
+  String.raw`(?<![\p{L}])(?:haan|ha+n ji|le lo|lelo|le lijiye|le lena|daal do|daalo|dalo|daal de|daal ke|kar do|kardo|karo|kijiye|kar lo|khareed\w*|kharid\w*|bech do|becho|de do|dedo|lagao|chahiye|pakka|jao|ke rakh\w*|bhool jao)(?![\p{L}])`,
 );
 const MODAL_RX = rx(
   String.raw`(?<![\p{L}])(?:should|must|ought|could|recommend\w*|suggest\w*|advis\w*|advice|best (?:option|choice|bet|pick)|go with|if i were you|i'd|i would|you need to|you have to)(?![\p{L}])`,
@@ -239,8 +247,33 @@ const DOMAIN_RX = rx(
   String.raw`(?<![\p{L}])(?:legal|illegal|legally|enforceable|lawful|valid|sue|sued|court|lawyer|doctor|diagnos\w*|prescri\w*|medicine|medication|dose|dosage|tablet|pill|stock|invest\w*|loan|crypto|coin|mutual fund)(?![\p{L}])`,
 );
 
+/** Any digit: a bare number can be a dose, an amount or a product ("Crocin 650", 4.8 fix 1). */
+const NUMBER_RX = /\p{N}/u;
+/**
+ * A proper noun mid-sentence (a capitalised or all-caps word after a letter, digit or comma), or an
+ * all-caps run anywhere: a product, brand or fund name ("Nifty BeES", "HDFC Bank"). "I" is not one.
+ * Ordinary teaching hits this too ("Python"): the judge decides, so the cost is latency only.
+ */
+const PROPER_NOUN_RX =
+  /(?<=[\p{L}\p{N},)] +)(?!I(?![\p{L}]))\p{Lu}|(?<![\p{L}])\p{Lu}{2,}(?![\p{L}])/u;
+
+/** A named product in the reply: a proper noun (case kept, so read before folding). */
+export function namesProduct(reply: string): boolean {
+  return PROPER_NOUN_RX.test(foldText(reply).s);
+}
+
+/** A sentence-start imperative from the hard rule's verb list ("Take one ...", "Okay, sign it."). */
+function imperativeAt(s: string): boolean {
+  return s.match(IMPERATIVE_RX) !== null;
+}
+
 /** A decision signal in the reply (step 2). */
 export function adviceSignal(reply: string): boolean {
+  return strongAdviceSignal(reply) || weakAdviceSignal(reply);
+}
+
+/** The signals that often mean advice: modal words, a dose, a promise, Hindi, a domain word. */
+export function strongAdviceSignal(reply: string): boolean {
   const s = fold(reply);
   return [
     NON_LATIN_RX,
@@ -253,25 +286,74 @@ export function adviceSignal(reply: string): boolean {
   ].some((r) => r.test(s));
 }
 
+/**
+ * The signals ordinary teaching hits too (fix round 1): any number, a sentence-start imperative, a
+ * proper noun. They still send the reply to the judge; the postGuard step only does not reserve
+ * the judge's time for them before adviceGuard's own turn.
+ */
+export function weakAdviceSignal(reply: string): boolean {
+  const s = fold(reply);
+  return NUMBER_RX.test(s) || imperativeAt(s) || namesProduct(reply);
+}
+
 /** A decision request in the student's (scrubbed) message: English, romanised Hindi, Devanagari. */
 const REQUEST_RX = rx(
   [
-    String.raw`(?<![\p{L}])(?:should i|shall i|whether (?:i|we) should|do i need to|what (?:should|do) i|doses?|dosage|yes or no|straight answer|real answer|just tell me|tell me (?:if|whether|exactly|what to)|pretend|act as|role-?play|you're my|be my|my (?:own )?situation|guarantee\w*|what to say|how do i win|will i (?:get|be|win|lose))(?![\p{L}])`,
+    String.raw`(?<![\p{L}])(?:should i|shall i|whether (?:i|we) should|do i need to|what (?:should|do) i|doses?|dosage|yes or no|straight answer|real answer|just tell me|tell me (?:if|whether|exactly|what to)|pretend|act as|role-?play|you're my|be my|my (?:own )?situation|guarantee\w*|what to say|how do i win|will i (?:get|be|win|lose)|can i (?:stop|skip|quit|take|double|reduce|increase)|is it (?:ok|okay|fine|safe|alright)(?: if i| for me)?(?: to)? (?:stop|skip|quit|take)|where (?:to|should i|do i|can i) (?:put|park|invest|keep)|(?:park|invest) (?:it|my|this)|good (?:stock|share|fund|coin|crypto|investment|medicine|tablet)s?|best [^.?!]{0,30}to (?:buy|invest|take|hold)|(?:buy|sell) (?:bitcoin|crypto|stocks?|shares?|gold))(?![\p{L}])`,
     String.raw`(?<![\p{L}])which(?![\p{L}])[^.?!]{0,40}(?<![\p{L}])(?:should|shall|would|best|better|buy|take|pick|choose|invest)(?![\p{L}])`,
-    String.raw`(?<![\p{L}])(?:kya karu\w*|konsi|konsa|kaunsa|kaunsi|le lun|le lu|le loon|daal du\w*|dal du\w*|kar du|kitni|kitna|chahiye|seedha (?:jawab|batao)|bas batao|exactly batao|ban jao|kya bolna|jeetun|khareedun|kharidun)(?![\p{L}])`,
-    'क्या करूं|क्या करूँ|कौन सा|कौन सी|कौन से|कौनसा|कौनसी|ले लूं|ले लूँ|डाल दूं|डाल दूँ|कितनी|कितना|चाहिए|सीधा|बताओ|बन जाओ|जीतूं|जीतूँ',
+    String.raw`(?<![\p{L}])(?:kya karu\w*|konsi|konsa|kaunsa|kaunsi|le lun|le lu|le loon|daal du\w*|dal du\w*|kar du|kitni|kitna|chahiye|seedha (?:jawab|batao)|bas batao|exactly batao|ban jao|kya bolna|jeetun|khareedun|kharidun|kaha+n lag\w*|kidhar|kaha+n daal\w*|kaha+n invest\w*|band kar du\w*|chhod du\w*|dawai|dawa)(?![\p{L}])`,
+    'क्या करूं|क्या करूँ|कौन सा|कौन सी|कौन से|कौनसा|कौनसी|ले लूं|ले लूँ|डाल दूं|डाल दूँ|कितनी|कितना|चाहिए|सीधा|बताओ|बन जाओ|जीतूं|जीतूँ|कहाँ लगा|कहां लगा|कहाँ डाल|कहां डाल|दवा|दवाई',
   ].join('|'),
 );
 
 /** A decision request in the student's message (step 2; also holds the stream, generate). */
 export function decisionRequest(studentText: string): boolean {
-  return studentText !== '' && REQUEST_RX.test(fold(studentText));
+  return studentText !== '' && REQUEST_RX.test(unLeet(fold(studentText)));
 }
 
-/** The rules a rewrite must pass: no directive, no non-Latin letter, no Hindi imperative. */
+/**
+ * A regulated topic in the student's (scrubbed) message: money, health or law, in English,
+ * romanised Hindi or Devanagari (4.8 fix round 1). Not a decision request (no disclaimer on its
+ * own): it holds the stream and sends the reply to the judge, so a reply about it is judged
+ * before the student sees it ("my head hurts, what helps?", "landlord sent a renewal").
+ */
+const TOPIC_RX = rx(
+  [
+    String.raw`(?<![\p{L}])(?:landlord|tenant|lease|rent agreement|renewal|evict\w*|legal\w*|lawyer|advocate|court|sue|suing|lawsuit|police|invest\w*|stocks?|shares|mutual funds?|sips?|crypto\w*|bitcoin|loans?|emis?|savings|rupees?|money|salary|medicines?|medications?|tablets?|pills?|doses?|dosage|hurts?|pain|aches?|headache|fever|sick|symptoms?|doctor|insulin|paisa|paise|rupay\w*|dard|bukhar|kiraya|makaan malik|vakil)(?![\p{L}])`,
+    String.raw`(?<![\p{L}])\p{N}+ ?k(?![\p{L}])`,
+    'पैसा|पैसे|रुपये|रुपए|दवा|दर्द|बुखार|किराया|मकान मालिक|वकील|लोन|शेयर',
+  ].join('|'),
+);
+
+/** A regulated topic in the student's message (holds the stream, sends the reply to the judge). */
+export function regulatedTopic(studentText: string): boolean {
+  return studentText !== '' && TOPIC_RX.test(unLeet(fold(studentText)));
+}
+
+const LEET: Readonly<Record<string, string>> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '@': 'a',
+};
+/** A digit or "@" between two letters read as the letter it stands for ("sh0uld", 4.8 fix 2). */
+function unLeet(s: string): string {
+  return s.replace(/(?<=\p{L})[013457@](?=\p{L})/gu, (c) => LEET[c] ?? c);
+}
+
+/**
+ * The rules a rewrite must pass: no directive, no non-Latin letter, no Hindi imperative, and none
+ * of the advice a rewrite could bring in (4.8 fix 4): no dose, no promise, no named product.
+ */
 function rewriteRejected(text: string, directive: (t: string) => boolean): boolean {
   const s = fold(text);
-  return directive(text) || NON_LATIN_RX.test(s) || HINGLISH_RX.test(s);
+  return (
+    directive(text) ||
+    [NON_LATIN_RX, HINGLISH_RX, DOSE_RX, PROMISE_SIGNAL_RX].some((r) => r.test(s)) ||
+    namesProduct(text)
+  );
 }
 
 // ---- the disclaimer ------------------------------------------------------------------------------
@@ -305,8 +387,11 @@ export function stripDisclaimerSuffix(
 export interface AdviceGuardOptions {
   /** The hard rule; default `personalDirective`. Tests only (mutation runs). */
   directive?: (text: string) => boolean;
-  /** The pre-filter; default a decision request or a reply signal. Tests only (mutation runs). */
-  signal?: (reply: string, studentText: string) => boolean;
+  /**
+   * The pre-filter; default: a regulated-subject agent (every reply is judged), a decision request
+   * or a reply signal. Tests only (mutation runs).
+   */
+  signal?: (reply: string, studentText: string, regulated: boolean) => boolean;
 }
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };
@@ -315,7 +400,8 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
   const directive = opts.directive ?? personalDirective;
   const signal =
     opts.signal ??
-    ((reply: string, student: string) => decisionRequest(student) || adviceSignal(reply));
+    ((reply: string, student: string, regulated: boolean) =>
+      regulated || decisionRequest(student) || regulatedTopic(student) || adviceSignal(reply));
   return {
     name: 'adviceGuard',
     phase: 'post',
@@ -339,9 +425,10 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
       const verifying = x.verifying?.() === true;
       let usage: Usage[] = [];
 
+      const regulated = x.ctx.agent.regulatedSubject !== undefined;
       let advice = directive(body);
       if (!advice) {
-        if (!signal(body, studentText)) return OK;
+        if (!signal(body, studentText, regulated)) return OK;
         if (!verifying) {
           let answer: string | undefined;
           try {
@@ -364,7 +451,6 @@ export function createAdviceGuard(opts: AdviceGuardOptions = {}): Guard<PostGuar
           advice = !adviceVerdictClean(answer);
         }
         if (!advice) {
-          const regulated = x.ctx.agent.regulatedSubject !== undefined;
           if (regulated && decisionRequest(studentText) && !text.includes(disclaimer)) {
             return replace(withDisclaimer(text), ADVICE_REASONS.disclaimer, usage);
           }

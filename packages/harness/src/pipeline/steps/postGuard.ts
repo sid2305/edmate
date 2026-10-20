@@ -60,6 +60,8 @@ import {
   adviceRedirectReplyText,
   adviceSignal,
   decisionRequest,
+  regulatedTopic,
+  strongAdviceSignal,
   disclaimerFor,
   personalDirective,
 } from '../../guardrails/adviceGuard.js';
@@ -75,7 +77,13 @@ import { LockedLeakDetected } from '../../guardrails/lockedLeak.js';
 import { postGuards } from '../../guardrails/postGuards.js';
 import { type CancelToken, linkCancel } from '../clock.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
-import { AdviceJudgeUnavailable, GroundingJudgeUnavailable, HarnessError } from '../errors.js';
+import { disclaimerGap } from '../../pedagogy/disclaimer.js';
+import {
+  AdviceJudgeUnavailable,
+  DisclaimerLocaleGap,
+  GroundingJudgeUnavailable,
+  HarnessError,
+} from '../errors.js';
 import { compileAnswerKeys } from '../generate/answerKey.js';
 import { StreamReader } from '../generate/streamReader.js';
 import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
@@ -299,9 +307,24 @@ function genericDisclaimerFor(env: StepEnv, ctx: TurnContext): string | undefine
   }
 }
 
-/** Whether anything in this turn could send the reply to adviceGuard's judge or rewrite. */
-function adviceMayCall(text: string, studentText: string | undefined): boolean {
-  return personalDirective(text) || decisionRequest(studentText ?? '') || adviceSignal(text);
+/**
+ * Whether anything in this turn could send the reply to adviceGuard's judge or rewrite. With
+ * `strongOnly`, the weak signals (a number, an imperative, a proper noun: fix round 1) don't count.
+ */
+function adviceMayCall(
+  text: string,
+  studentText: string | undefined,
+  regulated: boolean,
+  strongOnly = false,
+): boolean {
+  const student = studentText ?? '';
+  return (
+    regulated ||
+    personalDirective(text) ||
+    decisionRequest(student) ||
+    regulatedTopic(student) ||
+    (strongOnly ? strongAdviceSignal(text) : adviceSignal(text))
+  );
 }
 
 /** A locale text, when it is usable; a throw is reported and gives none. */
@@ -402,11 +425,17 @@ export function createPostGuard(
     }
 
     // Each guard's slice is worked out right before it runs; the rewrite and the judge read it.
-    // adviceGuard weighs as rules-only when nothing this turn could reach its judge or rewrite.
-    const adviceRules = !adviceMayCall(subject, studentText);
-    const weights = guards.map((g) =>
-      g.name === 'adviceGuard' && adviceRules ? PASS2_WEIGHT : postGuards.weight(g.name),
-    );
+    // adviceGuard weighs as rules-only when nothing this turn could reach its judge or rewrite,
+    // read on the text as it stands when each slice is worked out. Fix round 1: the guards before
+    // it reserve its judge's time only for a strong signal; the weak ones (any number, an
+    // imperative, a proper noun) are in most teaching replies and count only for its own slice.
+    const regulated = ctx.agent.regulatedSubject !== undefined;
+    const weightsFor = (text: string, own: boolean): number[] => {
+      const adviceRules = !adviceMayCall(text, studentText, regulated, !own);
+      return guards.map((g) =>
+        g.name === 'adviceGuard' && adviceRules ? PASS2_WEIGHT : postGuards.weight(g.name),
+      );
+    };
     const clock = env.deps.clock;
     const started = clock.now();
     const slices = new Map<string, number>();
@@ -415,6 +444,7 @@ export function createPostGuard(
     const sliceOf = (at: GuardSliceRequest): number => {
       pass = at.pass;
       const left = POST_GUARD_BUDGET_MS - (clock.now() - started);
+      const weights = weightsFor(at.text ?? subject, at.name === 'adviceGuard');
       const ms = postGuardSliceMs(left, weights, at);
       slices.set(at.name, ms);
       sliceStarts.set(at.name, clock.now());
@@ -435,6 +465,11 @@ export function createPostGuard(
       genericDisclaimer === undefined ? { ctx } : { ctx, genericDisclaimer },
     );
     const fixedTexts = [...fixed.texts, adviceFallbackText(disclaimer), redirectReply];
+    // Metric, code only: a regulated agent's market has no disclaimer for its subject.
+    const subjectCode = ctx.agent.regulatedSubject;
+    if (subjectCode !== undefined && disclaimerGap(subjectCode, ctx.locale)) {
+      env.report(new DisclaimerLocaleGap(subjectCode));
+    }
     const x: PostGuardCtx = {
       ctx,
       decision,

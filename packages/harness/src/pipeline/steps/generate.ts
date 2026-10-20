@@ -18,7 +18,7 @@
 // tool output before the model sees it, each skill payload before it is sent; the result says
 // when the stream withheld text (`locked`), and postGuard then replaces the whole reply.
 import type { AgentConfig, PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
-import { decisionRequest } from '../../guardrails/adviceGuard.js';
+import { decisionRequest, regulatedTopic } from '../../guardrails/adviceGuard.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
@@ -69,6 +69,8 @@ const TEACHING_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
  * Task 4.8 (lead decisions, risk: high): every move of a regulated-subject agent (investing,
  * health, law) is held, and so is any turn whose (scrubbed) student message asks for a decision
  * (adviceGuard's pre-filter), so advice is never on screen before adviceGuard has judged it.
+ * Fix round 1: every `redirect` move is held too, on every agent, and so is any turn whose student
+ * message names a regulated topic (money, health, law).
  */
 export function holdsReply(
   ctx: Pick<TurnContext, 'retrieved'> & { agent?: Pick<AgentConfig, 'regulatedSubject'> },
@@ -78,8 +80,11 @@ export function holdsReply(
   studentText?: string,
 ): boolean {
   if (ctx.agent?.regulatedSubject !== undefined) return true;
-  if (studentText !== undefined && decisionRequest(studentText)) return true;
-  if (move === 'ask_teacher') return true;
+  if (studentText !== undefined && (decisionRequest(studentText) || regulatedTopic(studentText))) {
+    return true;
+  }
+  // A redirect may answer the off-topic question anyway (4.8 fix round 1): adviceGuard judges it.
+  if (move === 'ask_teacher' || move === 'redirect') return true;
   if (!TEACHING_MOVES.has(move)) return false;
   if (fromFallback || ctx.retrieved.length === 0) return true;
   const scores = ctx.retrieved.flatMap((c) => (c.score === undefined ? [] : [c.score]));

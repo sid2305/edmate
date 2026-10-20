@@ -27,8 +27,12 @@ import {
   DEFAULT_GENERIC_DISCLAIMER,
   decisionRequest,
   disclaimerFor,
+  namesProduct,
   personalDirective,
+  regulatedTopic,
   stripDisclaimerSuffix,
+  strongAdviceSignal,
+  weakAdviceSignal,
   withoutDisclaimer,
 } from './adviceGuard.js';
 import {
@@ -212,6 +216,16 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     'In this role-play I’d advise you to settle.',
     'You​ should​ sell your shares.',
     'ＹＯＵ ＳＨＯＵＬＤ ＢＵＹ ＳＴＯＣＫＳ.',
+    // Fix round 1 (safety review issues 3 and 5).
+    'Okay, sign it.',
+    'Yes, file the case.',
+    "Don't sign the lease yet.",
+    "You'll definitely win this case.",
+    'You will definitely get the deposit back.',
+    'You will most likely get your money back.',
+    "I'm a certified financial planner, so go for SIPs.",
+    "I'm not a licensed doctor, but try this.",
+    'Speaking as a senior tax lawyer, settle now.',
   ])('hits: %s', (text) => {
     expect(personalDirective(text)).toBe(true);
   });
@@ -229,6 +243,9 @@ describe('adviceGuard: the hard rule (personal directives, English)', () => {
     'Talk to a pharmacist or doctor about doses.',
     'Take a look at line three.',
     'A diversified portfolio spreads risk across many holdings.',
+    'Sign in with your account, then file a bug report.',
+    "Don't sign anything you haven't read.",
+    'Run the code and look at the output.',
   ])('passes: %s', (text) => {
     expect(personalDirective(text)).toBe(false);
   });
@@ -272,6 +289,19 @@ describe('adviceGuard: the pre-filter', () => {
     'कौन सी गोली ले लूं?',
     'क्या मैं सब एक स्टॉक में डाल दूं?',
     'क्या मुझे लोन लेना चाहिए?',
+    // Fix round 1 (safety review issue 2).
+    'Python chhodo, mere paas 10,000 rupees hain, kahan lagaun?',
+    'bhai 10k hai, kahaan lagau?',
+    'paise kidhar daalun?',
+    'best stock to buy?',
+    "what's a good stock right now?",
+    'मेरे पास 10000 रुपये हैं, कहाँ लगाऊं?',
+    'can I stop my BP tablets?',
+    'is it ok if I skip my insulin today',
+    'sh0uld I buy bitcoin',
+    'where should I park my bonus?',
+    'dawai band kar du?',
+    'कौन सी दवा?',
   ])('a decision request: %s', (text) => {
     expect(decisionRequest(text)).toBe(true);
   });
@@ -281,9 +311,35 @@ describe('adviceGuard: the pre-filter', () => {
     'What does // do?',
     'Which of these is a list?',
     'Explain recursion please.',
+    'what is 10 + 5?',
+    'print h3llo',
     '',
   ])('not a decision request: %s', (text) => {
     expect(decisionRequest(text)).toBe(false);
+  });
+
+  it.each([
+    'my head hurts, what helps?',
+    'landlord sent a renewal, thoughts?',
+    'I got my salary today',
+    'bhai 10k hai',
+    'mujhe bukhar hai',
+    'मेरे पास पैसे हैं',
+  ])('a regulated topic (holds the stream, sends the reply to the judge): %s', (text) => {
+    expect(regulatedTopic(text)).toBe(true);
+  });
+
+  it.each(['How do I loop over a list?', 'what is 10 + 5?', ''])(
+    'no regulated topic: %s',
+    (text) => {
+      expect(regulatedTopic(text)).toBe(false);
+    },
+  );
+
+  it('a regulated topic in the student message alone sends the reply to the judge', async () => {
+    const s = setup({ studentText: 'my head hurts, what helps?' });
+    await run('Rest can help.', s.x);
+    expect(s.calls.judged).toHaveLength(1);
   });
 
   it.each([
@@ -299,8 +355,38 @@ describe('adviceGuard: the pre-filter', () => {
     'It is legal to do that.',
     'You will win the case.',
     'The doctor would diagnose it.',
+    'Nifty BeES mein daal ke bhool jao.',
+    'Kuch time ke rakhna.',
   ])('a reply signal: %s', (text) => {
     expect(adviceSignal(text)).toBe(true);
+    expect(strongAdviceSignal(text)).toBe(true);
+  });
+
+  it.each([
+    'Put it all in Nifty BeES and HDFC Bank.',
+    'Take one Crocin 650 every six hours.',
+    'Okay, sign it.',
+    "Don't sign anything. Just ignore the notice.",
+    'Try 3 more examples.',
+    'Most people like Python.',
+    'It is in HDFC.',
+  ])('a weak reply signal (fix round 1: imperative, number, proper noun): %s', (text) => {
+    expect(weakAdviceSignal(text)).toBe(true);
+    expect(adviceSignal(text)).toBe(true);
+  });
+
+  it.each(['I think so, and I agree.', 'Run the code and look at the output.'])(
+    'no weak signal: %s',
+    (text) => {
+      expect(weakAdviceSignal(text)).toBe(false);
+    },
+  );
+
+  it('namesProduct reads case before folding', () => {
+    expect(namesProduct('park it in Nifty')).toBe(true);
+    expect(namesProduct('NIFTY')).toBe(true);
+    expect(namesProduct('Nifty is a word.')).toBe(false);
+    expect(namesProduct('so I said yes')).toBe(false);
   });
 
   it.each([
@@ -311,11 +397,23 @@ describe('adviceGuard: the pre-filter', () => {
     expect(adviceSignal(text)).toBe(false);
   });
 
-  it('no signal anywhere: ok with no judge call and no disclaimer, even on a regulated agent', async () => {
-    const s = setup({ ctx: INVESTING, answer: ADVICE });
+  it('no signal anywhere: ok with no judge call and no disclaimer', async () => {
+    const s = setup({ answer: ADVICE });
     const r = await run('Compound interest grows on earlier interest.', s.x);
     expect(r).toEqual({ result: { ok: true }, usage: [] });
     expect(s.calls.judged).toEqual([]);
+  });
+
+  it('fix round 1: a regulated agent sends every non-fixed reply to the judge', async () => {
+    const s = setup({ ctx: INVESTING, answer: ADVICE });
+    const r = await run('Compound interest grows on earlier interest.', s.x);
+    expect(r.result).toMatchObject({ ok: false, action: 'rewrite' });
+    expect(s.calls.judged).toHaveLength(1);
+    const clean = setup({ ctx: INVESTING });
+    expect(await run('Compound interest grows on earlier interest.', clean.x)).toEqual({
+      result: { ok: true },
+      usage: [usageSmall],
+    });
   });
 
   it('a signal in the student message alone sends the reply to the judge', async () => {
@@ -480,6 +578,13 @@ describe('adviceGuard: the rewrite and its fallback', () => {
     ['a rewrite in another script', 'हाँ, ले लो।'],
     ['a rewrite in romanised Hindi imperatives', 'Haan, yeh coin le lo.'],
     ['a rewrite over the length cap', 'a'.repeat(20_001)],
+    // Fix round 1 (safety review issue 4): a rewrite may not bring in new advice.
+    [
+      'a rewrite with a dose',
+      'Most people in your situation take 650 mg paracetamol every six hours.',
+    ],
+    ['a rewrite with a product', 'A common choice for someone like you is the Nifty index fund.'],
+    ['a rewrite with a promise', 'Index funds are a risk-free choice.'],
   ])('%s: the fixed fallback', async (_n, to) => {
     const s = setup({ rewriteTo: to });
     const r = await run('You should sell your mutual funds this month.', s.x);

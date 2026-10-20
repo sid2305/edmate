@@ -34,7 +34,7 @@ import { spyGateway } from '../../testing/spyGateway.js';
 import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
-import { AdviceJudgeUnavailable, TurnAbort } from '../errors.js';
+import { AdviceJudgeUnavailable, DisclaimerLocaleGap, TurnAbort } from '../errors.js';
 import type { FallbackReplies, StepEnv } from '../types.js';
 import {
   ADVICE_REWRITE_MIN_MS,
@@ -250,7 +250,8 @@ describe('postGuard: adviceGuard on a teaching turn', () => {
 
   it('no signal: no advice judge call, the reply passes unchanged', async () => {
     const s = setup();
-    const r = await s.run('Index funds hold many companies [1].');
+    // No number either: a bare number is a signal (4.8 fix round 1).
+    const r = await s.run('Index funds hold many companies.');
     expect(r).toMatchObject({ result: 'ok' });
     expect(s.adviceJudged).toEqual([]);
   });
@@ -263,6 +264,8 @@ describe('postGuard: the disclaimer', () => {
     const r = await s.run(draft, { ctx: INVESTING });
     expect(r).toMatchObject({ result: 'replace', text: `${draft}\n\n${INVEST_NOTE}` });
     expect(r).not.toHaveProperty('escalateToTeacher');
+    // The market has an investing text: no locale-gap metric.
+    expect(s.reported.filter((e) => e instanceof DisclaimerLocaleGap)).toEqual([]);
     expect(s.judged).toHaveLength(1);
     expect(s.adviceJudged).toHaveLength(1);
   });
@@ -272,6 +275,10 @@ describe('postGuard: the disclaimer', () => {
     const health = { ...CTX, agent: { ...AGENT, regulatedSubject: 'health' as const } };
     const r = await s.run('Doses depend on many things [1].', { ctx: health });
     expect(r).toMatchObject({ text: `Doses depend on many things [1].\n\n${GENERIC}` });
+    // A regulated agent whose market has no text for its subject: a code-only metric (fix round 1).
+    const gap = s.reported.filter((e) => e instanceof DisclaimerLocaleGap);
+    expect(gap).toEqual([new DisclaimerLocaleGap('health')]);
+    expect((gap[0] as DisclaimerLocaleGap).message).not.toContain('Doses');
 
     const t = setup({ studentText: 'What dose should I take?' });
     const unknown = { ...health, agent: { ...health.agent, promptPackVersion: '9.9.9' } };

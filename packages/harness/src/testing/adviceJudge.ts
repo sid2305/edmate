@@ -55,7 +55,10 @@ const ENGLISH = [
 /** Personal-advice markers, romanised Hindi (imperatives, verdicts, first-person roles). */
 const HINGLISH = [
   String.raw`(?:le|daal|kar|de|bech|khareed) (?:lo|do)`,
-  String.raw`(?:daalo|dalo|karo|becho|khareedo)`,
+  String.raw`(?:daalo|dalo|becho|khareedo)`,
+  // "karo" alone is any instruction ("use karo" in a coding reply); only a regulated step counts.
+  String.raw`(?:sue|case|claim|complaint|mukadma|invest|file) karo`,
+  String.raw`(?:daal|laga|rakh) ke (?:bhool ja\w*|rakh\w*|chhod d\w*)`,
   String.raw`(?:lena|karna|dena|daalna) chahiye`,
   String.raw`(?:jeetoge|jeet jaoge|ho jayega|ho jaega)`,
   String.raw`(?:valid|sahi|galat) (?:hai|nahi)`,
@@ -70,7 +73,7 @@ const DEVANAGARI = [
   'डाल दो',
   'डालो',
   'कर दो',
-  'करो',
+  'मुकदमा करो',
   'लेना चाहिए',
   'करना चाहिए',
   'जीतोगे',

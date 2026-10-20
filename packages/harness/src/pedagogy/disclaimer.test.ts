@@ -3,11 +3,22 @@ import { demoLocalePack, localePackMinimal } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { fixturePromptPackSet } from '../testing/promptPackFixtures.js';
 import { composeSystemPrompt } from './compose.js';
-import { resolveDisclaimer } from './disclaimer.js';
+import { disclaimerGap, resolveDisclaimer } from './disclaimer.js';
 import { fallbackPolicy } from './policy.js';
 import { ctxWith } from './testing.js';
 
 const GENERIC = 'Generic notice: education only.';
+
+describe('disclaimerGap (4.8 fix round 1)', () => {
+  it('is true only for a regulated subject the locale pack has no text for', () => {
+    expect(disclaimerGap(undefined, localePackMinimal)).toBe(false);
+    expect(disclaimerGap('law', localePackMinimal)).toBe(true);
+    expect(disclaimerGap('investing', demoLocalePack)).toBe(
+      demoLocalePack.regulatedDisclaimers.investing === undefined,
+    );
+    expect(disclaimerGap('investing', demoLocalePack)).toBe(false);
+  });
+});
 
 describe('resolveDisclaimer', () => {
   it('a subject with a market disclaimer gets that text', () => {

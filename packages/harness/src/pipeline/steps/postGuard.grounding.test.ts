@@ -26,6 +26,7 @@ import {
   overlapJudge,
   UNGROUNDED_VERDICT,
 } from '../../testing/groundingJudge.js';
+import { adviceJudgeGateway, markerJudge } from '../../testing/adviceJudge.js';
 import { memoryRetrieval } from '../../testing/memoryRetrieval.js';
 import { type StreamStep, ScriptedGateway } from '../../testing/scriptedGateway.js';
 import { spyGateway } from '../../testing/spyGateway.js';
@@ -83,6 +84,8 @@ function setup(o: Setup = {}) {
           clock,
           ...(o.judgeDelayMs === undefined ? {} : { delayMs: o.judgeDelayMs }),
         });
+  // adviceGuard (4.8) judges any reply with a number (fix round 1): the non-circular fake answers.
+  const advised = adviceJudgeGateway(gateway, markerJudge, { clock });
   const base = memoryRetrieval({ chunks: [] });
   const retrieval: RetrievalIndex = {
     ...base,
@@ -102,7 +105,7 @@ function setup(o: Setup = {}) {
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_1',
-    gateway,
+    gateway: advised,
     usage: {
       record: () => undefined,
       checkBeforeCall: () => {
@@ -126,7 +129,7 @@ function setup(o: Setup = {}) {
         sources: [chunk(NOTES).source],
       }),
     );
-  return { clock, spy, env, reported, run, judged };
+  return { clock, spy, env, reported, run, judged, adviceJudged: advised.adviceJudged };
 }
 
 const trace = (grounding: { ok: boolean; action?: string }[]) => {
@@ -151,8 +154,14 @@ describe('postGuard: grounding', () => {
   it('a grounded reply passes unchanged; one judge call on the small tier, its usage kept', async () => {
     const s = setup();
     const r = await s.run('Floor division rounds down to a whole number [1].');
-    expect(r).toEqual({ result: 'ok', guards: trace([{ ok: true }]), usage: [usageSmall] });
+    // The second small-tier usage is adviceGuard's judge: "[1]" is a number (4.8 fix round 1).
+    expect(r).toEqual({
+      result: 'ok',
+      guards: trace([{ ok: true }]),
+      usage: [usageSmall, usageSmall],
+    });
     expect(s.judged).toHaveLength(1);
+    expect(s.adviceJudged).toHaveLength(1);
     expect(s.judged[0]).toMatchObject({
       tier: 'small',
       system: GROUNDING_JUDGE_SYSTEM,
@@ -194,7 +203,9 @@ describe('postGuard: grounding', () => {
     expect(r).not.toHaveProperty('escalateToTeacher');
     // The fixed text was judged once; the verification pass reused that verdict.
     expect(fix.judged).toHaveLength(1);
-    expect(r.usage).toEqual([usageSmall]);
+    // Plus adviceGuard's one judge call on pass 1 (a number is a signal; pass 2 is rules only).
+    expect(fix.adviceJudged).toHaveLength(1);
+    expect(r.usage).toEqual([usageSmall, usageSmall]);
   });
 
   it('a number fix that would show the answer key ends in the hint and never shows the key (lead answer 4)', async () => {

@@ -18,3 +18,14 @@ export function resolveDisclaimer(
   const own = subject === undefined ? undefined : locale.regulatedDisclaimers[subject];
   return own === undefined ? genericDisclaimer : inline(own);
 }
+
+/**
+ * True when a regulated-subject agent's locale pack has no disclaimer for its subject, so the
+ * generic one is used (4.8 fix round 1: the postGuard step reports it as a code-only metric).
+ */
+export function disclaimerGap(
+  subject: RegulatedSubject | undefined,
+  locale: Pick<LocalePack, 'regulatedDisclaimers'>,
+): boolean {
+  return subject !== undefined && locale.regulatedDisclaimers[subject] === undefined;
+}

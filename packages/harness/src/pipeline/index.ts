@@ -13,6 +13,7 @@ export {
 // (errors.ts); the background log relies on that.
 export {
   AdviceJudgeUnavailable,
+  DisclaimerLocaleGap,
   errorName,
   GenerateAttemptFailed,
   HarnessError,
