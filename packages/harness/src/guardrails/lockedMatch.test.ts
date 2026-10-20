@@ -286,6 +286,36 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(foldMarkup('<x a="b <y>c', 'rendered')).toBe(`<x a="b ${pad(3)}c`);
   }, 5_000);
 
+  it('4.6c: markdown emphasis inside a word is padded only in the rendered reading', () => {
+    expect(lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t)).toEqual(
+      ['the', 'loop', 'repeats'],
+    );
+    // Other readings split on the markdown punctuation as before (no change there).
+    expect(lockedTokens('t**h**e', 'drop', 'text').map((t) => t.t)).toEqual(['t', 'h', 'e']);
+    expect(lockedTokens('t**h**e', 'drop', 'values').map((t) => t.t)).toEqual(['t', 'h', 'e']);
+  }, 5_000);
+
+  it('4.6c: in-word strikethrough and backticks fold away in the rendered reading', () => {
+    expect(lockedTokens('lo~~o~~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['loop']);
+    expect(lockedTokens('lo`o`p', 'drop', 'rendered').map((t) => t.t)).toEqual(['loop']);
+    // Not doubled: a single tilde stays a separator even between letters.
+    expect(lockedTokens('lo~o~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'o', 'p']);
+  }, 5_000);
+
+  it('4.6c: unaffected forms stay unaffected (snake_case identifiers, spaced `*` as code)', () => {
+    expect(lockedTokens('snake_case_name', 'drop', 'rendered').map((t) => t.t)).toEqual([
+      'snake_case_name',
+    ]);
+    expect(lockedTokens('a * b', 'drop', 'rendered').map((t) => t.t)).toEqual(['a', 'b']);
+  }, 5_000);
+
+  it('4.6c: the bold-every-second-letter attack hits in the rendered reading', () => {
+    const inWordBold = SPAN8.split(' ')
+      .map((word) => `${word.slice(0, 1)}**${word.slice(1, 2)}**${word.slice(2)}`)
+      .join(' ');
+    expect(index.hits([inWordBold])).toBe(true);
+  }, 5_000);
+
   it('is linear: 8,000 characters of unclosed tags, quotes and comments fold well inside 1 s', () => {
     for (const unit of ['<a b="', '<a ', "<a b='c ", '<!--', '<a b c d e f ', '<a b=c d=e ']) {
       const text = unit.repeat(Math.ceil(8_000 / unit.length)).slice(0, 8_000);

@@ -40,11 +40,28 @@
 // other letter ciphers; URL percent-encoding (`%6C%6F%6F%70`); words joined by camelCase or
 // snake_case so the token boundary disappears (`theLoopRepeats`, `the_loop_repeats`); a span
 // written in reverse token or character order; confusables outside the small table above
-// (`foldConfusables` is not an exhaustive Unicode confusables mapping); markdown emphasis inside
-// a word (`lo**o**p` reads as `lo`, `o`, `p`); HTML entities without their closing semicolon
-// (`&#108oop`); a tag whose name holds an invisible character (`<b` + U+200B + `>` is not a tag,
-// so the markup stays as text in every reading); and prose split between attribute names and
-// attribute values of several tags (each reading sees only one of the two).
+// (`foldConfusables` is not an exhaustive Unicode confusables mapping); HTML entities without
+// their closing semicolon (`&#108oop`); a tag whose name holds an invisible character (`<b` +
+// U+200B + `>` is not a tag, so the markup stays as text in every reading); prose split between
+// attribute names and attribute values of several tags (each reading sees only one of the two);
+// and (4.6c, these matter only if raw model HTML is ever rendered to a student, which task 9.4
+// forbids) `<a<b>` (a `<` right before a real tag is read as plain text, not as a tag of its
+// own); a `<` inside a quoted attribute value (it ends the tag-parse attempt there, same as a bare
+// `<` would, so anything after it in that attribute is read as new markup, not as more of the
+// value); a comment closed by `--!>` instead of `-->` (not recognised, so the comment is never
+// found closed and is read to the end of the text, or as `open`); and a tag name in a non-ASCII
+// script (only an ASCII letter starts a tag name, so e.g. `<Ω>` is never a tag in any reading).
+//
+// 4.6c: markdown emphasis inside a word is now padded, but only in the `rendered` reading (the
+// `text` and `values` readings still read `*`, `_`, `~` and `` ` `` as plain punctuation, so
+// `lo**o**p` splits into `lo`, `o`, `p` there, same as before). `padMarkdownEmphasis` pads a run of
+// `*` or `` ` `` of any length, and a run of exactly two `_` or `~` (markdown's doubled forms,
+// `__bold__` and `~~strikethrough~~`), when the run sits directly between two letters on both
+// sides, so `t**h**e`, `lo~~o~~p` and `` lo`o`p `` all fold to one word. A single `_` is left alone
+// (it is a word character itself, so `snake_case_name` stays one token), and a run with a space or
+// punctuation on either side (markdown's actual syntax, `a * b`, a bullet list `* item`) is never
+// padding: pad only runs that already touch a letter on both sides, exactly as HTML markup and
+// entities do.
 import { decodedBase64Spans } from '../pipeline/generate/base64Leak.js';
 import { foldText } from './textFold.js';
 
@@ -185,29 +202,70 @@ function scanMarkup(text: string): { spans: MarkupSpan[]; open: number } {
   return { spans, open };
 }
 
+const isLetter = (c: string): boolean => c !== '' && /\p{L}/u.test(c);
+/** Markdown emphasis characters `foldMarkup`'s `rendered` reading may pad (see the header). */
+const EMPHASIS = new Set(['*', '_', '~', '`']);
+
+/**
+ * Pads a run of `*` or `` ` `` of any length, or an exact doubled run (`__`, `~~`) of `_` or `~`,
+ * with zero-width padding when it sits directly between two letters on both sides (4.6c; see the
+ * header). Every other run of these characters — markdown's real syntax (`a * b`, `* item`), a
+ * single `_` inside an identifier, a stray `~` or a run that does not touch a letter on one side —
+ * is left as text. Linear time, length-preserving.
+ */
+function padMarkdownEmphasis(text: string): string {
+  let out = '';
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const c = text.charAt(i);
+    if (!EMPHASIS.has(c)) {
+      out += c;
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < n && text.charAt(j) === c) j++;
+    const len = j - i;
+    const touchesLetters = isLetter(i > 0 ? text.charAt(i - 1) : '') && isLetter(text.charAt(j));
+    const pad =
+      touchesLetters && ((c === '*' || c === '`') ? true : len === 2);
+    out += pad ? PAD.repeat(len) : text.slice(i, j);
+    i = j;
+  }
+  return out;
+}
+
 /**
  * `text` read the way `reading` says (see the header): markup is replaced by zero-width padding
  * of the same length, so the result is exactly as long as `text`. Linear time.
  */
 export function foldMarkup(text: string, reading: MarkupReading): string {
-  if (reading === 'text' || !text.includes('<')) return text;
-  const { spans } = scanMarkup(text);
-  if (spans.length === 0) return text;
-  let out = '';
-  let at = 0;
-  for (const s of spans) {
-    out += text.slice(at, s.start);
-    let k = s.start;
-    if (reading === 'values') {
-      for (const [a, b] of s.keep) {
-        out += PAD.repeat(a - k) + text.slice(a, b);
-        k = b;
+  if (reading === 'text') return text;
+  let out = text;
+  if (text.includes('<')) {
+    const { spans } = scanMarkup(text);
+    if (spans.length > 0) {
+      let built = '';
+      let at = 0;
+      for (const s of spans) {
+        built += text.slice(at, s.start);
+        let k = s.start;
+        if (reading === 'values') {
+          for (const [a, b] of s.keep) {
+            built += PAD.repeat(a - k) + text.slice(a, b);
+            k = b;
+          }
+        }
+        built += PAD.repeat(s.end - k);
+        at = s.end;
       }
+      out = built + text.slice(at);
     }
-    out += PAD.repeat(s.end - k);
-    at = s.end;
   }
-  return out + text.slice(at);
+  // 4.6c: markdown emphasis inside a word, rendered reading only.
+  if (reading === 'rendered') out = padMarkdownEmphasis(out);
+  return out;
 }
 
 const OPEN_ENTITY = /&#?[a-zA-Z0-9]*$/;
