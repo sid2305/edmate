@@ -302,7 +302,7 @@ Why: `@auth/core` 0.41.3 starts the send, awaits `createHash`, and only then joi
 
 ### 20 Oct 2026 · 1.4 Switching to a new address by link leaves the old session row until it expires · decided by tdd-guide
 Decided: accept Auth.js's behaviour. Signed in as A, a link for an existing user B deletes A's session. A link for a new address creates the user and replaces the cookie, but A's session row stays until it expires. Both cases are tested.
-Why: the browser no longer holds A's token, so that browser can't use the row, and it expires within 30 days. Deleting it would need adapter side effects that carry more risk than they save. The plan's "Auth.js deletes that session first" holds only for existing users.
+Why: the browser no longer holds A's token, so that browser can't use the row, and it expires within 30 days. Deleting it would need adapter side effects that carry more risk than they save. The plan's "Auth.js deletes that session first" holds only for existing users. So `packages/db/src/identity/store.ts` gets no session sweep on an address switch; sign-out-everywhere is later work.
 
 ### 20 Oct 2026 · 1.4 `signIn('email')` from server code is refused · decided by tdd-guide
 Decided: the exported `signIn` rejects for the `email` provider.
