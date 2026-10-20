@@ -333,10 +333,10 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '1.5'
   milestone: M1
   title: 'Seed: the demo teacher (from 1.8), its two packages, 20 students with mixed subscriptions'
@@ -758,9 +758,9 @@ tasks:
     skill states the new rules.
   deps:
   - '0.7'
-  status: running
+  status: review
   branch: m7/0.13-agent-efficiency
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet buildA:sonnet
 - id: '0.14'
   milestone: M7
   title: 'Main CI red: the stream-gate latency test''s 1 s wall-clock bound flakes on CI runners (1.2–1.9 s with coverage); widen it to a gross-regression guard (linearity is asserted by counting work)'
@@ -1109,10 +1109,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.8-advice-guard
-  model: build:opus fix1:opus
+  model: plan:sonnet build:opus review:sonnet fix:sonnet
 - id: '4.9'
   milestone: M13
   title: '`personaBoundary` and `tone`'
@@ -1144,7 +1144,7 @@ tasks:
   accept: a 20-file fixture set parses; every chunk keeps its page, slide or heading.
   deps:
   - M3
-  status: review
+  status: done
   branch: m5/5.1-document-ingestion
   model: plan:sonnet buildA:opus buildBC:opus review:sonnet
 - id: '5.2'
@@ -1167,9 +1167,9 @@ tasks:
   - '1.8'
   - '5.1'
   - M3
-  status: planning
-  branch: null
-  model: plan:opus
+  status: running
+  branch: m5/5.3-retrieval-index
+  model: plan:opus buildA:opus
 - id: '5.4'
   milestone: M5
   title: 'Access filter: filtered `search`, code-only `probe`, entitlement-filtered tool registry, package-versioned caches'
@@ -1938,14 +1938,24 @@ tasks:
   accept: 'no test sets a per-test timeout under 5_000 ms (today: evals distressEscalate, harness escalate, costCeiling, preGuard, distressDetect, distressKeywords; queue alertSink); the suites pass'
   deps:
   - '4.3'
-  status: running
+  status: done
   needs_decision: null
   branch: m4/4.3a-test-timeouts
-  model: plan:lead build:haiku
+  model: plan:lead build:haiku review:sonnet
+- id: 4.4f
+  milestone: M13
+  title: 'Moderation/jailbreak follow-ups (4.4 review LOWs): narrow withheldCode/code to the SafetyEventCode subset; expectTypeOf links for the queue and db safety-event enums; build the alert before recording
+    the event in moderationIn; remove the classifier cancel listener; explicit block() return type; test indentation'
+  accept: the six LOWs in docs/tasks/4.4/review.md are fixed with tests where behaviour changes; the harness gate passes
+  deps:
+  - GATE
+  - '4.4'
+  status: todo
 - id: 5.1b
   milestone: M13
-  title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on budget overflow; keep pdfjs-dist''s optional @napi-rs/canvas native build out of installs'
-  accept: 'the four LOWs in docs/tasks/5.1/review.md are fixed with tests where behaviour changes; the ingest gate passes'
+  title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
+    budget overflow; keep pdfjs-dist''s optional @napi-rs/canvas native build out of installs'
+  accept: the four LOWs in docs/tasks/5.1/review.md are fixed with tests where behaviour changes; the ingest gate passes
   deps:
   - GATE
   - '5.1'

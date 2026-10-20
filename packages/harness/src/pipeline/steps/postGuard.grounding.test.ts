@@ -26,6 +26,7 @@ import {
   overlapJudge,
   UNGROUNDED_VERDICT,
 } from '../../testing/groundingJudge.js';
+import { adviceJudgeGateway, markerJudge } from '../../testing/adviceJudge.js';
 import { memoryRetrieval } from '../../testing/memoryRetrieval.js';
 import { type StreamStep, ScriptedGateway } from '../../testing/scriptedGateway.js';
 import { spyGateway } from '../../testing/spyGateway.js';
@@ -83,6 +84,8 @@ function setup(o: Setup = {}) {
           clock,
           ...(o.judgeDelayMs === undefined ? {} : { delayMs: o.judgeDelayMs }),
         });
+  // adviceGuard (4.8) judges any reply with a number (fix round 1): the non-circular fake answers.
+  const advised = adviceJudgeGateway(gateway, markerJudge, { clock });
   const base = memoryRetrieval({ chunks: [] });
   const retrieval: RetrievalIndex = {
     ...base,
@@ -102,7 +105,7 @@ function setup(o: Setup = {}) {
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_1',
-    gateway,
+    gateway: advised,
     usage: {
       record: () => undefined,
       checkBeforeCall: () => {
@@ -126,7 +129,7 @@ function setup(o: Setup = {}) {
         sources: [chunk(NOTES).source],
       }),
     );
-  return { clock, spy, env, reported, run, judged };
+  return { clock, spy, env, reported, run, judged, adviceJudged: advised.adviceJudged };
 }
 
 const trace = (grounding: { ok: boolean; action?: string }[]) => {
@@ -134,20 +137,16 @@ const trace = (grounding: { ok: boolean; action?: string }[]) => {
     { name: 'lockedLeak', ok: true },
     { name: 'answerLeak', ok: true },
     { name: 'grounding', ...g },
+    { name: 'adviceGuard', ok: true },
   ];
   return grounding.flatMap(pass);
 };
 
 describe('the post registry (4.7)', () => {
-  it('runs lockedLeak, answerLeak, then grounding, weighted 2, 3 and 4', () => {
-    expect(postGuards.ordered().map((g) => g.name)).toEqual([
-      'lockedLeak',
-      'answerLeak',
-      'grounding',
-    ]);
-    expect(['lockedLeak', 'answerLeak', 'grounding'].map((n) => postGuards.weight(n))).toEqual([
-      2, 3, 4,
-    ]);
+  it('runs lockedLeak, answerLeak, grounding, then adviceGuard (4.8), weighted 2, 3, 4 and 4', () => {
+    const names = ['lockedLeak', 'answerLeak', 'grounding', 'adviceGuard'];
+    expect(postGuards.ordered().map((g) => g.name)).toEqual(names);
+    expect(names.map((n) => postGuards.weight(n))).toEqual([2, 3, 4, 4]);
   });
 });
 
@@ -155,8 +154,14 @@ describe('postGuard: grounding', () => {
   it('a grounded reply passes unchanged; one judge call on the small tier, its usage kept', async () => {
     const s = setup();
     const r = await s.run('Floor division rounds down to a whole number [1].');
-    expect(r).toEqual({ result: 'ok', guards: trace([{ ok: true }]), usage: [usageSmall] });
+    // The second small-tier usage is adviceGuard's judge: "[1]" is a number (4.8 fix round 1).
+    expect(r).toEqual({
+      result: 'ok',
+      guards: trace([{ ok: true }]),
+      usage: [usageSmall, usageSmall],
+    });
     expect(s.judged).toHaveLength(1);
+    expect(s.adviceJudged).toHaveLength(1);
     expect(s.judged[0]).toMatchObject({
       tier: 'small',
       system: GROUNDING_JUDGE_SYSTEM,
@@ -198,7 +203,9 @@ describe('postGuard: grounding', () => {
     expect(r).not.toHaveProperty('escalateToTeacher');
     // The fixed text was judged once; the verification pass reused that verdict.
     expect(fix.judged).toHaveLength(1);
-    expect(r.usage).toEqual([usageSmall]);
+    // Plus adviceGuard's one judge call on pass 1 (a number is a signal; pass 2 is rules only).
+    expect(fix.adviceJudged).toHaveLength(1);
+    expect(r.usage).toEqual([usageSmall, usageSmall]);
   });
 
   it('a number fix that would show the answer key ends in the hint and never shows the key (lead answer 4)', async () => {
@@ -343,11 +350,13 @@ describe('postGuard: grounding', () => {
 
 describe('postGuard: three model or port calls in one turn (lead answer 1)', () => {
   // A locked check, answerLeak's rewrite and grounding's judge, at realistic scripted delays.
+  // With adviceGuard in the chain (4.8; rules-only weight on this turn, which holds no advice
+  // signal) every slice is a little smaller than with three guards: after a ~330 ms rewrite the
+  // judge gets about 530 ms of its 600 ms timeout. postGuard.advice.test.ts stacks all four.
   it.each([
     { locked: 100, rewrite: 300, judge: 400 },
-    { locked: 120, rewrite: 350, judge: 550 },
-    // Just under the judge's own 600 ms timeout (at 600 it fails closed: see the timeout test).
-    { locked: 140, rewrite: 380, judge: 590 },
+    { locked: 120, rewrite: 330, judge: 520 },
+    { locked: 140, rewrite: 330, judge: 530 },
   ])(
     'locked $locked ms, rewrite $rewrite ms, judge $judge ms: all three used, done inside the step',
     { timeout: 5_000 },

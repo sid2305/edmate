@@ -131,6 +131,7 @@ describe('lockedLeak guard', () => {
       'lockedLeak',
       'answerLeak',
       'grounding',
+      'adviceGuard',
     ]);
   }, 5_000);
 
@@ -190,14 +191,16 @@ describe('lockedLeak guard', () => {
       }),
     );
     expect(out).toMatchObject({ outcome: 'ok', text: REPLY });
-    // grounding (4.7) passes the locked reply as a fixed text.
+    // grounding (4.7) and adviceGuard (4.8) pass the locked reply as a fixed text.
     expect(out.guards).toEqual([
       { name: 'lockedLeak', ok: false, action: 'rewrite' },
       { name: 'answerLeak', ok: true },
       { name: 'grounding', ok: true },
+      { name: 'adviceGuard', ok: true },
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
       { name: 'grounding', ok: true },
+      { name: 'adviceGuard', ok: true },
     ]);
   }, 5_000);
 });

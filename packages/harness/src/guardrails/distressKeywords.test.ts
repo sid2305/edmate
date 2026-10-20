@@ -179,7 +179,7 @@ describe('distressKeywordLevel: the 35 seeded distress cases', () => {
 
   it('there are 39 hard ones (35 seeded before, minus 1 now soft, plus 5 from the fix round)', () => {
     expect(SEEDED_DISTRESS).toHaveLength(39);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('combination rules (lead decision, fix round 2)', () => {
@@ -189,7 +189,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
       expect(distressKeywordLevel(text)).toBe('hard');
       expect(hasDistressKeyword(text)).toBe(true);
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -204,7 +204,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -217,7 +217,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('soft');
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -230,7 +230,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -240,7 +240,7 @@ describe('held-out paraphrases (not used to tune the tables)', () => {
     (text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -250,7 +250,7 @@ describe('no hard hit on idiom, near-misses or coding talk', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 
   it('the seeded near-misses (but Durkheim, a bare noun) and mid-task first turns have no keyword', () => {
@@ -260,7 +260,7 @@ describe('no hard hit on idiom, near-misses or coding talk', () => {
       expect(distressKeywordLevel(text)).toBe('none');
       expect(hasDistressKeyword(text, 'en')).toBe(false);
     }
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('soft keywords', () => {
@@ -279,7 +279,7 @@ describe('soft keywords', () => {
       // distressCheck (hasDistressKeyword) is the hard list only: a soft hit asks the classifier.
       expect(hasDistressKeyword(text)).toBe(false);
     },
-    1_000,
+    5_000,
   );
 
   it('two different soft signals stay soft (the classifier decides); they are counted', () => {
@@ -288,22 +288,22 @@ describe('soft keywords', () => {
       kind: 'distress',
       softHits: 2,
     });
-  }, 1_000);
+  }, 5_000);
 
   it('the same soft signal twice counts once', () => {
     expect(distressKeywordMatch('hopeless. so hopeless').softHits).toBe(1);
-  }, 1_000);
+  }, 5_000);
 
   it('a hard phrase stays hard in a game context (human decision B-18: exemption dropped)', () => {
     expect(distressKeywordLevel('how to kill myself in valorant')).toBe('hard');
     expect(distressKeywordLevel('how to kill myself')).toBe('hard');
-  }, 1_000);
+  }, 5_000);
 
   it('hasAnyDistressKeyword: hard or soft (the runner, when preGuard has no verdict)', () => {
     expect(hasAnyDistressKeyword('i want to kill myself')).toBe(true);
     expect(hasAnyDistressKeyword('i feel so hopeless')).toBe(true);
     expect(hasAnyDistressKeyword('how do i reverse a list')).toBe(false);
-  }, 1_000);
+  }, 5_000);
 
   it('vaguer forms are soft', () => {
     for (const text of [
@@ -313,14 +313,14 @@ describe('soft keywords', () => {
     ]) {
       expect(distressKeywordLevel(text)).toBe('soft');
     }
-  }, 1_000);
+  }, 5_000);
 
   it('an abuse phrase in class still counts ("hits me in class")', () => {
     expect(distressKeywordMatch('my teacher hits me in class')).toMatchObject({
       level: 'hard',
       kind: 'abuse',
     });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('game talk (fix round 4, human decision B-18, option c): the exemption is dropped — ' +
@@ -363,7 +363,7 @@ describe('game talk (fix round 4, human decision B-18, option c): the exemption 
     (text, kind) => {
       expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
     },
-    1_000,
+    5_000,
   );
 
   it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
@@ -371,12 +371,12 @@ describe('game talk (fix round 4, human decision B-18, option c): the exemption 
     (text) => {
       expect(distressKeywordLevel(text)).toBe('none');
     },
-    1_000,
+    5_000,
   );
 
   it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
     expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('hard');
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('code talk (fix round 3): a soft hit next to code goes to the classifier', () => {
@@ -392,12 +392,12 @@ describe('code talk (fix round 3): a soft hit next to code goes to the classifie
       expect(m.level).toBe('soft');
       expect(m.softHits).toBeGreaterThanOrEqual(1);
     },
-    1_000,
+    5_000,
   );
 
   it('the same phrases without code still combine to hard', () => {
     expect(distressKeywordLevel('i have pills. nothing matters')).toBe('hard');
-  }, 1_000);
+  }, 5_000);
 
   it.each([
     ['my list of reasons is empty, i want to kill myself'],
@@ -408,7 +408,7 @@ describe('code talk (fix round 3): a soft hit next to code goes to the classifie
     (text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -434,7 +434,7 @@ describe('a method ready or saved up (fix round 3): hard', () => {
       expect(distressKeywordLevel(text)).toBe('hard');
       expect(hasDistressKeyword(text)).toBe(true);
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -450,7 +450,7 @@ describe('a method ready or saved up (fix round 3): hard', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -460,7 +460,7 @@ describe('edge inputs', () => {
     (text) => {
       expect(distressKeywordLevel(text)).toBe('none');
     },
-    1_000,
+    5_000,
   );
 
   it('a 4,000-character message is checked quickly', () => {
@@ -474,7 +474,7 @@ describe('edge inputs', () => {
     expect(hasDistressKeyword('मैं आत्महत्या करना चाहता हूँ', 'en')).toBe(true);
     expect(hasDistressKeyword('i want to kill myself', 'hi')).toBe(true);
     expect(hasDistressKeyword('i want to kill myself', 'fr')).toBe(true);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('normaliseForDistress (lead answer 2)', () => {
@@ -482,52 +482,52 @@ describe('normaliseForDistress (lead answer 2)', () => {
 
   it('NFKC, strips format characters (ZWSP, ZWJ, ZWNJ, soft hyphen), casefolds', () => {
     expect(forms('ＫＩＬＬ \u00adMY\u200d\u200cSELF')[0]).toBe('kill myself');
-  }, 1_000);
+  }, 5_000);
 
   it('maps curly apostrophes and drops apostrophes', () => {
     expect(forms('I\u2019d rather')[0]).toBe('id rather');
     expect(forms("don't")[0]).toBe('dont');
-  }, 1_000);
+  }, 5_000);
 
   it('joins single letters split by spaces, dots or dashes', () => {
     expect(forms('k i l l me')[0]).toBe('kill me');
     expect(forms('k.i.l.l')[0]).toBe('kill');
     expect(forms('d-i-e')[0]).toBe('die');
-  }, 1_000);
+  }, 5_000);
 
   it('leetspeak only inside words; plain numbers stay', () => {
     expect(forms('k1ll')[0]).toBe('kill');
     expect(forms('$uicide')[0]).toBe('suicide');
     expect(forms('in 3 days')[0]).toBe('in 3 days');
     expect(forms('score = 10')[0]).toBe('score 10');
-  }, 1_000);
+  }, 5_000);
 
   it('squashes runs of 3+ letters two ways (to 2 and to 1)', () => {
     const f = forms('diiiieeee killll');
     expect(f).toContain('diiee kill');
     expect(f).toContain('die kil');
-  }, 1_000);
+  }, 5_000);
 
   it('collapses whitespace and punctuation', () => {
     expect(forms('end,   it...all!')[0]).toBe('end it all');
-  }, 1_000);
+  }, 5_000);
 
   it('also reads format characters as spaces ("i<ZWSP>want<ZWSP>to<ZWSP>die")', () => {
     expect(forms('i\u200bwant\u200bto\u200bdie')).toContain('i want to die');
-  }, 1_000);
+  }, 5_000);
 
   it('strips Latin accents (NFKD) and maps Cyrillic and Greek look-alikes', () => {
     expect(forms('kíll')[0]).toBe('kill');
     expect(forms('\u0456 \u043e\u0430\u0435\u0441\u0440')[0]).toBe('i oaecp');
-  }, 1_000);
+  }, 5_000);
 
   it('a capital I after a lowercase letter may be an l; digit words; one-sided digits', () => {
     expect(forms('kiIl')).toContain('kill');
     expect(forms('want 2 die')).toContain('want to die');
     expect(forms('kil1')).toContain('kill');
-  }, 1_000);
+  }, 5_000);
 
   it('drops the Devanagari nukta and maps chandrabindu to anusvara', () => {
     expect(forms('फ़र्क हूँ')[0]).toBe('फर्क हूं');
-  }, 1_000);
+  }, 5_000);
 });

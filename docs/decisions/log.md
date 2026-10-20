@@ -10,6 +10,167 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.8 merged: adviceGuard post guard wired · decided by lead (plan revisions) · risk: high
+Decided: `adviceGuard` runs on every agent. It uses English personal-directive and identity rules, a small-tier judge (fail closed) for ambiguous or non-English replies, one rule-checked rewrite, and a fixed fallback. The disclaimer is deterministic and word for word, from the locale pack or the frame's generic text, and is shared with the system prompt. Regulated-subject agents and decision requests are held, not streamed. Redirect replies are judged too. Reviewed by safety-reviewer (plus security-reviewer, typescript-reviewer and silent-failure-hunter, as requested).
+Why: PRD regulated-subject rule and signed safety rule 5; lead answers 1–12 and the 4.7 safety review.
+Alternatives: run only on regulated agents (rejected by the lead).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 the redirect review case is added as pending · decided by lead (case), tdd-guide (fixture spec) · risk: medium
+Decided: `advice-grounding-redirect-hi-latin` is in `evals/suites/advice` with `reviewed_by: pending`, so `suites.test.ts` fails on exactly that line until the human signs. It passes the offline gate, caught by the judge layer.
+Why: the human signs eval cases (4.5/4.7 precedent).
+Alternatives: keep it out of the suite (the 4.6 posture).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 adviceGuard's time budget · decided by tdd-guide · risk: low
+Decided: the judge timeout reuses grounding's 600 ms. The rewrite runs only when at least 200 ms of the slice is left. On a turn with no decision request, no signal and no hard hit, adviceGuard weighs as a rules-only guard, so the other guards keep their time.
+Why: plan Q3 and lead answer 11; the four-call stacking test and the fixture latency run stay inside 2 s.
+Alternatives: a fixed weight on every turn (takes time away from grounding on ordinary turns).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 4.8 built-in English redirect reply · decided by tdd-guide · risk: low
+Decided: when the locale gives no usable `redirect` text, adviceGuard uses a built-in English reply. It names no helpline or contact, and a locale failure is reported.
+Why: the redirect fallback must always exist; English-only pilot.
+Alternatives: the safe reply (doesn't steer back to the course).
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: wider judge coverage · decided by lead (brief), tdd-guide (patterns) · risk: high
+Decided:
+- A regulated-subject agent sends every reply that isn't a fixed text to the judge.
+- On every agent, a sentence-start imperative, a bare number or a proper-noun product is a weak signal that also sends the reply to the judge.
+- A money, health or law topic in the student message holds the stream and sends the reply to the judge. It does not add the disclaimer to a clean reply on its own; only a decision request does.
+- Every redirect move is held.
+- A rewrite with a dose, a promise or a named product is rejected.
+Why: safety-review issues 1–6. The stream must not show advice that the judge would have caught later.
+Alternatives:
+- Judge only on signals (the round-0 design; it missed bare directives).
+- Add the disclaimer on every regulated-topic turn (too noisy for clean answers).
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: per-text slice weights · decided by tdd-guide · risk: low
+Decided: postGuard weighs each guard's time slice on the text current at that guard. Earlier guards reserve adviceGuard's judge time only for strong signals (non-English, modal, dose, promise, role-play, domain words) or a regulated agent or topic. Weak signals alone don't reserve it.
+Why: numbers are common in ordinary replies. Reserving judge time for them shrank other guards' rewrite slices below their floor. The latency run stays at 1200 ms of 2000 ms.
+Alternatives: a fixed reservation on every turn.
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 4.8 fix round 1: disclaimer locale-gap metric and narrower fake judge · decided by tdd-guide · risk: low
+Decided:
+- When a regulated agent's locale pack has no disclaimer for its subject, postGuard reports `DisclaimerLocaleGap` with the subject code only (no text, no PII) and keeps using the generic disclaimer.
+- The test-only `markerJudge` no longer flags a bare "karo". It flags only a legal or money verb plus "karo", or "daal ke bhool jao".
+Why:
+- The silent-failure HIGH.
+- The broad "karo" marker made a grounding case pass for the wrong reason (`grounding-fileio-hi-latin`).
+Alternatives:
+- Fail the turn on a gap (too harsh: the generic disclaimer is safe).
+- Change the grounding count (hides the cause).
+Reversible: yes.
+
+---
+
+### 5.1 New ingest dependencies: markdown-it 15.0.3 and cheerio 1.2.0 · decided by tdd-guide (lead pre-approved the library choice, no ADR) · risk: medium
+Decided: add `markdown-it` 15.0.3 (MIT, ships its own types) and `cheerio` 1.2.0 (MIT) to `packages/ingest`. Versions are the current npm `latest`, checked with `corepack pnpm view <pkg> version license` on 20 Oct 2026. HTML parsing imports `cheerio/slim` (htmlparser2), so the main entry's `fromURL`/undici network code is never loaded. Dev dependencies use the repo's existing pins (vitest 5.0.5, @vitest/coverage-v8 5.0.5, @types/node 22.20.5).
+Why: these are the plan's Phase A libraries. Both are MIT, pure JS, and give the block and heading structure the locators need.
+Alternatives: `remark`/`unified` (more packages for the same result); cheerio's full entry with parse5 (pulls in undici for no gain here).
+Reversible: yes. Both are used only inside `src/parse/`.
+
+---
+
+### 5.1 New ingest dependencies: pdfjs-dist 6.4.299, mammoth 1.13.0, jszip 3.10.2, fast-xml-parser 5.11.2 · decided by tdd-guide (lead pre-approved the library choice, no ADR) · risk: medium
+Decided: pin these exact versions, the npm `latest` on 20 Oct 2026 (`corepack pnpm view <pkg> version license`). Licences: pdfjs-dist Apache-2.0, mammoth BSD-2-Clause, jszip "MIT OR GPL-3.0-or-later" (used under MIT), fast-xml-parser MIT. pdfjs-dist pulls in its optional dependency `@napi-rs/canvas` 1.0.11 (MIT, prebuilt native binary for rendering); text extraction does not use it. pdfjs-dist 6 needs Node ≥ 22.13 (the repo runs 22.22).
+Why: the plan's Phase B/C libraries; each gives true page, heading or slide boundaries. mammoth's licence was the plan's open question: BSD-2-Clause is permissive, so the fallback (raw OOXML for DOCX) was not needed.
+Alternatives: `officeparser` (no slide boundaries); raw OOXML for DOCX (more code for heading styles and tables that mammoth already maps).
+Reversible: yes. Each library is used in one file under `src/parse/`.
+
+---
+
+### 5.1 DNS rebinding in the web fetch is deferred to board task 5.1a · decided by lead · risk: medium
+Decided: the gap Phase A raised (the public-address check resolves the name separately from the connection, so a rebinding host could answer differently the second time) is not fixed in 5.1. Board task 5.1a pins the connection to the checked address (an undici `Agent` with a guarded `connect.lookup`, or `node:https` with a `lookup` hook) where the app is assembled.
+Why: the fix belongs to the transport wired at the composition root, not to this package's parsers. Until then the exact-host allowlist limits the risk: an attacker must control an allowlisted host's DNS.
+Reversible: yes.
+
+---
+
+### 5.1 Web fetch checks the addresses a host resolves to, before the fetch and on every hop · decided by tdd-guide · risk: medium
+Decided: on top of the allowlist, an IP-literal host must be public. A host name is resolved through an injected `resolveHost`, and every address must be public, or the link is refused. Refused ranges: loopback, RFC 1918, CGNAT, link-local and metadata, unique-local, documentation, benchmarking, multicast, reserved, NAT64, 6to4, Teredo, and IPv4-mapped IPv6 whose IPv4 part is not public. Resolver failure or no answer gives `not_found`.
+Why: the lead asked that private, loopback, link-local and metadata addresses be blocked, including after redirects and DNS resolution. The remaining rebinding gap is the 5.1a decision above.
+Reversible: yes.
+
+---
+
+### 5.1 DOCX and PPTX unpack against a 100 MB budget · decided by tdd-guide · risk: medium
+Decided: every zip entry read is streamed and counted against one budget per file, five times the 20 MB upload cap (100 MB); going over gives `IngestError('input_too_large')`. A DOCX is fully inflated against the budget once before mammoth reads it, since mammoth inflates without a cap. PPTX XML with a DOCTYPE is refused.
+Why: the upload cap bounds only the compressed size; a zip bomb can inflate kilobytes into gigabytes in the worker. Office files never carry a DOCTYPE, and entity expansion is the XML bomb.
+Alternatives: trust declared sizes in the zip directory (attacker-controlled); no cap (worker memory exhaustion).
+Reversible: yes; the limit is one constant.
+
+---
+
+### 5.1 PPTX slides follow the show order · decided by tdd-guide · risk: low
+Decided: slide N is the Nth entry of `presentation.xml`'s slide list, resolved through its relationships; a missing or unknown slide reference is a validation error. Only when `presentation.xml` is absent do slide files sort by their number. Speaker notes are not read.
+Why: "slide 3" must mean the slide a student sees third. File names can lag behind a reorder.
+Reversible: yes.
+
+---
+
+### 5.1 PDF pages: text layer only, blank pages keep their number · decided by tdd-guide · risk: low
+Decided: one unit per page with text, located by its real page number. A PDF with no text at all (a scan) is `IngestError('validation')`; there is no OCR. A password-protected PDF says so; any other pdf.js failure is "could not be read as a PDF", with no library text kept.
+Why: locators must match the page a teacher would cite; OCR is out of 5.1's scope.
+Reversible: yes.
+
+---
+
+### 5.1 Binary fixtures come from a committed generator · decided by tdd-guide · risk: low
+Decided: `test/fixtures/make-fixtures.ts` (run with `node test/fixtures/make-fixtures.ts` from `packages/ingest`) writes all 12 PDF/DOCX/PPTX fixtures deterministically from self-written lesson text; tests import its builders for in-memory edge cases.
+Why: reviewers can read exactly what each binary contains, the bytes can be regenerated, and no throwaway `npx` tools are needed.
+Reversible: yes.
+
+---
+
+### 5.1 Locator and text shape for heading-tracked formats · decided by tdd-guide · risk: low
+Decided: one `ParsedUnit` per section, meaning the text between two headings. Block elements become lines joined by `\n`, table rows become `cell | cell`, and image alt text is kept in Markdown. An empty heading is ignored and leaves the path unchanged. Raw HTML in Markdown is dropped. In web pages, `nav`, `footer`, `aside`, `script`, `style`, `noscript`, `template`, `form`, `svg` and `iframe` are dropped. A later heading with the same path starts a new unit; it is never merged with the earlier one. DOCX follows the same rule through mammoth's HTML.
+Why: the plan leaves unit size to 5.3's chunker. Per-section units keep each locator exact and the output small.
+Reversible: yes.
+
+---
+
+### 5.1 IngestError codes are local to packages/ingest · decided by tdd-guide · risk: low
+Decided: `IngestError` uses a local code union (`validation`, `unsupported`, `forbidden`, `not_found`, `input_too_large`, `rate_limited`, `provider_error`) shaped like `TranscriberError`, with no `cause` kept. It does not import `@edmate/contracts`'s `ErrorCode`.
+Why: the package has no contracts dependency yet, and `unsupported` is not a contracts code. Whoever maps ingestion failures to API errors (8.x) can map them then.
+Reversible: yes.
+
+---
+
+### 20 Oct 2026 · 5.1 subpath imports left as they are (typescript-reviewer LOW, wontfix)
+Decided: no change to packages/ingest/package.json for the reviewer's unverified cheerio/slim and pdfjs-dist/legacy subpath resolution; the ingest typecheck (code-reviewer's local gate and CI) resolves both.
+Why: the reviewer's sandbox had no node_modules; the gate is the real check.
+
+---
+
+### 20 Oct 2026 · 4.3a per-test timeouts raised to 5 s · risk: high
+
+Decided: per-test timeouts in the 4.3 distress tests go from 1 s to 5 s; CI runners took 1.1 s and failed unrelated PRs. Test logic is unchanged.
+Why: the guardrails test files are a risky path, so this is logged risk: high for the human's skim list.
+
+---
+
+### 20 Oct 2026 · 4.3a the 2 s speed bound in distressKeywords stays · risk: high
+Decided: in packages/harness/src/guardrails/distressKeywords.test.ts the 2_000 timeout on "a 4,000-character message is checked quickly" is the test's speed bound, not a generic timeout, so it stays (code-reviewer MEDIUM, wontfix).
+Why: raising it would weaken the check that the keyword regexes stay fast on long input.
+
+---
+
 ### 19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word · decided by human (B-18, option c) · risk: high
 Decided: drop the game-shaped softening entirely. A hard self-harm or abuse phrase escalates whatever sits near it, including a game word within 5 words on either side ("killed myself in fortnite", "match mein marne ka mann karta hai", "how to kill myself in valorant"). `GAME_WORDS`, `gameTied`, `gameTalk` and the intent-detection helpers that existed only to decide whether to soften a game-shaped hit (`INTENT`, `INTENT_AFTER`, `COMPACT_INTENT`, `intentNear`) are removed from `distressKeywords.ts`. Code context (fix round 3: a soft phrase next to a code word stays out of the combination rules) and method-ready phrases (fix round 3) are unchanged. Occasional on-call pages for plain game talk ("i keep killing myself in minecraft by falling in lava") are accepted as the cost of never missing a real disclosure.
 Why: the round-3 exemption (B-16 answer a) still left a path where a hard phrase next to a game word could be read as soft by the classifier instead of escalating outright; the human chose certainty over precision for this guard.

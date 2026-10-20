@@ -91,6 +91,17 @@ export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualCloc
 export { type MemoryToolRegistry, memoryToolRegistry, testTool } from './memoryToolRegistry.js';
 export { type SpyGateway, spyGateway } from './spyGateway.js';
 export {
+  ADVICE_VERDICT,
+  type AdviceJudgeGateway,
+  adviceJudgeGateway,
+  type AdviceJudgeInput,
+  type AdviceVerdict,
+  CLEAN_ADVICE_VERDICT,
+  hasAdviceMarker,
+  markerJudge,
+  readAdviceJudgeRequest,
+} from './adviceJudge.js';
+export {
   GROUNDED_VERDICT,
   type JudgeGateway,
   judgeGateway,
