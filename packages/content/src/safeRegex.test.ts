@@ -1,6 +1,6 @@
 import { IN_PII_PATTERNS } from '@edmate/harness/testing';
 import { describe, expect, it } from 'vitest';
-import { checkSafeRegex, probeTiming, structuralIssues } from './safeRegex.js';
+import { checkSafeRegex, extractProbeUnits, probeTiming, structuralIssues } from './safeRegex.js';
 
 const NESTED = 'nests a quantifier inside a repeated group';
 const OVERLAP = 'repeats an alternation whose branches can start the same way';
@@ -22,6 +22,13 @@ describe('structuralIssues', () => {
     ['(?:a|)+', OVERLAP],
     ['(?:\\d|x)+', OVERLAP],
     ['(?:(?:a|a)b){2}', OVERLAP],
+    // fix round 1 (security review of PR #57): a manually unrolled ambiguous alternation,
+    // two or more adjacent unquantified copies of the same group, is just as dangerous as the
+    // quantified form and was not caught by the earlier check.
+    ['(x|xx)'.repeat(25) + 'z', OVERLAP],
+    ['(a|aa)'.repeat(25) + 'z', OVERLAP],
+    ['(ab|ac)(ab|ac)x', OVERLAP],
+    ['(a|b)(b|c)x', OVERLAP], // groups whose branches overlap each other, not identical groups
     ['(a)\\1', BACKREF],
     ['(?<n>a)\\k<n>', BACKREF],
     ['(?<=ab)x', BEHIND],
@@ -61,6 +68,24 @@ describe('structuralIssues', () => {
     for (const source of Object.values(IN_PII_PATTERNS)) {
       expect(structuralIssues(source)).toEqual([]);
     }
+  });
+
+  it('two adjacent non-overlapping groups are fine (not flagged as unrolled)', () => {
+    expect(structuralIssues('(ab|cd)(ef|gh)x')).toEqual([]);
+    expect(structuralIssues('(?:ab|cd){3}')).toEqual([]);
+  });
+});
+
+describe('extractProbeUnits', () => {
+  it('collects every distinct literal and class/escape sample used', () => {
+    expect(extractProbeUnits('(x|xx)z')).toEqual(expect.arrayContaining(['x', 'z']));
+    expect(extractProbeUnits(String.raw`\d[a-z]\s`)).toEqual(
+      expect.arrayContaining(['1', 'a', ' ']),
+    );
+  });
+
+  it('is empty for a pattern it cannot parse usefully, never throws', () => {
+    expect(extractProbeUnits('[')).toEqual([]);
   });
 });
 

@@ -64,6 +64,68 @@ Until all three land, `edmate content validate content/locales` exits 1 with the
 7. **The plan's compose-layer check lives in `@edmate/content`, not `harness/compose.test.ts`**: the harness can't read `content/locales` (no fs). `realLocales.test.ts` uses the real pack, the real prompt packs and the real runner.
 8. **The timing probe runs inputs from 32 to 8,192 characters, doubling, with a 100 ms budget per attempt, and flags a pattern only when 3 attempts all go over.** With only two lengths (256 and 8,192), a cubic pattern hung the check. Doubling stops it on the first slow length. The four IN patterns take about 1 ms alone, but one parallel full-gate run stalled a single attempt to about 400 ms, so a single attempt is not enough to flag. A slow pattern is slow every time; a busy machine stalls one attempt, not three.
 
+## Fix round 1
+
+Security HIGH (PR #57 review): the structural check only tested alternation overlap under an
+explicit repeating quantifier, so a manually unrolled ambiguous alternation (`'(x|xx)'.repeat(25) +
+'z'`, `'(a|aa)'.repeat(25) + 'z'`) passed `checkSafeRegex` yet took 0.5–4.7 s on a ~40-character
+input; and the timing probe only tried a fixed generic alphabet, so an ambiguous pattern on a
+character outside it could pass unnoticed.
+
+Fixed in `packages/content/src/safeRegex.ts`, `safeRegexGuard.ts`, `safeRegexWorkerEntry.ts`,
+`localeRules.ts`:
+
+1. **Structural:** `unrolledOverlap` now also refuses two or more adjacent, unquantified copies of
+   the same alternation group, or of groups whose branches overlap each other (not only an
+   alternation gated by an explicit `*`/`+`/`{n,m>1}`). `packages/content/src/safeRegex.test.ts`
+   adds both repro patterns plus `(ab|ac)(ab|ac)x` and `(a|b)(b|c)x` (overlapping but not identical
+   groups), and confirms two *non*-overlapping adjacent groups still pass.
+2. **Timing probe:** `extractProbeUnits(source)` walks the parsed pattern and collects every
+   distinct literal character and class/escape sample it uses (`\d`→`1`, `[a-z]`→`a`, `\s`→`' '`,
+   …); `checkSafeRegex` adds these to the generic `PROBE_UNITS` alphabet. The 3-attempts rule is
+   unchanged. `safeRegex.test.ts` covers `extractProbeUnits` directly (collects literals and class
+   samples; empty, never throws, on an unparseable fragment).
+3. **Hard ceiling (load/validate path only):** `checkSafeRegexGuarded` runs `checkSafeRegex` in a
+   `node:worker_threads` worker with a ~2 s wall-clock ceiling (`Atomics.wait`/`Atomics.notify` on a
+   shared flag; the worker notifies the flag itself and posts its result over a transferred
+   `MessagePort`, read back with the synchronous `receiveMessageOnPort` -- a 'message'/'error'
+   listener on the main thread cannot fire while it is blocked in `Atomics.wait`, so only the worker
+   calling `Atomics.notify` directly can wake it). `localeRules.ts`'s `safeRegexIssues` now calls
+   the guarded check (it already did in the WIP, but the guard itself did not work: see "stall root
+   cause" below). `checkSafeRegexGuarded` checks the compiled worker file exists before spawning
+   anything; in this package's own test run there is no `dist` build, so it takes the documented
+   in-process fallback, fast (`safeRegexGuard.test.ts`, unmocked, asserts under 500 ms, including
+   both repro patterns). The worker protocol itself (answers before the ceiling; relays an issue;
+   cannot start; nothing answers by the ceiling, terminated) is covered with `node:worker_threads`
+   and `node:fs` mocked (`safeRegexGuardWorker.test.ts`); `safeRegexWorkerEntry.ts`'s own top-level
+   side effect (post the result, store and notify the flag) is covered directly
+   (`safeRegexWorkerEntry.test.ts`). Coverage for the three new/changed files: 100% lines/branches/
+   functions/statements.
+4. **Stall root cause (why the previous fix round never finished):** the WIP's guard used a
+   main-thread `'message'`/`'error'` listener on the `Worker` object to call `Atomics.notify` on the
+   shared flag. `Atomics.wait` blocks the calling thread's own event loop, so that listener could
+   never run while the main thread was blocked inside `Atomics.wait` -- it would only be delivered
+   after the wait already timed out. Every real-pack test (`realLocales.test.ts`, `validate.test.ts`)
+   therefore waited the full 2,000 ms hard ceiling and then failed, because the worker file does not
+   exist when the package runs straight from TypeScript source (no build step) and the fallback path
+   never actually ran. Fixed by checking the compiled file exists (`existsSync`) before spawning
+   anything, and by having the worker itself call `Atomics.notify` on a flag passed into
+   `workerData`, with the result crossing on a transferred `MessagePort` read back via the
+   synchronous `receiveMessageOnPort` once the wait returns -- no reliance on the main thread's event
+   loop while it is blocked. `packages/content` now runs in about 1 s (291 → 299 tests, all pass);
+   previously `realLocales.test.ts` and `validate.test.ts` failed/stalled on the missing-worker-file
+   path.
+
+Evidence:
+
+| Check | Command → trimmed output |
+|---|---|
+| Content package, isolated | `corepack pnpm vitest run --coverage` (packages/content) → `Test Files 18 passed (18)`, `Tests 292 passed (292)`, ~1 s; `safeRegexGuard.ts` and `safeRegexWorkerEntry.ts` 100% lines/branches/functions/statements; `safeRegex.ts` 97.56/94.38/100/99.4. |
+| Full gate | infra up (`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d --wait postgres redis`); `corepack pnpm turbo run typecheck lint test --filter=...@edmate/contracts --force` → `Tasks: 37 successful, 37 total`, nothing skipped; `@edmate/content:test` `Test Files 18 passed (18)` `Tests 292 passed (292)`. |
+| Real IN patterns still pass | `safeRegex.test.ts` "the real India patterns pass" (structural + timing, real clock); `localeRules.test.ts` "passes the real India patterns" (`piiPatternsSafeRegex`, `piiPatternsCompileWithGu`); `realLocales.test.ts` loads the committed `content/locales/IN.yaml` through the real loader and runs 4.2's `piiScrubCaseFailures` → `[]`. All pass. |
+| ADR headings | `python3 docs/adr/check-headings.py` → no output, exit 0. |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → no output, exit 0. |
+
 ## Follow-ups (not blocking)
 
 - **Merge conflict to expect:** open branches `m4/4.3-distress` and `m4/4.4-moderation-jailbreak` add `packages/harness/src/testing/distressLocaleFixtures.ts` with a helpline literal that has no `verifiedBy` / `verifiedOn`. Whichever merges second must add those two fields (for example `verifiedBy: 'test pack'`, `verifiedOn: '2026-01-01'`) or typecheck fails.
@@ -74,6 +136,13 @@ Until all three land, `edmate content validate content/locales` exits 1 with the
 - An `en-US` pack waits for the M10 payments task (10.1), as the plan says.
 
 ## Decisions
+
+### 20 Oct 2026 · 3.10 Safe-regex structural check also refuses an unrolled ambiguous alternation; timing probe derives units from the pattern; a hard wall-clock ceiling guards the load/validate path · risk: high
+Decided: the structural check refuses not only an alternation whose branches overlap under an explicit repeating quantifier, but also two or more adjacent, unquantified copies of the same alternation group, or of groups whose branches overlap each other -- a manually unrolled ambiguity is exactly as dangerous once the compiled pattern runs. The timing probe's adversarial inputs are built from every distinct literal character and class/escape sample the pattern itself uses, in addition to the existing generic alphabet. `edmate content validate` and start-up `loadLocalePacks` (never the per-turn PII scrub) run the whole check inside a `node:worker_threads` worker with a roughly 2-second hard wall-clock ceiling; a pattern that does not answer in time is terminated and reported unsafe. All four real IN patterns and the global pack still pass.
+Why: security review of PR #57 found `'(x|xx)'.repeat(25) + 'z'` and `'(a|aa)'.repeat(25) + 'z'` passed the round-0 check yet took 0.5–4.7 s to run; a pack author (or anyone who can propose a pack) could spell an exponential-backtracking pattern out longhand to dodge a check gated only on an explicit quantifier. Pack patterns run on every student message in `piiScrub`, so any pattern that reaches that path must be provably safe, not merely safe against the specific shapes the first check's author anticipated.
+Alternatives: keep the quantifier-gated check and rely on the timing probe alone to catch an unrolled pattern (rejected: the probe's own fixed generic alphabet could miss a pattern ambiguous only on a character outside it, and a probe-only defence has no structural explanation for pack authors); add the `safe-regex` npm package (still a new dependency, the same Q1 answer as round 0); cap total validate-time instead of per-pattern (rejected: one slow pattern would still block every other pack's validation).
+Reviewers: security-reviewer (raised it), architect, typescript-reviewer (ADR-0008 addendum, the worker-protocol design in `safeRegexGuard.ts`).
+Reversible: yes, with a new ADR note; no stored data depends on the stricter rule, only which packs validate.
 
 ### 19 Oct 2026 · 3.10 LocalePack gains sign-off fields and a parental-consent flag (ADR-0008) · risk: high
 Decided: each helpline gets required `verifiedBy` (a name or handle, never an email, at most 200 characters) and `verifiedOn` (a calendar date). `compliance` gets a required `parentalConsentRequired` boolean. The pack gets an optional `reviewedBy` / `reviewedOn` pair for the compliance block. The literal `pending` is valid in the schema; the content rules report it, and the runtime loader never serves a helpline that carries it. The build plan's Core contracts text and the spec-type tests are updated to match.

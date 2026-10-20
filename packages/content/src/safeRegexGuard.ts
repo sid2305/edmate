@@ -9,17 +9,29 @@
 // `loadLocalePacks` (`localePacks.ts`) -- never per turn: the guard that scrubs PII on every
 // student message runs the already-vetted compiled pattern directly, with no check at all.
 //
-// The main thread blocks synchronously on `Atomics.wait`, so callers keep the same synchronous
-// shape as `checkSafeRegex`: a worker thread can call `Atomics.notify` while the main thread is
-// waiting, which a same-thread callback cannot. If the worker cannot start at all -- the compiled
-// `safeRegexWorkerEntry.js` is missing, which happens only when this module runs straight from
-// TypeScript source with no build step, the case in this package's own tests -- the check runs
-// in-process instead, with no hard ceiling; production always runs the built `dist`, where the
-// worker file sits next to this one.
-import { Worker } from 'node:worker_threads';
+// The main thread blocks synchronously on `Atomics.wait`, which stops its own event loop: a
+// 'message' or 'error' listener on the worker object would be queued but never delivered while
+// blocked, so there is no way to react to one. Only a raw `Atomics.notify` on a shared flag --
+// called directly by the worker thread, not from a main-thread callback -- can wake it; the
+// result itself crosses on a transferred `MessagePort`, read back with the synchronous
+// `receiveMessageOnPort` (no event loop needed) once the wait returns. A worker that never
+// notifies (it is missing, or it crashes before posting) is indistinguishable from one still
+// working, and is reported as unsafe when the ceiling passes -- the safe default when the check
+// could not be completed.
+//
+// Fix round 1 also checks the compiled worker file exists before spawning anything: it is missing
+// only when this module runs straight from TypeScript source with no build step, the case in this
+// package's own tests, and an attempt to load it would still cost the full `wallClockMs` (a
+// module-not-found error from inside the worker reaches the main thread the same asynchronous way
+// a 'message' would, so it cannot preempt the wait either). Production always runs the built
+// `dist`, where the worker file sits next to this one.
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 import { checkSafeRegex, type TimingOptions } from './safeRegex.js';
 
 const WORKER_URL = new URL('./safeRegexWorkerEntry.js', import.meta.url);
+const WORKER_PATH = fileURLToPath(WORKER_URL);
 
 /** Only the plain-data parts of `TimingOptions`: `now` is a function and cannot cross a worker boundary. */
 function serializableOpts(opts: TimingOptions): TimingOptions {
@@ -41,27 +53,26 @@ export function checkSafeRegexGuarded(
   opts: TimingOptions = {},
   wallClockMs = 2_000,
 ): string[] {
+  if (!existsSync(WORKER_PATH)) return checkSafeRegex(source, opts); // no compiled worker file on disk: in-process, tests only
+
   const flag = new Int32Array(new SharedArrayBuffer(4));
+  const { port1, port2 } = new MessageChannel();
   let worker: Worker;
   try {
-    worker = new Worker(WORKER_URL, { workerData: { source, opts: serializableOpts(opts) } });
+    worker = new Worker(WORKER_URL, {
+      workerData: { source, opts: serializableOpts(opts), port: port2, flag },
+      transferList: [port2],
+    });
   } catch {
-    return checkSafeRegex(source, opts); // no compiled worker file on disk: in-process, tests only
+    port1.close();
+    port2.close();
+    return checkSafeRegex(source, opts); // could not even start a worker: in-process, tests only
   }
-  let result: string[] | undefined;
-  worker.on('message', (msg: string[]) => {
-    result = msg;
-    Atomics.store(flag, 0, 1);
-    Atomics.notify(flag, 0);
-  });
-  worker.on('error', () => {
-    Atomics.store(flag, 0, 2);
-    Atomics.notify(flag, 0);
-  });
   Atomics.wait(flag, 0, 0, wallClockMs);
-  const state = Atomics.load(flag, 0);
+  const answered = Atomics.load(flag, 0) === 1;
+  const received = answered ? receiveMessageOnPort(port1) : undefined;
   void worker.terminate();
-  if (state === 1 && result !== undefined) return result;
-  if (state === 2) return checkSafeRegex(source, opts); // worker could not run it: in-process, tests only
+  port1.close();
+  if (received !== undefined) return received.message as string[];
   return [`exceeded the ${wallClockMs} ms hard limit for the load/validate path (terminated)`];
 }
