@@ -110,3 +110,7 @@ Reversible: yes.
 Decided: `IngestError` uses a local code union (`validation`, `unsupported`, `forbidden`, `not_found`, `input_too_large`, `rate_limited`, `provider_error`) shaped like `TranscriberError`, with no `cause` kept. It does not import `@edmate/contracts`'s `ErrorCode`.
 Why: the package has no contracts dependency yet, and `unsupported` is not a contracts code. Whoever maps ingestion failures to API errors (8.x) can map them then.
 Reversible: yes.
+
+### 20 Oct 2026 · 5.1 subpath imports left as they are (typescript-reviewer LOW, wontfix)
+- Decided: no change to packages/ingest/package.json for the reviewer's unverified cheerio/slim and pdfjs-dist/legacy subpath resolution; the ingest typecheck (code-reviewer's local gate and CI) resolves both.
+- Why: the reviewer's sandbox had no node_modules; the gate is the real check.

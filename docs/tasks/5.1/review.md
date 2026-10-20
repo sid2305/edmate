@@ -1,6 +1,5 @@
-# 5.1 review
+# 5.1 review — APPROVE
 
-Verdict: APPROVE
 
 Reviewers: code-reviewer (sonnet), typescript-reviewer (sonnet), security-reviewer (sonnet)
 
