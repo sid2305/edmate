@@ -1039,7 +1039,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: todo
+  status: running
   risk: risky
   branch: null
   model: null
