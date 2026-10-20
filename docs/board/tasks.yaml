@@ -392,15 +392,17 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: review
+  status: done
   needs_decision:
   - min-age
   risk: risky
   branch: m1/1.7-age-consent
-  model: plan:opus build:opus review:opus/sonnet
+  model: plan:opus build:opus fix:sonnet review:opus/sonnet
 - id: 1.7b
   milestone: M1
-  title: 'Web build loads the safe-regex worker (1.7 security re-check HIGH): with next build --webpack the worker is copied without its import, so IN.yaml''s PII patterns time out, the IN pack is refused and loadAgeContent drops it silently; load @edmate/content from dist with the worker beside it (or a path webpack leaves alone), log refused packs in loadAgeContent, add a build smoke test that loads the packs and serves IN'
+  title: 'Web build loads the safe-regex worker (1.7 security re-check HIGH): with next build --webpack the worker is copied without its import, so IN.yaml''s PII patterns time out, the IN pack is refused
+    and loadAgeContent drops it silently; load @edmate/content from dist with the worker beside it (or a path webpack leaves alone), log refused packs in loadAgeContent, add a build smoke test that loads
+    the packs and serves IN'
   accept: a production web build serves the IN pack at the age gate, the regex guard still times out an unsafe pattern in that build, and a refused pack is logged
   deps:
   - '1.7'
