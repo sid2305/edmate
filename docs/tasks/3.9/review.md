@@ -6,6 +6,8 @@ Both reviewers approve with no CRITICAL or HIGH findings, at head 15eefaa. code-
 
 The builder's same-topic → locked report was traced to the harness, not the CLI. retrievalQuery.ts appends the last agent reply, which dilutes coverage below 0.5, while the locked probe counts any score above 0 as a hit. That is now board task 3.4c.
 
+After review, d810f2b merged main, which brought in 5.4's access audit. It also added the CLI adapter `apps/cli/src/commands/chat/retrieval.ts` to the audit's rule-4 allowlist, a one-line test change the lead read, logged in the handoff, and removed again in 3.9a.
+
 ## Findings
 - [MEDIUM] [deferred 3.9a] apps/cli/src/commands/chat.ts:152 — readline runs with `terminal: false`, so Ctrl+C mid-stream kills the process without closing readline or printing `bye`. Handle SIGINT.
 - [MEDIUM] [deferred 3.9a] apps/cli/src/commands/chat.ts:47 — `renderEvent` has no `never` exhaustiveness check, so a new `TurnEvent` variant would be dropped silently.
