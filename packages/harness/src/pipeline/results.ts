@@ -75,6 +75,7 @@ export const BuiltContextSchema: z.ZodType<BuiltContext> = z.strictObject({
   persona: PersonaSchema.exactOptional(),
   helpRung: TurnContextSchema.shape.helpRung,
   helpState: HelpStateSchema,
+  helpStateUnreadable: z.literal(true).exactOptional(),
 });
 
 export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({

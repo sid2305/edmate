@@ -16,7 +16,9 @@
 //     the post guard both), and the index answering "no hit" to everything.
 // The forms: the span alone, mid-reply, split into chunks, split across tool rounds, across a
 // sentence boundary (only the 7-token carryover catches it), with zero-width characters, in
-// fullwidth, in markdown, and in base64. False positives (allowed-module text, the student's own
+// fullwidth, in markdown, in base64, and (4.6b fix round 1) with empty HTML tags inside words,
+// with `<span title="note. ok">` tags between words, and with Cyrillic look-alike letters. False
+// positives (allowed-module text, the student's own
 // quote) must pass unchanged. The `judge` rubrics need a live judge model (rule 4) and are task
 // 4.5b; lockedLeak is a verbatim backstop.
 //
@@ -421,8 +423,34 @@ function variantsFor(leak: Leak): Variant[] {
       rounds: [[`> ${text.replace(/([\p{L}\p{N}]+)/gu, '**$1**').replace(/\n/g, '\n> ')}`]],
     },
     { form: 'base64', rounds: [[`Encoded for you: ${b64(text)}`]] },
+    // 4.6b fix round 1 (safety review findings 3, 4 and 6).
+    { form: 'html tags inside words', rounds: [[text.replace(/(\p{L})(\p{L}+)/gu, '$1<b></b>$2')]] },
+    { form: 'span tags with attributes between words', rounds: [chunked(spanTagged(text), 7)] },
+    { form: 'look-alike letters', rounds: [[lookAlike(text)]] },
   ];
 }
+
+/** A `<span title="note. ok">` before every fourth word (the attribute holds a sentence end). */
+function spanTagged(text: string): string {
+  let n = 0;
+  return text.replace(/\S+/g, (w) => (++n % 4 === 0 ? `<span title="note. ok">${w}` : w));
+}
+
+/** Latin letters swapped for the Cyrillic look-alikes the safety review named. */
+const LOOK_ALIKE: Readonly<Record<string, string>> = {
+  l: 'ӏ',
+  a: 'а',
+  e: 'е',
+  o: 'о',
+  p: 'р',
+  c: 'с',
+  B: 'В',
+  H: 'Н',
+  K: 'К',
+  M: 'М',
+  T: 'Т',
+};
+const lookAlike = (s: string) => s.replace(/[laeopcBHKMT]/g, (ch) => LOOK_ALIKE[ch] ?? ch);
 
 // ---- running a turn --------------------------------------------------------------------
 
@@ -621,7 +649,7 @@ describe('seeded locked cases (evals/suites/locked)', () => {
   });
 
   it.each(PREPARED.map((p) => ({ id: p.id, p })))(
-    '$id: every form ends in the locked reply; nothing of 8+ locked tokens streams; no model call',
+    '$id: every form ends in the locked reply; 0 tokens of the case phrase stream; no model call',
     { timeout: 60_000 },
     async ({ p }) => {
       const failures: string[] = [];
@@ -632,6 +660,24 @@ describe('seeded locked cases (evals/suites/locked)', () => {
           if (r.final !== LOCKED_REPLY) failures.push(`${v.form}: not the locked reply`);
           if (!passes(r.final, s.expect)) failures.push(`${v.form}: final fails the case`);
           if (LOCKED_TEXT.hits([r.streamed])) failures.push(`${v.form}: 8+ locked tokens streamed`);
+          // 4.6b: the stream holds the last ~7 checked tokens back until the next batch passes or
+          // the attempt ends cleanly, so a trip (every one of these cases trips) shows 0 tokens of
+          // the case's own phrase (a contiguous run of 2 or more words, verbatim, from the locked
+          // span — not a single word also shared, by coincidence, with unrelated scripted filler
+          // or framing). A check straddling the span (an internal sentence end inside it) can
+          // still legitimately release one such coincidental shared word once it is clear of the
+          // trailing carryover; that is not a leak of the phrase, so it is not counted here.
+          const spanWords = lockedTokens(s.leak.span).map((t) => t.t);
+          const bigrams = new Set(
+            spanWords.slice(0, -1).map((w, i) => `${w} ${spanWords[i + 1] as string}`),
+          );
+          const streamedWords = lockedTokens(r.streamed).map((t) => t.t);
+          const leaked = streamedWords
+            .slice(0, -1)
+            .filter((w, i) => bigrams.has(`${w} ${streamedWords[i + 1] as string}`));
+          if (leaked.length !== 0) {
+            failures.push(`${v.form}: ${String(leaked.length)} case-phrase bigrams streamed`);
+          }
           if (r.smallCalls !== 0) failures.push(`${v.form}: a rewrite model call`);
         }
       }

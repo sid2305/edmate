@@ -23,9 +23,9 @@ import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
-import { generate } from '../steps/generate.js';
+import { createGenerate, generate } from '../steps/generate.js';
 import type { RegisteredTool } from '../tools.js';
-import type { StepEnv, UsageRecorder } from '../types.js';
+import type { StepEnv, Steps, UsageRecorder } from '../types.js';
 import { SkillEventDropped } from './skillEvent.js';
 import type { StreamGateFactory } from './streamGate.js';
 
@@ -72,6 +72,9 @@ function setup(
     tools?: RegisteredTool[];
     usage?: Partial<UsageRecorder>;
     gate?: StreamGateFactory;
+    lockedStopped?: boolean;
+    onLockedTrip?: () => void;
+    step?: Steps['generate'];
   } = {},
 ) {
   const clock = virtualClock();
@@ -109,10 +112,21 @@ function setup(
     recorded,
     run: () =>
       clock.drive(
-        generate(env, { ctx: c, decision: d, sources, attempt: 'primary' }, (e) => {
-          // The runner's emitter rejects what fails the schema; so does this one.
-          events.push(TurnEventSchema.parse(e));
-        }),
+        (o.step ?? generate)(
+          env,
+          {
+            ctx: c,
+            decision: d,
+            sources,
+            attempt: 'primary',
+            ...(o.lockedStopped === undefined ? {} : { lockedStopped: o.lockedStopped }),
+            ...(o.onLockedTrip === undefined ? {} : { onLockedTrip: o.onLockedTrip }),
+          },
+          (e) => {
+            // The runner's emitter rejects what fails the schema; so does this one.
+            events.push(TurnEventSchema.parse(e));
+          },
+        ),
       ),
   };
 }
@@ -177,11 +191,12 @@ describe('generate: events in order', () => {
       raw: 'Look at [2]. Now try it.',
       withheld: false,
     });
+    // 4.6b: under 8 tokens total, the locked stream holds both sentences back until the attempt
+    // ends cleanly, so they arrive as one token event (release()), after the skill event.
     expect(s.events).toEqual([
       { type: 'hint_rung', rung: 2 },
-      { type: 'token', text: 'Look at [2]. ' },
       { type: 'skill', skill: 'coach', payload: { shown: 'ok' } },
-      { type: 'token', text: 'Now try it.' },
+      { type: 'token', text: 'Look at [2]. Now try it.' },
       { type: 'sources', items: [src(2)] },
     ]);
     expect(s.recorded).toEqual([usageMain, usageMain]);
@@ -318,5 +333,42 @@ describe('generate: the answer-leak sentence gate is the default (4.5)', () => {
     expect(s.reported.map((e) => String(e))).toEqual([
       'SourceDropped: a cited source label held the answer key and was dropped',
     ]);
+  });
+});
+
+describe('generate: lockedStopped (ADR-0007 §8, 4.6b)', () => {
+  it('holds the whole reply until the attempt ends when the session already stopped streaming', async () => {
+    const s = setup([[say('One two three four. '), say('Five six seven eight.'), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      lockedStopped: true,
+    });
+    const out = await s.run();
+    // No per-sentence token events: the one token event is the whole reply, at the clean end.
+    expect(s.events.filter((e) => e.type === 'token')).toEqual([
+      { type: 'token', text: 'One two three four. Five six seven eight.' },
+    ]);
+    expect(out.draft).toBe('One two three four. Five six seven eight.');
+    expect(out.locked).toBeUndefined();
+  });
+
+  it('passes onLockedTrip through: told once when the stream trips (4.6b fix round 1)', async () => {
+    let told = 0;
+    const s = setup([[say('One two three four five six seven eight. '), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      onLockedTrip: () => void told++,
+      step: createGenerate({ lockedCheck: () => () => Promise.resolve(true) }),
+    });
+    const out = await s.run();
+    expect(out.locked).toBe('hit');
+    expect(told).toBe(1);
+  });
+
+  it('defaults to the ordinary per-sentence stream when unset', async () => {
+    const s = setup([[say('One two three four five six seven eight. '), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+    });
+    await s.run();
+    // 8 tokens: part of the sentence releases at once (not held for the whole attempt).
+    expect(s.events.some((e) => e.type === 'token' && e.text === 'One ')).toBe(true);
   });
 });

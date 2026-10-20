@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   copyHelp,
   INITIAL_HELP_STATE,
+  loadSessionHelp,
   parseSessionHelp,
   serializeSessionHelp,
   SessionHelpSchema,
@@ -15,6 +16,7 @@ const VALID = {
   attemptLogged: true,
   pendingCheck: false,
   answerKey: ['42'],
+  lockedStopped: false,
 };
 
 const DEFAULT = { rung: 0, help: { ...INITIAL_HELP_STATE, answerKey: [] } };
@@ -23,8 +25,18 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
   it('parses a valid stored blob into rung and help', () => {
     expect(parseSessionHelp(VALID)).toEqual({
       rung: 3,
-      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: ['42'] },
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: ['42'],
+        lockedStopped: false,
+      },
     });
+  });
+
+  it('parses lockedStopped true (4.6b: set for the rest of a session after a locked hit)', () => {
+    expect(parseSessionHelp({ ...VALID, lockedStopped: true }).help.lockedStopped).toBe(true);
   });
 
   it.each([
@@ -43,6 +55,7 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     ['stuckTurns 2', { ...VALID, stuckTurns: 2 }],
     ['a non-boolean flag', { ...VALID, attemptLogged: 'yes' }],
     ['a non-string answer key', { ...VALID, answerKey: [42] }],
+    ['a non-boolean lockedStopped', { ...VALID, lockedStopped: 'yes' }],
     [
       'a missing field',
       { v: 1, rung: 2, stuckTurns: 0, attemptLogged: false, pendingCheck: false },
@@ -50,6 +63,51 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     ['an unknown key', { ...VALID, extra: true }],
   ])('%s → the default', (_label, raw) => {
     expect(parseSessionHelp(raw)).toEqual(DEFAULT);
+  });
+
+  it('an old blob without lockedStopped (before 4.6b) parses with its rung intact (absent = false)', () => {
+    const old = { v: 1, rung: 2, stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: ['7'] };
+    const parsed = parseSessionHelp(old);
+    expect(parsed).toEqual({
+      rung: 2,
+      help: { stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: ['7'] },
+    });
+    expect(parsed.help.lockedStopped === true).toBe(false);
+  });
+});
+
+describe('loadSessionHelp: whether a stored blob could be read (4.6b fix round 1)', () => {
+  it.each([
+    ['undefined (no row value)', undefined],
+    ['null', null],
+    ['the db default {}', {}],
+    ['a valid blob', VALID],
+  ])('%s → readable', (_label, raw) => {
+    expect(loadSessionHelp(raw)).toEqual({ ...parseSessionHelp(raw), unreadable: false });
+  });
+
+  it.each([
+    ['a future version', { ...VALID, v: 2 }],
+    ['an unknown key', { ...VALID, extra: true }],
+    ['a string', 'rung 3'],
+    ['an array', [VALID]],
+    ['a non-boolean lockedStopped', { ...VALID, lockedStopped: 'yes' }],
+    [
+      'an object that throws when read',
+      new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('boom');
+          },
+          get() {
+            throw new Error('boom');
+          },
+        },
+      ),
+    ],
+  ])('%s → unreadable, with the default state', (_label, raw) => {
+    expect(loadSessionHelp(raw)).toEqual({ ...DEFAULT, unreadable: true });
   });
 
   it('the default never aliases the frozen INITIAL_HELP_STATE', () => {

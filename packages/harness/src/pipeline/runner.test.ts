@@ -11,6 +11,7 @@ import {
   type TurnEvent,
 } from '@edmate/contracts';
 import {
+  demoAttachment,
   demoChunk,
   demoChunkScored,
   demoLearnerProfile,
@@ -54,7 +55,7 @@ import {
   StepNotImplementedError,
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
-import { runTurn } from './runner.js';
+import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
 import { STEP_NAMES, STEP_SPEC } from './spec.js';
 import type { BuiltContext, StepEnv } from './types.js';
 import { buildContext } from './steps/buildContext.js';
@@ -455,6 +456,62 @@ describe('runTurn with the real scrub (4.2)', () => {
     });
   });
 
+  describe('an attachment-bearing turn is refused at the scrub step (task 4.2b)', () => {
+    it('ends guard_blocked, no model call, nothing committed', async () => {
+      const t = testDeps();
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const input = { ...demoTurnInput, attachments: [demoAttachment] };
+      const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+      expect(t.gateway.requests).toHaveLength(0);
+      expect(steps.commits).toHaveLength(1);
+      expect(steps.commits[0]?.input).toBeNull();
+      expect(result.background).toHaveLength(1);
+      const bg = result.background[0];
+      expect(bg?.task).toBe('runner');
+      expect(bg?.error).toBeInstanceOf(ScrubFailedError);
+      expect((bg?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+      expect((bg?.error as ScrubFailedError).detail.errorName).toBeUndefined();
+    });
+
+    it('the raw-text distress check still runs and escalates even with an attachment present (regression)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_ATTACHMENT';
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
+      const t = testDeps({
+        overrides: { distressCheck: (text) => text.includes(MARKER) },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toHaveLength(1);
+      expect(steps.commits[0]).toMatchObject({
+        outcome: 'escalated',
+        intent: 'distress',
+        input: null,
+      });
+      // The scrub still failed closed on the attachment and is still reported, not swallowed.
+      expect(result.background).toHaveLength(1);
+      expect((result.background[0]?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+    });
+
+    it('no distress hit + an attachment → the ordinary guard_blocked path (contrast)', async () => {
+      const input = { ...demoTurnInput, attachments: [demoAttachment] };
+      const t = testDeps({ overrides: { distressCheck: () => false } });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+      expect(t.alerts.raised).toEqual([]);
+    });
+  });
+
   it('scrubs the skill payload before any later step sees it', async () => {
     const t = testDeps();
     const steps = testSteps({ scrub: defaultSteps.scrub });
@@ -584,6 +641,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
   const history: Message[] = [
     {
@@ -701,6 +759,7 @@ describe('runTurn with the real decide (3.6)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
 
   function setup(
@@ -746,6 +805,7 @@ describe('runTurn with the real decide (3.6)', () => {
           attemptLogged: false,
           pendingCheck: false,
           answerKey: [ANSWER_KEY],
+          lockedStopped: false,
         },
         ...o.built,
       }),
@@ -768,7 +828,7 @@ describe('runTurn with the real decide (3.6)', () => {
     expect(rec?.decision).toMatchObject({ move: 'hint', rung: 2, mustNotReveal: [ANSWER_KEY] });
     expect(rec?.next).toEqual({
       rung: 2,
-      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY] },
+      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY], lockedStopped: false },
     });
     expect(rec?.promptPack).toEqual({
       set: FIXTURE_PROMPT_PACK_VERSION,

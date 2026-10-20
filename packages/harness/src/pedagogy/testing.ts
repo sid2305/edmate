@@ -30,7 +30,14 @@ export function ctxWith(o: CtxOverrides = {}): TurnContext {
 }
 
 export function helpWith(o: Partial<HelpState> = {}): HelpState {
-  return { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [], ...o };
+  return {
+    stuckTurns: 0,
+    attemptLogged: false,
+    pendingCheck: false,
+    answerKey: [],
+    lockedStopped: false,
+    ...o,
+  };
 }
 
 export function turnOf(

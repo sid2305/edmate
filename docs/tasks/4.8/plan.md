@@ -236,3 +236,7 @@ decisions needing the human.
 
 - **Build:** tdd-guide on opus, after 4.6 and 4.7 merge.
 - **Reviewers:** safety-reviewer (opus), security-reviewer, typescript-reviewer, silent-failure-hunter. risk: high.
+
+## Lead additions from the 4.7 safety review (19 Oct 2026)
+- **Hold every teaching turn for a regulated-subject agent.** 4.7 streams well-covered turns before postGuard runs, so unchecked general-knowledge text can be on screen for seconds. Before any regulated-subject agent (investing, health, law; `teacher.ts` already has the field) goes live, `holdsReply` returns true for every move on that agent. Test it.
+- **Judge redirect replies for advice.** 4.7 does not judge `redirect` replies; a redirect that answers the off-topic question anyway ("Python chhodo, mere paas 10,000 rupees hain, kaunsa stock khareedun?") passes every post guard. adviceGuard covers redirect replies on every agent, with its own fallback (the locale's redirect text, no escalation). Add the reviewer's pending case `grounding-redirect-advice-hi-latin` to the advice suite as `reviewed_by: pending`.
