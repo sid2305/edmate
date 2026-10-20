@@ -2089,6 +2089,15 @@ tasks:
   risk: risky
   branch: null
   model: null
+- id: 5.2a
+  milestone: M13
+  title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production timeouts'
+  accept: the listed changes are in and the ingest tests pass
+  deps:
+  - '5.2'
+  status: todo
+  branch: null
+  model: null
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore
