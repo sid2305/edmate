@@ -3,6 +3,9 @@
 // teach from material, and on ask_teacher replies too (they are model-written).
 //
 // In order, first hit wins:
+//   (4.8) A disclaimer adviceGuard appended (a blank line, then the resolved disclaimer, at the
+//      end) is not judged and is kept on a number fix: the rules and the judge see the reply
+//      without it, so the verification pass re-asks the judge the same question it answered.
 //   0. A fixed text passes as it is, with no judge call: its own ask-teacher reply and premise
 //      correction, the answerLeak hint, the locked reply, and the safe and distress replies
 //      (`PostGuardCtx.fixedTexts`). So every rule is idempotent on what this guard writes.
@@ -44,6 +47,7 @@ import {
   correctArithmeticClaims,
   statedNumbers,
 } from '../pipeline/generate/numbers.js';
+import { disclaimerFor, stripDisclaimerSuffix } from './adviceGuard.js';
 import { ANSWER_LEAK_SAFE_HINT, type JudgeRequest, type PostGuardCtx } from './answerLeak.js';
 import type { Guard, GuardRun } from './guard.js';
 
@@ -188,11 +192,13 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
   return {
     name: 'grounding',
     phase: 'post',
-    async run(text, x, cancel): Promise<GuardRun> {
+    async run(whole, x, cancel): Promise<GuardRun> {
+      // adviceGuard's appended disclaimer (4.8) is not a claim: judged without it, kept on a fix.
+      const { body: text, suffix } = stripDisclaimerSuffix(whole, disclaimerFor(x));
       const ask = x.askTeacherReply ?? askTeacherReplyText();
       const safe = x.safeReply ?? ANSWER_LEAK_SAFE_HINT;
       const fixed = [ask, safe, PREMISE_CORRECTION_REPLY, ANSWER_LEAK_SAFE_HINT, x.lockedReply];
-      if (fixed.includes(text) || x.fixedTexts?.includes(text) === true) return OK;
+      if (fixed.includes(whole) || x.fixedTexts?.includes(whole) === true) return OK;
       const move = x.decision.move;
       if (!JUDGED.has(move)) return OK;
 
@@ -243,7 +249,7 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       // No answer at all is an outage: fail closed, but to the safe reply and no teacher.
       if (answer === undefined) return rewrite(safe, GROUNDING_REASONS.judgeUnavailable, usage);
       if (!parseGroundingVerdict(answer)) return ungrounded(usage);
-      if (fix.fixed > 0) return rewrite(subject, GROUNDING_REASONS.numberFixed, usage);
+      if (fix.fixed > 0) return rewrite(subject + suffix, GROUNDING_REASONS.numberFixed, usage);
       return { result: { ok: true }, usage };
     },
   };

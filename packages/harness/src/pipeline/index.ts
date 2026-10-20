@@ -12,6 +12,7 @@ export {
 // Every HarnessError's message is fixed text, codes and ids only, never student or model text
 // (errors.ts); the background log relies on that.
 export {
+  AdviceJudgeUnavailable,
   errorName,
   GenerateAttemptFailed,
   HarnessError,
@@ -70,6 +71,9 @@ export { ATTACHMENT_REFUSED_REPLY } from './steps/scrub.js';
 export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
 export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
 export {
+  ADVICE_JUDGE_TIMEOUT_MS,
+  ADVICE_REWRITE_MIN_MS,
+  ADVICE_SLICE_MARGIN_MS,
   askTeacherReplyFor,
   createPostGuard,
   GROUNDING_JUDGE_MAX_OUTPUT_TOKENS,
@@ -82,6 +86,7 @@ export {
   postGuardSliceMs,
   REWRITE_MAX_OUTPUT_TOKENS,
   REWRITE_SHARE,
+  redirectReplyFor,
   REWRITE_SYSTEM,
 } from './steps/postGuard.js';
 export { LAST_RESORT_DISTRESS_REPLY } from './replies.js';

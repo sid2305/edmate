@@ -17,7 +17,8 @@
 // entitlement's teacher and allowed modules. Each sentence is checked before it is shown, each
 // tool output before the model sees it, each skill payload before it is sent; the result says
 // when the stream withheld text (`locked`), and postGuard then replaces the whole reply.
-import type { PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
+import type { AgentConfig, PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
+import { decisionRequest } from '../../guardrails/adviceGuard.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
@@ -64,13 +65,20 @@ const TEACHING_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
  * plus HOLD_MARGIN, where grounding is most likely to replace the reply. Fix round 1: also a
  * teaching turn with nothing retrieved, or one decide.fallback chose (`fromFallback`), since that
  * path never ran the coverage gate. A teaching turn whose chunks are all unscored still streams.
+ *
+ * Task 4.8 (lead decisions, risk: high): every move of a regulated-subject agent (investing,
+ * health, law) is held, and so is any turn whose (scrubbed) student message asks for a decision
+ * (adviceGuard's pre-filter), so advice is never on screen before adviceGuard has judged it.
  */
 export function holdsReply(
-  ctx: Pick<TurnContext, 'retrieved'>,
+  ctx: Pick<TurnContext, 'retrieved'> & { agent?: Pick<AgentConfig, 'regulatedSubject'> },
   move: PedagogyDecision['move'],
   threshold: number = DEFAULT_COVERAGE_THRESHOLD,
   fromFallback = false,
+  studentText?: string,
 ): boolean {
+  if (ctx.agent?.regulatedSubject !== undefined) return true;
+  if (studentText !== undefined && decisionRequest(studentText)) return true;
   if (move === 'ask_teacher') return true;
   if (!TEACHING_MOVES.has(move)) return false;
   if (fromFallback || ctx.retrieved.length === 0) return true;
@@ -112,7 +120,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     );
 
     const lockedCheck = lockedCheckOf(env, ctx);
-    const held = holdsReply(ctx, decision.move, undefined, fromFallback === true);
+    const held = holdsReply(ctx, decision.move, undefined, fromFallback === true, studentText);
 
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     const { draft, raw, locked } = await runToolLoop({

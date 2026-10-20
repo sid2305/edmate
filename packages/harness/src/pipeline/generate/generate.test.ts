@@ -81,6 +81,8 @@ function setup(
     lockedStopped?: boolean;
     onLockedTrip?: () => void;
     step?: Steps['generate'];
+    /** The student's (scrubbed) message; default demoTurnInput's. */
+    text?: string;
   } = {},
 ) {
   const clock = virtualClock();
@@ -96,7 +98,7 @@ function setup(
   const reported: unknown[] = [];
   const recorded: Usage[] = [];
   const env: StepEnv = {
-    input: demoTurnInput,
+    input: o.text === undefined ? demoTurnInput : { ...demoTurnInput, text: o.text },
     deps,
     cancel: cancelSource().token,
     turnId: 'turn_x',
@@ -290,6 +292,55 @@ describe('holdsReply (4.7, lead answer 13)', () => {
     const r = await s.run({ fromFallback: true });
     expect(r).toMatchObject({ held: true });
     expect(types(s.events)).toEqual([]);
+  });
+
+  it('4.8: holds every move of a regulated-subject agent (lead decision)', () => {
+    const moves = [
+      'ask',
+      'hint',
+      'worked_example',
+      'explain',
+      'solution',
+      'check',
+      'redirect',
+      'locked',
+      'ask_teacher',
+    ] as const;
+    for (const subject of ['investing', 'health', 'law'] as const) {
+      for (const move of moves) {
+        expect(holdsReply({ ...at(0.99), agent: { regulatedSubject: subject } }, move)).toBe(true);
+      }
+    }
+    expect(holdsReply({ ...at(0.99), agent: {} }, 'hint')).toBe(false);
+  });
+
+  it('4.8: holds any move when the student asks for a decision (adviceGuard pre-filter)', () => {
+    expect(holdsReply(at(0.99), 'redirect', undefined, false, 'Should I buy this stock?')).toBe(
+      true,
+    );
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'Konsi tablet le lun?')).toBe(true);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'क्या मुझे लोन लेना चाहिए?')).toBe(true);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, 'How do loops work?')).toBe(false);
+    expect(holdsReply(at(0.99), 'hint', undefined, false, '')).toBe(false);
+  });
+
+  it('4.8: the step streams no token for a regulated agent or a decision request', async () => {
+    const advice = 'You should take 500mg now.';
+    const regulated = setup([[say(advice), used]], {
+      decision: { move: 'explain' },
+      ctx: { ...ctx, agent: { ...ctx.agent, regulatedSubject: 'health' } },
+    });
+    expect(await regulated.run()).toMatchObject({ held: true, draft: advice });
+    expect(types(regulated.events)).toEqual([]);
+
+    const asked = setup([[say(advice), used]], {
+      decision: { move: 'redirect' },
+      text: 'What medicine should I take for a headache?',
+    });
+    expect(await asked.run()).toMatchObject({ held: true });
+    const streamed = asked.events.flatMap((e) => (e.type === 'token' ? [e.text] : []));
+    expect(streamed.join('')).not.toContain('500mg');
+    expect(streamed).toEqual([]);
   });
 
   it('no sources event when nothing is cited, or only out-of-range numbers', async () => {

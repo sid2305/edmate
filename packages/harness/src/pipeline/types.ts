@@ -117,6 +117,11 @@ export interface FallbackReplies {
    * absent, empty or failing, the built-in English `askTeacherReplyText` is used.
    */
   askTeacher?(lang: Lang): string;
+  /**
+   * The reply that replaces a redirect reply adviceGuard found giving personal advice (task 4.8).
+   * Optional: when absent, empty or failing, the built-in English `adviceRedirectReplyText`.
+   */
+  redirect?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */

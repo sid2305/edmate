@@ -108,7 +108,9 @@ export function createLockedLeakGuard(): Guard<PostGuardCtx> {
     name: 'lockedLeak',
     phase: 'post',
     async run(text, x): Promise<GuardRun> {
-      if (text === x.lockedReply) return OK;
+      // Its own reply, and the platform's fixed texts (4.8: e.g. adviceGuard's fallback), hold no
+      // teacher material: no index call.
+      if (text === x.lockedReply || x.fixedTexts?.includes(text) === true) return OK;
       if (!(await x.lockedCheck([text]))) return OK;
       return {
         result: { ok: false, action: 'rewrite', text: x.lockedReply, reason: 'locked' },

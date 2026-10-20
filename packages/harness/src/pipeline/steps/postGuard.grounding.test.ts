@@ -134,20 +134,16 @@ const trace = (grounding: { ok: boolean; action?: string }[]) => {
     { name: 'lockedLeak', ok: true },
     { name: 'answerLeak', ok: true },
     { name: 'grounding', ...g },
+    { name: 'adviceGuard', ok: true },
   ];
   return grounding.flatMap(pass);
 };
 
 describe('the post registry (4.7)', () => {
-  it('runs lockedLeak, answerLeak, then grounding, weighted 2, 3 and 4', () => {
-    expect(postGuards.ordered().map((g) => g.name)).toEqual([
-      'lockedLeak',
-      'answerLeak',
-      'grounding',
-    ]);
-    expect(['lockedLeak', 'answerLeak', 'grounding'].map((n) => postGuards.weight(n))).toEqual([
-      2, 3, 4,
-    ]);
+  it('runs lockedLeak, answerLeak, grounding, then adviceGuard (4.8), weighted 2, 3, 4 and 4', () => {
+    const names = ['lockedLeak', 'answerLeak', 'grounding', 'adviceGuard'];
+    expect(postGuards.ordered().map((g) => g.name)).toEqual(names);
+    expect(names.map((n) => postGuards.weight(n))).toEqual([2, 3, 4, 4]);
   });
 });
 
@@ -343,11 +339,13 @@ describe('postGuard: grounding', () => {
 
 describe('postGuard: three model or port calls in one turn (lead answer 1)', () => {
   // A locked check, answerLeak's rewrite and grounding's judge, at realistic scripted delays.
+  // With adviceGuard in the chain (4.8; rules-only weight on this turn, which holds no advice
+  // signal) every slice is a little smaller than with three guards: after a ~330 ms rewrite the
+  // judge gets about 530 ms of its 600 ms timeout. postGuard.advice.test.ts stacks all four.
   it.each([
     { locked: 100, rewrite: 300, judge: 400 },
-    { locked: 120, rewrite: 350, judge: 550 },
-    // Just under the judge's own 600 ms timeout (at 600 it fails closed: see the timeout test).
-    { locked: 140, rewrite: 380, judge: 590 },
+    { locked: 120, rewrite: 330, judge: 520 },
+    { locked: 140, rewrite: 330, judge: 530 },
   ])(
     'locked $locked ms, rewrite $rewrite ms, judge $judge ms: all three used, done inside the step',
     { timeout: 5_000 },
