@@ -47,7 +47,17 @@ Builders run as **at most 1 Opus and 1 Sonnet at once** (the human's decision, 1
 The human picks your own model (the main session); opus is recommended for the lead.
 
 ## 3. Run one task
-1. **Plan:** `planner` writes `docs/tasks/<id>/plan.md` and returns READY or BLOCKED. If BLOCKED, ask the human or pick another task. Set the board to `planning` (`board.py next` warns about a planning task with no `plan.md`). The plan lists every path it touches that matches `risk-paths.txt`, with the reviewers that group needs.
+Safety-path tasks (guardrails, safety/locked evals, prompt packs, access) get a plan review before the
+branch is created, not only after the build: until the pilot gate (13.3) the lead reads `plan.md` with a
+`safety-reviewer` eye before delegating the build; from 13.3 on, `safety-reviewer` itself reviews the plan.
+Fix rounds stay capped at **one per PR**: a HIGH still open after that round becomes a `[deferred <id>]`
+board task, not a second round (step 5).
+1. **Plan:** brief the `planner` with the exact files it should read (spec section, the task's existing
+   code, one or two sibling tasks' handoffs) rather than "read everything"; tell it to skip exhaustive
+   fixture reads (it names the shape it needs, not every example). `planner` writes
+   `docs/tasks/<id>/plan.md` and returns READY or BLOCKED. If BLOCKED, ask the human or pick another
+   task. Set the board to `planning` (`board.py next` warns about a planning task with no `plan.md`). The
+   plan lists every path it touches that matches `risk-paths.txt`, with the reviewers that group needs.
 2. **Build:** after READY, commit `docs/tasks/<id>/plan.md` on `main` first, **then** create the branch and worktree from `main`, so the plan is already in the builder's worktree; the builder never re-adds it. `tdd-guide` (in its own worktree) gets the absolute path of the plan. Set the board to `running --branch m<ms>/<id>-<slug> --model ...`. On build failures, use `build-error-resolver` in the same worktree.
 3. **Review:** run the required reviewers in parallel on the branch:
    - always: `code-reviewer` and `typescript-reviewer`;
@@ -63,7 +73,7 @@ The human picks your own model (the main session); opus is recommended for the l
    - exit 1: go back to step 5 (or run the missing reviewer, or add the `risk: high` decision entry);
    - exit 0: you decide the merge, risky or not. There is no human approval step.
 7. **Merge (PR only):** push the branch, `gh pr create`, wait for CI and the `Merge gate / check` to go green, then `gh pr merge <n> --squash`. The hook re-runs the gate. Never merge a task branch into `main` locally.
-8. **Close:** append the handoff's decisions to `docs/decisions/log.md` word for word (`board.py set <id> done` refuses otherwise), set the board to `done --model ...`, remove the worktree, and commit the board and log on `main` (allowed without asking). Then `git push origin main`; the hook runs the secret scan first.
+8. **Close:** append the handoff's decisions to `docs/decisions/log.md` word for word (`board.py set <id> done` refuses otherwise), set the board to `done --model ...`, remove the worktree. Batch the board/log commit with the next real commit on `main` (the plan commit for the next task, or that task's own merge closeout) rather than pushing it standalone for every status change; push whenever that batched commit is ready. The hook runs the secret scan first.
 
 ## 4. When to involve the human
 - **Ask (AskUserQuestion):** open decisions, BLOCKED plans, a CRITICAL still open after the one fix round, any spec conflict. Never eval-case sign-offs: you sign those yourself. Give a recommendation, not just options. Risky PRs are not asked about: they go through their required reviewers and a `risk: high` log entry, which the human skims.
