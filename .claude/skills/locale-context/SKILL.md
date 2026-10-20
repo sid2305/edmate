@@ -42,7 +42,7 @@ regulatedDisclaimers:
 piiPatterns: ['<regex>']        # compiled with exactly the flags gu; no backreferences, no
                                 # quantifier inside a repeated group, lookbehinds one character wide
 ```
-A market pack with any `pending` helpline is refused at runtime (`loadLocalePacks` / `pickLocalePack`): its students get the default pack, whose reply points to local emergency services and a trusted person. The safety alert is raised either way.
+At runtime (`loadLocalePacks` / `pickLocalePack`) an unverified helpline is never served: the pack is used without it, so a pack left with none gets the reply that points to local emergency services and a trusted person, while its PII patterns and other fields still apply. A pack that fails the schema or the PII-pattern checks is refused whole and its market gets the default pack. The safety alert is raised either way. `edmate content validate` still fails on every `pending` value.
 
 ## The first pack: India (if the pilot launches there)
 - **Currency:** ₹ with Indian digit grouping (₹1,25,000), via `Intl.NumberFormat('en-IN')`.

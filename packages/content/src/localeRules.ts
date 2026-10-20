@@ -85,21 +85,30 @@ function compilesWithGu(source: string): boolean {
   }
 }
 
-/** Every PII pattern compiles with exactly the flags the guard uses ('gu'), through the guard's own compiler. */
-export const piiPatternsCompileWithGu: LocaleRule = (packs) =>
-  each(packs, (p) =>
-    p.piiPatterns.flatMap((source, i) =>
-      compilesWithGu(source) ? [] : [`piiPatterns[${i}] does not compile with flags gu`],
-    ),
+/** The patterns of `pack` that do not compile with exactly 'gu' (the guard's own compiler), by position. */
+function guIssues(p: LocalePack): string[] {
+  return p.piiPatterns.flatMap((source, i) =>
+    compilesWithGu(source) ? [] : [`piiPatterns[${i}] does not compile with flags gu`],
   );
+}
+
+/** The patterns of `pack` that fail the safe-regex check (structure first, then a timing probe). */
+function safeRegexIssues(p: LocalePack): string[] {
+  return p.piiPatterns.flatMap((source, i) =>
+    checkSafeRegex(source).map((issue) => `piiPatterns[${i}] ${issue}`),
+  );
+}
+
+/** Every PII-pattern problem of one pack (gu compile, then safe-regex); empty when it may be used. */
+export function piiPatternIssues(pack: LocalePack): string[] {
+  return [...guIssues(pack), ...safeRegexIssues(pack)];
+}
+
+/** Every PII pattern compiles with exactly the flags the guard uses ('gu'), through the guard's own compiler. */
+export const piiPatternsCompileWithGu: LocaleRule = (packs) => each(packs, guIssues);
 
 /** Every PII pattern passes the safe-regex check (structure first, then a timing probe). */
-export const piiPatternsSafeRegex: LocaleRule = (packs) =>
-  each(packs, (p) =>
-    p.piiPatterns.flatMap((source, i) =>
-      checkSafeRegex(source).map((issue) => `piiPatterns[${i}] ${issue}`),
-    ),
-  );
+export const piiPatternsSafeRegex: LocaleRule = (packs) => each(packs, safeRegexIssues);
 
 export const LOCALE_RULES: readonly LocaleRule[] = [
   defaultPackPresent,

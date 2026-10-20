@@ -1,7 +1,8 @@
 # The India locale pack (task 3.10). Every "pending" value below waits for a person to check it
 # (see docs/tasks/3.10/handoff.md, "Human inputs needed"). Until the helpline is verified, the
-# runtime refuses this pack and India students get the default pack's country-neutral wording;
-# `edmate content validate content/locales` fails on purpose until then.
+# runtime serves this pack without it: a distress reply gives the country-neutral line (local
+# emergency services, someone you trust), and the PII patterns below are still used.
+# `edmate content validate content/locales` fails on purpose until a person signs off.
 # Agents must never fill in a helpline number, contact or reviewer here: only a person may.
 market: IN
 languages: [en] # the pilot teaches and replies in English only (18 Oct 2026; crisis replies too, B-14)

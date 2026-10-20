@@ -230,8 +230,14 @@ export function structuralIssues(source: string): string[] {
 export interface TimingOptions {
   /** Milliseconds now; defaults to `performance.now`. Tests inject a fake clock. */
   now?: () => number;
-  /** Total time allowed across every probe input. Default 100 ms. */
+  /** Total time allowed across every probe input, per attempt. Default 100 ms. */
   budgetMs?: number;
+  /**
+   * How many attempts must all go over the budget before the pattern is flagged. Default 3: a
+   * slow pattern is slow every time, while a loaded machine (a parallel test run, a GC pause)
+   * stalls one attempt, not three.
+   */
+  attempts?: number;
 }
 
 /** Characters a PII pattern is likely to loop on, alone and in pairs. */
@@ -249,19 +255,28 @@ function probeInputs(): string[] {
   );
 }
 
+/** One attempt: true when every probe input finished within the budget (stops at the first overrun). */
+function attemptInTime(re: RegExp, now: () => number, budgetMs: number): boolean {
+  const start = now();
+  for (const input of probeInputs()) {
+    input.replace(re, ''); // visits every match, as the scrub does
+    if (now() - start > budgetMs) return false;
+  }
+  return true;
+}
+
 /**
- * Runs `re` over the probe inputs, shortest first, and returns an issue as soon as the total time
- * passes the budget, or undefined when every probe finishes in time.
+ * Runs `re` over the probe inputs, shortest first. Returns an issue when every attempt goes over
+ * the budget, or undefined as soon as one attempt finishes in time.
  */
 export function probeTiming(re: RegExp, opts: TimingOptions = {}): string | undefined {
   const now = opts.now ?? (() => performance.now());
   const budgetMs = opts.budgetMs ?? 100;
-  const start = now();
-  for (const input of probeInputs()) {
-    input.replace(re, ''); // visits every match, as the scrub does
-    if (now() - start > budgetMs) return `took longer than ${budgetMs} ms on a probe input`;
+  const attempts = opts.attempts ?? 3;
+  for (let i = 0; i < attempts; i++) {
+    if (attemptInTime(re, now, budgetMs)) return undefined;
   }
-  return undefined;
+  return `took longer than ${budgetMs} ms on a probe input`;
 }
 
 /** Every safe-regex issue with `source`; the timing probe runs only when the structure is clean. */

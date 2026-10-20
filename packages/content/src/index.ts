@@ -30,16 +30,20 @@ export {
   localeLanguages,
   type LocalePacks,
   type LocaleRule,
+  piiPatternIssues,
   piiPatternsCompileWithGu,
   piiPatternsSafeRegex,
   unverifiedHelplines,
 } from './localeRules.js';
 export {
   DEFAULT_LOCALE_MARKET,
+  type DroppedHelpline,
+  type HelplineDropReason,
   type LoadedLocalePacks,
   loadLocalePacks,
   LocalePackError,
   pickLocalePack,
+  withVerifiedHelplines,
 } from './localePacks.js';
 export {
   checkSafeRegex,

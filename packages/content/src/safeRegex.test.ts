@@ -77,14 +77,31 @@ describe('probeTiming', () => {
     );
   });
 
-  it('stops at the first slow probe (later, longer inputs never run)', () => {
+  it('each attempt stops at the first slow probe (later, longer inputs never run)', () => {
     let calls = 0;
     const now = () => {
       calls++;
       return calls * 1_000;
     };
-    probeTiming(new RegExp('a', 'gu'), { now, budgetMs: 100 });
+    probeTiming(new RegExp('a', 'gu'), { now, budgetMs: 100, attempts: 1 });
     expect(calls).toBe(2);
+    calls = 0;
+    probeTiming(new RegExp('a', 'gu'), { now, budgetMs: 100 });
+    expect(calls).toBe(6); // three attempts by default
+  });
+
+  it('one stalled attempt (a loaded machine) is not enough to flag a pattern', () => {
+    // The clock jumps 1 s once, during the first attempt, then stands still.
+    let calls = 0;
+    const now = () => (++calls >= 2 ? 1_000 : 0);
+    expect(probeTiming(new RegExp('a', 'gu'), { now, budgetMs: 100 })).toBeUndefined();
+    expect(calls).toBeGreaterThan(3); // the second attempt ran every input
+    // Stalled on every attempt, it is flagged.
+    let t = 0;
+    const always = () => (t += 1_000);
+    expect(probeTiming(new RegExp('a', 'gu'), { now: always, budgetMs: 100 })).toBe(
+      'took longer than 100 ms on a probe input',
+    );
   });
 
   it('the real India patterns pass on the real clock', () => {

@@ -1,5 +1,5 @@
-# The default locale pack (task 3.10). It serves every market that has no pack of its own, and
-# every market whose helplines a person has not yet verified. Deliberately generic: no helpline,
+# The default locale pack (task 3.10). It serves every market that has no usable pack of its own
+# (none, or one refused for a bad schema or PII pattern). Deliberately generic: no helpline,
 # no law, no contact. With no helplines, a distress reply tells the student to contact local
 # emergency services if they are in danger now and to reach out to someone they trust (the
 # frame prompt pack's no-helplines line), and the safety alert is raised as for any market.
