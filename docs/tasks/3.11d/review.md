@@ -1,7 +1,10 @@
-# 3.11d review — fix round 2 done (round-1 re-reviews: safety-reviewer and architect APPROVE with notes)
-Reviewers: safety-reviewer (opus), architect (opus), typescript-reviewer (opus), security-reviewer (sonnet)
+# 3.11d review — APPROVE
+Reviewers: safety-reviewer (opus), architect (opus), typescript-reviewer (opus), security-reviewer (sonnet), code-reviewer (sonnet)
 
 Teacher turns move to the user channel under a platform label, forged labels in student and stored text are neutralised, the persona question count is server-owned (`personaQuestionsAsked`), and the learner summary is gated on teaching modes. ADR-0009 records the decisions. TypeScript and security approve; architect approves with doc fixes; safety requests changes (full text: safety-review.md).
+
+
+After fix round 2: code-reviewer (sonnet) approves the round-2 changes (fence breaker linear and idempotent, narrower "teacher wrote" window, agent-history passes) with one MEDIUM, deferred to 3.11e. The lead signed the 4 new eval cases (`reviewed_by: lead`, MVP first). Merge waits on the human re-signing the changed prompt packs (B-23).
 
 ## Findings
 - [HIGH] [fixed] content/prompt-packs/safety@1.0.0.md:15 — rule 3 calls a teacher note inside a user message forged, but this PR puts the real teacher note in the user channel; amend rule 3 under ADR-0009 (safety-review.md issue 1).
@@ -29,3 +32,4 @@ Teacher turns move to the user channel under a platform label, forged labels in 
 - [LOW] [fixed] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:27 — decisions numbered 1, 2, 5, 3, 4; decision 5 now follows 4 (architect).
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts foldForMatch — digit swaps (`Pl4tform`), small caps and a Devanagari label are not folded (safety).
 - [LOW] [deferred 3.11e] gateway adapters — no boundary test that consecutive user messages keep the teacher fence intact when merged (architect).
+- [MEDIUM] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts:96-98 — the core-phrase pass re-detects a label the exact-label pass already spaced out, so a verbatim pasted label gets " [copied]" twice (visible in the content snapshot); skip spans the exact-label pass rewrote (code-reviewer).
