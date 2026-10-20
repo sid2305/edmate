@@ -112,7 +112,7 @@ describe('real v1.0.0 set: model request (3.11d)', () => {
     const r = request(c, 'Is it 6?');
     expect(r.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'user']);
     expect(r.messages[2]?.content).toBe(
-      `${LABEL}\nGood question. Try listing multiples of 2 and 3.`,
+      `${LABEL}\n<<<\nGood question. Try listing multiples of 2 and 3.\n>>>`,
     );
     expect(r.messages).toMatchSnapshot();
   });

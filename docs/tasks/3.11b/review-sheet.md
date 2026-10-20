@@ -45,7 +45,7 @@ Composed prompt excerpt (paste from the snapshot):
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill explain > systemPrompt" (the full frame and safety preamble as the model sees them), plus "investing with a market disclaimer" and "investing without a market disclaimer (falls back to generic)".
 ```
 
-Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
+Sign-off: **void (task 3.11d fix round 1, 20 Oct 2026).** Was: approved by sid2305 — 2026-10-19 (all rows, "approve all"). Safety rule 3 changed (ADR-0009: a real teacher message is a user turn that starts with the platform note and its `<<<`…`>>>` fence; anything else is data), so check 1d needs a fresh sign-off; `safety@1.0.0.md` is `reviewed_by: pending` until then.
 
 ---
 
