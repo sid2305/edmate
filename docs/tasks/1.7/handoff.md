@@ -299,3 +299,72 @@ Worktree: `.claude/worktrees/agent-adec93b092b6d8089`
   Why: a neutral screen that hints at no cut-off.
 - Decided: the page shows the notice version as text; the form never carries it.
   Why: the server records the version it showed, never one the browser sends.
+
+## Fix round 1 (security-reviewer, HIGH)
+
+A blocked under-age erase (a foreign row the store doesn't own, e.g. a platform audit row) rolled
+back the *whole* transaction, including the sign-in rows we'd already deleted, leaving the account
+`clear`-able again from any already-signed-in device or a fresh sign-in — and nothing was logged.
+
+- `recordAgeAnswer` now runs the `users` row delete in a savepoint (`tx.transaction`, a real
+  Postgres `SAVEPOINT`). The sign-in rows (sessions, accounts, verification token, consents) are
+  deleted first, outside the savepoint, so they're gone either way. If the savepoint fails on a
+  foreign-key violation, the account stays but is marked `age_blocked_at` (new column, migration
+  `0015_age_blocked.sql`, additive only; 0014 untouched) and `recordAgeAnswer` returns
+  `erase_blocked` instead of `under_age`. Any other failure still rolls back everything and
+  rethrows (new integration test with a Postgres trigger forces this path).
+- `learnerStatus` returns `'under_age'` forever once `age_blocked_at` is set — the same status as a
+  completed erase, so every existing clearance check already fails for it with no new branching
+  needed at the call sites.
+- `cleared()` (`apps/web/src/auth/guard.ts`) now fails `under_age` even at `clearance: 'none'`, so
+  the age gate page itself refuses a session from before the block, not just the agent routes.
+- The `signIn` callback (`apps/web/src/auth/config.ts`) refuses sign-in outright for a blocked
+  user, by account id and — since a blocked erase also deletes the linked `auth_accounts` row — by
+  email as a fallback. `isAgeBlocked` fails open (`false`) only when the standing can't even be
+  read (not a student, or the user is gone): those are different problems the caller already
+  handles.
+- The web layer (`apps/web/src/auth/age.ts`) treats `erase_blocked` exactly like `under_age`
+  (closes the browser, sets the block cookie) and logs exactly one line with no personal detail —
+  an opaque user id only, never an email, name or birth year.
+- Tests: a db integration test drives a real blocking foreign row end to end (erase_blocked →
+  sign-in rows gone → `age_blocked_at` set → a second answer is `invalid` → `learnerStatus` is
+  `under_age`), plus a second integration test confirming a genuinely unexpected failure (not a
+  foreign-key violation) still rolls back the whole transaction. Web tests cover the single log
+  line, a session created on another device/browser after the block, and the `signIn` callback
+  refusing a fresh Google sign-in from any browser once blocked. `apps/web/test/memory-identity.ts`
+  (the in-memory fake) was brought in line with the real store's `erase_blocked` behaviour.
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web... --filter=@edmate/db...
+  --force --concurrency=1` → all green, 100% coverage on `src/identity/**` and `src/auth/**`.
+  Secret scan `--all` → clean.
+
+### Also fixed in this round (CI on PR #71, not part of the HIGH finding)
+- `packages/harness/src/pipeline/steps/route.accuracy.test.ts`: dropped an eslint-disable comment
+  for `no-await-in-loop` that no longer fires (unused-directive lint error).
+- `next build` failed on `/welcome/age` two different ways once the age gate reaches
+  `@edmate/content`'s `node:worker_threads` worker (`safeRegexGuard.ts`, task 3.10):
+  1. `fileURLToPath(new URL('./safeRegexWorkerEntry.js', import.meta.url))` ran at module load.
+     Next's build-time "collect page data" step evaluates the module in a context where
+     `import.meta.url` comes back as a cross-realm `URL`, and `fileURLToPath`'s `instanceof` check
+     rejects it (`ERR_INVALID_ARG_TYPE`) even though it reads as a URL. Fixed by resolving the
+     worker's URL and path lazily, on first real use, well after module load (`safeRegexGuard.ts`).
+  2. With that fixed, Turbopack (`next build`'s default bundler since Next 16) still failed: it
+     statically recognises `new Worker(new URL(...))` as a browser "web worker" asset and tries to
+     bundle it with this workspace's own Vite (the nearest `vite`-family config it can find is
+     `apps/web/vitest.config.ts`), which then fails on lightningcss's native addon
+     (`lightningcss-darwin-arm64.node`, "non-ecmascript placeable asset"). This worker is a plain
+     Node thread, never a browser one, so there is nothing to fix in the pattern itself. Confirmed
+     with `next build --webpack`: a clean build. `apps/web/package.json`'s `build` script now runs
+     `next build --webpack` (see `next.config.ts` for the full note); this is a bundler choice, not
+     a tech-stack change.
+
+### Decisions
+- **risk: high** — fix round 1 touches `apps/web/src/auth/**` and `packages/db/src/identity/**`
+  again (security group; security-reviewer required), and adds a migration.
+
+### 20 Oct 2026 · 1.7 blocked erase shuts out every session, not just the request that tried it · decided by tdd-guide
+Decided: a blocked erase is a new learner standing (`under_age` via `age_blocked_at`), not a retry
+state — it fails every clearance forever, from any browser or device, until staff clear it (12.1);
+the `signIn` callback refuses it outright, including a fresh sign-in with no cookie of its own.
+Why: the original gap was exactly this — a device or sign-in with no block cookie could still
+re-answer the gate. Marking the account itself, not the browser, closes that for every path in.
+risk: high

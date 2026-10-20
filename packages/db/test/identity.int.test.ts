@@ -762,17 +762,71 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       await expect(aged.learnerStatus(u.id)).rejects.toMatchObject({ kind: 'not_found' });
     });
 
-    it('rolls the erase back if any part of it fails, and stores no answer', async () => {
+    it('a blocking foreign row: the sign-in rows go, the account stays blocked forever (fix round 1)', async () => {
       const u = await student();
-      // A row the erase does not own blocks deleting the user (foreign key): nothing changes.
+      // A row the erase does not own blocks deleting the user (foreign key), but only that delete.
       await raw.query(
         `insert into platform_audit_log (id, actor, actor_role, action, target, subject_user_id)
            values ($1, 'operator', 'operator', 'test', 'user', $2)`,
         [`pal_${(n += 1)}`, u.id],
       );
+      await identity.linkAccount({
+        userId: u.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: `g-${(n += 1)}`,
+      });
       await identity.createSession(token('kept'), u.id, later());
-      // A known code (never a raw driver error): the web treats it as a closed account.
-      expect(await kindOf(() => answer(u.id, 2014))).toBe('not_found');
+      await identity.createVerificationToken({
+        identifier: u.email ?? '',
+        token: token('kept-link'),
+        expires: later(),
+      });
+
+      expect(await answer(u.id, 2014)).toEqual({ status: 'erase_blocked' });
+
+      // The user row stays (no birth year ever stored), but every sign-in row is gone.
+      expect(await userRow(u.id)).toEqual({
+        market: 'global',
+        birth_year: null,
+        age_confirmed_at: null,
+      });
+      for (const [table, col, value] of [
+        ['auth_accounts', 'user_id', u.id],
+        ['auth_sessions', 'user_id', u.id],
+        ['consents', 'user_id', u.id],
+        ['auth_verification_tokens', 'identifier', u.email],
+      ] as const) {
+        const { rowCount } = await raw.query(`select 1 from ${table} where ${col} = $1`, [value]);
+        expect(rowCount, table).toBe(0);
+      }
+      const { rows } = await raw.query<{ age_blocked_at: Date | null }>(
+        `select age_blocked_at from users where id = $1`,
+        [u.id],
+      );
+      expect(rows[0]?.age_blocked_at).not.toBeNull();
+
+      // Blocked forever: no second answer from this browser or any other, and the standing shows.
+      expect(await kindOf(() => answer(u.id, 1990))).toBe('invalid');
+      expect(await aged.learnerStatus(u.id)).toBe('under_age');
+    });
+
+    it('an unexpected failure on the erase rolls back everything (the savepoint is not a shield for it)', async () => {
+      const u = await student();
+      await identity.createSession(token('unexpected'), u.id, later());
+      // Not a constraint violation (no RepositoryError translation): the savepoint's own catch
+      // rethrows it, and that aborts the whole answer, sign-in rows included.
+      await raw.query(`create or replace function edmate_test_fail() returns trigger as $$
+        begin raise exception 'erase down'; end $$ language plpgsql`);
+      await raw.query(
+        `create trigger edmate_test_fail before delete on users for each row execute function edmate_test_fail()`,
+      );
+      try {
+        const err = await answer(u.id, 2014).catch((e: unknown) => e);
+        expectScrubbed(err, 'identity.recordAgeAnswer', [u.id, 'erase down']);
+      } finally {
+        await raw.query(`drop trigger edmate_test_fail on users`);
+      }
       expect(await userRow(u.id)).toEqual({
         market: 'global',
         birth_year: null,

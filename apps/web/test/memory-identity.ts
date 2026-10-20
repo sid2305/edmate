@@ -42,9 +42,12 @@ export interface MemoryIdentity extends IdentityStore {
   linked: unknown[];
   /**
    * When true, an under-age erase is blocked (as a row the store doesn't own would block it):
-   * `recordAgeAnswer` throws `not_found` and changes nothing (1.7 carry-forward).
+   * `recordAgeAnswer` deletes the sign-in rows and consents but keeps the user, marked blocked
+   * (`ageBlocked`), and returns `erase_blocked` (1.7 fix round 1).
    */
   blockErase: boolean;
+  /** User ids an under-age erase couldn't finish (fix round 1): blocked forever. */
+  ageBlocked: Set<string>;
 }
 
 export function memoryIdentity(
@@ -60,6 +63,7 @@ export function memoryIdentity(
   const consents: MemoryConsent[] = [];
   const created: unknown[] = [];
   const linked: unknown[] = [];
+  const ageBlocked = new Set<string>();
   let next = 0;
   const live = (token: string) => {
     const s = sessions.get(token);
@@ -78,6 +82,7 @@ export function memoryIdentity(
 
   const self: MemoryIdentity = {
     blockErase: false,
+    ageBlocked,
     users,
     accounts,
     sessions,
@@ -174,7 +179,9 @@ export function memoryIdentity(
       const u = users.get(userId);
       if (!u) throw await repoError('not_found', 'recordAgeAnswer');
       if (u.role !== 'student') throw await repoError('scope', 'recordAgeAnswer');
-      if (ages.has(userId)) throw await repoError('invalid', 'recordAgeAnswer');
+      if (ages.has(userId) || ageBlocked.has(userId)) {
+        throw await repoError('invalid', 'recordAgeAnswer');
+      }
       if (birthYear > now().getUTCFullYear()) throw await repoError('invalid', 'recordAgeAnswer');
       const { ageStatus, defaultPolicy } = await ageRule();
       const status = ageStatus({
@@ -184,15 +191,20 @@ export function memoryIdentity(
         now: now(),
       });
       if (status === 'under_age') {
-        if (self.blockErase) throw await repoError('not_found', 'recordAgeAnswer');
-        // Erase the user and every sign-in row, as the real store does in one transaction.
-        users.delete(userId);
+        // Sign-in rows and consents belong to this store: deleted whether or not the user row
+        // itself can be erased (fix round 1).
         for (const [k, id] of accounts) if (id === userId) accounts.delete(k);
         for (const [t, s] of sessions) if (s.userId === userId) sessions.delete(t);
         if (u.email) links.delete(u.email);
         for (let i = consents.length - 1; i >= 0; i -= 1) {
           if (consents[i]?.userId === userId) consents.splice(i, 1);
         }
+        if (self.blockErase) {
+          // A row the store doesn't own blocks only the user delete: it stays, blocked forever.
+          ageBlocked.add(userId);
+          return { status: 'erase_blocked' };
+        }
+        users.delete(userId);
         return { status };
       }
       ages.set(userId, { birthYear, market });
@@ -209,6 +221,7 @@ export function memoryIdentity(
       const u = users.get(userId);
       if (!u) throw await repoError('not_found', 'learnerStatus');
       if (u.role !== 'student') throw await repoError('scope', 'learnerStatus');
+      if (ageBlocked.has(userId)) return 'under_age';
       const a = ages.get(userId);
       if (!a) return 'age_needed';
       const { ageStatus, defaultPolicy } = await ageRule();

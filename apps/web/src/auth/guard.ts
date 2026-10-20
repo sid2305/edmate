@@ -95,8 +95,13 @@ export async function resolvePrincipal(
   }
 }
 
-/** Whether a standing meets a clearance; `null` (not a student) always does. */
+/**
+ * Whether a standing meets a clearance; `null` (not a student) always does. `under_age` (fix
+ * round 1: a blocked erase) fails every clearance, including `none` (the age gate page itself),
+ * so a live session from before the block can't be used to re-answer or reach anything.
+ */
 export function cleared(status: AgeStatus | null, clearance: Clearance): boolean {
+  if (status === 'under_age') return false;
   if (status === null || clearance === 'none') return true;
   if (status === 'age_needed') return false;
   return clearance === 'age' || status === 'clear';

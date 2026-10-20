@@ -152,6 +152,8 @@ export async function submitAgeAnswer(input: unknown, deps: AgeGateDeps): Promis
   if (!resolved) return { error: errorBody('unauthorized', 'Sign in first.') };
   const { principal, status } = resolved;
   if (status === null) return { error: errorBody('forbidden', 'This page is for learners.') };
+  // Blocked forever (fix round 1): a session from before the block must not get another try.
+  if (status === 'under_age') return close(deps);
   // Answered already (another tab): the standing, and nothing written.
   if (status !== 'age_needed') return { status };
 
@@ -170,6 +172,12 @@ export async function submitAgeAnswer(input: unknown, deps: AgeGateDeps): Promis
       birthYear,
       noticeVersion: deps.content.notice(market).version,
     });
+    if (result.status === 'erase_blocked') {
+      // One non-PII line for staff (12.1): an opaque user id, never an email, name or birth year.
+      const log = deps.log ?? ((line: string) => console.error(line));
+      log(`[auth] age gate: erase blocked, account held for user ${principal.userId}`);
+      return close(deps);
+    }
     return result.status === 'under_age' ? close(deps) : { status: result.status };
   } catch (error) {
     // The account is gone, or its erase was blocked: either way this browser is closed.
@@ -198,5 +206,7 @@ export async function ageGateView(
   if (!resolved) return { state: 'sign_in' };
   if (resolved.status === null) return { state: 'not_student' };
   if (resolved.status === 'age_needed') return { state: 'ask', markets: deps.content.markets };
+  // Blocked forever (fix round 1): shown the same as a closed browser, never re-answerable.
+  if (resolved.status === 'under_age') return { state: 'closed' };
   return { state: resolved.status };
 }

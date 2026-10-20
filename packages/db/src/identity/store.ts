@@ -117,18 +117,22 @@ export interface IdentityStore {
    */
   grantRole(input: GrantRoleInput): Promise<IdentityUser>;
   /**
-   * The age gate (1.7, README rule 12), once per student: a second answer is `invalid`, a
-   * non-student is `scope`. Under the market's minimum it erases the user and its sign-in rows in
-   * one transaction and stores nothing (`under_age`). Otherwise it stores the birth year, market
-   * and time, and a `privacy_notice` consent at `noticeVersion`, granted by `self`. With the
-   * `noticeVersion` option, a version other than the one shown for the market is `invalid`. An
-   * erase blocked by a row the store does not own is `not_found`, with nothing changed.
+   * The age gate (1.7, README rule 12), once per student: a second answer is `invalid` (also once
+   * `age_blocked_at` is set), a non-student is `scope`. Under the market's minimum it deletes the
+   * sign-in rows and any consent, then the user, in one transaction (`under_age`). When a row the
+   * store does not own blocks only the user delete (fix round 1), the sign-in rows stay deleted,
+   * the account stays with `age_blocked_at` set, and the status is `erase_blocked`. Otherwise it
+   * stores the birth year, market and time, and a `privacy_notice` consent at `noticeVersion`,
+   * granted by `self`. With the `noticeVersion` option, a version other than the one shown for the
+   * market is `invalid`.
    */
   recordAgeAnswer(input: AgeAnswer): Promise<{ status: AgeAnswerStatus }>;
   /**
-   * A learner's standing, read fresh: `age_needed` before the answer, `parent_needed` for 13-17
-   * in a market that requires consent until a live parental consent (granted by `parent`, not
-   * withdrawn), else `clear`. An unknown user is `not_found`; a teacher or staff user is `scope`.
+   * A learner's standing, read fresh: `under_age` once `age_blocked_at` is set (fix round 1: an
+   * under-age erase that a foreign row blocked), `age_needed` before the answer, `parent_needed`
+   * for 13-17 in a market that requires consent until a live parental consent (granted by
+   * `parent`, not withdrawn), else `clear`. An unknown user is `not_found`; a teacher or staff
+   * user is `scope`.
    */
   learnerStatus(userId: string): Promise<AgeStatus>;
 }
@@ -426,13 +430,22 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
       return db.transaction(async (tx) => {
         // Locked, so of two concurrent answers the second sees the first.
         const [user] = await tx
-          .select({ role: users.role, email: users.email, birthYear: users.birthYear })
+          .select({
+            role: users.role,
+            email: users.email,
+            birthYear: users.birthYear,
+            ageBlockedAt: users.ageBlockedAt,
+          })
           .from(users)
           .where(eq(users.id, a.userId))
           .for('update');
         if (!user) throw new RepositoryError('not_found', method);
         if (user.role !== 'student') throw new RepositoryError('scope', method);
-        if (user.birthYear !== null) throw new RepositoryError('invalid', method);
+        // Already answered: a stored birth year (cleared), or a blocked erase (fix round 1) —
+        // either way a second answer must not be taken, from this browser or any other.
+        if (user.birthYear !== null || user.ageBlockedAt !== null) {
+          throw new RepositoryError('invalid', method);
+        }
         const status = ageStatus({
           birthYear: a.birthYear,
           policy: agePolicy(a.market),
@@ -440,8 +453,8 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
           now: now(),
         });
         if (status === 'under_age') {
-          // Erase at once (README rule 10, 12): the sign-in rows, any consent, then the user.
-          // A row this store does not own (e.g. an audit row) makes the whole erase fail.
+          // Erase at once (README rule 10, 12): the sign-in rows and any consent belong to this
+          // store, so they are deleted whether or not the account itself can be erased.
           await tx.delete(authSessions).where(eq(authSessions.userId, a.userId));
           await tx.delete(authAccounts).where(eq(authAccounts.userId, a.userId));
           if (user.email !== null) {
@@ -450,11 +463,20 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
               .where(eq(authVerificationTokens.identifier, user.email));
           }
           await tx.delete(consents).where(eq(consents.userId, a.userId));
-          // A row the store does not own still pointing at the user (a foreign key) blocks the
-          // erase: it comes back as `not_found` (the account can't be kept open) and the whole
-          // transaction rolls back. The web closes the session; staff erase the account (12.1).
-          await translateWrite(method, () => tx.delete(users).where(eq(users.id, a.userId)));
-          return { status };
+          // The user row, in a savepoint (fix round 1): a row the store does not own still
+          // pointing at the user (a foreign key) blocks only this delete, not the sign-in rows
+          // already removed above. The account then stays, marked `age_blocked_at`, so no other
+          // device or fresh sign-in can ever clear the gate for it; staff erase it (12.1).
+          try {
+            await tx.transaction((sp) =>
+              translateWrite(method, () => sp.delete(users).where(eq(users.id, a.userId))),
+            );
+            return { status };
+          } catch (err) {
+            if (!(err instanceof RepositoryError) || err.kind !== 'not_found') throw err;
+            await tx.update(users).set({ ageBlockedAt: now() }).where(eq(users.id, a.userId));
+            return { status: 'erase_blocked' as const };
+          }
         }
         await tx
           .update(users)
@@ -476,13 +498,20 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
       const method = 'identity.learnerStatus';
       const id = parseArg(IdSchema, userId, method);
       const [user] = await db
-        .select({ role: users.role, market: users.market, birthYear: users.birthYear })
+        .select({
+          role: users.role,
+          market: users.market,
+          birthYear: users.birthYear,
+          ageBlockedAt: users.ageBlockedAt,
+        })
         .from(users)
         .where(eq(users.id, id))
         .limit(1);
       if (!user) throw new RepositoryError('not_found', method);
       // The age gate is for students; teacher and staff age checks come with vetting.
       if (user.role !== 'student') throw new RepositoryError('scope', method);
+      // A blocked erase (fix round 1): under-age forever, whatever the stored birth year (none).
+      if (user.ageBlockedAt !== null) return 'under_age';
       if (user.birthYear === null) return 'age_needed';
       const status = ageStatus({
         birthYear: user.birthYear,

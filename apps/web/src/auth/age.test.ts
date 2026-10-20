@@ -160,7 +160,7 @@ describe('submitAgeAnswer', () => {
     expect(t.log).toEqual([]);
   });
 
-  it('an erase the store could not finish: closed the same way; the account stays for staff', async () => {
+  it('an erase the store could not finish: closed the same way; the account stays for staff, logged once with no detail', async () => {
     const t = await setup();
     t.identity.blockErase = true;
     expect(await submitAgeAnswer({ market: 'IN', birthYear: '2015' }, t.deps)).toEqual({
@@ -172,6 +172,31 @@ describe('submitAgeAnswer', () => {
     expect(t.identity.sessions.size).toBe(0);
     expect(t.jar.values.get(BLOCK)).toBe('1');
     expect(t.jar.values.has(SESSION)).toBe(false);
+    // One line, an opaque user id only: no email, name or birth year.
+    expect(t.log).toEqual([`[auth] age gate: erase blocked, account held for user ${t.user.id}`]);
+    expect(t.log.join(' ')).not.toContain(t.user.email ?? '\u0000');
+    expect(t.log.join(' ')).not.toContain('2015');
+  });
+
+  it('fix round 1: blocked forever, a session created afterwards (any browser) is also shut out', async () => {
+    const t = await setup();
+    t.identity.blockErase = true;
+    expect(await submitAgeAnswer({ market: 'IN', birthYear: '2015' }, t.deps)).toEqual({
+      status: 'closed',
+    });
+    expect(await t.identity.learnerStatus(t.user.id)).toBe('under_age');
+
+    // Any later session for this user (another device, or a sign-in a composition root allowed
+    // through some other path) resolves to `under_age`, which fails every clearance.
+    const otherSid = 'other-sid'.padEnd(32, '1');
+    await t.identity.createSession(otherSid, t.user.id, new Date(NOW.getTime() + 86_400_000));
+    const otherJar = jar({ [SESSION]: otherSid });
+    const otherDeps: AgeGateDeps = { ...t.deps, cookies: otherJar.cookies };
+    expect(await ageGateView(otherDeps)).toEqual({ state: 'closed' });
+    expect(await submitAgeAnswer({ market: 'IN', birthYear: '1990' }, otherDeps)).toEqual({
+      status: 'closed',
+    });
+    expect(t.identity.ages.size).toBe(0);
   });
 
   it('a session delete that fails still closes the browser and is logged without detail', async () => {
@@ -184,7 +209,10 @@ describe('submitAgeAnswer', () => {
       status: 'closed',
     });
     expect(t.jar.values.get(BLOCK)).toBe('1');
-    expect(t.log).toEqual(['[auth] age gate: session delete failed Error']);
+    expect(t.log).toEqual([
+      `[auth] age gate: erase blocked, account held for user ${t.user.id}`,
+      '[auth] age gate: session delete failed Error',
+    ]);
   });
 
   it('with no logger, a failed session delete goes to console.error by name only', async () => {
@@ -246,6 +274,16 @@ describe('submitAgeAnswer', () => {
       });
     }
     expect(t.identity.ages.size + t.identity.consents.length).toBe(0);
+  });
+
+  it('the account vanished mid-answer (not_found): closed, same as a normal erase', async () => {
+    const t = await setup();
+    t.identity.recordAgeAnswer = async () => {
+      throw new RepositoryError('not_found', 'identity.recordAgeAnswer');
+    };
+    expect(await submitAgeAnswer({ market: 'IN', birthYear: '2015' }, t.deps)).toEqual({
+      status: 'closed',
+    });
   });
 
   it('a store refusal (invalid) is validation, and nothing is erased', async () => {

@@ -69,22 +69,23 @@ function setup() {
     }),
   );
   const jar = new Jar();
-  async function call(method: 'GET' | 'POST', path: string, form?: Record<string, string>) {
-    const headers: Record<string, string> = { cookie: jar.header() };
-    if (form) headers['content-type'] = 'application/x-www-form-urlencoded';
-    const req = new NextRequest(`${ORIGIN}${path}`, {
-      method,
-      headers,
-      ...(form ? { body: new URLSearchParams(form).toString() } : {}),
-    });
-    const res = await (method === 'GET' ? handlers.GET(req) : handlers.POST(req));
-    jar.take(res);
-    return res;
-  }
-  async function signIn(): Promise<Response> {
-    const csrf = await call('GET', '/api/auth/csrf');
+  /** Signs in on a given browser (jar); `signIn()` below is this on the one `t.jar` keeps. */
+  async function signInOn(j: Jar): Promise<Response> {
+    async function c(method: 'GET' | 'POST', path: string, form?: Record<string, string>) {
+      const headers: Record<string, string> = { cookie: j.header() };
+      if (form) headers['content-type'] = 'application/x-www-form-urlencoded';
+      const req = new NextRequest(`${ORIGIN}${path}`, {
+        method,
+        headers,
+        ...(form ? { body: new URLSearchParams(form).toString() } : {}),
+      });
+      const res = await (method === 'GET' ? handlers.GET(req) : handlers.POST(req));
+      j.take(res);
+      return res;
+    }
+    const csrf = await c('GET', '/api/auth/csrf');
     const { csrfToken } = (await csrf.json()) as { csrfToken: string };
-    const start = await call('POST', '/api/auth/signin/google', {
+    const start = await c('POST', '/api/auth/signin/google', {
       csrfToken,
       callbackUrl: `${ORIGIN}/`,
     });
@@ -92,11 +93,9 @@ function setup() {
     const nonce = authorize.searchParams.get('nonce');
     if (nonce) google.nonce = nonce;
     const state = authorize.searchParams.get('state') ?? '';
-    return call(
-      'GET',
-      `/api/auth/callback/google?code=good-code&state=${encodeURIComponent(state)}`,
-    );
+    return c('GET', `/api/auth/callback/google?code=good-code&state=${encodeURIComponent(state)}`);
   }
+  const signIn = () => signInOn(jar);
 
   const guardDeps: GuardDeps = {
     getPrincipal: principalFromIdentity(identity, SESSION_COOKIE),
@@ -156,7 +155,7 @@ function setup() {
     });
     return (await handler(req)).status;
   }
-  return { identity, google, jar, sets, redirects, guard, signIn, answer, route };
+  return { identity, google, jar, sets, redirects, guard, signIn, signInOn, answer, route };
 }
 
 function learner(over: Partial<GoogleUser> = {}): GoogleUser {
@@ -298,5 +297,27 @@ describe('the age gate, end to end (1.7)', () => {
     expect(t.jar.values.get(BLOCK_COOKIE)).toBe('1');
     expect(await t.route('GET', '/api/me/progress')).toBe(401);
     expect((await t.signIn()).headers.get('location')).toContain('error=AccessDenied');
+  });
+
+  it('fix round 1: a blocked erase refuses sign-in from any browser, not only the one blocked', async () => {
+    await t.signIn();
+    t.identity.blockErase = true;
+    expect(await t.answer({ market: 'IN', birthYear: '2014' })).toEqual({ status: 'closed' });
+    const userId = [...t.identity.users.keys()][0]!;
+    await expect(t.identity.learnerStatus(userId)).resolves.toBe('under_age');
+
+    // A second browser, with no block cookie of its own, tries the same Google account.
+    const other = new Jar();
+    const retry = await t.signInOn(other);
+    expect(retry.headers.get('location')).toContain('/api/auth/error?error=AccessDenied');
+    expect(other.values.has(SESSION_COOKIE)).toBe(false);
+
+    // Even a session created some other way for this account can never clear the gate.
+    const leftover = 'leftover'.padEnd(32, '0');
+    await t.identity.createSession(leftover, userId, new Date(NOW.getTime() + 86_400_000));
+    t.jar.values.set(SESSION_COOKIE, leftover);
+    expect(await t.route('GET', '/api/me/progress')).toBe(403);
+    expect(await t.route('POST', '/api/subscriptions')).toBe(403);
+    await expect(t.guard.requireRole(['student'])).rejects.toThrow(`REDIRECT ${AGE_GATE_PATH}`);
   });
 });

@@ -19,6 +19,11 @@ export const users = pgTable(
     ageConfirmedAt: tstz('age_confirmed_at'),
     /** The learner's own answer at the age gate (1.7): a year only, never a full date of birth. */
     birthYear: smallint('birth_year'),
+    /**
+     * Set when an under-age erase is blocked by a row the store does not own (1.7 fix round 1):
+     * the account stays open but is treated as `under_age` forever, until staff clear it (12.1).
+     */
+    ageBlockedAt: tstz('age_blocked_at'),
     /** When the sign-in provider (or 1.4's magic link) last confirmed the email (task 1.3). */
     emailVerifiedAt: tstz('email_verified_at'),
     ...timestamps(),

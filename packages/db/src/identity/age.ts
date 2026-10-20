@@ -21,11 +21,19 @@ export const DEFAULT_AGE_POLICY: Readonly<AgePolicy> = Object.freeze({
   consentRequired: true,
 });
 
-/** A learner's standing: no answer yet, waiting for a parent, or free to use the agent. */
-export type AgeStatus = 'age_needed' | 'parent_needed' | 'clear';
+/**
+ * A learner's standing: no answer yet, waiting for a parent, free to use the agent, or blocked
+ * forever (`under_age`, fix round 1 of 1.7: `age_blocked_at` is set because an under-13 erase was
+ * blocked by a row the store does not own; staff resolve it, 12.1).
+ */
+export type AgeStatus = 'age_needed' | 'parent_needed' | 'clear' | 'under_age';
 
-/** The outcome of an age answer: `under_age` erases the account. */
-export type AgeAnswerStatus = 'under_age' | 'parent_needed' | 'clear';
+/**
+ * The outcome of an age answer: `under_age` erased the account; `erase_blocked` (fix round 1)
+ * means the same under-13 answer but the erase was blocked by a row the store does not own, so
+ * the account stays, marked `age_blocked_at` instead.
+ */
+export type AgeAnswerStatus = 'under_age' | 'parent_needed' | 'clear' | 'erase_blocked';
 
 /**
  * The youngest age someone born in `birthYear` can be at `now` (UTC): the year of birth counts
@@ -56,10 +64,13 @@ export interface AgeInput {
   now: Date;
 }
 
-/** With a birth year the answer is never `age_needed`. */
-export function ageStatus(input: AgeInput & { birthYear: number }): AgeAnswerStatus;
-export function ageStatus(input: AgeInput): AgeStatus | 'under_age';
-export function ageStatus(input: AgeInput): AgeStatus | 'under_age' {
+/**
+ * With a birth year the answer is never `age_needed` (runtime-guaranteed by the `birthYear === null`
+ * check below, not provable from the types alone).
+ */
+export function ageStatus(input: AgeInput & { birthYear: number }): Exclude<AgeStatus, 'age_needed'>;
+export function ageStatus(input: AgeInput): AgeStatus;
+export function ageStatus(input: AgeInput): AgeStatus {
   const { birthYear, policy, parentConsent, now } = input;
   if (birthYear === null) return 'age_needed';
   const age = youngestAge(birthYear, now);

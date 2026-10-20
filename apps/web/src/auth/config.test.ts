@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { IdentityStore } from '@edmate/db';
+import { RepositoryError, type IdentityStore } from '@edmate/db';
 import type { Account, Profile, Session, User } from 'next-auth';
 import type { AdapterUser } from 'next-auth/adapters';
 import { describe, expect, it, vi } from 'vitest';
@@ -341,6 +341,30 @@ describe('createAuthConfig', () => {
           profile: { email: 'a@example.test', email_verified: true } as Profile,
         }),
       ).toBe(false);
+    });
+
+    it('an owner whose standing cannot be read (not a student) is not treated as blocked (fix round 1)', async () => {
+      const owner = { id: 'owner-1' };
+      const fake: Partial<IdentityStore> = {
+        getUserByAccount: vi.fn(async () => owner as never),
+        getUserByEmail: vi.fn(async () => owner as never),
+        learnerStatus: vi.fn(async () => {
+          throw new RepositoryError('scope', 'learnerStatus');
+        }),
+        getSessionAndUser: vi.fn(async () => null),
+      };
+      const notAStudent = createAuthConfig({
+        identity: fake as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await notAStudent.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(true);
     });
   });
 
