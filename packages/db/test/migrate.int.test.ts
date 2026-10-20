@@ -9,10 +9,11 @@
 // database named in the URL beyond CREATE/DROP DATABASE.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
+import pg from 'pg';
 import { demoPackageFree } from '@edmate/contracts/fixtures';
 import { createDb } from '../src/client.js';
 import { runMigrateCli } from '../src/cli.js';
-import { migrateDatabase } from '../src/migrate.js';
+import { migrateDatabase, runPostMigrateSteps, type PostMigrateStep } from '../src/migrate.js';
 import * as s from '../src/schema/index.js';
 import { DATA_MODEL_TABLES, latestSnapshot, migrationSql } from './helpers.js';
 import {
@@ -121,6 +122,99 @@ describe.skipIf(!up)(
       }
     });
 
+    // Task 3.16d (3.16c review deferral (a)): isIndexInvalid schema-qualifies with
+    // to_regclass(format('%I.%I', 'public', $1)) instead of string concatenation, so a mixed-case
+    // index name (needs double-quoting to resolve) is looked up correctly rather than silently
+    // matching nothing.
+    it('runs post-migrate steps against a mixed-case index name, quoted correctly by format(%I.%I)', async () => {
+      const name = throwawayName();
+      const url = urlFor(name);
+      await createDatabase(name);
+      try {
+        await admin((c) => c.query('create table "T" (id int)'), url);
+        const steps: PostMigrateStep[] = [
+          {
+            kind: 'concurrentIndex',
+            indexName: 'MixedCaseIdx',
+            sql: 'CREATE INDEX CONCURRENTLY IF NOT EXISTS "MixedCaseIdx" ON "T" ("id")',
+          },
+        ];
+        const { pool, close } = createDb({ DATABASE_URL: url });
+        try {
+          await runPostMigrateSteps(pool, steps);
+          // Re-run: isIndexInvalid must find the existing, valid, mixed-case index and skip the
+          // drop, proving the lookup actually resolved it rather than matching nothing.
+          await runPostMigrateSteps(pool, steps);
+        } finally {
+          await close();
+        }
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean }>(
+            `select indisvalid from pg_index where indexrelid = '"MixedCaseIdx"'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]?.indisvalid).toBe(true);
+        }, url);
+      } finally {
+        await dropDatabase(name);
+      }
+    });
+
+    // Task 3.16d (3.16c review deferral (b)): CREATE/DROP INDEX CONCURRENTLY must wait out any
+    // transaction holding an older snapshot, whether or not it touches the indexed table; a
+    // forgotten idle-in-transaction session elsewhere can otherwise hang a post-migrate step
+    // forever. migrateDatabase bounds this with a per-run statement_timeout.
+    it('a bounded step timeout fails the step when a stray open transaction blocks it, and a re-run after it ends rebuilds the index valid', async () => {
+      const name = throwawayName();
+      const url = urlFor(name);
+      await createDatabase(name);
+      try {
+        await migrateDatabase(url);
+        // Simulate what a killed concurrent build leaves behind: the index exists, but is
+        // INVALID, so the next post-migrate run must DROP and CREATE it again (real waiting work,
+        // not a short-circuited IF NOT EXISTS no-op).
+        await admin(
+          (c) =>
+            c.query(
+              `update pg_index set indisvalid = false
+                 where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+            ),
+          url,
+        );
+
+        // `CREATE INDEX CONCURRENTLY` must wait out every transaction whose snapshot predates it,
+        // not just ones using this table; a held, actively running statement (not merely an idle
+        // one) reliably reproduces that wait. Not awaited: it blocks until rolled back below.
+        const blocker = new pg.Client({ connectionString: url });
+        await blocker.connect();
+        await blocker.query('BEGIN');
+        const blockerQuery = blocker.query('select pg_sleep(2)');
+        blockerQuery.catch(() => undefined);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        try {
+          await expect(migrateDatabase(url, { stepTimeoutMs: 200 })).rejects.toThrow(
+            /canceling statement due to statement timeout/,
+          );
+        } finally {
+          await blocker.query('ROLLBACK');
+          await blockerQuery.catch(() => undefined);
+          await blocker.end();
+        }
+
+        await migrateDatabase(url);
+        await admin(async (c) => {
+          const idx = await c.query<{ indisvalid: boolean; indisready: boolean }>(
+            `select indisvalid, indisready from pg_index
+               where indexrelid = 'sessions_package_id_package_version_idx'::regclass`,
+          );
+          expect(idx.rows).toHaveLength(1);
+          expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
+        }, url);
+      } finally {
+        await dropDatabase(name);
+      }
+    });
+
     it('apply cleanly to an empty database', async () => {
       await migrateDatabase(TEST_URL);
       const got = await expectFullSchema();
@@ -204,6 +298,64 @@ describe.skipIf(!up)(
         expect(after.rows[0]).toMatchObject({ indisvalid: true, indisready: true });
       }, TEST_URL);
     });
+
+    // Task 3.17: migration 0011 is additive only (a new index on existing columns) — it never
+    // drops or rewrites a row, so existing teacher_questions survive untouched; it also enforces
+    // the dedup the repository relies on (teacherQuestionsRepo.open), checked here at the raw SQL
+    // level, independent of that repository.
+    it('0011’s teacher_questions dedup index survives a re-run with existing data and rejects a duplicate open question', async () => {
+      await admin(async (c) => {
+        await c.query(`insert into users (id, name, locale, market, role)
+          values ('usr_3_17_fixture', 'T', 'en', 'test', 'teacher')`);
+        await c.query(
+          `insert into agents (id, teacher_id) values ('agt_3_17_fixture', 'usr_3_17_fixture')`,
+        );
+        // A pre-existing open question (as if migrated from before 0011): the migration must not
+        // touch or lose it.
+        await c.query(
+          `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+             values ('tq_3_17_pre', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                     'Why?', 'open')`,
+        );
+      }, TEST_URL);
+
+      await migrateDatabase(TEST_URL);
+
+      await admin(async (c) => {
+        const pre = await c.query(`select id from teacher_questions where id = 'tq_3_17_pre'`);
+        expect(pre.rowCount, 'the pre-existing row survives the migration').toBe(1);
+
+        const idx = await c.query<{ indisvalid: boolean; indisunique: boolean }>(
+          `select indisvalid, indisunique from pg_index
+             where indexrelid = 'teacher_questions_open_dedup_key'::regclass`,
+        );
+        expect(idx.rows).toHaveLength(1);
+        expect(idx.rows[0]).toMatchObject({ indisvalid: true, indisunique: true });
+
+        // A second identical open question collides on the index …
+        await expect(
+          c.query(
+            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+               values ('tq_3_17_dup', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                       'Why?', 'open')`,
+          ),
+        ).rejects.toThrow(/teacher_questions_open_dedup_key/);
+        // … but once answered, the same (teacher, student, agent, text) can open again (the index
+        // is partial, `WHERE status = 'open'`).
+        await c.query(
+          `update teacher_questions set status = 'answered' where id = 'tq_3_17_pre'`,
+        );
+        await c.query(
+          `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, status)
+             values ('tq_3_17_reopen', 'usr_3_17_fixture', 'agt_3_17_fixture', 'usr_3_17_fixture',
+                     'Why?', 'open')`,
+        );
+        const reopened = await c.query(
+          `select id from teacher_questions where id = 'tq_3_17_reopen'`,
+        );
+        expect(reopened.rowCount).toBe(1);
+      }, TEST_URL);
+    }, 30_000);
 
     it('rejects a session that violates the 0009 package-pin constraints', async () => {
       await admin(async (c) => {

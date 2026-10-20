@@ -1,9 +1,11 @@
-import { LIMITS, type Message } from '@edmate/contracts';
+import { LIMITS, type EvidenceEvent, type Message } from '@edmate/contracts';
 import { demoSafetyAlert, demoTurnTrace, usageMain, usageSmall } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import {
   COMMIT_QUEUE,
   DEAD_LETTER_QUEUE,
+  evidenceEventId,
+  EvidenceJobSchema,
   FAILED_JOB_TTL_SECONDS,
   HelpStateJobSchema,
   JOB,
@@ -12,6 +14,7 @@ import {
   MAX_TRACKED_TURNS,
   METER_QUEUE,
   MessageJobSchema,
+  queuedProfileStore,
   queuedSessionStateStore,
   queuedTraceSink,
   queuedTranscriptStore,
@@ -52,8 +55,15 @@ describe('queue names, job ids and options', () => {
       jobId.message('msg_1'),
       jobId.helpState('ses_1', 'w1'),
       jobId.trace('turn_1'),
+      jobId.evidence('ev_abc'),
     ];
-    expect(all).toEqual(['turn_1.usage.0', 'msg_1.message', 'ses_1.help.w1', 'turn_1.trace']);
+    expect(all).toEqual([
+      'turn_1.usage.0',
+      'msg_1.message',
+      'ses_1.help.w1',
+      'turn_1.trace',
+      'ev_abc.evidence',
+    ]);
     for (const id of all) expect(id).not.toContain(':');
   });
 
@@ -276,14 +286,20 @@ describe('queuedTraceSink', () => {
 });
 
 describe('queuedTurnPorts', () => {
-  it('meter jobs go to the meter queue, alerts and safety events to their own, the rest to commit', async () => {
+  it('meter jobs go to the meter queue, alerts and safety events to their own, the rest (including evidence) to commit', async () => {
     const meter = fakeQueue();
     const commit = fakeQueue();
     const alert = fakeQueue();
     const safetyEvent = fakeQueue();
-    const ports = queuedTurnPorts({ meter, commit, alert, safetyEvent }, scope, {
-      history: () => Promise.resolve([]),
-    });
+    const ports = queuedTurnPorts(
+      { meter, commit, alert, safetyEvent },
+      scope,
+      { history: () => Promise.resolve([]) },
+      {
+        get: (studentId, teacherId) =>
+          Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+      },
+    );
     await ports.alerts.raise(demoSafetyAlert);
     await ports.safetyEvents.record({
       ...scope,
@@ -298,11 +314,13 @@ describe('queuedTurnPorts', () => {
     await ports.transcripts.append('ses_1', message);
     await ports.sessionState.saveHelpState('ses_1', {});
     await ports.traces.record(demoTurnTrace);
+    await ports.profiles.applyEvidence([evidenceEvent]);
     expect(meter.added.map((j) => j.name)).toEqual(['usage.record']);
     expect(commit.added.map((j) => j.name)).toEqual([
       'message.append',
       'session.help_state',
       'trace.record',
+      'evidence.apply',
     ]);
     expect(alert.added.map((j) => j.name)).toEqual(['alert.escalate_check', 'alert.raise']);
   });
@@ -313,9 +331,115 @@ describe('queuedTurnPorts', () => {
       { meter: fakeQueue(), commit: fakeQueue(), alert, safetyEvent: fakeQueue() },
       scope,
       { history: () => Promise.resolve([]) },
+      {
+        get: (studentId, teacherId) =>
+          Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+      },
       { escalateAfterMs: 25 },
     );
     await ports.alerts.raise(demoSafetyAlert);
     expect(alert.added[0]?.opts.delay).toBe(25);
+  });
+});
+
+const evidenceEvent: EvidenceEvent = {
+  studentId: 'stu_test_01',
+  teacherId: 'tch_test_01',
+  topicId: 'top_test_01',
+  correct: true,
+  source: 'practice',
+  weight: 1,
+  ts: '2026-10-19T10:00:00.000Z',
+};
+
+describe('evidenceEventId', () => {
+  it('is stable for the same event, distinct across any differing field, and a contracts id', () => {
+    const a = evidenceEventId(evidenceEvent);
+    expect(evidenceEventId({ ...evidenceEvent })).toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, studentId: 'stu_other' })).not.toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, teacherId: 'tch_other' })).not.toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, topicId: 'top_other' })).not.toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, correct: false })).not.toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, source: 'check' })).not.toBe(a);
+    expect(evidenceEventId({ ...evidenceEvent, weight: 0.5 })).not.toBe(a);
+    // A retry must hash the event's *original* ts, never a re-stamped one.
+    expect(evidenceEventId({ ...evidenceEvent, ts: '2026-10-19T10:00:00.001Z' })).not.toBe(a);
+    expect(a).toMatch(/^ev_[0-9a-f]{40}$/);
+  });
+
+  it('jobId.evidence and the producer both derive from this one function (lead answer)', () => {
+    // The "shared serialisation" the lead asked for: the queue job id a producer would use, and
+    // the row id a worker processor would pass to evidenceEvents.append, both call
+    // evidenceEventId on the same event and so always agree.
+    const producerJobId = jobId.evidence(evidenceEventId(evidenceEvent));
+    const workerRowId = evidenceEventId(evidenceEvent);
+    expect(producerJobId).toBe(`${workerRowId}.evidence`);
+  });
+});
+
+describe('queuedProfileStore', () => {
+  it('get goes straight to the reader; applyEvidence enqueues one job per event, no colon', async () => {
+    const q = fakeQueue();
+    const reads: [string, string][] = [];
+    const profile = { ...scope, lang: 'en' as const, mastery: {}, mistakes: [] };
+    const store = queuedProfileStore(q, scope, {
+      get: (studentId, teacherId) => {
+        reads.push([studentId, teacherId]);
+        return Promise.resolve(profile);
+      },
+    });
+    expect(await store.get(scope.studentId, scope.teacherId)).toEqual(profile);
+    expect(reads).toEqual([[scope.studentId, scope.teacherId]]);
+
+    const second: EvidenceEvent = { ...evidenceEvent, topicId: 'top_test_02' };
+    const result = await store.applyEvidence([evidenceEvent, second]);
+    expect(result).toEqual(profile);
+    expect(q.added.map((j) => [j.name, j.opts.jobId])).toEqual([
+      [JOB.evidence, jobId.evidence(evidenceEventId(evidenceEvent))],
+      [JOB.evidence, jobId.evidence(evidenceEventId(second))],
+    ]);
+    for (const id of q.added.map((j) => j.opts.jobId as string)) expect(id).not.toContain(':');
+    for (const j of q.added) expect(EvidenceJobSchema.parse(j.data)).toEqual(j.data);
+    expect(q.added[0]?.data).toEqual({ scope, event: evidenceEvent });
+  });
+
+  it('an empty evidence array enqueues nothing but still reads the current profile', async () => {
+    const q = fakeQueue();
+    const profile = { ...scope, lang: 'en' as const, mastery: {}, mistakes: [] };
+    const store = queuedProfileStore(q, scope, { get: () => Promise.resolve(profile) });
+    expect(await store.applyEvidence([])).toEqual(profile);
+    expect(q.added).toEqual([]);
+  });
+
+  it('refuses an event for another pair; nothing is enqueued', async () => {
+    const q = fakeQueue();
+    const store = queuedProfileStore(q, scope, { get: () => Promise.resolve(null as never) });
+    await expect(
+      store.applyEvidence([{ ...evidenceEvent, studentId: 'stu_other' }]),
+    ).rejects.toThrow(/not this store/);
+    await expect(
+      store.applyEvidence([{ ...evidenceEvent, teacherId: 'tch_other' }]),
+    ).rejects.toThrow(/not this store/);
+    expect(q.added).toEqual([]);
+    expect(() =>
+      queuedProfileStore(
+        q,
+        { studentId: '', teacherId: 'tch' },
+        { get: () => Promise.resolve(null as never) },
+      ),
+    ).toThrow(/invalid scope/);
+  });
+
+  it('a malformed event or a failed add rejects', async () => {
+    await expect(
+      queuedProfileStore(fakeQueue(), scope, {
+        get: () => Promise.resolve(null as never),
+      }).applyEvidence([{ ...evidenceEvent, weight: Number.NaN }]),
+    ).rejects.toThrow();
+    await expect(
+      queuedProfileStore(fakeQueue({ fail: true }), scope, {
+        get: () => Promise.resolve(null as never),
+      }).applyEvidence([evidenceEvent]),
+    ).rejects.toThrow('redis down');
   });
 });

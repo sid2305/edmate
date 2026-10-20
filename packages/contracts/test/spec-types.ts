@@ -139,8 +139,9 @@ export interface LocalePack {
   market: string; languages: Lang[]; timezone: string;            // IANA, e.g. 'Asia/Kolkata'
   currency: { code: string; format: string };
   payments: { methods: string[]; provider: string };
-  helplines: { name: string; number: string; kind: string }[];
-  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
+  helplines: { name: string; number: string; kind: string; verifiedBy: string; verifiedOn: string }[];   // verifiedBy: the person who checked the line (a name or handle, never an email); verifiedOn: YYYY-MM-DD; a loaded pack refuses the literal 'pending' (ADR-0008)
+  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string; parentalConsentRequired: boolean };   // parentalConsentRequired: learners under 18 need verifiable parental consent in this market (ADR-0008)
+  reviewedBy?: string; reviewedOn?: string;                       // sign-off for the compliance block, both or neither; same formats as verifiedBy / verifiedOn (ADR-0008)
   regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
 }
 
@@ -155,6 +156,8 @@ export interface RetrievalIndex {
   search(q: string, scope: { teacherId: string; allowedModuleIds: string[] }, k: number): Promise<Chunk[]>;
   // Code-only: says whether locked modules match, never returns their text.
   probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
+  // Code-only: true when any candidate shares an 8+ token span with this teacher's material outside allowedModuleIds; never text, spans or counts (ADR-0007).
+  leakCheck(candidates: readonly string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
 }
 export interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
 export interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)

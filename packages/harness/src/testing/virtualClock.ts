@@ -5,8 +5,22 @@ import type { Cancel, Clock } from '../pipeline/clock.js';
 /** 2026-10-17T10:00:00.000Z: the default start, so timestamps in traces are stable. */
 export const VIRTUAL_EPOCH_MS = Date.UTC(2026, 9, 17, 10, 0, 0);
 
-/** Microtask turns flushed between timers; enough for the pipeline's await chains. */
-const FLUSH_TURNS = 200;
+/**
+ * Microtask turns in one flush pass; enough for most of the pipeline's await chains. Raised from
+ * 200 in task 4.6: each streamed sentence now waits for a locked check, so a long reply's chain at
+ * one virtual instant is longer (too few turns made the clock fire a timeout the code never
+ * reached).
+ *
+ * This single pass is no longer the whole budget (4.6b): a fixed number here was itself a magic
+ * number the 4.6 review flagged, and a long reply made of many model chunks (one streamed sentence
+ * per chunk, so one awaited locked check per chunk, with no tool call or real timer in between)
+ * can still need more microtask turns than any one fixed pass can promise. `drive` below instead
+ * flushes until quiet: on a still-pending promise with no timer due, it keeps taking another pass
+ * of this size, up to `QUIET_FLUSH_PASSES` more, before it calls it a deadlock.
+ */
+const FLUSH_TURNS = 2_000;
+/** Extra flush passes `drive` spends on a still-pending promise with no timer due (4.6b). */
+const QUIET_FLUSH_PASSES = 50;
 
 export interface VirtualClock extends Clock {
   /** Timers not yet fired or cancelled. */
@@ -86,6 +100,13 @@ export function virtualClock(opts: { start?: number } = {}): VirtualClock {
       watched.catch(() => undefined); // the caller awaits `watched` below
       for (let steps = 0; ; steps++) {
         await flush();
+        // Flush until quiet (4.6b): a long chain of awaits with no timer due yet is not
+        // necessarily a deadlock, only a chain longer than one pass. Keep flushing while there is
+        // still no timer and the promise has not settled, up to QUIET_FLUSH_PASSES more passes,
+        // before concluding it really is stuck.
+        for (let quiet = 0; !settled && nextTimer() === undefined && quiet < QUIET_FLUSH_PASSES; quiet++) {
+          await flush();
+        }
         if (settled) return watched;
         const t = nextTimer();
         if (t === undefined) {

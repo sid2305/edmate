@@ -47,6 +47,26 @@ export interface Composed {
   sources: SourceRef[];
   promptPack: PromptPackRef;
   mode: ComposeMode;
+  /**
+   * True when the pinned agent's `languages` was not exactly `PILOT_LANGUAGES` and the reply
+   * language was clamped to English instead (defence in depth; see `PILOT_LANGUAGES`). The
+   * runner reports this to the background log by name only; nothing here carries agent content.
+   */
+  languageClamped: boolean;
+}
+
+/**
+ * Pilot policy (18 Oct 2026 decision, docs/decisions/log.md): the agent teaches and replies in
+ * English only. Named once here (the harness cannot import `@edmate/content`'s own copy of this
+ * constant, used by the content-validation side of the same policy).
+ */
+export const PILOT_LANGUAGES: readonly Lang[] = ['en'];
+
+function isPilotLanguages(languages: readonly Lang[]): boolean {
+  return (
+    languages.length === PILOT_LANGUAGES.length &&
+    languages.every((l, idx) => l === PILOT_LANGUAGES[idx])
+  );
 }
 
 /**
@@ -71,9 +91,15 @@ function showsMaterial(mode: ComposeMode): boolean {
   return mode === 'ask_teacher' || (SKILL_PACKS as readonly string[]).includes(mode);
 }
 
-/** The student's language when the agent allows it, else the agent's first language. */
+/**
+ * The student's language when the agent allows it, else English. Pilot policy
+ * (`PILOT_LANGUAGES`): an agent pinned to anything other than English only is clamped to English
+ * here regardless of what the student asked for or what the agent config claims to allow; while
+ * the pilot holds, `agent.languages` is always `['en']` once it passes the clamp, so English is
+ * also the only fallback.
+ */
 export function replyLanguage(lang: Lang, agent: Pick<AgentConfig, 'languages'>): Lang {
-  return agent.languages.includes(lang) ? lang : (agent.languages[0] ?? lang);
+  return isPilotLanguages(agent.languages) && agent.languages.includes(lang) ? lang : 'en';
 }
 
 /** The fixed delimiters around data blocks (material, style card, learner summary). */
@@ -236,5 +262,6 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
       },
     },
     mode,
+    languageClamped: !isPilotLanguages(ctx.agent.languages),
   };
 }

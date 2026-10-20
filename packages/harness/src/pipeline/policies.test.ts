@@ -28,7 +28,8 @@ import type { GatewayScript } from '../testing/scriptedGateway.js';
 import type { MemoryAlertSink } from '../testing/memoryPorts.js';
 import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
-import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
+import { runTurn } from './runner.js';
 import { ALERT_ATTEMPT_TIMEOUT_MS, STEP_SPEC, type StepName } from './spec.js';
 import type { StepEnv, Steps, TurnRunResult } from './types.js';
 
@@ -898,10 +899,13 @@ describe(`postGuard: ${policy('postGuard')}`, () => {
     expect(steps.commits[0]?.replyText).toBe(TEST_SAFE_REPLY);
   });
 
-  it('timeout at 2 s → safe reply', async () => {
+  it("timeout at 2 s → replace '' (clears skill events and sources), then the safe reply", async () => {
     const { timed } = await run({ postGuard: hang() });
-    const replace = timed.find((x) => x.event.type === 'replace');
-    expect(replace?.event).toEqual({ type: 'replace', text: TEST_SAFE_REPLY });
+    const replaces = timed.filter((x) => x.event.type === 'replace').map((x) => x.event);
+    expect(replaces).toEqual([
+      { type: 'replace', text: '' },
+      { type: 'replace', text: TEST_SAFE_REPLY },
+    ]);
   });
 
   it('a throwing safe-reply text still replaces the draft (with empty text) and reports it', async () => {
@@ -921,7 +925,7 @@ describe(`postGuard: ${policy('postGuard')}`, () => {
       t.clock,
     );
     expect(events.at(-2)).toEqual({ type: 'replace', text: '' });
-    expect(result.background.map((b) => b.task)).toEqual(['runner']);
+    expect(result.background.map((b) => b.task)).toEqual(['runner', 'runner']); // the step failure, then the text
   });
 });
 

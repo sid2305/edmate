@@ -9,6 +9,7 @@ export * from './repositories/index.js';
 export * from './identity/index.js';
 export { migrateDatabase, MIGRATIONS_DIR } from './migrate.js';
 export type { DbEnv } from './client.js';
+export { applyBkt, BKT_DEFAULTS, foldMastery, type BktParams, type MasteryEntry } from './mastery.js';
 
 /** Repositories and the sign-in identity store over one pool from env (see client.ts). */
 export function openDatabase(env: DbEnv = process.env): {

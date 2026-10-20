@@ -28,7 +28,7 @@ class GateCase(RepoCase):
         all_files.update(files)
         return self.repo.branch(B, all_files)
 
-    def gh_env(self, labels=(), fail=False, oid="auto"):
+    def gh_env(self, labels=(), fail=False, oid="auto", branch=B):
         """A stub `gh` on PATH that reports the PR's branch, head commit (by default the local branch
         head, read when the stub runs) and labels (which the gate ignores)."""
         bindir = self.repo.root.parent / "bin"
@@ -37,12 +37,12 @@ class GateCase(RepoCase):
         if fail:
             gh.write_text("#!/bin/sh\necho 'not logged in'\nexit 1\n")
         else:
-            data = {"headRefName": B, "labels": [{"name": n} for n in labels]}
+            data = {"headRefName": branch, "labels": [{"name": n} for n in labels]}
             if oid == "auto":
                 data["headRefOid"] = "OID"
             elif oid is not None:
                 data["headRefOid"] = oid
-            text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {B})"')
+            text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {branch})"')
             gh.write_text(f"#!/bin/sh\ncat <<EOF\n{text}\nEOF\n")
         gh.chmod(0o755)
         return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}")
@@ -91,6 +91,40 @@ class Basics(GateCase):
         self.assertEqual(code, 1)
         self.assertIn("review.md is missing", out)
 
+    def test_status_missing_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("no 'Status:' line", out)
+
+    def test_status_partial_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\nStatus: PARTIAL\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("Status is 'PARTIAL', not DONE", out)
+
+    def test_status_blocked_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n- **Status:** BLOCKED (waiting on human)\n\n## Decisions\nNone\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1)
+        self.assertIn("not DONE", out)
+
+    def test_status_bold_done_passes(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff="# h\n- **Status:** DONE (fix round 1 applied)\n\n## Decisions\nNone\n")
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_status_composite_subtask_done_passes(self):
+        # A parent handoff covering lettered sub-tasks in one composite status line (e.g. 4.0).
+        handoff = "# h\n**Status:** 9.9b DONE (PR #1); 9.9a DONE pending sign-off\n\n## Decisions\nNone\n"
+        self.make({"apps/cli.ts": "x\n"}, handoff=handoff)
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_status_partial_in_prose_not_matched(self):
+        # Mentioning another status word mid-sentence (not as a Status: line) must not confuse the check.
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\nDecided: builders stop at `Status: PARTIAL` mid-build.\n"
+        self.make({"apps/cli.ts": "x\n"}, handoff=handoff)
+        self.assertEqual(self.gate()[0], 0)
+
     def test_changes_requested(self):
         self.make({"apps/cli.ts": "x\n"}, review="# 9.9 review — CHANGES_REQUESTED\nReviewers: code-reviewer\n")
         code, out = self.gate()
@@ -109,11 +143,42 @@ class Basics(GateCase):
         self.assertEqual(code, 1)
         self.assertIn("still [open]", out)
 
-    def test_unfixed_high(self):
+    # MVP first (human decision, 20 Oct 2026): a HIGH may be [deferred <id>] to a task on the board.
+    def test_high_deferred_to_board_task_ok(self):
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("9.10", status="todo")]))
+        self.repo.commit("board: 9.10")  # on main, where the gate reads the board
         self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [deferred 9.10] apps/cli.ts:3 — x\n")
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("CRITICAL and HIGH must be fixed", out)
+        self.assertEqual(code, 0, out)
+
+    def test_high_deferred_to_unknown_task_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [deferred 9.10] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("9.10 is not on the board", out)
+
+    def test_open_high_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [open] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("a HIGH finding is [open]", out)
+
+    def test_critical_must_be_fixed(self):
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("9.10", status="todo")]))
+        self.repo.commit("board: 9.10")
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [CRITICAL] [deferred 9.10] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("CRITICAL must be fixed", out)
+
+    def test_pr_mode_keeps_task_letter(self):
+        b = "m3/3.11d-x"
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("3.11d", branch=b)]))
+        self.repo.commit("board: 3.11d")
+        self.repo.branch(b, {**self.repo.task_files("3.11d"), "apps/cli.ts": "x\n"})
+        code, out = self.gate("--pr", "5", env=self.gh_env(branch=b))
+        self.assertEqual(code, 0, out)
+        self.assertIn("3.11d", out)
 
     def test_deferred_medium_ok(self):
         self.make({"apps/cli.ts": "x\n"}, review=review() + "- [MEDIUM] [deferred 9.10] apps/cli.ts:3 — x\n")
@@ -133,8 +198,9 @@ class Basics(GateCase):
 
 # One sample path per risk group and the reviewers it needs (from risk-paths.txt).
 GROUPS = [
-    ("packages/harness/src/guardrails/g.ts", ("safety-reviewer",)),
-    ("content/locales/in/pack.yaml", ("safety-reviewer",)),
+    # Safety group: code-reviewer only until the pilot gate (MVP first, 20 Oct 2026); 13.3 restores safety-reviewer.
+    ("packages/harness/src/guardrails/g.ts", ("code-reviewer",)),
+    ("content/locales/in/pack.yaml", ("code-reviewer",)),
     ("packages/harness/src/access/filter.ts", ("security-reviewer",)),
     ("packages/payments/src/ledger.ts", ("security-reviewer",)),
     ("apps/web/app/api/webhooks/pay.ts", ("security-reviewer",)),
@@ -187,6 +253,8 @@ class RiskyGroups(GateCase):
                         text = review(*kept)
                         if missing == "typescript-reviewer":
                             text = text.replace("typescript-reviewer", "code-reviewer")
+                        elif missing == "code-reviewer":  # also a default in review()
+                            text = text.replace("code-reviewer, ", "")
                         self.make(self.files(path), review=text, handoff=HIGH)
                         code, out = self.gate(*args, env=env)
                         self.assertEqual(code, 1, out)
@@ -219,13 +287,15 @@ class RiskyGroups(GateCase):
         self.assertIn("risk: high", out)
 
     def test_union_across_groups(self):
-        files = {"packages/contracts/src/x.ts": "x\n", "content/skills/s.md": "x\n", **SAFETY_REVIEW}
-        self.make(files, review=review("architect", "security-reviewer"), handoff=HIGH)
+        files = {"packages/contracts/src/x.ts": "x\n", "content/skills/s.md": "x\n"}
+        # review() always lists code-reviewer, which the skills group now needs; write the line by hand.
+        text = "# r — APPROVE\nReviewers: typescript-reviewer, architect, security-reviewer\n"
+        self.make(files, review=text, handoff=HIGH)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
-        self.assertIn("missing safety-reviewer", out)
+        self.assertIn("missing code-reviewer", out)
         self.fresh()
-        self.make(files, review=review("architect", "security-reviewer", "safety-reviewer"), handoff=HIGH)
+        self.make(files, review=review("architect", "security-reviewer"), handoff=HIGH)
         self.assertEqual(self.gate()[0], 0)
 
     def test_reviewer_word_match(self):
@@ -238,21 +308,23 @@ class RiskyGroups(GateCase):
         self.assertNotIn("missing typescript-reviewer", out)
 
     def test_risk_high_outside_decisions_ignored(self):
-        handoff = "# h\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note · risk: high\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note · risk: high\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         self.assertEqual(self.gate()[0], 1)
 
-    def test_safety_path_needs_safety_review(self):
-        self.make({"apps/worker/src/alerts/a.ts": "x\n"}, review=review("safety-reviewer"), handoff=HIGH)
+    # Until the pilot gate the safety group needs no safety-review.md (MVP first, 20 Oct 2026). When 13.3
+    # restores `safety-reviewer` in risk-paths.txt, these two flip back to code 1 + "safety-review.md is missing".
+    def test_safety_path_passes_without_safety_review(self):
+        self.make({"apps/worker/src/alerts/a.ts": "x\n"}, review=review("code-reviewer"), handoff=HIGH)
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("safety-review.md is missing", out)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("safety-review.md", out)
 
-    def test_locales_need_safety_review(self):
-        self.make({"content/locales/in/p.yaml": "x\n"}, review=review("safety-reviewer"), handoff=HIGH)
+    def test_locales_pass_without_safety_review(self):
+        self.make({"content/locales/in/p.yaml": "x\n"}, review=review("code-reviewer"), handoff=HIGH)
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("safety-review.md is missing", out)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("safety-review.md", out)
 
     def test_destructive_migration(self):
         files = {"packages/db/migrations/0002.sql": "DROP TABLE students;\n"}
@@ -293,11 +365,12 @@ class FixRound1(GateCase):
             git(self.repo.root, "branch", "-D", B)
 
     def test_non_ascii_path_is_risky(self):
-        self.make({"content/prompt-packs/caf\u00e9.md": "x\n"}, handoff=HIGH)
+        self.make({"content/prompt-packs/caf\u00e9.md": "x\n"},
+                  review="# r \u2014 APPROVE\nReviewers: typescript-reviewer\n", handoff=HIGH)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
         self.assertIn("risky content/prompt-packs/caf\u00e9.md", out)
-        self.assertIn("missing safety-reviewer", out)
+        self.assertIn("missing code-reviewer", out)
 
     def test_rename_out_of_risky_path(self):
         self.repo.write("packages/contracts/src/x.ts", "export const x = 1;\n")
@@ -404,14 +477,14 @@ class FixRound1(GateCase):
         self.assertEqual(self.gate()[0], 1)
 
     def test_risk_high_must_end_heading(self):
-        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         code, out = self.gate()
         self.assertEqual(code, 1, out)
         self.assertIn("risk: high", out)
 
     def test_risk_high_trailing_space_ok(self):
-        handoff = "# h\n\n## Decisions\n### 18 Oct 2026 · 9.9 x · risk: high  \nDecided: x.\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\n### 18 Oct 2026 · 9.9 x · risk: high  \nDecided: x.\n"
         self.make({".claude/x": "x\n"}, review=review("security-reviewer"), handoff=handoff)
         self.assertEqual(self.gate()[0], 0)
 
@@ -447,7 +520,7 @@ class Wontfix(GateCase):
         self.assertEqual(self.gate()[0], 1)
 
     def test_entry_outside_decisions_section(self):
-        handoff = "# h\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note\ncli.ts is long\n"
+        handoff = "# h\nStatus: DONE\n\n## Decisions\nNone\n\n## Notes\n### 9.9 note\ncli.ts is long\n"
         self.make({"apps/cli.ts": "x\n"}, review=self.REVIEW, handoff=handoff)
         self.assertEqual(self.gate()[0], 1)
 

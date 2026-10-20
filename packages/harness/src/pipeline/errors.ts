@@ -39,6 +39,20 @@ export class TurnAbort extends HarnessError {
   }
 }
 
+/**
+ * Pilot policy (18 Oct 2026 decision, docs/decisions/log.md): decide reports this to the
+ * background log, by name only, whenever the composer had to clamp a pinned agent's reply
+ * language to English because `agent.languages` was not exactly English-only. Fixed text, no
+ * agent or student content.
+ */
+export class PilotLanguageClamped extends HarnessError {
+  override readonly name = 'PilotLanguageClamped';
+
+  constructor() {
+    super('agent languages were not English-only; the composer clamped the reply to English');
+  }
+}
+
 /** A step a later task builds. Stubs throw this, so each hits its failure policy (fail closed). */
 export class StepNotImplementedError extends HarnessError {
   override readonly name = 'StepNotImplementedError';
@@ -50,7 +64,8 @@ export class StepNotImplementedError extends HarnessError {
 
 /**
  * Why the scrub failed closed (task 4.2): a guard-chain cause, a payload the scrub could not walk,
- * or (set by the runner) the step itself throwing, timing out or returning a bad result.
+ * (set by the runner) the step itself throwing, timing out or returning a bad result, or (task
+ * 4.2b) an attachment present on the turn.
  */
 export type ScrubFailureCause =
   | 'empty'
@@ -66,7 +81,8 @@ export type ScrubFailureCause =
   | 'payload_shape'
   | 'step_error'
   | 'step_timeout'
-  | 'step_invalid_result';
+  | 'step_invalid_result'
+  | 'attachment';
 
 /** Only a cause and an error *name*: never a message, reason or text (messages can echo input). */
 export interface ScrubFailureDetail {
@@ -77,6 +93,9 @@ export interface ScrubFailureDetail {
 /**
  * The scrub could not give a trusted scrubbed input; the turn fails closed (`guard_blocked`).
  * A HarnessError: its message is fixed text plus the cause code, so the background log may keep it.
+ * Most causes are a framework bug; `'attachment'` is the one deliberate, by-design refusal (task
+ * 4.2b, no OCR/vision pipeline exists yet) — the turn still fails closed the same way, but it is
+ * not reported as a bug.
  */
 export class ScrubFailedError extends HarnessError {
   override readonly name = 'ScrubFailedError';
@@ -123,6 +142,45 @@ export class GenerateAttemptFailed extends HarnessError {
       `generate ${attempt} attempt failed: ${kind}` +
         (causeName === undefined ? '' : ` (${causeName})`),
     );
+  }
+}
+
+/**
+ * The postGuard step failed (threw, timed out or returned a malformed result) and the runner sent
+ * the safe reply (4.5). Carries only the kind and the underlying error's name.
+ */
+export class PostGuardStepFailed extends HarnessError {
+  override readonly name = 'PostGuardStepFailed';
+
+  constructor(
+    readonly kind: 'error' | 'timeout' | 'invalid_result',
+    readonly causeName?: string,
+  ) {
+    super(`postGuard failed: ${kind}` + (causeName === undefined ? '' : ` (${causeName})`));
+  }
+}
+
+/**
+ * grounding's judge gave no answer (missing, failed, timed out, at the cost ceiling), so the turn
+ * got the safe reply (task 4.7 fix round 1). A metric, not a failure: fixed text, no turn text.
+ */
+export class GroundingJudgeUnavailable extends HarnessError {
+  override readonly name = 'GroundingJudgeUnavailable';
+
+  constructor() {
+    super('grounding judge unavailable: sent the safe reply');
+  }
+}
+
+/**
+ * A grounding escalation could open no TeacherQuestion: the live open and commit's fallback both
+ * failed (task 4.7 fix round 1). The cause's error name only, never text.
+ */
+export class GroundingEscalationLost extends HarnessError {
+  override readonly name = 'GroundingEscalationLost';
+
+  constructor(readonly causeName: string) {
+    super(`grounding escalation lost: no TeacherQuestion opened (${causeName})`);
   }
 }
 

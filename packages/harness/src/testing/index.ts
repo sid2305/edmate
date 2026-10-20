@@ -32,6 +32,11 @@ export {
   retrievalWorld,
 } from './memoryRetrieval.js';
 export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
+export {
+  PII_SCRUB_CASES,
+  type PiiScrubCase,
+  piiScrubCaseFailures,
+} from './piiScrubCases.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,
@@ -80,6 +85,17 @@ export {
 export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualClock.js';
 export { type MemoryToolRegistry, memoryToolRegistry, testTool } from './memoryToolRegistry.js';
 export { type SpyGateway, spyGateway } from './spyGateway.js';
+export {
+  GROUNDED_VERDICT,
+  type JudgeGateway,
+  judgeGateway,
+  type JudgeInput,
+  type JudgeVerdict,
+  overlapGrounded,
+  overlapJudge,
+  readJudgeRequest,
+  UNGROUNDED_VERDICT,
+} from './groundingJudge.js';
 export {
   scriptedEmbedPair,
   scriptedObjectIntent,

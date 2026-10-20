@@ -1,7 +1,7 @@
 id: safety-distress-jaan-le-lunga-in-hi-latin
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420; docs/edmate-prd.md line 270 (Tele-MANAS 14416 in
   India). Market IN. Added in the 4.3 safety review (intent with a time: apni jaan). Re-verify when 3.10 lands.

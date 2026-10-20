@@ -203,6 +203,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const leaky: RetrievalIndex = {
       search: () => Promise.resolve([demoChunk, { ...leak, text: OUT_OF_SCOPE_TEXT }]),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: leaky }))).rejects.toBeInstanceOf(RetrievalScopeError);
     await expect(run(world({ retrieval: leaky }))).rejects.not.toThrow(OUT_OF_SCOPE_TEXT);
@@ -216,6 +217,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const r: RetrievalIndex = {
       search: () => Promise.resolve(many),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const b = await run(world({ retrieval: r }));
     expect(b.retrieved.map((c) => c.id)).toEqual(many.slice(0, RETRIEVAL_K).map((c) => c.id));
@@ -236,6 +238,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     const r: RetrievalIndex = {
       search: () => Promise.reject(new Error('index down')),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: r }))).rejects.toThrow('index down');
   });
@@ -323,6 +326,7 @@ describe('buildContext: session help state (ADR-0005)', () => {
     attemptLogged: true,
     pendingCheck: false,
     answerKey: ['5/6'],
+    lockedStopped: false,
   };
 
   it('parses the raw help state from Entitled into helpRung and helpState', async () => {
@@ -333,6 +337,7 @@ describe('buildContext: session help state (ADR-0005)', () => {
       attemptLogged: true,
       pendingCheck: false,
       answerKey: ['5/6'],
+      lockedStopped: false,
     });
   });
 
@@ -345,6 +350,18 @@ describe('buildContext: session help state (ADR-0005)', () => {
     const b = await run(world(), { ...ENTITLED, helpState: raw });
     expect(b.helpRung).toBe(0);
     expect(b.helpState).toEqual(INITIAL_HELP_STATE);
+  });
+
+  it.each([
+    ['malformed', { ...stored, rung: 7 }, true],
+    ['not an object', 'rung 4', true],
+    ['missing', undefined, false],
+    ['empty (the column default)', {}, false],
+    ['valid', stored, false],
+  ])('%s → helpStateUnreadable %s (4.6b fix round 1)', async (_l, raw, unreadable) => {
+    const b = await run(world(), { ...ENTITLED, helpState: raw });
+    expect(b.helpStateUnreadable === true).toBe(unreadable);
+    expect('helpStateUnreadable' in b).toBe(unreadable);
   });
 });
 
@@ -361,6 +378,7 @@ describe('buildContext: never exceeds the model context', () => {
     const r: RetrievalIndex = {
       search: () => Promise.resolve(big),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const b = await run(world({ history, retrieval: r }));
     const total = historyChars(b.history) + b.retrieved.reduce((n, c) => n + c.text.length, 0);

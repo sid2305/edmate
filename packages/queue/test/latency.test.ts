@@ -31,6 +31,7 @@ describe('reply latency with a slow database', () => {
       { meter, commit, alert: fakeQueue(), safetyEvent: fakeQueue() },
       { studentId: 'stu_test_01', teacherId: 'tch_test_01' },
       { history: () => Promise.resolve([]) },
+      { get: (studentId, teacherId) => Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }) },
     );
     const t = testDeps({ overrides: ports });
     const happy = testSteps();

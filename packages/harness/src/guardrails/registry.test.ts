@@ -29,8 +29,8 @@ describe('GuardRegistry', () => {
       r.register(fakeGuard(n, 'post', ok));
     }
     expect(names(r.ordered())).toEqual([
-      'answerLeak',
       'lockedLeak',
+      'answerLeak',
       'grounding',
       'adviceGuard',
       'personaBoundary',
@@ -108,4 +108,27 @@ describe('GuardRegistry', () => {
     expect(() => new GuardRegistry<unknown>('mid' as never)).toThrow(GuardRegistryError);
     expect(() => new GuardRegistry<unknown>('constructor' as never)).toThrow(GuardRegistryError);
   });
+});
+
+describe('GuardRegistry: slice weights (task 4.7, lead answer 1)', () => {
+  it('keeps each guard’s weight; 1 by default and for a name it does not hold', () => {
+    const r = new GuardRegistry<unknown>('post');
+    r.register(fakeGuard('grounding', 'post', ok), { weight: 4 });
+    r.register(fakeGuard('tone', 'post', ok));
+    expect(r.weight('grounding')).toBe(4);
+    expect(r.weight('tone')).toBe(1);
+    expect(r.weight('answerLeak')).toBe(1);
+    expect(r.weight('constructor')).toBe(1);
+  });
+
+  it.each([0, -1, 1.5, 101, Number.NaN, Number.POSITIVE_INFINITY, '2' as unknown as number])(
+    'refuses weight %s',
+    (weight) => {
+      const r = new GuardRegistry<unknown>('post');
+      expect(() => r.register(fakeGuard('tone', 'post', ok), { weight })).toThrow(
+        GuardRegistryError,
+      );
+      expect(r.has('tone')).toBe(false);
+    },
+  );
 });

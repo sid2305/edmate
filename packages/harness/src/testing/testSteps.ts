@@ -10,7 +10,7 @@ import {
   demoStyleCard,
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
-import type { PedagogyDecision } from '@edmate/contracts';
+import type { ModelRequest, PedagogyDecision, RetrievalIndex } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
 import { createTurnLimits } from '../pipeline/limits.js';
 import { refusingGateway } from '../pipeline/turnGateway.js';
@@ -36,6 +36,12 @@ import {
   unusedPort,
 } from './memoryPorts.js';
 import { scriptedStreamText } from './gatewayFixtures.js';
+import {
+  GROUNDED_VERDICT,
+  judgeGateway,
+  type JudgeVerdict,
+  UNGROUNDED_VERDICT,
+} from './groundingJudge.js';
 import { fixturePromptPackLibrary } from './promptPackFixtures.js';
 import { type GatewayScript, ScriptedGateway } from './scriptedGateway.js';
 import { type SpyGateway, spyGateway } from './spyGateway.js';
@@ -258,6 +264,18 @@ export function stepEnvExtras(
   };
 }
 
+/**
+ * A retrieval port whose `leakCheck` finds nothing (generate and postGuard ask it about every
+ * reply, 4.6); `search` and `probe` stay the given (usually unused) port's.
+ */
+function noLockedMaterial(port: RetrievalIndex): RetrievalIndex {
+  return {
+    search: (q, scope, k) => port.search(q, scope, k),
+    probe: (q, scope) => port.probe(q, scope),
+    leakCheck: () => Promise.resolve({ hit: false }),
+  };
+}
+
 export interface TestDeps {
   deps: PipelineDeps;
   clock: VirtualClock;
@@ -272,6 +290,8 @@ export interface TestDeps {
   log: MemoryTurnLog;
   /** Calls to ports the happy path never uses (stores); should stay empty. */
   portCalls: string[];
+  /** grounding judge requests the fake judge answered (empty without `judge`). */
+  judged: ModelRequest[];
 }
 
 /**
@@ -289,6 +309,13 @@ export function testDeps(
     alerts?: MemoryAlertSink;
     safetyEvents?: MemorySafetyEventSink;
     log?: MemoryTurnLog;
+    /**
+     * Answers grounding's judge requests (4.7) outside the script and the spy: a fixed verdict or a
+     * function of the request (`overlapJudge`). Absent: they reach the script like any request.
+     */
+    judge?: 'grounded' | 'ungrounded' | JudgeVerdict;
+    /** Virtual time each judge answer takes. */
+    judgeDelayMs?: number;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
   } = {},
@@ -304,10 +331,23 @@ export function testDeps(
   const safetyEvents = opts.safetyEvents ?? memorySafetyEventSink();
   const log = opts.log ?? memoryTurnLog();
   const portCalls: string[] = [];
+  const j = opts.judge;
+  const verdict: JudgeVerdict | undefined =
+    j === 'grounded' ? () => GROUNDED_VERDICT : j === 'ungrounded' ? () => UNGROUNDED_VERDICT : j;
+  const judged =
+    verdict === undefined
+      ? undefined
+      : judgeGateway(gateway, verdict, {
+          clock,
+          ...(opts.judgeDelayMs === undefined ? {} : { delayMs: opts.judgeDelayMs }),
+        });
   const deps: PipelineDeps = {
     clock,
     ids,
-    gatewayFor: (spec) => gateway.gatewayFor(spec),
+    gatewayFor: (spec) => {
+      const tg = gateway.gatewayFor(spec);
+      return judged === undefined ? tg : { ...tg, gateway: judged };
+    },
     priceUsage: (u) => u.costMicroUsd,
     log,
     entitlements: unusedPort('entitlements', portCalls),
@@ -317,7 +357,7 @@ export function testDeps(
     profiles: unusedPort('profiles', portCalls),
     transcripts: unusedPort('transcripts', portCalls),
     sessionState: unusedPort('sessionState', portCalls),
-    retrieval: unusedPort('retrieval', portCalls),
+    retrieval: noLockedMaterial(unusedPort<RetrievalIndex>('retrieval', portCalls)),
     teacherQuestions: unusedPort('teacherQuestions', portCalls),
     usage,
     traces,
@@ -331,5 +371,17 @@ export function testDeps(
     promptPacks: fixturePromptPackLibrary,
     ...opts.overrides,
   };
-  return { deps, clock, ids, gateway, traces, usage, alerts, safetyEvents, log, portCalls };
+  return {
+    deps,
+    clock,
+    ids,
+    gateway,
+    traces,
+    usage,
+    alerts,
+    safetyEvents,
+    log,
+    portCalls,
+    judged: judged?.judged ?? [],
+  };
 }

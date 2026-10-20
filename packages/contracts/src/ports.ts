@@ -30,6 +30,15 @@ export interface RetrievalIndex {
     q: string,
     scope: { teacherId: string; moduleIds: string[] },
   ): Promise<{ hit: boolean; score: number }>;
+  /**
+   * Code-only (ADR-0007): true when any candidate shares an 8+ token span with this teacher's
+   * material outside `allowedModuleIds` (and not also in them). One boolean for the whole batch:
+   * never text, spans, scores or counts. Fails closed: a timeout or error counts as a hit.
+   */
+  leakCheck(
+    candidates: readonly string[],
+    scope: { teacherId: string; allowedModuleIds: string[] },
+  ): Promise<{ hit: boolean }>;
 }
 
 export interface EntitlementStore {

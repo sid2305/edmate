@@ -9,13 +9,20 @@
 import { randomBytes } from 'node:crypto';
 import type { TurnEvent } from '@edmate/contracts';
 import { demoTurnInput } from '@edmate/contracts/fixtures';
-import { migrateDatabase, openDatabase, type Repositories, RepositoryError } from '@edmate/db';
+import {
+  migrateDatabase,
+  openDatabase,
+  profileStoreFor,
+  type Repositories,
+  RepositoryError,
+} from '@edmate/db';
 import { defaultSteps, runTurn } from '@edmate/harness';
 import { testDeps, testSteps } from '@edmate/harness/testing';
 import {
   COMMIT_QUEUE,
   createTurnQueues,
   DEAD_LETTER_QUEUE,
+  evidenceEventId,
   FAILED_JOB_TTL_SECONDS,
   JOB,
   jobOptions,
@@ -93,6 +100,13 @@ async function seed(c: pg.Client): Promise<void> {
     values ('pkg_test_paid', 'tch_test_01', 'agt_test_01', 'P', 1)`);
   await c.query(`insert into package_versions (id, teacher_id, package_id, version, config)
     values ('pv_test_paid_1', 'tch_test_01', 'pkg_test_paid', 1, '{}')`);
+  // For evidence jobs (task 3.17): evidence_events.topic_id references topics.
+  await c.query(`insert into courses (id, teacher_id, title, "order")
+    values ('crs_test_01', 'tch_test_01', 'C', 0)`);
+  await c.query(`insert into modules (id, teacher_id, course_id, title, "order")
+    values ('mod_test_01', 'tch_test_01', 'crs_test_01', 'M', 0)`);
+  await c.query(`insert into topics (id, teacher_id, module_id, title, "order")
+    values ('top_test_01', 'tch_test_01', 'mod_test_01', 'T', 0)`);
   // Open sessions are pinned to a package version (3.16, sessions_open_has_package).
   await c.query(`insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version) values
     ('ses_test_01', 'stu_test_01', 'tch_test_01', 'agt_test_01', 1, 'pkg_test_paid', 1),
@@ -158,9 +172,12 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
   });
 
   it('a harness turn on the queue-backed ports lands in Postgres via the workers', async () => {
-    const ports = queuedTurnPorts(queues, scope, {
-      history: (s, n) => db.repos.messages.history(scope, s, n),
-    });
+    const ports = queuedTurnPorts(
+      queues,
+      scope,
+      { history: (s, n) => db.repos.messages.history(scope, s, n) },
+      { get: (studentId, teacherId) => profileStoreFor(db.repos, scope).get(studentId, teacherId) },
+    );
     // A real clock: the enqueue is real I/O, which a virtual clock would read as a deadlock.
     const clock = {
       now: () => Date.now(),
@@ -263,6 +280,63 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
       v: 1,
       rung: 3,
     });
+  });
+
+  it('a replayed evidence job updates mastery once; a duplicated teacher-question open lands once', async () => {
+    const event = {
+      studentId: scope.studentId,
+      teacherId: scope.teacherId,
+      topicId: 'top_test_01',
+      correct: true,
+      source: 'practice' as const,
+      weight: 1,
+      ts: '2026-10-19T14:00:00.000Z',
+    };
+    const evidenceJob = { name: JOB.evidence, data: { scope, event } };
+    await queues.commit.add(
+      JOB.evidence,
+      evidenceJob.data,
+      jobOptions(`${evidenceEventId(event)}.evidence`, JOB.evidence),
+    );
+    // The exact same job, added a second time (the replay this task must make a no-op).
+    await queues.commit.add(
+      JOB.evidence,
+      evidenceJob.data,
+      jobOptions(`${evidenceEventId(event)}.evidence`, JOB.evidence),
+    );
+    await until(
+      () => db.repos.learnerProfiles.get(scope),
+      (p) => p?.mastery[event.topicId] !== undefined,
+    );
+    expect(
+      await count(
+        `select count(*)::text as n from evidence_events where topic_id = $1 and ts = $2`,
+        [event.topicId, event.ts],
+      ),
+    ).toBe(1);
+    const profile = await db.repos.learnerProfiles.get(scope);
+    expect(profile?.mastery[event.topicId]?.n).toBe(1);
+
+    // Two concurrent opens of the same ask_teacher question (the 3.7 live attempt racing commit's
+    // 3.17 fallback): both calls land on one row (teacherQuestionsRepo.open, migration 0011).
+    const [a, b] = await Promise.all([
+      db.repos.teacherQuestions.open(scope, {
+        agentId: 'agt_test_01',
+        text: 'TQ-COMMIT-INT-CANARY: why does this work?',
+        similarIds: [],
+      }),
+      db.repos.teacherQuestions.open(scope, {
+        agentId: 'agt_test_01',
+        text: 'TQ-COMMIT-INT-CANARY: why does this work?',
+        similarIds: [],
+      }),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(
+      await count(
+        `select count(*)::text as n from teacher_questions where text = 'TQ-COMMIT-INT-CANARY: why does this work?'`,
+      ),
+    ).toBe(1);
   });
 
   it('a permanent failure (another student’s session) is dead-lettered after one attempt', async () => {

@@ -60,10 +60,10 @@ describe('runGuardChain: declared order', () => {
     for (const n of [
       'tone',
       'grounding',
-      'answerLeak',
+      'lockedLeak',
       'personaBoundary',
       'adviceGuard',
-      'lockedLeak',
+      'answerLeak',
     ]) {
       r.register(fakeGuard<Ctx>(n, 'post', OK, { spy: calls }));
     }
@@ -313,14 +313,14 @@ describe('runGuardChain: fail closed', () => {
   it.each(invalid)(
     'a guard returning %s fails with cause invalid_result',
     async (_label, value) => {
-      const a = rawGuard('answerLeak', 'post', () => Promise.resolve(value as never));
+      const a = rawGuard('lockedLeak', 'post', () => Promise.resolve(value as never));
       const b = fakeGuard<Ctx>('tone', 'post', OK);
       const { run } = setup('post');
       const res = await run([a, b]);
       expect(res).toEqual({
         outcome: 'failed',
-        failure: { name: 'answerLeak', cause: 'invalid_result' },
-        guards: [{ name: 'answerLeak', ok: false, action: 'failed' }],
+        failure: { name: 'lockedLeak', cause: 'invalid_result' },
+        guards: [{ name: 'lockedLeak', ok: false, action: 'failed' }],
         usage: [],
       });
       expect(b.calls).toEqual([]);
@@ -495,7 +495,7 @@ describe('runGuardChain: rewrite and the verification pass', () => {
   const once = (from: string, to: string) => (t: string) => (t === from ? rewrite(to) : OK);
 
   it('rewrite returns the replacement text; a clean verification pass keeps it', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', once('the answer is 42', 'a safer hint'));
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', once('the answer is 42', 'a safer hint'));
     const b = fakeGuard<Ctx>('tone', 'post', OK);
     const { run } = setup('post');
     const res = await run([a, b], 'the answer is 42');
@@ -503,9 +503,9 @@ describe('runGuardChain: rewrite and the verification pass', () => {
       outcome: 'ok',
       text: 'a safer hint',
       guards: [
-        { name: 'answerLeak', ok: false, action: 'rewrite' },
+        { name: 'lockedLeak', ok: false, action: 'rewrite' },
         { name: 'tone', ok: true },
-        { name: 'answerLeak', ok: true },
+        { name: 'lockedLeak', ok: true },
         { name: 'tone', ok: true },
       ],
       usage: [],
@@ -515,8 +515,8 @@ describe('runGuardChain: rewrite and the verification pass', () => {
   });
 
   it('two rewrites compose: the second sees the first and its text is final', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', once('draft', 'draft +a'));
-    const b = fakeGuard<Ctx>('lockedLeak', 'post', once('draft +a', 'draft +a +b'));
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', once('draft', 'draft +a'));
+    const b = fakeGuard<Ctx>('answerLeak', 'post', once('draft +a', 'draft +a +b'));
     const { run } = setup('post');
     const res = await run([a, b], 'draft');
     expect(textOf(res)).toBe('draft +a +b');
@@ -525,53 +525,53 @@ describe('runGuardChain: rewrite and the verification pass', () => {
   });
 
   it('a later rewrite that puts the withheld answer back is caught by an earlier guard', async () => {
-    // answerLeak passes the draft; grounding then rewrites the answer back in.
-    const answerLeak = fakeGuard<Ctx>('answerLeak', 'post', (t) =>
+    // The first post guard passes the draft; grounding then rewrites the withheld text back in.
+    const lockedLeak = fakeGuard<Ctx>('lockedLeak', 'post', (t) =>
       t.includes('42') ? rewrite('try the next step') : OK,
     );
-    const lockedLeak = fakeGuard<Ctx>('lockedLeak', 'post', OK);
+    const answerLeak = fakeGuard<Ctx>('answerLeak', 'post', OK);
     const grounding = fakeGuard<Ctx>('grounding', 'post', once('draft', 'the answer is 42'));
     const tone = fakeGuard<Ctx>('tone', 'post', OK);
     const { run } = setup('post');
-    const res = await run([answerLeak, lockedLeak, grounding, tone], 'draft');
+    const res = await run([lockedLeak, answerLeak, grounding, tone], 'draft');
     expect(res).toEqual({
       outcome: 'block',
       cause: 'rewrite_unverified',
-      blockedBy: 'answerLeak',
+      blockedBy: 'lockedLeak',
       guards: [
-        { name: 'answerLeak', ok: true },
         { name: 'lockedLeak', ok: true },
+        { name: 'answerLeak', ok: true },
         { name: 'grounding', ok: false, action: 'rewrite' },
         { name: 'tone', ok: true },
-        { name: 'answerLeak', ok: false, action: 'block' },
+        { name: 'lockedLeak', ok: false, action: 'block' },
       ],
       usage: [],
     });
-    expect(answerLeak.calls.map((c) => c.text)).toEqual(['draft', 'the answer is 42']);
-    expect(tone.calls).toHaveLength(1); // the verification pass stopped at answerLeak
+    expect(lockedLeak.calls.map((c) => c.text)).toEqual(['draft', 'the answer is 42']);
+    expect(tone.calls).toHaveLength(1); // the verification pass stopped at lockedLeak
     expect(JSON.stringify(res)).not.toContain('42');
   });
 
   it('a block verdict on the verification pass is rewrite_unverified too', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', (t) => (t === 'bad' ? BLOCK : OK));
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', (t) => (t === 'bad' ? BLOCK : OK));
     const b = fakeGuard<Ctx>('tone', 'post', once('draft', 'bad'));
     const { run } = setup('post');
     expect(await run([a, b], 'draft')).toMatchObject({
       outcome: 'block',
       cause: 'rewrite_unverified',
-      blockedBy: 'answerLeak',
+      blockedBy: 'lockedLeak',
     });
   });
 
   it('a guard failure on the verification pass fails the chain', async () => {
     let calls = 0;
-    const a = rawGuard('answerLeak', 'post', () =>
+    const a = rawGuard('lockedLeak', 'post', () =>
       calls++ === 0 ? Promise.resolve({ result: OK, usage: [] }) : Promise.reject(new Error('x')),
     );
     const b = fakeGuard<Ctx>('tone', 'post', once('draft', 'better'));
     const { run } = setup('post');
     const res = await run([a, b], 'draft');
-    expect(failureOf(res)).toEqual({ name: 'answerLeak', cause: 'error', errorName: 'Error' });
+    expect(failureOf(res)).toEqual({ name: 'lockedLeak', cause: 'error', errorName: 'Error' });
   });
 
   it('an escalate on the verification pass still escalates (a stronger outcome than block)', async () => {
@@ -641,8 +641,8 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
       [BLOCK, 'block'],
       [ESCALATE, 'escalate'],
     ] as const) {
-      const a = fakeGuard<Ctx>('answerLeak', 'post', OK, { usage: [u(1)] });
-      const b = fakeGuard<Ctx>('lockedLeak', 'post', rewrite('y'), { usage: [u(2), u(3)] });
+      const a = fakeGuard<Ctx>('lockedLeak', 'post', OK, { usage: [u(1)] });
+      const b = fakeGuard<Ctx>('answerLeak', 'post', rewrite('y'), { usage: [u(2), u(3)] });
       const c = fakeGuard<Ctx>('grounding', 'post', last, { usage: [usageMain] });
       const d = fakeGuard<Ctx>('tone', 'post', OK, { usage: [u(9)] });
       const { run } = setup('post');
@@ -653,7 +653,7 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
   });
 
   it('adds usage from the verification pass', async () => {
-    const a = fakeGuard<Ctx>('answerLeak', 'post', (t) => (t === 'x' ? rewrite('y') : OK), {
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', (t) => (t === 'x' ? rewrite('y') : OK), {
       usage: [u(1)],
     });
     const b = fakeGuard<Ctx>('tone', 'post', OK, { usage: [u(2)] });
@@ -672,7 +672,7 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
     const results: GuardResult[] = [OK, BLOCK, rewrite('secret replacement'), ESCALATE];
     for (const r of results) {
       const { run } = setup('post');
-      const res = await run([fakeGuard<Ctx>('answerLeak', 'post', r)], 'secret draft');
+      const res = await run([fakeGuard<Ctx>('lockedLeak', 'post', r)], 'secret draft');
       parsesAsTrace(res);
       for (const g of res.guards) {
         expect(Object.keys(g).sort()).toEqual(g.ok ? ['name', 'ok'] : ['action', 'name', 'ok']);
@@ -685,14 +685,14 @@ describe('runGuardChain: usage, trace and the outcome hook', () => {
     const events: GuardOutcomeEvent[] = [];
     const { run } = setup('post', { onGuardOutcome: (e) => events.push(e) });
     await run([
-      fakeGuard<Ctx>('answerLeak', 'post', OK),
-      fakeGuard<Ctx>('lockedLeak', 'post', rewrite('secret')),
+      fakeGuard<Ctx>('lockedLeak', 'post', OK),
+      fakeGuard<Ctx>('answerLeak', 'post', rewrite('secret')),
       fakeGuard<Ctx>('grounding', 'post', BLOCK),
       fakeGuard<Ctx>('tone', 'post', OK),
     ]);
     expect(events).toEqual([
-      { name: 'answerLeak', phase: 'post', pass: 1, outcome: 'ok' },
-      { name: 'lockedLeak', phase: 'post', pass: 1, outcome: 'rewrite' },
+      { name: 'lockedLeak', phase: 'post', pass: 1, outcome: 'ok' },
+      { name: 'answerLeak', phase: 'post', pass: 1, outcome: 'rewrite' },
       { name: 'grounding', phase: 'post', pass: 1, outcome: 'block' },
     ]);
     expect(JSON.stringify(events)).not.toContain('secret');
@@ -789,5 +789,59 @@ describe('fakeGuard', () => {
     const g = fakeGuard<Ctx>('tone', 'post', (t) => Promise.resolve(rewrite(t.toUpperCase())));
     const c = cancelSource();
     expect((await g.run('abc', CTX, c.token)).result).toEqual(rewrite('ABC'));
+  });
+});
+
+describe('runGuardChain: per-guard slices (task 4.7)', () => {
+  it('asks the slice function before each run, with the guard, pass and position', async () => {
+    const asked: unknown[] = [];
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', (t) => (t === 'r' ? OK : rewrite('r')));
+    const b = fakeGuard<Ctx>('grounding', 'post', OK);
+    const { run } = setup('post', {
+      timeoutMs: (at) => {
+        asked.push(at);
+        return SLICE_MS;
+      },
+    });
+    const res = await run([a, b]);
+    expect(res.outcome).toBe('ok');
+    expect(asked).toEqual([
+      { name: 'lockedLeak', pass: 1, index: 0 },
+      { name: 'grounding', pass: 1, index: 1 },
+      { name: 'lockedLeak', pass: 2, index: 0 },
+      { name: 'grounding', pass: 2, index: 1 },
+    ]);
+  });
+
+  it('each guard gets its own slice', async () => {
+    const clockRef: { c?: VirtualClock } = {};
+    const slow = (name: string, ms: number) =>
+      rawGuard(name, 'post', async () => {
+        await clockRef.c?.sleep(ms);
+        return { result: OK, usage: [] };
+      });
+    const slices: Record<string, number> = { lockedLeak: 10, grounding: 100 };
+    const { run, clock } = setup('post', { timeoutMs: ({ name }) => slices[name] ?? 0 });
+    clockRef.c = clock;
+    expect((await run([slow('lockedLeak', 9), slow('grounding', 99)])).outcome).toBe('ok');
+    expect(failureOf(await run([slow('lockedLeak', 11), slow('grounding', 1)]))).toEqual({
+      name: 'lockedLeak',
+      cause: 'timeout',
+    });
+  });
+
+  it('a slice function that throws or gives nonsense fails the guard closed (timeout)', async () => {
+    for (const timeoutMs of [
+      () => {
+        throw new Error('boom');
+      },
+      () => Number.NaN,
+      () => 'x' as unknown as number,
+    ]) {
+      const a = fakeGuard<Ctx>('tone', 'post', OK);
+      const { run } = setup('post', { timeoutMs });
+      expect(failureOf(await run([a]))).toEqual({ name: 'tone', cause: 'timeout' });
+      expect(a.calls).toEqual([]);
+    }
   });
 });

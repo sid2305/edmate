@@ -5,6 +5,7 @@
 // queue (task 4.4) carries moderationIn and jailbreak blocks to the safety-event worker.
 import type {
   AlertSink,
+  ProfileStore,
   SafetyEventSink,
   SessionStateStore,
   TraceSink,
@@ -12,6 +13,7 @@ import type {
 } from '@edmate/contracts';
 import { type ConnectionOptions, Queue } from 'bullmq';
 import { queuedAlertSink, type QueuedAlertSinkOptions } from './alertSink.js';
+import { type ProfileReader, queuedProfileStore } from './profileStore.js';
 import {
   ALERT_QUEUE,
   COMMIT_QUEUE,
@@ -28,10 +30,12 @@ import { type QueuedUsageMeter, queuedUsageMeter } from './usageMeter.js';
 
 export * from './queues.js';
 export { queuedAlertSink, type QueuedAlertSinkOptions } from './alertSink.js';
+export { type ProfileReader, queuedProfileStore } from './profileStore.js';
 export { queuedSafetyEventSink } from './safetyEventSink.js';
 export { queuedSessionStateStore } from './sessionStateStore.js';
 export { queuedTraceSink } from './traceSink.js';
 export { queuedTranscriptStore } from './transcriptStore.js';
+export { type RedisTurnCounterOptions, redisTurnCounter, redisTurnLimits } from './turnLimits.js';
 export {
   MAX_TRACKED_TURNS,
   type QueuedUsageMeter,
@@ -49,8 +53,8 @@ export interface TurnQueues {
 }
 
 /**
- * The producer queues (meter, commit, alert, safety event) on a connection the caller owns (`prefix`: BullMQ's key prefix, for
- * tests). Nothing connects until a job is added.
+ * The producer queues (meter, commit, alert, safety event) on a connection the caller owns
+ * (`prefix`: BullMQ's key prefix, for tests). Nothing connects until a job is added.
  */
 export function createTurnQueues(
   connection: ConnectionOptions,
@@ -79,13 +83,19 @@ export interface QueuedTurnPorts {
   traces: TraceSink;
   alerts: AlertSink;
   safetyEvents: SafetyEventSink;
+  profiles: ProfileStore;
 }
 
-/** One turn's queue-backed ports for its student x teacher (`reader` serves transcript history). */
+/**
+ * One turn's queue-backed ports for its student x teacher (`reader` serves transcript history and
+ * `profileReader` serves `profiles.get`: both reads the turn needs now, so neither goes through
+ * the queue).
+ */
 export function queuedTurnPorts(
   queues: Pick<TurnQueues, 'meter' | 'commit' | 'alert' | 'safetyEvent'>,
   scope: JobScope,
   reader: Pick<TranscriptStore, 'history'>,
+  profileReader: ProfileReader,
   alertOptions: QueuedAlertSinkOptions = {},
 ): QueuedTurnPorts {
   return {
@@ -95,5 +105,6 @@ export function queuedTurnPorts(
     traces: queuedTraceSink(queues.commit, scope),
     alerts: queuedAlertSink(queues.alert, alertOptions),
     safetyEvents: queuedSafetyEventSink(queues.safetyEvent, scope),
+    profiles: queuedProfileStore(queues.commit, scope, profileReader),
   };
 }

@@ -4,6 +4,7 @@ import { demoLocalePack } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { cancelSource } from '../pipeline/clock.js';
 import { indiaLocalePackWithPii } from '../testing/piiLocaleFixtures.js';
+import { PII_SCRUB_CASES, piiScrubCaseFailures } from '../testing/piiScrubCases.js';
 import { virtualClock } from '../testing/virtualClock.js';
 import { runGuardChain } from './chain.js';
 import { PII_PLACEHOLDERS as P, PiiPatternError } from './piiPatterns.js';
@@ -14,72 +15,8 @@ const token = cancelSource().token;
 const guard = createPiiScrubGuard();
 const run = (text: string, ctx: PiiScrubCtx = IN) => guard.run(text, ctx, token);
 
-/** Each category with its matched literal (fake, from the eval cases) and expected rewrite. */
-const CASES = [
-  {
-    label: 'phone',
-    input: 'save my number 90000 11111 please',
-    pii: '90000 11111',
-    text: `save my number ${P.phone} please`,
-    reason: 'redacted: phone',
-  },
-  {
-    label: 'phone in Devanagari digits',
-    input: 'मेरा नंबर ९०००० १२३४५ है',
-    pii: '९०००० १२३४५',
-    text: `मेरा नंबर ${P.phone} है`,
-    reason: 'redacted: phone',
-  },
-  {
-    label: 'email',
-    input: 'mail aarav.student@example.com now',
-    pii: 'aarav.student@example.com',
-    text: `mail ${P.email} now`,
-    reason: 'redacted: email',
-  },
-  {
-    label: 'card',
-    input: 'card 4111 1111 1111 1111 cvv 123',
-    pii: '4111 1111 1111 1111',
-    text: `card ${P.card} cvv ${P.card}`,
-    reason: 'redacted: card',
-  },
-  {
-    label: 'OTP-like',
-    input: 'OTP aaya hai 615204',
-    pii: '615204',
-    text: `OTP aaya hai ${P.otp}`,
-    reason: 'redacted: otp',
-  },
-  {
-    label: 'own name',
-    input: "Hi, I'm Aarav Mehta.",
-    pii: 'Aarav',
-    text: `Hi, I'm ${P.name} ${P.name}.`,
-    reason: 'redacted: name',
-  },
-  {
-    label: 'Aadhaar-like (locale)',
-    input: 'aadhaar 1234 5678 9012 hai',
-    pii: '1234 5678 9012',
-    text: `aadhaar ${P.id} hai`,
-    reason: 'redacted: id',
-  },
-  {
-    label: 'PAN (locale)',
-    input: 'my PAN is ABCDE1234F',
-    pii: 'ABCDE1234F',
-    text: `my PAN is ${P.id}`,
-    reason: 'redacted: id',
-  },
-  {
-    label: 'UPI id (locale)',
-    input: 'UPI kabir.fake@exampleupi today',
-    pii: 'kabir.fake',
-    text: `UPI ${P.id} today`,
-    reason: 'redacted: id',
-  },
-] as const;
+/** 4.2's cases, shared with @edmate/content's test of the real IN pack (task 3.10). */
+const CASES = PII_SCRUB_CASES;
 
 describe('createPiiScrubGuard', () => {
   it('is the scrub-phase piiScrub guard', () => {
@@ -147,6 +84,21 @@ describe('createPiiScrubGuard', () => {
     const a = await run('my PAN is ABCDE1234F', { locale: pack });
     const b = await run('my PAN is ABCDE1234F', { locale: pack });
     expect(a).toEqual(b);
+  });
+});
+
+describe('piiScrubCaseFailures (the shared runner)', () => {
+  it('none for the India pack', async () => {
+    expect(await piiScrubCaseFailures(IN)).toEqual([]);
+  });
+
+  it('names, by label only, each case a pack without the India patterns misses', async () => {
+    const none: PiiScrubCtx = { locale: { ...demoLocalePack, piiPatterns: [] } };
+    expect(await piiScrubCaseFailures(none)).toEqual([
+      'Aadhaar-like (locale)',
+      'PAN (locale)',
+      'UPI id (locale)',
+    ]);
   });
 });
 

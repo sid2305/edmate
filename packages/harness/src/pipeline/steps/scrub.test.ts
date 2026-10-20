@@ -2,6 +2,7 @@
 import { type GuardResult, LIMITS, type LocalePack, type TurnInput } from '@edmate/contracts';
 import {
   demoAgentConfig,
+  demoAttachment,
   demoEntitlementSubscription,
   demoLocalePack,
   demoPackagePaid,
@@ -22,7 +23,12 @@ import { ScrubFailedError } from '../errors.js';
 import { ScrubbedSchema } from '../results.js';
 import type { Entitled, StepEnv } from '../types.js';
 import { defaultSteps } from './index.js';
-import { createScrub, SCRUB_GUARD_TIMEOUT_MS, scrub } from './scrub.js';
+import {
+  ATTACHMENT_REFUSED_REPLY,
+  createScrub,
+  SCRUB_GUARD_TIMEOUT_MS,
+  scrub,
+} from './scrub.js';
 
 const PHONE = '90000 11111';
 const entitled = (locale: LocalePack = indiaLocalePackWithPii): Entitled => ({
@@ -215,9 +221,8 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
     return drive(scrub(env, entitled()));
   };
 
-  it('a bare OTP and a bare first name (no keyword in the value) are redacted', async () => {
+  it('a bare OTP (no keyword in the value) is redacted', async () => {
     expect((await run({ otp: '482913' })).skillPayload).toEqual({ otp: P.otp });
-    expect((await run({ name: 'Riya' })).skillPayload).toEqual({ name: P.name });
   });
 
   it.each([
@@ -230,10 +235,12 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
     ['pan', { PAN: 'ABCDE' }, { PAN: P.id }],
     ['upi id', { 'upi-id': 'riya' }, { 'upi-id': P.id }],
     ['student name', { studentName: 'Riya Sen' }, { studentName: P.name }],
+    ['student name, one word (fix round)', { studentName: 'Riya' }, { studentName: P.name }],
+    ['pin code (compound, not bare "pin")', { pinCode: '411001' }, { pinCode: P.otp }],
     [
-      'nested under the key',
-      { name: { first: 'Riya', last: ['Sen'] } },
-      { name: { first: P.name, last: [P.name] } },
+      'an array is still the key’s own value',
+      { studentName: ['Riya', 'Sen'] },
+      { studentName: [P.name, P.name] },
     ],
     [
       'empty, boolean and null values stay',
@@ -254,6 +261,89 @@ describe('scrub: values under PII-named keys are redacted whole (fix round)', ()
       { name: 'piiScrub', ok: true },
       { name: 'piiScrub', ok: false, action: 'rewrite' },
     ]);
+  });
+});
+
+describe('scrub: a bare "name"/"card"/"pin" key redacts its own scalar value (fix round, CRITICAL)', () => {
+  const run = async (skillPayload: unknown) => {
+    const { env, drive } = setup({ ...demoTurnInput, skillPayload });
+    return drive(scrub(env, entitled()));
+  };
+
+  // 4.2c item 7's "ambiguous, needs a compound form" rule let a bare "name"/"card"/"pin" key's
+  // own scalar value reach the model unredacted ({"name":"Riya Sen"} never redacted at all). The
+  // ambiguity only ever needs to stop a bare key's category spreading into an unrelated NESTED
+  // key, which a key-less nested object or array element already does on its own (see below); it
+  // must never block the key's own direct value.
+  it.each([
+    ['bare "name" at the top level', { name: 'Riya' }, { name: P.name }],
+    ['bare "name", a full name', { name: 'Riya Sen' }, { name: P.name }],
+    ['bare "pin", a 6-digit PIN string', { pin: '411001' }, { pin: P.otp }],
+    ['bare "pin", a 4-digit postcode-shaped string', { pin: '1100' }, { pin: P.otp }],
+    ['student name (prefixed, not bare)', { studentName: 'Riya' }, { studentName: P.name }],
+  ] as const)('%s', async (_label, payload, expected) => {
+    expect((await run(payload)).skillPayload).toEqual(expected);
+  });
+
+  it.each([
+    ['bare "card" with an object value is a flashcard, not a payment card', { card: { front: 'What is a list?' } }],
+    [
+      'bare "name" nested under a file-like key is a file name, not a person',
+      { files: [{ name: 'main.py' }] },
+    ],
+    ['bare "pin", a short number is not a PIN code', { pin: 13 }],
+  ] as const)('left alone: %s', async (_label, payload) => {
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('bare "name" with an object value redacts its direct name-like fields only', async () => {
+    const payload = { name: { first: 'Riya', last: 'Sen' } };
+    expect((await run(payload)).skillPayload).toEqual({ name: { first: P.name, last: P.name } });
+  });
+
+  it('an object value under a PII-named key does not propagate into its own unrelated keys', async () => {
+    const payload = { studentName: { nickname: 'Riya', initials: 'RS' } };
+    expect((await run(payload)).skillPayload).toEqual(payload);
+  });
+
+  it('compound forms of the same ambiguous words still redact', async () => {
+    expect((await run({ cardNumber: '4111' })).skillPayload).toEqual({ cardNumber: P.card });
+    expect((await run({ studentName: 'Riya' })).skillPayload).toEqual({ studentName: P.name });
+    expect((await run({ pinCode: '411001' })).skillPayload).toEqual({ pinCode: P.otp });
+  });
+});
+
+describe('scrub: the file-like-parent exemption also needs the value to look like a file or identifier (fix round 2, HIGH)', () => {
+  const run = async (skillPayload: unknown) => {
+    const { env, drive } = setup({ ...demoTurnInput, skillPayload });
+    return drive(scrub(env, entitled()));
+  };
+
+  // Fix round 1 keyed the exemption on the enclosing key's name alone, so a person's name under
+  // `files`, `module`, `function`, `class` or `variable` was never redacted, at any depth. Now
+  // both have to hold: the parent is file-shaped AND the value itself looks like a file name or a
+  // plain identifier (a dot-extension, or a single no-whitespace token that isn't a bare
+  // Title-Case word). Unsure cases redact (fail toward privacy).
+  it.each([
+    ['a name under "files"', { files: [{ name: 'Riya Sen' }] }, { files: [{ name: P.name }] }],
+    ['a one-word name under "module"', { module: { name: 'Riya' } }, { module: { name: P.name } }],
+    ['a name under "function"', { function: { name: 'Riya Sen' } }, { function: { name: P.name } }],
+    ['a name under "class"', { class: { name: 'Riya Sen' } }, { class: { name: P.name } }],
+    ['a name under "variable"', { variable: { name: 'Riya Sen' } }, { variable: { name: P.name } }],
+    [
+      'a name under "files" nested two levels deep',
+      { project: { files: [{ name: 'Riya Sen' }] } },
+      { project: { files: [{ name: P.name }] } },
+    ],
+  ] as const)('%s', async (_label, payload, expected) => {
+    expect((await run(payload)).skillPayload).toEqual(expected);
+  });
+
+  it.each([
+    ['a dot-extension file name under "files"', { files: [{ name: 'main.py' }] }],
+    ['a snake_case identifier under "function"', { function: { name: 'greet_user' } }],
+  ] as const)('still left alone: %s', async (_label, payload) => {
+    expect((await run(payload)).skillPayload).toEqual(payload);
   });
 });
 
@@ -417,5 +507,88 @@ describe('scrub: every non-ok outcome fails closed with ids and an error name on
     const { env, drive } = setup(withText(`call ${PHONE}`));
     const e = await failure(drive(scrub(env, entitled(bad))));
     expect(e.cause).toEqual({ guardCause: 'error', errorName: 'PiiPatternError' });
+  });
+});
+
+describe('scrub: an attachment is refused, not scrubbed (task 4.2b)', () => {
+  // No OCR/vision pipeline exists yet (board task 4.2b design note): every attachment is refused
+  // before anything about it — not even its bytes or storage key — is read. This is the safe
+  // stopgap until a real extract-and-scrub pipeline is built for photo upload (P1).
+  it('a single attachment is refused before the guard chain or payload walk runs', async () => {
+    const spy = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', { ok: true });
+    const { env, drive } = setup({ ...demoTurnInput, attachments: [demoAttachment] });
+    const e = await failure(drive(createScrub([spy])(env, entitled())));
+    expect(e.detail).toEqual({ guardCause: 'attachment' });
+    expect(spy.calls).toEqual([]);
+  });
+
+  it('two attachments (at the schema cap) are refused the same way', async () => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      attachments: [demoAttachment, { ...demoAttachment, storageKey: 'test/uploads/att_02.png' }],
+    });
+    expect((await failure(drive(scrub(env, entitled())))).detail).toEqual({
+      guardCause: 'attachment',
+    });
+  });
+
+  it('an empty attachments array is not a refusal (regression against an over-eager check)', async () => {
+    const { env, drive } = setup({ ...demoTurnInput, attachments: [] });
+    expect(await drive(scrub(env, entitled()))).toEqual({
+      text: demoTurnInput.text,
+      guards: [{ name: 'piiScrub', ok: true }],
+    });
+  });
+
+  it('a PII-bearing text and skillPayload alongside an attachment are still refused outright', async () => {
+    const spy = fakeGuard<PiiScrubCtx>('piiScrub', 'scrub', { ok: true });
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      text: `my number is ${PHONE}`,
+      skillPayload: { phone: PHONE },
+      attachments: [demoAttachment],
+    });
+    const e = await failure(drive(createScrub([spy])(env, entitled())));
+    expect(e.detail).toEqual({ guardCause: 'attachment' });
+    expect(spy.calls).toEqual([]);
+  });
+
+  // Labels are illustrative only (via storageKey, test documentation value): no OCR exists to
+  // tell these cases apart today, so all four are refused identically before any extraction is
+  // even attempted. A follow-up task building the real extract-and-scrub pipeline must re-test
+  // these for real once OCR/vision exists.
+  it.each([
+    ['an ID-card photo', 'test/uploads/id-card-fixture.png'],
+    ['a rotated/split-text photo', 'test/uploads/rotated-split-text-fixture.png'],
+    ['a no-text image', 'test/uploads/no-text-fixture.png'],
+    ['a "slow OCR" fixture', 'test/uploads/slow-ocr-fixture.png'],
+  ] as const)('adversarial fixture label: %s', async (_label, storageKey) => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      attachments: [{ ...demoAttachment, storageKey }],
+    });
+    expect((await failure(drive(scrub(env, entitled())))).detail).toEqual({
+      guardCause: 'attachment',
+    });
+  });
+
+  it('the thrown error never shows the text, skillPayload or any attachment field', async () => {
+    const { env, drive } = setup({
+      ...demoTurnInput,
+      text: `my number is ${PHONE}`,
+      skillPayload: { phone: PHONE },
+      attachments: [demoAttachment],
+    });
+    const e = await failure(drive(scrub(env, entitled())));
+    const s = shown(e);
+    expect(s).not.toContain(PHONE);
+    expect(s).not.toContain(demoTurnInput.text);
+    expect(s).not.toContain(demoAttachment.storageKey);
+    expect(s).not.toContain(demoAttachment.mime);
+  });
+
+  it('ATTACHMENT_REFUSED_REPLY is friendly, English, names no ids or codes', () => {
+    expect(ATTACHMENT_REFUSED_REPLY).not.toMatch(/error|guard_blocked|attachment_refused/i);
+    expect(ATTACHMENT_REFUSED_REPLY).toMatch(/photo|image/i);
   });
 });

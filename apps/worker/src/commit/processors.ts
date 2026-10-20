@@ -13,6 +13,7 @@
 // integrity error) is thrown as `PermanentJobError`, which the worker turns into BullMQ's
 // UnrecoverableError (no retries, straight to the dead-letter queue). Anything else is retried.
 import {
+  foldMastery,
   type Repositories,
   RepositoryError,
   sessionStateStoreFor,
@@ -20,6 +21,8 @@ import {
   transcriptStoreFor,
 } from '@edmate/db';
 import {
+  EvidenceJobSchema,
+  evidenceEventId,
   HelpStateJobSchema,
   JOB,
   MessageJobSchema,
@@ -191,6 +194,25 @@ export function commitProcessor(
           })) !== null,
         () => traceSinkFor(repos, d.scope).record(d.trace),
       );
+    }
+    if (job.name === JOB.evidence) {
+      const d = parse(EvidenceJobSchema, job);
+      // evidenceEvents.append is itself idempotent (ON CONFLICT (id) DO NOTHING, task 3.17): a
+      // replayed job's id already exists, `applied` comes back empty, and mastery is folded zero
+      // times more (never once more). No separate exists() check is needed (unlike usage/trace
+      // above), so this isn't built on `once()`.
+      try {
+        const id = evidenceEventId(d.event);
+        const applied = await repos.evidenceEvents.append(d.scope, [{ ...d.event, id }]);
+        if (applied.length > 0) {
+          const current = await repos.learnerProfiles.get(d.scope);
+          const patch = foldMastery(current?.mastery ?? {}, applied);
+          await repos.learnerProfiles.applyMastery(d.scope, patch);
+        }
+        return applied.length > 0 ? 'written' : 'already_written';
+      } catch (error) {
+        return classify(job.name, error);
+      }
     }
     throw new PermanentJobError(`unknown commit job ${JSON.stringify(job.name).slice(0, 60)}`);
   };

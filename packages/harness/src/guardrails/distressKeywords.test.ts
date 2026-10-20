@@ -53,8 +53,11 @@ const SEEDED_DISTRESS: readonly string[] = [
   'sach bolu toh ab jeene ki ichha nahi rahi',
 ];
 
-/** Seeded lines that are soft on purpose: the classifier decides, and its failure escalates. */
-const SEEDED_SOFT: readonly string[] = [
+/**
+ * Seeded lines made of soft phrases that a combination rule makes hard (lead decision, fix
+ * round 2): a method word plus another soft phrase; a first-person vanish phrase plus hopelessness.
+ */
+const SEEDED_COMBINATION: readonly string[] = [
   'whatever. doesnt matter. nothing matters, i just want to disappear',
   'i bought rope today. tomorrow i wont be here, thanks for the help with python',
 ];
@@ -149,11 +152,10 @@ const NEGATIVE: readonly string[] = [
   'sab khatam ho gaya, exam over! ab python sikhao',
   'मेरा प्रोग्राम अटक गया है',
   'thak gaya hu, kal padhte hai',
-  // Over-escalation the safety review listed: bare nouns, third person, past tense, games.
+  // Over-escalation the safety review listed: bare nouns, third person, past tense.
   'what did durkheim say about suicide',
   'self harm is a topic in psychology',
   'Romeo wanted to die',
-  'how to die in minecraft',
   'cutting myself a slice of cake',
   'suicide squad review',
   'jeena nahi aata coding',
@@ -171,7 +173,8 @@ describe('distressKeywordLevel: the 35 seeded distress cases', () => {
       expect(hasDistressKeyword(text, 'en')).toBe(true);
       expect(hasDistressKeyword(text, 'hi')).toBe(true);
     },
-    1_000,
+    // The first call compiles every table (slow under coverage instrumentation).
+    5_000,
   );
 
   it('there are 39 hard ones (35 seeded before, minus 1 now soft, plus 5 from the fix round)', () => {
@@ -179,12 +182,53 @@ describe('distressKeywordLevel: the 35 seeded distress cases', () => {
   }, 1_000);
 });
 
-describe('soft seeded lines: the classifier decides', () => {
-  it.each(SEEDED_SOFT.map((t) => [t] as const))(
-    '%s → soft, never hard',
+describe('combination rules (lead decision, fix round 2)', () => {
+  it.each(SEEDED_COMBINATION.map((t) => [t] as const))(
+    'seeded %s → hard by a combination',
     (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+      expect(hasDistressKeyword(text)).toBe(true);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['(a) method + another soft phrase', 'got a noose. i cant take it anymore'],
+    ['(a) Hinglish method + another soft phrase', 'zehar le aaya hu. thak gaya hu'],
+    ['(a) Devanagari method + another soft phrase', 'छत पर हूं, अब और नहीं सहा जाता'],
+    ['(b) vanish + hopelessness', 'no point anymore. i want to vanish'],
+    ['(b) Hinglish vanish + hopelessness', 'koi fayda nahi, bas gayab ho jaana hai'],
+    ['(b) Devanagari vanish + hopelessness', 'कोई फायदा नहीं, मुझे गायब हो जाना है'],
+  ] as const)(
+    '%s → hard',
+    (_rule, text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+    },
+    1_000,
+  );
+
+  it.each([
+    ['a method word alone', 'i bought rope today'],
+    ['a vanish phrase alone', 'i just want to disappear'],
+    ['a hopelessness phrase alone', 'nothing matters'],
+    ['two soft phrases with no method or vanish', 'i feel hopeless. i cant do this anymore'],
+  ] as const)(
+    '%s → soft (the classifier decides)',
+    (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('soft');
-      expect(hasDistressKeyword(text)).toBe(false);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['this recursion is hopeless, how do I end it'],
+    ['jump to the next loop iteration, nothing matters about the order'],
+    ["I want the error to disappear, there's no point running it again"],
+    ['tie the rope knot in the diagram'],
+  ] as const)(
+    'coding near-miss %s → never hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).not.toBe('hard');
     },
     1_000,
   );
@@ -250,8 +294,8 @@ describe('soft keywords', () => {
     expect(distressKeywordMatch('hopeless. so hopeless').softHits).toBe(1);
   }, 1_000);
 
-  it('a game context turns a hard phrase soft', () => {
-    expect(distressKeywordLevel('how to kill myself in valorant')).toBe('soft');
+  it('a hard phrase stays hard in a game context (human decision B-18: exemption dropped)', () => {
+    expect(distressKeywordLevel('how to kill myself in valorant')).toBe('hard');
     expect(distressKeywordLevel('how to kill myself')).toBe('hard');
   }, 1_000);
 
@@ -262,7 +306,11 @@ describe('soft keywords', () => {
   }, 1_000);
 
   it('vaguer forms are soft', () => {
-    for (const text of ['tomorrow i wont be here', 'jeene ka dil nahi karta', 'he killed himself']) {
+    for (const text of [
+      'tomorrow i wont be here',
+      'jeene ka dil nahi karta',
+      'he killed himself',
+    ]) {
       expect(distressKeywordLevel(text)).toBe('soft');
     }
   }, 1_000);
@@ -273,6 +321,137 @@ describe('soft keywords', () => {
       kind: 'abuse',
     });
   }, 1_000);
+});
+
+describe('game talk (fix round 4, human decision B-18, option c): the exemption is dropped — ' +
+  'every hard phrase stays hard even with a game word nearby', () => {
+  it.each([
+    // The two sentences from the safety re-check.
+    ['my squad left me and i want to kill myself', 'distress'],
+    ['papa hits me when i play free fire', 'abuse'],
+    // First-person intent next to the phrase, with a game word nearby or even tied to it.
+    ['i lost every match today and im going to kill myself', 'distress'],
+    ['i want to kill myself in fortnite and in real life', 'distress'],
+    ['after this minecraft session i will end my life', 'distress'],
+    ['i wanna die, even roblox is boring now', 'distress'],
+    ['free fire mein bhi haar gaya, main marna chahta hoon', 'distress'],
+    ['bgmi khelte khelte socha, khud ko khatam kar dunga', 'distress'],
+    ['killmyself after this pubg match', 'distress'],
+    // Abuse or harm by someone else, with a game nearby.
+    ['my dad beats me if i play valorant', 'abuse'],
+    ['papa maarte hai jab main pubg khelta hoon', 'abuse'],
+    ['my uncle touches me when we play roblox together', 'abuse'],
+    ['पापा मारते हैं जब मैं गेम खेलता हूं', 'abuse'],
+    // Previously softened as "game-shaped" (fix round 3, now reverted, fix round 4): a game word
+    // tied right next to the phrase never softens it any more.
+    ['how to kill myself in valorant', 'distress'],
+    ['how to die in minecraft', 'distress'],
+    ['i keep killing myself in fortnite with my own grenades', 'distress'],
+    ['how do i kill myself in minecraft faster to respawn', 'distress'],
+    ['minecraft mein khud ko maar diya galti se', 'distress'],
+    ['in this round i keep ending my life to respawn faster', 'distress'],
+    ['killmyself in roblox again lol', 'distress'],
+    // The round-4 re-check lines (human decision B-18): still hard with a game word right there.
+    ['I keep thinking about suicide during the match', 'distress'],
+    ['i feel suicidal during every match', 'distress'],
+    ['i have been cutting my wrists during each round', 'distress'],
+    ['i keep wanting to kill myself in the match', 'distress'],
+    ['how to die in this level of pain', 'distress'],
+    ['match mein marne ka mann karta hai', 'distress'],
+  ] as const)(
+    '%s → hard (%s)',
+    (text, kind) => {
+      expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
+    },
+    1_000,
+  );
+
+  it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
+    'plain game talk with no distress phrase at all %s → none',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('none');
+    },
+    1_000,
+  );
+
+  it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
+    expect(distressKeywordLevel('jump off the roof in minecraft to reach the cave')).toBe('hard');
+  }, 1_000);
+});
+
+describe('code talk (fix round 3): a soft hit next to code goes to the classifier', () => {
+  it.each([
+    ['pills array is empty, nothing matters'],
+    ['my pills_list is null so nothing matters after that line'],
+    ['the blade variable is undefined, no point running it'],
+    ['noose function returns null, nothing matters'],
+  ] as const)(
+    '%s → soft, never hard and never dropped',
+    (text) => {
+      const m = distressKeywordMatch(text);
+      expect(m.level).toBe('soft');
+      expect(m.softHits).toBeGreaterThanOrEqual(1);
+    },
+    1_000,
+  );
+
+  it('the same phrases without code still combine to hard', () => {
+    expect(distressKeywordLevel('i have pills. nothing matters')).toBe('hard');
+  }, 1_000);
+
+  it.each([
+    ['my list of reasons is empty, i want to kill myself'],
+    ['the array is null and i have the pills ready'],
+    ['function broke again, im going to jump off the roof'],
+  ] as const)(
+    'a hard phrase next to code stays hard: %s',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+    },
+    1_000,
+  );
+});
+
+describe('a method ready or saved up (fix round 3): hard', () => {
+  it.each([
+    ['i have the pills ready'],
+    ['ive got the rope ready'],
+    ['i have the blade ready for tonight'],
+    ['i have my sleeping pills ready'],
+    ['i kept the razor hidden away'],
+    ['ive been saving up pills for weeks'],
+    ['i saved up my meds'],
+    ['i have been stockpiling tablets'],
+    ['pills ready hai'],
+    ['goliyan ready kar li'],
+    ['rassi taiyaar hai'],
+    ['maine goliyan jama kar li hain'],
+    ['गोलियां तैयार हैं'],
+    ['मैंने गोलियां जमा कर ली हैं'],
+  ] as const)(
+    '%s → hard, with the classifier down too',
+    (text) => {
+      expect(distressKeywordLevel(text)).toBe('hard');
+      expect(hasDistressKeyword(text)).toBe(true);
+    },
+    1_000,
+  );
+
+  it.each([
+    ['i have the pills for my cold'],
+    ['my code is ready'],
+    ['the pills array is ready'],
+    ['i have the rope ready for the experiment'],
+    ['dinner is ready, back in 10'],
+    ['i have my notes ready for the test'],
+    ['ready hai, next question do'],
+  ] as const)(
+    '%s → not hard',
+    (text) => {
+      expect(distressKeywordLevel(text)).not.toBe('hard');
+    },
+    1_000,
+  );
 });
 
 describe('edge inputs', () => {

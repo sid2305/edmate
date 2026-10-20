@@ -7,12 +7,17 @@
 // as it streams with the per-turn cost ceiling, `replace ''` before an error whenever text was
 // shown, cancellation (the consumer detaching, or `RunTurnOptions.cancel`), the TeacherQuestion
 // opened before `done`, and every `finished.background` failure logged (ids and error only).
+//
+// Task 4.7 adds: a reply generate held back (ask_teacher, or coverage near the threshold) is sent
+// only after postGuard passes it; and when grounding replaced an ungrounded reply, the turn's
+// TeacherQuestion is opened (same shared, idempotent open as ask_teacher; one per turn, and at most
+// GROUNDING_ASKS_PER_SESSION per session, counted in the help state; past the cap the student
+// gets the ask-teacher reply only).
 import {
   type Intent,
   type PedagogyDecision,
   type SafetyAlert,
   type SourceRef,
-  TeacherQuestionSchema,
   type TurnContext,
   TurnContextSchema,
   type TurnEvent,
@@ -22,9 +27,9 @@ import {
   type Usage,
   UsageSchema,
 } from '@edmate/contracts';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
-import type { HelpState } from '../pedagogy/helpState.js';
+import { type HelpState, type SessionHelp, withGroundingAsks } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -32,10 +37,12 @@ import {
   GenerateAttemptFailed,
   HarnessError,
   InvalidEventError,
+  PostGuardStepFailed,
   ScrubFailedError,
   UnpricedUsage,
 } from './errors.js';
 import { EventQueue } from './events.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { ceilingOf, TurnCost } from './generate/costCeiling.js';
 import {
   admitFailure,
@@ -66,11 +73,13 @@ import {
   ALERT_ATTEMPT_TIMEOUT_MS,
   ALERT_RETRY_MAX_MS,
   ALERT_RETRY_START_MS,
+  GROUNDING_ASKS_PER_SESSION,
   STEP_SPEC,
   type StepName,
   STREAM_CLOSE_SETTLE_MS,
   TEACHER_QUESTION_TIMEOUT_MS,
 } from './spec.js';
+import { openTeacherQuestion } from './teacherQuestion.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
 import { TraceBuilder } from './trace.js';
 import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
@@ -81,6 +90,7 @@ import type {
   DecideResult,
   Emit,
   Entitled,
+  GenerateResult,
   PipelineDeps,
   Scrubbed,
   StepEnv,
@@ -93,15 +103,10 @@ import type {
 } from './types.js';
 
 /**
- * Sent only when the escalate step and `fallbackReplies.distress` both give no text. Built in (not
- * injected) so a distressed student always gets a caring reply. Country-neutral: no numbers or
- * country names; the locale pack's helplines come through the normal paths.
+ * The trace action (on a `grounding` guard entry) marking a reply grounding replaced after the
+ * student had seen it stream in (task 4.7 fix round 1). A code, never text.
  */
-export const LAST_RESORT_DISTRESS_REPLY =
-  "I'm really glad you told me, and I'm sorry it's this hard right now. You matter. " +
-  "I'm an AI, so please reach out to someone you trust right now, like a friend, " +
-  'family member, teacher or counsellor. If you are in danger or might hurt yourself, ' +
-  'contact your local emergency services now.';
+export const STREAMED_REPLACED = 'replaced_streamed';
 
 export interface RunTurnOptions {
   deps: PipelineDeps;
@@ -145,9 +150,6 @@ function ids(input: TurnInput): { sessionId: unknown; agentId: unknown; studentI
 /** generate's outcome when the turn was cancelled during or before it. */
 const CANCELLED = 'cancelled';
 
-/** findSimilar's result, checked like any port result. */
-const SimilarQuestionsSchema = z.array(TeacherQuestionSchema);
-
 /** A step result that passed its schema, or why it didn't. */
 type Checked<T> = { ok: true; value: T; ms: number } | { ok: false; ms: number; error?: unknown };
 
@@ -188,6 +190,19 @@ class Turn {
   private guardGateway: TurnGateway | null = null;
   /** Streamed text is on the student's screen and no `replace` cleared it yet. */
   private shown = false;
+  /** A post guard's escalate text (4.5): saved with the turn, never shown. */
+  private escalatedText: string | undefined;
+  /**
+   * The session's locked stop flag as loaded (ADR-0007 §8, 4.6b fix round 1). `null` when the
+   * help state could not be loaded (buildContext failed or timed out, the context fell back, or
+   * a stored blob could not be read): the turn then holds its whole reply and saves no help state,
+   * so a stored `true` is never overwritten with `false`.
+   */
+  private loadedStop: boolean | null = false;
+  /** A locked hit or failed locked check anywhere in this turn: any attempt, or the post guard. */
+  private lockedTrip = false;
+  /** decide.fallback chose the decision: generate holds the reply (4.7 fix round 1). */
+  private decideFellBack = false;
 
   constructor(
     private readonly input: TurnInput,
@@ -248,6 +263,15 @@ class Turn {
       if (parsed.data.type === 'token' || parsed.data.type === 'skill') this.shown = true;
       this.queue.push(parsed.data);
     };
+  }
+
+  /**
+   * Before postGuard replaces the reply (4.5): `replace ''` always, so skill events and sources
+   * shown with the rejected draft clear too, not only streamed text.
+   */
+  private clearAll(): void {
+    this.shown = false;
+    this.send({ type: 'replace', text: '' });
   }
 
   /** Clears unguarded streamed text off the student's screen (before a retry or an error). */
@@ -481,12 +505,15 @@ class Turn {
     // Assemble the TurnContext; its refine (retrieved ⊆ allowed, same teacher, ids match) is the
     // last check before decide. A failure is treated as a buildContext failure.
     let built = bc.ok ? bc.value : fallbackContext(scrubbed, e);
+    let helpLoaded = bc.ok && built.helpStateUnreadable !== true;
     let ctx = assemble(e, built, intent, attempt);
     if (ctx === null && bc.ok) {
       this.trace.outcome('buildContext', 'fallback');
       built = fallbackContext(scrubbed, e);
+      helpLoaded = false;
       ctx = assemble(e, built, intent, attempt);
     }
+    this.loadedStop = helpLoaded ? built.helpState.lockedStopped === true : null;
     if (ctx === null) {
       this.endWithError({ code: 'no_access', retryable: false });
       return this.finish(e, { outcome: 'error', input: scrubbed, intent }, intent, 'redirect');
@@ -504,18 +531,30 @@ class Turn {
       );
     }
     const { decision } = decided;
+    // The session's grounding escalation count rides along on every path that saves the help
+    // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
+    const asked = built.helpState.groundingAsks ?? 0;
     const base = {
       input: scrubbed,
       intent,
       context: ctx,
       decision,
-      next: decided.next,
+      next: withGroundingAsks(decided.next, asked),
       promptPack: decided.promptPack,
     };
 
     // 8. generate: one retry on the fallback model; a TurnAbort or a cancel is final. Text the
     // student saw is cleared before the error, so unguarded partial text never stays on screen.
-    const gen = await this.generate(scrubbed, ctx, decision, decided.sources);
+    // ADR-0007 §8 (4.6b): a session that already stopped streaming (an earlier turn's locked
+    // hit or failed check), or whose flag could not be loaded, holds this turn's whole reply.
+    const gen = await this.generate(
+      scrubbed,
+      ctx,
+      decision,
+      decided.sources,
+      this.loadedStop !== false,
+    );
+    if (gen !== CANCELLED && !('code' in gen) && gen.locked !== undefined) this.lockedTrip = true;
     if (gen === CANCELLED || 'code' in gen) {
       this.clearShown();
       this.endWithError(gen === CANCELLED ? PROVIDER_ERROR : gen);
@@ -523,20 +562,48 @@ class Turn {
     }
 
     // The TeacherQuestion is opened before done, so its id reaches the student (lead answer Q3).
-    const questionId =
-      decision.move === 'ask_teacher' ? await this.openTeacherQuestion(scrubbed, e) : undefined;
+    let questionId =
+      decision.move === 'ask_teacher' ? await this.openTeacherQuestionLive(scrubbed, e) : undefined;
     if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
 
-    // 9. postGuard on the whole reply, before done; a failure sends the safe reply.
-    const replyText = await this.postGuard(scrubbed, ctx, decision, gen.draft);
+    // 9. postGuard on the whole reply, before done; a failure sends the safe reply. A post guard
+    // that escalates clears the reply and ends the turn as an escalation (caring template, 4.5).
+    const post = await this.postGuard(scrubbed, ctx, decision, gen, decided.sources);
+    if ('alert' in post) {
+      this.clearAll();
+      // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
+      // the flag in finish(). Without one, an escalation saves no help state, as before.
+      const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
+      return this.escalate(scrubbed, e, post.alert, keep);
+    }
+    const { replyText } = post;
+
+    // grounding sent an ungrounded reply to the teacher (4.7): one question per turn (none when
+    // decide already asked), within the session's cap. Only a question that was opened counts
+    // (fix round 1): a failed live open leaves the count to commit, which counts its own fallback
+    // open only if it succeeds.
+    const escalating =
+      post.escalateToTeacher &&
+      decision.move !== 'ask_teacher' &&
+      asked < GROUNDING_ASKS_PER_SESSION;
+    if (escalating) {
+      questionId = await this.openTeacherQuestionLive(scrubbed, e);
+      if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
+    }
     this.done();
+    // ADR-0007 §8 (4.6b): finish() sets the session's stop flag on `next`.
     return this.finish(
       e,
       {
         ...base,
+        next: withGroundingAsks(
+          decided.next,
+          asked + (escalating && questionId !== undefined ? 1 : 0),
+        ),
         outcome: 'replied',
         replyText,
         ...(questionId === undefined ? {} : { teacherQuestionId: questionId }),
+        ...(escalating ? { escalateToTeacher: true } : {}),
       },
       intent,
       decision.move,
@@ -544,41 +611,19 @@ class Turn {
   }
 
   /**
-   * findSimilar then open, within one budget, with the scrubbed text (never the raw input). Any
-   * failure or timeout is reported and gives no id: the turn still replies and commit (3.17)
-   * opens the question. A timed-out open may still land; 3.17 must open idempotently.
+   * findSimilar then open (`teacherQuestion.ts`'s shared helper), within one budget, with the
+   * scrubbed text (never the raw input). Any failure or timeout is reported and gives no id: the
+   * turn still replies and commit (3.17) opens the question. A timed-out open may still land;
+   * the store's dedup (migration 0011) makes that, and commit's own fallback, land once.
    */
-  private async openTeacherQuestion(input: TurnInput, e: Entitled): Promise<string | undefined> {
+  private async openTeacherQuestionLive(
+    input: TurnInput,
+    e: Entitled,
+  ): Promise<string | undefined> {
     const text = input.text;
     if (text === undefined || text.trim() === '') return undefined;
-    const ent = e.entitlement;
-    const store = this.deps.teacherQuestions;
     const r = await runWithTimeout(
-      async () => {
-        const similar = SimilarQuestionsSchema.parse(await store.findSimilar(ent.teacherId, text));
-        if (similar.some((q) => q.teacherId !== ent.teacherId)) {
-          throw new HarnessError(
-            "TeacherQuestionStore.findSimilar returned another teacher's question",
-          );
-        }
-        const q = TeacherQuestionSchema.parse(
-          await store.open({
-            teacherId: ent.teacherId,
-            agentId: ent.agentId,
-            studentId: ent.studentId,
-            text,
-            similarIds: [...new Set(similar.map((s) => s.id))],
-          }),
-        );
-        if (
-          q.teacherId !== ent.teacherId ||
-          q.agentId !== ent.agentId ||
-          q.studentId !== ent.studentId
-        ) {
-          throw new HarnessError('TeacherQuestionStore.open returned a question for another turn');
-        }
-        return q.id;
-      },
+      () => openTeacherQuestion(this.deps.teacherQuestions, e.entitlement, text),
       TEACHER_QUESTION_TIMEOUT_MS,
       this.deps.clock,
     );
@@ -623,6 +668,7 @@ class Turn {
     input: TurnInput,
     e: Entitled,
     preAlert: SafetyAlert | undefined,
+    next?: SessionHelp,
   ): Promise<TurnRunResult> {
     const es = check(
       await this.timed(input, timeoutOf('escalate'), (env) =>
@@ -650,19 +696,21 @@ class Turn {
       replyText = LAST_RESORT_DISTRESS_REPLY;
       outcome = 'failed';
     }
-    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms });
+    return this.sendEscalation(e, input, built, { replyText, outcome, ms: es.ms }, next);
   }
 
   /**
    * The end of every escalated turn: dispatch the alert (if one could be built), record escalate
    * (`failed` when the alert could not be built first time), send safety + reply + done, save.
-   * `commitInput` is null when the scrub failed, so the raw text is never stored.
+   * `commitInput` is null when the scrub failed, so the raw text is never stored. `next` is the
+   * help state to save, only after a locked trip (4.6b fix round 1).
    */
   private sendEscalation(
     e: Entitled,
     commitInput: TurnInput | null,
     built: { alert: SafetyAlert | null; failed: boolean },
     reply: { replyText: string; outcome: 'ok' | 'fallback' | 'failed'; ms: number },
+    next?: SessionHelp,
   ): Promise<TurnRunResult> {
     const delivered = built.alert === null ? undefined : this.deliverAlert(built.alert);
     this.trace.step('escalate', reply.ms, built.failed ? 'failed' : reply.outcome);
@@ -677,6 +725,7 @@ class Turn {
         intent: 'distress',
         replyText: reply.replyText,
         ...(built.alert === null ? {} : { alert: built.alert }),
+        ...(next === undefined ? {} : { next }),
       },
       'distress',
       'redirect',
@@ -799,6 +848,7 @@ class Turn {
         throw new HarnessError(`decide.fallback returned move "${move}"`);
       }
       this.trace.step('decide', d.ms, 'fallback');
+      this.decideFellBack = true;
       return fb;
     } catch (error) {
       this.background.push({ task: 'runner', error });
@@ -812,7 +862,8 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     sources: SourceRef[],
-  ): Promise<{ draft: string } | TurnError | typeof CANCELLED> {
+    lockedStopped: boolean,
+  ): Promise<GenerateResult | TurnError | typeof CANCELLED> {
     const policies = turnPolicies(ctx.agent.modelPolicy);
     let ms = 0;
     for (const attempt of ['primary', 'fallback'] as const) {
@@ -829,7 +880,17 @@ class Turn {
           const tg = buildTurnGateway(this.deps, policy, this.billing as TurnBilling);
           return this.steps.generate(
             this.env(input, cancel, tg, 'generate'),
-            { ctx, decision, sources, attempt },
+            {
+              ctx,
+              decision,
+              sources,
+              attempt,
+              lockedStopped,
+              onLockedTrip: () => {
+                this.lockedTrip = true;
+              },
+              ...(this.decideFellBack ? { fromFallback: true as const } : {}),
+            },
             this.emitter(cancel, state),
           );
         },
@@ -844,7 +905,7 @@ class Turn {
       const g = check(raw, GenerateResultSchema);
       if (g.ok && !state.invalid) {
         this.trace.step('generate', ms, attempt === 'primary' ? 'ok' : 'fallback');
-        return { draft: g.value.draft };
+        return g.value;
       }
       // Every failed attempt is reported, by kind and error name only (never a foreign message).
       this.background.push({ task: 'generate', error: attemptFailure(attempt, raw, state) });
@@ -864,31 +925,60 @@ class Turn {
     input: TurnInput,
     ctx: TurnContext,
     decision: PedagogyDecision,
-    draft: string,
-  ): Promise<string> {
-    const p = check(
-      await this.timed(input, timeoutOf('postGuard'), (env) =>
-        this.steps.postGuard(env, { ctx, decision, draft }),
-      ),
-      PostGuardResultSchema,
+    gen: GenerateResult,
+    sources: SourceRef[],
+  ): Promise<{ replyText: string; escalateToTeacher: boolean } | { alert: SafetyAlert }> {
+    const { draft } = gen;
+    const x = {
+      ctx,
+      decision,
+      draft,
+      sources,
+      ...(gen.raw === undefined ? {} : { raw: gen.raw }),
+      ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
+      ...(gen.locked === undefined ? {} : { locked: gen.locked }),
+    };
+    const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
+      this.steps.postGuard(env, x),
     );
+    const p = check(raw, PostGuardResultSchema);
     if (p.ok) {
       this.trace.addGuards(p.value.guards);
       this.addReported(p.value.usage);
       this.trace.step('postGuard', p.ms, 'ok');
-      if (p.value.result === 'ok') return draft;
+      // A locked hit or failed locked check the post guard found counts as a trip (4.6b fix 1).
+      if (p.value.guards.some((g) => g.name === 'lockedLeak' && !g.ok)) this.lockedTrip = true;
+      if (p.value.result === 'ok') {
+        // A held reply (4.7) reaches the student only now, checked.
+        if (gen.held === true) this.send({ type: 'token', text: draft });
+        return { replyText: draft, escalateToTeacher: false };
+      }
+      // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
+      if (p.value.result === 'escalate') {
+        this.escalatedText = p.value.text;
+        return { alert: p.value.alert };
+      }
+      // grounding replaced text the student had already seen stream in: flagged in the trace,
+      // code only, so 7.x can size that window (4.7 fix round 1).
+      if (p.value.groundingRewrote === true && this.shown) {
+        this.trace.addGuards([{ name: 'grounding', ok: false, action: STREAMED_REPLACED }]);
+      }
+      this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
-      return p.value.text;
+      return { replyText: p.value.text, escalateToTeacher: p.value.escalateToTeacher === true };
     }
     this.trace.step('postGuard', p.ms, 'fallback');
+    // Reported like every other step failure: kind and error name only, never a message.
+    this.background.push({ task: 'runner', error: postGuardFailure(raw) });
     let safe = '';
     try {
       safe = this.deps.fallbackReplies.safeReply(input.lang);
     } catch (error) {
       this.background.push({ task: 'runner', error });
     }
+    this.clearAll();
     this.send({ type: 'replace', text: safe });
-    return safe;
+    return { replyText: safe, escalateToTeacher: false };
   }
 
   // ---- 10, 11 and the trace: after the stream has ended ---------------------------------------
@@ -904,7 +994,7 @@ class Turn {
     alertDelivered?: Promise<void>,
   ): Promise<TurnRunResult> {
     const record: CommitRecord = {
-      ...rec,
+      ...this.withStopFlag(rec),
       turnId: this.turnId,
       // The original input's session id: set even when the scrub failed and `input` is null.
       sessionId: this.input.sessionId,
@@ -912,6 +1002,7 @@ class Turn {
       receivedAt: this.receivedAt,
       createdAt: isoAt(this.deps.clock.now()),
       entitled: e,
+      ...(this.escalatedText === undefined ? {} : { escalatedText: this.escalatedText }),
     };
     // Usage from a metered turn gateway was metered at the gateway (2.4); only the rest goes here.
     const usage = this.meterable.map((u) => ({ ...u }));
@@ -941,6 +1032,23 @@ class Turn {
     if (alertDelivered !== undefined) await alertDelivered;
     await this.settlePending();
     return { trace, background: this.background };
+  }
+
+  /**
+   * The runner owns the session's locked stop flag (ADR-0007 §8, 4.6b fix round 1): every help
+   * state it saves gets `loaded || tripped this turn`, whatever decide or a skill returned (a
+   * correct practice answer, decide's fallback). When the help state could not be loaded, none is
+   * saved at all, so a stored `true` is never overwritten.
+   */
+  private withStopFlag<R extends { next?: SessionHelp }>(rec: R): R {
+    if (rec.next === undefined) return rec;
+    if (this.loadedStop === null) {
+      const out = { ...rec };
+      delete out.next;
+      return out;
+    }
+    const lockedStopped = this.loadedStop || this.lockedTrip;
+    return { ...rec, next: { ...rec.next, help: { ...rec.next.help, lockedStopped } } };
   }
 
   /**
@@ -977,6 +1085,13 @@ class Turn {
       this.background.push({ task: name, error });
     }
   }
+}
+
+/** What a failed postGuard step reports: the kind and the underlying error's name. */
+function postGuardFailure(r: TimedResult<unknown>): PostGuardStepFailed {
+  if (r.status === 'timeout') return new PostGuardStepFailed('timeout');
+  if (r.status === 'error') return new PostGuardStepFailed('error', errorName(r.error));
+  return new PostGuardStepFailed('invalid_result');
 }
 
 /** What a failed generate attempt reports: the kind and the underlying error's name. */

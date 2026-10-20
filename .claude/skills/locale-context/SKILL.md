@@ -16,24 +16,33 @@ Edmate is not built for one country. A **locale pack** carries every country-spe
 6. **Examples come from the teacher's material,** which is already in their context. Don't add country examples the teacher didn't use.
 
 ## Pack shape (`content/locales/<market>.yaml`)
+The schema is `LocalePackSchema` in `packages/contracts/src/locale.ts` (camelCase; ADR-0008 added the sign-off fields). `edmate content validate content/locales` checks every pack; `global.yaml` is the required default pack.
 ```yaml
-market: IN                      # ISO 3166 country code
-languages: [en, hi]             # BCP 47 primary tags the UI and agent support here
-scripts: { hi: [Deva, Latn] }   # Hindi in Devanagari or romanised
-currency: { code: INR, format: "en-IN" }      # Intl.NumberFormat locale
-payments: { methods: [upi_autopay, card], provider: <decided per market> }
-helplines:                      # verified by a human, with source URL and date
-  - { name: Tele-MANAS, number: "14416", kind: mental_health, source: <url>, verified: <date> }
+market: IN                      # ISO 3166-1 alpha-2 code, or `global` for the default pack
+languages: [en]                 # BCP 47 primary tags; English only during the pilot
+timezone: Asia/Kolkata
+currency: { code: INR, format: "₹#,##,##0.00" }
+payments: { methods: [], provider: tbd }      # decided per market with payments (task 10.1)
+helplines:                      # each checked by a person; `pending` until then
+  - name: <helpline name>
+    number: <verified number>   # never filled in by an agent
+    kind: mental_health
+    verifiedBy: <name or handle, never an email>
+    verifiedOn: "YYYY-MM-DD"
 compliance:
-  privacy_law: DPDP Act 2023 + Rules 2025
-  min_age: 18                   # MVP decision; minors need verifiable parental consent here
-  data_region: <Indian cloud region>
-  grievance: IT Rules 2021 grievance officer
-  tax: GST on subscriptions; payout tax to confirm with a chartered accountant
-regulated_subjects:
+  privacyLaw: <law and rules>
+  minAge: 13
+  dataRegion: <where data is hosted>
+  grievance: <grievance officer contact>      # `pending` until a person supplies it
+  parentalConsentRequired: true               # learners under 18 need verifiable parental consent here
+reviewedBy: <name or handle>    # sign-off for the compliance block; `pending` until a person checks it
+reviewedOn: "YYYY-MM-DD"
+regulatedDisclaimers:
   investing: "Educational only; not investment advice."
-pii_patterns: [phone_in, aadhaar_like, pan, upi_id]
+piiPatterns: ['<regex>']        # compiled with exactly the flags gu; no backreferences, no
+                                # quantifier inside a repeated group, lookbehinds one character wide
 ```
+At runtime (`loadLocalePacks` / `pickLocalePack`) an unverified helpline is never served: the pack is used without it, so a pack left with none gets the reply that points to local emergency services and a trusted person, while its PII patterns and other fields still apply. A pack that fails the schema or the PII-pattern checks is refused whole and its market gets the default pack. The safety alert is raised either way. `edmate content validate` still fails on every `pending` value.
 
 ## The first pack: India (if the pilot launches there)
 - **Currency:** ₹ with Indian digit grouping (₹1,25,000), via `Intl.NumberFormat('en-IN')`.
@@ -43,4 +52,4 @@ pii_patterns: [phone_in, aadhaar_like, pan, upi_id]
 - **Law:** DPDP Act 2023 and Rules 2025; IT Rules 2021 grievance officer.
 - **PII patterns:** Indian mobile numbers, Aadhaar-like 12-digit numbers, PAN, UPI IDs.
 
-A pack's helplines, legal lines and tax lines must be checked by a human before that market launches. Agents may draft a pack, but `reviewed_by` stays `pending` until a person signs off.
+A pack's helplines, legal lines and tax lines must be checked by a human before that market launches. Agents may draft a pack, but each helpline's `verifiedBy` and the pack's `reviewedBy` stay `pending` until a person signs off.

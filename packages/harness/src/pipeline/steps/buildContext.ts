@@ -5,7 +5,7 @@
 // Any throw (a store down, an index that widens the scope) sends the runner to its
 // `fallbackContext`, which takes the ask_teacher path.
 import type { Chunk, Entitlement } from '@edmate/contracts';
-import { parseSessionHelp } from '../../pedagogy/helpState.js';
+import { loadSessionHelp } from '../../pedagogy/helpState.js';
 import { HarnessError } from '../errors.js';
 import type { Steps } from '../types.js';
 import { isWithheld } from '../policies.js';
@@ -85,7 +85,7 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
       : deps.retrieval.probe(q, { teacherId: e.teacherId, moduleIds: [...e.lockedModuleIds] }),
   ]);
   const retrieved = fit(checkScope(found, e), MAX_CONTEXT_CHARS - historyChars(history));
-  const help = parseSessionHelp(s.helpState);
+  const help = loadSessionHelp(s.helpState);
   return {
     profile,
     history,
@@ -94,5 +94,7 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
     lockedHit: probe?.hit === true,
     helpRung: help.rung,
     helpState: help.help,
+    // 4.6b fix round 1: a stored blob that could not be read may hold lockedStopped true.
+    ...(help.unreadable ? { helpStateUnreadable: true } : {}),
   };
 };

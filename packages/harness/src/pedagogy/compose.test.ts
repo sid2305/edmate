@@ -231,19 +231,45 @@ describe('style card', () => {
 
 describe('locale pack', () => {
   it('replies in the student language when the agent allows it, else the agent first language', () => {
-    expect(replyLanguage('hi', { languages: ['en', 'hi'] })).toBe('hi');
-    expect(replyLanguage('fr', { languages: ['en', 'hi'] })).toBe('en');
-    expect(replyLanguage('fr', { languages: [] })).toBe('fr');
-    expect(prompt(ctx(), policy(), 'hi')).toContain('Reply in language hi.');
+    expect(replyLanguage('en', { languages: ['en'] })).toBe('en');
+    expect(replyLanguage('fr', { languages: ['en'] })).toBe('en');
+  });
+
+  // Pilot policy (3.11c, 18 Oct 2026 decision): `demoAgentConfig` fixture carries `['en', 'hi']`
+  // (the general contract allows it); the harness clamps any agent not pinned to English only.
+  it('clamps the reply to English when the agent is not pinned to English only (pilot policy)', () => {
+    expect(replyLanguage('hi', { languages: ['en', 'hi'] })).toBe('en');
+    expect(replyLanguage('en', { languages: ['en', 'hi'] })).toBe('en');
+    expect(replyLanguage('fr', { languages: [] })).toBe('en');
+    expect(prompt(ctx(), policy(), 'hi')).toContain('Reply in language en.');
     expect(prompt(ctx(), policy(), 'ta')).toContain('Reply in language en.');
+  });
+
+  it('reports languageClamped only when the agent is not pinned to English only', () => {
+    expect(compose(ctx({ agent: { ...agent, languages: ['en'] } }), policy()).languageClamped).toBe(
+      false,
+    );
+    expect(compose(ctx(), policy()).languageClamped).toBe(true);
   });
 
   it('takes currency and every helpline from the pack', () => {
     const locale = {
       ...demoLocalePack,
       helplines: [
-        { name: 'Line A', number: '000-0001', kind: 'mental_health' },
-        { name: 'Line B', number: '000-0002', kind: 'crisis' },
+        {
+          name: 'Line A',
+          number: '000-0001',
+          kind: 'mental_health',
+          verifiedBy: 'R',
+          verifiedOn: '2026-01-01',
+        },
+        {
+          name: 'Line B',
+          number: '000-0002',
+          kind: 'crisis',
+          verifiedBy: 'R',
+          verifiedOn: '2026-01-01',
+        },
       ],
     };
     const text = prompt(ctx({ locale }), policy());

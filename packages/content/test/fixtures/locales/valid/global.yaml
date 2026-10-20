@@ -1,0 +1,16 @@
+# Test double of the default pack (made up; the real one is content/locales/global.yaml).
+market: global
+languages: [en]
+timezone: UTC
+currency: { code: USD, format: "$#,##0.00" }
+payments: { methods: [], provider: tbd }
+helplines: []
+compliance:
+  privacyLaw: Example privacy law
+  minAge: 13
+  dataRegion: test-region
+  grievance: Example grievance desk
+  parentalConsentRequired: true
+regulatedDisclaimers:
+  investing: Example disclaimer.
+piiPatterns: []

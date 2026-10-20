@@ -48,6 +48,7 @@ const helpState = {
   attemptLogged: false,
   pendingCheck: false,
   answerKey: [ANSWER_KEY],
+  lockedStopped: false,
 };
 
 function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
@@ -68,7 +69,12 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const turnConfig: TurnConfigStore = {
     load: () =>
       Promise.resolve({
-        agent: { ...demoAgentConfig, promptPackVersion: FIXTURE_PROMPT_PACK_VERSION },
+        // Pilot policy (3.11c): English only, so this turn's `background` stays empty.
+        agent: {
+          ...demoAgentConfig,
+          languages: ['en'],
+          promptPackVersion: FIXTURE_PROMPT_PACK_VERSION,
+        },
         pkg: demoPackagePaid,
         styleCard: demoStyleCard,
         locale: demoLocalePack,
@@ -78,6 +84,7 @@ function world(streams: StreamStep[][], overrides: Partial<PipelineDeps> = {}) {
   const retrieval: RetrievalIndex = {
     search: () => Promise.resolve([{ ...demoChunkScored }]),
     probe: () => Promise.resolve({ hit: false, score: 0 }),
+    leakCheck: () => Promise.resolve({ hit: false }),
   };
   const tools = memoryToolRegistry([
     testTool({
@@ -130,10 +137,14 @@ describe('turn integration (3.7 acceptance)', () => {
       w.clock,
     );
 
+    // 4.6b: round 1's text ("Look at the denominators [1]. ", 5 tokens) is under 8 tokens, so the
+    // locked stream holds it back; the skill event (round 1's tool call) comes before any token,
+    // and round 2's text releases in two pieces (the batch check, then the remaining carryover at
+    // the clean end).
     expect(events.map((e) => e.type)).toEqual([
       'hint_rung',
-      'token',
       'skill',
+      'token',
       'token',
       'sources',
       'done',
@@ -141,7 +152,7 @@ describe('turn integration (3.7 acceptance)', () => {
     for (const e of events) expect(TurnEventSchema.safeParse(e).success).toBe(true);
     expect(events.filter((e) => e.type === 'done' || e.type === 'error')).toHaveLength(1);
     expect(events[0]).toEqual({ type: 'hint_rung', rung: 2 });
-    expect(events[2]).toEqual({
+    expect(events[1]).toEqual({
       type: 'skill',
       skill: 'coach',
       payload: { worked: { value: 'common multiple: 6' } },
@@ -184,7 +195,7 @@ describe('turn integration (3.7 acceptance)', () => {
   it('aborts an over-budget turn', async () => {
     const w = world(
       [
-        [say('Start '), used, say('never shown')],
+        [say('Start. '), used, say('never shown')],
         [say('retry'), used],
       ],
       {
@@ -196,10 +207,10 @@ describe('turn integration (3.7 acceptance)', () => {
       w.clock,
     );
 
+    // 4.6b: "Start. " is under 8 tokens, held by the locked stream and never released (the turn
+    // aborts before a clean end), so nothing was shown and clearShown sends no `replace ''`.
     expect(events).toEqual([
       { type: 'hint_rung', rung: 2 },
-      { type: 'token', text: 'Start ' },
-      { type: 'replace', text: '' },
       { type: 'error', code: 'turn_cost_exceeded', retryable: false },
     ]);
     // No second stream call and no retry; the stream was closed.

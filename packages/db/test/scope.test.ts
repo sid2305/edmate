@@ -8,8 +8,10 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createDb } from '../src/client.js';
 import {
   createRepositories,
+  profileStoreFor,
   RepositoryError,
   studentScope,
+  teacherQuestionStoreFor,
   teacherScope,
   transcriptStoreFor,
   usageMeterFor,
@@ -138,6 +140,13 @@ describe('every repository method rejects a bad scope before any SQL', () => {
   it('usageMeterFor rejects a bad scope at construction', () => {
     for (const [, bad] of BAD_SCOPES) {
       expectScopeError(() => usageMeterFor(repos, bad as never), 'usageMeterFor');
+    }
+  });
+
+  it('profileStoreFor and teacherQuestionStoreFor reject a bad scope at construction', () => {
+    for (const [, bad] of BAD_SCOPES) {
+      expectScopeError(() => profileStoreFor(repos, bad as never), 'profileStoreFor');
+      expectScopeError(() => teacherQuestionStoreFor(repos, bad as never), 'teacherQuestionStoreFor');
     }
   });
 });

@@ -1,5 +1,25 @@
 // Guard framework and registry (task 4.1). Concrete guards land in 4.2-4.9 (4.2: piiScrub;
-// 4.3: distressDetect; 4.4: moderationIn, jailbreak).
+// 4.3: distressDetect; 4.4: moderationIn, jailbreak; 4.5: answerLeak, 4.6: lockedLeak).
+export {
+  ANSWER_LEAK_SAFE_HINT,
+  createAnswerLeakGuard,
+  type GroundingJudge,
+  type JudgeReply,
+  type JudgeRequest,
+  type LeakRewrite,
+  type LockedCheck,
+  type PostGuardCtx,
+} from './answerLeak.js';
+export {
+  askTeacherReplyText,
+  createGroundingGuard,
+  GROUNDING_JUDGE_SYSTEM,
+  GROUNDING_REASONS,
+  type GroundingOptions,
+  groundingJudgeRequest,
+  parseGroundingVerdict,
+  PREMISE_CORRECTION_REPLY,
+} from './grounding.js';
 export {
   type GuardBlockCause,
   type GuardChainOptions,
@@ -7,6 +27,7 @@ export {
   type GuardFailure,
   type GuardFailureCause,
   type GuardOutcomeEvent,
+  type GuardSliceRequest,
   runGuardChain,
 } from './chain.js';
 export {
@@ -71,6 +92,7 @@ export {
   type GuardPhase,
   isGuardPhase,
 } from './order.js';
+export { type FoldedDigitForms, foldDigitForms } from './digitForms.js';
 export {
   compileLocalePatterns,
   findPii,
@@ -82,4 +104,36 @@ export {
   scrubPii,
 } from './piiPatterns.js';
 export { createPiiScrubGuard, type PiiScrubCtx } from './piiScrub.js';
-export { GuardRegistry, GuardRegistryError } from './registry.js';
+export {
+  createLockedCheck,
+  createLockedLeakGuard,
+  LOCKED_CHECK_TIMEOUT_MS,
+  LockedCheckFailed,
+  type LockedCheckFailure,
+  type LockedCheckOptions,
+  LockedLeakDetected,
+  lockedReplyText,
+  type LockedSite,
+} from './lockedLeak.js';
+export {
+  carryStart,
+  type InvisibleReading,
+  LOCKED_LEAK_MIN_TOKENS,
+  LOCKED_STREAM_CARRY_TOKENS,
+  lockedCandidates,
+  type LockedIndex,
+  lockedIndex,
+  type LockedToken,
+  lockedTokens,
+  type MarkupReading,
+  shingles,
+  stringLeaves,
+} from './lockedMatch.js';
+export { postGuards } from './postGuards.js';
+export {
+  GuardRegistry,
+  GuardRegistryError,
+  MAX_GUARD_WEIGHT,
+  type RegisterOptions,
+} from './registry.js';
+export { digitValue, type FoldedText, foldText, isDecimalDigit, isFormatChar } from './textFold.js';

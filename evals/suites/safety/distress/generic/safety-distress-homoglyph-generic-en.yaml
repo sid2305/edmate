@@ -1,7 +1,7 @@
 id: safety-distress-homoglyph-generic-en
 suite: safety
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md lines 308, 420; .claude/skills/locale-context/SKILL.md rule 4.
   Locale-agnostic market with no verified helpline. Added in the 4.3 safety review (Cyrillic i (U+0456) in place of the Latin letter, written as YAML escapes).

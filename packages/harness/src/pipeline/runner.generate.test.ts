@@ -38,6 +38,7 @@ import { BACKGROUND_LOG_MESSAGE_MAX } from './backgroundLog.js';
 import { cancelSource } from './clock.js';
 import { HarnessError } from './errors.js';
 import { runTurn } from './runner.js';
+import { passThroughGate } from './generate/streamGate.js';
 import { defaultSteps } from './steps/index.js';
 import { FIXTURE_PROMPT_PACK_VERSION } from '../testing/promptPackFixtures.js';
 import type { PipelineDeps, Steps } from './types.js';
@@ -47,7 +48,10 @@ const used = { type: 'usage', usage: usageMain } satisfies ModelChunk;
 const wait = (ms: number) => ({ type: 'delay', ms }) satisfies StreamStep;
 const fail = { type: 'error', code: 'provider_error' } satisfies StreamStep;
 
-/** testDeps with the spy on a scripted gateway; the real generate step. */
+/**
+ * testDeps with the spy on a scripted gateway; the real generate step. These tests are about the
+ * runner, so text passes straight through (the sentence gate has its own tests, 4.5).
+ */
 function world(
   streams: StreamStep[][],
   o: {
@@ -63,7 +67,11 @@ function world(
   );
   const t = testDeps({
     clock,
-    overrides: { gatewayFor: (s) => spy.gatewayFor(s), ...o.overrides },
+    overrides: {
+      gatewayFor: (s) => spy.gatewayFor(s),
+      streamGate: passThroughGate,
+      ...o.overrides,
+    },
   });
   const steps = testSteps({ entitle: fixtureEntitle, generate: defaultSteps.generate, ...o.steps });
   return { t, spy, steps, clock };
@@ -83,17 +91,19 @@ const genOutcome = (r: { trace: { steps: { name: string; outcome: string }[] } |
 describe('metering', () => {
   it('a primary attempt that streams usage and then fails keeps its usage in the trace and done', async () => {
     const w = world([
-      [say('Partial '), used, fail],
+      [say('Partial. '), used, fail],
       [say('Retry.'), used],
     ]);
     const { events, result } = await driveTurn(
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
       w.clock,
     );
+    // 4.6b: "Partial. " is under 8 tokens, so the locked stream holds it rather than showing it
+    // at once; the attempt fails before release() ever runs, so it is never shown (and clearShown
+    // sends no `replace ''`, since nothing was shown). The retry's "Retry." is held the same way,
+    // and is released, as one token event, once that attempt ends cleanly.
     expect(events).toEqual([
       { type: 'hint_rung', rung: 1 },
-      { type: 'token', text: 'Partial ' },
-      { type: 'replace', text: '' },
       { type: 'hint_rung', rung: 1 },
       { type: 'token', text: 'Retry.' },
       { type: 'done', messageId: 'message_1', usage: [usageMain, usageMain] },
@@ -282,15 +292,16 @@ describe('metering', () => {
   });
 
   it('unpriced usage aborts the turn with turn_cost_exceeded (Q2)', async () => {
-    const w = world([[say('Hi '), used, say('never')]], {
+    const w = world([[say('Hi. '), used, say('never')]], {
       overrides: { priceUsage: () => undefined },
     });
     const { events } = await driveTurn(
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
       w.clock,
     );
-    expect(events.slice(-2)).toEqual([
-      { type: 'replace', text: '' },
+    // 4.6b: "Hi. " is under 8 tokens, held by the locked stream and never released (the attempt
+    // aborts before a clean end), so nothing was shown and clearShown sends no `replace ''`.
+    expect(events.slice(-1)).toEqual([
       { type: 'error', code: 'turn_cost_exceeded', retryable: false },
     ]);
     expect(started(w.steps.log, 'generate')).toBe(1);
@@ -320,9 +331,11 @@ describe('metering', () => {
 
 describe("replace '' before an error", () => {
   it('both attempts stream then fail: each attempt is cleared, then the error', async () => {
+    // 8+ tokens each, so the locked stream releases part of the sentence at once (its last 7
+    // tokens stay held and are lost when the attempt then fails).
     const w = world([
-      [say('One '), fail],
-      [say('Two '), fail],
+      [say('One two three four five six seven eight. '), fail],
+      [say('Two three four five six seven eight nine. '), fail],
     ]);
     const { events } = await driveTurn(
       runTurn(demoTurnInput, { deps: w.t.deps, steps: w.steps }),
@@ -367,7 +380,7 @@ describe('client disconnect', () => {
 
   it('the consumer returns mid-stream: generate stops, the stream is closed, no retry, no postGuard', async () => {
     const w = world([
-      [say('First '), wait(2_000), say('second'), used],
+      [say('First one two three four five six seven. '), wait(2_000), say('second'), used],
       [say('retry'), used],
     ]);
     const { seen, result } = await detachAfterFirstToken(w);
@@ -386,7 +399,7 @@ describe('client disconnect', () => {
   }, 10_000);
 
   it('generate stops at once: the turn finishes before the stream would have', async () => {
-    const w = world([[say('First '), wait(10_000), say('second'), used]]);
+    const w = world([[say('First one two three four five six seven. '), wait(10_000), say('second'), used]]);
     const t0 = w.clock.now();
     const { result } = await detachAfterFirstToken(w);
     expect(result.trace?.steps.find((s) => s.name === 'generate')?.ms).toBeLessThan(10_000);
@@ -395,7 +408,7 @@ describe('client disconnect', () => {
 
   it('RunTurnOptions.cancel during generate works the same way', async () => {
     const w = world([
-      [say('First '), wait(2_000), say('second'), used],
+      [say('First one two three four five six seven. '), wait(2_000), say('second'), used],
       [say('retry'), used],
     ]);
     const c = cancelSource();
@@ -489,8 +502,10 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
     const store = memoryTeacherQuestionStore({ similar: [teacherQuestionOpen] });
     const w = askWorld(store);
     const { events, result } = await w.run();
-    expect(events.slice(-2)).toEqual([
+    // The ask_teacher reply is held until postGuard passes it (4.7), so it comes after the event.
+    expect(events).toEqual([
       { type: 'teacher_question', questionId: 'tq_mem_1' },
+      { type: 'token', text: 'I sent that to your teacher.' },
       { type: 'done', messageId: 'message_1', usage: [usageMain] },
     ]);
     expect(store.searched).toEqual([
@@ -516,7 +531,12 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
     w.steps.postGuard = () =>
       Promise.resolve({ result: 'replace', text: 'rewritten', guards: [], usage: [] });
     const { events } = await w.run();
-    expect(events.slice(-3).map((e) => e.type)).toEqual(['teacher_question', 'replace', 'done']);
+    expect(events.slice(-4)).toEqual([
+      { type: 'teacher_question', questionId: 'tq_mem_1' },
+      { type: 'replace', text: '' },
+      { type: 'replace', text: 'rewritten' },
+      { type: 'done', messageId: 'message_1', usage: expect.anything() as unknown },
+    ]);
   });
 
   it('a failing store: no event, done still sent, the failure is reported, no id on commit', async () => {
@@ -534,12 +554,17 @@ describe('teacher_question (ask_teacher, lead answer Q3)', () => {
       open: () => new Promise(() => undefined),
     };
     const w = askWorld(hanging);
+    const t0 = w.clock.now();
     const { events, result, timed } = await w.run();
     expect(events.at(-1)?.type).toBe('done');
     expect(result.background.map((b) => String(b.error))).toEqual([
       'Error: TeacherQuestionStore timed out',
     ]);
-    expect((timed.at(-1)?.at ?? 0) - (timed.at(-2)?.at ?? 0)).toBe(500);
+    // The held reply (4.7) and done both come once the open was given up on.
+    expect(timed.map((e) => [e.event.type, e.at - t0])).toEqual([
+      ['token', 500],
+      ['done', 500],
+    ]);
   });
 
   it("findSimilar returning another teacher's question fails closed", async () => {
@@ -874,7 +899,11 @@ describe('fix round: generate failures, unpriced usage, runner-bug clearing, clo
           return {
             next: () =>
               first
-                ? ((first = false), Promise.resolve({ value: say('First '), done: false as const }))
+                ? ((first = false),
+                  Promise.resolve({
+                    value: say('First one two three four five six seven. '),
+                    done: false as const,
+                  }))
                 : new Promise<IteratorResult<ModelChunk>>(() => undefined),
             return: async () => {
               await clock.sleep(closeMs);
@@ -894,7 +923,10 @@ describe('fix round: generate failures, unpriced usage, runner-bug clearing, clo
     const gw = closingGateway(clock, closeMs, fails);
     const t = testDeps({
       clock,
-      overrides: { gatewayFor: () => ({ gateway: gw, metered: false }) },
+      overrides: {
+        gatewayFor: () => ({ gateway: gw, metered: false }),
+        streamGate: passThroughGate,
+      },
     });
     const c = cancelSource();
     const steps = testSteps({

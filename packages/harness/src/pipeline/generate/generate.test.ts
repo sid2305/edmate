@@ -7,7 +7,13 @@ import type {
   Usage,
 } from '@edmate/contracts';
 import { LIMITS, TurnEventSchema } from '@edmate/contracts';
-import { demoTurnInput, turnContextFull, usageMain } from '@edmate/contracts/fixtures';
+import {
+  demoChunk,
+  demoChunkScored,
+  demoTurnInput,
+  turnContextFull,
+  usageMain,
+} from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildModelRequest } from '../../pedagogy/modelRequest.js';
@@ -23,9 +29,9 @@ import { testDeps } from '../../testing/testSteps.js';
 import { virtualClock } from '../../testing/virtualClock.js';
 import { cancelSource } from '../clock.js';
 import { TurnAbort } from '../errors.js';
-import { generate } from '../steps/generate.js';
+import { createGenerate, generate, HOLD_MARGIN, holdsReply } from '../steps/generate.js';
 import type { RegisteredTool } from '../tools.js';
-import type { StepEnv, UsageRecorder } from '../types.js';
+import type { StepEnv, Steps, UsageRecorder } from '../types.js';
 import { SkillEventDropped } from './skillEvent.js';
 import type { StreamGateFactory } from './streamGate.js';
 
@@ -72,6 +78,9 @@ function setup(
     tools?: RegisteredTool[];
     usage?: Partial<UsageRecorder>;
     gate?: StreamGateFactory;
+    lockedStopped?: boolean;
+    onLockedTrip?: () => void;
+    step?: Steps['generate'];
   } = {},
 ) {
   const clock = virtualClock();
@@ -107,12 +116,24 @@ function setup(
     events,
     reported,
     recorded,
-    run: () =>
+    run: (extra: { fromFallback?: true } = {}) =>
       clock.drive(
-        generate(env, { ctx: c, decision: d, sources, attempt: 'primary' }, (e) => {
-          // The runner's emitter rejects what fails the schema; so does this one.
-          events.push(TurnEventSchema.parse(e));
-        }),
+        (o.step ?? generate)(
+          env,
+          {
+            ctx: c,
+            decision: d,
+            sources,
+            attempt: 'primary',
+            ...(o.lockedStopped === undefined ? {} : { lockedStopped: o.lockedStopped }),
+            ...(o.onLockedTrip === undefined ? {} : { onLockedTrip: o.onLockedTrip }),
+            ...extra,
+          },
+          (e) => {
+            // The runner's emitter rejects what fails the schema; so does this one.
+            events.push(TurnEventSchema.parse(e));
+          },
+        ),
       ),
   };
 }
@@ -172,12 +193,17 @@ describe('generate: events in order', () => {
       [say('Now try it.'), used],
     ]);
     const out = await s.run();
-    expect(out).toEqual({ draft: 'Look at [2]. Now try it.' });
+    expect(out).toEqual({
+      draft: 'Look at [2]. Now try it.',
+      raw: 'Look at [2]. Now try it.',
+      withheld: false,
+    });
+    // 4.6b: under 8 tokens total, the locked stream holds both sentences back until the attempt
+    // ends cleanly, so they arrive as one token event (release()), after the skill event.
     expect(s.events).toEqual([
       { type: 'hint_rung', rung: 2 },
-      { type: 'token', text: 'Look at [2]. ' },
       { type: 'skill', skill: 'coach', payload: { shown: 'ok' } },
-      { type: 'token', text: 'Now try it.' },
+      { type: 'token', text: 'Look at [2]. Now try it.' },
       { type: 'sources', items: [src(2)] },
     ]);
     expect(s.recorded).toEqual([usageMain, usageMain]);
@@ -192,7 +218,7 @@ describe('generate: events in order', () => {
     },
   );
 
-  it.each(['ask', 'explain', 'check', 'redirect', 'ask_teacher'] as const)(
+  it.each(['ask', 'explain', 'check', 'redirect'] as const)(
     '%s sends no hint_rung',
     async (move) => {
       const s = setup([[say('x'), used]], { decision: { move } });
@@ -200,6 +226,71 @@ describe('generate: events in order', () => {
       expect(types(s.events)).toEqual(['token']);
     },
   );
+
+  it('ask_teacher sends no hint_rung and holds its text for postGuard (4.7)', async () => {
+    const s = setup([[say('It has gone '), say('to your teacher.'), used]], {
+      decision: { move: 'ask_teacher' },
+    });
+    const r = await s.run();
+    expect(types(s.events)).toEqual([]);
+    expect(r).toMatchObject({ draft: 'It has gone to your teacher.', held: true });
+  });
+
+  it('a teaching turn near the coverage threshold is held; a well-covered one streams (4.7)', async () => {
+    const near = setup([[say('x'), used]], {
+      decision: { move: 'explain' },
+      ctx: { ...ctx, retrieved: [{ ...demoChunkScored, score: 0.55 }] },
+    });
+    expect(await near.run()).toMatchObject({ held: true });
+    expect(types(near.events)).toEqual([]);
+    const far = setup([[say('x'), used]], { decision: { move: 'explain' } });
+    expect(await far.run()).not.toHaveProperty('held');
+    expect(types(far.events)).toEqual(['token']);
+  });
+});
+
+describe('holdsReply (4.7, lead answer 13)', () => {
+  const at = (...scores: (number | undefined)[]) => ({
+    retrieved: scores.map((score) =>
+      score === undefined ? demoChunk : { ...demoChunkScored, score },
+    ),
+  });
+
+  it('holds ask_teacher always', () => {
+    expect(holdsReply(at(), 'ask_teacher')).toBe(true);
+    expect(holdsReply(at(0.99), 'ask_teacher')).toBe(true);
+  });
+
+  it('holds a teaching move whose best scored chunk is under the threshold plus the margin', () => {
+    expect(HOLD_MARGIN).toBe(0.1);
+    expect(holdsReply(at(0.59, 0.2), 'hint')).toBe(true);
+    expect(holdsReply(at(0.3), 'ask')).toBe(true);
+    expect(holdsReply(at(0.6), 'hint')).toBe(false);
+    expect(holdsReply(at(0.82, 0.55), 'solution')).toBe(false);
+    expect(holdsReply(at(0.65), 'explain', 0.6)).toBe(true);
+  });
+
+  it('streams teaching turns whose chunks are all unscored, and redirect or locked turns', () => {
+    expect(holdsReply(at(undefined), 'check')).toBe(false);
+    expect(holdsReply(at(0.1), 'redirect')).toBe(false);
+    expect(holdsReply(at(0.1), 'locked')).toBe(false);
+    expect(holdsReply(at(), 'redirect')).toBe(false);
+  });
+
+  it('holds a teaching turn with nothing retrieved, or one decide.fallback chose (fix round 1)', () => {
+    expect(holdsReply(at(), 'explain')).toBe(true);
+    expect(holdsReply(at(), 'ask')).toBe(true);
+    expect(holdsReply(at(0.9), 'ask', undefined, true)).toBe(true);
+    expect(holdsReply(at(undefined), 'ask', undefined, true)).toBe(true);
+    expect(holdsReply(at(0.9), 'redirect', undefined, true)).toBe(false);
+  });
+
+  it('a decide.fallback turn is held by the step (fromFallback)', async () => {
+    const s = setup([[say('What have you tried?'), used]], { decision: { move: 'ask' } });
+    const r = await s.run({ fromFallback: true });
+    expect(r).toMatchObject({ held: true });
+    expect(types(s.events)).toEqual([]);
+  });
 
   it('no sources event when nothing is cited, or only out-of-range numbers', async () => {
     const s = setup([[say('See [7] and [0].'), used]], { decision: { move: 'ask' } });
@@ -274,7 +365,82 @@ describe('generate: the stream gate seam', () => {
       };
     };
     const s = setup([[say('a'), say('b'), used]], { gate: holding, decision: { move: 'ask' } });
-    expect(await s.run()).toEqual({ draft: 'AB' });
+    expect(await s.run()).toEqual({ draft: 'AB', raw: 'ab', withheld: false });
     expect(s.events).toEqual([{ type: 'token', text: 'AB' }]);
+  });
+});
+
+describe('generate: the answer-leak sentence gate is the default (4.5)', () => {
+  it('a leaking sentence is never shown nor in the draft; raw keeps it; withheld is set', async () => {
+    const s = setup([[say('Good. '), say(`It is ${KEY}`), say('. More. '), used]], {
+      decision: { move: 'ask' },
+    });
+    expect(await s.run()).toEqual({
+      draft: 'Good. ',
+      raw: `Good. It is ${KEY}. More. `,
+      withheld: true,
+    });
+    expect(s.events).toEqual([{ type: 'token', text: 'Good. ' }]);
+  });
+
+  it('a key split across tool rounds is still caught: no flush between rounds', async () => {
+    const s = setup(
+      [
+        [say('See ANSWER_'), callCalc, used],
+        [say('KEY_3_7 now.'), used],
+      ],
+      { decision: { move: 'ask' } },
+    );
+    const out = await s.run();
+    expect(out).toMatchObject({ draft: '', withheld: true });
+    expect(types(s.events)).toEqual(['skill']);
+  });
+
+  it('a cited source whose label holds the key is dropped and reported', async () => {
+    const s = setup([[say('Look at [1] and [2].'), used]], {
+      decision: { move: 'ask', mustNotReveal: ['p. 2'] },
+    });
+    await s.run();
+    expect(s.events.at(-1)).toEqual({ type: 'sources', items: [src(1)] });
+    expect(s.reported.map((e) => String(e))).toEqual([
+      'SourceDropped: a cited source label held the answer key and was dropped',
+    ]);
+  });
+});
+
+describe('generate: lockedStopped (ADR-0007 §8, 4.6b)', () => {
+  it('holds the whole reply until the attempt ends when the session already stopped streaming', async () => {
+    const s = setup([[say('One two three four. '), say('Five six seven eight.'), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      lockedStopped: true,
+    });
+    const out = await s.run();
+    // No per-sentence token events: the one token event is the whole reply, at the clean end.
+    expect(s.events.filter((e) => e.type === 'token')).toEqual([
+      { type: 'token', text: 'One two three four. Five six seven eight.' },
+    ]);
+    expect(out.draft).toBe('One two three four. Five six seven eight.');
+    expect(out.locked).toBeUndefined();
+  });
+
+  it('passes onLockedTrip through: told once when the stream trips (4.6b fix round 1)', async () => {
+    let told = 0;
+    const s = setup([[say('One two three four five six seven eight. '), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+      onLockedTrip: () => void told++,
+      step: createGenerate({ lockedCheck: () => () => Promise.resolve(true) }),
+    });
+    const out = await s.run();
+    expect(out.locked).toBe('hit');
+    expect(told).toBe(1);
+  });
+
+  it('defaults to the ordinary per-sentence stream when unset', async () => {
+    const s = setup([[say('One two three four five six seven eight. '), used]], {
+      decision: { move: 'ask', mustNotReveal: [] },
+    });
+    await s.run();
+    // 8 tokens: part of the sentence releases at once (not held for the whole attempt).
+    expect(s.events.some((e) => e.type === 'token' && e.text === 'One ')).toBe(true);
   });
 });

@@ -252,8 +252,9 @@ interface LocalePack {
   market: string; languages: Lang[]; timezone: string;            // IANA, e.g. 'Asia/Kolkata'
   currency: { code: string; format: string };
   payments: { methods: string[]; provider: string };
-  helplines: { name: string; number: string; kind: string }[];
-  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
+  helplines: { name: string; number: string; kind: string; verifiedBy: string; verifiedOn: string }[];   // verifiedBy: the person who checked the line (a name or handle, never an email); verifiedOn: YYYY-MM-DD; a loaded pack refuses the literal 'pending' (ADR-0008)
+  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string; parentalConsentRequired: boolean };   // parentalConsentRequired: learners under 18 need verifiable parental consent in this market (ADR-0008)
+  reviewedBy?: string; reviewedOn?: string;                       // sign-off for the compliance block, both or neither; same formats as verifiedBy / verifiedOn (ADR-0008)
   regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
 }
 
@@ -268,6 +269,8 @@ interface RetrievalIndex {
   search(q: string, scope: { teacherId: string; allowedModuleIds: string[] }, k: number): Promise<Chunk[]>;
   // Code-only: says whether locked modules match, never returns their text.
   probe(q: string, scope: { teacherId: string; moduleIds: string[] }): Promise<{ hit: boolean; score: number }>;
+  // Code-only: true when any candidate shares an 8+ token span with this teacher's material outside allowedModuleIds; never text, spans or counts (ADR-0007).
+  leakCheck(candidates: readonly string[], scope: { teacherId: string; allowedModuleIds: string[] }): Promise<{ hit: boolean }>;
 }
 interface EntitlementStore { resolve(x: { studentId: string; agentId: string; source: Entitlement['source'] }, at: string): Promise<Entitlement | null> }
 interface TurnConfigStore {          // the config a turn runs on: pkg at e.packageVersion, agent at the session's pinned version (ADR-0004)
@@ -425,8 +428,8 @@ Guards are small, independent `Guard` objects: cheap rules first, then a small-m
 | `distressDetect` | pre | Keywords per supported language (from the locale pack, incl. romanised scripts), then a classifier | `escalate`: caring template + helplines from the student's locale pack + alert to the trust team |
 | `moderationIn` | pre | Provider moderation where available; else classifier with a fixed taxonomy | `block` with redirect; log `safety_event` |
 | `jailbreak` | pre | Patterns + classifier for prompt injection, including "pretend I'm on another package" | `block`; strikes per student |
+| `lockedLeak` | post (runs before `answerLeak`, so no locked span reaches a rewriter; ADR-0007) | Code only: n-gram overlap with the teacher's locked modules (leak = 8+ token span), checked per batch of sentences while streaming (once per reply after a session's first locked hit; ADR-0007 amendment, 4.6b) and on the full reply via `RetrievalIndex.leakCheck` | `replace` the whole reply with the locked reply (no surgical strip; ADR-0007) |
 | `answerLeak` | post | Numbers and words vs `mustNotReveal`; fuzzy match; judge for paraphrase | `rewrite` once, then safe hint |
-| `lockedLeak` | post | Code only: n-gram overlap with the teacher's locked modules (leak = 8+ token span) | `rewrite` without it |
 | `grounding` | post | Claims must be supported by retrieved material or teacher notes; numbers recomputed | `rewrite` with corrections, or switch to `ask_teacher` |
 | `adviceGuard` | post | Regulated subjects: personal investment, medical or legal advice | `rewrite` to concept-level teaching + disclaimer |
 | `personaBoundary` | post | Persona `must_not` list for interview and viva skills | `rewrite` in persona |
@@ -582,6 +585,8 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 
 ### M4 · Guardrails and safety (depends on: 3.1, 3.12)
 
+> **MVP first (20 Oct 2026).** M4 is done once 4.0–4.8 merge. 4.9 and the follow-ups the safety reviews raised (4.2d, 4.3b–d, 4.4b–e, 4.5b, 4.7b) move to M13 and are built before the pilot, not now. Until the pilot gate, `safety-reviewer` does not run on PRs; 13.3 runs one whole-system safety review.
+
 - **4.0** Seed eval suites: ≥ 30 human-reviewed cases per guard (PII, distress, moderation, jailbreak, leak, locked, grounding, advice, persona). *Accept:* cases validate; reviewer recorded per case.
 - **4.1** Guard framework and registry. *Accept:* guards run in declared order and fail closed; `rewrite` returns replacement text.
 - **4.2** `piiScrub` (generic + locale-pack patterns). *Accept:* 100% on the seeded PII cases.
@@ -591,7 +596,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **4.6** `lockedLeak` post-guard (code only). *Accept:* seeded locked cases 100% on fixtures; the guard makes no model call.
 - **4.7** `grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`. *Accept:* seeded grounding cases pass; ≥ 95% of uncovered questions go to `ask_teacher`, none answered from general knowledge.
 - **4.8** `adviceGuard` for regulated subjects. *Accept:* seeded advice cases pass.
-- **4.9** `personaBoundary` and `tone`. *Accept:* seeded persona cases pass; no reply claims to be human or the teacher.
+- **4.9** `personaBoundary` and `tone`. *Accept:* seeded persona cases pass; no reply claims to be human or the teacher. *Moved to M13 (20 Oct 2026).*
 
 ### M5 · Knowledge, access filter and skills (depends on: M3)
 
@@ -684,6 +689,7 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 - **13.4** Privacy rights per the locale pack's `privacyLaw`: per-user export and delete, retention jobs. *Accept:* jobs tested; export complete.
 - **13.5** Cost dashboard: AI cost per turn and per active student per package against price. *Accept:* numbers match the usage rows.
 - **13.6** Deploy guide for the pilot market's region, backups and restore, pilot readiness checklist. *Accept:* fresh VM to running demo in < 30 minutes; checklist signed off by a human.
+- **Parked from M4 (20 Oct 2026, MVP first):** 4.9 `personaBoundary` and `tone`, and the safety-review follow-ups 4.2d, 4.3b, 4.3c, 4.3d, 4.4b, 4.4c, 4.4d, 4.4e, 4.5b, 4.7b. 13.3 also restores `safety-reviewer` in `risk-paths.txt` and runs one whole-system safety review.
 
 ## Agent operating rules and definition of done
 
@@ -697,7 +703,7 @@ These rules let many agents work in parallel without breaking each other's work 
 4. **No real model or payment calls in unit or CI tests.** Use the scripted gateway, payment sandbox fixtures and recorded responses. Live calls only in `--live` runs with keys from the environment.
 5. **Never log or persist secrets or raw student content** outside `messages`. No student names in prompts. The repo is public: never commit credentials, keys, real student data, teacher uploads or personal details; the secret scan blocks them at edit, commit and CI.
 6. **The team lead merges every PR; risky ones need their required reviewers.** A PR touching a path in `.claude/skills/merge-gate/risk-paths.txt` (guardrails, the access filter, payments and webhooks, prompt packs, persona templates, contracts, ADRs, keys, sign-in, data isolation, harness and CI config), or a migration that drops or deletes data, passes the merge gate only when `review.md` names the reviewers that file lists for each group it touches and the handoff logs a `risk: high` decision, which reaches the human's skim list in the decision log. All other PRs are merged once the merge gate passes (rule 11).
-7. **Platform content and eval cases are reviewed by people.** Agents may draft prompt packs, skill and persona templates, and eval cases; a named human signs off before merge (`reviewed_by`). Teachers own and review their own course material.
+7. **Platform content is reviewed by people; eval cases by the lead.** Agents may draft prompt packs, skill and persona templates, and eval cases. Prompt packs and templates need a named human in `reviewed_by` before merge. Eval cases are reviewed and signed by the team lead (`reviewed_by: lead`; human decision, 20 Oct 2026): the human is not asked. Teachers own and review their own course material.
 8. **Ask, don't guess.** If a spec is ambiguous or conflicts with another section, the team lead asks the human (or opens a `needs-human` issue) and the agent picks another task.
 9. **Small PRs.** Aim for < 600 changed lines excluding fixtures.
 10. **Keep the docs current.** Update the relevant README and the board when a task merges.

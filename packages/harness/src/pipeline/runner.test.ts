@@ -11,6 +11,7 @@ import {
   type TurnEvent,
 } from '@edmate/contracts';
 import {
+  demoAttachment,
   demoChunk,
   demoChunkScored,
   demoLearnerProfile,
@@ -54,6 +55,7 @@ import {
   StepNotImplementedError,
 } from './errors.js';
 import { createScrub } from './steps/scrub.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { runTurn } from './runner.js';
 import { STEP_NAMES, STEP_SPEC } from './spec.js';
 import type { BuiltContext, StepEnv } from './types.js';
@@ -323,7 +325,7 @@ describe('runTurn runner bugs', () => {
 });
 
 describe('defaultSteps (stubs)', () => {
-  it('every stub throws StepNotImplementedError (admit, entitle: 3.2; buildContext: 3.4; decide: 3.6; generate: 3.7; meter, commit: 3.8; preGuard, escalate: 4.3)', async () => {
+  it('the one remaining stub (route.run) throws StepNotImplementedError', async () => {
     const t = testDeps();
     const env = {
       input: demoTurnInput,
@@ -333,10 +335,7 @@ describe('defaultSteps (stubs)', () => {
       ...stepEnvExtras(),
     };
     const anyArg = {} as never;
-    const calls: (() => unknown)[] = [
-      () => defaultSteps.route.run(env, anyArg),
-      () => defaultSteps.postGuard(env, anyArg),
-    ];
+    const calls: (() => unknown)[] = [() => defaultSteps.route.run(env, anyArg)];
     for (const call of calls) await expect(call()).rejects.toBeInstanceOf(StepNotImplementedError);
     expect(defaultSteps.route.onFailure(env, anyArg)).toEqual({
       intent: 'on_task',
@@ -455,6 +454,62 @@ describe('runTurn with the real scrub (4.2)', () => {
       expect(result.background.map((b) => String(b.error))).toEqual([
         'Error: distressCheck failed on the unscrubbed text',
       ]);
+    });
+  });
+
+  describe('an attachment-bearing turn is refused at the scrub step (task 4.2b)', () => {
+    it('ends guard_blocked, no model call, nothing committed', async () => {
+      const t = testDeps();
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const input = { ...demoTurnInput, attachments: [demoAttachment] };
+      const { events, result } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+      expect(t.gateway.requests).toHaveLength(0);
+      expect(steps.commits).toHaveLength(1);
+      expect(steps.commits[0]?.input).toBeNull();
+      expect(result.background).toHaveLength(1);
+      const bg = result.background[0];
+      expect(bg?.task).toBe('runner');
+      expect(bg?.error).toBeInstanceOf(ScrubFailedError);
+      expect((bg?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+      expect((bg?.error as ScrubFailedError).detail.errorName).toBeUndefined();
+    });
+
+    it('the raw-text distress check still runs and escalates even with an attachment present (regression)', async () => {
+      const MARKER = 'RAWDISTRESSMARKER_ATTACHMENT';
+      const raw = {
+        ...demoTurnInput,
+        text: `I feel ${MARKER} today`,
+        attachments: [demoAttachment],
+      };
+      const t = testDeps({
+        overrides: { distressCheck: (text) => text.includes(MARKER) },
+      });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events, result } = await driveTurn(runTurn(raw, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([
+        { type: 'safety', level: 'alert' },
+        { type: 'token', text: LAST_RESORT_DISTRESS_REPLY },
+        { type: 'done', messageId: 'message_1', usage: [] },
+      ]);
+      expect(t.alerts.raised).toHaveLength(1);
+      expect(steps.commits[0]).toMatchObject({
+        outcome: 'escalated',
+        intent: 'distress',
+        input: null,
+      });
+      // The scrub still failed closed on the attachment and is still reported, not swallowed.
+      expect(result.background).toHaveLength(1);
+      expect((result.background[0]?.error as Error).cause).toEqual({ guardCause: 'attachment' });
+    });
+
+    it('no distress hit + an attachment → the ordinary guard_blocked path (contrast)', async () => {
+      const input = { ...demoTurnInput, attachments: [demoAttachment] };
+      const t = testDeps({ overrides: { distressCheck: () => false } });
+      const steps = testSteps({ scrub: defaultSteps.scrub });
+      const { events } = await driveTurn(runTurn(input, { deps: t.deps, steps }), t.clock);
+      expect(events).toEqual([{ type: 'error', code: 'guard_blocked', retryable: true }]);
+      expect(t.alerts.raised).toEqual([]);
     });
   });
 
@@ -587,6 +642,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
   const history: Message[] = [
     {
@@ -669,6 +725,7 @@ describe('runTurn with the real buildContext (3.4)', () => {
       search: () =>
         Promise.resolve([{ ...demoChunk, moduleId: 'mod_test_04', text: OUT_OF_SCOPE_TEXT }]),
       probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
     };
     const { t, steps, seen } = setup({ retrieval: leaky });
     const { events, result } = await driveTurn(
@@ -703,6 +760,7 @@ describe('runTurn with the real decide (3.6)', () => {
     attemptLogged: false,
     pendingCheck: false,
     answerKey: [ANSWER_KEY],
+    lockedStopped: false,
   };
 
   function setup(
@@ -748,6 +806,7 @@ describe('runTurn with the real decide (3.6)', () => {
           attemptLogged: false,
           pendingCheck: false,
           answerKey: [ANSWER_KEY],
+          lockedStopped: false,
         },
         ...o.built,
       }),
@@ -770,7 +829,7 @@ describe('runTurn with the real decide (3.6)', () => {
     expect(rec?.decision).toMatchObject({ move: 'hint', rung: 2, mustNotReveal: [ANSWER_KEY] });
     expect(rec?.next).toEqual({
       rung: 2,
-      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY] },
+      help: { stuckTurns: 0, attemptLogged: false, pendingCheck: false, answerKey: [ANSWER_KEY], lockedStopped: false },
     });
     expect(rec?.promptPack).toEqual({
       set: FIXTURE_PROMPT_PACK_VERSION,
@@ -979,7 +1038,10 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   it('a slow scrub plus a soft hit: preGuard times out, the runner still escalates (safety review)', async () => {
     const t = testDeps({
       overrides: {
-        transcripts: { history: () => new Promise(() => undefined), append: () => Promise.resolve() },
+        transcripts: {
+          history: () => new Promise(() => undefined),
+          append: () => Promise.resolve(),
+        },
         // The raw-text and fallback dep stays hard-only; the soft check is the runner's own.
         distressCheck: hasDistressKeyword,
       },
@@ -1000,12 +1062,15 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('a soft hit never escalates through the raw-text check alone (it stays hard-only)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [
-      { value: { distress: false } },
-      // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
-      { value: { category: 'none' } },
-      { value: { category: 'none' } },
-    ] });
+    const t = deps({
+      stream: [scriptedStreamText],
+      generateObject: [
+        { value: { distress: false } },
+        // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
+        { value: { category: 'none' } },
+        { value: { category: 'none' } },
+      ],
+    });
     const { events } = await driveTurn(
       runTurn(at('i feel so hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,
@@ -1014,12 +1079,15 @@ describe('runTurn with the real preGuard, escalate and distressCheck (4.3)', () 
   }, 2_000);
 
   it('soft keyword + classifier false → a normal reply (no alert)', async () => {
-    const t = deps({ stream: [scriptedStreamText], generateObject: [
-      { value: { distress: false } },
-      // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
-      { value: { category: 'none' } },
-      { value: { category: 'none' } },
-    ] });
+    const t = deps({
+      stream: [scriptedStreamText],
+      generateObject: [
+        { value: { distress: false } },
+        // moderationIn and jailbreak (4.4) ask their classifiers too: both say none.
+        { value: { category: 'none' } },
+        { value: { category: 'none' } },
+      ],
+    });
     const { events } = await driveTurn(
       runTurn(at('this bug is hopeless'), { deps: t.deps, steps: realDistress() }),
       t.clock,

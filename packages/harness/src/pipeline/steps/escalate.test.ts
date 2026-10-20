@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { indiaLocalePackWithHelplines } from '../../testing/distressLocaleFixtures.js';
 import { stepEnvExtras, testDeps } from '../../testing/testSteps.js';
 import { cancelSource } from '../clock.js';
-import { LAST_RESORT_DISTRESS_REPLY } from '../runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from '../replies.js';
 import type { Entitled, StepEnv } from '../types.js';
 import { buildCaringReply, escalate } from './escalate.js';
 
@@ -55,8 +55,20 @@ describe('buildCaringReply', () => {
     const reply = buildCaringReply({
       ...localePackMinimal,
       helplines: [
-        { name: 'Line A', number: '000-1', kind: 'mental_health' },
-        { name: 'Line B', number: '000-2', kind: 'child' },
+        {
+          name: 'Line A',
+          number: '000-1',
+          kind: 'mental_health',
+          verifiedBy: 'test pack',
+          verifiedOn: '2026-01-01',
+        },
+        {
+          name: 'Line B',
+          number: '000-2',
+          kind: 'child',
+          verifiedBy: 'test pack',
+          verifiedOn: '2026-01-01',
+        },
       ],
     });
     expect(reply).toContain('You can also call Line A on 000-1 or Line B on 000-2.');
@@ -65,7 +77,15 @@ describe('buildCaringReply', () => {
   it('blank helpline entries are skipped', () => {
     const reply = buildCaringReply({
       ...localePackMinimal,
-      helplines: [{ name: ' ', number: '', kind: 'mental_health' }],
+      helplines: [
+        {
+          name: ' ',
+          number: '',
+          kind: 'mental_health',
+          verifiedBy: 'test pack',
+          verifiedOn: '2026-01-01',
+        },
+      ],
     });
     expect(reply).toBe(LAST_RESORT_DISTRESS_REPLY);
   }, 1_000);

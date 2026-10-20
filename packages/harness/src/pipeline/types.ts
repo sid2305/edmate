@@ -7,6 +7,7 @@ import type {
   Chunk,
   Entitlement,
   EntitlementStore,
+  EvidenceEvent,
   Intent,
   Lang,
   LearnerProfile,
@@ -107,6 +108,17 @@ export interface FallbackReplies {
    * failing, entitle uses the built-in English `DEFAULT_LIMIT_REACHED_REPLY`.
    */
   limitReached?(lang: Lang): string;
+  /**
+   * The reply that replaces one holding locked material (task 4.6). `packageName` is the student's
+   * own package, given only when the teacher chose `name_package`. Optional: when absent, empty or
+   * failing, the built-in English `lockedReplyText` is used.
+   */
+  lockedReply?(lang: Lang, packageName?: string): string;
+  /**
+   * The reply that replaces one the grounding guard found ungrounded (task 4.7). Optional: when
+   * absent, empty or failing, the built-in English `askTeacherReplyText` is used.
+   */
+  askTeacher?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -125,7 +137,7 @@ export interface PipelineDeps {
   maxTurnCostMicroUsd?: number;
   /** The tool registry; default `noTools` (5.5 builds the real one). */
   tools?: ToolRegistry;
-  /** Builds generate's stream gate; default the pass-through (4.5 adds the sentence gate). */
+  /** Builds generate's stream gate; default the answer-leak sentence gate (4.5). */
   streamGate?: StreamGateFactory;
   /** Where `finished.background` failures are logged (ids and error name and message only). */
   log: TurnLog;
@@ -262,6 +274,12 @@ export interface BuiltContext {
    * the runner passes it to decide, and decide's `next` goes to commit.
    */
   helpState: HelpState;
+  /**
+   * True when a help state was stored but could not be read (4.6b fix round 1). It may hold
+   * `lockedStopped: true`, so the runner holds the whole reply and saves no help state this turn
+   * (never false over a stored true). Absent: read fine, or nothing stored yet.
+   */
+  helpStateUnreadable?: true;
 }
 
 /** What decide works from: the context plus the parsed help state (kept out of TurnContext). */
@@ -293,10 +311,43 @@ export interface EscalateResult {
 export interface GenerateResult {
   /** What the student was shown, all tool rounds joined. */
   draft: string;
+  /** Everything the model wrote, shown or not (4.5); postGuard checks it. Absent: the draft. */
+  raw?: string;
+  /** The stream gate withheld text as an answer leak (4.5): postGuard forces the hint. */
+  withheld?: boolean;
+  /**
+   * The stream's locked check withheld text (4.6): `hit` gives the locked reply, `failed` (the
+   * check could not answer) the safe reply.
+   */
+  locked?: 'hit' | 'failed';
+  /**
+   * The reply was held, not streamed (4.7: an ask_teacher turn or one near the coverage
+   * threshold): the runner sends it after postGuard passes it.
+   */
+  held?: boolean;
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
-  { result: 'ok' } | { result: 'replace'; text: string }
+  | { result: 'ok' }
+  | {
+      result: 'replace';
+      text: string;
+      /**
+       * grounding replaced an ungrounded reply (reason code `ungrounded`, 4.7): the runner opens
+       * the turn's TeacherQuestion if decide had not, within the per-session cap.
+       */
+      escalateToTeacher?: true;
+      /**
+       * grounding replaced the reply (any reason; 4.7 fix round 1). With text already streamed,
+       * the runner flags it in the trace (code only) so 7.x can size the streamed window.
+       */
+      groundingRewrote?: true;
+    }
+  /**
+   * A post guard escalated (4.5 forwards it; later post guards may raise it). The runner replies
+   * with the caring template and raises `alert`; `text` (the chain's text) is kept, never shown.
+   */
+  | { result: 'escalate'; alert: SafetyAlert; text: string }
 );
 
 export type TurnOutcome = 'replied' | 'escalated' | 'blocked' | 'error';
@@ -332,12 +383,29 @@ export interface CommitRecord {
   inputWithheld?: true;
   /** The blocking guard's code, when a code came with the block (for the placeholder). */
   withheldCode?: string;
+  /**
+   * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
+   * (the student got the caring template). Server-side only; commit decides where it is kept.
+   */
+  escalatedText?: string;
   alert?: SafetyAlert;
   /**
    * The TeacherQuestion the runner opened for an `ask_teacher` turn (lead answer Q3). Absent when
    * opening failed or timed out: commit (3.17) then opens it.
    */
   teacherQuestionId?: string;
+  /**
+   * The grounding guard escalated this turn to the teacher (4.7) and the per-session cap allowed
+   * it: commit opens the TeacherQuestion when the live attempt left no id, as for ask_teacher.
+   */
+  escalateToTeacher?: boolean;
+  /**
+   * Topic-scored evidence from this turn, for `profiles.applyEvidence` (task 3.17; harness-internal
+   * — not a contracts change). Absent or empty today: no step upstream produces real, topic-scoped
+   * evidence yet (that needs route/3.3, the practice skill/5.6 and the topic map/6.1); commit calls
+   * `applyEvidence` only when this is non-empty.
+   */
+  evidence?: EvidenceEvent[];
 }
 
 export interface Steps {
@@ -370,12 +438,39 @@ export interface Steps {
       /** decide's numbered sources, for the `sources` event. */
       sources: SourceRef[];
       attempt: 'primary' | 'fallback';
+      /**
+       * Session-wide stop (ADR-0007 §8, 4.6b): the session's saved help state already had a
+       * locked hit or failed check. When true, generate holds the whole reply until the attempt
+       * ends cleanly instead of streaming it sentence by sentence. Default false.
+       */
+      lockedStopped?: boolean;
+      /**
+       * Called at once on every locked hit or failed locked check in this attempt (the stream
+       * tripping, or a tool output failed as `locked`), even when the attempt then fails: the
+       * runner saves the session's stop flag from it (4.6b fix round 1).
+       */
+      onLockedTrip?: () => void;
+      /** decide.fallback chose the decision (4.7 fix round 1): generate holds the reply. */
+      fromFallback?: true;
     },
     emit: Emit,
   ): Promise<GenerateResult>;
   postGuard(
     env: StepEnv,
-    x: { ctx: TurnContext; decision: PedagogyDecision; draft: string },
+    x: {
+      ctx: TurnContext;
+      decision: PedagogyDecision;
+      /** What the student was shown. */
+      draft: string;
+      /** Everything the model wrote (GenerateResult.raw). */
+      raw?: string;
+      /** The stream gate withheld a leak (GenerateResult.withheld). */
+      withheld?: boolean;
+      /** The stream's locked check withheld text (GenerateResult.locked). */
+      locked?: 'hit' | 'failed';
+      /** decide's numbered sources, for grounding's citation check (4.7). */
+      sources?: SourceRef[];
+    },
   ): Promise<PostGuardResult>;
   meter(env: StepEnv, x: { usage: Usage[]; entitlement: Entitlement }): Promise<void>;
   commit(env: StepEnv, record: CommitRecord): Promise<void>;

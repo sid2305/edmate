@@ -96,7 +96,9 @@ export type {
 export {
   type EntitlementStoreOptions,
   entitlementStoreFor,
+  profileStoreFor,
   sessionStateStoreFor,
+  teacherQuestionStoreFor,
   traceSinkFor,
   transcriptStoreFor,
   turnConfigStoreFor,
@@ -106,4 +108,5 @@ export {
   type UnmeteredUsageInput,
   type UsageMeterContext,
 } from './ports.js';
+export type { EvidenceEventEntry } from './learner.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
