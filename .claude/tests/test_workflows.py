@@ -2,13 +2,18 @@
 pinned by full commit SHA, permissions are minimal, the gate and labeller run main's scripts (never the
 PR's), CI runs every gate, and nothing references the retired human-approved label."""
 import re
+import sys
 import unittest
+from pathlib import Path
 
 from helpers import REPO, require_tools
 
 WF = REPO / ".github" / "workflows"
 NAMES = ("ci.yml", "merge-gate.yml", "risk-label.yml")
 FETCH_PR = re.compile(r'git fetch[^\n]*"\+refs/pull/\$\{\{ github\.event\.pull_request\.number \}\}/head:')
+
+sys.path.insert(0, str(REPO / ".github" / "scripts"))
+from docs_only import is_docs_only  # noqa: E402
 
 
 def setUpModule():
@@ -31,6 +36,17 @@ def steps(data):
 
 def run_text(data):
     return "\n".join(s.get("run", "") for s in steps(data))
+
+
+def eval_gh_if(expr, **outputs):
+    """Evaluate the small subset of GH Actions `if:` syntax this workflow uses (`needs.<job>.
+    outputs.<name>`, `!=`/`==`, `||`/`&&`) against substituted output values, so the condition can be
+    checked without a runner."""
+    e = expr
+    for k, v in outputs.items():
+        e = e.replace(f"needs.changes.outputs.{k}", repr(v))
+    e = e.replace("||", " or ").replace("&&", " and ")
+    return bool(eval(e, {"__builtins__": {}}, {}))  # noqa: S307 -- fixed test-authored expression, no input
 
 
 class Workflows(unittest.TestCase):
@@ -104,7 +120,7 @@ class Workflows(unittest.TestCase):
 
     def test_job_names_match_branch_protection(self):
         self.assertEqual(load("ci.yml")[1]["name"], "CI")
-        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"node", "python-harness", "secrets"})
+        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"changes", "node", "python-harness", "secrets"})
         self.assertEqual(load("merge-gate.yml")[1]["name"], "Merge gate")
         self.assertEqual(set(load("merge-gate.yml")[1]["jobs"]), {"check"})
 
@@ -145,6 +161,44 @@ class Workflows(unittest.TestCase):
     def test_existing_tree_scan_kept(self):
         py = "\n".join(s.get("run", "") for s in load("ci.yml")[1]["jobs"]["python-harness"]["steps"])
         self.assertIn("python3 .githooks/secret-scan.py --all", py)
+
+    def test_ci_has_nightly_schedule_trigger(self):
+        data = load("ci.yml")[1]
+        self.assertIn("schedule", data["on"])
+        crons = [e["cron"] for e in data["on"]["schedule"]]
+        self.assertEqual(len(crons), 1)
+        # 5-field cron, not a push/PR-only trigger.
+        self.assertRegex(crons[0], r"^\S+ \S+ \S+ \S+ \S+$")
+
+    def test_node_job_skips_on_docs_only_diff(self):
+        data = load("ci.yml")[1]
+        node = data["jobs"]["node"]
+        self.assertEqual(node.get("needs"), "changes")
+        self.assertIn("needs.changes.outputs.docs_only", node.get("if", ""))
+        # A docs-only diff must make the guard condition false (job skipped); anything else, true.
+        self.assertFalse(eval_gh_if(node["if"], docs_only="true"))
+        self.assertTrue(eval_gh_if(node["if"], docs_only="false"))
+
+    def test_changes_job_uses_a_plain_git_diff_not_a_third_party_action(self):
+        data = load("ci.yml")[1]
+        changes = data["jobs"]["changes"]
+        for s in changes["steps"]:
+            if "uses" in s:
+                self.assertTrue(s["uses"].startswith(("actions/checkout@", "actions/setup-python@")), s["uses"])
+        self.assertIn("git diff --name-only", run_text({"jobs": {"changes": changes}}))
+        self.assertIn("docs_only.py", run_text({"jobs": {"changes": changes}}))
+
+    def test_docs_only_classifier_matches_docs_and_rejects_code(self):
+        self.assertTrue(is_docs_only(["docs/edmate-prd.md", "docs/tasks/0.13/plan.md"], "push"))
+        self.assertTrue(is_docs_only(["README.md"], "pull_request"))
+        self.assertFalse(is_docs_only(["packages/harness/src/index.ts"], "push"))
+        self.assertFalse(is_docs_only(["docs/edmate-prd.md", "packages/harness/src/index.ts"], "push"))
+        self.assertFalse(is_docs_only([], "push"))
+
+    def test_docs_only_classifier_always_false_on_schedule(self):
+        # The nightly run has no diff to judge; it must always run the full suite.
+        self.assertFalse(is_docs_only(["README.md"], "schedule"))
+        self.assertFalse(is_docs_only([], "schedule"))
 
     def test_labeller_uses_the_labeller_vocabulary(self):
         text, data = load("risk-label.yml")

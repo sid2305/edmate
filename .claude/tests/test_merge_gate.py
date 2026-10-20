@@ -30,7 +30,9 @@ class GateCase(RepoCase):
 
     def gh_env(self, labels=(), fail=False, oid="auto", branch=B):
         """A stub `gh` on PATH that reports the PR's branch, head commit (by default the local branch
-        head, read when the stub runs) and labels (which the gate ignores)."""
+        head, read when the stub runs) and labels (which the gate ignores). Tests set
+        MERGE_GATE_PR_WAIT_SECONDS=0 so a bounded retry (for a `gh pr view` race right after a push)
+        does not slow the suite down."""
         bindir = self.repo.root.parent / "bin"
         bindir.mkdir(exist_ok=True)
         gh = bindir / "gh"
@@ -45,7 +47,32 @@ class GateCase(RepoCase):
             text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {branch})"')
             gh.write_text(f"#!/bin/sh\ncat <<EOF\n{text}\nEOF\n")
         gh.chmod(0o755)
-        return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}")
+        return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}", MERGE_GATE_PR_WAIT_SECONDS="0")
+
+    def gh_env_flaky(self, fail_times, branch=B):
+        """A stub `gh` that reports a stale (mismatched) head commit for the first `fail_times`
+        calls, then the real local branch head after that -- simulating `gh pr view` lagging just
+        behind a push."""
+        bindir = self.repo.root.parent / "bin"
+        bindir.mkdir(exist_ok=True)
+        gh = bindir / "gh"
+        counter = bindir / "gh_count"
+        counter.write_text("0")
+        gh.write_text(f"""#!/bin/sh
+count=$(cat "{counter}")
+count=$((count + 1))
+echo "$count" > "{counter}"
+if [ "$count" -le {fail_times} ]; then
+  oid="0000000000000000000000000000000000000000"
+else
+  oid="$(git rev-parse {branch})"
+fi
+cat <<EOF
+{{"headRefName": "{branch}", "headRefOid": "$oid", "labels": []}}
+EOF
+""")
+        gh.chmod(0o755)
+        return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}", MERGE_GATE_PR_WAIT_SECONDS="0")
 
 
 class Basics(GateCase):
@@ -409,6 +436,30 @@ class FixRound1(GateCase):
         self.assertEqual(code, 1, out)
         self.assertIn("head commit", out)
 
+    def test_pr_head_retries_then_passes(self):
+        # gh reports a stale head for the first call, then the real one: the gate retries
+        # (bounded) instead of failing on a push/gh-view race.
+        self.make({"apps/cli.ts": "x\n"})
+        code, out = self.gate("--pr", "5", env=self.gh_env_flaky(fail_times=1))
+        self.assertEqual(code, 0, out)
+
+    def test_pr_head_retries_exhausted_still_fails(self):
+        # A genuine, persistent mismatch must still fail once the bounded retries run out.
+        self.make({"apps/cli.ts": "x\n"})
+        code, out = self.gate("--pr", "5", env=self.gh_env_flaky(fail_times=99))
+        self.assertEqual(code, 1, out)
+        self.assertIn("PR head 0000000", out)
+
+    def test_bad_retries_env_falls_back_to_default_and_still_retries(self):
+        # A malformed or negative MERGE_GATE_PR_RETRIES/_WAIT_SECONDS must not crash the gate or
+        # turn off retrying -- it falls back to the built-in default (retries=3).
+        self.make({"apps/cli.ts": "x\n"})
+        for bad in ("not-a-number", "-1"):
+            env = self.gh_env_flaky(fail_times=1)
+            env["MERGE_GATE_PR_RETRIES"] = bad
+            code, out = self.gate("--pr", "5", env=env)
+            self.assertEqual(code, 0, out)
+
     def test_destructive_migrations(self):
         cases = {
             "packages/db/migrations/0002.sql": "ALTER TABLE students DROP COLUMN email;",
@@ -475,6 +526,11 @@ class FixRound1(GateCase):
         text = "# r — APPROVE\nReviewers: code-reviewer\nReviewers: security-reviewer\n"
         self.make({".claude/x": "x\n"}, review=text, handoff=HIGH)
         self.assertEqual(self.gate()[0], 1)
+
+    def test_reviewers_bullet_prefix_and_trailing_period(self):
+        text = "# r — APPROVE\n- Reviewers: code-reviewer, security-reviewer.\n"
+        self.make({".claude/x": "x\n"}, review=text, handoff=HIGH)
+        self.assertEqual(self.gate()[0], 0)
 
     def test_risk_high_must_end_heading(self):
         handoff = "# h\nStatus: DONE\n\n## Decisions\n### 18 Oct 2026 · 9.9 not risk: high really · risk: low\nDecided: x.\n"

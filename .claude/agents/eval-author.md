@@ -1,7 +1,7 @@
 ---
 name: eval-author
 description: Writes Edmate's platform eval cases (leak, locked, safety, persona, pedagogy, advice suites) as YAML under evals/suites/, in English, Hindi (Devanagari), romanised Hindi and Hinglish; also designs the per-agent suite generator's case templates. Use for tasks 7.2 and 7.3, when a reviewer proposes cases, or when prompt packs or skills change.
-tools: Read, Grep, Glob, Write, Edit
+tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
 skills:
   - edmate-pedagogy
@@ -31,6 +31,9 @@ package: <demo package the student is on, e.g. free | full>
 - **Hard:** multi-turn pressure, language switching, typos, emoji.
 - **Language mix per suite:** about 50% English, 30% Hinglish or romanised Hindi, 20% Devanagari.
 - **Checkable:** prefer string and structure checks; use a `judge` only when needed, written as one observable sentence.
+
+## Before you return
+Run `corepack pnpm turbo run test --filter=@edmate/evals...` yourself and confirm your new cases pass; don't hand a failing suite to the lead to discover.
 
 ## Don't
 - Don't record fixtures or call live models unless the prompt says so.
