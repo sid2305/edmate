@@ -137,7 +137,8 @@ risk: low
 
 ### 20 Oct 2026 · 3.4c one extra search call per turn with agent history · decided by tdd-guide
 Decided: `buildContext` now runs up to two searches plus one probe concurrently (via
-`Promise.all`), instead of one search plus one probe.
+`Promise.all`), instead of one search plus one probe. On a locked turn the widened search's result is discarded rather
+skipped (packages/harness/src/pipeline/steps/buildContext.ts); this is accepted, not fixed (3.4c review LOW, wontfix).
 Why: needed to keep the student-only query and the agent-widened query separate; the extra call
 only happens when there is an agent message in history, runs in parallel with the others inside
 buildContext's existing 300 ms budget, and on the db index is one more query embedding per turn.
