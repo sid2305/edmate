@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.2 starts before M3 closes · decided by lead
+
+Decided: 5.2 (video ingestion) no longer waits on the whole of M3. What's left open in M3 is 3.11d and 3.11e, teacher-label hardening, which ingestion doesn't use. 5.2 still depends on 2.7 and 5.1.
+Why: MVP first (human, 20 Oct 2026). 5.2 blocks the teacher-upload slice (8.x), and the open M3 work doesn't touch ingestion.
+risk: low
+
 ### 20 Oct 2026 · 3.4c locked probe and precedence run on the student's own words · decided by tdd-guide
 Decided: the locked probe and the locked-precedence check in `buildContext` run on the student's
 own words only (`retrievalQueries(...).student`); the agent-widened query is used only to add

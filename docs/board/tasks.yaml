@@ -1181,7 +1181,6 @@ tasks:
   deps:
   - '2.7'
   - '5.1'
-  - M3
   status: todo
   branch: null
   model: null
