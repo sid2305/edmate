@@ -2039,9 +2039,10 @@ tasks:
   accept: a multi-turn same-topic test on allowed content climbs the help ladder and never returns locked; locked content still returns locked; retrieval-leak and locked suites pass
   deps:
   - '3.4'
-  status: planning
+  status: running
   risk: risky
-  model: plan:opus
+  model: plan:opus build:sonnet
+  branch: m3/3.4c-same-topic-locked
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
