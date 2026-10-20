@@ -9,8 +9,9 @@
 // fixed IngestError that names neither the chunk text nor the invented id (rule: no teacher
 // material in a thrown message).
 import type { ModelGateway, ModelRequest } from '@edmate/contracts';
-import { z, ZodError } from 'zod';
+import { z } from 'zod';
 import { IngestError } from '../errors.js';
+import { classifyGatewayFailure, type DraftFailureCode } from '../gatewayFailure.js';
 import type { ModuleOutlineDraft, OutlineDraft, OutlineModuleInput, TopicDraft } from './types.js';
 
 const MAX_OUTPUT_TOKENS = 1200;
@@ -50,12 +51,14 @@ export function buildOutlineModuleRequest(input: OutlineModuleInput): ModelReque
   };
 }
 
-function draftFailed(): IngestError {
-  return new IngestError('provider_error', true, 'the outline could not be drafted');
-}
+const FAILURE_MESSAGES: Record<DraftFailureCode, string> = {
+  provider_error: 'the outline could not be drafted',
+  validation: 'the model drafted an outline that failed validation',
+};
 
-function schemaFailed(): IngestError {
-  return new IngestError('validation', false, 'the model drafted an outline that failed validation');
+function toIngestError(e: unknown): IngestError {
+  const { code, retryable } = classifyGatewayFailure(e);
+  return new IngestError(code, retryable, FAILURE_MESSAGES[code]);
 }
 
 async function draftModule(
@@ -67,9 +70,9 @@ async function draftModule(
   try {
     model = await gateway.generateObject(buildOutlineModuleRequest(input), ModuleOutlineModelSchema);
   } catch (e) {
-    // A ZodError means the model's own schema call rejected the shape of the reply (a
-    // deterministic, non-retryable mistake); anything else is a real gateway/provider failure.
-    throw e instanceof ZodError ? schemaFailed() : draftFailed();
+    // The real gateway and ScriptedGateway throw differently-shaped failures for the same cause;
+    // classifyGatewayFailure (5.11a) maps both to the same validation/provider_error split.
+    throw toIngestError(e);
   }
   const topics: TopicDraft[] = model.topics.map((t) => {
     if (t.topic.trim() === '') {
@@ -83,14 +86,15 @@ async function draftModule(
   return { moduleId: input.moduleId, title: input.title, topics };
 }
 
-/** Drafts a candidate topic tree, one `generateObject` call per module. */
+/** Drafts a candidate topic tree: one `generateObject` call per module, run in parallel since
+ * modules are independent. Output order always matches `modules` input order, regardless of
+ * which call settles first. */
 export async function draftOutline(
   gateway: Pick<ModelGateway, 'generateObject'>,
   modules: readonly OutlineModuleInput[],
 ): Promise<OutlineDraft> {
-  const drafted: ModuleOutlineDraft[] = [];
-  for (const module of modules) {
-    drafted.push(await draftModule(gateway, module));
-  }
+  const drafted: ModuleOutlineDraft[] = await Promise.all(
+    modules.map((module) => draftModule(gateway, module)),
+  );
   return { modules: drafted };
 }

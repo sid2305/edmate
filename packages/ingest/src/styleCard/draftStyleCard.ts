@@ -9,8 +9,9 @@
 // `mistakeTags` entry outside `mistakeCandidates` is rejected (mirrors 6.3's "never emits a tag
 // outside the list"), with a fixed IngestError that names neither the entry nor the teacher text.
 import { StyleCardSchema, type ModelGateway, type ModelRequest } from '@edmate/contracts';
-import { ZodError, type z } from 'zod';
+import type { z } from 'zod';
 import { IngestError } from '../errors.js';
+import { classifyGatewayFailure, type DraftFailureCode } from '../gatewayFailure.js';
 
 const MAX_OUTPUT_TOKENS = 800;
 
@@ -52,16 +53,14 @@ export function buildStyleCardRequest(input: DraftStyleCardInput): ModelRequest 
   };
 }
 
-function draftFailed(): IngestError {
-  return new IngestError('provider_error', true, 'the style card could not be drafted');
-}
+const FAILURE_MESSAGES: Record<DraftFailureCode, string> = {
+  provider_error: 'the style card could not be drafted',
+  validation: 'the model drafted a style card that failed validation',
+};
 
-function schemaFailed(): IngestError {
-  return new IngestError(
-    'validation',
-    false,
-    'the model drafted a style card that failed validation',
-  );
+function toIngestError(e: unknown): IngestError {
+  const { code, retryable } = classifyGatewayFailure(e);
+  return new IngestError(code, retryable, FAILURE_MESSAGES[code]);
 }
 
 /** Drafts a style card; the caller assigns `id`/`teacherId`/`version` before storing it. */
@@ -73,10 +72,10 @@ export async function draftStyleCard(
   try {
     draft = await gateway.generateObject(buildStyleCardRequest(input), StyleCardDraftSchema);
   } catch (e) {
-    // A ZodError means the model's own schema call rejected the shape or content of the reply
-    // (e.g. the ≤300-word rule in StyleCardSchema): a deterministic, non-retryable mistake. Any
-    // other failure is a real gateway/provider failure.
-    throw e instanceof ZodError ? schemaFailed() : draftFailed();
+    // The real gateway and ScriptedGateway throw differently-shaped failures for the same cause
+    // (e.g. the ≤300-word rule in StyleCardSchema rejecting the reply); classifyGatewayFailure
+    // (5.11a) maps both to the same validation/provider_error split.
+    throw toIngestError(e);
   }
   const candidates = new Set(input.mistakeCandidates);
   if (draft.mistakeTags.some((tag) => !candidates.has(tag))) {

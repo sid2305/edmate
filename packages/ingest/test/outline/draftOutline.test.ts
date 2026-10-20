@@ -126,4 +126,71 @@ describe('draftOutline', () => {
       retryable: false,
     });
   });
+
+  it('maps a real-gateway-shaped validation error to validation, not retryable', async () => {
+    const module = chunkedModule('sample', 'Sample module', fixture('sample-module.md'));
+    const gateway = {
+      generateObject: <T>(): Promise<T> =>
+        Promise.reject(
+          Object.assign(new Error('schema mismatch'), {
+            name: 'GatewayError',
+            code: 'validation',
+            retryable: false,
+          }),
+        ),
+    };
+
+    await expect(draftOutline(gateway, [module])).rejects.toMatchObject({
+      name: 'IngestError',
+      code: 'validation',
+      retryable: false,
+    });
+  });
+
+  it('keeps a real-gateway provider outage as provider_error, retryable', async () => {
+    const module = chunkedModule('sample', 'Sample module', fixture('sample-module.md'));
+    const gateway = {
+      generateObject: <T>(): Promise<T> =>
+        Promise.reject(
+          Object.assign(new Error('rate limited'), {
+            name: 'GatewayError',
+            code: 'rate_limited',
+            retryable: true,
+          }),
+        ),
+    };
+
+    await expect(draftOutline(gateway, [module])).rejects.toMatchObject({
+      name: 'IngestError',
+      code: 'provider_error',
+      retryable: true,
+    });
+  });
+
+  it('drafts independent modules in parallel, keeping output order equal to input order', async () => {
+    const modules = DEMO_MODULES.map((m) => demoModuleInput(m.id, m.title));
+    const resolveOrder: string[] = [];
+    // The second module's call resolves first; output order must still match input order.
+    const gateway = {
+      generateObject: <T>(req: { messages: readonly { content: string }[] }): Promise<T> => {
+        const module = modules.find((m) =>
+          m.chunks.some((c) => req.messages.some((msg) => msg.content.includes(c.id))),
+        )!;
+        const delayMs = module.moduleId === modules[0]!.moduleId ? 10 : 0;
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolveOrder.push(module.moduleId);
+            resolve({
+              topics: [{ topic: `${module.title}: part one`, chunkIds: [module.chunks[0]!.id] }],
+            } as T);
+          }, delayMs);
+        });
+      },
+    };
+
+    const outline = await draftOutline(gateway, modules);
+
+    expect(resolveOrder[0]).toBe(modules[1]!.moduleId);
+    expect(outline.modules.map((m) => m.moduleId)).toEqual(modules.map((m) => m.moduleId));
+  });
 });
