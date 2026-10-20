@@ -59,6 +59,11 @@ export interface IndexDocumentResult {
   readonly embeddedChunks: number;
 }
 
+/** A leading BOM is stripped so it never lands in the shape check's first line. */
+function decodeRawText(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes).replace(/^\uFEFF/, '');
+}
+
 function storeFailed(): IngestError {
   return new IngestError('provider_error', false, 'the chunks could not be stored');
 }
@@ -145,6 +150,11 @@ export async function indexDocument(
   const { scope, documentId, source } = input;
   let parsed: ParsedDocument;
   let headings: boolean;
+  // 5.6c Phase C: a markdown source's raw text is available before parsing, so the bank shape
+  // check can run on its raw lines (packages/ingest/src/answerBank.ts). No other source kind here
+  // has raw lines: a `ParsedSource` and a `VideoSource` are already parsed, and PDF/DOCX/PPTX bytes
+  // are binary.
+  let rawText: string | undefined;
   if (source.kind === 'parsed') {
     parsed = source.document;
     headings = source.headings;
@@ -152,13 +162,14 @@ export async function indexDocument(
     parsed = await parseVideo(deps, source);
     headings = false;
   } else {
+    if (source.kind === 'markdown') rawText = decodeRawText(source.bytes);
     parsed = await parseDocument(source);
     headings = source.kind === 'markdown' || source.kind === 'docx';
   }
   // 5.6a Phase B: a practice bank or answer key is never chunked or indexed, so it can never
   // reach the model as retrieved context. Checked here, after parsing (so the shape check sees
   // the parsed text) and before chunking (so a refused source is never stored).
-  assertNotAnswerBank(parsed.sourceTitle, parsed.units);
+  assertNotAnswerBank(parsed.sourceTitle, parsed.units, rawText);
   const drafts: ChunkDraft[] = chunkDocument(parsed, { headings });
   if (drafts.length === 0) {
     throw new IngestError('validation', false, 'the document has no text to learn from');
