@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -78,18 +79,23 @@ def matches(path, glob):
     return fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(path, glob.replace("/**", "/*"))
 
 
+REVIEWERS_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Reviewers?:\s*(\S.*)$", re.I)
+
+
 def reviewer_names(review):
     """Names on the first `Reviewers:` line outside code fences, or None if there is none.
-    The line is a comma-separated list; each item is a name with an optional `(model)` suffix.
-    Any other item ("security-reviewer skipped", "not architect") does not count."""
+    The line may carry a leading bullet/number ("- Reviewers: ...", same convention as
+    STATUS_LINE). The value is a comma-separated list; each item is a name with an optional
+    `(model)` suffix; a trailing period on the whole line is ignored. Any other item
+    ("security-reviewer skipped", "not architect") does not count."""
     fenced = False
     for line in (review or "").splitlines():
         if line.lstrip().startswith(("```", "~~~")):
             fenced = not fenced
             continue
-        m = None if fenced else re.match(r"Reviewers?:\s*(\S.*)$", line)
+        m = None if fenced else REVIEWERS_LINE.match(line)
         if m:
-            items = [i.strip() for i in m.group(1).split(",")]
+            items = [i.strip() for i in m.group(1).rstrip().rstrip(".").split(",")]
             return {mm.group(1) for mm in map(REVIEWER_ITEM.fullmatch, items) if mm}
     return None
 
@@ -273,30 +279,48 @@ def evaluate(task, branch, pr=None):
     return 0, lines
 
 
+def pr_head(pr):
+    """(code, branch, oid, local, error) for PR `pr`'s current head, or (1, ..., error) if `gh`
+    or git fail. A fresh call each time, since this is retried to ride out a `gh pr view` race."""
+    code, out = sh("gh", "pr", "view", pr, "--json", "headRefName,headRefOid")
+    if code:
+        return 1, None, None, None, f"FAIL  cannot read PR {pr} with gh: {out}"
+    data = json.loads(out)
+    branch = data["headRefName"]
+    m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)  # task ids may carry a letter: 3.11d
+    if not m:
+        return 1, None, None, None, f"FAIL  branch {branch} is not m<milestone>/<task-id>-<slug>"
+    oid = data.get("headRefOid")
+    _, local = sh("git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}")
+    if not oid:
+        return 1, branch, None, local, f"FAIL  gh did not report PR {pr}'s head commit (headRefOid); cannot check what will merge"
+    return 0, branch, oid, local, None
+
+
 def main(argv):
     pr = None
     if argv[:1] == ["--pr"] and len(argv) == 2:
         pr = argv[1]
-        code, out = sh("gh", "pr", "view", pr, "--json", "headRefName,headRefOid")
-        if code:
-            print(f"FAIL  cannot read PR {pr} with gh: {out}")
-            return 1
-        data = json.loads(out)
-        branch = data["headRefName"]
-        m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)  # task ids may carry a letter: 3.11d
-        if not m:
-            print(f"FAIL  branch {branch} is not m<milestone>/<task-id>-<slug>")
-            return 1
-        task = m.group(1)
-        # The PR merges GitHub's head, so the local branch the gate reads must be that exact commit.
-        oid = data.get("headRefOid")
-        _, local = sh("git", "rev-parse", "--verify", "--quiet", f"{branch}^{{commit}}")
-        if not oid:
-            print(f"FAIL  gh did not report PR {pr}'s head commit (headRefOid); cannot check what will merge")
-            return 1
+        # `gh pr view` can briefly lag just after a push, reporting a stale headRefOid (false
+        # positive seen 18 Oct). Retry a bounded number of times before failing; tests set
+        # MERGE_GATE_PR_WAIT_SECONDS=0 so this never slows the suite down.
+        wait = float(os.environ.get("MERGE_GATE_PR_WAIT_SECONDS", "2"))
+        retries = int(os.environ.get("MERGE_GATE_PR_RETRIES", "3"))
+        code = branch = oid = local = err = None
+        for attempt in range(retries + 1):
+            code, branch, oid, local, err = pr_head(pr)
+            if code:
+                print(err)
+                return 1
+            if oid == local:
+                break
+            if attempt < retries:
+                time.sleep(wait)
         if oid != local:
             print(f"FAIL  PR head {oid[:7]} is not local {branch} ({local[:7] or 'missing'}): git fetch the branch and re-run")
             return 1
+        m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)
+        task = m.group(1)
     elif len(argv) == 1:
         task, branch = argv[0], board_branch(argv[0])
         if not branch:

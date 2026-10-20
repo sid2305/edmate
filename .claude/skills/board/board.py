@@ -23,6 +23,10 @@ ROOT = Path(__file__).resolve().parents[3]
 BOARD = ROOT / "docs" / "board" / "tasks.yaml"
 LOG = ROOT / "docs" / "decisions" / "log.md"
 STATUSES = {"todo", "planning", "running", "review", "blocked", "done"}
+# A "Decided:" line, bare or bullet-prefixed ("- Decided: ..."), matched the same way as a
+# "Status:" line (see merge_gate.py's STATUS_LINE): closeout.py copies handoff entries into
+# docs/decisions/log.md verbatim, so this only needs to recognize the line, not normalize it.
+DECIDED_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Decided:")
 
 
 def load():
@@ -77,7 +81,7 @@ def done_problems(tid):
     body = body[: nxt.start()] if nxt else body
     if norm(body).rstrip(".").lower() == "none":
         return []
-    decided = [norm(l) for l in body.splitlines() if l.strip().startswith("Decided:")]
+    decided = [norm(l) for l in body.splitlines() if DECIDED_LINE.match(l)]
     if not decided:
         return ["handoff ## Decisions has entries but no 'Decided:' lines (or write None)"]
     logged = {norm(l) for l in (LOG.read_text() if LOG.exists() else "").splitlines()}

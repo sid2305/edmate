@@ -20,6 +20,7 @@ SCRIPTS = [
     "skills/merge-gate/risk_labels.py",
     "skills/merge-gate/risk-paths.txt",
     "skills/board/board.py",
+    "skills/team-lead/closeout.py",
 ]
 
 # Isolate git from the developer's own config (signing, hooks, default branch, identity).
@@ -154,7 +155,8 @@ class Repo:
     def script(self, name, *args, root=None, env=None):
         root = root or self.root
         rel = {"gate": "skills/merge-gate/merge_gate.py", "board": "skills/board/board.py",
-               "labels": "skills/merge-gate/risk_labels.py"}[name]
+               "labels": "skills/merge-gate/risk_labels.py",
+               "closeout": "skills/team-lead/closeout.py"}[name]
         return run(["python3", str(root / ".claude" / rel), *args], cwd=root, env=env)
 
 
