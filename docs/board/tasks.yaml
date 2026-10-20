@@ -1248,6 +1248,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 5.6c
+  milestone: M5
+  title: '5.6 review follow-ups (before any real practice bank): PracticeBank requires a teacherId scope check (records carry teacherId, a teacher-only test); keep practice keys out of the model''s do-not-say prompt and guard them with the stream gate and postGuard only (spelled and roman forms leak); carry a skipped item''s key for one turn; expectNoLeak scans skill events and the generated key; bound GEN_ID operands'
+  accept: a bank pick for another teacher with the same module id returns nothing; no practice key text appears in any model request; the listed tests pass
+  deps:
+  - '5.6'
+  risky: true
+  status: todo
+  branch: null
+  model: null
 - id: '5.7'
   milestone: M5
   title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'
