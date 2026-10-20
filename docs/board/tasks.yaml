@@ -513,10 +513,10 @@ tasks:
   - '2.6'
   - '3.1'
   - M0
-  status: running
+  status: review
   risk: expert
   branch: m3/3.3-route-intent-attempt
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus eval:sonnet
 - id: '3.4'
   milestone: M3
   title: '`buildContext`: history trim, last summary, access-filtered retrieval, locked `probe`, style card, persona'
@@ -1224,9 +1224,9 @@ tasks:
   deps:
   - '5.5'
   - M3
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m5/5.6-practice-skill
+  model: plan:sonnet build:sonnet
 - id: '5.7'
   milestone: M5
   title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'
