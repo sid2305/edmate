@@ -10,6 +10,19 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 4.3a per-test timeouts raised to 5 s · risk: high
+
+Decided: per-test timeouts in the 4.3 distress tests go from 1 s to 5 s; CI runners took 1.1 s and failed unrelated PRs. Test logic is unchanged.
+Why: the guardrails test files are a risky path, so this is logged risk: high for the human's skim list.
+
+---
+
+### 20 Oct 2026 · 4.3a the 2 s speed bound in distressKeywords stays · risk: high
+Decided: in packages/harness/src/guardrails/distressKeywords.test.ts the 2_000 timeout on "a 4,000-character message is checked quickly" is the test's speed bound, not a generic timeout, so it stays (code-reviewer MEDIUM, wontfix).
+Why: raising it would weaken the check that the keyword regexes stay fast on long input.
+
+---
+
 ### 19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word · decided by human (B-18, option c) · risk: high
 Decided: drop the game-shaped softening entirely. A hard self-harm or abuse phrase escalates whatever sits near it, including a game word within 5 words on either side ("killed myself in fortnite", "match mein marne ka mann karta hai", "how to kill myself in valorant"). `GAME_WORDS`, `gameTied`, `gameTalk` and the intent-detection helpers that existed only to decide whether to soften a game-shaped hit (`INTENT`, `INTENT_AFTER`, `COMPACT_INTENT`, `intentNear`) are removed from `distressKeywords.ts`. Code context (fix round 3: a soft phrase next to a code word stays out of the combination rules) and method-ready phrases (fix round 3) are unchanged. Occasional on-call pages for plain game talk ("i keep killing myself in minecraft by falling in lava") are accepted as the cost of never missing a real disclosure.
 Why: the round-3 exemption (B-16 answer a) still left a path where a hard phrase next to a game word could be read as soft by the classifier instead of escalating outright; the human chose certainty over precision for this guard.
