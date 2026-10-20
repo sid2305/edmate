@@ -10,6 +10,64 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 0.13 Merge gate PR-head retry and reviewer-line parsing, board bullet-Decided support, new closeout.py · decided by tdd-guide · risk: high
+Decided: `merge_gate.py`'s `--pr` mode retries a bounded number of times (env-overridable wait/
+retry count, defaulting to 3 retries x 2s) before failing a PR-head mismatch; `reviewer_names()`
+accepts a leading bullet and one trailing period. `board.py`'s done-check accepts bullet-prefixed
+`- Decided:` lines. A new `closeout.py` logs decisions, marks a task done and cleans up its
+worktree/branch in one command, refusing to delete an unmerged branch.
+Why: these are the 18 Oct false positives and the one-command-closeout requirement the plan
+(`docs/tasks/0.13/plan.md`) asks for; the lettered-subtask regex was already fixed in bbc47dc so no
+change was needed there.
+Alternatives: leave the PR-head check without retry (the known race would keep false-positiving);
+reparse individual `Decided:` lines in `closeout.py` instead of copying whole entries verbatim (more
+code, and would need the same bullet-handling twice).
+Reversible: yes — each change is additive (a regex relaxation, a retry loop, a new standalone
+script); none change an existing passing test's behaviour.
+
+---
+
+### 20 Oct 2026 · 0.13 CI docs-only skip via a stdlib script, not a third-party action · decided by tdd-guide · risk: high
+Decided: a new `changes` job computes a `docs_only` output with a plain `git diff --name-only` piped
+into a new stdlib script (`.github/scripts/docs_only.py`), not a third-party paths-filter action.
+The `node` job alone gets `needs: changes` / `if: needs.changes.outputs.docs_only != 'true'`;
+`python-harness` and `secrets` are unaffected. A doc is anything under `docs/`, a top-level `*.md`,
+or a `.md` under `.github/`. A new nightly `schedule:` trigger (`cron: "17 3 * * *"`) always runs
+the full suite — `docs_only.py` returns `false` whenever `event_name == "schedule"`, since a
+scheduled run has no diff to judge.
+Why: the lead's instruction for this sitting was explicit — prefer a plain `git diff --name-only`
+shell step over a third-party paths-filter action "if that's simple", and it is: the classifier is
+~20 lines of stdlib Python, directly unit-testable (`test_workflows.py` imports and calls
+`is_docs_only` with known path lists) without a runner, and needs no new action pin.
+Alternatives: a third-party paths-filter action (`dorny/paths-filter` or similar) — rejected per the
+lead's instruction, and it would add one more action to keep pinned/bumped for no behaviour this
+stdlib script doesn't already give; `paths-ignore` at the workflow trigger level — rejected because
+it would skip the whole workflow (including `python-harness`/`secrets`), not just `node`.
+Reversible: yes — drop the `changes` job and the `node` job's `needs`/`if`, delete the script and its
+test cases; nothing else in the workflow depends on it.
+
+---
+
+### 20 Oct 2026 · 0.13 Lead-efficiency rules in SKILL.md, with the lead's rule-(a) wording for the pre-13.3 safety-plan review · decided by tdd-guide · risk: high
+Decided: `.claude/skills/team-lead/SKILL.md` now states the four 18 Oct lead-efficiency rules
+(planner briefing scope, batched close commits, capped fix rounds, and a pre-branch safety-plan
+review). Rule (a) uses the lead's own wording for this sitting rather than the plan's more general
+phrasing: safety-path plans get a plan review before the branch is created; until the pilot gate
+(13.3) the lead does that review itself (reading `plan.md` with a safety-reviewer eye), and from
+13.3 on `safety-reviewer` does it. The same line states fix rounds are capped at one per PR and that
+a HIGH still open after that round becomes a `[deferred <id>]` board task.
+Why: this is a direct instruction from the lead for this build (the plan's own text for rule (a) was
+left more open; the lead resolved it to match the existing "MVP first" / no-safety-reviewer-until-
+13.3 policy already in force elsewhere in this same `SKILL.md`), so the rule stays internally
+consistent with the rest of the document rather than introducing a second, conflicting safety-review
+policy.
+Alternatives: run `safety-reviewer` on every safety-path plan now, ahead of 13.3 — rejected, conflicts
+with the standing MVP-first decision (20 Oct 2026) that `safety-reviewer` doesn't run per PR until
+the pilot gate.
+Reversible: yes — a prose-only change to a skill file; no code depends on its exact wording.
+
+---
+
 ### 19 Oct 2026 · 4.8 merged: adviceGuard post guard wired · decided by lead (plan revisions) · risk: high
 Decided: `adviceGuard` runs on every agent. It uses English personal-directive and identity rules, a small-tier judge (fail closed) for ambiguous or non-English replies, one rule-checked rewrite, and a fixed fallback. The disclaimer is deterministic and word for word, from the locale pack or the frame's generic text, and is shared with the system prompt. Regulated-subject agents and decision requests are held, not streamed. Redirect replies are judged too. Reviewed by safety-reviewer (plus security-reviewer, typescript-reviewer and silent-failure-hunter, as requested).
 Why: PRD regulated-subject rule and signed safety rule 5; lead answers 1–12 and the 4.7 safety review.
