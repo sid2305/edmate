@@ -79,7 +79,8 @@ per turn by the caller. `entitlementStoreFor(repos, opts)` (3.2) binds the trust
 three sources; `turnConfigStoreFor(repos, { locales })` (3.2, ADR-0004) loads a turn's agent,
 package, style card and locale pack and returns null unless the session is the entitlement's and
 open. Other port adapters (ProfileStore 6.2,
-TeacherQuestionStore / CorrectionStore 5.10, TraceSink 3.8 / 7.7, RetrievalIndex 5.3 / 5.4)
+TeacherQuestionStore / CorrectionStore 5.10, TraceSink 3.8 / 7.7, RetrievalIndex 5.3 / 5.4; see
+§ Retrieval)
 belong to their tasks and must add their isolation cases here.
 
 **UsageMeter (task 2.4, done).** `usageMeterFor(repos, scope)` binds one student x teacher and
@@ -108,6 +109,39 @@ for the rest of the month. Both have cases in `CASES`; `test/cost-alarm.int.test
 sums against raw SQL, the free/paid split, the audit rows, the once-a-month rule and concurrency.
 The audit `system` role (enum `audit_actor_role`, separate from `user_role` so no user can hold
 it) requires an actor id starting `system_`, and no other role may use that prefix.
+
+## Retrieval (task 5.3)
+
+**Writes.** `documents.create(scope, { id, moduleId, kind, sourceTitle, storageKey? })` is
+`INSERT … SELECT FROM modules WHERE id = $m AND teacher_id = $t`; another teacher's module, a
+missing one and a document id already taken by anyone are all `not_found`.
+`chunks.insertMany(scope, documentId, drafts)` reads the document in the scope (and its module,
+still the teacher's) in the same statement, and takes teacher, module, kind and source title from
+it, so a chunk can't be filed under another teacher's module. Chunk ids are
+`<documentId>-c<0000>` (document order without an `ord` column); writing the same `ord` twice is
+`invalid`. `chunks.setEmbeddings(scope, items)` is all or nothing: any id that is not the scope's
+is `not_found` and nothing is written; vectors are checked (1536 finite numbers) before SQL.
+
+**Material revision.** Every write above bumps `teacher_material_revisions.revision` for the
+scope's teacher in the same transaction (`retrieval.revision(scope)` reads it; 0 before any
+write). leakCheck's cache key includes it (ADR-0007). **Any future path that deletes or edits a
+teacher's documents or chunks (8.x, 13.4) must bump it too**, or a cached leak index goes stale.
+
+**Search and probe.** `retrieval.search(scope, { q, allowedModuleIds, k, embedding? })` runs
+one statement per signal (full text over the generated `'simple'` tsvector with prefix terms and a
+short stop-word list; vector by cosine distance when an embedding is given), each with
+`teacher_id = $t AND module_id IN (allowed) AND module_id IN (the teacher's modules)` in the same
+WHERE clause, before ranking. Results are fused by reciprocal rank (k = 60, ties by id), matching
+teacher notes go first, and `score` is an absolute 0-1 relevance (not the RRF value; constants
+calibrated in 5.3 Phase D). Allowed ids the teacher does not own are ignored. Module ids are part
+of the scope: malformed is `scope`. `retrieval.probe(scope, { q, moduleIds, embedding? })` ranks
+the same way over the scope's own `moduleIds` and returns only `{ hit, score }` (ADR-0003).
+
+**Port.** `retrievalIndexFor(repos, { embedder?, embedTimeoutMs?, onEmbedFallback? })` is the
+production `RetrievalIndex`: it validates the port scope before embedding the query, and an
+embedder that throws, times out (800 ms default) or returns a bad vector falls back to full text,
+reporting only a fixed code (`embed_failed` / `embed_timeout` / `embed_invalid`), never the
+query or the error. `leakCheck` returns `{ hit: true }` (fail closed) until 5.3 Phase B.
 
 ## Package surface
 
