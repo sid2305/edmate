@@ -970,9 +970,10 @@ class Turn {
     sources: SourceRef[],
   ): Promise<{ replyText: string; escalateToTeacher: boolean } | { alert: SafetyAlert }> {
     const { draft } = gen;
-    // Every practice key issued this turn is checked too (5.6, ADR-0010 §4). Only the guards see
-    // it: the decision that is saved and composed is unchanged.
-    const keys = this.issuedKeys();
+    // Every practice key issued this turn is checked too (5.6, ADR-0010 §4): the items collected
+    // through onPracticeItem and the generate result's own `practiceAnswerKey` (5.6 review). Only
+    // the guards see them: the decision that is saved and composed is unchanged.
+    const keys = [...new Set([...this.issuedKeys(), ...(gen.practiceAnswerKey ?? [])])];
     const guarded =
       keys.length === 0
         ? decision

@@ -245,7 +245,10 @@ Must-hold, each with its test:
 - `pipeline/generate/toolLoop.ts`: `no_answer_key` fail reason; `mustNotReveal` read live.
 - `pipeline/steps/generate.ts`, `pipeline/types.ts`, `pipeline/results.ts`:
   `GenerateResult.practiceAnswerKey`; `practice`, `issuedKeys`, `onPracticeItem` inputs; a live
-  served list so a second call or a retry serves a new item.
+  served list so a second call or a retry leaves out items already issued. (Corrected in the
+  review fix round: as first built, the generator ignored that list, so once the bank items were
+  served a second call got the same generated item, which then failed `answer_key`. See "Fix
+  round (review)".)
 - `pipeline/runner.ts`: issued-item collection, postGuard keys, `withPractice` save,
   fail-closed stop flag when the stored state was unreadable.
 - Tests: `helpState.test.ts`, `policy.test.ts`, `streamGate.test.ts`, `toolLoop.test.ts`,
@@ -257,12 +260,18 @@ Must-hold, each with its test:
 - The skill event's payload is checked against the keys guarded before its own item, not its
   own key: the item's prompt was checked against its own key when it was made (`validateItem`),
   and a generated "What is 3 + 4?" would otherwise always drop its own event (see below).
-- The generator ignores the exclude list: after the module's bank items are served, the same
-  generated item (one per module and level) repeats. Fine for the pilot; noted for 5.11.
+- The generator ignored the exclude list: after the module's bank items were served, the same
+  generated item (one per module and level) repeated. Fixed in the review fix round.
 - "Where the item event went out" is implemented as "the checked tool output reached the model",
   a superset (an item is saved even if its skill event was then dropped). Safer: its key is held.
 
-### Open question for the lead (needs a human answer; B-28 to add to `.claude/blockers.md`)
+### Open question for the lead (answered)
+
+Answered by the lead: (c). The pack wording is done in fed7d54 ("the app shows the item; don't
+repeat it"); the matcher ignoring the issued item's own prompt, and its hint false positives, go
+to follow-up task 5.6b.
+
+Original question:
 
 The answer matcher evaluates arithmetic, so a reply that restates a generated sum item ("What is
 3 + 4?") counts as revealing "7". practice@1.1.0 says "show the item exactly as the tool returns
@@ -295,7 +304,7 @@ Decided: an item's own `skill` payload is checked against the keys guarded befor
 Why: its prompt was already checked against its own key when made, and the arithmetic matcher would drop every generated sum item's event.
 
 ### 20 Oct 2026 · 5.6 Practice fields ride along like groundingAsks; served list capped at 20 · decided by tdd-guide
-Decided: the runner carries the loaded practice fields onto every saved state (decide rebuilds the help state without them); the served list keeps the last 20 ids; a second call or a retry in the same turn serves a new item.
+Decided: the runner carries the loaded practice fields onto every saved state (decide rebuilds the help state without them); the served list keeps the last 20 ids; a second call or a retry in the same turn leaves out items already issued (corrected in the review fix round: the generator now honours that list).
 Why: same pattern as 4.7's groundingAsks; a bounded list keeps the blob small.
 
 ### 20 Oct 2026 · 5.6 Unreadable stored state plus an issued item saves the state stopped · decided by tdd-guide
@@ -305,3 +314,77 @@ Why: the key must be saved; an unknown stored stop flag is treated as set (fail 
 ### 20 Oct 2026 · 5.6 Pending prompt packs load; reported, not changed · decided by tdd-guide
 Decided: practice@1.1.0 and set@1.1.0 are committed with `reviewed_by: pending`; the loaders accept it and no validation fails. Nothing was changed in the loaders.
 Why: no other pending pack exists to set a precedent; the sign-off is B-26 and the merge gate.
+
+## Fix round (review)
+
+Review findings fixed (architect and security-reviewer, 20 Oct 2026). The other LOW and MEDIUM
+items (teacherId scope, the key in compose.ts's prompt, test LOWs, the GEN_ID comment,
+runner.ts:1135) are deferred by the lead. No `packages/contracts` change; the harness imports
+only contracts, zod, mathjs and its own modules.
+
+1. [HIGH] Items are validated at runtime. `pickItem` serves a bank item only if it is a servable
+   kind (no mcq or code_output), inside the scope, its id is at most `PRACTICE_ID_MAX`, it is not
+   excluded, it passes `validateItem` and the caller accepts it; otherwise it asks the bank again
+   (at most 20 times), then the generator, and fails closed if nothing is valid. Tests
+   (`practiceItems.test.ts`, "pickItem validates every item at runtime"): "never serves a bank
+   item whose prompt holds its own key; the generator steps in", "never serves an mcq (or
+   code_output) item, even from a bank that offers one", "fails closed when nothing is valid".
+2. [HIGH] CI: the content snapshot is regenerated after the practice@1.1.0 rewording (fed7d54);
+   only the practice pack's three lines changed. The pack itself is untouched.
+3. [MEDIUM] Practice no longer gets stuck. An item tool's output and its skill payload are
+   checked against earlier keys on the item's shown text only (prompt and options, `IssuedItem
+   .shown`), not the JSON, so `"level":1` or the id never matches a held key "1". The generator
+   honours the exclude list (up to 64 deterministic operand variants; variant 0 is unchanged) and
+   the tool skips any item whose prompt or options show a key held this attempt (`heldKeys`, read
+   live). Tests: `runner.practiceAnswerKey.test.ts` "three items in a row at level 1 are all
+   served, with a held key "1"" and "three turns in a row at level 1 each serve a new item";
+   `toolLoop.test.ts` "an item tool is key-checked on its shown text only"; `skillEvent.test.ts`
+   "an item payload is key-checked on its shown text only"; `practice.test.ts` "forSession
+   heldKeys: never serves an item whose prompt shows a held key".
+4. [MEDIUM] No fail-open when the gate has no `addKeys`: once an item is issued, generate shows
+   nothing more for the attempt and reports it `withheld`, so postGuard puts the safe hint in its
+   place. Test: `generate.test.ts` "holds the rest of the attempt and reports it withheld".
+5. [MEDIUM] Id and key bounds. The output schema caps `id` at `PRACTICE_ID_MAX`; the generator
+   never makes a longer id (fails closed); `issuedItem` fails closed when the module id is over
+   the limit or the turn's key union would pass `PRACTICE_KEYS_MAX_JSON` (2,048), which keeps a
+   full state under `LIMITS.helpStateMaxJsonLength`. Tests: `practice.test.ts` "the output schema
+   caps the item id at PRACTICE_ID_MAX", "issuedItem: a module id over PRACTICE_ID_MAX fails
+   closed", "issuedItem: fails closed when the key union would push HelpState over its limit";
+   `helpState.test.ts` "a state at every practice limit still serialises".
+6. [MEDIUM] postGuard's keys are the union of the runner's issued items and
+   `gen.practiceAnswerKey`. Test: "a key only in gen.practiceAnswerKey still makes postGuard hold
+   a reply that shows it". The generate.ts header comment now says so.
+7. [MEDIUM] `issuedItem` no longer casts `find(...) as string`: no single allowed module resolving
+   the id returns undefined (fail closed). Test: "issuedItem: fails closed when no single allowed
+   module resolves the id".
+8. Docs: ADR-0010 no longer says "the client never sees the key" (the raw key is in the later
+   turns' do-not-say prompt and the matcher can miss spelled or roman forms; follow-up task to
+   come); the handoff's "serves a new item" claim is corrected and the open question is marked
+   answered.
+
+Evidence: `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...
+--filter=@edmate/content... --force --concurrency=1` → 14 successful, 14 total; harness 106
+files / 4728 tests passed with coverage thresholds met; content 19 files / 313 tests; lint 0
+errors (1 pre-existing warning, `route.accuracy.test.ts`). The repo secret scan (`--all`) is
+clean.
+
+### 20 Oct 2026 · 5.6 Item tools are key-checked on the text they show, not their JSON · decided by tdd-guide
+Decided: for a tool with `issuedItem`, the do-not-say check on its output and on its skill payload reads only the item's prompt and options (`IssuedItem.shown`); the locked check still reads every leaf. Other tools keep the whole-JSON check.
+Why: the JSON's `"level":1` and the id matched a held key "1", so after one item every later item failed and practice got stuck; the id and level are server-made and never hold an answer the prompt doesn't show.
+risk: high
+
+### 20 Oct 2026 · 5.6 The generator varies operands to honour the exclude list and held keys · decided by tdd-guide
+Decided: `generateItem` tries up to 64 deterministic variants (variant 0 is the old item) and serves the first that is not excluded, passes `validateItem` and shows no held key; none valid fails closed. The bank is asked at most 20 times before the generator.
+Why: a fixed item per module and level repeated and then failed; bounded loops keep it deterministic and fail closed.
+risk: low
+
+### 20 Oct 2026 · 5.6 An issued item with a gate that can't take keys holds the rest of the attempt · decided by tdd-guide
+Decided: `addKeys` stays optional on `StreamGate`; when an item is issued and the gate has none, generate shows no more text and returns `withheld: true`, so postGuard replaces the reply with the safe hint.
+Why: fail closed without forcing every test gate to implement `addKeys`; production's answer-leak gate has it.
+risk: high
+
+### 20 Oct 2026 · 5.6 Practice keys per turn are capped at 2,048 characters of JSON · decided by tdd-guide
+Decided: `PRACTICE_KEYS_MAX_JSON = 2048`; `issuedItem` fails closed when the turn's key union would pass it, or the module id is over `PRACTICE_ID_MAX`.
+Why: with 20 served ids of 200 characters it keeps the saved state under the 8 KB limit, so `serializeSessionHelp` never throws and drops a key.
+risk: low
+

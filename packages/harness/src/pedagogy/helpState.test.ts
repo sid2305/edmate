@@ -10,6 +10,8 @@ import {
   parseSessionHelp,
   serializeSessionHelp,
   SessionHelpSchema,
+  PRACTICE_ID_MAX,
+  PRACTICE_KEYS_MAX_JSON,
 } from './helpState.js';
 
 const VALID = {
@@ -244,5 +246,29 @@ describe('practice fields (5.6, ADR-0010)', () => {
     });
     expect(f.practiceServed).not.toBe(h.practiceServed);
     expect(practiceFields(parseSessionHelp(VALID).help)).toEqual({});
+  });
+});
+
+describe('practice limits fit the stored blob (5.6 review)', () => {
+  it('a state at every practice limit still serialises under LIMITS.helpStateMaxJsonLength', () => {
+    const id = 'i'.repeat(PRACTICE_ID_MAX);
+    // One key whose JSON array is exactly PRACTICE_KEYS_MAX_JSON long.
+    const key = 'k'.repeat(PRACTICE_KEYS_MAX_JSON - 4);
+    expect(JSON.stringify([key]).length).toBe(PRACTICE_KEYS_MAX_JSON);
+    const out = serializeSessionHelp({
+      rung: 4,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: true,
+        answerKey: [key],
+        lockedStopped: true,
+        groundingAsks: 1_000,
+        practiceItemId: id,
+        practiceModuleId: id,
+        practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),
+      },
+    });
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(LIMITS.helpStateMaxJsonLength);
   });
 });

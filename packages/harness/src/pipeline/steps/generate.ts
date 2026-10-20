@@ -21,8 +21,11 @@
 // Practice items (5.6, ADR-0010): an item tool's copy is bound to the session's practice state
 // for this attempt. The moment it issues an item, the tool loop has looked its key up on the
 // server; generate adds it, on the same turn, to the stream gate, to the list later tool outputs,
-// skill payloads and sources are checked against, and to `practiceAnswerKey` (postGuard gets it
-// through the runner). The key is never put in the model's prompt on this turn.
+// skill payloads and sources are checked against, and to `practiceAnswerKey`. The runner unions
+// `practiceAnswerKey` with the items it collected through `onPracticeItem` into postGuard's keys.
+// The key is never put in the model's prompt on this turn. A gate that cannot take new keys
+// (no `addKeys`) shows nothing more once an item is issued, and the attempt counts as withheld,
+// so postGuard puts the safe hint in its place (fail closed).
 import type { AgentConfig, PedagogyDecision, TurnContext, TurnEvent } from '@edmate/contracts';
 import { decisionRequest, regulatedTopic } from '../../guardrails/adviceGuard.js';
 import type { LockedCheck } from '../../guardrails/answerLeak.js';
@@ -136,13 +139,18 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     const request = buildModelRequest({ ctx, decision, input: env.input, set });
     /** The served ids, live: an item issued this attempt is not served again by a later call. */
     const served = [...(practice?.servedItemIds ?? [])];
-    const session = practice === undefined ? undefined : { ...practice, servedItemIds: served };
+    /** Every key guarded this attempt: the decision's, then each practice item's as it comes. */
+    const guarded: string[] = [...decision.mustNotReveal];
+    /** This turn's issued keys so far (earlier attempts', then this one's), live. */
+    const turnIssued: string[] = [...(issuedKeys ?? [])];
+    const session =
+      practice === undefined
+        ? undefined
+        : { ...practice, servedItemIds: served, heldKeys: guarded, issuedKeys: turnIssued };
     const offered = offeredTools(deps.tools ?? noTools, decision.tools, ctx.entitlement).map((r) =>
       session !== undefined && r.forSession !== undefined ? r.forSession(session) : r,
     );
     const studentText = env.input.text;
-    /** Every key guarded this attempt: the decision's, then each practice item's as it comes. */
-    const guarded: string[] = [...decision.mustNotReveal];
     /** This attempt's issued practice keys (GenerateResult.practiceAnswerKey). */
     const issued: string[] = [];
     const guard = (keys: readonly string[]) => {
@@ -160,6 +168,8 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
 
     const lockedCheck = lockedCheckOf(env, ctx);
     const held = holdsReply(ctx, decision.move, undefined, fromFallback === true, studentText);
+    /** An item was issued but the gate can't take its key: show nothing more (fail closed). */
+    let holdRest = false;
 
     if (HINT_MOVES.has(decision.move)) emit({ type: 'hint_rung', rung: decision.rung });
     const { draft, raw, locked } = await runToolLoop({
@@ -173,19 +183,24 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
       gate,
       // A held reply is still gated and checked as it streams; it is only not shown yet.
       show: (text) => {
-        if (!held) emit({ type: 'token', text });
+        if (!held && !holdRest) emit({ type: 'token', text });
       },
       onToolOutput: async (entry, output, item) => {
         // The item's own payload is checked against the keys guarded before it: its prompt was
         // validated against its own key when the item was made (validateItem).
         const before = [...guarded];
         if (item !== undefined) {
-          gate.addKeys?.(guard(item.answerKey));
-          for (const k of item.answerKey) if (!issued.includes(k)) issued.push(k);
+          const fresh = guard(item.answerKey);
+          if (gate.addKeys === undefined) holdRest = true;
+          else gate.addKeys(fresh);
+          for (const k of item.answerKey) {
+            if (!issued.includes(k)) issued.push(k);
+            if (!turnIssued.includes(k)) turnIssued.push(k);
+          }
           served.push(item.itemId);
           onPracticeItem?.(item);
         }
-        const e = await skillEvent(entry, output, ctx, before, lockedCheck);
+        const e = await skillEvent(entry, output, ctx, before, lockedCheck, item?.shown);
         if (e instanceof SkillEventDropped) env.report(e);
         else if (e !== undefined) emit(e);
       },
@@ -207,7 +222,7 @@ export function createGenerate(opts: GenerateOptions = {}): Steps['generate'] {
     return {
       draft,
       raw,
-      withheld: gate.tripped === true,
+      withheld: gate.tripped === true || holdRest,
       ...(locked === undefined ? {} : { locked }),
       ...(held ? { held } : {}),
       ...(issued.length > 0 ? { practiceAnswerKey: issued } : {}),

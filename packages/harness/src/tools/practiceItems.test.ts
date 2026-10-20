@@ -1,7 +1,9 @@
 // Task 5.6 Phase A: the item model, bank interface and generator (pure, no pipeline wiring).
 import { describe, expect, it } from 'vitest';
+import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
 import { prng } from '../testing/prng.js';
 import {
+  GEN_VARIANTS,
   generatedAnswerKeyFor,
   generateItem,
   pickItem,
@@ -188,6 +190,115 @@ describe('pickItem', () => {
       const picked = pickItem(bank, { teacherId: 't', allowedModuleIds: moduleIds }, level, []);
       expect(moduleIds).toContain(picked?.item.moduleId);
     }
+  });
+});
+
+describe('pickItem validates every item at runtime (5.6 review)', () => {
+  /** A bank that hands out its records in order, ignoring kind (a careless or buggy bank). */
+  function carelessBank(
+    records: readonly { item: PracticeItem; answerKey: readonly string[] }[],
+  ): PracticeBank {
+    return {
+      pick: (_scope, level, exclude) =>
+        records.find((r) => r.item.level === level && !exclude.includes(r.item.id))?.item,
+      answerKeyFor: (itemId) => records.find((r) => r.item.id === itemId)?.answerKey,
+    };
+  }
+  const leaky: PracticeItem = { ...BANK_ITEM, id: 'bank:leaky', prompt: 'Is 1/2 the answer?' };
+  const mcq: PracticeItem = {
+    ...BANK_ITEM,
+    id: 'bank:mcq',
+    kind: 'mcq',
+    prompt: 'Which is half?',
+    options: ['a', 'b'],
+  };
+
+  it('never serves a bank item whose prompt holds its own key; the generator steps in', () => {
+    const picked = pickItem(carelessBank([{ item: leaky, answerKey: ['1/2'] }]), SCOPE, 2, []);
+    expect(picked?.item.id).not.toBe(leaky.id);
+    expect(picked?.item.id).toMatch(/^gen:module-fractions:practice:2:/);
+  });
+
+  it('never serves an mcq (or code_output) item, even from a bank that offers one', () => {
+    const code: PracticeItem = { ...BANK_ITEM, id: 'bank:code', kind: 'code_output' };
+    const bank = carelessBank([
+      { item: mcq, answerKey: ['opt-1'] },
+      { item: code, answerKey: ['42'] },
+    ]);
+    const picked = pickItem(bank, SCOPE, 2, []);
+    expect(picked?.item.kind).toBe('numeric');
+    expect([mcq.id, code.id]).not.toContain(picked?.item.id);
+  });
+
+  it('skips an invalid bank item and serves the next valid one from the bank', () => {
+    const bank = carelessBank([
+      { item: leaky, answerKey: ['1/2'] },
+      { item: BANK_ITEM, answerKey: ['1/2'] },
+    ]);
+    expect(pickItem(bank, SCOPE, 2, [])?.item).toEqual(BANK_ITEM);
+  });
+
+  it('never serves a bank item outside scope, or one whose id is over PRACTICE_ID_MAX', () => {
+    const outside: PracticeItem = { ...BANK_ITEM, id: 'bank:out', moduleId: 'module-other' };
+    const long: PracticeItem = { ...BANK_ITEM, id: `bank:${'x'.repeat(PRACTICE_ID_MAX)}` };
+    const bank = carelessBank([
+      { item: outside, answerKey: ['1/2'] },
+      { item: long, answerKey: ['1/2'] },
+    ]);
+    expect(pickItem(bank, SCOPE, 2, [])?.item.id).toMatch(/^gen:/);
+  });
+
+  it('stops asking a bank that keeps returning the same rejected item', () => {
+    const stuck: PracticeBank = { pick: () => leaky, answerKeyFor: () => ['1/2'] };
+    expect(pickItem(stuck, SCOPE, 2, [])?.item.id).toMatch(/^gen:/);
+  });
+
+  it('skips items the caller does not accept (an earlier key in the prompt)', () => {
+    const bank = fixedBank([BANK_RECORD]);
+    const picked = pickItem(bank, SCOPE, 2, [], undefined, (item) => item.id !== BANK_ITEM.id);
+    expect(picked?.item.id).toMatch(/^gen:/);
+  });
+
+  it('fails closed when nothing is valid: no bank item, no generated variant accepted', () => {
+    const bank = fixedBank([BANK_RECORD]);
+    expect(pickItem(bank, SCOPE, 2, [], undefined, () => false)).toBeUndefined();
+  });
+});
+
+describe('generateItem honours the exclude list (5.6 review)', () => {
+  it('serves a different item for each excluded one, deterministically', () => {
+    const scope: PracticeScope = { teacherId: 't', allowedModuleIds: ['m1'] };
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const picked = generateItem(scope, 1, ids);
+      expect(picked).toBeDefined();
+      expect(ids).not.toContain(picked?.item.id);
+      expect(generatedAnswerKeyFor(picked?.item.id ?? '')).toEqual(picked?.answerKey);
+      ids.push(picked?.item.id ?? '');
+    }
+    // The same exclude list gives the same next item.
+    expect(generateItem(scope, 1, ids.slice(0, 3))).toEqual(generateItem(scope, 1, ids.slice(0, 3)));
+  });
+
+  it('the first variant is unchanged when nothing is excluded', () => {
+    const scope: PracticeScope = { teacherId: 't', allowedModuleIds: ['m1'] };
+    expect(generateItem(scope, 1, [])).toEqual(generateItem(scope, 1));
+  });
+
+  it('gives up after GEN_VARIANTS tries (fail closed)', () => {
+    const scope: PracticeScope = { teacherId: 't', allowedModuleIds: ['m1'] };
+    let tries = 0;
+    const picked = generateItem(scope, 1, [], () => {
+      tries++;
+      return false;
+    });
+    expect(picked).toBeUndefined();
+    expect(tries).toBe(GEN_VARIANTS);
+  });
+
+  it('never makes an id over PRACTICE_ID_MAX: a very long module id fails closed', () => {
+    const scope: PracticeScope = { teacherId: 't', allowedModuleIds: ['m'.repeat(PRACTICE_ID_MAX)] };
+    expect(generateItem(scope, 1)).toBeUndefined();
   });
 });
 

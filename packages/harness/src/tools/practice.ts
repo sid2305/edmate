@@ -16,7 +16,9 @@
 //     each issued item's key up through `issuedItem` the moment the tool returns.
 import type { Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
+import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
 import { HarnessError } from '../pipeline/errors.js';
+import { revealsAnswerKey } from '../pipeline/generate/answerKey.js';
 import type { IssuedItem, RegisteredTool, ToolSessionState } from '../pipeline/tools.js';
 import {
   generatedAnswerKeyFor,
@@ -29,7 +31,7 @@ import {
 
 const input = z.strictObject({ level: z.literal([1, 2, 3]).exactOptional() });
 const output = z.strictObject({
-  id: z.string(),
+  id: z.string().max(PRACTICE_ID_MAX),
   kind: z.enum(['numeric', 'mcq', 'short', 'code_output']),
   level: z.literal([1, 2, 3]),
   prompt: z.string(),
@@ -116,6 +118,15 @@ export interface PracticeToolOptions {
   activeModuleId?(ctx: TurnContext): string | undefined;
   /** Item ids the bank should not serve again (the session's served list, 5.6 Phase C). */
   exclude?: readonly string[];
+  /** Keys held this attempt, read live: no item showing one is served (5.6 review). */
+  heldKeys?: readonly string[];
+  /** Keys issued this turn so far, read live: the union with a new item's key is capped. */
+  issuedKeys?: readonly string[];
+}
+
+/** The text an item shows: its prompt and options (the answer-key checks read only this). */
+function shownText(item: Pick<PracticeItem, 'prompt' | 'options'>): string[] {
+  return [item.prompt, ...(item.options ?? [])];
 }
 
 export interface PracticeRegisteredTool extends RegisteredTool {
@@ -155,7 +166,9 @@ export function practiceNextItemTool(
       const narrowed: PracticeScope =
         module === undefined ? scope : { ...scope, allowedModuleIds: [module] };
       const level = args.level ?? DEFAULT_LEVEL;
-      const picked = pickItem(bank, narrowed, level, opts.exclude ?? [], profileOf(ctx));
+      const held = opts.heldKeys ?? [];
+      const accept = (item: PracticeItem) => !revealsAnswerKey(shownText(item), held);
+      const picked = pickItem(bank, narrowed, level, opts.exclude ?? [], profileOf(ctx), accept);
       if (picked === undefined) return Promise.reject(new NoPracticeItemError());
       return Promise.resolve(toOutput(picked.item));
     },
@@ -175,9 +188,12 @@ export function practiceNextItemTool(
       practiceNextItemTool(bank, {
         exclude: s.servedItemIds,
         activeModuleId: (ctx) => s.activeModuleId ?? opts.activeModuleId?.(ctx),
+        ...(s.heldKeys === undefined ? {} : { heldKeys: s.heldKeys }),
+        ...(s.issuedKeys === undefined ? {} : { issuedKeys: s.issuedKeys }),
       }),
     // The key is looked up on the server by item id, inside the turn's entitlement (ADR-0010 §3);
-    // the module is the one allowed module the id resolves in.
+    // the module is the one allowed module the id resolves in. Fails closed (undefined) when the
+    // ids or the turn's key union would not fit the saved HelpState (5.6 review).
     issuedItem(out, ctx) {
       const parsed = output.safeParse(out);
       if (!parsed.success) return undefined;
@@ -187,8 +203,11 @@ export function practiceNextItemTool(
       if (answerKey === undefined || answerKey.length === 0) return undefined;
       const moduleId = scope.allowedModuleIds.find(
         (m) => answerKeyFor(itemId, { ...scope, allowedModuleIds: [m] }) !== undefined,
-      ) as string;
-      return { itemId, moduleId, answerKey: [...answerKey] };
+      );
+      if (moduleId === undefined || moduleId.length > PRACTICE_ID_MAX) return undefined;
+      const union = [...new Set([...(opts.issuedKeys ?? []), ...answerKey])];
+      if (JSON.stringify(union).length > PRACTICE_KEYS_MAX_JSON) return undefined;
+      return { itemId, moduleId, answerKey: [...answerKey], shown: shownText(parsed.data) };
     },
   };
 }

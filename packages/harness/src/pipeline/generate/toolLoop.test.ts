@@ -810,7 +810,7 @@ describe('runToolLoop: issued items (5.6, ADR-0010)', () => {
   });
 
   it('passes the issued item (with its key) to onToolOutput; the model sees only the output', async () => {
-    const item = { itemId: 'item-1', moduleId: 'mod-1', answerKey: ['5/6'] };
+    const item = { itemId: 'item-1', moduleId: 'mod-1', answerKey: ['5/6'], shown: ['p'] };
     const s = setup([[call('c1')], [say('Try it.')]], { tools: [withIssued(() => item)] });
     const got: unknown[] = [];
     s.input.onToolOutput = (_r, _o, issued) => void got.push(issued);
@@ -858,6 +858,36 @@ describe('runToolLoop: issued items (5.6, ADR-0010)', () => {
     expect(lastResults(s.spy.requests[1])).toEqual([
       { id: 'c1', name: 'calculator', ok: true, output: { value: '5/6' } },
       { id: 'c2', name: 'calculator', ok: false, error: 'failed' },
+    ]);
+    expect(failures(s.reported)).toEqual([['answer_key', undefined]]);
+  });
+
+  it('an item tool is key-checked on its shown text only, not its JSON (an id or level)', async () => {
+    // The output JSON holds "5/6"; the item shows only its prompt, which does not.
+    const item = { itemId: 'i', moduleId: 'm', answerKey: ['7'], shown: ['What is 2 + 3?'] };
+    const s = setup([[call('c1')], [say('Ok.')]], {
+      tools: [withIssued(() => item)],
+      mustNotReveal: ['5/6'],
+    });
+    const got: unknown[] = [];
+    s.input.onToolOutput = (_r, _o, issued) => void got.push(issued);
+    await s.run();
+    expect(got).toEqual([item]);
+    expect(failures(s.reported)).toEqual([]);
+  });
+
+  it('an item whose shown text holds a held key fails closed as `answer_key`', async () => {
+    const item = { itemId: 'i', moduleId: 'm', answerKey: ['7'], shown: ['Is it 5/6?'] };
+    const s = setup([[call('c1')], [say('Ok.')]], {
+      tools: [withIssued(() => item)],
+      mustNotReveal: ['5/6'],
+    });
+    const got: unknown[] = [];
+    s.input.onToolOutput = (_r, _o, issued) => void got.push(issued);
+    await s.run();
+    expect(got).toEqual([]);
+    expect(lastResults(s.spy.requests[1])).toEqual([
+      { id: 'c1', name: 'calculator', ok: false, error: 'failed' },
     ]);
     expect(failures(s.reported)).toEqual([['answer_key', undefined]]);
   });

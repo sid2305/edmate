@@ -254,6 +254,13 @@ export async function runToolLoop(i: ToolLoopInput): Promise<ToolLoopResult> {
           results.push(fail('failed'));
           continue;
         }
+        // Only the item's prompt and options are checked against earlier keys: its id or
+        // `"level":1` must not count as showing a held key "1" (5.6 review).
+        if (revealsAnswerKey(issued.shown, i.mustNotReveal)) {
+          i.report(new ToolFailed(entry.tool.name, 'answer_key'));
+          results.push(fail('failed'));
+          continue;
+        }
       }
       results.push({ id: c.id, name: c.name, ok: true, output: out.value });
       await i.onToolOutput(entry, out.value, issued);
@@ -297,7 +304,10 @@ async function runTool(
   const json = jsonSafe(checked.data);
   if (!json.ok) return failed('not_json');
   if (json.json.length > TOOL_RESULT_MAX_JSON_LENGTH) return failed('too_large');
-  if (revealsAnswerKey(json.value, i.mustNotReveal)) return failed('answer_key');
+  // An item tool's output is key-checked on the text it shows, after its lookup (5.6 review).
+  if (entry.issuedItem === undefined && revealsAnswerKey(json.value, i.mustNotReveal)) {
+    return failed('answer_key');
+  }
   try {
     if (await raceCancel(i.lockedCheck(stringLeaves(json.value)), i.cancel)) {
       i.onLocked?.();

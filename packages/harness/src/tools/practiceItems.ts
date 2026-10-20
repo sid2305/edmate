@@ -14,6 +14,7 @@
 //   4. `mcq` and `code_output` stay as item kinds (so the model, when it exists, is representable)
 //      but are not in `SERVABLE_KINDS`: no bank built here ever hands one out yet.
 import { evaluateExpression } from './sandbox.js';
+import { PRACTICE_ID_MAX } from '../pedagogy/helpState.js';
 import { normaliseForMatch } from '../pipeline/generate/answerKey.js';
 
 /** Difficulty tier (distinct from the help-ladder rung in `pedagogy/ladder.ts`). */
@@ -86,10 +87,40 @@ export interface PracticeBank {
   answerKeyFor(itemId: string, scope: PracticeScope): readonly string[] | undefined;
 }
 
+/** A caller's extra filter on an item (the practice tool: no earlier key in its prompt). */
+export type AcceptItem = (item: PracticeItem) => boolean;
+
+/** Most bank picks `pickItem` tries before falling back to the generator. */
+export const BANK_TRIES = 20;
+/** Most generator variants `generateItem` tries before failing closed. */
+export const GEN_VARIANTS = 64;
+
+/**
+ * Whether an item may be served (5.6 review): a servable kind, inside `scope`, an id short enough
+ * for HelpState, not excluded, its key passes `validateItem` and the caller accepts it.
+ */
+function servable(
+  picked: PickedPracticeItem,
+  scope: PracticeScope,
+  exclude: readonly string[],
+  accept: AcceptItem,
+): boolean {
+  const { item, answerKey } = picked;
+  return (
+    SERVABLE_KINDS.has(item.kind) &&
+    scope.allowedModuleIds.includes(item.moduleId) &&
+    item.id.length <= PRACTICE_ID_MAX &&
+    !exclude.includes(item.id) &&
+    validateItem(item, answerKey) &&
+    accept(item)
+  );
+}
+
 /**
  * Picks an item inside `scope`: the bank first (teacher content), then the generator, which uses
- * the first allowed module as a placeholder topic (no real outline yet, Q4). Returns `undefined`
- * only when `scope` allows no module at all — the generator never serves outside scope either.
+ * the first allowed module as a placeholder topic (no real outline yet, Q4). Every item is checked
+ * at runtime (`servable`): a bank item that fails is skipped and the bank asked again (at most
+ * BANK_TRIES times), then the generator. Returns `undefined` (fail closed) when nothing is valid.
  */
 export function pickItem(
   bank: PracticeBank,
@@ -97,13 +128,19 @@ export function pickItem(
   level: PracticeLevel,
   exclude: readonly string[],
   profile?: LearnerPracticeProfile,
+  accept: AcceptItem = () => true,
 ): PickedPracticeItem | undefined {
-  const item = bank.pick(scope, level, exclude, profile);
-  if (item !== undefined) {
+  const skipped = [...exclude];
+  for (let i = 0; i < BANK_TRIES; i++) {
+    const item = bank.pick(scope, level, skipped, profile);
+    if (item === undefined || skipped.includes(item.id)) break;
     const answerKey = bank.answerKeyFor(item.id, scope);
-    if (answerKey !== undefined) return { item, answerKey };
+    if (answerKey !== undefined && servable({ item, answerKey }, scope, skipped, accept)) {
+      return { item, answerKey };
+    }
+    skipped.push(item.id);
   }
-  return generateItem(scope, level);
+  return generateItem(scope, level, exclude, accept);
 }
 
 /** A small, seeded string hash (djb2 variant): deterministic, no dependency. */
@@ -144,9 +181,11 @@ function generateArithmeticItem(
   topicId: string,
   moduleId: string,
   level: PracticeLevel,
+  variant: number,
 ): PickedPracticeItem {
   const template = TEMPLATES[level];
-  const seed0 = hashString(`${topicId}:${level}`);
+  // Variant 0 keeps the original seed; later variants vary the operands deterministically.
+  const seed0 = hashString(variant === 0 ? `${topicId}:${level}` : `${topicId}:${level}:${variant}`);
   const draw1 = nextOperand(seed0, template.min, template.max);
   const draw2 = nextOperand(draw1.seed, template.min, template.max);
   let a = draw1.value;
@@ -180,15 +219,23 @@ function generateArithmeticItem(
 /**
  * The scoped generator fallback: picks the first allowed module as a placeholder topic (no real
  * outline yet, Q4), or `undefined` when `scope` allows no module at all (fail closed, architect
- * review point 1 — the generator never serves outside scope either).
+ * review point 1 — the generator never serves outside scope either). Honours `exclude` and
+ * `accept` (5.6 review): it tries up to GEN_VARIANTS deterministic variants and serves the first
+ * that is servable, else `undefined` (fail closed; also when the id would pass PRACTICE_ID_MAX).
  */
 export function generateItem(
   scope: PracticeScope,
   level: PracticeLevel,
+  exclude: readonly string[] = [],
+  accept: AcceptItem = () => true,
 ): PickedPracticeItem | undefined {
   const moduleId = scope.allowedModuleIds[0];
   if (moduleId === undefined) return undefined;
-  return generateArithmeticItem(`${moduleId}:practice`, moduleId, level);
+  for (let v = 0; v < GEN_VARIANTS; v++) {
+    const picked = generateArithmeticItem(`${moduleId}:practice`, moduleId, level, v);
+    if (servable(picked, scope, exclude, accept)) return picked;
+  }
+  return undefined;
 }
 
 /**

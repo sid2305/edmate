@@ -9,6 +9,12 @@ import { z } from 'zod';
 export const PRACTICE_SERVED_MAX = 20;
 /** Longest stored practice item or module id. */
 export const PRACTICE_ID_MAX = 200;
+/**
+ * Longest JSON of the practice keys a turn may save (the union of its issued items' keys, 5.6
+ * review). With the id limits above it keeps a full state under LIMITS.helpStateMaxJsonLength,
+ * so a saved key is never dropped by `serializeSessionHelp` throwing.
+ */
+export const PRACTICE_KEYS_MAX_JSON = 2_048;
 
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */

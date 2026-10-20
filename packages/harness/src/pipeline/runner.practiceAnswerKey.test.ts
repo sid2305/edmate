@@ -100,6 +100,8 @@ async function turn(
     records?: readonly DemoPracticeRecord[];
     build?: Steps['buildContext'];
     postGuard?: Steps['postGuard'];
+    decision?: PedagogyDecision;
+    generate?: Steps['generate'];
   } = {},
 ) {
   const tools = memoryToolRegistry([practiceNextItemTool(demoPracticeBank(o.records ?? RECORDS))]);
@@ -107,9 +109,9 @@ async function turn(
   const generatedKeys: (readonly string[] | undefined)[] = [];
   const steps = testSteps({
     entitle: fixtureEntitle,
-    decide: { run: () => Promise.resolve(testDecideResult(decision)) },
+    decide: { run: () => Promise.resolve(testDecideResult(o.decision ?? decision)) },
     generate: async (env, x, emit) => {
-      const g = await defaultSteps.generate(env, x, emit);
+      const g = await (o.generate ?? defaultSteps.generate)(env, x, emit);
       generatedKeys.push(g.practiceAnswerKey);
       return g;
     },
@@ -315,5 +317,54 @@ describe('runner + practice.next_item: the next turn', () => {
     });
     expect(r.help).toMatchObject(practice);
     expect(r.generatedKeys).toEqual([undefined]);
+  });
+});
+
+describe('runner + practice.next_item: practice never gets stuck (5.6 review)', () => {
+  it('three items in a row at level 1 are all served, with a held key "1"', async () => {
+    // Before the fix the output JSON's `"level":1` matched the held key "1" and every call failed.
+    const calls = ['c1', 'c2', 'c3'].map((id) => ({ ...callItem, id }));
+    const r = await turn([main(...calls, used), main(say('Three for you.'), used)], {
+      records: [],
+      decision: { ...decision, mustNotReveal: ['1'] },
+    });
+    const served = r.help?.practiceServed ?? [];
+    expect(served).toHaveLength(3);
+    expect(new Set(served).size).toBe(3);
+    expect(skillEvents(r.events)).toHaveLength(3);
+    for (const id of served) expect(id).toMatch(/^gen:mod_test_01:practice:1:/);
+    expect(r.help?.answerKey).toEqual([
+      ...new Set(served.flatMap((id) => generatedAnswerKeyFor(id) ?? [])),
+    ]);
+  });
+
+  it('three turns in a row at level 1 each serve a new item, the earlier key held', async () => {
+    let help: Partial<HelpState> = {};
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const prior = help;
+      const r = await turn([main(callItem, used), main(say('Next.'), used)], {
+        records: [],
+        decision: { ...decision, mustNotReveal: [...(prior.answerKey ?? [])] },
+        build: () => Promise.resolve(builtWith(prior)),
+      });
+      expect(skillEvents(r.events)).toHaveLength(1);
+      const id = r.help?.practiceItemId ?? '';
+      expect(ids).not.toContain(id);
+      ids.push(id);
+      help = r.help ?? {};
+    }
+    expect(help.practiceServed).toEqual(ids);
+  });
+});
+
+describe('runner + postGuard: the generate result’s practice keys are guarded (5.6 review)', () => {
+  it('a key only in gen.practiceAnswerKey still makes postGuard hold a reply that shows it', async () => {
+    const step: Steps['generate'] = async (env, x, emit) => ({
+      ...(await defaultSteps.generate(env, x, emit)),
+      practiceAnswerKey: ['8642'],
+    });
+    const r = await turn([main(say('It is 8642.'), used)], { generate: step });
+    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
   });
 });

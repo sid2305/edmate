@@ -42,6 +42,13 @@ export interface ToolSessionState {
   servedItemIds: readonly string[];
   /** The active item's module, if the session has one. */
   activeModuleId?: string;
+  /**
+   * Keys this attempt must not reveal (the decision's and every item issued so far), read live:
+   * no item whose prompt or options show one is served (5.6 review). Server-side only.
+   */
+  heldKeys?: readonly string[];
+  /** Keys issued this turn so far (all attempts), read live: their union is capped (5.6 review). */
+  issuedKeys?: readonly string[];
 }
 
 /** An item a tool issued (5.6): server-side only, it holds the answer key. */
@@ -49,6 +56,12 @@ export interface IssuedItem {
   itemId: string;
   moduleId: string;
   answerKey: readonly string[];
+  /**
+   * The text the item shows (its prompt and options). The answer-key check on the tool output and
+   * on its skill payload reads only this, not the output's JSON, so an id or `"level":1` never
+   * counts as revealing an earlier key "1" (5.6 review).
+   */
+  shown: readonly string[];
 }
 
 export interface ToolRegistry {

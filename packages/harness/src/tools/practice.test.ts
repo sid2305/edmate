@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { toolSpec } from '../pipeline/tools.js';
 import { demoPracticeBank } from './demoPracticeBank.js';
 import { NoPracticeItemError, practiceNextItemTool } from './practice.js';
-import { generatedAnswerKeyFor, type PracticeScope } from './practiceItems.js';
+import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.js';
+import { generatedAnswerKeyFor, type PracticeBank, type PracticeScope } from './practiceItems.js';
 
 const SCOPE: PracticeScope = {
   teacherId: turnContextFull.entitlement.teacherId,
@@ -294,6 +295,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
       itemId: 'demo:fractions:2:a',
       moduleId: MODULE_FRACTIONS,
       answerKey: ['1/2'],
+      shown: [(out as { prompt: string }).prompt],
     });
     expect(serializedContains(out, '1/2')).toBe(false);
   });
@@ -312,6 +314,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
       itemId: id,
       moduleId: MODULE_ARITHMETIC,
       answerKey: [...(generatedAnswerKeyFor(id) ?? [])],
+      shown: [(out as { prompt: string }).prompt],
     });
   });
 
@@ -333,5 +336,71 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     const t = practiceNextItemTool(empty);
     const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p' };
     expect(t.issuedItem(out, two)).toBeUndefined();
+  });
+
+  it('the output schema caps the item id at PRACTICE_ID_MAX', () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const at = { id: 'x'.repeat(PRACTICE_ID_MAX), kind: 'numeric', level: 1, prompt: 'p' };
+    expect(t.tool.output.safeParse(at).success).toBe(true);
+    expect(t.tool.output.safeParse({ ...at, id: `${at.id}x` }).success).toBe(false);
+  });
+
+  it('issuedItem: shown is the prompt and the options, never the id or level', () => {
+    const t = practiceNextItemTool(demoPracticeBank());
+    const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p', options: ['o'] };
+    expect(t.issuedItem(out, two)?.shown).toEqual(['p', 'o']);
+  });
+
+  it('issuedItem: a module id over PRACTICE_ID_MAX fails closed', () => {
+    const long = 'm'.repeat(PRACTICE_ID_MAX + 1);
+    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => ['5'] };
+    const t = practiceNextItemTool(bank);
+    const ctx = ctxWith({
+      entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [long] },
+    });
+    const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(t.issuedItem(out, ctx)).toBeUndefined();
+  });
+
+  it('issuedItem: fails closed when no single allowed module resolves the id', () => {
+    // An inconsistent bank: a key for the whole scope but none for any one module.
+    const bank: PracticeBank = {
+      pick: () => undefined,
+      answerKeyFor: (_id, scope) => (scope.allowedModuleIds.length > 1 ? ['5'] : undefined),
+    };
+    const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(practiceNextItemTool(bank).issuedItem(out, two)).toBeUndefined();
+  });
+
+  it('issuedItem: fails closed when the key union would push HelpState over its limit', () => {
+    const big = 'k'.repeat(PRACTICE_KEYS_MAX_JSON);
+    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [big] };
+    const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
+    expect(practiceNextItemTool(bank).issuedItem(out, two)).toBeUndefined();
+    // The session's earlier keys count too.
+    const half = 'h'.repeat(PRACTICE_KEYS_MAX_JSON / 2);
+    const halfBank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [half] };
+    const fresh = practiceNextItemTool(halfBank).forSession({ servedItemIds: [] });
+    expect(fresh.issuedItem?.(out, two)).toBeDefined();
+    const full = practiceNextItemTool(halfBank).forSession({
+      servedItemIds: [],
+      issuedKeys: ['x'.repeat(PRACTICE_KEYS_MAX_JSON / 2)],
+    });
+    expect(full.issuedItem?.(out, two)).toBeUndefined();
+  });
+
+  it('forSession heldKeys: never serves an item whose prompt shows a held key', async () => {
+    // Level 1 sums: hold every key the first generated items would have.
+    const base = practiceNextItemTool(demoPracticeBank(), { exclude: ['demo:arithmetic:1:a'] });
+    const first = await base.tool.run({ level: 1 }, two);
+    const key = base.issuedItem(first, two)?.answerKey ?? [];
+    const bound = base.forSession({ servedItemIds: ['demo:arithmetic:1:a'], heldKeys: key });
+    const next = (await bound.tool.run({ level: 1 }, two)) as { id: string; prompt: string };
+    expect(next.id).not.toBe(idOf(first));
+    expect(bound.issuedItem?.(next, two)?.answerKey).not.toEqual(key);
+    // Held "1": no item whose prompt names 1 is served.
+    const one = base.forSession({ servedItemIds: ['demo:arithmetic:1:a'], heldKeys: ['1'] });
+    const p = ((await one.tool.run({ level: 1 }, two)) as { prompt: string }).prompt;
+    expect(p).not.toMatch(/(?<![0-9])1(?![0-9])/);
   });
 });
