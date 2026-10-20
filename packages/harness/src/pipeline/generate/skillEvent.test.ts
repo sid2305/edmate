@@ -223,4 +223,16 @@ describe('skillEvent', () => {
     dropped(r, 'locked');
     expect((r as SkillEventDropped).cause).toEqual({ name: 'LockedCheckFailed' });
   }, 5_000);
+
+  it('an item payload is key-checked on its shown text only (5.6 review)', async () => {
+    const payload = { id: 'gen:m:practice:1:2+3', level: 1, prompt: 'What is 2 + 3?' };
+    const entry = withPresent(() => ({ skill: 'practice', payload }));
+    // The JSON holds "1" (the level, the id); the shown prompt does not.
+    expect(await skillEvent(entry, {}, turnContextFull, ['1'], NONE, [payload.prompt])).toEqual({
+      type: 'skill',
+      skill: 'practice',
+      payload,
+    });
+    dropped(await skillEvent(entry, {}, turnContextFull, ['5'], NONE, [payload.prompt]), 'answer_key');
+  });
 });

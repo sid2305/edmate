@@ -40,7 +40,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, '../../..');
 const DIR = resolve(REPO_ROOT, 'content/prompt-packs');
 const PERSONA_DIR = resolve(REPO_ROOT, 'content/skills/mock_interview');
-const SET_VERSION = '1.0.0';
+const SET_VERSION = '1.1.0';
 
 const library = readPromptPackLibrary(DIR);
 const set = resolvePromptPackSet(library, SET_VERSION);
@@ -271,7 +271,7 @@ const CASES: Case[] = [
 ];
 
 describe('on-disk prompt-pack set: composed-prompt snapshots', () => {
-  it('loads with no issues and exposes set 1.0.0', () => {
+  it('loads with no issues and exposes set 1.1.0', () => {
     expect(set.version).toBe(SET_VERSION);
   });
 

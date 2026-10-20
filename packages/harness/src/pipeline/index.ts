@@ -36,8 +36,10 @@ export {
   noTools,
   offeredTools,
   policyTools,
+  type IssuedItem,
   type RegisteredTool,
   type SkillPresentation,
+  type ToolSessionState,
   type ToolRegistry,
   toolSpec,
 } from './tools.js';

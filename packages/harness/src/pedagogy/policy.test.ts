@@ -137,6 +137,34 @@ describe('mustNotReveal', () => {
     expect(r.mustNotReveal).toEqual([]);
   });
 
+  it('a practice item: a forced solution move is capped at the worked example, key held (5.6)', () => {
+    // The same turn as above (coach skill, finalAnswers allowed, rung 3, hint request), which
+    // reaches the solution rung, but the help state holds a practice item's key.
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ helpRung: 3, pkg: { finalAnswers: 'allowed' } }),
+        turn: turnOf('hint_request'),
+        help: helpWith({ answerKey: ['7'], practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.skill).toBe('coach');
+    expect(r.move).toBe('worked_example');
+    expect(r.rung).toBe(3);
+    expect(r.reason).toBe('at_ceiling');
+    expect(r.mustNotReveal).toEqual(['7']);
+  });
+
+  it('an active practice item with no key left (solved) no longer caps coach', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ helpRung: 3, pkg: { finalAnswers: 'allowed' } }),
+        turn: turnOf('hint_request'),
+        help: helpWith({ answerKey: [], practiceItemId: 'item-1' }),
+      }),
+    );
+    expect(r.move).toBe('solution');
+  });
+
   it('holds the answer key on redirect, locked and ask_teacher', () => {
     for (const o of [{ intent: 'misuse' as const }, { retrieved: [] }]) {
       const r = decidePolicy(base({ ctx: ctxWith(o), help: helpWith({ answerKey: key }) }));

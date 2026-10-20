@@ -439,6 +439,35 @@ describe('generate: the stream gate seam', () => {
   });
 });
 
+describe('generate: an issued item and a gate without addKeys (5.6 review, fail closed)', () => {
+  const item = { itemId: 'i', moduleId: 'm', answerKey: ['7'], shown: ['What is 3 + 4?'] };
+  const issuing = { ...presenting({ prompt: 'What is 3 + 4?' }), issuedItem: () => item };
+  const plain: StreamGateFactory = () => ({ push: (t) => [t], flush: () => [] });
+  const stream = [[callCalc, used], [say('Try it. '), say('It is 7.'), used]];
+
+  it('holds the rest of the attempt and reports it withheld', async () => {
+    const s = setup(stream, { gate: plain, tools: [issuing], decision: { move: 'ask' } });
+    const out = await s.run();
+    expect(out).toMatchObject({ withheld: true, practiceAnswerKey: ['7'] });
+    // The item event still goes out; no text after it is shown.
+    expect(types(s.events)).toEqual(['skill']);
+  });
+
+  it('a gate with addKeys gets the key and keeps showing what it releases', async () => {
+    const added: string[] = [];
+    const growing: StreamGateFactory = () => ({
+      push: (t) => [t],
+      flush: () => [],
+      addKeys: (k) => void added.push(...k),
+    });
+    const s = setup(stream, { gate: growing, tools: [issuing], decision: { move: 'ask' } });
+    expect(await s.run()).toMatchObject({ withheld: false, practiceAnswerKey: ['7'] });
+    expect(added).toEqual(['7']);
+    const text = s.events.map((e) => (e.type === 'token' ? e.text : '')).join('');
+    expect(text).toBe('Try it. It is 7.');
+  });
+});
+
 describe('generate: the answer-leak sentence gate is the default (4.5)', () => {
   it('a leaking sentence is never shown nor in the draft; raw keeps it; withheld is set', async () => {
     const s = setup([[say('Good. '), say(`It is ${KEY}`), say('. More. '), used]], {

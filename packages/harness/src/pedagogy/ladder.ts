@@ -1,7 +1,7 @@
 // The help ladder (build plan § Teaching engine › Help ladder). Pure: rules only, no model.
 import type { PackageConfig, TurnContext, TurnInput } from '@edmate/contracts';
 import type { Move } from './budgets.js';
-import { copyHelp, type HelpState } from './helpState.js';
+import { copyHelp, type HelpState, holdsPracticeKey } from './helpState.js';
 
 export type { Move } from './budgets.js';
 export type Rung = TurnContext['helpRung'];
@@ -64,7 +64,10 @@ export function attemptLoggedAfter(
 }
 
 export function nextRung(i: LadderInput): LadderStep {
-  const ceiling = effectiveCeiling(i.pkg, i.skill);
+  // While the help state holds a practice item's key, the practice cap applies whatever skill
+  // the turn chose (5.6, ADR-0010 §5): a free-text follow-up routed to coach never reaches the
+  // solution rung on a practice item.
+  const ceiling = effectiveCeiling(i.pkg, holdsPracticeKey(i.help) ? 'practice' : i.skill);
   const from = Math.min(i.rung, ceiling) as Rung;
   const attemptLogged = attemptLoggedAfter(i.help, i.attempt, i.kind);
   const { answerKey } = copyHelp(i.help);

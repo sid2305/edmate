@@ -2,11 +2,16 @@ import { LIMITS } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   copyHelp,
+  holdsPracticeKey,
   INITIAL_HELP_STATE,
+  PRACTICE_SERVED_MAX,
+  practiceFields,
   loadSessionHelp,
   parseSessionHelp,
   serializeSessionHelp,
   SessionHelpSchema,
+  PRACTICE_ID_MAX,
+  PRACTICE_KEYS_MAX_JSON,
 } from './helpState.js';
 
 const VALID = {
@@ -184,5 +189,86 @@ describe('serializeSessionHelp (for 3.8 commit)', () => {
     expect(() =>
       serializeSessionHelp({ rung: 0, help: { ...INITIAL_HELP_STATE, answerKey: [big] } }),
     ).toThrow(/helpStateMaxJsonLength/);
+  });
+});
+
+describe('practice fields (5.6, ADR-0010)', () => {
+  const PRACTICE = {
+    ...VALID,
+    practiceItemId: 'item-2',
+    practiceModuleId: 'mod-1',
+    practiceServed: ['item-1', 'item-2'],
+  };
+
+  it('parse and serialise round-trip the active item, its module and the served ids', () => {
+    const s = parseSessionHelp(PRACTICE);
+    expect(s.help).toMatchObject({
+      practiceItemId: 'item-2',
+      practiceModuleId: 'mod-1',
+      practiceServed: ['item-1', 'item-2'],
+    });
+    expect(serializeSessionHelp(s)).toEqual(PRACTICE);
+  });
+
+  it('a blob saved before 5.6 parses without them', () => {
+    const s = parseSessionHelp(VALID);
+    expect(s.help).not.toHaveProperty('practiceItemId');
+    expect(s.help).not.toHaveProperty('practiceServed');
+  });
+
+  it(`refuses more than PRACTICE_SERVED_MAX (${PRACTICE_SERVED_MAX}) served ids or an empty id`, () => {
+    const many = Array.from({ length: PRACTICE_SERVED_MAX + 1 }, (_, i) => `item-${i}`);
+    expect(parseSessionHelp({ ...VALID, practiceServed: many })).toEqual(DEFAULT);
+    expect(parseSessionHelp({ ...VALID, practiceItemId: '' })).toEqual(DEFAULT);
+  });
+
+  it('copyHelp copies the served list, so it never aliases', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    const c = copyHelp(h);
+    expect(c.practiceServed).toEqual(h.practiceServed);
+    expect(c.practiceServed).not.toBe(h.practiceServed);
+  });
+
+  it('holdsPracticeKey: an active item and a non-empty key', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    expect(holdsPracticeKey(h)).toBe(true);
+    expect(holdsPracticeKey({ ...h, answerKey: [] })).toBe(false);
+    expect(holdsPracticeKey(parseSessionHelp(VALID).help)).toBe(false);
+  });
+
+  it('practiceFields picks only the practice fields, copied', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    const f = practiceFields(h);
+    expect(f).toEqual({
+      practiceItemId: 'item-2',
+      practiceModuleId: 'mod-1',
+      practiceServed: ['item-1', 'item-2'],
+    });
+    expect(f.practiceServed).not.toBe(h.practiceServed);
+    expect(practiceFields(parseSessionHelp(VALID).help)).toEqual({});
+  });
+});
+
+describe('practice limits fit the stored blob (5.6 review)', () => {
+  it('a state at every practice limit still serialises under LIMITS.helpStateMaxJsonLength', () => {
+    const id = 'i'.repeat(PRACTICE_ID_MAX);
+    // One key whose JSON array is exactly PRACTICE_KEYS_MAX_JSON long.
+    const key = 'k'.repeat(PRACTICE_KEYS_MAX_JSON - 4);
+    expect(JSON.stringify([key]).length).toBe(PRACTICE_KEYS_MAX_JSON);
+    const out = serializeSessionHelp({
+      rung: 4,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: true,
+        answerKey: [key],
+        lockedStopped: true,
+        groundingAsks: 1_000,
+        practiceItemId: id,
+        practiceModuleId: id,
+        practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),
+      },
+    });
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(LIMITS.helpStateMaxJsonLength);
   });
 });
