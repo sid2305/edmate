@@ -562,7 +562,7 @@ tasks:
   - '2.6'
   - '3.6'
   - M0
-  status: running
+  status: review
   needs_decision:
   - pilot-market
   risk: risky
@@ -616,7 +616,7 @@ tasks:
   deps:
   - '4.7'
   - 3.11b
-  status: todo
+  status: running
   branch: null
   model: null
 - id: '3.12'
