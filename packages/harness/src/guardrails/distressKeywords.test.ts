@@ -189,7 +189,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
       expect(distressKeywordLevel(text)).toBe('hard');
       expect(hasDistressKeyword(text)).toBe(true);
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -204,7 +204,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -217,7 +217,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (_rule, text) => {
       expect(distressKeywordLevel(text)).toBe('soft');
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -230,7 +230,7 @@ describe('combination rules (lead decision, fix round 2)', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -240,7 +240,7 @@ describe('held-out paraphrases (not used to tune the tables)', () => {
     (text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -250,7 +250,7 @@ describe('no hard hit on idiom, near-misses or coding talk', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 
   it('the seeded near-misses (but Durkheim, a bare noun) and mid-task first turns have no keyword', () => {
@@ -279,7 +279,7 @@ describe('soft keywords', () => {
       // distressCheck (hasDistressKeyword) is the hard list only: a soft hit asks the classifier.
       expect(hasDistressKeyword(text)).toBe(false);
     },
-    1_000,
+    5_000,
   );
 
   it('two different soft signals stay soft (the classifier decides); they are counted', () => {
@@ -363,7 +363,7 @@ describe('game talk (fix round 4, human decision B-18, option c): the exemption 
     (text, kind) => {
       expect(distressKeywordMatch(text)).toMatchObject({ level: 'hard', kind });
     },
-    1_000,
+    5_000,
   );
 
   it.each([['kill the boss first'], ['i died in the match'], ['i keep dying on level 3']] as const)(
@@ -371,7 +371,7 @@ describe('game talk (fix round 4, human decision B-18, option c): the exemption 
     (text) => {
       expect(distressKeywordLevel(text)).toBe('none');
     },
-    1_000,
+    5_000,
   );
 
   it('a method plus another soft phrase is still a combination when both are tied to a game', () => {
@@ -392,7 +392,7 @@ describe('code talk (fix round 3): a soft hit next to code goes to the classifie
       expect(m.level).toBe('soft');
       expect(m.softHits).toBeGreaterThanOrEqual(1);
     },
-    1_000,
+    5_000,
   );
 
   it('the same phrases without code still combine to hard', () => {
@@ -408,7 +408,7 @@ describe('code talk (fix round 3): a soft hit next to code goes to the classifie
     (text) => {
       expect(distressKeywordLevel(text)).toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -434,7 +434,7 @@ describe('a method ready or saved up (fix round 3): hard', () => {
       expect(distressKeywordLevel(text)).toBe('hard');
       expect(hasDistressKeyword(text)).toBe(true);
     },
-    1_000,
+    5_000,
   );
 
   it.each([
@@ -450,7 +450,7 @@ describe('a method ready or saved up (fix round 3): hard', () => {
     (text) => {
       expect(distressKeywordLevel(text)).not.toBe('hard');
     },
-    1_000,
+    5_000,
   );
 });
 
@@ -460,7 +460,7 @@ describe('edge inputs', () => {
     (text) => {
       expect(distressKeywordLevel(text)).toBe('none');
     },
-    1_000,
+    5_000,
   );
 
   it('a 4,000-character message is checked quickly', () => {

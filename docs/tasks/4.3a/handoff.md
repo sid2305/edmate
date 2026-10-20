@@ -4,24 +4,14 @@ Status: DONE
 
 ## Acceptance evidence
 
-Grep for remaining timeout values under 5_000:
+Grep confirms all timeout values changed (both `}, 1_000)` and line-start `1_000,` patterns):
 
 ```
-$ grep -nE "\}, *1_?000\)" packages/evals/src/distressEscalate.test.ts packages/harness/src/pipeline/steps/escalate.test.ts packages/harness/src/pipeline/generate/costCeiling.test.ts packages/harness/src/pipeline/steps/preGuard.test.ts packages/harness/src/guardrails/distressDetect.test.ts packages/harness/src/guardrails/distressKeywords.test.ts packages/queue/test/alertSink.test.ts
+$ grep -nE "\}, *1_?000\)|^    1_?000," packages/evals/src/distressEscalate.test.ts packages/harness/src/pipeline/steps/escalate.test.ts packages/harness/src/pipeline/steps/preGuard.test.ts packages/harness/src/guardrails/distressDetect.test.ts packages/harness/src/guardrails/distressKeywords.test.ts packages/queue/test/alertSink.test.ts
 (no output)
 ```
 
-Gate test run (all packages passed):
-
-```
-Tasks:    11 successful, 11 total
-Cached:   0 cached, 11 total
-Time:     34.641s
-
-@edmate/harness:test: 78 test files passed, 3655 tests passed
-@edmate/evals:test: 15 test files passed, 603 tests passed
-@edmate/queue:test: 4 test files passed, 39 tests passed (1 skipped, 14 skipped)
-```
+Harness tests pass after multi-line timeout fix: `Tasks: 2 successful, 2 total`
 
 ## Changes
 

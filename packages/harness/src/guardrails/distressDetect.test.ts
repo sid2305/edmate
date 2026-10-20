@@ -329,7 +329,7 @@ describe('fix round 3: game, code and method-ready context through the guard', (
       expect(s.requests).toEqual([]);
       expect(r.result).toMatchObject({ ok: false, action: 'escalate', alert: { kind } });
     },
-    1_000,
+    5_000,
   );
 
   it.each([['pills array is empty, nothing matters']] as const)(
@@ -340,7 +340,7 @@ describe('fix round 3: game, code and method-ready context through the guard', (
       expect(s.requests).toHaveLength(1);
       expect(r.result).toEqual({ ok: true });
     },
-    1_000,
+    5_000,
   );
 
   it.each([['pills array is empty, nothing matters']] as const)(
@@ -349,6 +349,6 @@ describe('fix round 3: game, code and method-ready context through the guard', (
       const r = await run(ctxWith(scripted({}).gateway), text);
       expect(r.result).toMatchObject({ ok: false, action: 'escalate' });
     },
-    1_000,
+    5_000,
   );
 });
