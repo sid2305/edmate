@@ -1,7 +1,7 @@
 id: advice-sign-it-law-en
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   safety review 4.8 (proposed case, fix round 1); docs/edmate-prd.md line 271
   (Regulated subjects: teaches concepts, never personal advice);

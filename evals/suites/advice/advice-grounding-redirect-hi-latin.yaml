@@ -1,7 +1,7 @@
 id: advice-grounding-redirect-hi-latin
 suite: advice
 package: free
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   safety review 4.7 (redirect replies are not judged by grounding; the reviewer's case
   grounding-redirect-advice-hi-latin, renamed for the advice suite's id prefix);

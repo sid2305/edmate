@@ -1,17 +1,26 @@
-# 4.8 review — CHANGES (fix round 1 done, re-review pending)
-Reviewers: safety-reviewer (opus), typescript-reviewer (sonnet), silent-failure-hunter (sonnet)
+# 4.8 review — APPROVE
+Reviewers: safety-reviewer (opus), typescript-reviewer (sonnet), silent-failure-hunter (sonnet), code-reviewer (sonnet)
 
 adviceGuard runs on every agent: English directive and identity rules, a small-model judge that fails closed, one rule-checked rewrite and a fixed fallback; a word-for-word disclaimer for regulated agents; regulated-agent and decision-request turns are held, not streamed; redirect replies are judged. TypeScript approves; silent-failure finds no fail-open path; safety requests changes (full text: safety-review.md).
+
+After fix round 1: the safety re-check (opus) closes issues 1, 2, 3, 5 and 6 and the round-0 examples of issue 4, and finds one HIGH and four MEDIUM/LOW left, all deferred to 4.8b under the one-fix-round rule. code-reviewer approves with one MEDIUM (deferred). The lead signed the 5 new advice cases (`reviewed_by: lead`, human answer B-22).
 
 ## Findings
 - [CRITICAL] [fixed] packages/harness/src/guardrails/adviceGuard.ts:344 — a directive with no modal, domain word or dose skips the judge, even on a regulated agent (safety-review.md issue 1). Fix round 1: a regulated agent sends every non-fixed reply to the judge; on all agents a sentence-start imperative, a number or a proper-noun product is a signal.
 - [HIGH] [fixed] packages/harness/src/pipeline/steps/generate.ts:81-84 — redirect moves on non-regulated agents stream unless REQUEST_RX matches; many money and medicine asks miss it (safety-review.md issue 2). Fix round 1: every redirect move is held, and so is any turn whose student message names a regulated topic (money, health, law).
 - [HIGH] [fixed] packages/harness/src/guardrails/adviceGuard.ts:162 — "sign it" and "file a case" can never match because the window starts after the verb (safety-review.md issue 3). Fix round 1: the verb is inside the window; "sign it/this/the contract" and "file a case" now match.
-- [HIGH] [fixed] packages/harness/src/guardrails/adviceGuard.ts:272-275 — a rewrite is accepted on the hard rule alone and can add new advice (safety-review.md issue 4). Fix round 1: a rewrite with a dose, a promise or a named product is rejected and falls back.
+- [HIGH] [fixed] packages/harness/src/guardrails/adviceGuard.ts:272-275 — a rewrite is accepted on the hard rule alone and can add new advice (safety-review.md issue 4). Fix round 1: a rewrite with a dose, a promise or a named product is rejected and falls back; the re-check confirms the round-0 examples, and the remaining gap is the deferred HIGH below.
 - [HIGH] [fixed] packages/harness/src/pedagogy/disclaimer.ts:18-19 — a regulated agent whose locale pack lacks its subject's disclaimer silently gets the generic one; report a code-only locale-gap metric (silent-failure). Fix round 1: postGuard reports `DisclaimerLocaleGap` (subject code only, no text).
 - [HIGH] [fixed] packages/evals/src/groundingFixtures.test.ts — the judge-always-grounded mutation no longer fails `grounding-fileio-hi-latin` on this branch (lead test run). Fix round 1: cause was markerJudge flagging bare "karo" as advice; narrowed it, the mutation fails 25 again.
 - [MEDIUM] [fixed] packages/harness/src/guardrails/adviceGuard.ts:180 — identity, promise and Hinglish regexes too narrow (safety-review.md issue 5). Fix round 1: widened (up to 3 words, adverbs, "get ... back", more Hinglish imperatives).
 - [MEDIUM] [fixed] packages/evals/src/adviceFixtures.test.ts:475 — "nothing streamed" only covered by messages matching REQUEST_RX; add the proposed cases (safety-review.md issue 6). Fix round 1: the 4 proposed cases added (pending), checked streamed and final.
+- [HIGH] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:351-358 — safety re-check of fix round 1: the rewrite check is regex-only, so plain lower-case advice ("a common choice for someone like you is a nifty 50 index fund.", "okay — sign it.") passes with the disclaimer. Judge the rewrite once and fall back on advice or no answer. Left open after the one fix round (MVP first, 20 Oct 2026).
+- [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:161 — the em dash is not a sentence break, so "Okay — sign it." skips the rule and the judge (safety re-check).
+- [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:300-326 — Hinglish and Devanagari health and wage asks (goli, BP, sugar, pet, क्या लूँ, wages) are not held (safety re-check).
+- [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:445-450 — during a judge outage, weak-signal-only replies (most coding replies) get the advice fallback; needs a lead decision (safety re-check).
+- [MEDIUM] [deferred 4.8b] packages/harness/src/pipeline/steps/postGuard.ts:467 — grounding's PREMISE_CORRECTION_REPLY is not in fixedTexts, so adviceGuard judges it; safe today only by its wording (code-reviewer).
+- [LOW] [deferred 4.8b] evals/suites/advice/advice-redirect-stream-coding-en.yaml:11 — "good stock" matches the request patterns, so the case does not pin the new redirect hold (safety re-check).
+- [LOW] [deferred 4.8b] packages/harness/src/testing/adviceJudge.ts:59-61 — the fake judge's "daal ke bhool jao" marker was written for one case; add a "band karo" marker and case (safety re-check).
 - [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:347-356 — one catch collapses a scrub bug and a judge outage into judge_unavailable with no cause (silent-failure).
 - [MEDIUM] [deferred 4.8b] packages/harness/src/guardrails/adviceGuard.ts:379-395 — the rewrite catch discards errors with no reason or metric (silent-failure).
 - [LOW] [deferred 4.8b] the redirect text's "an adult you trust" reads oddly for 18+ students (safety).
