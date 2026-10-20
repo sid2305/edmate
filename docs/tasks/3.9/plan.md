@@ -1,270 +1,181 @@
-# Task 3.9 — CLI `edmate chat --agent --package` (teacher-preview or eval entitlement)
+# 3.9 plan: CLI `edmate chat --agent --package` (teacher-preview or eval entitlement)
 
-## Acceptance (verbatim, from the board)
-> a full session with the demo teacher runs in a terminal with a real key.
+## Acceptance (verbatim)
+"a full session with the demo teacher runs in a terminal with a real key."
 
-**How it is shown:** the human runs the exact command in "Manual acceptance" below, with
-`EDMATE_ANTHROPIC_API_KEY` and `DATABASE_URL` set in their shell (sourced from `~/.edmate/env`,
-outside the repo, per `docs/setup/devbox.md` — never written into the repo). They type a few
-real messages to the demo Python course (`content/demo-teacher/`) on `demo-package-paid` and see
-streamed tokens, at least one `sources` or `locked` event when relevant, and a final `done`. This
-is a manual step the human does (build plan rule 4: no real model calls in CI/tests); the PR's
-automated tests only prove the wiring is correct using the scripted gateway and fixtures — they
-never hold a real key. The task handoff records that the human ran it and what they saw (pass/fail
-against the acceptance line), not a transcript (no student/model text in the repo).
+**How it will be shown:** an automated test proves the CLI drives a full multi-turn
+session through the real pipeline steps (`defaultSteps`) using the scripted gateway and
+demo-teacher content fixtures — no network, no real key, CI-safe. The "real key" half of
+the acceptance is a **manual step only the human runs** (see Phase B), because real model
+calls are out of bounds for automated tests (rule 4). The human (or the lead, after the
+human) records the transcript summary and `secret-scan` result in the task handoff; the
+builder cannot self-certify this half.
 
-## What exists already (read before building; nothing here needs a contracts or ADR change)
-- `runTurn(input, { deps, steps, cancel? })` and `defaultSteps` are exported from `@edmate/harness`
-  (`packages/harness/src/pipeline/runner.ts`, `steps/index.ts`) and are feature-complete enough to
-  run a turn end to end. **`defaultSteps.route.run` is still a stub** (task 3.3, board: `todo`) —
-  every turn falls back to `route.onFailure` (`ROUTE_DEFAULT`, intent `on_task`/attempt `none`,
-  unless a distress keyword hits). That is an existing, already-accepted gap outside 3.9's deps;
-  the CLI changes nothing about it and will pick up real routing automatically once 3.3 ships
-  (same `defaultSteps` reference, no CLI change needed).
-- `packages/db`'s repositories already implement every DB-backed port the pipeline needs, including
-  the `teacher_preview` and `eval` branches of `entitlementStoreFor` and `turnConfigStoreFor`
-  (`packages/db/src/repositories/ports.ts`). `openDatabase(env)` (`@edmate/db`) is the one public
-  entry point for app code.
-- `packages/gateway` has everything to build a real, metered model gateway: `envKeySource`,
-  `loadProviderKeys`, `createAnthropicAdapter`, `createRouter`, `meterRouter`, `loadBundledPrices`
-  — see `apps/cli/src/commands/judgeGateway.ts`, which already does exactly this for the judge
-  model and is the template to follow.
-- `@edmate/content`'s `readPromptPackLibrary(dir)` builds a `PromptPackLibrary` from
-  `content/prompt-packs/` (task 3.6/3.11, both done) — no new loader needed.
-- The demo teacher is seeded with fixed ids (`packages/db/src/seed.ts`, `DEMO_IDS`):
-  `teacher: 'demo-teacher'`, `agent: 'demo-agent'`, `packageFree: 'demo-package-free'`,
-  `packagePaid: 'demo-package-paid'`; its model policy is Anthropic on both tiers; its students'
-  (and so its locale) market is `'global'`.
-- `packages/harness/src/pipeline/clock.ts`'s doc comment says it outright: *"Production adapters
-  [for `Clock`/`IdSource`] come with the first real caller (3.9); tests use `virtualClock()` and
-  `sequentialIds()` from harness/testing."* **This task is that first real caller** — it must add a
-  real wall-clock `Clock` and a real `IdSource` (e.g. `randomUUID()`-based), living in `apps/cli`,
-  not in `packages/harness` (which stays pure per rule 3).
-- `packages/db/src/repositories/ports.ts`'s `TurnConfigStoreOptions.locales` doc comment says:
-  *"Until task 3.10 the composition root passes fixtures."* 3.10 (locale packs) is not done, so the
-  CLI's `locales()` returns `@edmate/contracts/fixtures`'s `localePackMinimal` (market `'global'`,
-  matching the demo teacher) for every market — exactly what that comment anticipates. This is a
-  genuine package export (`@edmate/contracts` `package.json` has a `./fixtures` subpath, described
-  as "with fixtures"), not a test-only hack.
-- `createTurnLimits(clock)` (`@edmate/harness`) is the in-memory `TurnLimits` already used as the
-  default in tests; its own doc comment says a restart or a second instance resets it, and 3.14
-  replaces it with a durable, shared Redis store for multi-instance web traffic. 3.9 does not
-  depend on 3.8 or 3.14 (the worker-queue/Redis durability tasks); a single CLI process has no
-  second instance to share state with, so this is the right default here (see Decisions).
+## Context found while planning
 
-## Design
+- **`route` (3.3) is not yet built** (board: `status: todo`). `defaultSteps.route` always
+  throws `StepNotImplementedError`; the runner's documented failure policy then falls back
+  to `ROUTE_DEFAULT` (`intent: 'on_task', attempt: 'none'`) and the turn proceeds normally
+  (`spec.ts`: "Default `on_task`/`none`; distress keywords still escalate"). So a full
+  session works today without 3.3 — every turn is just routed generically. This is not a
+  blocker; it's a known limitation to note in the handoff, not fixed by this task.
+- 4.3/4.4/4.5/4.6/4.7/4.8 are all `done`, so `preGuard`/`postGuard` run for real, including
+  the grounding and advice judges — both of which make model calls through a gateway. Only
+  4.9 (persona boundary) is deferred to M13 and absent from `defaultSteps` today.
+  Consequence: a single real key, mapped to both the `small` and `main` tiers, powers
+  every model call in the turn (generate, classifiers, judges) — matching the acceptance's
+  singular "a real key."
+- The **production `RetrievalIndex`** (task 5.3) lives in `packages/db/src/repositories/retrieval.ts`
+  and needs Postgres+pgvector plus an ingestion/embedding pipeline over
+  `content/demo-teacher/`. That is out of scope and out of budget for this task (no DB in
+  3.9's deps, and 5.3/5.4 aren't in 3.9's dep list). **Decision:** this CLI ships its own
+  tiny in-process, access-filtered lexical `RetrievalIndex` over `content/demo-teacher`'s
+  module notes (substring/keyword match, no embeddings, no DB). `buildContext`'s documented
+  failure path ("proceed without retrieval → `ask_teacher`") already makes a weaker
+  retrieval safe, never silently wrong. A follow-up task should swap in 5.3's real index.
+- `@edmate/harness` already publishes a `./testing` subpath (package.json `exports`), and
+  `apps/cli` already depends on `@edmate/gateway`'s `loadProviderKeys`/`envKeySource`/
+  `createAnthropicAdapter` pattern (see `apps/cli/src/commands/judgeGateway.ts`, built for
+  `edmate eval --record`). This task reuses both rather than reinventing: `memoryAccess.ts`'s
+  `memoryEntitlementStore`/`memoryTurnConfigStore` (generic over any `AccessWorld`) for
+  entitlement/session resolution, and the rest of `testing`'s memory ports
+  (`memoryTeacherQuestionStore`, `memorySessionStateStore`, `memoryTranscriptStore`,
+  `memoryTraceSink`, `memoryAlertSink`, `memorySafetyEventSink`, `memoryUsageMeter`) for
+  everything that would otherwise need a database. `@edmate/gateway` already has
+  `createRouter`, `meterRouter`, `shippedPrices()`, `computeCostMicroUsd`,
+  `DEFAULT_MODEL_POLICY` (2.3/2.4), and `@edmate/harness`'s `turnPolicies`/`billingFor`
+  (3.7) compose these into `gatewayFor`. This is wiring, not new engineering — keeps the
+  build small.
+- `apps/cli`'s `unwiredAgent`/`edmate eval --record` wiring is explicitly untouched; `edmate
+  chat` is a separate command and composition root. No change to `eval.ts`/`judgeGateway.ts`.
+- **5.4 Phase A is editing `packages/harness/src/pipeline/tools.ts` → `access/tools.ts`
+  right now.** This plan touches no file under `packages/harness/**`. If the builder hits a
+  real gap that only a harness change can fix, it stops and flags the lead instead of
+  editing harness (merge-conflict risk with 5.4, and a harness change needs its own task).
 
-### Command and flags
-`edmate chat --agent <agentId> --package <packageId> [--entitlement teacher_preview|eval] [--teacher <id>] [--student <id>] [--package-version <n>] [--market <code>]`
+## Packages touched
+`apps/cli` only (no `packages/harness`, no `packages/db`, no contracts).
 
-- Default `--entitlement teacher_preview` (matches the build plan's CLI-parity line, which shows
-  no entitlement flag for the common case). The previewing "student id" the pipeline needs is not
-  asked of the user: the command resolves the agent's owning teacher via `repos.agents.owner
-  ({ agentId })` (a public lookup) and uses that teacher id as both the entitlement request's
-  `studentId` and `TurnInput.studentId` — this is the existing, documented `teacher_preview`
-  convention (`entitlementStoreFor`'s doc comment: "the student id is the teacher's user id"). The
-  package's newest version is used (`packageVersions.latest`), also per that port's existing
-  behaviour. `--teacher`, `--student`, `--package-version`, `--market` are rejected together with
-  `--entitlement eval` as unused/conflicting flags.
-- `--entitlement eval` requires `--teacher` and `--package-version` (eval pins one version, with
-  no sensible default); `--student` defaults to a fixed literal (`eval-cli-session`, not a real
-  account); `--market` defaults to `global`.
-- `--agent`/`--package` are always required; a missing one is a usage error, not a crash.
-- No `--key` flag: the model key is read only from `process.env.EDMATE_ANTHROPIC_API_KEY`, never
-  taken as an argument (so it never appears in shell history or `ps`), never echoed, never written
-  to any file.
-- Each run opens a brand-new session (`repos.sessions.create`) for the resolved entitlement; the
-  REPL loop reuses that one `sessionId` for every turn until the user exits (Ctrl-D / `/exit`).
-  Resuming a previous CLI session is out of scope (a natural 3.9 follow-up, not blocking this task).
+## Scope and constraints followed
+- No `packages/harness` edits (checked above).
+- No real model calls in automated tests; `apps/cli/test/setup/no-network.ts` already
+  replaces `globalThis.fetch`, so any accidental live call fails loudly in CI.
+- The real key lives only in `ANTHROPIC_API_KEY` (environment), loaded the same way
+  `judgeGateway.ts` already does (`loadProviderKeys`/`envKeySource`); never logged, never
+  printed, never written to a file. A test asserts the CLI's error path (missing key) never
+  echoes the env value.
+- Two phases, each small enough for one Sonnet builder; Phase B depends on Phase A's
+  green commit.
 
-### Composition root (`PipelineDeps`), all real, no bypass
-| Dep | Real implementation |
-| --- | --- |
-| `clock`, `ids` | New: wall-clock `Clock` (`Date.now()` + cancellable `setTimeout`); `IdSource` via `randomUUID()` (ids re-shaped to the contracts id charset) |
-| `gatewayFor` | `meterRouter(createRouter(policy, { anthropic: (model) => createAnthropicAdapter(keys.get('anthropic'), { model }) }), usageMeterFor(repos, scope), billing, loadBundledPrices())`, `metered: true` (so `meter` step's own recording is skipped — it already is, by design, when metered is true) |
-| `priceUsage` | `computeCostMicroUsd`-based, same as `@edmate/gateway`'s own default |
-| `entitlements` | `entitlementStoreFor(repos, { market: 'global', packMarket: () => 'global', preview: { packageId }, eval: { teacherId, packageId, version, market } })` per the chosen `--entitlement` |
-| `turnConfig` | `turnConfigStoreFor(repos, { locales: () => localePackMinimal })` |
-| `entitlementSource` | `'teacher_preview'` or `'eval'` from the flag — **never `'subscription'`, and never client input** |
-| `limits` | `createTurnLimits(clock)` (in-memory; see Decisions) |
-| `profiles`, `transcripts`, `sessionState`, `teacherQuestions` | `profileStoreFor`/`transcriptStoreFor`/`sessionStateStoreFor`/`teacherQuestionStoreFor(repos, scope)` |
-| `usage` | `usageMeterFor(repos, scope)` (also what `gatewayFor`'s `meterRouter` writes to) |
-| `traces` | `traceSinkFor(repos, scope)` |
-| `retrieval` | New: a no-op stand-in (`search` → `[]`, `probe` → `{ hit: false }`, `leakCheck` → `{ hit: false }`), documented as a placeholder until ingest/RAG (M6) ships — never throws, so `buildContext` degrades to the `ask_teacher` path instead of failing the turn |
-| `alerts` | New: one structured JSON line per `SafetyAlert` (ids, `level`, `kind`, `excerptRedacted` — the schema's own already-redacted field, nothing else) to stderr, mirroring `logCostAlarmSink`'s exact pattern and doc comment ("real delivery... waits for a vendor decision") |
-| `distressCheck` | New: a small English keyword check (see Open questions — this one has no existing implementation anywhere to copy) |
-| `fallbackReplies` | New: English-only `safeReply`/`distress`/`limitReached`/`lockedReply` text (English-only pilot) |
-| `promptPacks` | `readPromptPackLibrary('content/prompt-packs')` |
+## Files to create / modify
 
-### Terminal rendering
-Read lines from stdin (readline), send each as a `message` turn
-(`kind: 'message', lang: 'en', clientTs: isoAt(clock.now())`). Consume `run.events` and print:
-`token` → append to the current line; `sources`/`locked`/`teacher_question`/`skill` → one labelled
-line each (no student/model text beyond what the event already carries); `done` → newline, ready
-for the next input; `error` → print `code` (and `retryable`) only, per the frozen wire shape (no
-internal error text, matching how the pipeline already treats errors). Ctrl-C cancels the in-flight
-turn only (`opts.cancel`), not the process.
+### Phase A — composition root (no CLI surface yet)
+Create, all under `apps/cli/src/commands/chat/`:
+- `world.ts` — loads `content/demo-teacher` via `@edmate/content`'s `loadDemoTeacherContent`;
+  builds one `AgentConfig` (using `@edmate/gateway`'s `DEFAULT_MODEL_POLICY` for both tiers,
+  `promptPackVersion` from the fixture pack below), two `PackageConfig`s (free/paid, from
+  the content's package drafts), one `StyleCard`, the module list, and a locale pack
+  (reuse the real 3.10 default pack if trivially importable; else `@edmate/contracts/fixtures`'
+  minimal pack — record whichever is used as a decision). Assembles one `AccessWorld`
+  (`@edmate/harness/testing`'s shape) with a single open `MemorySession`, and exposes a
+  helper that builds the `Entitlement` request for `--source teacher_preview` (student id =
+  teacher id) or `--source eval` (`opts.eval`).
+- `retrieval.ts` — the in-process lexical `RetrievalIndex` described above, filtered by
+  `allowedModuleIds`; never logs candidate text.
+- `gateway.ts` — `createChatGateway(env)` → one real `ModelGateway` (Anthropic only, same
+  pattern as `judgeGateway.ts`); `gatewayFor(spec)` built from `turnPolicies`/`billingFor`
+  (`@edmate/harness`) plus `createRouter`/`meterRouter`/`shippedPrices` (`@edmate/gateway`),
+  returning `{ gateway, metered: true }`. Accepts an injected gateway for tests.
+- `deps.ts` — assembles the full `PipelineDeps`: a tiny real `Clock`/`IdSource` (new, a few
+  lines each, not test doubles — real `setTimeout`/`crypto.randomUUID`), `createTurnLimits`
+  (`@edmate/harness`, real), the memory ports listed above from `@edmate/harness/testing`,
+  `priceUsage` from `@edmate/gateway`'s `computeCostMicroUsd`/`shippedPrices`, short literal
+  English `fallbackReplies.safeReply`/`.distress`, and `promptPacks` (the fixture library
+  from `@edmate/harness/testing` unless a real 3.11 pack loader is trivially available —
+  record whichever is used as a decision).
 
-## Files to create
-- `apps/cli/src/commands/chat/index.ts` — command entry: arg parsing, env checks, REPL loop, exit codes
-- `apps/cli/src/commands/chat/index.test.ts`
-- `apps/cli/src/commands/chat/deps.ts` — composition root: builds `PipelineDeps` from `Repositories` + env
-- `apps/cli/src/commands/chat/deps.test.ts`
-- `apps/cli/src/commands/chat/gateway.ts` — real metered `ModelGateway` (mirrors `judgeGateway.ts`)
-- `apps/cli/src/commands/chat/gateway.test.ts`
-- `apps/cli/src/commands/chat/runtime.ts` — real `Clock` and `IdSource`
-- `apps/cli/src/commands/chat/runtime.test.ts`
-- `apps/cli/src/commands/chat/retrieval.ts` — no-op `RetrievalIndex` stand-in
-- `apps/cli/src/commands/chat/retrieval.test.ts`
-- `apps/cli/src/commands/chat/alerts.ts` — structured-log `AlertSink`
-- `apps/cli/src/commands/chat/alerts.test.ts`
-- `apps/cli/src/commands/chat/distress.ts` — `distressCheck` keyword check
-- `apps/cli/src/commands/chat/distress.test.ts`
-- `apps/cli/src/commands/chat/replies.ts` — `FallbackReplies` (English text)
-- `apps/cli/src/commands/chat/replies.test.ts`
-- `apps/cli/src/commands/chat/render.ts` — `TurnEvent` → terminal lines
-- `apps/cli/src/commands/chat/render.test.ts`
+Tests (same directory, `*.test.ts`): `world.test.ts`, `retrieval.test.ts`, `gateway.test.ts`
+(key-loading success/error paths only; asserts no key in thrown messages), `deps.test.ts`
+(assembles full deps, runs one `runTurn` through `defaultSteps` and the **scripted**
+gateway end to end — the acceptance's offline half, proven here before any CLI exists).
 
-## Files to modify
-- `apps/cli/src/cli.ts` — add the `chat` case to the dispatch switch and `USAGE`
-- `apps/cli/src/cli.test.ts` — cover the new case (help text, dispatch)
-- `apps/cli/package.json` — move `@edmate/harness` from `devDependencies` to `dependencies`; add
-  `@edmate/db` as a dependency (both are production imports now, not test-only)
+**Green commit (end of Phase A):** `corepack pnpm turbo run typecheck lint test --filter=@edmate/cli...`
+passes; `deps.test.ts` shows one full scripted turn (admit → commit) succeeding with a
+teacher_preview entitlement over real demo-teacher content. State for Phase B: `chat/deps.ts`
+exports a ready-to-use `PipelineDeps` factory; nothing renders to a terminal yet.
 
-## Files out of bounds (not touched by this task)
-- `packages/contracts/**`, `packages/harness/**`, `packages/db/**`, `packages/gateway/**`,
-  `packages/content/**` — every port and loader this task needs already exists; nothing here
-  changes (so no ADR, per the task constraints)
-- `apps/cli/src/commands/eval.ts`'s `unwiredAgent` — wiring the real agent into `edmate eval`
-  (replacing the stub) is a natural follow-up once `chat`'s composition root exists, but it is not
-  `edmate chat` and not in 3.9's accept line; left as is
-- `apps/worker/**`, `apps/web/**` — no web/API route or worker change; this is the harness's first
-  app-level consumer, standing alone
+### Phase B — the CLI command
+Create:
+- `apps/cli/src/commands/chat.ts` — `edmate chat [--agent <id>] [--package <id>]
+  [--source teacher_preview|eval] [--student <id>] [--help]` (defaults: the demo agent and
+  free package, `--source teacher_preview`, student = the demo teacher's own id, so a bare
+  `edmate chat` just works). Builds `PipelineDeps` via Phase A's `deps.ts` (real gateway by
+  default; injectable for tests), then a line-at-a-time REPL (`node:readline`): each line
+  becomes a `TurnInput` (fixed `sessionId`/`studentId`/`agentId` for the run), calls
+  `runTurn` from `@edmate/harness`, and renders the turn's events to stdout as they stream
+  (`token` text appended live, `sources`, `locked`, `teacher_question`, `skill`, `error`,
+  `done`). Help-state/session persist in the one in-memory `AccessWorld` built at startup, so
+  the help ladder and history work across turns in the same run. `Ctrl+D`/`exit` ends the
+  session cleanly.
 
-## Tests first (TDD order)
-1. `runtime.test.ts` — real `Clock.now()` advances with real time; `sleep` resolves after `ms` and
-   resolves early on cancel; `IdSource.next(kind)` returns distinct, contracts-valid ids
-   (`turn`/`message`/`alert`). No model or DB calls; this is plain unit testing of real timers —
-   consistent with "no real model or payment calls in tests" (this isn't either).
-2. `retrieval.test.ts` — `search` always `[]`, `probe` always `{ hit: false }`, `leakCheck` always
-   `{ hit: false }`, for any scope; never throws.
-3. `alerts.test.ts` — one JSON line per `raise(alert)`, containing only `id`, `level`, `kind`,
-   `studentId`, `teacherId`, `sessionId`, `excerptRedacted`, `createdAt` (fixture `SafetyAlert`s
-   from `@edmate/contracts/fixtures`); never the full object if extra fields were ever added.
-4. `distress.test.ts` — table-driven: known English distress phrases hit, ordinary teaching
-   questions and the existing PII/safety eval near-miss list do not (reuse `evals/suites/safety`
-   fixtures' negative cases, not real student text). Blocked on the open question below.
-5. `replies.test.ts` — each reply function returns non-empty English text; `distress` text
-   mentions reaching out to a trusted person (mirrors `LAST_RESORT_DISTRESS_REPLY`'s spirit; no
-   locale pack helplines, since `localePackMinimal.helplines` is `[]`).
-6. `gateway.test.ts` — builds against a fake `KeySource`/fake adapter factory (no network): a
-   missing `EDMATE_ANTHROPIC_API_KEY` throws `KeyConfigError` without the value anywhere in the
-   message; a configured key builds a working router; `settled()` resolves.
-7. `deps.test.ts` — the composition root, against an in-memory/fake `Repositories` double (same
-   shape as `packages/db`'s, built for this test) and the scripted gateway in place of `gateway.ts`:
-   - `teacher_preview` resolves `studentId` to the agent's owner teacher id automatically
-   - `eval` requires `--teacher`/`--package-version` and rejects a request for `'subscription'`
-   - every `PipelineDeps` field is present and typed; `entitlementSource` is never settable to
-     `'subscription'` from any flag combination (type-level and runtime)
-8. `index.test.ts` (command) — arg parsing and validation only (missing `--agent`/`--package`,
-   conflicting eval/teacher_preview flags, missing env vars) against injected `CliIo` and a fake
-   `deps` builder; no real DB, gateway or model. A full `runTurn` pass is exercised through
-   `deps.test.ts` + existing harness integration tests (`packages/harness/src/pipeline/*.test.ts`),
-   not duplicated here with a second scripted-gateway pipeline run.
-9. `render.test.ts` — each `TurnEvent` variant renders the expected line(s); `error` never prints
-   more than `code`/`retryable`.
-10. `cli.test.ts` update — `chat` appears in `USAGE`; unknown flags still error as today.
+Modify:
+- `apps/cli/src/cli.ts` — wire the `chat` command, extend `USAGE`.
+- `apps/cli/package.json` — move `@edmate/harness` from `devDependencies` to `dependencies`
+  (chat.ts is production code, not test-only).
 
-No test anywhere calls a real model or a real database; `deps.test.ts` and `index.test.ts` inject
-fakes. The manual, real-key run is the acceptance step a human performs directly (see above), not
-part of the automated suite.
+Tests:
+- `apps/cli/src/commands/chat.test.ts` — drives the REPL with scripted stdin lines and the
+  **scripted** gateway (via Phase A's injectable `deps.ts`), asserting terminal output for a
+  short multi-turn demo conversation (including at least one `sources` and one `locked` or
+  `ask_teacher` turn, to show the pipeline — not just echo — is driving the reply), `--help`,
+  a bad flag, and the missing-`ANTHROPIC_API_KEY` error path (asserts the message names the
+  missing variable and never echoes any environment value).
 
-## Decisions to log (spec didn't make these; stated with rationale, not reopened as questions)
-1. **No `@edmate/queue` (task 3.8/3.14) in the CLI's composition root.** `transcripts`,
-   `sessionState`, `profiles`, `usage`, `traces` use `packages/db`'s synchronous, scoped ports
-   directly, not the Redis/BullMQ-backed wrappers. 3.9 does not depend on 3.8 or 3.14; the CLI is
-   one local process, not scaled web traffic, so there is no second instance for the queue's
-   durability to protect against. A future shared composition root (the web API route) can swap in
-   the queue-backed ports later — same port shapes, no contracts change.
-2. **`retrieval` is a no-op stand-in** until ingest/RAG (M6) ships; not a dep of 3.9. Turns
-   degrade to the `ask_teacher` path for anything needing retrieved material, which is safe
-   (fails toward asking the teacher, never toward an ungrounded answer invented by this gap).
-3. **`alerts` logs a structured line, no real paging**, exactly like `logCostAlarmSink` (task 2.5)
-   already does for cost alarms, and for the same reason (4.3's own gap, not yet filled by a vendor
-   decision). Nothing routed here is unredacted model or student text (`excerptRedacted` only).
-4. **Locale pack is the `localePackMinimal` fixture** (not `demoLocalePack`, which is market `'IN'`
-   and would mismatch the demo teacher's `'global'` market), per `TurnConfigStoreOptions.locales`'s
-   own doc comment anticipating fixtures pre-3.10.
-5. **In-memory `TurnLimits`** (`createTurnLimits`), not a durable store — single process, no peers.
+**Green commit (end of Phase B):** `corepack pnpm turbo run typecheck lint test --filter=@edmate/cli...`
+and root `typecheck lint test` pass; `python3 .githooks/secret-scan.py --all` clean.
 
-## Risky paths touched (checked against `.claude/skills/merge-gate/risk-paths.txt`)
-None. Every file this task adds or changes is under `apps/cli/**`, which is not listed in
-`risk-paths.txt`, and no `packages/contracts`, `packages/harness/src/guardrails|pedagogy`,
-`packages/content/src/promptPacks.ts|personaTemplates.ts`, `packages/harness/src/access`,
-`packages/payments`, auth/webhook routes, `packages/db/src/identity`, `packages/gateway/src/keys`,
-`packages/db/src/repositories`, `docs/adr`, or `.claude|.github|.githooks` paths are touched.
-No `risk: high` decision is required by the risk-paths check.
+### Manual step (human only, after Phase B merges)
+With a real `ANTHROPIC_API_KEY` exported in the shell (never in a file the repo tracks):
+`corepack pnpm --filter=@edmate/cli exec node bin/edmate chat`
+Have a short real conversation about the demo Python course (content/demo-teacher), confirm
+a locked or ask_teacher turn behaves sensibly on the free package, exit, then re-run
+`python3 .githooks/secret-scan.py --all` to confirm nothing leaked. The human (or the lead)
+adds this transcript summary and scan result to the task handoff; it is the acceptance
+evidence the builder cannot produce itself.
 
-That said, this is the harness's first production wiring of a real model key, a real database and
-real student/teacher-shaped ids (even if only the demo teacher's), and it is the one place
-`distressCheck` and `AlertSink` get a real (if provisional) implementation. I'd flag the PR for a
-`security-reviewer` pass on key/credential handling (never logged/echoed/written) even though
-the path check doesn't force it, and recommend whoever reviews task 4.3 (distress, in `review` now)
-also glance at `distress.ts` once that lands for consistency. This is a recommendation, not a path
-match, so it doesn't change the merge gate's requirement.
+## Files out of bounds
+`packages/harness/**` (5.4 is live there), `packages/db/**`, `packages/contracts/**`,
+`content/demo-teacher/**` (read-only), `apps/cli/src/commands/eval.ts`,
+`apps/cli/src/commands/judgeGateway.ts` (read as reference only).
 
-## Open questions
-1. **`distressCheck`'s keyword list has no existing implementation anywhere in the repo to reuse**
-   (unlike `alerts.ts`, which mirrors `logCostAlarmSink` closely, or `retrieval.ts`/locale, which
-   both have doc comments anticipating exactly this stand-in). `route.onFailure`'s own distress
-   fallback and 4.3's `distressDetect` guard are separate, model-based classifiers; `deps
-   .distressCheck` is the harness's last-resort, code-only check when even the router's own
-   fallback logic throws. Recommendation: a short, explicit, hand-reviewed English keyword list
-   (same spirit as the existing seeded safety/distress eval cases under `evals/suites/safety/`,
-   which 3.9 can read for consistency but must not copy verbatim fixture text that is meant to stay
-   test-only) — ship a first version in `distress.ts`, reviewed by whoever reviews 4.3 (already
-   `safety-reviewer`'s area), and treat it as provisional/improvable, same as every other stand-in
-   in this plan. Not a blocker: a false negative here only matters on the narrow path where the
-   router's main failure path itself throws, which is already a rare, logged, "runner" background
-   failure.
-2. **Sequencing, not a blocker:** 3.9's declared deps are `1.5, 1.8, 2.6, 3.7, M0, 4.5`, but
-   `defaultSteps.preGuard` is still a stub until 4.3 and 4.4 land (both currently `status: review`
-   on the board, not `done`). If 3.9 is built before they merge, every turn fails closed at
-   `preGuard` (`guard_blocked`) before reaching `generate` — the CLI still "runs in a terminal"
-   safely, but produces no teaching reply, which likely fails the spirit of the acceptance line
-   even though it technically starts a session. Recommendation: the team lead sequence 3.9's build
-   to start after 4.3 and 4.4 merge (no code or plan change needed here either way — `defaultSteps`
-   is used by reference, so this is purely a scheduling call, not something this plan can decide).
+## Tests first
+tdd-guide writes `deps.test.ts`'s "one scripted turn end to end" and `chat.test.ts`'s
+scripted REPL conversation before the corresponding source files, per the project's
+TDD workflow; both are the acceptance's offline evidence.
+
+## Risky paths touched
+None. Checked against `.claude/skills/merge-gate/risk-paths.txt`: every planned path is
+under `apps/cli/**`, which matches no glob in that file (not `packages/harness/src/access|guardrails|pedagogy/**`,
+not `packages/contracts/**`, not `.claude|.github|.githooks/**`). No ADR needed (no
+contracts change). No `risk: high` decision required for the PR itself; the human's manual
+real-key step is recorded as a normal decision/evidence entry, not a risk flag.
+
+## Open questions (recommendations)
+1. **Flag defaults and `--source` naming** — not in the build plan or PRD. Recommendation:
+   proceed with the defaults above (bare `edmate chat` previews the demo teacher's free
+   package); reversible, no spec conflict, so not a blocker.
+2. **Which locale pack and prompt-pack set to use** (real 3.10/3.11 artifacts vs. test
+   fixtures) — depends on how easily those are loadable outside a DB-backed composition
+   root. Recommendation: try the real ones first; fall back to fixtures and record it as a
+   decision in the handoff. Not a blocker either way.
+3. **Lexical-only retrieval now, real 5.3 index later** — recommendation above; flagged as a
+   explicit deviation, not a blocker, since `buildContext`'s own failure policy makes this
+   safe.
 
 ## Status
-**READY** (both points above are a build-time content decision and a scheduling note, not an
-unclear spec or an unresolved spec conflict; neither blocks writing the plan or starting
-TDD on the parts with no dependency on them, e.g. `runtime.ts`, `retrieval.ts`, `alerts.ts`,
-`replies.ts`, `gateway.ts`).
+READY.
 
-## Manual acceptance (the human performs this; never in CI)
-```
-# one-time: migrate + seed a local Postgres (docker/env.example), then:
-corepack pnpm --filter @edmate/cli build
-EDMATE_ANTHROPIC_API_KEY=<key> DATABASE_URL=<postgres-url> \
-  node apps/cli/bin/edmate chat --agent demo-agent --package demo-package-paid
-```
-`EDMATE_ANTHROPIC_API_KEY` is the only env var naming the key; it is read once from `process.env`,
-never logged, echoed, or written to disk by any file this task adds (checked by the secret scan,
-and by `alerts.ts`/error paths only ever carrying `redact()`-passed or schema-redacted text).
-
-## Lead revisions (19 Oct 2026)
-1. **`distressCheck` is not a CLI-local keyword list.** Task 4.3 adds `hasDistressKeyword` in
-   `packages/harness/src/guardrails/distressKeywords.ts`, written as the implementation behind
-   `PipelineDeps.distressCheck`. The CLI wires that function (through the harness's public exports);
-   drop `apps/cli/src/commands/chat/distress.ts` and its test. One distress list, reviewed once.
-2. **Retrieval is the demo course, not a no-op.** A no-op index sends every turn to ask_teacher, so
-   "a full session with the demo teacher" would never teach. Load `content/demo-teacher/course.yaml`
-   into an in-memory `RetrievalIndex` (reuse `@edmate/harness/testing`'s memory retrieval if it takes
-   chunks; otherwise a small CLI adapter with the same scope rules). `leakCheck` must be the real
-   matcher over locked/unpackaged modules, never a stub `{ hit: false }`, so lockedLeak works in the
-   CLI. Label it preview-only until 5.3's pgvector adapter lands.
-3. **Sequencing:** 3.9 now depends on 4.3 and 4.4 (the real pre-guards and the distress list). Build
-   starts when both merge; the human's real-key acceptance run waits for that too.
-4. Run security-reviewer on the PR (key handling: never logged, echoed or written) in addition to
-   code-reviewer and typescript-reviewer.
+## Lead answers (20 Oct 2026)
+- **Q1, flags:** accepted. Pick reversible defaults and log them as decisions.
+- **Q2, packs:** use the real locale pack and prompt-pack set first. Fall back to the test fixtures only if loading them fails, and record which you used.
+- **Q3, retrieval:** accepted, with one rule. The CLI's in-process lexical index implements the harness's existing retrieval port and contains no access logic of its own. Filtering stays in the harness (`buildContext`, and 5.4's scoped search once it merges), so there is never a second, unfiltered search path. A follow-up task switches the CLI to the packages/db index.
