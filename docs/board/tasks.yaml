@@ -1278,9 +1278,9 @@ tasks:
   deps:
   - '5.6'
   risky: true
-  status: planning
-  branch: null
-  model: plan:opus
+  status: running
+  branch: m5/5.6c-practice-followups
+  model: plan:opus build:opus/sonnet
 - id: '5.7'
   milestone: M5
   title: 'Feedback skill: rubric feedback on answers, essays and code (no execution)'

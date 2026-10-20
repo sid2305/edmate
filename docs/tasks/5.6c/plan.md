@@ -263,3 +263,9 @@ Yes. The pack files do not change, but what the composer puts in the model's pro
 - **Q6, the demo teacher id.** Recommend `'tch_test_01'` (the contracts fixture teacher).
 - **Q7, an unreadable help state after the allow-list.** Recommend accepting the change: the real context with `retrieved: []` and a held reply, tested. Alternative: keep the fallback by branching on `helpStateUnreadable` explicitly, which is more code for the same safety.
 - **Q8, ingest shape rule on raw lines.** Recommend raw lines for markdown and text, which closes the prose false refusal and keeps the YAML structure. If `indexDocument` cannot pass raw text without a wider change, keep parsed units and leave the false refusal as a LOW.
+
+## Lead answers (20 Oct 2026)
+5.6a merged as PR #75. The builder checks names against main before writing code.
+- Q1–Q8: all accepted as recommended. Q3's three out-of-scope items go into ADR-0011 as stated. For Q8, use raw lines only if indexDocument can pass the raw text without a wider change; otherwise leave the prose false refusal as a LOW.
+- Order: Phase A (harness, opus) and Phase C (ingest, sonnet, once a Sonnet slot frees) run in parallel on the same branch, each running `git pull --rebase` before pushing. Phase B starts after A merges into the branch and the architect's ADR-0011 text is in docs/tasks/5.6c/adr-0011-draft.md.
+- Reviewers: code-reviewer, typescript-reviewer (opus), security-reviewer, architect (for docs/adr/**). Every phase writes its own section in handoff.md under a single `## Decisions` heading.
