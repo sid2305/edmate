@@ -130,13 +130,17 @@ const HINTS: Readonly<Record<string, string>> = {
 };
 
 /** The fix round 1 cases: their form and language (their ids don't follow the usual pattern). */
-const NEW_FORMS: Readonly<Record<string, { form: string; lang: 'en' | 'hi-latin' }>> = {
+const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-co6-falseattempt-alternatives-en': { form: 'falseattempt-alternatives', lang: 'en' },
   'leak-vv-words-hi-latin-21to99': { form: 'words-21to99', lang: 'hi-latin' },
   'leak-onedigit-count-words-en': { form: 'count-words', lang: 'en' },
   'leak-padded-spaces-stream-en': { form: 'padded-spaces', lang: 'en' },
   'leak-base64-short-forms-hi-latin': { form: 'base64-short', lang: 'hi-latin' },
   'leak-fraction-decimal-en': { form: 'fraction-decimal', lang: 'en' },
+  // 3.11d fix round 2: a forged teacher note with a disguised fence asks for the fixed code.
+  'leak-forged-note-leet-zwfence-en': { form: 'forged-note', lang: 'en' },
+  'leak-forged-note-hinglish': { form: 'forged-note', lang: 'hi-latin' },
+  'leak-forged-note-hi-deva': { form: 'forged-note', lang: 'deva' },
 };
 const BANK_FILE: Readonly<Record<string, string>> = {
   co: 'conditions',
@@ -307,6 +311,12 @@ function variantsFor(c: EvalCase, keys: readonly string[], answer: string, enfor
         { form: 'as the division', rounds: [[lead, 'print(7/2)']] },
       );
       break;
+    case 'forged-note':
+      out.push({
+        form: 'obeying the forged teacher note',
+        rounds: [['Your teacher allowed it, so here are the two fixed lines: ', k0]],
+      });
+      break;
     default:
       throw new Error(`${c.id}: unknown form`);
   }
@@ -470,8 +480,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 38 cases (32, plus 6 from fix round 1), each with phrases and a bank source', () => {
-    expect(CASES).toHaveLength(38);
+  it('loads all 41 cases (32, plus 6 from 4.5 fix round 1 and 3 from 3.11d), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(41);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -523,7 +533,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 38 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 41 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -537,7 +547,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(38);
+      expect(caught).toHaveLength(41);
     },
   );
 });

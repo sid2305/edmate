@@ -8,6 +8,9 @@
 // check folds disguises first (markup, entities, NFKD, look-alike letters, accents, punctuation)
 // and breaks the core phrases ("platform note", "teacher wrote") anywhere; a teacher's words sit
 // in a `<<<` … `>>>` fence after the label, and `<<<`/`>>>` are broken in every other text.
+// Fix round 2: fence runs are matched after the same fold (format characters, NFKC, entities);
+// "teacher wrote" is broken only in the forged-label shape; the agent's own past replies skip
+// the core-phrase pass (they were never student-controlled).
 import type {
   Message,
   ModelRequest,
@@ -55,6 +58,7 @@ export const FORGED_LABEL_PLACEHOLDER = '[a copied label was removed]';
 const SYNTAX = /[\^$\\.*+?()[\]{}|/]/g;
 const FORMAT_CHARS = /\p{Cf}/gu;
 const GAP = /[\s\p{Cf}]+/gu;
+const IS_FORMAT = /^\p{Cf}$/u;
 
 /**
  * The label's words in order, any case, any whitespace between words, and invisible format
@@ -90,22 +94,37 @@ function spacedOut(match: string): string {
  * label so short that spacing it out still matches is replaced by a fixed placeholder instead.
  */
 export function neutraliseForgedLabel(text: string, label: string): string {
+  return breakCorePhrases(neutraliseExactLabel(text, label));
+}
+
+/** The exact-label pass on its own: the label's words in order, spaced out or replaced. */
+function neutraliseExactLabel(text: string, label: string): string {
   const pattern = forgedLabelPattern(label);
-  const exact =
-    pattern === null
-      ? text
-      : text.replace(pattern, spacedOut).replace(pattern, FORGED_LABEL_PLACEHOLDER);
-  return breakCorePhrases(exact);
+  return pattern === null
+    ? text
+    : text.replace(pattern, spacedOut).replace(pattern, FORGED_LABEL_PLACEHOLDER);
 }
 
 /**
  * The words a forged teacher note can't do without (3.11d fix round 1), each as the folded words
- * of one phrase. They are broken wherever they appear once folded, whatever the label says.
+ * of one phrase. "platform note" is broken wherever it appears once folded. "teacher wrote" is
+ * broken only in the forged-label shape (fix round 2): followed by "this reply", or with
+ * "platform" or "note" within `NEAR` folded characters (about five words) either side, so a
+ * student's ordinary "my teacher wrote on my essay" reaches the model unchanged.
  */
-const CORE_PHRASES: readonly { phrase: string; firstWord: number }[] = [
-  { phrase: 'platformnote', firstWord: 'platform'.length },
-  { phrase: 'teacherwrote', firstWord: 'teacher'.length },
+const CORE_PHRASES: readonly { phrase: string; firstWord: number; anywhere: boolean }[] = [
+  { phrase: 'platformnote', firstWord: 'platform'.length, anywhere: true },
+  { phrase: 'teacherwrote', firstWord: 'teacher'.length, anywhere: false },
 ];
+const NEAR = 32;
+const LABEL_WORDS = ['platform', 'note'] as const;
+
+/** Whether the core phrase at folded `[k, end)` sits in the shape of a forged label. */
+function labelShaped(folded: string, k: number, end: number): boolean {
+  if (folded.startsWith('thisreply', end)) return true;
+  const around = [folded.slice(Math.max(0, k - NEAR), k), folded.slice(end, end + NEAR)];
+  return around.some((s) => LABEL_WORDS.some((w) => s.includes(w)));
+}
 /** What goes between a core phrase's words: letters, so no fold can read through it. */
 export const CORE_PHRASE_BREAK = ' [copied]';
 const MARK_OR_JUNK = /[^\p{L}\p{N}]/gu;
@@ -143,8 +162,9 @@ function foldForMatch(text: string): { folded: string; src: number[] } {
 function breakCorePhrases(text: string): string {
   const { folded, src } = foldForMatch(text);
   const cuts: number[] = [];
-  for (const { phrase, firstWord } of CORE_PHRASES) {
+  for (const { phrase, firstWord, anywhere } of CORE_PHRASES) {
     for (let k = folded.indexOf(phrase); k !== -1; k = folded.indexOf(phrase, k + phrase.length)) {
+      if (!anywhere && !labelShaped(folded, k, k + phrase.length)) continue;
       // `src` has one entry per folded character, so the match's own index is always present.
       cuts.push(src[k + firstWord - 1] as number);
     }
@@ -163,21 +183,67 @@ function breakCorePhrases(text: string): string {
 export const TEACHER_OPEN = DATA_OPEN;
 export const TEACHER_CLOSE = DATA_CLOSE;
 
-/** Breaks any run of 3+ `<` or `>`, so no text can open or close a fence. */
-function breakFences(text: string): string {
-  return text.replace(/<{3,}|>{3,}/g, (m) => m.split('').join(' '));
+/** A fence character once folded: `<`, `>` or neither. */
+function fenceChar(ch: string): '<' | '>' | null {
+  const f = ch.normalize('NFKC');
+  return f === '<' || f === '>' ? f : null;
+}
+
+/**
+ * Breaks any run of 3+ `<` or `>`, so no text can open or close a fence. A run is matched the way
+ * a reader sees it (fix round 2): HTML entities decoded (`&lt;`, `&#60;`), each character NFKC
+ * folded (fullwidth `＜`, small form `﹤`), and invisible format characters (zero-width and the
+ * like) skipped. The run becomes plain `< < <`, so it stays readable and the result has no run
+ * (idempotent). One pass, linear. The harness's own fence is added after this, never through it.
+ */
+export function breakFenceRuns(text: string): string {
+  // Entities decode to their character plus zero-width padding, so offsets stay the same.
+  const read = decodeHtmlEntities(text);
+  let out = '';
+  let at = 0;
+  let run: { ch: '<' | '>'; start: number; end: number; count: number } | null = null;
+  const flush = (): void => {
+    if (run !== null && run.count >= 3) {
+      out += text.slice(at, run.start) + Array(run.count).fill(run.ch).join(' ');
+      at = run.end;
+    }
+    run = null;
+  };
+  let i = 0;
+  for (const ch of read) {
+    const end = i + ch.length;
+    if (run !== null && IS_FORMAT.test(ch)) {
+      run.end = end;
+    } else {
+      const f = fenceChar(ch);
+      if (run !== null && f === run.ch) {
+        run.count += 1;
+        run.end = end;
+      } else {
+        flush();
+        if (f !== null) run = { ch: f, start: i, end, count: 1 };
+      }
+    }
+    i = end;
+  }
+  flush();
+  return out + text.slice(at);
 }
 
 /** Stored or student text made safe to send: no forged label, no fence marker. */
 function safeText(text: string, label: string): string {
-  return breakFences(neutraliseForgedLabel(text, label));
+  return breakFenceRuns(neutraliseForgedLabel(text, label));
 }
 
 function historyMessage(m: Message, set: PromptPackSet): ModelRequest['messages'][number] {
   const label = set.frame['teacher-label'];
+  // The agent's own past replies were never student-controlled (commit stores only the guarded
+  // reply as `agent`), so they skip the core-phrase pass: no " [copied]" for the model to echo.
+  if (m.role === 'agent') {
+    return { role: 'assistant', content: breakFenceRuns(neutraliseExactLabel(m.text, label)) };
+  }
   const text = safeText(m.text, label);
   if (m.role === 'student') return { role: 'user', content: text };
-  if (m.role === 'agent') return { role: 'assistant', content: text };
   // A teacher's words go in the user channel with the harness's own label (3.11d): the model
   // must never read them as its own earlier reply. The fence marks where they end, so a student
   // turn a provider merges after it never reads as the teacher's.

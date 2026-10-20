@@ -1,4 +1,4 @@
-# 3.11d review — CHANGES (fix round 1 pending)
+# 3.11d review — fix round 2 done (round-1 re-reviews: safety-reviewer and architect APPROVE with notes)
 Reviewers: safety-reviewer (opus), architect (opus), typescript-reviewer (opus), security-reviewer (sonnet)
 
 Teacher turns move to the user channel under a platform label, forged labels in student and stored text are neutralised, the persona question count is server-owned (`personaQuestionsAsked`), and the learner summary is gated on teaching modes. ADR-0009 records the decisions. TypeScript and security approve; architect approves with doc fixes; safety requests changes (full text: safety-review.md).
@@ -22,3 +22,10 @@ Teacher turns move to the user channel under a platform label, forged labels in 
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/compose.test.ts:166 — the "claim in conversation changes nothing" test is tautological (composer never reads ctx.history).
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/compose.test.ts:183 — the test pins "question 0 of 5", an unreachable state.
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts historyMessage — teacher turns in the user channel can give consecutive user messages; note the adapter requirement in ADR-0009 or the gateway task.
+
+### Round-1 re-reviews (safety-reviewer, architect) — APPROVE with notes; fixed in fix round 2
+- [MEDIUM] [fixed] packages/harness/src/pedagogy/modelRequest.ts:167-169 — the fence check matched literal `<`/`>` only, so `<<\u200B<`, `＜＜＜`, `﹤﹤﹤` and `&lt;&lt;&lt;` passed (safety). Fix: `breakFenceRuns` decodes entities, NFKC-folds each character and skips format characters before matching; a run becomes `< < <`; linear and idempotent.
+- [MEDIUM] [fixed] packages/harness/src/pedagogy/modelRequest.ts:105-110,178 — the core-phrase pass put " [copied]" into assistant history and ordinary student text, which the model could echo (safety). Fix: agent history skips the core-phrase pass (commit stores only the guarded reply as `agent`); "teacher wrote" breaks only before "this reply" or with "platform"/"note" within 32 folded characters. Every round-1 probe still breaks.
+- [LOW] [fixed] docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md:27 — decisions numbered 1, 2, 5, 3, 4; decision 5 now follows 4 (architect).
+- [LOW] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts foldForMatch — digit swaps (`Pl4tform`), small caps and a Devanagari label are not folded (safety).
+- [LOW] [deferred 3.11e] gateway adapters — no boundary test that consecutive user messages keep the teacher fence intact when merged (architect).

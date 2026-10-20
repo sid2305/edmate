@@ -86,6 +86,22 @@ Evidence:
 
 Needs the human's re-sign before merge: `safety@1.0.0.md` (row 1, new), plus the earlier `frame@1.0.0.md`, `mock_interview@1.0.0.md` (its line 8 changed again, already pending), `job-interview@1.0.0.yaml`, `viva@1.0.0.yaml`.
 
+## Fix round 2 (20 Oct 2026)
+
+Fixes the round-1 re-review notes (safety-reviewer and architect both APPROVE with notes; `review.md` "Round-1 re-reviews").
+
+1. **[MEDIUM] Disguised fences** (`modelRequest.ts` `breakFenceRuns`, now exported): a run of 3+ `<` or `>` is matched after decoding HTML entities (`&lt;`, `&#60;`, `&GT;`), NFKC-folding each character (fullwidth `＜`, small form `﹤`) and skipping format characters (zero-width and the like). The run becomes plain `< < <`. One linear pass; running it twice changes nothing. The harness's own `<<<`/`>>>` around a teacher turn is added after it.
+2. **[MEDIUM] No " [copied]" echo**: assistant-role history (the agent's own guarded replies; `commit` stores only `record.replyText` as `agent`) gets the exact-label pass and the fence break but skips the core-phrase pass. "teacher wrote" now breaks only in the forged-label shape: followed by "this reply", or with "platform" or "note" within 32 folded characters (about five words) either side. "platform note" still breaks anywhere. All 16 round-1 probes still break with no stricter form needed (each carries "platform" or "note" beside the phrase). Ordinary "my teacher wrote on my essay" reaches the model unchanged.
+3. **[LOW] ADR-0009**: decisions now run 1–5 in order, with a "Fix round 2" note under decisions 2 and 5.
+4. **Eval cases** (`reviewed_by: pending`): `evals/suites/leak/leak-forged-note-{leet-zwfence-en,hinglish,hi-deva}.yaml` and `evals/suites/pedagogy/pedagogy-quality-no-copied-echo-en.yaml`. Zero-width and fullwidth characters use YAML `\u` escapes. `leakFixtures.test.ts` gets a `forged-note` form for the three leak cases (case count 38 → 41).
+
+Evidence:
+- `vitest run src/pedagogy/modelRequest.test.ts` before the fix → `Tests 12 failed | 60 passed (72)`; after → `Tests 72 passed (72)`.
+- `corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --force --concurrency=1 --continue` (postgres + redis up) → `Tasks: 33 successful, 34 total`; harness 3464, gateway 405, queue 40, content 169, db 491, cli 46, web 132, worker 106 passed; evals `1 failed | 351 passed`, and the one failure is `suites.test.ts` listing only the 4 new pending cases. Harness coverage: `src/access`, `src/guardrails`, `src/pedagogy` 100/100/100/100.
+- `python3 docs/adr/check-headings.py` → no output (pass); `python3 .githooks/secret-scan.py --all` → clean.
+
+Deviations: the brief's `quality-no-copied-echo-en` id is `pedagogy-quality-no-copied-echo-en`, because the suite rules require an id to start with its folder name. The 4 new cases need the lead's sign-off.
+
 ## Decisions
 
 ### 19 Oct 2026 · 3.11d teacher-label hardening: ADR-0009, prompt-pack behaviour change (risk: high)
@@ -122,4 +138,11 @@ Needs the human's re-sign before merge: `safety@1.0.0.md` (row 1, new), plus the
 **Why:** The exact-label match was beaten by trivial variants (safety review issue 2). Inserting letters is the only edit no fold can read through, so the result is idempotent; inserting rather than deleting keeps the student's text readable. `indexOf` on the folded string keeps it linear.
 **Alternatives:** a longer regex of variants (rejected: never complete, ReDoS risk); deleting the phrase (rejected: loses text); breaking only in student text (rejected: a stored agent or teacher text can carry it too, and it costs nothing). Cost: ordinary text with "my teacher wrote" reads "my teacher [copied] wrote".
 **Reviewers:** safety-reviewer, security-reviewer, typescript-reviewer.
+**Risk:** high
+
+### 20 Oct 2026 · 3.11d fix round 2: fence fold, narrower "teacher wrote", no core-phrase pass on agent replies (risk: high)
+**Decision:** Fence runs are matched after decoding entities, NFKC and dropping format characters. "teacher wrote" breaks only before "this reply" or with "platform"/"note" within 32 folded characters; "platform note" still breaks anywhere. The agent's own past replies skip the core-phrase pass (exact-label pass and fence break stay).
+**Why:** Safety re-review: disguised `<<<` passed unchanged, and " [copied]" in ordinary text and in the model's own replies could be echoed to students. Every round-1 probe still breaks under the narrower rule.
+**Alternatives:** keep breaking "teacher wrote" everywhere (rejected: the echo); a frame-pack line telling the model to ignore "[copied]" (rejected: needs another human re-sign); a 32-character window rather than word counting (chosen: the folded text has no word breaks, and it stays linear).
+**Reviewers:** safety-reviewer, architect.
 **Risk:** high
