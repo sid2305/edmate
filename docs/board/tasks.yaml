@@ -629,6 +629,17 @@ tasks:
   status: review
   branch: null
   model: null
+- id: 3.11e
+  milestone: M3
+  title: 'Teacher-label follow-ups (3.11d reviews): the persona count rises on /pause, stop and post-debrief turns, never resets on a new role-play or persona, and is saved when the turn errors, is cancelled
+    or gets the safe reply (reset on role-play start; render "question N of M" or "all asked: debrief now"); compose.test.ts tautological history test and the unreachable "question 0 of 5" pin; closed modes
+    still send the whole session history; MessageSchema.text and ChunkSchema.text have no max length; eval schema fields for teacher turns, skills and personas, then the parked forged-note cases'
+  accept: each item has a unit test; a restarted role-play opens at question 1; an errored persona turn leaves the count unchanged; the forged-note eval cases are written as reviewed_by pending.
+  deps:
+  - 3.11d
+  status: todo
+  branch: null
+  model: null
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
