@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.2 video ingestion · decided by tdd-guide
+Decided: Keep the 90-second time-window size for one video "unit" (bucket), per the plan's lead answer; no change needed, reversible later as one constant.
+Why: No spec value was given; 90s mirrors the "one unit ≈ one page" precedent at ordinary speech density and the lead confirmed it in the plan ("Lead answers", Q2).
+risk: low
+
+---
+
+### 20 Oct 2026 · 5.2 video ingestion · decided by tdd-guide
+Decided: Production Whisper timeout tuning for the 15-minute SLA is deferred to the task that wires the production transcriber for video (8.2 or later), not blocking 5.2.
+Why: 5.2 is a pure library task with an injected `Transcriber`; there is no real timeout to configure here. Flagged in the plan's open questions and already answered by the lead (not a 5.2 blocker).
+risk: low
+
+---
+
 ### 20 Oct 2026 · 1.7 learnerClear gates every subscription resolve · decided by tdd-guide · risk: high
 Decided: `learnerClear` is a **required** option on `EntitlementStoreOptions`; every composition
 root must say how it blocks a learner held at the age gate, and it is asked fresh on every

@@ -1203,9 +1203,9 @@ tasks:
   deps:
   - '2.7'
   - '5.1'
-  status: running
+  status: done
   branch: m5/5.2-video-ingest
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet/sonnet
 - id: '5.3'
   milestone: M5
   title: Chunking, embeddings, full-text fallback, hybrid ranking with teacher notes first; chunks tagged teacher → course → module
@@ -2091,7 +2091,8 @@ tasks:
   model: null
 - id: 5.2a
   milestone: M13
-  title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production timeouts'
+  title: 'Video ingestion follow-ups (5.2 review LOWs): type `let transcript` as Transcript; `transcriber` dep as Pick<Transcriber, ''transcribe''>; a real-transcriber timing check once 8.2 wires production
+    timeouts'
   accept: the listed changes are in and the ingest tests pass
   deps:
   - '5.2'
