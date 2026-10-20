@@ -1961,8 +1961,8 @@ tasks:
   model: plan:lead build:haiku review:sonnet
 - id: 0.13a
   milestone: M13
-  title: 'Agent-efficiency follow-up (0.13 review LOW): test that docs_only.py treats a non-.md file under docs/ (e.g. docs/system-design.html) as not docs-only, or decide it is'
-  accept: docs_only.py has a test for a non-.md file under docs/ and the behaviour is stated in its docstring; the python harness tests pass
+  title: 'Agent-system follow-ups (0.13 and 0.11 review LOWs): test that docs_only.py treats a non-.md file under docs/ (e.g. docs/system-design.html) as not docs-only, or decide it is; safety-reviewer.md:13 says the lead turns its findings into safety-review.md, which gates the merge'
+  accept: docs_only.py has a test for a non-.md file under docs/ and the behaviour is stated in its docstring; safety-reviewer.md line 13 reworded; the python harness tests pass
   deps:
   - '0.13'
   status: todo
