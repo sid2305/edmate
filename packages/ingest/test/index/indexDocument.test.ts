@@ -1,4 +1,4 @@
-import type { ModelGateway } from '@edmate/contracts';
+import type { ModelGateway, TranscribeInput, Transcriber, Transcript } from '@edmate/contracts';
 import { manualClock, ScriptedGateway, type GatewayScript } from '@edmate/harness/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IngestError } from '../../src/errors.js';
@@ -63,6 +63,34 @@ function countingEmbedder(inner: Pick<ModelGateway, 'embed'>) {
     embed(texts: string[]) {
       calls.push(texts.length);
       return inner.embed(texts);
+    },
+  };
+}
+
+const recording: TranscribeInput = {
+  url: 'https://storage.edmate.invalid/recordings/live-class.mp3?X-Amz-Signature=fake0sig',
+  mimeType: 'audio/mpeg',
+};
+
+function transcript(
+  segments: readonly { startMs: number; endMs: number; text: string }[],
+  durationMs: number,
+): Transcript {
+  return {
+    text: segments.map((s) => s.text).join(' '),
+    language: 'en',
+    durationMs,
+    segments: [...segments],
+  };
+}
+
+function fakeTranscriber(result: Transcript | Error): Transcriber & { calls: TranscribeInput[] } {
+  const calls: TranscribeInput[] = [];
+  return {
+    calls,
+    transcribe(i: TranscribeInput) {
+      calls.push(i);
+      return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
     },
   };
 }
@@ -241,6 +269,76 @@ describe('indexDocument', () => {
       );
       expect(result).toEqual({ chunks: 100, embedded: false, embeddedChunks: 96 });
       expect(writer.embeddings.map((b) => b.length)).toEqual([96]);
+    });
+  });
+
+  describe('a video source', () => {
+    it('transcribes, chunks, stores and embeds like a parsed source', async () => {
+      const t = transcript(
+        [
+          { startMs: 0, endMs: 1_000, text: 'Hello class.' },
+          { startMs: 95_000, endMs: 96_000, text: 'Second window now.' },
+        ],
+        100_000,
+      );
+      const transcriber = fakeTranscriber(t);
+      const writer = recordingWriter();
+      const result = await indexDocument(
+        { writer, embedder: hashedEmbedder(), transcriber },
+        {
+          scope,
+          documentId: 'vid-1',
+          source: { kind: 'video', sourceTitle: 'Live class', recording },
+        },
+      );
+      expect(transcriber.calls).toEqual([recording]);
+      expect(result).toEqual({ chunks: 2, embedded: true, embeddedChunks: 2 });
+      expect(writer.inserts).toEqual([
+        {
+          scope,
+          documentId: 'vid-1',
+          drafts: [
+            { ord: 0, text: 'Hello class.', locator: '0:00' },
+            { ord: 1, text: 'Second window now.', locator: '1:30' },
+          ],
+        },
+      ]);
+    });
+
+    it('no transcriber configured is a clear validation error, nothing written', async () => {
+      const writer = recordingWriter();
+      const err = await indexDocument(
+        { writer },
+        {
+          scope,
+          documentId: 'vid-2',
+          source: { kind: 'video', sourceTitle: 'Live class', recording },
+        },
+      ).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(IngestError);
+      expect((err as IngestError).code).toBe('validation');
+      expect(writer.inserts).toEqual([]);
+    });
+
+    it('a transcriber rejection becomes a fixed, non-leaking IngestError', async () => {
+      const transcriber = fakeTranscriber(new Error(`provider said: ${LOCKED_TEXT}`));
+      const writer = recordingWriter();
+      const err = await indexDocument(
+        { writer, transcriber },
+        {
+          scope,
+          documentId: 'vid-3',
+          source: { kind: 'video', sourceTitle: 'Live class', recording },
+        },
+      ).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(IngestError);
+      const e = err as IngestError;
+      expect(e.code).toBe('provider_error');
+      expect(e.retryable).toBe(true);
+      expect(e.cause).toBeUndefined();
+      expect(e.stack).not.toContain(LOCKED_TEXT);
+      expect(JSON.stringify(e)).not.toContain(LOCKED_TEXT);
+      expect(writer.inserts).toEqual([]);
     });
   });
 

@@ -17,6 +17,7 @@ export {
   type IndexDocumentInput,
   type IndexDocumentResult,
   type ParsedSource,
+  type VideoSource,
 } from './index/indexDocument.js';
 export type { ChunkDraft, ChunkWriter, ChunkWriterScope } from './index/types.js';
 export { IngestError, type IngestErrorCode } from './errors.js';
@@ -34,5 +35,6 @@ export { parseMarkdown } from './parse/markdown.js';
 export { parseDocx } from './parse/docx.js';
 export { parsePdf } from './parse/pdf.js';
 export { parsePptx } from './parse/pptx.js';
+export { formatTimestamp, parseVideoTranscript, VIDEO_UNIT_WINDOW_MS } from './parse/video.js';
 export { MAX_UNZIPPED_BYTES } from './parse/zip.js';
 export { MAX_DOCUMENT_BYTES, type ParsedDocument, type ParsedUnit } from './types.js';
