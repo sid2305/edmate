@@ -10,6 +10,12 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 0.11 Agent files follow the lead-approved merge policy, MVP-first eval sign-off and the English-only pilot · decided by tdd-guide · risk: high
+Decided: Updated safety-reviewer, eval-author, pedagogy-author and the locale-context skill so no agent file tells reviewers to require human approval; the lead decides every merge per rule 6, and logs it. Prompt packs, skill templates and persona templates still need a named human's sign-off (rule 7); during the MVP the lead signs eval cases (`reviewed_by: lead`). Default eval, pedagogy and locale-context guidance is English only for the pilot (18 Oct 2026 decision); safety and guard eval cases keep Hindi, Devanagari and Hinglish input as a safety net.
+Why: These three decisions (lead-approved merge policy, English-only pilot, MVP-first eval sign-off) were made in the decision log and MEMORY.md but several agent files still referenced the old human-sign-off and multilingual-by-default language, which would mislead agents reading their own instructions.
+
+---
+
 ### 19 Oct 2026 · 4.4 ADR-0006 SafetyEventSink and SafetyEventCode in contracts · decided by lead (plan review) · risk: high
 - Decided: add a type-only `SafetyEventSink.record({studentId, teacherId, sessionId, turnId, guard, code, source})` and a 17-code `SafetyEventCodeSchema`; guards call it directly; `onGuardOutcome` stays the generic text-free seam.
 - Why: the build plan's guard table needs a safety_event and strikes; `GuardOutcomeEvent` has no code or ids by design; a closed enum keeps text out.
