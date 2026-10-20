@@ -1,5 +1,5 @@
 // Task 5.3 Phase B: the cache behind leakCheck (ADR-0007 point 7). A built locked index is kept
-// per (teacher, material revision, allowed module ids). Any chunk write bumps the teacher's
+// per (teacher, material revision, owned allowed module ids; 5.4). Any chunk write bumps the teacher's
 // revision, so a stale entry can't be reached again; storing a newer revision also drops every
 // older entry of that teacher at once. Builds are shared between concurrent callers, a failed or
 // overrunning build is never stored, and the cache holds at most `max` entries (least recently
@@ -73,7 +73,10 @@ export class LeakIndexCache<V> {
   private async build(key: LeakCacheKey, load: () => Promise<V>): Promise<V> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const overrun = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('leak index build timed out')), this.buildTimeoutMs);
+      timer = setTimeout(
+        () => reject(new Error('leak index build timed out')),
+        this.buildTimeoutMs,
+      );
       timer.unref();
     });
     try {

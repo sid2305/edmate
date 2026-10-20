@@ -124,6 +124,8 @@ export {
 } from './chunks.js';
 export {
   type EmbedFallback,
+  LEAK_CANDIDATE_MAX_LENGTH,
+  LEAK_CANDIDATES_MAX,
   type LeakFallback,
   NOTE_MATCH_FLOOR,
   PROBE_FLOOR,
