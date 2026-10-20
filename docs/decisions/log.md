@@ -10,6 +10,134 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word · decided by human (B-18, option c) · risk: high
+Decided: drop the game-shaped softening entirely. A hard self-harm or abuse phrase escalates whatever sits near it, including a game word within 5 words on either side ("killed myself in fortnite", "match mein marne ka mann karta hai", "how to kill myself in valorant"). `GAME_WORDS`, `gameTied`, `gameTalk` and the intent-detection helpers that existed only to decide whether to soften a game-shaped hit (`INTENT`, `INTENT_AFTER`, `COMPACT_INTENT`, `intentNear`) are removed from `distressKeywords.ts`. Code context (fix round 3: a soft phrase next to a code word stays out of the combination rules) and method-ready phrases (fix round 3) are unchanged. Occasional on-call pages for plain game talk ("i keep killing myself in minecraft by falling in lava") are accepted as the cost of never missing a real disclosure.
+Why: the round-3 exemption (B-16 answer a) still left a path where a hard phrase next to a game word could be read as soft by the classifier instead of escalating outright; the human chose certainty over precision for this guard.
+Alternatives: keep the fix-round-3 exemption (intent- and abuse-aware game softening, option a/b); narrow the game-word list further (still leaves a gap).
+Reversible: Yes, but only with safety-reviewer sign-off, and only by re-adding a narrower, explicitly-scoped exemption, not by restoring the old message-wide check.
+
+---
+
+### 19 Oct 2026 · 4.3 Game talk softens only game-shaped phrases, never intent or abuse · decided by human (B-16 answer a) and tdd-guide (patterns) · risk: high
+Decided: a hard self-harm phrase counts as soft only when every time it appears it is tied to a game within 5 words ("killed myself in fortnite", "in this round i keep ending my life", "minecraft mein khud ko maar diya"). It stays hard if first-person intent is in the 5 words before it or in the phrase itself (want, wanna, going to, gonna, will, plan, main, mujhe, chahta, ...unga), or if a Hindi intent word comes right after it. Abuse phrases are never softened. A game word elsewhere in the message ("my squad left me", "when i play free fire") changes nothing, and "squad" is no longer a game word.
+Why: in the safety re-check, a game word anywhere in the message downgraded real intent and abuse.
+Alternatives: drop the game exemption entirely (over-escalates plain game talk and pages on-call); keep it message-wide (the HIGH).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Code context keeps a soft phrase out of the combination rules · decided by human (B-16 answer a) and tdd-guide (code word list) · risk: high
+Decided: a soft phrase with a code word within 5 words either side (array, list, null, undefined, function, variable, string, dict, index, length, print, ...; identifiers like `pills_array` normalise to these words) does not count towards the combination rules, so "pills array is empty, nothing matters" goes to the classifier as an ordinary soft hit. It is never dropped: the classifier decides, and a classifier failure still escalates. Code context never changes a hard phrase. Words that are also emotional or school words ("empty", "class", "loop", "return", "none", "value") are left out of the list on purpose.
+Why: coding text was paging on-call through combination rule (a).
+Alternatives: drop soft hits in code context (silently misses real distress); detect code syntax in the raw text (punctuation is gone after normalisation).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 A method in hand and ready, or saved up, is a hard phrase · decided by human (B-16 answer a) and tdd-guide (phrases) · risk: high
+Decided: new hard phrases. English: "have/got/kept/hid <pills|tablets|rope|noose|blade|razor|poison> ... ready / set aside / hidden away / saved up" (not when followed by "for the experiment/project/class/..."), and "saved up / been saving / stockpiling / hoarding pills, tablets, meds". Hinglish: "pills/goliyan/rassi/blade/zehar ready/taiyaar hai/kar li", "goliyan jama/ikatthi kar". Devanagari: "गोलियां/ब्लेड/रस्सी/जहर तैयार है", "गोलियां जमा कर". So these escalate even when the classifier is down.
+Why: "i have the pills ready" relied on the classifier.
+Alternatives: leave it soft (the MEDIUM).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Distress keyword tables: all languages, normalised, hard and soft · decided by lead (safety plan review, safety review fix round) and tdd-guide (phrases) · risk: high
+Decided: built-in English, romanised-Hindi and Devanagari stem tables run on every message whatever `lang` says, over several normalised forms (format characters dropped and as spaces, accents, look-alike letters, leetspeak, digit words, written-together phrases); hard = first-person intent, plan or method and abuse disclosures; soft = bare nouns, third person, past tense, vague farewells and any hard phrase in a game context; obfuscated spellings and eval strings are never in the tables.
+Why: students mix scripts, and hidden characters or spelling tricks must not dodge the check.
+Alternatives: per-language tables chosen by `lang`; locale-pack keyword data (needs a contracts change).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Combinations of soft phrases that count as hard · decided by team lead · risk: high
+Decided: a soft method phrase (rope or noose, pills or goliyan, blade, jumping off or kood, zehar or poison, a roof or chhat) plus any other soft phrase, and a first-person vanish phrase plus a hopelessness phrase, escalate with no classifier call; every other pair of soft phrases still asks the classifier.
+Why: the accept line is "100% of distress cases escalate", and the safe direction is to escalate.
+Alternatives: leave all soft pairs to the classifier (fix round 1); count every soft pair as hard (first build).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Other soft pairs ask the classifier · decided by lead (safety review fix round) · risk: high
+Decided: one soft phrase, or two that match no combination rule, go to the classifier; the turn escalates when the classifier says yes, throws, times out or returns bad output, and not when it says no.
+Why: over-escalation pages on-call every 15 minutes until acknowledged; the classifier failure path keeps the safe side.
+Alternatives: two soft phrases count as hard (the first build).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 `distressCheck` is the hard list; with no preGuard verdict, soft counts too · decided by tdd-guide (lead's 4.2 note) and lead (safety review fix round) · risk: high
+Decided: `PipelineDeps.distressCheck` = `hasDistressKeyword` (hard only; 4.2 ORs it on the raw text into step 5); when preGuard fails (step timeout, chain failure) the runner also escalates on any soft phrase in the scrubbed text through the built-in `hasAnyDistressKeyword`; distressDetect gives its classifier 230 ms inside a 300 ms guard slice, waiting for the earlier messages outside that deadline.
+Why: a soft phrase must not bypass a working classifier, but with no verdict at all the safe side is to escalate.
+Alternatives: hard + soft in `distressCheck`; a second injected seam for soft phrases.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 No keyword and the classifier fails: the turn is blocked · decided by lead (4.1 safety review: never invent ok) · risk: high
+Decided: with no keyword, a classifier throw or timeout fails the chain, preGuard throws, and the turn ends `guard_blocked` (still saved, no reply); a classifier outage therefore blocks non-keyword turns.
+Why: without a verdict the guard cannot say the message is safe.
+Alternatives: pass the turn when no keyword hit (fail open on the classifier).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Alerts are never lost: check first, unlimited capped retries, repage until acked · decided by lead (safety plan review) and tdd-guide (BullMQ details) · risk: high
+Decided: `queuedAlertSink` enqueues the 15-minute check before the raise; each notifier call times out after 20 s and is retried; alert jobs get 1,000,000 attempts with backoff doubling from 1 s to a 30 s cap and survive 1,000 stalls; every unacknowledged check schedules the next round first, then pages on-call, forever until acknowledged; round ids keep one pending check per alert, and completed jobs are kept 24 h so a replayed raise adds nothing.
+Why: a distress alert must reach a person even if Redis, the worker or the notifier fails for a while.
+Alternatives: BullMQ's 5-attempt default; uncapped exponential backoff; a single 15-minute check.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Delivery and acknowledgement stand-ins · decided by lead (plan Q4, Q5) · risk: medium
+Decided: notifications are a structured log line (ids, kind, level, audience, time; never the excerpt) until a vendor is chosen, the same gap as the cost alarm; acknowledgements are a real 30-day Redis key, but nothing calls `acknowledge` yet, so every alert pages on-call every 15 minutes until a trust-console task lands.
+Why: delivery needs a vendor decision; an unreachable ack is the safe default.
+Alternatives: wire a mail vendor now; stub the ack store as always-acked.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The caring reply is the built-in template plus the pack's helplines · decided by lead (safety plan review) · risk: medium
+Decided: escalate always replies `LAST_RESORT_DISTRESS_REPLY` plus "You can also call <name> on <number>" for each pack helpline, in English, and never uses the alert; with no helpline, the template's generic wording stands.
+Why: it says it is an AI, promises nothing and points to someone the student trusts; no ids or alert wording can leak.
+Alternatives: a model-written reply; per-language templates (pilot is English only).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The classifier sees the last 3 student messages · decided by lead (safety plan review) and tdd-guide (limits) · risk: medium
+Decided: preGuard reads up to 12 history messages (50 ms limit), keeps the last 3 student ones and passes them with the message as JSON data; a failed, slow or malformed read gives none and is reported on `finished.background` with a cause only.
+Why: indirect distress often builds over turns; the read must not eat the guard's budget.
+Alternatives: no history; reuse buildContext's history (it runs concurrently, not before).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 Abuse-only hits raise `kind: abuse` · decided by tdd-guide · risk: medium
+Decided: when every hard hit is an abuse phrase (for example, being hit or touched by a relative), the alert's kind is `abuse`; otherwise `distress`.
+Why: the trust team needs to know which kind of help is needed.
+Alternatives: always `distress`.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The classifier call is unmetered · decided by lead (plan Q3) · risk: medium
+Decided: distressDetect reports `usage: []`, because `ModelGateway.generateObject` has no usage channel; a follow-up should add one (it also affects 4.4 and route).
+Why: no contracts change in this task.
+Alternatives: estimate tokens; a contracts ADR now.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 `must_escalate` is checked, never passed silently · decided by lead (safety plan review) · risk: low
+Decided: `must_escalate` is a check in packages/evals' own case format, and the agent reply gains `escalated`; the generic runner fails the check when the agent does not report it; `distressEscalate.test.ts` drives the real pipeline.
+Why: a check the runner cannot see must not count as a pass.
+Alternatives: a separate tag outside `expect`; skip it in the generic runner.
+Reversible: Yes.
+
+---
+
 ### 20 Oct 2026 · 3.10 Fix round 2: worker 'error' listener, real-worker integration test, structural-check bypasses closed, overclaims reworded · risk: medium
 Decided: `checkSafeRegexGuarded` attaches `worker.on('error', ...)` right after spawning (swallowed: the guard already reports unsafe at the ceiling either way), closing a host-process crash when a worker threw after `Atomics.wait` already returned. `safeRegexGuardIntegration.test.ts` builds the package with its own `tsc` and imports the compiled `dist` so one test exercises the real `Worker`/`Atomics`/`MessagePort` protocol end to end, not a mock or the no-`dist` fallback. `unrolledOverlap` (`safeRegex.ts`) now treats a `{1}` quantifier as unquantified, unwraps a one-branch plain group before the adjacency scan, and no longer lets a possibly-empty term between groups reset the scan. A fourth shape the re-review raised, `a?`×25 then `a`×25 with no group at all, is left to the timing probe and the load-path ceiling (the real IN mobile pattern has that same optional-then-mandatory shape and must not be flagged); a test proves the probe and the ceiling both catch it. ADR-0008 and this handoff are reworded where they overstated the structural check as a proof ("matching the quantified case's ambiguity exactly", "provably safe"); the ADR now also documents the `existsSync` in-process fallback (no ceiling, test-only today) and a strictness note that `(a|b)(a|b)` is refused even though it is not itself exponential. `received.message as string[]` is replaced with a runtime shape check.
 Why: typescript-reviewer and architect re-review of PR #57's fix round 1 found the crash path untested and still possible, the real worker protocol untested, three ways to dodge the unrolled-overlap scan structurally, and wording that claimed more certainty than a heuristic check can give.

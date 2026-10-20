@@ -853,10 +853,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.3-distress
-  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
+  model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium fixes:opus+sonnet review:opus+sonnet
 - id: 4.2c
   milestone: M4
   title: 'PII pattern hardening from the 4.2 safety review: keycap, superscript and circled digits and invisible marks; more phone, card, OTP and name shapes; spelled-out single-turn numbers; Aadhaar Verhoeff
