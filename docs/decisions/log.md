@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 3.4c locked probe and precedence run on the student's own words · decided by tdd-guide
+Decided: the locked probe and the locked-precedence check in `buildContext` run on the student's
+own words only (`retrievalQueries(...).student`); the agent-widened query is used only to add
+coverage via `mergeByScore`, and only when the student's own words don't hit locked material.
+Why: this is the smallest change that keeps locked-content protection exactly as strict as before
+(judged on undiluted words) while fixing the same-topic degrade; a diluted or inflated locked
+verdict from the agent's own reply text would be a safety regression either way.
+risk: high
+
+---
+
+### 20 Oct 2026 · 3.4c no probe threshold in the in-memory index · decided by tdd-guide
+Decided: `memoryRetrieval.probe`/`scopedRetrieval.probeLocked` keep `hit: score > 0`; no threshold
+was added here.
+Why: the in-memory scorer has no stop words, so a 0.5 floor would turn a real locked request
+("Teach me loops please" scores 0.25) into `ask_teacher`, weakening locked protection in the CLI
+and in harness tests. The db adapter already has its own calibrated `PROBE_FLOOR = 0.5`, which is
+the production threshold; this task is out of bounds for `packages/db/**`.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c one extra search call per turn with agent history · decided by tdd-guide
+Decided: `buildContext` now runs up to two searches plus one probe concurrently (via
+`Promise.all`), instead of one search plus one probe. On a locked turn the widened search's result is discarded rather
+skipped (packages/harness/src/pipeline/steps/buildContext.ts); this is accepted, not fixed (3.4c review LOW, wontfix).
+Why: needed to keep the student-only query and the agent-widened query separate; the extra call
+only happens when there is an agent message in history, runs in parallel with the others inside
+buildContext's existing 300 ms budget, and on the db index is one more query embedding per turn.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c finding for 3.9a: edmate chat never reloads saved help state · decided by tdd-guide
+Decided: not fixed here (explicitly out of bounds per the plan). `apps/cli/src/commands/chat/deps.ts`
+composes `memoryTurnConfigStore(world)`, which reads the world's fixed session row and never looks
+at what `memorySessionStateStore.saveHelpState` wrote, so the CLI's help ladder never climbs across
+turns in practice. `sameTopic.test.ts` works around this with in-test plumbing
+(`withHelpStateReload`) to prove the harness-level fix climbs correctly.
+Why: logging as a finding for 3.9a, per the plan's explicit scope boundary.
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.4c filler follow-ups still lock on the CLI's in-memory index until 3.9a · decided by lead
+Decided: a follow-up with no topic words ("I still don't get it", after "I don't know what a variable is") still ends `locked` through `edmate chat`. This is because the in-memory index has no stop words and no probe floor. It is accepted for now, and 3.9a closes it by moving the CLI to the db index, which has both.
+Why: the code review reproduced it on the branch. The db index is what students use in production. Adding a threshold to the in-memory probe would stop real locked requests from locking (the planner's analysis).
+risk: low
+
+---
+
 ### 20 Oct 2026 · 3.3 how a student's answer is matched to the answer key · decided by tdd-guide
 
 Decided: answer-key items are required parts of one answer. All parts matched gives `correct`, some gives `partial`, none gives `wrong`. Numbers are compared by value (fractions, decimals, `1,000`, unicode minus), and a decimal with 2 or more places matches when it rounds to the key. Other parts match as whole words. Credit needs answer-shaped text or a `check_answer` turn, so a key inside a question ("why is it 5/6?") is `none`. With no readable key, answer-shaped text is `wrong`.
@@ -17,6 +68,8 @@ Decided: answer-key items are required parts of one answer. All parts matched gi
 Why: the plan left the matching rule to the builder. Whole-part matching and answer-shaped gating keep a question that quotes the key from counting as an attempt.
 
 ---
+
+
 
 ---
 
@@ -28,6 +81,8 @@ Why: off_topic, meta and misuse make decide redirect, so a broad rule would redi
 
 ---
 
+
+
 ---
 
 ### 20 Oct 2026 · 3.3 only a hard distress phrase is a confident route distress · decided by lead (risk: high)
@@ -37,6 +92,8 @@ Decided: route uses the shared distress keyword tables, but only a hard phrase g
 Why: route's `distress` escalates the turn. A soft hit, such as a bare "suicide" in a Hamlet lesson, would escalate even when preGuard's safety-reviewed classifier judged it safe. The runner's last-resort soft checks when preGuard fails are unchanged. The lead accepted these plan deviations at review.
 
 ---
+
+
 
 ---
 
