@@ -1109,10 +1109,10 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: running
+  status: done
   risk: risky
   branch: m4/4.8-advice-guard
-  model: build:opus fix1:opus
+  model: plan:sonnet build:opus review:sonnet fix:sonnet
 - id: '4.9'
   milestone: M13
   title: '`personaBoundary` and `tone`'
