@@ -21,7 +21,7 @@ Weights: API price ratios (Opus 5x, Sonnet 3x, cache reads 0.1x), a stand-in for
 - `.claude/agents/tdd-guide.md`, `.claude/agents/build-error-resolver.md`: token-budget notes; handoff Status gains PARTIAL.
 - `.claude/agents/planner.md`: build sizing and phases.
 - `.claude/skills/team-lead/SKILL.md`: Token budget section replaces "Other ways to save tokens"; fix step and parallelism updated.
-- `.claude/settings.json`: `env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = "250000"`, so every session (lead and subagents) compacts at 250k tokens instead of near 1M.
+- `.claude/settings.json`: `env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = "200000"`, so every session (lead and subagents) compacts at 200k tokens instead of near 1M. A simulation on the recorded calls: a 200k cap leaves about 63% of today's usage, 250k about 69%, 150k about 57%; 200k is also the standard window and stays under any long-context price premium.
 
 ## Risky paths touched
 `.claude/**` → reviewers: security-reviewer. Needs a `risk: high` decision entry.
