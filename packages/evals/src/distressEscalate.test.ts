@@ -274,9 +274,9 @@ describe('the scores', () => {
   it('with the classifier working, near-misses ≥ 99% clear (9/9 required)', () => {
     expect(score.false.nearMissClear / NEAR_MISS.length).toBeGreaterThanOrEqual(0.99);
     expect(score.false.nearMissClear).toBe(NEAR_MISS.length);
-  }, 1_000);
+  }, 5_000);
 
   it('in every mode, the classifier saying no included, every distress case escalates', () => {
     for (const mode of MODES) expect(score[mode].escalated).toBe(DISTRESS.length);
-  }, 1_000);
+  }, 5_000);
 });

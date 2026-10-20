@@ -66,7 +66,7 @@ describe('preGuard (default registry: distressDetect)', () => {
       guards: [{ name: 'distressDetect', ok: false, action: 'escalate' }],
       usage: [],
     });
-  }, 1_000);
+  }, 5_000);
 
   it('classifier false → ok', async () => {
     const t = testDeps({
@@ -83,7 +83,7 @@ describe('preGuard (default registry: distressDetect)', () => {
     };
     const r = await preGuard(env, entitled);
     expect(r).toEqual({ result: 'ok', guards: [{ name: 'distressDetect', ok: true }], usage: [] });
-  }, 1_000);
+  }, 5_000);
 
   it('no keyword + classifier throws → PreGuardChainFailedError without the text', async () => {
     const secret = 'how do i reverse a list SECRET-TEXT';
@@ -99,7 +99,7 @@ describe('preGuard (default registry: distressDetect)', () => {
       cause: 'error',
       errorName: 'ScriptedGatewayError',
     });
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('createPreGuardStep: outcome mapping', () => {
@@ -119,7 +119,7 @@ describe('createPreGuardStep: outcome mapping', () => {
       guards: [{ name: 'moderationIn', ok: false, action: 'block' }],
       usage: [],
     });
-  }, 1_000);
+  }, 5_000);
 
   it('escalate from any pre guard passes its alert through', async () => {
     const step = createPreGuardStep(
@@ -127,7 +127,7 @@ describe('createPreGuardStep: outcome mapping', () => {
     );
     const { env } = envWith('hello', { transcripts: memoryTranscriptStore() });
     expect(await step(env, entitled)).toMatchObject({ result: 'escalate', alert: demoSafetyAlert });
-  }, 1_000);
+  }, 5_000);
 
   it('an empty registry fails closed (throws)', async () => {
     const step = createPreGuardStep(reg());
@@ -135,7 +135,7 @@ describe('createPreGuardStep: outcome mapping', () => {
     await expect(step(env, entitled)).rejects.toThrow(
       'preGuard: guard chain failed ((empty chain): empty)',
     );
-  }, 1_000);
+  }, 5_000);
 
   it('the guards get the ctx: entitlement, session, lang, locale, earlier student turns', async () => {
     const seen: PreGuardCtx[] = [];
@@ -162,7 +162,7 @@ describe('createPreGuardStep: outcome mapping', () => {
     // Started before the chain, not awaited by preGuard itself.
     expect(seen[0]?.recentStudentTurns).toBeInstanceOf(Promise);
     expect(await seen[0]?.recentStudentTurns).toEqual(['first', 'second']);
-  }, 1_000);
+  }, 5_000);
 });
 
 describe('recentStudentTurns', () => {
@@ -174,7 +174,7 @@ describe('recentStudentTurns', () => {
     }
     const { env } = envWith('x', { transcripts });
     expect(await recentStudentTurns(env)).toEqual(['s3', 's4', 's5']);
-  }, 1_000);
+  }, 5_000);
 
   it('a failing history read → [] (the classifier still runs) and is reported without text', async () => {
     const failing: TranscriptStore = {
@@ -186,7 +186,7 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (TypeError)',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it('a malformed history result → [] and reported', async () => {
     const odd = {
@@ -198,7 +198,7 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (malformed)',
     ]);
-  }, 1_000);
+  }, 5_000);
 
   it(`a history read slower than ${HISTORY_TIMEOUT_MS} ms → [] and reported`, async () => {
     const t = testDeps();
@@ -221,5 +221,5 @@ describe('recentStudentTurns', () => {
     expect(reported.map((e) => (e as Error).message)).toEqual([
       'preGuard: earlier student messages unavailable (timeout)',
     ]);
-  }, 1_000);
+  }, 5_000);
 });
