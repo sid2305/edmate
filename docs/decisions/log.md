@@ -10,6 +10,60 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 5.4 Access filter consolidated in harness/access (scoped retrieval, tool filter) · decided by tdd-guide · risk: high
+Decided: every turn-time read of the retrieval index goes through `access/scopedRetrieval.ts`, which fixes the scope from the entitlement, re-checks each chunk (teacher, allowed, not locked), rebuilds it with only the Chunk fields and passes on only a fresh `{ hit, score }` from the probe. The tool filter moved to `access/tools.ts` with re-exports from `pipeline/tools.ts`.
+Why: the build plan's access filter and ADR-0003 want one reviewed place for it; keeping only known fields and a fresh probe object means a buggy or hostile index cannot smuggle text through extra keys.
+
+---
+
+### 20 Oct 2026 · 5.4 Cache rule and inventory recorded in access/index.ts · decided by tdd-guide · risk: high
+Decided: a cache of anything derived from teacher material or an entitlement is keyed by the package id and version or the exact owned allowed-module set, plus the material revision for material. The inventory is `promptCacheKey` and the db `leakCache` (keyed in Phase B on teacher, material revision and owned allowed ids, per the lead's Q1 answer). No new cache added.
+Why: ADR-0003 point 6 (package-versioned caches) without a contracts change.
+
+---
+
+### 20 Oct 2026 · 5.4 Property sizes and seeds · decided by tdd-guide · risk: low
+Decided: seed 20261020; 2,000 index-level iterations, 200 whole turns, 2,000 tool-registry iterations. All three print a tally of outcomes.
+Why: the plan's sizes; together they run in under a second locally, so CI time is not a concern.
+
+---
+
+### 20 Oct 2026 · 5.4 100% coverage threshold for harness access · decided by tdd-guide · risk: low
+Decided: `vitest.config.ts` enforces 100% for `src/access/**`, as it does for guardrails and pedagogy.
+Why: the Definition of done requires 100% on `packages/harness/src/access/`; a threshold keeps it from slipping.
+
+---
+
+### 20 Oct 2026 · 5.4 leakCache keyed by teacher, material revision and owned allowed ids · decided by tdd-guide · risk: high
+Decided: leakCheck reads the revision and the teacher's module ids together, and keys and builds the locked index only on the allowed ids the teacher owns. Foreign, unknown and repeated ids drop out, so every list with the same owned set shares one cache entry. A module added between the reads counts as locked. A failed ids read fails closed.
+Why: the lead's Q1 answer. A package version decides access only through its owned allowed set, so this key changes whenever access changes, which meets ADR-0003 point 6 without a contracts change. It also stops junk ids from filling the 64-entry cache (the 5.3 MEDIUM).
+
+---
+
+### 20 Oct 2026 · 5.4 leakCheck candidate caps · decided by tdd-guide · risk: medium
+Decided: at most 2,048 candidates of 65,536 characters each; more is `invalid` before any SQL.
+Why: the largest legitimate batches measured from the harness (one 16 KB text: a 16,383-character candidate; split by a 4,000-character student message: about 220 candidates) with at least 4x headroom. The test fails if the harness ever produces a batch over a quarter of the caps.
+
+---
+
+### 20 Oct 2026 · 5.4 Full-text terms quoted in to_tsquery · decided by tdd-guide · risk: low
+Decided: every term goes to `to_tsquery` as a quoted literal (`'term':*`).
+Why: Q4 fold-in. A sweep of every code point on Postgres 16 shows the quoted form never raises, whatever the term filter lets through later. Matching is unchanged; the recall gate is still green.
+
+---
+
+### 20 Oct 2026 · 5.4 Static no-unfiltered-search audit allowlists · decided by tdd-guide · risk: high
+Decided: `test/access-audit.test.ts` pins five rules with named allowlists. The `chunks` table is named only in the schema, `internal.ts` and the chunks/retrieval repositories. `retrieval.ts` reads it exactly 5 times, each read scoped. Only `retrieval.ts` calls `.material(` (the lead's Q2). Only db `retrieval.ts`, three harness testing helpers and the port declaration implement `RetrievalIndex`. Harness search, probe and leakCheck calls happen only in `access/scopedRetrieval.ts` and `guardrails/lockedLeak.ts`, plus the testing helpers named in the allowlist.
+Why: the acceptance requires that no unfiltered search exists anywhere. Any new read path fails CI until a reviewer adds it to an allowlist.
+
+---
+
+### 20 Oct 2026 · 5.4 Postgres property sizes and seeds · decided by tdd-guide · risk: low
+Decided: seeds 20261020 (300 random scopes) and 20261022 (20 package versions, each resolved through preview and eval, 5 searches each). Both print a tally and assert minimum counts, so neither can pass with nothing checked.
+Why: the plan's 300 iterations. The run takes about 3 s.
+
+---
+
 ### 20 Oct 2026 · 1.4 Magic-link tokens: hashed, single use by atomic delete, one live link per address · decided by tdd-guide · risk: high
 Decided: `auth_verification_tokens` stores only `sha256(token)`, where the token is the value Auth.js passes in (already `sha256(raw + AUTH_SECRET)`), so the database holds a hash of a hash. Using a link is one `DELETE … WHERE identifier AND token_hash … RETURNING`, so two concurrent clicks can't both win, and an expired row is deleted and read as `null`. The store never returns the token or its hash. The table has no FK to `users`.
 Why: a copy of the database must hold no usable sign-in link, and single use has to hold under races without depending on Auth.js. This is the identity path (`packages/db/src/identity/**`), so it is risk: high.

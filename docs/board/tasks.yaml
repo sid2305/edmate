@@ -1204,10 +1204,10 @@ tasks:
   deps:
   - '5.3'
   - M3
-  status: running
+  status: done
   risk: risky
   branch: m5/5.4-access-filter
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus/sonnet
 - id: '5.5'
   milestone: M5
   title: Tool registry and sandboxed calculator
