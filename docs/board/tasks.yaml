@@ -1959,6 +1959,13 @@ tasks:
   needs_decision: null
   branch: m4/4.3a-test-timeouts
   model: plan:lead build:haiku review:sonnet
+- id: 0.13a
+  milestone: M13
+  title: 'Agent-efficiency follow-up (0.13 review LOW): test that docs_only.py treats a non-.md file under docs/ (e.g. docs/system-design.html) as not docs-only, or decide it is'
+  accept: docs_only.py has a test for a non-.md file under docs/ and the behaviour is stated in its docstring; the python harness tests pass
+  deps:
+  - '0.13'
+  status: todo
 - id: 4.4f
   milestone: M13
   title: 'Moderation/jailbreak follow-ups (4.4 review LOWs): narrow withheldCode/code to the SafetyEventCode subset; expectTypeOf links for the queue and db safety-event enums; build the alert before recording
