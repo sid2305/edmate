@@ -4,7 +4,6 @@ import {
   copyHelp,
   holdsPracticeKey,
   INITIAL_HELP_STATE,
-  PRACTICE_CARRIED_MAX,
   PRACTICE_SERVED_MAX,
   practiceFields,
   loadSessionHelp,
@@ -271,16 +270,20 @@ describe('practiceCarriedKey: a skipped item key, guarded one more turn (5.6c, A
     expect(loadSessionHelp(VALID).unreadable).toBe(false);
   });
 
-  it(`is bounded: more than ${PRACTICE_CARRIED_MAX} entries or a non-string is unreadable`, () => {
-    const many = Array.from({ length: PRACTICE_CARRIED_MAX + 1 }, (_, i) => `k${i}`);
-    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: many })).toEqual(DEFAULT);
-    expect(loadSessionHelp({ ...VALID, practiceCarriedKey: many }).unreadable).toBe(true);
+  it('a non-string entry is unreadable; no entry cap of its own (5.6c fix round)', () => {
     expect(parseSessionHelp({ ...VALID, practiceCarriedKey: [7] })).toEqual(DEFAULT);
+    expect(loadSessionHelp({ ...VALID, practiceCarriedKey: [7] }).unreadable).toBe(true);
     expect(parseSessionHelp({ ...VALID, practiceCarriedKey: undefined })).toEqual(DEFAULT);
-    const atMax = Array.from({ length: PRACTICE_CARRIED_MAX }, (_, i) => `k${i}`);
+    // As many entries as answerKey may hold: the JSON caps bound it, not an entry count.
+    const many = Array.from({ length: 65 }, (_, i) => `k${i}`);
     expect(
-      parseSessionHelp({ ...VALID, practiceCarriedKey: atMax }).help.practiceCarriedKey,
-    ).toEqual(atMax);
+      parseSessionHelp({ ...VALID, practiceCarriedKey: many }).help.practiceCarriedKey,
+    ).toEqual(many);
+    const saved = serializeSessionHelp({
+      rung: 0,
+      help: { ...parseSessionHelp(VALID).help, practiceCarriedKey: many },
+    });
+    expect(saved.practiceCarriedKey).toEqual(many);
   });
 
   it('copyHelp keeps it, copied, so it never aliases', () => {

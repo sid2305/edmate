@@ -15,8 +15,6 @@ export const PRACTICE_ID_MAX = 200;
  * so a saved key is never dropped by `serializeSessionHelp` throwing.
  */
 export const PRACTICE_KEYS_MAX_JSON = 2_048;
-/** Most entries in a carried practice key (5.6c, ADR-0011). */
-export const PRACTICE_CARRIED_MAX = 64;
 
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */
@@ -66,9 +64,12 @@ export const HelpStateSchema = z.strictObject({
    * `holdsPracticeKey`. buildContext drops chunks that hold it. The runner alone sets it and
    * removes it from every other saved state; `copyHelp` keeps it and `practiceFields` leaves it
    * out. The JSON of `answerKey` plus this stays within PRACTICE_KEYS_MAX_JSON (the practice
-   * tool's cap counts held keys). Optional, so a blob saved before 5.6c still parses.
+   * tool's cap counts held keys). Optional, so a blob saved before 5.6c still parses. No entry cap
+   * of its own (5.6c fix round): the carried key is a subset of a loaded `answerKey`, which has
+   * none, so a cap here could make `serializeSessionHelp` throw on a state the tool let through.
+   * The JSON caps above and LIMITS.helpStateMaxJsonLength bound it.
    */
-  practiceCarriedKey: z.array(z.string()).max(PRACTICE_CARRIED_MAX).exactOptional(),
+  practiceCarriedKey: z.array(z.string()).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 

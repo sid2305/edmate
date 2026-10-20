@@ -117,6 +117,16 @@ Built by tdd-guide in its own auto worktree (branch `work-5.6cB`, pushed to `m5/
 - ADR-0011 is `Proposed` and needs architect, security-reviewer and typescript-reviewer, plus code-reviewer for `pedagogy/**`. Fix "bullet 1" if the architect agrees.
 - Out of scope, as the ADR says: the small-tier rewrite of a draft in which the model wrote the key (a `guardrails/**` change).
 
+## Fix round
+
+Findings: typescript-review HIGH helpState.ts:71 and security-review MEDIUM answerBank.ts:51/77. Branch `m5/5.6c-practice-followups`, built in an auto worktree on `work-5.6cF`.
+
+- **Carried key entry cap (HIGH).** `practiceCarriedKey` no longer has `.max(64)`; `PRACTICE_CARRIED_MAX` is removed. The carried key is a subset of a loaded `answerKey`, which has no entry cap, and the practice tool's JSON cap (held + issued + new keys) bounds both. So the saved state fits by construction and `serializeSessionHelp` can no longer throw on a carried key the tool let through. Tests: `runner.practiceAnswerKey.test.ts` "a 65-entry skipped key saves whole and every entry stays guarded next turn" (serialises the saved state, then the first and the 65th key are held by the guards on the next turn with the real decide, and no carried key reaches a main-tier request); "a turn that saves no state leaves the stored carried key in place" (decide and its fallback fail, commit gets no `next`). `helpState.test.ts`: 65 entries parse and serialise; a non-string entry is still unreadable.
+- **Markdown bank refusal (MEDIUM, regression).** `lineKeyPattern` now allows any run of markdown markers before the key (`-`/`*`/`+`, `1.`/`1)`, `>`, `#`, `|`, each with optional whitespace, so tabs and two spaces too) and opening emphasis/quotes/brackets (`**`, `_`, quotes, `{`, `[`), with closing emphasis/quotes after it. A second per-line pattern `[{,]\s*key\s*:` catches YAML flow mappings. Lines split on `\r\n?|\n`, so CR-only files are checked line by line. `test/answerBank.test.ts` adds 16 refused cases (each form in the finding, plus `1)`, `> -`, `**question**:`, `_question_:` and a RubricAnswer list); the prose non-refusal test and the two documented 8.x gap tests stay green.
+- Evidence: `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/ingest...` → `Tasks: 14 successful, 14 total`. `python3 .githooks/secret-scan.py --all` → clean.
+- ADR-0011 §2 says the carried key has "at most 64 entries"; that bound is now gone (text not edited, see Decisions). Handoff line under Phase B naming `PRACTICE_CARRIED_MAX` is superseded by this section.
+- Not done (other findings, deferred per the fix-only-blockers rule): carry from loaded vs decide's `next` (MEDIUM runner.ts:1144), `z.string().min(1)` entries, the tautological assemble test, BOM replace, doc wording.
+
 ## Decisions
 
 ### 20 Oct 2026 · 5.6c Practice items are teacher-scoped; demo bank teacher is tch_test_01 · decided by tdd-guide
@@ -164,4 +174,14 @@ risk: medium
 ### 20 Oct 2026 · 5.6c expectNoLeak scans every issued key, skill events and every tier · decided by tdd-guide
 Decided: the practice runner tests check every key issued in the turn (the saved state plus every attempt's generate keys). They scan the trace and the skill events too. On turns where the model never writes the key, they scan every request on every tier, including the judges and route's intent model. Echo tests stay main-tier only (ADR-0011 §5).
 Why: 5.6 review LOW. The old helper checked one key, main tier only.
+risk: low
+
+### 20 Oct 2026 · 5.6c fix round: the carried key has no entry cap · decided by tdd-guide
+Decided: `practiceCarriedKey` drops its 64-entry cap. Its size is bounded only by the practice tool's JSON cap (which counts held keys) and `LIMITS.helpStateMaxJsonLength`. ADR-0011 §2's "at most 64 entries" no longer holds; the ADR text is unchanged and its "the saved state always fits" now holds by construction.
+Why: `answerKey` has no entry cap, so 65 or more short keys passed the tool's JSON cap and then made `serializeSessionHelp` throw, saving nothing and leaving the new item's key unguarded (typescript-review HIGH). Counting entries in the tool's cap was the other option; it would refuse items the state can hold.
+risk: low
+
+### 20 Oct 2026 · 5.6c fix round: markdown bank refusal accepts markers, emphasis and flow keys · decided by tdd-guide
+Decided: on raw lines, a key may follow any run of markdown list/quote/heading/table markers and opening emphasis, quotes or brackets, or follow "{" or "," (YAML flow key, unquoted only). Lines split on CR, LF or CRLF. A compact JSON array bank (quoted keys after "{") stays the documented 8.x gap.
+Why: the 5.6c raw-line rule replaced main's word-boundary check for markdown, so list, quote, bold, heading, flow-style, tab-marker and CR-only banks were indexed again (security-review MEDIUM regression).
 risk: low

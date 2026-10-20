@@ -111,6 +111,8 @@ async function turn(
     build?: Steps['buildContext'];
     postGuard?: Steps['postGuard'];
     decision?: PedagogyDecision;
+    /** A whole decide step (wins over `decision` and `realDecide`). */
+    decide?: Steps['decide'];
     generate?: Steps['generate'];
     /** The real decide step (policy + composer with the fixture packs) instead of `decision`. */
     realDecide?: boolean;
@@ -149,7 +151,9 @@ async function turn(
   const steps = testSteps({
     entitle: fixtureEntitle,
     decide:
-      o.realDecide === true
+      o.decide !== undefined
+        ? o.decide
+        : o.realDecide === true
         ? defaultSteps.decide
         : { run: () => Promise.resolve(testDecideResult(o.decision ?? decision)) },
     ...(o.realRoute === true ? { route: realRoute } : {}),
@@ -597,5 +601,50 @@ describe('runner: a skipped item key is carried one turn (5.6c, ADR-0011 §2-3)'
     });
     expect(r.help?.answerKey).toEqual([B, 'shared']);
     expect(r.help?.practiceCarriedKey).toEqual([A]);
+  });
+
+  it('a 65-entry skipped key saves whole and every entry stays guarded next turn (5.6c fix round)', async () => {
+    const many = Array.from({ length: 65 }, (_, i) => String(7000 + i));
+    const first = await turn([main(callItem, used), main(say('A new one.'), used)], {
+      decision: { ...decision, mustNotReveal: many },
+      build: () => Promise.resolve(builtWith({ ...loadedA, answerKey: many })),
+    });
+    expect(first.help?.answerKey).toEqual([B]);
+    expect(first.help?.practiceCarriedKey).toEqual(many);
+    const saved = first.commit?.next;
+    if (saved === undefined) throw new Error('turn 1 saved no state');
+    // Before the fix the schema capped carried entries at 64, so this threw and nothing was saved.
+    const stored = serializeSessionHelp(saved);
+    expect(stored.practiceCarriedKey).toEqual(many);
+    for (const key of [many[0] ?? '', many[64] ?? '']) {
+      const next = await turn([main(say('Last time '), say(`it was ${key}. `), used)], {
+        realDecide: true,
+        build: () =>
+          Promise.resolve(
+            builtWith(saved.help, { helpRung: 0, retrieved: [{ ...demoChunk, score: 0.9 }] }),
+          ),
+      });
+      expect(next.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+      expect(tokens(next.events)).not.toMatch(standalone(key));
+      const sent = JSON.stringify(next.t.gateway.requests.filter((q) => q.tier === 'main'));
+      for (const k of many) expect(sent).not.toMatch(standalone(k));
+    }
+  });
+
+  it('a turn that saves no state leaves the stored carried key in place (ADR-0011 §6)', async () => {
+    // decide and its fallback both fail: the turn ends in an error and commit saves no `next`,
+    // so the stored blob, carried key included, is not overwritten (fail closed).
+    const r = await turn([main(say('never sent'), used)], {
+      decide: {
+        run: () => Promise.reject(new Error('decide down')),
+        fallback: () => {
+          throw new Error('fallback down');
+        },
+      },
+      build: () => Promise.resolve(builtWith({ ...loadedA, answerKey: [B], practiceCarriedKey: [A] })),
+    });
+    expect(r.events.at(-1)).toMatchObject({ type: 'error' });
+    expect(r.commit).toBeDefined();
+    expect(r.commit).not.toHaveProperty('next');
   });
 });

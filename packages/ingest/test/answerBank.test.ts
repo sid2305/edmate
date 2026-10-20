@@ -178,6 +178,30 @@ describe('assertNotAnswerBank', () => {
     }).toThrow(IngestError);
   });
 
+  // 5.6c fix round: every markdown shape the units check on main refused is refused on raw lines.
+  it.each([
+    ['a "* " list item', '* question: 2+2\n  answer: 4\n'],
+    ['a "+ " list item', '+ question: 2+2\n+ answer: 4\n'],
+    ['a "1. " numbered item', '1. question: 2+2\n2. answer: 4\n'],
+    ['a "1) " numbered item', '1) question: 2+2\n   answer: 4\n'],
+    ['a "> " quote', '> question: 2+2\n> answer: 4\n'],
+    ['a nested "> - " quote list', '> - question: 2+2\n>   answer: 4\n'],
+    ['bold keys "**question:**"', '**question:** 2+2\n**answer:** 4\n'],
+    ['bold keys "**question**:"', '**question**: 2+2\n**answer**: 4\n'],
+    ['italic keys "_question_:"', '_question_: 2+2\n_answer_: 4\n'],
+    ['"## " headings', '## question: 2+2\n## answer: 4\n'],
+    ['a YAML flow mapping', '- {question: 2+2, answer: 4}\n'],
+    ['a YAML flow mapping with spaces', '- { question: "2+2", answer: "4" }\n'],
+    ['"-" then a tab', '-\tquestion: 2+2\n-\tanswer: 4\n'],
+    ['"-" then two spaces', '-  question: 2+2\n   answer: 4\n'],
+    ['CR-only line endings', 'intro\rquestion: 2+2\ranswer: 4\r'],
+    ['a RubricAnswer as a "* " list', '* studentAnswer: 7\n* rubricNotes: correct\n'],
+  ])('refuses %s on raw lines', (_shape, raw) => {
+    expect(() => {
+      assertNotAnswerBank('notes.md', [{ text: raw, locator: 'page 1' }], raw);
+    }).toThrow(IngestError);
+  });
+
   it('does not refuse prose that mentions "question:" and "answer:" mid-sentence, on raw lines', () => {
     const raw = 'In this lesson we cover a question: what is x? and the answer: it depends.\n';
     expect(() => {

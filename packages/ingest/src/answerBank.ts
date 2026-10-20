@@ -8,8 +8,8 @@
 // Task 5.6c Phase C: the title and the text are folded (Unicode NFKC, then zero-width/format
 // characters dropped) before every check, so a fullwidth letter or an embedded zero-width space
 // cannot slip a bank past the refusal. The shape rule runs on the raw source lines when they are
-// available (markdown and text sources): a key must start its own line (after an optional "- " list
-// marker and an optional quote), so an ordinary sentence that happens to contain "a question: ... the
+// available (markdown and text sources): a key must start its own line (after any markdown list,
+// quote or heading markers and emphasis) or follow "{" or "," as a YAML flow key, so an ordinary sentence that happens to contain "a question: ... the
 // answer: ..." is not refused. When raw lines are not available (PDF, DOCX, slides), the shape rule
 // falls back to the looser word-boundary check across the parsed units' text, as before. A JSON-array
 // bank or a markdown-table bank is not refused by either rule; that is left to the upload scope
@@ -46,20 +46,31 @@ function namesABankPath(sourceTitle: string): boolean {
 }
 
 /** A line matches a key when, at the start of the line (after trimming leading indentation), there
- * is an optional "- " list marker, an optional quote, the key, an optional quote, optional
- * whitespace and then ":". Case-sensitive, like the fallback check. */
+ * is any run of markdown markers (a "-", "*" or "+" list marker, a "1." or "1)" numbered marker, a
+ * ">" quote, a "#" heading or a "|" cell, each with optional whitespace after it), then any opening
+ * emphasis, quote or bracket ("**", "_", a quote, "{", "["), the key, any closing emphasis or quote,
+ * optional whitespace and then ":". So "* question:", "1. question:", "> question:",
+ * "## question:", "**question:**" and "-\tquestion:" all match, as the units check on main did
+ * (5.6c fix round). Case-sensitive, like the fallback check. Linear: the marker alternatives are
+ * disjoint and each numbered marker needs its terminator. */
 function lineKeyPattern(key: string): RegExp {
-  return new RegExp(`^(?:- )?["']?${key}["']?\\s*:`);
+  return new RegExp(`^(?:(?:[-*+>#|]|\\d+[.)])\\s*)*[*_"'{\\[]*${key}[*_"']*\\s*:`);
+}
+
+/** A YAML flow mapping key ("- {question: 2+2, answer: 4}"): the key follows "{" or "," anywhere on
+ * the line. Unquoted only, so a compact JSON array bank stays the documented 8.x gap. */
+function flowKeyPattern(key: string): RegExp {
+  return new RegExp(`[{,]\\s*${key}\\s*:`);
 }
 
 function hasKeyOnItsOwnLine(lines: readonly string[], key: string): boolean {
-  const pattern = lineKeyPattern(key);
-  return lines.some((line) => pattern.test(line));
+  const patterns = [lineKeyPattern(key), flowKeyPattern(key)];
+  return lines.some((line) => patterns.some((pattern) => pattern.test(line)));
 }
 
 function hasBankShapeInLines(rawText: string): boolean {
   const lines = fold(rawText)
-    .split(/\r?\n/)
+    .split(/\r\n?|\n/)
     .map((line) => line.trimStart());
   const isQuestionBank = QUESTION_BANK_KEY_NAMES.every((key) => hasKeyOnItsOwnLine(lines, key));
   const isRubricAnswer = RUBRIC_ANSWER_KEY_NAMES.every((key) => hasKeyOnItsOwnLine(lines, key));
