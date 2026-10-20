@@ -407,9 +407,9 @@ tasks:
   deps:
   - '1.7'
   risky: true
-  status: running
+  status: done
   branch: m1/1.7b-web-regex-worker
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet-5/medium fix:sonnet-5/medium review:security-opus,ts-sonnet,code-sonnet
 - id: 1.7c
   milestone: M1
   title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key)'
@@ -1348,7 +1348,8 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 5.11a
   milestone: M5
-  title: '5.11 review follow-ups: draftOutline and draftStyleCard treat the real gateway''s schema failure (GatewayError code validation, packages/gateway/src/adapters/errors.ts) as IngestError validation, not retryable, with a test using that error shape (the 5.11 fix only covers ScriptedGateway''s ZodError); draft independent modules in parallel; distinct failure messages per cause'
+  title: '5.11 review follow-ups: draftOutline and draftStyleCard treat the real gateway''s schema failure (GatewayError code validation, packages/gateway/src/adapters/errors.ts) as IngestError validation,
+    not retryable, with a test using that error shape (the 5.11 fix only covers ScriptedGateway''s ZodError); draft independent modules in parallel; distinct failure messages per cause'
   accept: a real-gateway-shaped validation error surfaces as validation, retryable false; a provider outage stays provider_error, retryable true
   deps:
   - '5.11'

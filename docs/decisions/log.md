@@ -10,6 +10,87 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 1.7b fix round: a missing/relocated safe-regex worker fails closed in production · decided by builder · risk: high
+Decided: `checkSafeRegexGuarded` (`packages/content/src/safeRegexGuard.ts`) now reports every
+pattern unsafe, logged once, whenever the compiled worker file cannot be found *and*
+`process.env.NODE_ENV === 'production'`, instead of taking the unbounded in-process fallback meant
+for dev and this package's own tests. `getWorkerFile()` also stops trying to derive a relocated
+worker's path from `process.cwd()` (Next's standalone `server.js` chdirs to its own directory
+before anything runs, making that guess wrong) and instead reads an explicit
+`EDMATE_CONTENT_WORKER_DIR` env var, set by `apps/web/Dockerfile` to the image's own known layout
+and by the build-smoke test to its relocated copy's layout.
+Why: a production web build (`next build --webpack`) still bundles `@edmate/content` into the
+app's own server chunk despite `serverExternalPackages` (a pnpm-monorepo gap in that Next option,
+not something fixable from this config), and the bundled module's `import.meta.url` is rewritten to
+the build machine's own absolute path -- wrong everywhere else, including the Docker image this app
+ships in and any relocated standalone output. Without this fix, a missing worker in production
+silently ran the full regex check with no wall-clock limit at all, on exactly the path (loading and
+validating locale packs, including real PII patterns) this guard exists to protect -- failing open,
+not closed. This changes the age gate's effective behaviour on a risky path
+(`apps/web/src/auth/**` depends on `@edmate/content`'s locale-pack loading).
+risk: high
+
+---
+
+### 20 Oct 2026 · 1.7b fix round: build-smoke test relocates the build to prove the worker survives it · decided by builder
+Decided: `apps/web/test/build-smoke.test.ts` now copies `.next/standalone` to a temp directory and
+hides this checkout's own `packages/content/dist` for the duration of the test, instead of running
+the build in place.
+Why: running the build in place let the bundled chunk's baked build-machine path still resolve, so
+the original test could never have caught the bug the security review found (it is specific to
+relocation: the Docker image, or any standalone copy moved elsewhere). Relocating in the test is
+the only way to exercise what actually ships.
+risk: low
+
+---
+
+### 20 Oct 2026 · 1.7b worker path built without `new URL(<literal>, import.meta.url)` · decided by builder
+Decided: `getWorkerFile()` in `packages/content/src/safeRegexGuard.ts` now builds the worker's path
+with `fileURLToPath(import.meta.url)` + `path.join`, passing a plain string to `new Worker(...)`
+instead of a `URL`.
+Why: `new URL(<relative literal>, import.meta.url)` is webpack 5's (and Turbopack's) built-in "URL
+asset" convention — it is statically detected and rewritten to copy only the target file's bytes,
+breaking the worker's sibling import of `safeRegex.js`. In production this made every locale-pack
+load/validate check hit the wall-clock ceiling and report every pattern unsafe, including `IN`'s
+real PII patterns, silently narrowing the age gate's market list to `global` only — a change to the
+age gate's effective content load behaviour, on a risky path (`apps/web/src/auth/**` depends on
+this).
+risk: high
+
+---
+
+### 20 Oct 2026 · 1.7b Turbopack trial: fixed for the original bug, still fails for a different reason · decided by builder
+Decided: keep `next build --webpack` (`apps/web/package.json` unchanged) for this task, per the
+plan's lead answer. A plain `next build` (no `--webpack`) was trialed after the fix and still
+fails, now with a different error: Turbopack's page-data collection reaches
+`apps/web/vitest.config.ts` → Vite → lightningcss's native addon, which Turbopack can't place in an
+ESM chunk. This is unrelated to the `new URL(..., import.meta.url)` bug this task fixes.
+Why: the task's acceptance criteria only require the webpack build to work; chasing the separate
+Turbopack/lightningcss issue is out of scope and risks scope creep on a task that is otherwise
+narrow and well-bounded.
+risk: low
+
+---
+
+### 20 Oct 2026 · 1.7b Turbopack revert is a follow-up task, not part of 1.7b · decided by builder
+Decided: reverting `apps/web/package.json`'s `build` script to plain `next build` (Turbopack) is
+left as a separate follow-up task, to be picked up only once the lightningcss/vitest.config.ts
+issue found in the trial above is understood and fixed.
+Why: the plan flagged this as an open question for the lead to confirm; the lead's answer in the
+plan file says to keep `--webpack` and log Turbopack re-adoption as a follow-up, not an ADR (no new
+tool or dependency — Next.js ships both bundlers with the current toolchain), so this does not
+trigger CLAUDE.md rule 2's ADR requirement.
+risk: low
+
+---
+
+### 20 Oct 2026 · 1.7b merge: safe-regex worker survives a relocated build · decided by lead · risk: high
+Decided: merge PR #76. It touches apps/web/src/auth/** and .github/** (risky groups). security-reviewer (opus), typescript-reviewer and code-reviewer ran, and the fix round was re-verified by fresh security and TypeScript passes. The smoke-test MEDIUM and the LOWs go to 1.7d; the Turbopack revert goes to 1.7e.
+Why: a relocated build now fails closed instead of running an unbounded in-process check; the remaining findings are test hygiene and log tidying.
+risk: high
+
+---
+
 ### 20 Oct 2026 · 5.6c Practice items are teacher-scoped; demo bank teacher is tch_test_01 · decided by tdd-guide
 Decided: `PracticeItem` carries a harness-internal `teacherId`. The demo bank's records all use `DEMO_PRACTICE_TEACHER_ID = 'tch_test_01'`, the contracts fixture teacher. The bank's `pick`/`answerKeyFor`, `pickItem`'s runtime check and the tool's `issuedItem` all refuse an item from another teacher, even when the module id is the same. Generated items take the scope's teacher.
 Why: two teachers can use the same module id. Before this change, only the module was checked (5.6 review MEDIUM).
