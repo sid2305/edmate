@@ -346,6 +346,14 @@ tasks:
   - '1.4'
   status: todo
   risk: risky
+- id: 1.4d
+  milestone: M13
+  title: 'Sign-in follow-ups from the 1.4 review: ioredis dev singleton and shutdown; split the Edge-safe guard exports from the Node-only auth runtime (server-only); one shared Redis ready promise; log the Auth.js error type, not minified class names; bump nodemailer once next-auth allows; per-IP ''unknown'' bucket; deploy drops the Mailpit default and sets Caddy trusted_proxies'
+  accept: dev hot reload reuses one Redis client; guard helpers import without ioredis or nodemailer; no MaxListeners warning in a Redis outage; deploy docs cover Mailpit and trusted_proxies; auth tests pass
+  deps:
+  - '1.4'
+  status: todo
+  risk: risky
 - id: 1.4c
   milestone: M13
   title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
