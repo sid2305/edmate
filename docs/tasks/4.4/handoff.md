@@ -267,3 +267,30 @@ where the `queuedTurnPorts` arity fix landed). `@edmate/harness:test` 86 files /
 `@edmate/evals:test` 16 files / 864 tests passed (moderation 36/36 + jailbreak 49/49 blocked,
 held-out 0/0, near-miss 26/26 clear; distress 52/52 escalated in all 4 modes, near-miss 9/9 clear
 with a working classifier). `python3 .githooks/secret-scan.py --all` → clean.
+
+## Sync 2 with main (4.8, 4.3a)
+
+4.8 (`adviceGuard`, PR #60) and 4.3a (per-test timeouts raised from `1_000` to `5_000`) landed on
+`main` after the first sync. Merged `origin/main` into this branch again.
+
+### Conflict
+
+- **`packages/harness/src/pipeline/steps/preGuard.test.ts`**: both sides touched the same tests.
+  Kept this branch's (4.4's) test bodies — the registry-order test, all three guard block/escalate
+  cases, the safety-event assertions, `teacherPackageNames` and `recentStudentTurns` — and took
+  main's 4.3a timeout, raising every per-test `}, 1_000)` in the file to `}, 5_000)`.
+
+### Non-conflict fallout
+
+- Swept `packages/harness` and `packages/evals` for any other 4.4-added test file still on the old
+  `1_000` ms per-test timeout and raised those to `5_000` too, to match 4.3a:
+  `packages/evals/src/moderationJailbreak.test.ts` (one case).
+- No fallout from 4.8's `adviceGuard`: it registers in `postGuards` and the default guard registry,
+  outside 4.4's `pre` guard chain, and none of 4.4's scripted-gateway test fixtures exercise
+  `postGuards`, so no test needed new scripted answers for it. Guard behaviour unchanged on both
+  sides.
+
+### Gate
+
+`corepack pnpm turbo run typecheck lint test --filter=...@edmate/harness --filter=@edmate/evals --force --concurrency=1`
+→ **34/34 tasks passed**. `python3 .githooks/secret-scan.py --all` → clean.
