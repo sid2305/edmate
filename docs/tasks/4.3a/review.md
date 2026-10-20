@@ -1,6 +1,5 @@
-# 4.3a review
+# 4.3a review — APPROVE
 
-Verdict: APPROVE
 
 Reviewers: code-reviewer (sonnet)
 
