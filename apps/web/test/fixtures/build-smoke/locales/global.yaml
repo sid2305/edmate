@@ -1,0 +1,17 @@
+# Fixture only (task 1.7b build smoke test): never read by production or `edmate content validate`.
+# A minimal, valid default pack -- loadLocalePacks requires one to load at all.
+market: global
+languages: [en]
+timezone: UTC
+currency: { code: USD, format: "$#,##0.00" }
+payments: { methods: [], provider: tbd }
+helplines: []
+compliance:
+  privacyLaw: "n/a (fixture)"
+  minAge: 13
+  dataRegion: "n/a (fixture)"
+  grievance: "n/a (fixture)"
+  parentalConsentRequired: true
+regulatedDisclaimers:
+  investing: "n/a (fixture)"
+piiPatterns: []

@@ -10,7 +10,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "build-smoke": "vitest run --config vitest.build-smoke.config.ts"
   },
   "dependencies": {
     "@edmate/content": "workspace:*",

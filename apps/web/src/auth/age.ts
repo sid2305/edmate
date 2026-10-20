@@ -48,15 +48,26 @@ export interface AgeContent {
 /**
  * Loads the locale packs (`<dir>/locales`) and privacy notices (`<dir>/legal/privacy-notice`).
  * Throws when either can't be used: the gate must not run without the notice it records.
+ *
+ * `log` (default `console.error`, matching `close()` below) gets one line per refused pack: the
+ * file and its reasons only (already non-PII codes/messages -- the same strings `loadLocalePacks`
+ * puts in the thrown `Error` for the default-pack case). The gate itself does not change
+ * behaviour: a refused pack's market still falls back to the default pack, same as before.
  */
-export function loadAgeContent(dir: string): AgeContent {
+export function loadAgeContent(
+  dir: string,
+  log: (line: string) => void = (line) => console.error(line),
+): AgeContent {
   const { notices, errors } = readPrivacyNoticesDir(join(dir, 'legal', 'privacy-notice'));
   if (errors.length > 0) {
     throw new Error(`privacy notices: ${errors.length} unusable file(s)`);
   }
   // Fails here, not on first use, when there is no default notice.
   pickPrivacyNotice(ELSEWHERE, notices);
-  const { packs } = loadLocalePacks(join(dir, 'locales'));
+  const { packs, refused } = loadLocalePacks(join(dir, 'locales'));
+  for (const r of refused) {
+    log(`[auth] age gate: refused locale pack ${r.file}: ${r.reasons.join('; ')}`);
+  }
   const markets = [...packs.keys()].filter((m) => m !== ELSEWHERE).sort();
   return {
     markets: Object.freeze([...markets, ELSEWHERE]),

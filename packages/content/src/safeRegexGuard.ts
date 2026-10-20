@@ -26,6 +26,7 @@
 // a 'message' would, so it cannot preempt the wait either). Production always runs the built
 // `dist`, where the worker file sits next to this one.
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 import { checkSafeRegex, type TimingOptions } from './safeRegex.js';
@@ -35,12 +36,22 @@ import { checkSafeRegex, type TimingOptions } from './safeRegex.js';
 // task 1.7, imports the locale loader) can hand `import.meta.url` back as a URL from a different
 // realm, and Node's `fileURLToPath` rejects that with ERR_INVALID_ARG_TYPE even though it reads
 // as a URL. Nothing here runs until the first real check, well after module load.
-let workerFile: { url: URL; path: string } | undefined;
+//
+// 1.7b: the path is built with `fileURLToPath` + `path.join`, never `new URL(<literal>,
+// import.meta.url)`. That exact expression is webpack 5's (and Turbopack's) built-in "URL asset"
+// convention: a production Next build parses it and copies only `safeRegexWorkerEntry.js`'s own
+// bytes to a hashed output path, without resolving that file's own relative import of
+// `safeRegex.js`. The worker then fails to load, every check hits the wall-clock ceiling, and
+// every pattern is reported unsafe (the IN pack's real PII patterns among them). Passing a plain
+// string path to `Worker` (it accepts either a `URL` or a string) avoids the asset-URL rewrite
+// entirely -- nothing bundler-specific is left for either bundler to misparse.
+let workerFile: { path: string } | undefined;
 
-function getWorkerFile(): { url: URL; path: string } {
+function getWorkerFile(): { path: string } {
   if (!workerFile) {
-    const url = new URL('./safeRegexWorkerEntry.js', import.meta.url);
-    workerFile = { url, path: fileURLToPath(url) };
+    const here = fileURLToPath(import.meta.url);
+    const filePath = path.join(path.dirname(here), 'safeRegexWorkerEntry.js');
+    workerFile = { path: filePath };
   }
   return workerFile;
 }
@@ -72,7 +83,7 @@ export function checkSafeRegexGuarded(
   const { port1, port2 } = new MessageChannel();
   let worker: Worker;
   try {
-    worker = new Worker(file.url, {
+    worker = new Worker(file.path, {
       workerData: { source, opts: serializableOpts(opts), port: port2, flag },
       transferList: [port2],
     });

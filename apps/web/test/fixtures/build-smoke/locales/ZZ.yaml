@@ -1,0 +1,22 @@
+# Fixture only (task 1.7b build smoke test): never read by production or `edmate content validate`.
+# "ZZ" is not a real market; this pack exists only so its one PII pattern -- a fresh, deliberately
+# unsafe structural shape (nested quantifier inside a repeated group, not a real PII pattern) -- is
+# refused whole at load. Proves checkSafeRegexGuarded still catches a genuinely unsafe pattern fast,
+# with the specific structural reason, rather than silently passing it or defaulting every pattern
+# to the generic "exceeded the wall-clock ceiling" message (the 1.7b bug's symptom).
+market: ZZ
+languages: [en]
+timezone: UTC
+currency: { code: USD, format: "$#,##0.00" }
+payments: { methods: [], provider: tbd }
+helplines: []
+compliance:
+  privacyLaw: "n/a (fixture)"
+  minAge: 13
+  dataRegion: "n/a (fixture)"
+  grievance: "n/a (fixture)"
+  parentalConsentRequired: true
+regulatedDisclaimers:
+  investing: "n/a (fixture)"
+piiPatterns:
+  - '(a+)+$'
