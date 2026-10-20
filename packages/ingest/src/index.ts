@@ -1,3 +1,4 @@
+export { assertNotAnswerBank } from './answerBank.js';
 export {
   CHUNK_MAX_CHARS,
   CHUNK_MAX_WORDS,

@@ -3,6 +3,7 @@
 // (a fixed code, never text) and the call still resolves. A storage failure rejects with a fixed
 // IngestError that keeps nothing of the cause (it may quote teacher material).
 import type { ModelGateway, TranscribeInput, Transcriber } from '@edmate/contracts';
+import { assertNotAnswerBank } from '../answerBank.js';
 import { chunkDocument } from '../chunk/chunker.js';
 import { parseDocument, type DocumentInput } from '../document.js';
 import { IngestError } from '../errors.js';
@@ -142,16 +143,23 @@ export async function indexDocument(
   input: IndexDocumentInput,
 ): Promise<IndexDocumentResult> {
   const { scope, documentId, source } = input;
-  let drafts: ChunkDraft[];
+  let parsed: ParsedDocument;
+  let headings: boolean;
   if (source.kind === 'parsed') {
-    drafts = chunkDocument(source.document, { headings: source.headings });
+    parsed = source.document;
+    headings = source.headings;
   } else if (source.kind === 'video') {
-    drafts = chunkDocument(await parseVideo(deps, source), { headings: false });
+    parsed = await parseVideo(deps, source);
+    headings = false;
   } else {
-    drafts = chunkDocument(await parseDocument(source), {
-      headings: source.kind === 'markdown' || source.kind === 'docx',
-    });
+    parsed = await parseDocument(source);
+    headings = source.kind === 'markdown' || source.kind === 'docx';
   }
+  // 5.6a Phase B: a practice bank or answer key is never chunked or indexed, so it can never
+  // reach the model as retrieved context. Checked here, after parsing (so the shape check sees
+  // the parsed text) and before chunking (so a refused source is never stored).
+  assertNotAnswerBank(parsed.sourceTitle, parsed.units);
+  const drafts: ChunkDraft[] = chunkDocument(parsed, { headings });
   if (drafts.length === 0) {
     throw new IngestError('validation', false, 'the document has no text to learn from');
   }

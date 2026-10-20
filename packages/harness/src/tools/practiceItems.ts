@@ -87,8 +87,11 @@ export interface PracticeBank {
   answerKeyFor(itemId: string, scope: PracticeScope): readonly string[] | undefined;
 }
 
-/** A caller's extra filter on an item (the practice tool: no earlier key in its prompt). */
-export type AcceptItem = (item: PracticeItem) => boolean;
+/**
+ * A caller's extra filter on an item and its server-only key (the practice tool: no earlier key
+ * in its prompt, and, 5.6a, its own key in none of the turn's retrieved chunks).
+ */
+export type AcceptItem = (item: PracticeItem, answerKey: readonly string[]) => boolean;
 
 /** Most bank picks `pickItem` tries before falling back to the generator. */
 export const BANK_TRIES = 20;
@@ -112,7 +115,7 @@ function servable(
     item.id.length <= PRACTICE_ID_MAX &&
     !exclude.includes(item.id) &&
     validateItem(item, answerKey) &&
-    accept(item)
+    accept(item, answerKey)
   );
 }
 

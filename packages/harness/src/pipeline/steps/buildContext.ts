@@ -5,10 +5,15 @@
 // locked verdict (retrievalQuery.ts's retrievalQueries, mergeByScore below).
 // The style card and locale pack are already on Entitled (ADR-0004); persona has no source
 // before 3.11/5.8, so it is left out (3.5's skill rules fall back to coach).
+// 5.6a: a chunk whose text, title or locator reveals the held answer key is dropped before the
+// merge, so it never reaches the model (dropAnswerKeyChunks below); an unreadable help state
+// drops every chunk (fail closed). Short numeric keys are not used for this (contextAnswerKeys).
 // Any throw (a store down, an index that widens the scope) sends the runner to its
 // `fallbackContext`, which takes the ask_teacher path.
 import type { Chunk } from '@edmate/contracts';
 import { scopedRetrieval } from '../../access/scopedRetrieval.js';
+import { type AnswerKeyMatcher, compileAnswerKeys } from '../generate/answerKey.js';
+import { numericKey } from '../generate/numbers.js';
 import { loadSessionHelp } from '../../pedagogy/helpState.js';
 import type { Steps } from '../types.js';
 import { isWithheld } from '../policies.js';
@@ -68,6 +73,41 @@ function mergeByScore(own: readonly Chunk[], ctx: readonly Chunk[], k: number): 
     .slice(0, k);
 }
 
+/** A whole number key with fewer digits than this is too short to drop context (5.6a). */
+const SHORT_NUMBER_DIGITS = 3;
+
+/**
+ * The keys used to check retrieved material (lead answer, 20 Oct 2026): every key except a short
+ * whole number ("1", "7", "42", or the same number in words, "one"). Such a key would drop almost
+ * every chunk, and a chunk that happens to hold "7" does not give an item's answer away. The stream
+ * gate and postGuard still hold every key on what the model says.
+ */
+export function contextAnswerKeys(keys: readonly string[]): string[] {
+  return keys.filter((k) => {
+    const n = numericKey(k);
+    return n === undefined || !new RegExp(`^\\d{1,${String(SHORT_NUMBER_DIGITS - 1)}}$`).test(n.value);
+  });
+}
+
+/** True when any field the composer shows the model (text, source title, locator) leaks a key. */
+export function chunkLeaks(c: Chunk, m: AnswerKeyMatcher): boolean {
+  return m.leaks(c.text) || m.leaks(c.source.title) || m.leaks(c.source.locator);
+}
+
+/** Splits `chunks` into those that reveal no key and the ids of those that do (5.6a). */
+export function dropAnswerKeyChunks(
+  chunks: readonly Chunk[],
+  m: AnswerKeyMatcher,
+): { kept: Chunk[]; dropped: Set<string> } {
+  const kept: Chunk[] = [];
+  const dropped = new Set<string>();
+  for (const c of chunks) {
+    if (!m.empty && chunkLeaks(c, m)) dropped.add(c.id);
+    else kept.push(c);
+  }
+  return { kept, dropped };
+}
+
 export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel }, s) => {
   const e = s.entitlement;
   const [profile, fetched] = await Promise.all([
@@ -97,9 +137,24 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
       ? Promise.resolve<Chunk[]>([])
       : scoped.search(withContext, RETRIEVAL_K),
   ]);
-  const found = probe.hit ? own : mergeByScore(own, ctx, RETRIEVAL_K);
-  const retrieved = fit(found, MAX_CONTEXT_CHARS - historyChars(history));
   const help = loadSessionHelp(s.helpState);
+  // 5.6a: drop before the merge and the fit, so clean chunks fill the freed slots. On a locked hit
+  // only `own` is used (3.4c), so a dropped own chunk is never backfilled from `ctx`.
+  const candidates = probe.hit ? own : [...own, ...ctx];
+  let found: Chunk[];
+  let dropped: number;
+  if (help.unreadable) {
+    // The stored blob may hold a key we cannot read: fail closed, no material this turn.
+    found = [];
+    dropped = new Set(candidates.map((c) => c.id)).size;
+  } else {
+    const m = compileAnswerKeys(contextAnswerKeys(help.help.answerKey));
+    const o = dropAnswerKeyChunks(own, m);
+    const x = dropAnswerKeyChunks(probe.hit ? [] : ctx, m);
+    found = probe.hit ? o.kept : mergeByScore(o.kept, x.kept, RETRIEVAL_K);
+    dropped = new Set([...o.dropped, ...x.dropped]).size;
+  }
+  const retrieved = fit(found, MAX_CONTEXT_CHARS - historyChars(history));
   return {
     profile,
     history,
@@ -109,5 +164,6 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
     helpState: help.help,
     // 4.6b fix round 1: a stored blob that could not be read may hold lockedStopped true.
     ...(help.unreadable ? { helpStateUnreadable: true } : {}),
+    ...(dropped > 0 ? { answerKeyDropped: dropped } : {}),
   };
 };

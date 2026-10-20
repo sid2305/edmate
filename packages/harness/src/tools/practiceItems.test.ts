@@ -259,6 +259,18 @@ describe('pickItem validates every item at runtime (5.6 review)', () => {
     expect(picked?.item.id).toMatch(/^gen:/);
   });
 
+  it('accept receives the item and its answer key (5.6a), bank and generated alike', () => {
+    const seen: [string, readonly string[]][] = [];
+    const bank = fixedBank([BANK_RECORD]);
+    const picked = pickItem(bank, SCOPE, 2, [], undefined, (item, key) => {
+      seen.push([item.id, key]);
+      return item.id !== BANK_ITEM.id;
+    });
+    expect(seen[0]).toEqual([BANK_ITEM.id, ['1/2']]);
+    expect(seen[1]?.[0]).toBe(picked?.item.id);
+    expect(seen[1]?.[1]).toEqual(picked?.answerKey);
+  });
+
   it('fails closed when nothing is valid: no bank item, no generated variant accepted', () => {
     const bank = fixedBank([BANK_RECORD]);
     expect(pickItem(bank, SCOPE, 2, [], undefined, () => false)).toBeUndefined();
