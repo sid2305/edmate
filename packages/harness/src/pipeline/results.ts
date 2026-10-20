@@ -15,6 +15,7 @@ import {
   PedagogyDecisionSchema,
   PersonaSchema,
   SafetyAlertSchema,
+  SafetyEventCodeSchema,
   SourceRefSchema,
   StyleCardSchema,
   TurnContextSchema,
@@ -55,7 +56,15 @@ export const ScrubbedSchema: z.ZodType<Scrubbed> = z.strictObject({
 });
 
 export const PreGuardResultSchema: z.ZodType<PreGuardResult> = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal(['ok', 'block']), guards, usage }),
+  z.strictObject({ result: z.literal('ok'), guards, usage }),
+  z.strictObject({
+    result: z.literal('block'),
+    guards,
+    usage,
+    reply: z.string().min(1).exactOptional(),
+    alert: SafetyAlertSchema.exactOptional(),
+    code: SafetyEventCodeSchema.exclude(['self_harm']).exactOptional(),
+  }),
   z.strictObject({ result: z.literal('escalate'), alert: SafetyAlertSchema, guards, usage }),
 ]);
 

@@ -54,7 +54,7 @@ export class PermanentJobError extends Error {
 const PERMANENT_KINDS = new Set(['scope', 'not_found', 'invalid', 'integrity']);
 
 /** Rethrows `error` as permanent when a retry can't fix it; a `failed` (db down) stays retryable. */
-function classify(job: string, error: unknown): never {
+export function classify(job: string, error: unknown): never {
   if (error instanceof RepositoryError && PERMANENT_KINDS.has(error.kind)) {
     throw new PermanentJobError(`${job}: ${error.message}`, { cause: error });
   }

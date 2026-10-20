@@ -52,4 +52,14 @@ export const invalid: InvalidCase[] = [
     value: { ok: false, action: 'rewrite', text: 'x'.repeat(8001), reason: 'x' },
     path: ['text'],
   },
+  // ADR-0006: a code is one of the fixed set; free text, a prefixed form or '' are refused.
+  {
+    schema: 'SafetyEventCode',
+    name: 'free text instead of a code',
+    value: 'asked how to hurt someone',
+    path: [],
+  },
+  { schema: 'SafetyEventCode', name: 'a prefixed code', value: 'moderation_block:hate', path: [] },
+  { schema: 'SafetyEventCode', name: 'empty', value: '', path: [] },
+  { schema: 'SafetyEventCode', name: 'not a string', value: 3, path: [] },
 ];

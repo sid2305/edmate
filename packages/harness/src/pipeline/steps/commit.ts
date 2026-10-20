@@ -1,5 +1,6 @@
 // Step 11, commit (tasks 3.8, 3.17): persists what the turn produced, through ports only.
-// 1. The scrubbed student message (when the scrub passed and the input had text), timestamped
+// 1. The scrubbed student message (when the scrub passed and the input had text; a placeholder
+//    when a pre guard blocked it, task 4.4), timestamped
 //    when the turn started, with an id drawn here once (a worker retry replays the same job).
 // 2. The agent's reply (when the student was shown one), with the `done` event's message id.
 // 3. A grounding escalation's TeacherQuestion (4.7, `escalateToTeacher`) when the live attempt
@@ -14,17 +15,24 @@
 //
 // The answer key lives in `record.next` and in `record.decision` (systemPrompt, mustNotReveal);
 // it goes to saveHelpState and nowhere else (ADR-0005): messages, evidence and the TeacherQuestion
-// carry only `input.text` (scrubbed) and `replyText` — never the answer key or locked text. In
-// production the ports are queue-backed (@edmate/queue): this resolves once the jobs are
-// enqueued, never on the database write.
+// carry only `input.text` (scrubbed, or its blocked placeholder, task 4.4) and `replyText` — never
+// the answer key or locked text. In production the ports are queue-backed (@edmate/queue): this
+// resolves once the jobs are enqueued, never on the database write.
 import { serializeSessionHelp, withGroundingAsks } from '../../pedagogy/helpState.js';
 import { errorName, GroundingEscalationLost } from '../errors.js';
+import { withheldMessage } from '../policies.js';
 import { openTeacherQuestion } from '../teacherQuestion.js';
 import type { Steps } from '../types.js';
 
 export const commit: Steps['commit'] = async (env, record) => {
   const { transcripts, sessionState, profiles, teacherQuestions, ids } = env.deps;
-  const text = record.input?.text;
+  // A blocked input is saved as a placeholder, never its text (4.4 fix round).
+  const text =
+    record.input?.text === undefined
+      ? undefined
+      : record.inputWithheld === true
+        ? withheldMessage(record.withheldCode)
+        : record.input.text;
   const asks = text !== undefined && text.trim() !== '' && record.teacherQuestionId === undefined;
   if (text !== undefined) {
     await transcripts.append(record.sessionId, {

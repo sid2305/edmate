@@ -25,6 +25,8 @@ import { sequentialIds, type SequentialIds } from './ids.js';
 import {
   type MemoryAlertSink,
   memoryAlertSink,
+  type MemorySafetyEventSink,
+  memorySafetyEventSink,
   type MemoryTraceSink,
   memoryTraceSink,
   type MemoryTurnLog,
@@ -290,6 +292,8 @@ export interface TestDeps {
   traces: MemoryTraceSink;
   usage: MemoryUsageMeter;
   alerts: MemoryAlertSink;
+  /** moderationIn and jailbreak blocks (ADR-0006). */
+  safetyEvents: MemorySafetyEventSink;
   log: MemoryTurnLog;
   /** Calls to ports the happy path never uses (stores); should stay empty. */
   portCalls: string[];
@@ -312,6 +316,7 @@ export function testDeps(
     traces?: MemoryTraceSink;
     usage?: MemoryUsageMeter;
     alerts?: MemoryAlertSink;
+    safetyEvents?: MemorySafetyEventSink;
     log?: MemoryTurnLog;
     /**
      * Answers grounding's judge requests (4.7) outside the script and the spy: a fixed verdict or a
@@ -339,6 +344,7 @@ export function testDeps(
   const traces = opts.traces ?? memoryTraceSink();
   const usage = opts.usage ?? memoryUsageMeter();
   const alerts = opts.alerts ?? memoryAlertSink();
+  const safetyEvents = opts.safetyEvents ?? memorySafetyEventSink();
   const log = opts.log ?? memoryTurnLog();
   const portCalls: string[] = [];
   const j = opts.judge;
@@ -389,6 +395,7 @@ export function testDeps(
     usage,
     traces,
     alerts,
+    safetyEvents,
     fallbackReplies: {
       safeReply: () => TEST_SAFE_REPLY,
       distress: () => TEST_DISTRESS_REPLY,
@@ -405,6 +412,7 @@ export function testDeps(
     traces,
     usage,
     alerts,
+    safetyEvents,
     log,
     portCalls,
     judged: judged?.judged ?? [],

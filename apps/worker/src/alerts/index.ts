@@ -10,3 +10,10 @@ export {
 } from './processors.js';
 export type { AckStore, AlertAudience, AlertNotifier } from './types.js';
 export { ALERT_MAX_STALLED, createAlertWorker, type AlertWorkerOptions } from './workers.js';
+export {
+  createSafetyEventWorker,
+  type SafetyEventOutcome,
+  type SafetyEventRepo,
+  safetyEventProcessor,
+  type SafetyEventWorkerOptions,
+} from './safetyEvents.js';

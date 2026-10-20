@@ -286,12 +286,13 @@ describe('queuedTraceSink', () => {
 });
 
 describe('queuedTurnPorts', () => {
-  it('meter jobs go to the meter queue, alerts to the alert queue, the rest (including evidence) to commit', async () => {
+  it('meter jobs go to the meter queue, alerts and safety events to their own, the rest (including evidence) to commit', async () => {
     const meter = fakeQueue();
     const commit = fakeQueue();
     const alert = fakeQueue();
+    const safetyEvent = fakeQueue();
     const ports = queuedTurnPorts(
-      { meter, commit, alert },
+      { meter, commit, alert, safetyEvent },
       scope,
       { history: () => Promise.resolve([]) },
       {
@@ -300,6 +301,15 @@ describe('queuedTurnPorts', () => {
       },
     );
     await ports.alerts.raise(demoSafetyAlert);
+    await ports.safetyEvents.record({
+      ...scope,
+      sessionId: 'ses_1',
+      turnId: 'trn_1',
+      guard: 'moderationIn',
+      code: 'hate',
+      source: 'rule',
+    });
+    expect(safetyEvent.added.map((j) => j.name)).toEqual(['safety_event.record']);
     await ports.usage.record(usageMain, ctx);
     await ports.transcripts.append('ses_1', message);
     await ports.sessionState.saveHelpState('ses_1', {});
@@ -318,7 +328,7 @@ describe('queuedTurnPorts', () => {
   it('passes the alert options through (a shorter escalation delay)', async () => {
     const alert = fakeQueue();
     const ports = queuedTurnPorts(
-      { meter: fakeQueue(), commit: fakeQueue(), alert },
+      { meter: fakeQueue(), commit: fakeQueue(), alert, safetyEvent: fakeQueue() },
       scope,
       { history: () => Promise.resolve([]) },
       {

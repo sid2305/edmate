@@ -21,6 +21,8 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SafetyEventCode,
+  SafetyEventSink,
   SessionStateStore,
   SourceRef,
   StyleCard,
@@ -166,6 +168,17 @@ export interface PipelineDeps {
   usage: UsageMeter;
   traces: TraceSink;
   alerts: AlertSink;
+  /**
+   * Where moderationIn and jailbreak record a block (ADR-0006): ids and a fixed code, never text.
+   * Bound to the turn's student x teacher by the composition root (`queuedTurnPorts`).
+   */
+  safetyEvents: SafetyEventSink;
+  /**
+   * The names of all of the teacher's packages (4.4 fix round), for package claims ("I'm on
+   * <another package>"). Server-side, keyed by the entitlement's teacher. Optional: without it
+   * only the student's own package name is known.
+   */
+  teacherPackageNames?: (teacherId: string) => Promise<readonly string[]>;
   fallbackReplies: FallbackReplies;
   /**
    * The validated prompt-pack sets, by version, loaded once at start-up by the composition root
@@ -231,7 +244,21 @@ export interface Scrubbed {
 }
 
 export type PreGuardResult =
-  | { result: 'ok' | 'block'; guards: GuardTrace[]; usage: Usage[] }
+  | { result: 'ok'; guards: GuardTrace[]; usage: Usage[] }
+  | {
+      result: 'block';
+      guards: GuardTrace[];
+      usage: Usage[];
+      /**
+       * The reply the student sees, picked by the blocking guard's code (4.4). Absent: the turn
+       * ends with the generic `guard_blocked` error instead.
+       */
+      reply?: string;
+      /** A misuse alert to raise with the block (4.4: harm to others). */
+      alert?: SafetyAlert;
+      /** The blocking guard's code (4.4), for the withheld placeholder. Never text. */
+      code?: Exclude<SafetyEventCode, 'self_harm'>;
+    }
   | { result: 'escalate'; alert: SafetyAlert; guards: GuardTrace[]; usage: Usage[] };
 
 export interface RouteResult {
@@ -354,6 +381,13 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * A pre guard (moderationIn, jailbreak) blocked the input (4.4 fix round): commit saves
+   * WITHHELD_MESSAGE in its place, so the blocked text never reaches a later turn's history.
+   */
+  inputWithheld?: true;
+  /** The blocking guard's code, when a code came with the block (for the placeholder). */
+  withheldCode?: string;
   /**
    * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
    * (the student got the caring template). Server-side only; commit decides where it is kept.
