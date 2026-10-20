@@ -1938,10 +1938,10 @@ tasks:
   accept: 'no test sets a per-test timeout under 5_000 ms (today: evals distressEscalate, harness escalate, costCeiling, preGuard, distressDetect, distressKeywords; queue alertSink); the suites pass'
   deps:
   - '4.3'
-  status: running
+  status: done
   needs_decision: null
   branch: m4/4.3a-test-timeouts
-  model: plan:lead build:haiku
+  model: plan:lead build:haiku review:sonnet
 - id: 5.1b
   milestone: M13
   title: 'Ingest follow-ups (5.1 review LOWs): html.ts DomNode double cast (type guard on AnyNode); pptx.ts attributes typed Record<string, string | undefined>; zip.ts destroys (not pauses) the stream on
