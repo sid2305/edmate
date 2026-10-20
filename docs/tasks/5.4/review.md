@@ -1,8 +1,8 @@
 # 5.4 review — APPROVE
 
-Reviewers: security-reviewer (opus, Phase A at 79b2f15 and Phase B at 8a86d86), code-reviewer (sonnet), typescript-reviewer (sonnet), database-reviewer (sonnet)
+Reviewers: security-reviewer (opus), code-reviewer (sonnet), typescript-reviewer (sonnet), database-reviewer (sonnet)
 
-All reviewers approve with no CRITICAL or HIGH findings. Security mutation-tested both phases: five harness filter breaks, the db allowed-module and teacher/ownership filters, and the raw-allowed cache key. Every break was caught by the property tests or the retrieval-leak test. Search scope is fixed from the entitlement. Every chunk is re-checked and rebuilt from known fields. `probeLocked` returns only `{hit, score}`. The tool filter lives in `access/`. leakCache is keyed on teacher, revision and owned ∩ allowed ids, and fails closed. Indexes cover every scope filter, and the leakCheck SLO holds (p95 4.3 ms).
+All reviewers approve with no CRITICAL or HIGH findings. security-reviewer reviewed Phase A at 79b2f15 and Phase B at 8a86d86. Security mutation-tested both phases: five harness filter breaks, the db allowed-module and teacher/ownership filters, and the raw-allowed cache key. Every break was caught by the property tests or the retrieval-leak test. Search scope is fixed from the entitlement. Every chunk is re-checked and rebuilt from known fields. `probeLocked` returns only `{hit, score}`. The tool filter lives in `access/`. leakCache is keyed on teacher, revision and owned ∩ allowed ids, and fails closed. Indexes cover every scope filter, and the leakCheck SLO holds (p95 4.3 ms).
 
 ## Findings
 - [MEDIUM] [deferred 5.4a] packages/db/test/access-audit.test.ts:96 — rule 1 misses `db.query.chunks.findMany()` (the drizzle relational API on a schema-aware client), namespace imports (`t.chunks`), and SQL `from public.chunks`. Flag those forms too.
