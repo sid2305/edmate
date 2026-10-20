@@ -1919,3 +1919,14 @@ tasks:
   needs_decision: null
   branch: null
   model: null
+- id: 5.1a
+  milestone: M13
+  title: 'Web-link fetch follow-up (5.1 Phase A open question): the public-address check resolves the host separately from the connection, so a host whose DNS answer changes between the two (DNS rebinding) could reach a private address; pin the connection to the checked address (custom lookup/agent) where the app is assembled. The allowlist limits it until then'
+  accept: a test where the second DNS answer is private fails closed; the connection uses the address that passed the check
+  deps:
+  - GATE
+  - '5.1'
+  status: todo
+  needs_decision: null
+  branch: null
+  model: null
