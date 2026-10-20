@@ -28,7 +28,7 @@ class GateCase(RepoCase):
         all_files.update(files)
         return self.repo.branch(B, all_files)
 
-    def gh_env(self, labels=(), fail=False, oid="auto"):
+    def gh_env(self, labels=(), fail=False, oid="auto", branch=B):
         """A stub `gh` on PATH that reports the PR's branch, head commit (by default the local branch
         head, read when the stub runs) and labels (which the gate ignores)."""
         bindir = self.repo.root.parent / "bin"
@@ -37,12 +37,12 @@ class GateCase(RepoCase):
         if fail:
             gh.write_text("#!/bin/sh\necho 'not logged in'\nexit 1\n")
         else:
-            data = {"headRefName": B, "labels": [{"name": n} for n in labels]}
+            data = {"headRefName": branch, "labels": [{"name": n} for n in labels]}
             if oid == "auto":
                 data["headRefOid"] = "OID"
             elif oid is not None:
                 data["headRefOid"] = oid
-            text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {B})"')
+            text = json.dumps(data).replace('"OID"', f'"$(git rev-parse {branch})"')
             gh.write_text(f"#!/bin/sh\ncat <<EOF\n{text}\nEOF\n")
         gh.chmod(0o755)
         return dict(ENV, PATH=f"{bindir}{os.pathsep}{ENV['PATH']}")
@@ -143,11 +143,42 @@ class Basics(GateCase):
         self.assertEqual(code, 1)
         self.assertIn("still [open]", out)
 
-    def test_unfixed_high(self):
+    # MVP first (human decision, 20 Oct 2026): a HIGH may be [deferred <id>] to a task on the board.
+    def test_high_deferred_to_board_task_ok(self):
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("9.10", status="todo")]))
+        self.repo.commit("board: 9.10")  # on main, where the gate reads the board
         self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [deferred 9.10] apps/cli.ts:3 — x\n")
         code, out = self.gate()
-        self.assertEqual(code, 1)
-        self.assertIn("CRITICAL and HIGH must be fixed", out)
+        self.assertEqual(code, 0, out)
+
+    def test_high_deferred_to_unknown_task_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [deferred 9.10] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("9.10 is not on the board", out)
+
+    def test_open_high_fails(self):
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [HIGH] [open] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("a HIGH finding is [open]", out)
+
+    def test_critical_must_be_fixed(self):
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("9.10", status="todo")]))
+        self.repo.commit("board: 9.10")
+        self.make({"apps/cli.ts": "x\n"}, review=review() + "- [CRITICAL] [deferred 9.10] apps/cli.ts:3 — x\n")
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("CRITICAL must be fixed", out)
+
+    def test_pr_mode_keeps_task_letter(self):
+        b = "m3/3.11d-x"
+        self.repo.write("docs/board/tasks.yaml", board_yaml([task("9.9", branch=B), task("3.11d", branch=b)]))
+        self.repo.commit("board: 3.11d")
+        self.repo.branch(b, {**self.repo.task_files("3.11d"), "apps/cli.ts": "x\n"})
+        code, out = self.gate("--pr", "5", env=self.gh_env(branch=b))
+        self.assertEqual(code, 0, out)
+        self.assertIn("3.11d", out)
 
     def test_deferred_medium_ok(self):
         self.make({"apps/cli.ts": "x\n"}, review=review() + "- [MEDIUM] [deferred 9.10] apps/cli.ts:3 — x\n")

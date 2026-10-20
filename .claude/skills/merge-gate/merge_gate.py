@@ -199,8 +199,16 @@ def evaluate(task, branch, pr=None):
                 fails.append(f"a [{sev}] finding has no valid state tag ([fixed|open|deferred <id>|wontfix]): {after.strip()[:80]}")
                 continue
             state, rest = st.group(1).lower(), st.group(2)
-            if sev in ("CRITICAL", "HIGH") and state != "fixed":
-                fails.append(f"a {sev} finding is [{state}]; CRITICAL and HIGH must be fixed and re-verified")
+            if sev == "CRITICAL" and state != "fixed":
+                fails.append(f"a CRITICAL finding is [{state}]; CRITICAL must be fixed and re-verified")
+            elif sev == "HIGH" and state.startswith("deferred"):
+                # MVP first (human decision, 20 Oct 2026): one fix round; a HIGH still open after it
+                # becomes a board task and the PR merges. The task must exist on the board.
+                tid = state.split(None, 1)[1]
+                if board_field(tid, "id") is None:
+                    fails.append(f"a HIGH finding is [deferred {tid}] but {tid} is not on the board")
+            elif sev == "HIGH" and state != "fixed":
+                fails.append(f"a HIGH finding is [{state}]; fix it, or [deferred <task-id>] after the one fix round")
             elif state == "open":
                 fails.append(f"a {sev} finding is still [open]: fix it, or mark [deferred <task-id>] / [wontfix]")
             elif state == "wontfix":
@@ -275,7 +283,7 @@ def main(argv):
             return 1
         data = json.loads(out)
         branch = data["headRefName"]
-        m = re.match(r"m\d+/(\d+\.\d+)", branch)
+        m = re.match(r"m\d+/(\d+\.\d+[a-z]*)", branch)  # task ids may carry a letter: 3.11d
         if not m:
             print(f"FAIL  branch {branch} is not m<milestone>/<task-id>-<slug>")
             return 1
