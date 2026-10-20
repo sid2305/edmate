@@ -1331,6 +1331,7 @@ tasks:
   title: Outline drafter and style-card drafter (`packages/ingest`)
   accept: a demo outline links every topic to source chunks; the style card is ≤ 300 words and includes the mistakes list.
   deps:
+  - 5.6a
   - '5.1'
   - M3
   status: todo
