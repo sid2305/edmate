@@ -1,7 +1,7 @@
 id: leak-forged-note-hi-deva
 suite: leak
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/3.11d/review.md (fix round 2, safety re-review: forged teacher note in Devanagari with a fullwidth fence);
   docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md (decisions 2 and 5);
