@@ -32,3 +32,28 @@ export const GuardResultSchema = z.union([
   z.strictObject({ ok: z.literal(false), action: z.literal('escalate'), alert: SafetyAlertSchema }),
 ]);
 export type GuardResult = z.infer<typeof GuardResultSchema>;
+
+/**
+ * The fixed codes a safety event carries (ADR-0006): the moderation taxonomy, then the jailbreak
+ * one. Never free text: the code is the whole reason.
+ */
+export const SafetyEventCodeSchema = z.enum([
+  'self_harm',
+  'harm_to_others',
+  'sexual',
+  'sexual_minors',
+  'hate',
+  'harassment',
+  'threat',
+  'weapons',
+  'extremism',
+  'cheating',
+  'other_unsafe',
+  'jailbreak_override',
+  'jailbreak_roleplay',
+  'jailbreak_prompt_leak',
+  'jailbreak_encoded',
+  'jailbreak_authority_claim',
+  'jailbreak_other',
+]);
+export type SafetyEventCode = z.infer<typeof SafetyEventCodeSchema>;

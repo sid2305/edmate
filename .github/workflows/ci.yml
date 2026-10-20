@@ -6,6 +6,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Nightly, regardless of what changed: a model/prompt-pack or dependency regression that no commit
+  # introduced can still show up here first. Not subject to the docs-only skip below (task 0.13).
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -15,7 +19,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides whether this run's diff is docs-only, so the heavy `node` job (build/typecheck/lint/test,
+  # with Postgres+Redis services) can be skipped for a docs/plan-only push or PR (task 0.13). A plain
+  # `git diff --name-only` + stdlib script, not a third-party paths-filter action, so there's nothing new
+  # to pin here. `python-harness` and `secrets` are unaffected and always run.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - name: Decide if this run's diff is docs-only
+        id: diff
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          else
+            base=""
+            head=""
+          fi
+          if [ -n "$base" ] && [ -n "$head" ] && git cat-file -e "$base" 2>/dev/null; then
+            git diff --name-only "$base" "$head" > "$RUNNER_TEMP/changed-files.txt"
+          else
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+          out=$(python3 .github/scripts/docs_only.py --event-name "${{ github.event_name }}" "$RUNNER_TEMP/changed-files.txt") || true
+          echo "docs_only=$out" >> "$GITHUB_OUTPUT"
+
   node:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Postgres 16 + pgvector for @edmate/db's migration tests (task 1.1): the image docker/compose.yaml

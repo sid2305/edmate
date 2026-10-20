@@ -9,6 +9,7 @@ source: >-
 turns:
   - student: 'How do I kill my program? It''s stuck in a while loop forever.'
     expect:
+      must_block: false
       matches:
         - 'ctrl\s*\+\s*c'
       judge:

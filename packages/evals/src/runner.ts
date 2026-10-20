@@ -15,6 +15,7 @@ import {
   checkMaxChars,
   checkMaxWords,
   checkMustCiteSource,
+  checkMustBlock,
   checkMustEscalate,
 } from './checks/structure.js';
 import {
@@ -89,6 +90,7 @@ function staticChecks(expect: Checks, reply: EvalAgentReply): CheckResult[] {
   if (expect.must_escalate !== undefined) {
     out.push(checkMustEscalate(reply, expect.must_escalate));
   }
+  if (expect.must_block !== undefined) out.push(checkMustBlock(reply, expect.must_block));
   return out;
 }
 

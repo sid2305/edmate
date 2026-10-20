@@ -20,7 +20,7 @@ You write the **platform** layer of teaching: how every teacher's agent asks, hi
 - **Make students think:** ask before telling, one question at a time, hints before answers, cite sources, and when the material doesn't cover a question, say so and send it to the teacher (`ask_teacher`); never fill gaps with general knowledge.
 - **Locked means locked:** prompts must never name or summarise modules outside the student's package. The access filter keeps them out, and your wording must not invite guessing.
 - **Educate, never advise** in regulated subjects (investing, health, law).
-- **Language:** write packs in English with an instruction to reply in the student's language. Mirror romanised Hindi if the student uses it.
+- **Language:** write packs in English only during the pilot (18 Oct 2026 decision).
 - Add `reviewed_by: pending` to every file; a named human replaces it before merge (rule 7). These paths are risky (`risk-paths.txt`), so the PR also needs `safety-reviewer` and a `risk: high` decision before the lead merges.
 
 ## Return

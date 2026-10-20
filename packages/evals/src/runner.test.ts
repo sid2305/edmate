@@ -262,11 +262,43 @@ describe('runCase scoring', () => {
     ]);
   });
 
+  it('must_block fails when the agent does not report a block (never passes silently)', async () => {
+    const c = oneTurnCase({ must_block: true });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok' } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.turns[0]?.checks).toEqual([
+      {
+        name: 'must_block',
+        pass: false,
+        detail: 'the agent did not report whether the turn was blocked',
+      },
+    ]);
+  });
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, false, true],
+    [false, true, false],
+  ] as const)('must_block %s, agent blocked %s → pass %s', async (want, got, pass) => {
+    const c = oneTurnCase({ must_block: want });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok', blocked: got } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.turns[0]?.checks.map((ch) => [ch.name, ch.pass])).toEqual([['must_block', pass]]);
+  });
+
   it('runs checks in a fixed order whatever the YAML key order', async () => {
     const c = oneTurnCase({
       judge: ['The reply is short.'],
       must_cite_source: false,
       must_escalate: false,
+      must_block: false,
       max_chars: 100,
       max_words: 10,
       matches: ['ok'],
@@ -274,7 +306,7 @@ describe('runCase scoring', () => {
       must_contain: ['ok'],
     });
     const result = await runCase(c, {
-      agent: scriptedAgent({ 'Hello?': { text: 'ok', escalated: false } }),
+      agent: scriptedAgent({ 'Hello?': { text: 'ok', escalated: false, blocked: false } }),
       judgeGateway: scriptedJudge([{ rubric: 'The reply is short.', pass: true }]),
       judgeModel: JUDGE_MODEL,
       recorder: memoryRecorder('record'),
@@ -287,6 +319,7 @@ describe('runCase scoring', () => {
       'max_chars',
       'must_cite_source',
       'must_escalate',
+      'must_block',
       'judge[0]',
     ]);
     expect(result.pass).toBe(true);

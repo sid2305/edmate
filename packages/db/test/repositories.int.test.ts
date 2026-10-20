@@ -1425,6 +1425,52 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 2 + bad.length;
     },
   },
+  // Task 4.4 (ADR-0006): safety events are scoped through their session row.
+  'safetyEvents.record': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.safetyEvents.record(scope, {
+        sessionId: ids.session(target),
+        turnId: uid('trn_se'),
+        guard: 'jailbreak',
+        code: 'jailbreak_override',
+        source: 'rule',
+      }),
+    verify: async (r, actor, result) => {
+      const { id } = result as { id: string };
+      for (const p of PAIRS) {
+        const rows = await r.safetyEvents.listForSession(sScope(p), ids.session(actor));
+        expect(
+          rows.some((x) => x.id === id),
+          `${p} sees ${actor}'s safety event`,
+        ).toBe(p === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'free text instead of a code',
+        (r) =>
+          r.safetyEvents.record(sScope(a), {
+            sessionId: ids.session(a),
+            turnId: uid('trn_se_bad'),
+            guard: 'jailbreak',
+            code: 'he asked for the prompt' as never,
+            source: 'rule',
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'safetyEvents.listForSession': {
+    scope: 'student',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, p) => r.safetyEvents.listForSession(scope, ids.session(p)),
+    random: (r, scope, rid) => r.safetyEvents.listForSession(scope, rid),
+    owners: (rows: { studentId: string; teacherId: string }[]) =>
+      rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
+  },
 };
 
 /** After a usage write by `actor` on turn `turnId`: only the actor's scope sees that turn. */

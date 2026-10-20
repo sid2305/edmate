@@ -21,6 +21,8 @@ export const EvalAgentReplySchema = z.strictObject({
   sources: z.array(z.strictObject({ title: z.string(), locator: z.string() })).exactOptional(),
   /** Whether the turn escalated (task 4.3). Absent: unknown, so a `must_escalate` check fails. */
   escalated: z.boolean().exactOptional(),
+  /** Whether a guard blocked the turn by its verdict (task 4.4). Absent: a `must_block` check fails. */
+  blocked: z.boolean().exactOptional(),
 });
 export type EvalAgentReply = z.infer<typeof EvalAgentReplySchema>;
 

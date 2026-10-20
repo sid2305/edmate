@@ -50,6 +50,13 @@ describe('EvalCaseSchema', () => {
     expect(issuePaths(bad)).toContain('turns.0.expect.must_escalate');
   });
 
+  it('must_block alone is a check (task 4.4); it must be a boolean', () => {
+    const c = { ...minimal, turns: [{ student: 'hi', expect: { must_block: true } }] };
+    expect(EvalCaseSchema.parse(c).turns[0]?.expect).toEqual({ must_block: true });
+    const bad = { ...minimal, turns: [{ student: 'hi', expect: { must_block: 1 } }] };
+    expect(issuePaths(bad)).toContain('turns.0.expect.must_block');
+  });
+
   it('allows a turn with no expect block (pressure build-up)', () => {
     const c = { ...minimal, turns: [{ student: 'one' }, ...minimal.turns] };
     expect(EvalCaseSchema.parse(c).turns[0]).toEqual({ student: 'one' });

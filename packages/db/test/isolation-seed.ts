@@ -162,6 +162,12 @@ export async function seed(db: Db): Promise<void> {
         createdAt: new Date('2026-10-17T10:00:02Z'),
       },
     ]);
+    // Task 4.4: one jailbreak strike per pair, on its session (ADR-0006 storage).
+    await db.insert(s.safetyEvents).values({
+      id: `se_${lc(p)}`,
+      target: `session:${ids.session(p)}`,
+      reason: 'jailbreak:jailbreak_override:rule',
+    });
     await db.insert(s.turnTraces).values({
       id: `tt_${lc(p)}`,
       sessionId: ids.session(p),

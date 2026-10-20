@@ -78,6 +78,22 @@ class Done(RepoCase):
         self.assertEqual(code, 1, out)
         self.assertIn("Decided:", out)
 
+    def test_bullet_decided_line_accepted(self):
+        # A handoff written with bullet-prefixed Decided lines ("- Decided: ...") is recognized
+        # the same as a plain "Decided:" line, as long as the log has the same bulleted text.
+        self.handoff("### 18 Oct 2026 · 9.9 Thing · decided by lead · risk: low\n- Decided: Keep the thing simple.\nWhy: x.\n")
+        self.repo.write("docs/decisions/log.md", "# log\n\n### 18 Oct 2026 · 9.9 Thing\n- Decided: Keep the thing simple.\n")
+        code, out, _ = self.done()
+        self.assertEqual(code, 0, out)
+        self.assertIn("status: done", self.board_text())
+
+    def test_bullet_decided_line_still_checked_against_log(self):
+        self.handoff("### 18 Oct 2026 · 9.9 Thing · decided by lead · risk: low\n- Decided: Keep the thing simple.\nWhy: x.\n")
+        self.repo.write("docs/decisions/log.md", "# log\n\n### 18 Oct 2026 · 9.9 Thing\nSomething else entirely.\n")
+        code, out, _ = self.done()
+        self.assertEqual(code, 1, out)
+        self.assertIn("Decided: Keep the thing simple.", out)
+
     def test_other_statuses_unchanged(self):
         r = self.repo.script("board", "set", "9.7", "running", "--branch", "m9/9.7-y", "--model", "build:opus")
         self.assertEqual(r.returncode, 0, r.stderr)

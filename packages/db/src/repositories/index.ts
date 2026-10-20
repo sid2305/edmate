@@ -9,6 +9,7 @@ import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { retrievalRepo } from './retrieval.js';
+import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
@@ -52,6 +53,7 @@ export function createRepositories(db: Db) {
     documents: guardAll('documents', documentsRepo(db)),
     chunks: guardAll('chunks', chunksRepo(db)),
     retrieval: guardAll('retrieval', retrievalRepo(db)),
+    safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
   };
 }
 
@@ -75,6 +77,7 @@ export {
   SYSTEM_ACTOR_PREFIX,
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
+export { type SafetyEventInput, type SafetyEventRow, safetyEventRowId } from './safety-events.js';
 export type { TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,
