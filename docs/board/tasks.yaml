@@ -2043,6 +2043,16 @@ tasks:
   risk: risky
   model: plan:opus build:sonnet
   branch: m3/3.4c-same-topic-locked
+- id: 1.7a
+  milestone: M13
+  title: 'Age and consent follow-ups (1.7 review MEDIUM/LOW): content validate flags minAge outside 13-18; refuse an unsigned privacy notice in production (the signed flag is unused); a default-deny clearance or a coverage test for pages and server actions behind requireRole; log errors in the age gate catch blocks and catch resolve() failures in ageGateView; comment that the ageStatus overload narrowing is a runtime guarantee; NOT VALID plus VALIDATE for the 0014 checks at scale'
+  accept: each item has a test or a logged decision; production refuses a pending notice
+  deps:
+  - '1.7'
+  status: todo
+  risk: risky
+  branch: null
+  model: null
 - id: 3.4d
   milestone: M13
   title: 'Same-topic fix follow-ups (3.4c review LOWs): make the "agent context alone would cover" buildContext test really cover (combined query >= 0.5) so locked precedence is tested; give mergeByScore the id tie-break the plan describes, or update the plan; replace the as-unknown-as casts in sameTopic.test.ts with a typed helper'
