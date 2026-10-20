@@ -916,12 +916,12 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: done
   needs_decision:
   - moderation
   risk: risky
   branch: m4/4.4-moderation-jailbreak
-  model: plan:sonnet planreview:opus(safety)+sonnet(architect) build:opus-5.5/medium
+  model: plan:opus build:opus review:sonnet/opus fix:sonnet
 - id: 4.4b
   milestone: M13
   title: 'Pre-guard latency before live models (4.4 handoff): distress, moderation and jailbreak classifiers run as one combined small-model call (or concurrently) so a benign turn fits step 3''s 400 ms
