@@ -23,6 +23,11 @@ export const HelpStateSchema = z.strictObject({
    * parses and keeps its rung. Harness-internal only: never a contracts change.
    */
   lockedStopped: z.boolean().exactOptional(),
+  /**
+   * How many times this session the grounding guard sent a question to the teacher (task 4.7);
+   * absent until the first. The runner caps it (GROUNDING_ASKS_PER_SESSION) and carries it over.
+   */
+  groundingAsks: z.int().min(0).max(1_000).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -66,7 +71,8 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped } = r.data;
+  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped, groundingAsks } =
+    r.data;
   return {
     rung,
     help: copyHelp({
@@ -75,8 +81,18 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       pendingCheck,
       answerKey,
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
+      ...(groundingAsks === undefined ? {} : { groundingAsks }),
     }),
   };
+}
+
+/**
+ * `next` with the session's grounding escalation count set to `asks` (task 4.7): decide's ladder
+ * may rebuild the help state without it. Unchanged when `asks` is 0.
+ */
+export function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp {
+  if (asks === 0) return next;
+  return { ...next, help: { ...next.help, groundingAsks: asks } };
 }
 
 /** Nothing stored yet: no value, or the column's default `{}`. */

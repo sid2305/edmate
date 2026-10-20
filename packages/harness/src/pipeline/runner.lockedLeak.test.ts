@@ -62,7 +62,11 @@ async function turn(
   cancel?: CancelToken,
 ) {
   const retrieval = memoryRetrieval({ chunks: retrievalWorld() });
-  const t = testDeps({ script: { stream }, overrides: { retrieval, ...overrides } });
+  const t = testDeps({
+    script: { stream },
+    overrides: { retrieval, ...overrides },
+    judge: 'grounded',
+  });
   const steps = testSteps({
     entitle: fixtureEntitle,
     decide: { run: () => Promise.resolve(testDecideResult(decision)) },

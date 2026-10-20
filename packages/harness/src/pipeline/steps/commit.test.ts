@@ -255,6 +255,77 @@ describe('commit', () => {
     expect(w.teacherQuestions.opened).toEqual([]);
   });
 
+  it('opens the fallback question for a turn grounding escalated (4.7), once, never with an id set', async () => {
+    const w = world();
+    await commit(w.env, record({ decision: demoPedagogyDecision, escalateToTeacher: true }));
+    expect(w.teacherQuestions.opened).toHaveLength(1);
+    expect(w.teacherQuestions.opened[0]?.text).toBe('How do I add [number] and 1/3?');
+    const live = world();
+    await commit(
+      live.env,
+      record({
+        decision: demoPedagogyDecision,
+        escalateToTeacher: true,
+        teacherQuestionId: 'tq_live_01',
+      }),
+    );
+    expect(live.teacherQuestions.opened).toEqual([]);
+    const notEscalated = world();
+    await commit(
+      notEscalated.env,
+      record({ decision: demoPedagogyDecision, escalateToTeacher: false }),
+    );
+    expect(notEscalated.teacherQuestions.opened).toEqual([]);
+  });
+
+  it('counts a grounding fallback open only when it succeeds, before saving the help state (fix round 1)', async () => {
+    const help = {
+      stuckTurns: 0 as const,
+      attemptLogged: false,
+      pendingCheck: false,
+      answerKey: [],
+    };
+    const w = world();
+    await commit(
+      w.env,
+      record({
+        decision: demoPedagogyDecision,
+        escalateToTeacher: true,
+        next: { rung: 0, help: { ...help, groundingAsks: 1 } },
+      }),
+    );
+    expect(w.sessionState.saved.at(-1)?.helpState).toMatchObject({ groundingAsks: 2 });
+    // No help state to save: the open still happens.
+    const bare = world();
+    const { next: _drop, ...noNext } = record({ escalateToTeacher: true });
+    void _drop;
+    await commit(bare.env, { ...noNext, decision: demoPedagogyDecision });
+    expect(bare.teacherQuestions.opened).toHaveLength(1);
+  });
+
+  it('a failed grounding fallback open: everything else saved, count unchanged, then GroundingEscalationLost (fix round 1)', async () => {
+    const help = {
+      stuckTurns: 0 as const,
+      attemptLogged: false,
+      pendingCheck: false,
+      answerKey: [],
+    };
+    const w = world({ teacherQuestionsFail: true });
+    await expect(
+      commit(
+        w.env,
+        record({
+          decision: demoPedagogyDecision,
+          escalateToTeacher: true,
+          next: { rung: 0, help },
+        }),
+      ),
+    ).rejects.toThrow('grounding escalation lost: no TeacherQuestion opened (Error)');
+    expect(w.transcripts.appended).toHaveLength(2);
+    expect(w.sessionState.saved).toHaveLength(1);
+    expect(w.sessionState.saved[0]?.helpState).not.toHaveProperty('groundingAsks');
+  });
+
   it('never opens a question for any other move, even with no id set', async () => {
     const w = world();
     await commit(w.env, record({ decision: demoPedagogyDecision }));

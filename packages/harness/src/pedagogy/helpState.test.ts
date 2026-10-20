@@ -65,8 +65,37 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
     expect(parseSessionHelp(raw)).toEqual(DEFAULT);
   });
 
+  it('keeps the grounding escalation count when there is one, next to 4.6b’s stop flag (task 4.7)', () => {
+    expect(parseSessionHelp({ ...VALID, lockedStopped: true, groundingAsks: 2 })).toEqual({
+      rung: 3,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: ['42'],
+        lockedStopped: true,
+        groundingAsks: 2,
+      },
+    });
+    for (const bad of [-1, 1.5, '2', 1_001]) {
+      expect(parseSessionHelp({ ...VALID, groundingAsks: bad })).toEqual(DEFAULT);
+    }
+    const s = {
+      rung: 1 as const,
+      help: { ...INITIAL_HELP_STATE, answerKey: [], groundingAsks: 3 },
+    };
+    expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
+  });
+
   it('an old blob without lockedStopped (before 4.6b) parses with its rung intact (absent = false)', () => {
-    const old = { v: 1, rung: 2, stuckTurns: 1, attemptLogged: true, pendingCheck: false, answerKey: ['7'] };
+    const old = {
+      v: 1,
+      rung: 2,
+      stuckTurns: 1,
+      attemptLogged: true,
+      pendingCheck: false,
+      answerKey: ['7'],
+    };
     const parsed = parseSessionHelp(old);
     expect(parsed).toEqual({
       rung: 2,

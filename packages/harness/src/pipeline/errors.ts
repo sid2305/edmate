@@ -160,6 +160,30 @@ export class PostGuardStepFailed extends HarnessError {
   }
 }
 
+/**
+ * grounding's judge gave no answer (missing, failed, timed out, at the cost ceiling), so the turn
+ * got the safe reply (task 4.7 fix round 1). A metric, not a failure: fixed text, no turn text.
+ */
+export class GroundingJudgeUnavailable extends HarnessError {
+  override readonly name = 'GroundingJudgeUnavailable';
+
+  constructor() {
+    super('grounding judge unavailable: sent the safe reply');
+  }
+}
+
+/**
+ * A grounding escalation could open no TeacherQuestion: the live open and commit's fallback both
+ * failed (task 4.7 fix round 1). The cause's error name only, never text.
+ */
+export class GroundingEscalationLost extends HarnessError {
+  override readonly name = 'GroundingEscalationLost';
+
+  constructor(readonly causeName: string) {
+    super(`grounding escalation lost: no TeacherQuestion opened (${causeName})`);
+  }
+}
+
 /** Usage for a model with no valid price: traced and reported, never metered as free. */
 export class UnpricedUsage extends HarnessError {
   override readonly name = 'UnpricedUsage';

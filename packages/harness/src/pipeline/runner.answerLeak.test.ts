@@ -37,7 +37,7 @@ const fixtureEntitle: Steps['entitle'] = async (env) => {
 };
 
 async function turn(stream: ScriptedStreamCall[], overrides: Partial<PipelineDeps> = {}) {
-  const t = testDeps({ script: { stream }, overrides });
+  const t = testDeps({ script: { stream }, overrides, judge: 'grounded' });
   const steps = testSteps({
     entitle: fixtureEntitle,
     decide: { run: () => Promise.resolve(testDecideResult(decision)) },
@@ -95,7 +95,8 @@ describe('runner + answerLeak', () => {
       { type: 'token', text: 'x is 16.' },
       { type: 'replace', text: '' },
       { type: 'replace', text: 'Try the last line again.' },
-      { type: 'done', messageId: 'message_1', usage: [usageMain, usageSmall] },
+      // The rewrite's usage, then grounding's judge's (4.7).
+      { type: 'done', messageId: 'message_1', usage: [usageMain, usageSmall, usageSmall] },
     ]);
     expect(steps.commits[0]?.replyText).toBe('Try the last line again.');
   });

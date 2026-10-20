@@ -7,6 +7,12 @@
 // as it streams with the per-turn cost ceiling, `replace ''` before an error whenever text was
 // shown, cancellation (the consumer detaching, or `RunTurnOptions.cancel`), the TeacherQuestion
 // opened before `done`, and every `finished.background` failure logged (ids and error only).
+//
+// Task 4.7 adds: a reply generate held back (ask_teacher, or coverage near the threshold) is sent
+// only after postGuard passes it; and when grounding replaced an ungrounded reply, the turn's
+// TeacherQuestion is opened (same shared, idempotent open as ask_teacher; one per turn, and at most
+// GROUNDING_ASKS_PER_SESSION per session, counted in the help state; past the cap the student
+// gets the ask-teacher reply only).
 import {
   type Intent,
   type PedagogyDecision,
@@ -22,7 +28,7 @@ import {
   UsageSchema,
 } from '@edmate/contracts';
 import type { z } from 'zod';
-import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
+import { type HelpState, type SessionHelp, withGroundingAsks } from '../pedagogy/helpState.js';
 import { logBackground } from './backgroundLog.js';
 import { type Cancel, cancelSource, type CancelToken, isoAt, linkCancel } from './clock.js';
 import {
@@ -35,6 +41,7 @@ import {
   UnpricedUsage,
 } from './errors.js';
 import { EventQueue } from './events.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { ceilingOf, TurnCost } from './generate/costCeiling.js';
 import {
   admitFailure,
@@ -65,6 +72,7 @@ import {
   ALERT_ATTEMPT_TIMEOUT_MS,
   ALERT_RETRY_MAX_MS,
   ALERT_RETRY_START_MS,
+  GROUNDING_ASKS_PER_SESSION,
   STEP_SPEC,
   type StepName,
   STREAM_CLOSE_SETTLE_MS,
@@ -93,16 +101,13 @@ import type {
   UsageRecorder,
 } from './types.js';
 
+export { LAST_RESORT_DISTRESS_REPLY };
+
 /**
- * Sent only when the escalate step and `fallbackReplies.distress` both give no text. Built in (not
- * injected) so a distressed student always gets a caring reply. Country-neutral: no numbers or
- * country names; the locale pack's helplines come through the normal paths.
+ * The trace action (on a `grounding` guard entry) marking a reply grounding replaced after the
+ * student had seen it stream in (task 4.7 fix round 1). A code, never text.
  */
-export const LAST_RESORT_DISTRESS_REPLY =
-  "I'm really glad you told me, and I'm sorry it's this hard right now. You matter. " +
-  "I'm an AI, so please reach out to someone you trust right now, like a friend, " +
-  'family member, teacher or counsellor. If you are in danger or might hurt yourself, ' +
-  'contact your local emergency services now.';
+export const STREAMED_REPLACED = 'replaced_streamed';
 
 export interface RunTurnOptions {
   deps: PipelineDeps;
@@ -197,6 +202,8 @@ class Turn {
   private loadedStop: boolean | null = false;
   /** A locked hit or failed locked check anywhere in this turn: any attempt, or the post guard. */
   private lockedTrip = false;
+  /** decide.fallback chose the decision: generate holds the reply (4.7 fix round 1). */
+  private decideFellBack = false;
 
   constructor(
     private readonly input: TurnInput,
@@ -506,12 +513,15 @@ class Turn {
       );
     }
     const { decision } = decided;
+    // The session's grounding escalation count rides along on every path that saves the help
+    // state (decide's ladder may rebuild the state without it; 4.7 fix round 1).
+    const asked = built.helpState.groundingAsks ?? 0;
     const base = {
       input: scrubbed,
       intent,
       context: ctx,
       decision,
-      next: decided.next,
+      next: withGroundingAsks(decided.next, asked),
       promptPack: decided.promptPack,
     };
 
@@ -534,30 +544,48 @@ class Turn {
     }
 
     // The TeacherQuestion is opened before done, so its id reaches the student (lead answer Q3).
-    const questionId =
+    let questionId =
       decision.move === 'ask_teacher' ? await this.openTeacherQuestionLive(scrubbed, e) : undefined;
     if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
 
     // 9. postGuard on the whole reply, before done; a failure sends the safe reply. A post guard
     // that escalates clears the reply and ends the turn as an escalation (caring template, 4.5).
-    const post = await this.postGuard(scrubbed, ctx, decision, gen);
-    if (typeof post !== 'string') {
+    const post = await this.postGuard(scrubbed, ctx, decision, gen, decided.sources);
+    if ('alert' in post) {
       this.clearAll();
       // A locked trip must still be saved (4.6b fix round 1): the loaded state, untouched, gets
       // the flag in finish(). Without one, an escalation saves no help state, as before.
       const keep = this.lockedTrip ? { rung: built.helpRung, help: built.helpState } : undefined;
       return this.escalate(scrubbed, e, post.alert, keep);
     }
-    const replyText = post;
+    const { replyText } = post;
+
+    // grounding sent an ungrounded reply to the teacher (4.7): one question per turn (none when
+    // decide already asked), within the session's cap. Only a question that was opened counts
+    // (fix round 1): a failed live open leaves the count to commit, which counts its own fallback
+    // open only if it succeeds.
+    const escalating =
+      post.escalateToTeacher &&
+      decision.move !== 'ask_teacher' &&
+      asked < GROUNDING_ASKS_PER_SESSION;
+    if (escalating) {
+      questionId = await this.openTeacherQuestionLive(scrubbed, e);
+      if (questionId !== undefined) this.send({ type: 'teacher_question', questionId });
+    }
     this.done();
     // ADR-0007 §8 (4.6b): finish() sets the session's stop flag on `next`.
     return this.finish(
       e,
       {
         ...base,
+        next: withGroundingAsks(
+          decided.next,
+          asked + (escalating && questionId !== undefined ? 1 : 0),
+        ),
         outcome: 'replied',
         replyText,
         ...(questionId === undefined ? {} : { teacherQuestionId: questionId }),
+        ...(escalating ? { escalateToTeacher: true } : {}),
       },
       intent,
       decision.move,
@@ -570,7 +598,10 @@ class Turn {
    * turn still replies and commit (3.17) opens the question. A timed-out open may still land;
    * the store's dedup (migration 0011) makes that, and commit's own fallback, land once.
    */
-  private async openTeacherQuestionLive(input: TurnInput, e: Entitled): Promise<string | undefined> {
+  private async openTeacherQuestionLive(
+    input: TurnInput,
+    e: Entitled,
+  ): Promise<string | undefined> {
     const text = input.text;
     if (text === undefined || text.trim() === '') return undefined;
     const r = await runWithTimeout(
@@ -764,6 +795,7 @@ class Turn {
         throw new HarnessError(`decide.fallback returned move "${move}"`);
       }
       this.trace.step('decide', d.ms, 'fallback');
+      this.decideFellBack = true;
       return fb;
     } catch (error) {
       this.background.push({ task: 'runner', error });
@@ -804,6 +836,7 @@ class Turn {
               onLockedTrip: () => {
                 this.lockedTrip = true;
               },
+              ...(this.decideFellBack ? { fromFallback: true as const } : {}),
             },
             this.emitter(cancel, state),
           );
@@ -840,12 +873,14 @@ class Turn {
     ctx: TurnContext,
     decision: PedagogyDecision,
     gen: GenerateResult,
-  ): Promise<string | { alert: SafetyAlert }> {
+    sources: SourceRef[],
+  ): Promise<{ replyText: string; escalateToTeacher: boolean } | { alert: SafetyAlert }> {
     const { draft } = gen;
     const x = {
       ctx,
       decision,
       draft,
+      sources,
       ...(gen.raw === undefined ? {} : { raw: gen.raw }),
       ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
       ...(gen.locked === undefined ? {} : { locked: gen.locked }),
@@ -860,15 +895,24 @@ class Turn {
       this.trace.step('postGuard', p.ms, 'ok');
       // A locked hit or failed locked check the post guard found counts as a trip (4.6b fix 1).
       if (p.value.guards.some((g) => g.name === 'lockedLeak' && !g.ok)) this.lockedTrip = true;
-      if (p.value.result === 'ok') return draft;
+      if (p.value.result === 'ok') {
+        // A held reply (4.7) reaches the student only now, checked.
+        if (gen.held === true) this.send({ type: 'token', text: draft });
+        return { replyText: draft, escalateToTeacher: false };
+      }
       // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
       if (p.value.result === 'escalate') {
         this.escalatedText = p.value.text;
         return { alert: p.value.alert };
       }
+      // grounding replaced text the student had already seen stream in: flagged in the trace,
+      // code only, so 7.x can size that window (4.7 fix round 1).
+      if (p.value.groundingRewrote === true && this.shown) {
+        this.trace.addGuards([{ name: 'grounding', ok: false, action: STREAMED_REPLACED }]);
+      }
       this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
-      return p.value.text;
+      return { replyText: p.value.text, escalateToTeacher: p.value.escalateToTeacher === true };
     }
     this.trace.step('postGuard', p.ms, 'fallback');
     // Reported like every other step failure: kind and error name only, never a message.
@@ -881,7 +925,7 @@ class Turn {
     }
     this.clearAll();
     this.send({ type: 'replace', text: safe });
-    return safe;
+    return { replyText: safe, escalateToTeacher: false };
   }
 
   // ---- 10, 11 and the trace: after the stream has ended ---------------------------------------
@@ -990,7 +1034,6 @@ class Turn {
   }
 }
 
-/** What a failed generate attempt reports: the kind and the underlying error's name. */
 /** What a failed postGuard step reports: the kind and the underlying error's name. */
 function postGuardFailure(r: TimedResult<unknown>): PostGuardStepFailed {
   if (r.status === 'timeout') return new PostGuardStepFailed('timeout');
@@ -998,6 +1041,7 @@ function postGuardFailure(r: TimedResult<unknown>): PostGuardStepFailed {
   return new PostGuardStepFailed('invalid_result');
 }
 
+/** What a failed generate attempt reports: the kind and the underlying error's name. */
 function attemptFailure(
   attempt: 'primary' | 'fallback',
   raw: TimedResult<unknown>,

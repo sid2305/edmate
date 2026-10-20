@@ -127,7 +127,11 @@ describe('lockedLeak guard', () => {
   it('is the registered post guard, ahead of answerLeak', () => {
     expect(guard.name).toBe('lockedLeak');
     expect(guard.phase).toBe('post');
-    expect(postGuards.ordered().map((g) => g.name)).toEqual(['lockedLeak', 'answerLeak']);
+    expect(postGuards.ordered().map((g) => g.name)).toEqual([
+      'lockedLeak',
+      'answerLeak',
+      'grounding',
+    ]);
   }, 5_000);
 
   it('a clean reply is ok, with no usage', async () => {
@@ -186,11 +190,14 @@ describe('lockedLeak guard', () => {
       }),
     );
     expect(out).toMatchObject({ outcome: 'ok', text: REPLY });
+    // grounding (4.7) passes the locked reply as a fixed text.
     expect(out.guards).toEqual([
       { name: 'lockedLeak', ok: false, action: 'rewrite' },
       { name: 'answerLeak', ok: true },
+      { name: 'grounding', ok: true },
       { name: 'lockedLeak', ok: true },
       { name: 'answerLeak', ok: true },
+      { name: 'grounding', ok: true },
     ]);
   }, 5_000);
 });

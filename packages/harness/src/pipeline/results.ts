@@ -88,11 +88,19 @@ export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   raw: z.string().max(LIMITS.modelTextMaxLength).exactOptional(),
   withheld: z.boolean().exactOptional(),
   locked: z.enum(['hit', 'failed']).exactOptional(),
+  held: z.boolean().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [
   z.strictObject({ result: z.literal('ok'), guards, usage }),
-  z.strictObject({ result: z.literal('replace'), text: z.string(), guards, usage }),
+  z.strictObject({
+    result: z.literal('replace'),
+    text: z.string(),
+    escalateToTeacher: z.literal(true).exactOptional(),
+    groundingRewrote: z.literal(true).exactOptional(),
+    guards,
+    usage,
+  }),
   z.strictObject({
     result: z.literal('escalate'),
     alert: SafetyAlertSchema,

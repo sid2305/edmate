@@ -34,7 +34,11 @@ describe('answerLeak', () => {
   it('is the post phase’s registered answerLeak guard', () => {
     expect(guard.name).toBe('answerLeak');
     expect(guard.phase).toBe('post');
-    expect(postGuards.ordered().map((g) => g.name)).toEqual(['lockedLeak', 'answerLeak']);
+    expect(postGuards.ordered().map((g) => g.name)).toEqual([
+      'lockedLeak',
+      'answerLeak',
+      'grounding',
+    ]);
   });
 
   it('a clean draft is ok, with no usage', async () => {
@@ -126,8 +130,9 @@ describe('answerLeak', () => {
   });
 
   it('through the chain: a rewrite is verified on the second pass', async () => {
+    // Without grounding (4.7), which this synthetic context (no material) would send to ask_teacher.
     const r = await runGuardChain(
-      postGuards.ordered(),
+      postGuards.ordered().filter((g) => g.name !== 'grounding'),
       'x is 16.',
       ctxFor(['16'], { rewrite: rewriteTo('Look at the last line.') }),
       { phase: 'post', clock: virtualClock(), timeoutMs: 900 },

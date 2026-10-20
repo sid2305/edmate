@@ -791,3 +791,57 @@ describe('fakeGuard', () => {
     expect((await g.run('abc', CTX, c.token)).result).toEqual(rewrite('ABC'));
   });
 });
+
+describe('runGuardChain: per-guard slices (task 4.7)', () => {
+  it('asks the slice function before each run, with the guard, pass and position', async () => {
+    const asked: unknown[] = [];
+    const a = fakeGuard<Ctx>('lockedLeak', 'post', (t) => (t === 'r' ? OK : rewrite('r')));
+    const b = fakeGuard<Ctx>('grounding', 'post', OK);
+    const { run } = setup('post', {
+      timeoutMs: (at) => {
+        asked.push(at);
+        return SLICE_MS;
+      },
+    });
+    const res = await run([a, b]);
+    expect(res.outcome).toBe('ok');
+    expect(asked).toEqual([
+      { name: 'lockedLeak', pass: 1, index: 0 },
+      { name: 'grounding', pass: 1, index: 1 },
+      { name: 'lockedLeak', pass: 2, index: 0 },
+      { name: 'grounding', pass: 2, index: 1 },
+    ]);
+  });
+
+  it('each guard gets its own slice', async () => {
+    const clockRef: { c?: VirtualClock } = {};
+    const slow = (name: string, ms: number) =>
+      rawGuard(name, 'post', async () => {
+        await clockRef.c?.sleep(ms);
+        return { result: OK, usage: [] };
+      });
+    const slices: Record<string, number> = { lockedLeak: 10, grounding: 100 };
+    const { run, clock } = setup('post', { timeoutMs: ({ name }) => slices[name] ?? 0 });
+    clockRef.c = clock;
+    expect((await run([slow('lockedLeak', 9), slow('grounding', 99)])).outcome).toBe('ok');
+    expect(failureOf(await run([slow('lockedLeak', 11), slow('grounding', 1)]))).toEqual({
+      name: 'lockedLeak',
+      cause: 'timeout',
+    });
+  });
+
+  it('a slice function that throws or gives nonsense fails the guard closed (timeout)', async () => {
+    for (const timeoutMs of [
+      () => {
+        throw new Error('boom');
+      },
+      () => Number.NaN,
+      () => 'x' as unknown as number,
+    ]) {
+      const a = fakeGuard<Ctx>('tone', 'post', OK);
+      const { run } = setup('post', { timeoutMs });
+      expect(failureOf(await run([a]))).toEqual({ name: 'tone', cause: 'timeout' });
+      expect(a.calls).toEqual([]);
+    }
+  });
+});
