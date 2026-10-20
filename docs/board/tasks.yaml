@@ -1223,9 +1223,9 @@ tasks:
   deps:
   - '5.5'
   - M3
-  status: review
+  status: done
   branch: m5/5.6-practice-skill
-  model: plan:sonnet build:sonnet/opus arch:opus review:opus
+  model: plan:sonnet build:sonnet/opus arch:opus review:opus/opus/sonnet fix:opus
 - id: 5.6a
   milestone: M5
   title: 'Answer keys out of retrieved context (5.6 architect Q-C): buildContext drops, and reports, any retrieved chunk where revealsAnswerKey is true; an ingest rule that the practice bank and its keys
