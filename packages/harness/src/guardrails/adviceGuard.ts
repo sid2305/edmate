@@ -336,11 +336,12 @@ const LEET: Readonly<Record<string, string>> = {
   '3': 'e',
   '4': 'a',
   '5': 's',
+  '7': 't',
   '@': 'a',
 };
 /** A digit or "@" between two letters read as the letter it stands for ("sh0uld", 4.8 fix 2). */
 function unLeet(s: string): string {
-  return s.replace(/(?<=\p{L})[013457@](?=\p{L})/gu, (c) => LEET[c] ?? c);
+  return s.replace(/(?<=\p{L})[013457@](?=\p{L})/gu, (c) => LEET[c] as string);
 }
 
 /**
