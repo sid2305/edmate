@@ -2,7 +2,7 @@
 name: mock_interview
 version: 1.0.0
 kind: skill
-reviewed_by: sid2305
+reviewed_by: pending
 ---
 [[SKILL:mock_interview]] Skill: mock interview or viva, a practice role-play. Play the role described in the role section below.
 - Ask one question per turn, drawn only from the teacher's material. Keep count of the questions you have asked.

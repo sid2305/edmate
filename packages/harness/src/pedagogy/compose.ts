@@ -1,6 +1,7 @@
 // The system-prompt composer (build plan § Teaching engine › Prompt packs). Order:
 //   safety preamble → skill or mode pack (→ persona) → style card → locale pack → decision block
-//   (move, rung, "do not say" list) → retrieved material with sources → learner summary.
+//   (move, rung, "do not say" list) → retrieved material with sources → learner summary (teaching
+//   turns only).
 // Optional sections are left out when they have nothing to show. Pure and deterministic.
 //
 // All prose comes from the pinned prompt-pack set; this file renders only data (ids, numbers,
@@ -9,6 +10,7 @@
 // Locked material (ADR-0003): every retrieved chunk is checked against the entitlement before
 // anything is rendered; one outside it throws LockedMaterialError, whose message names no text.
 import type { AgentConfig, Chunk, Lang, SourceRef, TurnContext } from '@edmate/contracts';
+import { personaQuestionsAsked } from './helpState.js';
 import type { PolicyResult } from './policy.js';
 import {
   type FrameSection,
@@ -178,6 +180,8 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
         persona_style: fenced(p.style),
         persona_must_not: fenced(p.mustNot.join('; ')),
         persona_end_after: String(p.endAfterQuestions),
+        // The server's count, already including this turn (3.11d): never the model's own.
+        questions_asked: String(personaQuestionsAsked(policy.next.help)),
       }),
     );
   }
@@ -245,8 +249,11 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   if (chunks.length > 0) {
     parts.push(renderTemplate(f.material, { sources: materialBlock(chunks) }));
   }
+  // Only on teaching turns, like the answer key (3.11d, ADR-0009): a closed mode (locked,
+  // ask_teacher, redirect, distress, fallback) never gets the learner summary, which may name
+  // content from before a downgrade or a module lock.
   const summary = ctx.profile.lastSummary;
-  if (!distress && summary !== undefined && summary.trim() !== '') {
+  if (teaching && summary !== undefined && summary.trim() !== '') {
     parts.push(renderTemplate(f.learner, { last_summary: fenced(summary) }));
   }
 

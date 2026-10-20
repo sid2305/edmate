@@ -1,7 +1,8 @@
 import type { Skill } from '@edmate/contracts';
 import { demoPersona } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
-import { decidePolicy, type PolicyResult } from './policy.js';
+import { PERSONA_QUESTIONS_MAX } from './helpState.js';
+import { decidePolicy, fallbackPolicy, type PolicyResult } from './policy.js';
 import { selectSkill } from './skills.js';
 import { ctxWith, helpWith, turnOf } from './testing.js';
 
@@ -160,12 +161,97 @@ describe('skill default moves', () => {
       expect(r.next.help).not.toBe(help);
     }
     const m = run('mock_interview', { helpRung: 3, persona: demoPersona }, 'skill_action', help);
-    expect(m.next).toEqual({ helpRung: 3, help });
+    // The one change a persona turn makes: the server counts the question (3.11d).
+    expect(m.next).toEqual({ helpRung: 3, help: { ...help, personaQuestionsAsked: 1 } });
   });
 
   it('per-skill budgets apply', () => {
     expect(run('revision').maxOutputTokens).toBe(700);
     expect(run('feedback').maxOutputTokens).toBe(500);
     expect(run('explain').maxOutputTokens).toBe(400);
+  });
+});
+
+describe('persona question count (3.11d: the server counts, never the model)', () => {
+  const persona = { persona: demoPersona };
+
+  it('a mock_interview turn with a persona counts one question, from absent', () => {
+    const r = run('mock_interview', persona);
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.next.help.personaQuestionsAsked).toBe(1);
+  });
+
+  it('counts once per turn across a session', () => {
+    let help = helpWith();
+    const seen: (number | undefined)[] = [];
+    for (let n = 0; n < 3; n++) {
+      const r = run('mock_interview', persona, 'message', help);
+      seen.push(r.next.help.personaQuestionsAsked);
+      help = r.next.help;
+    }
+    expect(seen).toEqual([1, 2, 3]);
+  });
+
+  it('stops at PERSONA_QUESTIONS_MAX, so the state always stays savable', () => {
+    const r = run(
+      'mock_interview',
+      persona,
+      'message',
+      helpWith({
+        personaQuestionsAsked: PERSONA_QUESTIONS_MAX,
+      }),
+    );
+    expect(r.next.help.personaQuestionsAsked).toBe(PERSONA_QUESTIONS_MAX);
+  });
+
+  it('no persona: no count (and the coach fallback keeps an earlier one)', () => {
+    expect(run('mock_interview').next.help.personaQuestionsAsked).toBeUndefined();
+    const r = run('mock_interview', {}, 'skill_action', helpWith({ personaQuestionsAsked: 2 }));
+    expect(r.skill).toBe('coach');
+    expect(r.next.help.personaQuestionsAsked).toBe(2);
+  });
+
+  it.each(ALL.filter((s) => s !== 'mock_interview'))(
+    '%s keeps an earlier count unchanged, ladder paths included',
+    (skill) => {
+      for (const kind of ['message', 'hint_request', 'check_answer', 'skill_action'] as const) {
+        for (const attempt of ['none', 'wrong', 'partial', 'correct'] as const) {
+          const help = helpWith({ personaQuestionsAsked: 4, answerKey: ['k'] });
+          const r = run(skill, { attempt, helpRung: 2 }, kind, help);
+          expect(r.next.help.personaQuestionsAsked).toBe(4);
+        }
+      }
+    },
+  );
+
+  it('a pending check keeps it too', () => {
+    const pending = run(
+      'coach',
+      {},
+      'message',
+      helpWith({ pendingCheck: true, personaQuestionsAsked: 3 }),
+    );
+    expect(pending.reason).toBe('pending_check');
+    expect(pending.next.help.personaQuestionsAsked).toBe(3);
+  });
+
+  it('closed moves and the fallback keep it unchanged, even with a persona', () => {
+    const help = helpWith({ personaQuestionsAsked: 5 });
+    for (const o of [
+      { intent: 'off_topic' as const },
+      { intent: 'distress' as const },
+      { entitlement: { skills: ['coach' as const] } },
+    ]) {
+      const r = decidePolicy({
+        ctx: ctxWith({ entitlement: { skills: ALL }, persona: demoPersona, ...o }),
+        turn: turnOf('skill_action', 'mock_interview'),
+        help,
+      });
+      expect(r.reason).not.toBe('mock_interview');
+      expect(r.next.help.personaQuestionsAsked).toBe(5);
+    }
+    expect(
+      fallbackPolicy(ctxWith({ persona: demoPersona }), help).next.help.personaQuestionsAsked,
+    ).toBe(5);
   });
 });

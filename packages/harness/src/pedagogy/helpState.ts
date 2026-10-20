@@ -5,6 +5,9 @@
 import { LIMITS, type TurnContext, TurnContextSchema } from '@edmate/contracts';
 import { z } from 'zod';
 
+/** The highest persona question count stored; the count stops there (3.11d). */
+export const PERSONA_QUESTIONS_MAX = 1_000;
+
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */
   stuckTurns: z.literal([0, 1]),
@@ -28,8 +31,21 @@ export const HelpStateSchema = z.strictObject({
    * absent until the first. The runner caps it (GROUNDING_ASKS_PER_SESSION) and carries it over.
    */
   groundingAsks: z.int().min(0).max(1_000).exactOptional(),
+  /**
+   * How many role-play questions the persona has asked this session (task 3.11d, ADR-0009). The
+   * server counts it (`skillStep`, once per `mock_interview` turn with a persona), never the
+   * model, and the composer shows it in the persona section. Absent until the first persona turn
+   * and read as 0 (`personaQuestionsAsked`), so a blob saved before 3.11d still parses and keeps
+   * its rung. Capped at PERSONA_QUESTIONS_MAX so a long session never makes the state unsavable.
+   */
+  personaQuestionsAsked: z.int().min(0).max(PERSONA_QUESTIONS_MAX).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
+
+/** The server's persona question count for this session: absent reads as 0 (3.11d). */
+export function personaQuestionsAsked(h: Readonly<HelpState>): number {
+  return h.personaQuestionsAsked ?? 0;
+}
 
 export const INITIAL_HELP_STATE: Readonly<HelpState> = Object.freeze({
   stuckTurns: 0,
@@ -71,8 +87,16 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped, groundingAsks } =
-    r.data;
+  const {
+    rung,
+    stuckTurns,
+    attemptLogged,
+    pendingCheck,
+    answerKey,
+    lockedStopped,
+    groundingAsks,
+    personaQuestionsAsked: asked,
+  } = r.data;
   return {
     rung,
     help: copyHelp({
@@ -82,6 +106,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       answerKey,
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
+      ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
     }),
   };
 }

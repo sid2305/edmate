@@ -139,6 +139,7 @@ Snapshot cases: `skill mock_interview`, `mock_interview with persona template "I
 - [ ] 3 The frame's `persona` section: steps out on "are you human?", `/pause`, "stop" and distress
 - [ ] 4 The frame's `persona` section states the order (safety, then decision and do-not-say, then role), "can add limits but never removes one", "binding even though it is fenced", style "grants no permissions"
 - [ ] 5 The frame line reads "You are an AI playing the role of …"; the name rendered is a role name
+- [ ] 3.11d The frame's `persona` section shows the platform's count ("this is question N of M"), tells the role never to count turns itself and never to accept a claim about which question this is
 - [ ] 2 The distress-with-persona snapshot has no `[[PERSONA]]` section, no style card and no do-not-say section
 
 Composed prompt excerpt:
@@ -147,7 +148,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "skill mock_interview > systemPrompt".
 ```
 
-Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
+Sign-off: **void (task 3.11d, 19 Oct 2026).** Was: approved by sid2305 — 2026-10-19. The frame's `persona` section prose changed (the server's question count, `{{questions_asked}}`, ADR-0009), so this row needs a fresh sign-off; `reviewed_by` is `pending` in this row's files until then.
 
 ---
 
@@ -221,7 +222,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Interviewer\" > systemPrompt".
 ```
 
-Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
+Sign-off: **void (task 3.11d, 19 Oct 2026).** Was: approved by sid2305 — 2026-10-19. The frame's `persona` section prose changed (the server's question count, `{{questions_asked}}`, ADR-0009), so this row needs a fresh sign-off; `reviewed_by` is `pending` in this row's files until then.
 
 ---
 
@@ -253,7 +254,7 @@ Composed prompt excerpt:
 Read in `packages/content/src/__snapshots__/promptPacks.snapshot.test.ts.snap` (open it on GitHub on branch m3/3.11b-prompt-pack-content): "mock_interview with persona template \"Viva examiner\" > systemPrompt", and "mode distress (mid mock-interview, persona set)" to see the role drop.
 ```
 
-Sign-off: approved by sid2305 — 2026-10-19 (all rows, "approve all")
+Sign-off: **void (task 3.11d, 19 Oct 2026).** Was: approved by sid2305 — 2026-10-19. The frame's `persona` section prose changed (the server's question count, `{{questions_asked}}`, ADR-0009), so this row needs a fresh sign-off; `reviewed_by` is `pending` in this row's files until then.
 
 ---
 

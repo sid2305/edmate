@@ -1,7 +1,13 @@
 // Skill rules (build plan § Teaching engine › Skills): which skill a turn uses, and its default move.
 import type { Entitlement, Skill, TurnContext, TurnInput } from '@edmate/contracts';
 import type { Move } from './budgets.js';
-import { copyHelp, type HelpState, INITIAL_HELP_STATE } from './helpState.js';
+import {
+  copyHelp,
+  type HelpState,
+  INITIAL_HELP_STATE,
+  PERSONA_QUESTIONS_MAX,
+  personaQuestionsAsked,
+} from './helpState.js';
 import {
   attemptLoggedAfter,
   effectiveCeiling,
@@ -53,7 +59,22 @@ export interface SkillInput {
   skill: Skill;
 }
 
+/**
+ * The skill's move and next state. The persona question count (3.11d, ADR-0009) is the server's:
+ * a `mock_interview` turn with a persona counts one question (capped at PERSONA_QUESTIONS_MAX),
+ * and every other path carries the earlier count over, including the ladder and a solved
+ * practice item, which rebuild the help state from scratch.
+ */
 export function skillStep(i: SkillInput): SkillStep {
+  const s = stepFor(i);
+  const before = personaQuestionsAsked(i.help);
+  const asked =
+    s.reason === 'mock_interview' ? Math.min(before + 1, PERSONA_QUESTIONS_MAX) : before;
+  if (asked === 0) return s;
+  return { ...s, next: { ...s.next, help: { ...s.next.help, personaQuestionsAsked: asked } } };
+}
+
+function stepFor(i: SkillInput): SkillStep {
   const { ctx, help } = i;
   const unchanged = { helpRung: ctx.helpRung, help: copyHelp(help) };
   const fixed = (move: Move, skill: Skill | null, reason: SkillReason): SkillStep => ({
@@ -96,7 +117,8 @@ export function skillStep(i: SkillInput): SkillStep {
       // Point to the rubric line and the fix; never rewrite the work.
       return fixed('hint', 'feedback', 'feedback');
     case 'mock_interview':
-      // 5.8 owns /pause, the end conditions and the debrief. No persona: coach instead, but
+      // 5.8 owns /pause, the end conditions and the debrief; skillStep counts the question
+      // (3.11d). No persona: coach instead, but
       // only when the package includes coach (coach can reach a solution); otherwise locked.
       if (ctx.persona !== undefined) return fixed('ask', 'mock_interview', 'mock_interview');
       return ctx.entitlement.skills.includes('coach')
