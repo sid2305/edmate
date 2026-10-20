@@ -65,4 +65,42 @@ describe('draftStyleCard', () => {
 
     await expect(draftStyleCard(gateway, BASE_INPUT)).rejects.toBeInstanceOf(IngestError);
   });
+
+  it('maps a real-gateway-shaped validation error to validation, not retryable', async () => {
+    const gateway = {
+      generateObject: <T>(): Promise<T> =>
+        Promise.reject(
+          Object.assign(new Error('schema mismatch'), {
+            name: 'GatewayError',
+            code: 'validation',
+            retryable: false,
+          }),
+        ),
+    };
+
+    await expect(draftStyleCard(gateway, BASE_INPUT)).rejects.toMatchObject({
+      name: 'IngestError',
+      code: 'validation',
+      retryable: false,
+    });
+  });
+
+  it('keeps a real-gateway provider outage as provider_error, retryable', async () => {
+    const gateway = {
+      generateObject: <T>(): Promise<T> =>
+        Promise.reject(
+          Object.assign(new Error('rate limited'), {
+            name: 'GatewayError',
+            code: 'rate_limited',
+            retryable: true,
+          }),
+        ),
+    };
+
+    await expect(draftStyleCard(gateway, BASE_INPUT)).rejects.toMatchObject({
+      name: 'IngestError',
+      code: 'provider_error',
+      retryable: true,
+    });
+  });
 });
