@@ -1,6 +1,6 @@
 # Task 5.3 handoff: retrieval index (Phase A)
 
-- **Status:** PARTIAL (Phases A and B done; Phases C and D left)
+- **Status:** PARTIAL (Phases A, B and C done; Phase D left)
 - **Branch:** `m5/5.3-retrieval-index` (built on local `build-5.3a`, pushed without force)
 - **Worktree:** `.claude/worktrees/agent-a1d87b646b89373e2`
 - **Plan:** `docs/tasks/5.3/plan.md` (with the lead's answers of 20 Oct 2026)
@@ -64,7 +64,7 @@ Local run note: the integration suites need the test port override, `docker comp
 ## Left to do
 
 - **Phase B:** done (see "Phase B" below).
-- **Phase C:** in `packages/ingest`: the chunker (≤ 300 words, never crosses a unit, no overlap, heading kept on the first chunk), `indexDocument` (embed batches of 96, failure leaves NULL embeddings) and the hashed test embedder. Read `docs/tasks/5.1/handoff.md` on main first.
+- **Phase C:** done (see "Phase C" below). Was: in `packages/ingest`: the chunker (≤ 300 words, never crosses a unit, no overlap, heading kept on the first chunk), `indexDocument` (embed batches of 96, failure leaves NULL embeddings) and the hashed test embedder. Read `docs/tasks/5.1/handoff.md` on main first.
 - **Phase D:** the recall test on the demo Q&A set (heading-level gold, about 30 in-course items plus about 8 out-of-course items marked `reviewed_by: pending`, per Q1). Calibrate `TEXT_HALF`, `VECTOR_ZERO`, `NOTE_MATCH_FLOOR`, `PROBE_FLOOR` and `coverageThreshold` (Q3 = yes, code-reviewer, `risk: high`). The "with embeddings" assertion waits on B-24 (Q2).
 - **For Phase D to check (Phase A review MEDIUM):** HNSW with WHERE filters filters after the index scan (ef_search 40), so a large teacher with a small allowed set could get fewer than 20 vector candidates. pgvector 0.8's `hnsw.iterative_scan` (set per transaction) is the likely fix. The demo corpus is far below the point where this shows. Phase B tried and could not make a red test (see "Phase B").
 
@@ -146,6 +146,68 @@ Local run note: the integration suites need the test port override, `docker comp
 
 I tried to make a red test: 1,000 locked chunks on the query's axis plus 1,000 allowed chunks off it, with the far module allowed. Postgres chose a sequential scan plus a sort, which is exact, so the test passed with no fix. With `enable_seqscan=off, enable_sort=off`, a plain filtered query did use `chunks_embedding_hnsw_idx`. The repository's own statement (with the ownership subquery) still came back complete, so I found no red test within budget. The candidate fix is still `SET LOCAL hnsw.iterative_scan = strict_order` (compose runs pgvector 0.8.1) in the vector query's transaction. Proving it red first needs a larger corpus or an EXPLAIN of the real statement.
 
+## Phase C
+
+- **Status:** Phase C done; Status stays PARTIAL. Left to do: Phase D (recall gate, score calibration, `coverageThreshold`). Phase D also carries the HNSW `iterative_scan` item (see "HNSW filtered scan" above).
+- **Branch:** local `build-5.3c` (from `origin/m5/5.3-retrieval-index`, merged with `origin/main` for 5.1, no conflicts), pushed to `m5/5.3-retrieval-index` without force.
+
+### What Phase C delivers
+
+`packages/ingest` can now turn a document into stored, embedded chunks:
+
+- `chunkDocument(doc, { headings })` (`src/chunk/chunker.ts`): 5.1's `ParsedDocument` → `ChunkDraft { ord, text, locator }`. A chunk never crosses a unit, so it keeps the unit's exact locator. A unit splits at lines, then sentences, then words, then (a run with no spaces) characters, packed greedily up to 300 words and 4,000 characters. No overlap. With `headings: true`, the first chunk of each section starts with its heading line.
+- `indexDocument(deps, { scope, documentId, source })` (`src/index/indexDocument.ts`): parse (or take an already parsed web page) → chunk → `writer.insertMany` in batches of 500 → `embedder.embed` in batches of 96 → `writer.setEmbeddings`. Returns `{ chunks, embedded, embeddedChunks }`.
+- `ChunkWriter`, `ChunkDraft` (`src/index/types.ts`): local structural types. `@edmate/db`'s `chunks` repository fits them as is; ingest does not import db.
+- `hashedEmbedding` / `hashedEmbedder` (`src/testing/hashedEmbedder.ts`, exported from `@edmate/ingest/testing`): deterministic 1536-dim hashed-trigram unit vectors, for tests only.
+
+### Acceptance evidence (Phase C)
+
+| Item | Evidence |
+|---|---|
+| Every draft keeps its unit's locator; never crosses a unit | `test/chunk/chunker.test.ts` "never crosses a unit…", "splits a long unit at paragraphs…" (every draft of a split unit has the unit's locator) |
+| No draft over 300 words | paragraph, sentence, no-stop and mixed-document cases assert `words ≤ 300` (exact sizes `[300, 300, 200]`, `[300, 150]`, `[300, 300, 50]`); a no-space run is cut at 4,000 chars |
+| No text lost or duplicated | every split case asserts the whitespace-collapsed concatenation equals the input; the heading case asserts the same after removing the heading lines |
+| Heading line on the first chunk only | "puts the heading line verbatim on the first chunk of each section only" (real `parseMarkdown` output); none before the first heading, none for page/slide documents, none for an over-long or blank heading |
+| Embed batching (97 → 2 calls) | `test/index/indexDocument.test.ts` "embeds in batches of 96: 97 chunks are 2 calls (ScriptedGateway)" → calls `[96, 1]` |
+| Embed failure → NULL embeddings, `embedded: false`, nothing thrown | seven cases (rejects, throws, scripted gateway runs out, too few vectors, non-array, wrong dimension, NaN) → `{ embedded: false, embeddedChunks: 0 }`, no `setEmbeddings`, callback gets `embed_failed` / `embed_malformed`, no `console.*` call; a later batch failing keeps the earlier 96 |
+| Writer rejection propagates with a fixed code | `insertMany` rejects, `setEmbeddings` rejects, wrong id count → `IngestError('provider_error', retryable false, "ingest: the chunks could not be stored")`, no `cause`, the serialised error has none of the cause's text |
+| No real model calls | `ScriptedGateway` (with `manualClock`) and the hashed embedder only |
+| No contracts change | `git diff origin/main -- packages/contracts` is empty |
+
+```
+$ corepack pnpm turbo run typecheck lint test --filter=...@edmate/ingest --filter=...@edmate/db --force --concurrency=1
+@edmate/ingest:test:  Test Files  16 passed (16)
+@edmate/ingest:test:       Tests  243 passed (243)      (35 new)
+@edmate/ingest:test: All files          |     100 |    98.45 |     100 |     100 |
+@edmate/ingest:test:   chunker.ts       |     100 |      100 |     100 |     100 |
+@edmate/ingest:test:   indexDocument.ts |     100 |    95.45 |     100 |     100 |
+@edmate/ingest:test:   hashedEmbedder.ts|     100 |      100 |     100 |     100 |
+@edmate/db:test:       Tests  564 passed (564)
+@edmate/worker:test:   Tests  121 passed | 10 skipped (131)
+@edmate/web:test:      Tests  132 passed (132)
+ Tasks:    17 successful, 17 total
+
+$ python3 .githooks/secret-scan.py --all
+(exit 0)
+```
+
+### Changes (Phase C)
+
+- `packages/ingest/package.json`: `@edmate/contracts` dependency (the `ModelGateway` type); `@edmate/harness` devDependency (`ScriptedGateway`, `manualClock`). `pnpm-lock.yaml` updated.
+- New: `src/chunk/chunker.ts`, `src/index/indexDocument.ts`, `src/index/types.ts`, `src/testing/hashedEmbedder.ts`; tests `test/chunk/chunker.test.ts`, `test/index/indexDocument.test.ts`, `test/testing/hashedEmbedder.test.ts`.
+- `src/index.ts` and `src/testing/index.ts` export the new names.
+
+### Deviations (Phase C)
+
+1. **5.1's units do not contain their heading.** `SectionBuilder` puts the heading in the locator only. So "keeps its heading line verbatim" became: with `headings: true` the chunker puts the locator's last step (the section's own heading) in front of the section's first chunk, as its own line. The heading counts toward the 300 words. `indexDocument` turns it on for Markdown and DOCX; a web page passes `{ kind: 'parsed', headings: true }`.
+2. **`indexDocument` also takes a parsed document** (`{ kind: 'parsed', document, headings }`), because a web link is fetched and parsed by `parseWebLink`, not `parseDocument`.
+3. **Added beyond the plan:** a 4,000-character cap per chunk, a 500-character locator cap, a 10,000-chunk cap per document, insert batches of 500, `embeddedChunks` in the result, an `onEmbedFailed` callback, a check that each batch's vectors are well formed, and a validation error for a document that chunks to nothing.
+4. **The document row is not created here.** `indexDocument` takes the id of a document the caller has already filed (`documents.create`, 8.x upload centre).
+
+### Left to do
+
+- **Phase D:** as listed above (recall gate, heading-level gold, calibration, `coverageThreshold`), plus the HNSW `iterative_scan` item. Phase D should also add a type-level check in `packages/db/test` that the `chunks` repository satisfies `@edmate/ingest`'s `ChunkWriter`, since db gains ingest as a devDependency then.
+
 ## Decisions
 
 ### 5.3 Production RetrievalIndex search/probe and chunk writes in `packages/db/src/repositories`, ownership-checked, material revision bumped in the same transaction · risk: high
@@ -185,3 +247,19 @@ Why: without a build deadline, one hung query would keep every later call on tha
 ### 20 Oct 2026 · 5.3 HNSW iterative scan left for Phase D · decided by tdd-guide · risk: low
 Decided: Phase B makes no change to the vector query. The lead's MEDIUM stays open under Phase D.
 Why: at test sizes Postgres picks an exact scan, so no red test could be made within budget. The gap affects recall, not leakage.
+
+### 20 Oct 2026 · 5.3 The section heading leads the first chunk, taken from the locator · decided by tdd-guide · risk: low
+Decided: 5.1's units carry their heading only in the locator, so the chunker (with `headings: true`) puts the locator's last step on its own line at the start of a section's first chunk. It adds none to text located by the source title, none to page or slide documents, and none for a heading over 30 words. A heading that itself contains " > " keeps only its last part.
+Why: the plan wants the heading on the first chunk for full-text recall, and the heading is still source text, so the module text leakCheck joins stays true to the source. Changing 5.1's unit text instead would alter its locator contract.
+
+### 20 Oct 2026 · 5.3 Chunk size caps: 300 words, 4,000 characters, 500-character locator, 10,000 chunks per document · decided by tdd-guide · risk: low
+Decided: a chunk holds at most 300 words and 4,000 characters (a run with no spaces is cut by characters). A locator over 500 characters keeps its last 499 characters after an ellipsis. A document that chunks to more than 10,000 pieces is `IngestError('input_too_large')` before anything is written.
+Why: 4,000 characters keeps any chunk inside the embedding model's input limit, even for long URLs or formulas. The db's locator column takes 500 characters and chunk ids hold a 4-digit ord.
+
+### 20 Oct 2026 · 5.3 Storage failure is a fixed, non-retryable IngestError; embedding failure is not an error · decided by tdd-guide · risk: medium
+Decided: any `insertMany` or `setEmbeddings` rejection, or a wrong id count, becomes `IngestError('provider_error', false, 'the chunks could not be stored')` with no cause. An embedding failure (a throw or rejection, or malformed vectors) stops embedding, keeps the batches already written, reports `embed_failed` or `embed_malformed` to an optional callback and resolves with `embedded: false`.
+Why: a db error can quote teacher material, so nothing of it is kept. It is not marked retryable because earlier insert batches may already be stored, and re-running would hit the repeated-ord `invalid` error; re-indexing needs the delete path (8.x). Full text still finds unembedded chunks, so a missing embedding should not fail the upload.
+
+### 20 Oct 2026 · 5.3 @edmate/ingest depends on @edmate/contracts, with @edmate/harness as a devDependency · decided by tdd-guide · risk: low
+Decided: ingest now imports the `ModelGateway` type from contracts and uses harness's `ScriptedGateway` in tests only. No contracts change.
+Why: the plan's Phase C file list. `Pick<ModelGateway, 'embed'>` keeps the embedder swappable without ingest importing the gateway package.
