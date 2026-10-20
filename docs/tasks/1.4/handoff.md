@@ -1,8 +1,8 @@
 # 1.4 handoff: Email magic-link sign-in
 
-Status: PARTIAL (Phases A and B done; Phase C goes to a later builder)
-Branch: `m1/1.4-magic-link-sign-in` (Phase A pushed from local `build-1.4a`, Phase B from `build-1.4b`)
-Worktree: Phase A `.claude/worktrees/agent-af9b0a98367d923da`; Phase B `.claude/worktrees/agent-a7933fa155256c311` (both under the repo root)
+Status: DONE (Phases A, B and C)
+Branch: `m1/1.4-magic-link-sign-in` (Phase A pushed from local `build-1.4a`, Phase B from `build-1.4b`, Phase C from `build-1.4c`)
+Worktree: Phase A `.claude/worktrees/agent-af9b0a98367d923da`; Phase B `.claude/worktrees/agent-a7933fa155256c311`; Phase C `.claude/worktrees/agent-a175e2fa6a55ac3ac` (all under the repo root)
 
 ## Phase A
 
@@ -126,6 +126,126 @@ Caddy 2.10's `reverse_proxy` sets `X-Forwarded-For` by itself. Without `trusted_
 - `test/setup.ts` should also clear `EMAIL_SERVER`, `EMAIL_FROM` and `REDIS_URL` once `env.ts` reads them.
 - The migration renumbering note under Phase A still applies.
 
+## Phase C
+
+### What was built (wiring, sandbox, evidence)
+- **`src/auth/env.ts`**:
+  - Google is optional as a pair (`AUTH_GOOGLE_ID` + `AUTH_GOOGLE_SECRET`);
+  - email is optional as a pair (`EMAIL_SERVER` must be an `smtp:`/`smtps:` URL, plus `EMAIL_FROM`);
+  - email needs `REDIS_URL` (`redis:`/`rediss:`);
+  - no provider at all is an `AuthConfigError`;
+  - `AuthEnv` is `google?: { id, secret }` and `email?: { server, from, redisUrl }`;
+  - messages name the variable and never echo a value.
+- **`src/auth/config.ts`**:
+  - `providers` lists only the configured ones. Email env without the `emailSignIn` deps throws, so there are no limit-less links;
+  - `AuthConfigDeps.request` is `{ cookies, headers }`, plus a new `emailSignIn: { mail, limiter }` dep;
+  - the `signIn` email branch: a verification request goes to the limiter with `account.providerAccountId` (Auth.js's normalised address, the same for known and unknown users) and the request headers;
+  - over the limit it returns `RATE_LIMITED_PATH` (`/api/auth/error?error=RateLimited`);
+  - with no request (a server action) it returns `false`;
+  - a limiter error propagates, and Auth.js answers `AccessDenied`;
+  - the link callback itself returns `true`, and the Google branch is unchanged;
+  - a new `redirect` callback, `safeRedirect(url, env.url)`, parses against AUTH_URL and keeps the result only if its origin is AUTH_URL's. Anything else lands on the app origin.
+- **`src/auth/adapter.ts`**: `createVerificationToken` / `useVerificationToken` pass through to the store and echo back the token Auth.js passed in, because the store never returns it.
+- **`src/auth/redis-ready.ts`** (new): `whenReady(redis, timeoutMs)` and `readyCounters(redis, counters)`. Each take waits up to `REDIS_READY_TIMEOUT_MS` (3 s) for ioredis `ready`. Past that it throws a bare `RedisNotReadyError`, so the request fails closed: no token and no mail.
+- **`src/auth/index.ts`**: with `env.email`, the first auth call builds:
+  - one ioredis client (`maxRetriesPerRequest: 1`, `enableOfflineQueue: false`), whose `error` listener logs `[auth] redis <name>` only;
+  - `smtpMailSender({ requireTls: env.secureCookies })`;
+  - `createSignInLimiter` over `readyCounters(redis, redisSignInCounters(redis))`.
+
+  The exported `signIn('email', …)` rejects, so email sign-in only goes through the rate-limited HTTP route.
+- **`src/auth/email.ts`** (Phase B module, one fix): `sendVerificationRequest` marks its promise handled before returning it (see Decisions). Auth.js still receives the rejection.
+- **`test/setup.ts`** also clears `EMAIL_SERVER`, `EMAIL_FROM` and `REDIS_URL`.
+- **`docker/compose.yaml`**:
+  - a new `mailpit` service, pinned by digest (`axllent/mailpit:v1.31.6@sha256:23fe39e8…0387`), with the image's own healthcheck and no volume;
+  - the UI and API are on `127.0.0.1:${EDMATE_MAIL_UI_PORT:-8025}`, and SMTP stays on the compose network;
+  - `web` gets `EMAIL_SERVER` (default `smtp://mailpit:1025`) and `EMAIL_FROM` (default `Edmate <sign-in@edmate.test>`), and depends on `mailpit` being healthy.
+- **`docker/env.example`**:
+  - empty `EMAIL_SERVER=` / `EMAIL_FROM=`;
+  - the production shape with obvious placeholders (`smtps://REPLACE_ME_USER:REPLACE_ME_PASSWORD@smtp.provider.example:465`);
+  - `EDMATE_MAIL_UI_PORT` and the sandbox recipe.
+
+  Production mail stays blocker B-25.
+- **`docker/Caddyfile`**: a comment only. Any future access log must not record `/api/auth/callback/*` query strings, and the app reads only the rightmost `X-Forwarded-For` entry.
+- **`apps/web/scripts/sandbox-magic-link.mjs`** (new):
+  - localhost only (it refuses other hosts) and uses only `student1@example.test`;
+  - flow: health, CSRF, request a link, read Mailpit's API, follow the link, print the session, show that a replay is refused;
+  - the token is redacted in its output.
+
+### Evidence
+Tests were written first. The new suites (`redis-ready.test.ts`, `email-flow.test.ts`, the email blocks of `config.test.ts`, `env.test.ts` and `index.test.ts`, and the adapter link tests) failed before the code existed.
+
+Sandbox: the full compose stack under its own project, `-p edmate14c` (ports 18080 app, 18025 Mailpit, 55433 Postgres, 56380 Redis; `AUTH_URL=http://localhost:18080`; a fresh `AUTH_SECRET` from `openssl rand`). Migrations were applied first, then:
+```
+$ SANDBOX_APP_URL=http://localhost:18080 SANDBOX_MAIL_URL=http://127.0.0.1:18025 node apps/web/scripts/sandbox-magic-link.mjs
+ok   GET /api/health → 200
+ok   GET /api/auth/csrf → token
+POST /api/auth/signin/email (student1@example.test) → 302 http://localhost:18080/api/auth/verify-request?provider=email&type=email
+Mailpit: "Your Edmate sign-in link" to student1@example.test
+ok   link origin is AUTH_URL's (http://localhost:18080)
+GET /api/auth/session → {"user":{"id":"089977f0-…","role":"student"},"expires":"2026-11-19T16:18:00.250Z"}
+GET same link again (new browser) → 302 http://localhost:18080/api/auth/error?error=Verification
+ok   reusing the link is refused
+```
+- It was the first sign-in after a cold start of `web` and Redis, and it succeeded, so the `ready` wait works.
+- The Redis keys were only `edmate:signin:addr:<64 hex>` and `edmate:signin:ip:<64 hex>`, with no address or IP.
+- `web`'s env held `EMAIL_SERVER=smtp://mailpit:1025`, and `docker compose config` shows `mailpit` and `web`'s `EMAIL_*`.
+- The stack was torn down afterwards. A separate project kept the run from touching another session's `edmate` containers.
+
+Gate, with Postgres and Redis up (`TEST_DATABASE_URL=…127.0.0.1:55433/edmate`, `TEST_REDIS_URL=redis://127.0.0.1:56380`):
+```
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/web... --filter=@edmate/db --force --concurrency=1
+@edmate/db:test:  identity.int (32 tests), migrate.int (13 tests) ran
+@edmate/db:test:       Tests  511 passed (511)
+@edmate/web:test:  rate-limit.int ran on real Redis; email-flow.test.ts (21 tests)
+@edmate/web:test:       Tests  295 passed (295)
+@edmate/web:test: All files          |     100 |      100 |     100 |     100 |
+@edmate/web:test:  src/auth          |     100 |      100 |     100 |     100 |
+ Tasks:    26 successful, 26 total
+
+$ cd apps/web && corepack pnpm exec next build
+✓ Compiled successfully
+
+$ python3 .githooks/secret-scan.py --all
+(clean)
+```
+
+`email-flow.test.ts` drives Auth.js's real handlers over an in-memory store, mail and counters, with no socket. It covers:
+- request → one mail → link → a new `student` with `emailVerifiedAt` set; the store holds a hash, not the link token;
+- the link is single use (`Verification`); an expired link is refused; an older link dies when a newer one is sent; a forged or missing token signs nobody in;
+- an existing Google user who signs in by link gets the same user id;
+- signed in as A, a link for an existing user B deletes A's session; a link for a new address replaces A's cookie (see Decisions);
+- known and unknown addresses get identical responses;
+- the 6th request per address is refused with no token and no mail; `+tag` and case variants share the bucket; rate-limited known and unknown addresses get identical responses;
+- the 51st request per IP is refused; spoofed left `X-Forwarded-For` entries are ignored; the keys hold no plaintext;
+- `x-forwarded-host: evil.test` still mails an AUTH_URL link; `callbackUrl=https://evil.test` ends at the app origin;
+- a missing CSRF token gets `MissingCSRF` and no mail;
+- bad addresses (two `@`, a comma list, CRLF, no `@`) get the generic `Configuration` page, with no token and no mail;
+- a mail failure gets the same generic page and is logged by name only;
+- the global fetch is never used.
+
+`index.test.ts` fakes ioredis, nodemailer and `openDatabase`. It covers:
+- `signIn('email')` rejects;
+- email-only env serves only `email`, with the Redis options above and `requireTLS: false` over http;
+- cold start: the request waits for `ready`, counts twice and mails once;
+- Redis never ready: after 3 s it gets `error=AccessDenied`, with no count and no mail, and the Redis error is logged by name only.
+
+### Migration numbering
+`origin/main` was merged in cleanly (it brought 4.4, 0.11 and 0.13). PR #64 (5.3, `0012_material_revision`) is **not** on main yet, so the migration stays `0013` and no meta repair was needed. The Phase A note on renumbering still applies to whichever PR merges second.
+
+### Caddy and X-Forwarded-For
+As the lead directed, nothing depends on whether Caddy replaces or appends the header. Both leave the peer Caddy saw as the rightmost entry, and `clientIp` reads only that entry. There is one Caddy hop.
+
+### Deviations
+- `redisUrl` is nested in `AuthEnv.email` instead of being a separate optional field.
+- `redis-ready.ts` is a new module, for the lead's cold-start rule.
+- `email.ts` (Phase B) got the handled-promise fix.
+- `index.test.ts` mocks `@edmate/db`'s `openDatabase` with the memory identity, because `getUserByEmail` runs before the limiter.
+- No `next.config.ts` change was needed.
+
+### Observations (not fixed)
+- LOW: in the production build, `describeError` logs Auth.js's minified class name (`[auth] error L (Verification)`). The type is still useful. This was already true for 1.3's logger.
+- A Redis outage or cold-start timeout shows Auth.js's `AccessDenied` page, and a bad address or a mail failure shows `Configuration`. Each is the same for every address. Friendlier copy belongs to the sign-in UI follow-up.
+
 ## Decisions
 
 ### 20 Oct 2026 · 1.4 Magic-link tokens: hashed, single use by atomic delete, one live link per address · decided by tdd-guide · risk: high
@@ -163,3 +283,31 @@ Why: nodemailer errors can quote addresses. Rethrowing the original would hand t
 ### 20 Oct 2026 · 1.4 IPv4-mapped IPv6 counts as the IPv4 address; zone IDs dropped · decided by tdd-guide
 Decided: `::ffff:a.b.c.d` is bucketed as `a.b.c.d`, and `fe80::1%eth0` loses its `%eth0` before bucketing. Other IPv6 addresses, including NAT64 `64:ff9b::…`, go by their /64. An address with a port or brackets is `unknown`.
 Why: a dual-stack listener can report one client in either form, and both should share a bucket. Caddy's `X-Forwarded-For` holds bare IPs, so anything else is unexpected and falls into the shared, limiting bucket.
+
+### 20 Oct 2026 · 1.4 Email sign-in wired: limited in the signIn callback, waits for Redis, redirects pinned to AUTH_URL · decided by tdd-guide · risk: high
+Decided: the `email` provider is listed only when `EMAIL_SERVER` + `EMAIL_FROM` (+ `REDIS_URL`) are set, and building it without a mail sender and a limiter throws. Each link request is counted in the `signIn` callback on Auth.js's normalised address. Over the limit it redirects to `/api/auth/error?error=RateLimited`, the same for known and unknown addresses. Every count first waits up to 3 s for Redis `ready`; on a timeout it fails closed (`AccessDenied`, no token, no mail). Every redirect is pinned to AUTH_URL's origin by parsing it.
+Why: the plan's design plus the lead's answers (bounded cold-start wait, fail closed, identical responses). This is the sign-in path, so it is risk: high.
+
+### 20 Oct 2026 · 1.4 `redisUrl` lives inside `AuthEnv.email` · decided by tdd-guide
+Decided: `AuthEnv.email` is `{ server, from, redisUrl }`, not a separate optional `redisUrl` field as the plan sketched.
+Why: the type then says "email implies Redis", so the wiring has no unreachable "email but no Redis" branch. The env rule is the same.
+
+### 20 Oct 2026 · 1.4 A bad address or a mail failure shows the generic `Configuration` error · decided by tdd-guide
+Decided: accept Auth.js's mapping. `InvalidEmailError` and `MailSendError` are not AuthErrors, so Auth.js redirects to `error=Configuration` (not `EmailSignin`, as the Phase B note assumed). Neither creates a token or sends mail.
+Why: the page is identical for every address and leaks nothing. Remapping would mean wrapping Auth.js's errors for no security gain. Friendlier copy belongs to the sign-in UI.
+
+### 20 Oct 2026 · 1.4 The mail-send promise is marked handled before Auth.js joins it · decided by tdd-guide
+Decided: `sendVerificationRequest` attaches a no-op `catch` to its promise and returns that same promise, so the rejection still reaches Auth.js.
+Why: `@auth/core` 0.41.3 starts the send, awaits `createHash`, and only then joins it. A fast SMTP failure was an unhandled rejection, which Node can treat as fatal. A test proves the error still propagates.
+
+### 20 Oct 2026 · 1.4 Switching to a new address by link leaves the old session row until it expires · decided by tdd-guide
+Decided: accept Auth.js's behaviour. Signed in as A, a link for an existing user B deletes A's session. A link for a new address creates the user and replaces the cookie, but A's session row stays until it expires. Both cases are tested.
+Why: the browser no longer holds A's token, so that browser can't use the row, and it expires within 30 days. Deleting it would need adapter side effects that carry more risk than they save. The plan's "Auth.js deletes that session first" holds only for existing users.
+
+### 20 Oct 2026 · 1.4 `signIn('email')` from server code is refused · decided by tdd-guide
+Decided: the exported `signIn` rejects for the `email` provider.
+Why: a server action has no request headers, so it would skip the per-IP limit. Email sign-in goes only through `/api/auth/signin/email`.
+
+### 20 Oct 2026 · 1.4 Mailpit v1.31.6 pinned by digest for the local stack · decided by tdd-guide
+Decided: `axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387`, using its built-in healthcheck, with the UI bound to 127.0.0.1. Production SMTP stays B-25, and `env.example` holds only `REPLACE_ME` placeholders.
+Why: it matches how MinIO is pinned, and no real mail can leave a dev stack.
