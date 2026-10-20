@@ -19,6 +19,7 @@ import {
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
+import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
 import { INITIAL_HELP_STATE } from '../../pedagogy/helpState.js';
 import {
   memoryRetrieval,
@@ -153,7 +154,7 @@ describe('buildContext: history', () => {
 });
 
 describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
-  it('every search carries the entitlement teacher and allowed modules, k = RETRIEVAL_K', async () => {
+  it('with no agent history, one search carries the entitlement teacher and allowed modules, k = RETRIEVAL_K', async () => {
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     await run(world({ retrieval: r }));
     expect(r.searches).toEqual([
@@ -168,7 +169,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     ]);
   });
 
-  it('the query adds the latest agent question, so a bare "42" still retrieves', async () => {
+  it('the query adds the latest agent question, so a bare "42" still retrieves (now via the context search, 3.4c)', async () => {
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     const history = [msg(1, 'agent', 'Add fractions with a common denominator: 1/2 + 1/3?')];
     const b = await run(world({ retrieval: r, history }), ENTITLED, {
@@ -176,6 +177,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
       text: '42',
     });
     expect(r.searches.map((s) => s.q)).toEqual([
+      '42',
       '42\nAdd fractions with a common denominator: 1/2 + 1/3?',
     ]);
     expect(b.retrieved.length).toBeGreaterThan(0);
@@ -241,6 +243,74 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
       leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: r }))).rejects.toThrow('index down');
+  });
+
+  it('dilution fixed (3.4c): the agent reply in history no longer drags a covered chunk below threshold', async () => {
+    // The student's own words alone fully cover chk_world_02; a long, unrelated agent reply would
+    // dilute the combined query's overlap on main, but the student-only search keeps the score.
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [
+      msg(1, 'agent', `Let's talk about something totally different for a long while: ${'z'.repeat(200)}`),
+    ];
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...demoTurnInput,
+      text: 'fractions name equal parts of a whole',
+    });
+    const own = b.retrieved.find((c) => c.id === 'chk_world_02');
+    expect(own?.score).toBeGreaterThanOrEqual(0.5);
+    expect(coverageGate(b, DEFAULT_COVERAGE_THRESHOLD)).toBeNull();
+  });
+
+  it('locked precedence (3.4c): a real locked request still ends locked even though the agent context alone would cover', async () => {
+    // The student's own words hit the locked module; the agent's last question is on allowed
+    // material. The context search would cover, but locked precedence means it never gets to.
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [
+      msg(1, 'agent', 'Fractions name equal parts of a whole; a common denominator is shared.'),
+    ];
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...demoTurnInput,
+      text: 'integration by parts: choose u and dv',
+    });
+    expect(b.lockedHit).toBe(true);
+    expect(coverageGate(b, DEFAULT_COVERAGE_THRESHOLD)).toBe('locked');
+    // found comes from the student-only search: no chunk from the agent-widened query leaks in.
+    for (const c of b.retrieved) expect(c.moduleId).not.toBe('mod_test_02');
+  });
+
+  it('merges own and context searches by score, deduping by id, unscored last, capped at K', async () => {
+    const shared: Chunk = { ...demoChunk, id: 'chk_shared', score: 0.4 };
+    const ownOnly: Chunk = { ...demoChunk, id: 'chk_own', score: 0.9 };
+    const ctxOnly: Chunk = { ...demoChunk, id: 'chk_ctx', score: 0.6 };
+    const sharedBetter: Chunk = { ...shared, score: 0.7 };
+    let call = 0;
+    const r: RetrievalIndex = {
+      search: () => {
+        call += 1;
+        return Promise.resolve(call === 1 ? [ownOnly, shared] : [ctxOnly, sharedBetter]);
+      },
+      probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
+    };
+    const history = [msg(1, 'agent', 'a different question entirely')];
+    const b = await run(world({ retrieval: r, history }));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_own', 'chk_shared', 'chk_ctx']);
+    expect(b.retrieved.find((c) => c.id === 'chk_shared')?.score).toBe(0.7);
+  });
+
+  it('a hint request with agent history: the context search runs (student text is blank, no probe)', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [msg(1, 'agent', 'A common denominator is a shared multiple.')];
+    const noText: TurnInput = { ...demoTurnInput };
+    delete noText.text;
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...noText,
+      kind: 'hint_request',
+    });
+    expect(r.searches.map((s) => s.q)).toEqual(['A common denominator is a shared multiple.']);
+    expect(r.probes).toEqual([]);
+    expect(b.lockedHit).toBe(false);
+    expect(b.retrieved.length).toBeGreaterThan(0);
   });
 
   it('stops before retrieval when the step was cancelled', async () => {
