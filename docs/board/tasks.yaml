@@ -970,8 +970,11 @@ tasks:
   model: null
 - id: 4.3d
   milestone: M4
-  title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the rope is ready" at least soft); the code-word window shrinks to 1-2 words and drops everyday words (list, print, object, field, stack, queue, element); method-ready negatives apply only to rope and blade, never pills, tablets, poison or noose; "hopeless" alone feeds the hopelessness family'
-  accept: each phrase is a unit test (hit or negative) and a pending case; "i have pills and nothing matters anymore, my list of reasons is empty" stays hard; no regression on the distress and near-miss suites.
+  title: 'Distress keyword follow-ups (4.3 fix-round-3 re-check): more method-ready phrasings ("all my pills ready", "my pills are ready", "kept enough tablets aside", "collected/stocked up on pills", "the
+    rope is ready" at least soft); the code-word window shrinks to 1-2 words and drops everyday words (list, print, object, field, stack, queue, element); method-ready negatives apply only to rope and blade,
+    never pills, tablets, poison or noose; "hopeless" alone feeds the hopelessness family'
+  accept: each phrase is a unit test (hit or negative) and a pending case; "i have pills and nothing matters anymore, my list of reasons is empty" stays hard; no regression on the distress and near-miss
+    suites.
   deps:
   - '4.3'
   status: todo
@@ -993,7 +996,8 @@ tasks:
   milestone: M4
   title: 'lockedLeak follow-ups (4.6b fix-round re-review): markdown emphasis inside words (l**o**op, ~~, backticks) padded in the rendered reading; known-miss notes for <a<b>, a < inside a quoted value,
     --!> comments and non-ASCII tag names; a failed or timed-out post-guard step counts as a locked trip; a corrupt stored help state is reported once'
-  accept: each item has a unit test; the markdown in-word case (locked-loops-md-inword-bold-en, pending) trips; the three human-approved cases parked in docs/tasks/4.6/pending-cases/ (B-19) move into evals/suites/locked with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
+  accept: each item has a unit test; the markdown in-word case (locked-loops-md-inword-bold-en, pending) trips; the three human-approved cases parked in docs/tasks/4.6/pending-cases/ (B-19) move into evals/suites/locked
+    with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
   status: todo
@@ -1008,7 +1012,7 @@ tasks:
   - '3.12'
   - '4.0'
   - '4.1'
-  status: review
+  status: done
   risk: risky
   branch: m4/4.7-grounding
   model: plan:sonnet planreview:opus(safety) build:opus-5.5/medium
