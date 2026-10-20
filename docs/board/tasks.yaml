@@ -1921,7 +1921,8 @@ tasks:
   model: null
 - id: 5.1a
   milestone: M13
-  title: 'Web-link fetch follow-up (5.1 Phase A open question): the public-address check resolves the host separately from the connection, so a host whose DNS answer changes between the two (DNS rebinding) could reach a private address; pin the connection to the checked address (custom lookup/agent) where the app is assembled. The allowlist limits it until then'
+  title: 'Web-link fetch follow-up (5.1 Phase A open question): the public-address check resolves the host separately from the connection, so a host whose DNS answer changes between the two (DNS rebinding)
+    could reach a private address; pin the connection to the checked address (custom lookup/agent) where the app is assembled. The allowlist limits it until then'
   accept: a test where the second DNS answer is private fails closed; the connection uses the address that passed the check
   deps:
   - GATE
@@ -1932,11 +1933,12 @@ tasks:
   model: null
 - id: 4.3a
   milestone: M4
-  title: 'CI flake from 4.3: preGuard.test.ts sets a 1_000 ms per-test timeout and "classifier false → ok" took 1142 ms on a CI runner (PR #60, run 39440391131). Raise these per-test timeouts to the package default (or 5_000) so a slow runner cannot fail an unrelated PR'
-  accept: no test sets a per-test timeout under 5_000 ms (today: evals distressEscalate, harness escalate, costCeiling, preGuard, distressDetect, distressKeywords; queue alertSink); the suites pass
+  title: 'CI flake from 4.3: preGuard.test.ts sets a 1_000 ms per-test timeout and "classifier false → ok" took 1142 ms on a CI runner (PR #60, run 39440391131). Raise these per-test timeouts to the package
+    default (or 5_000) so a slow runner cannot fail an unrelated PR'
+  accept: 'no test sets a per-test timeout under 5_000 ms (today: evals distressEscalate, harness escalate, costCeiling, preGuard, distressDetect, distressKeywords; queue alertSink); the suites pass'
   deps:
   - '4.3'
-  status: todo
+  status: running
   needs_decision: null
-  branch: null
-  model: null
+  branch: m4/4.3a-test-timeouts
+  model: plan:lead build:haiku
