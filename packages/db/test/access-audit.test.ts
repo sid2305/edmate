@@ -65,6 +65,8 @@ const INDEX_IMPLEMENTERS = new Set([
   'packages/harness/src/testing/memoryRetrieval.ts',
   'packages/harness/src/testing/testSteps.ts',
   'packages/harness/src/testing/hostileRetrieval.ts',
+  // The CLI's dev-only lexical adapter (3.9 Q3), to be replaced by the db index in 3.9a.
+  'apps/cli/src/commands/chat/retrieval.ts',
 ]);
 const HARNESS_SRC = 'packages/harness/src/';
 /** Harness files that may call the index's search/probe: the filter, and test-only helpers. */

@@ -1,6 +1,6 @@
 # 3.9 handoff — Phase A + Phase B (tdd-guide)
 
-## Status: DONE
+Status: DONE
 
 ## Phase A
 
@@ -78,6 +78,17 @@ All files          |   96.26 |    91.26 |   93.44 |   97.98 |
   deliberately left untouched — it belongs to Phase B (the CLI command surface), not this task.
 
 ## Decisions
+
+### 20 Oct 2026 · 3.9 CLI retrieval adapter allowlisted in access audit rule 4 · decided by build-error-resolver
+
+Decided: `apps/cli/src/commands/chat/retrieval.ts` is added to `packages/db/test/access-audit.test.ts`'s
+`INDEX_IMPLEMENTERS` allowlist, until 3.9a moves the CLI from this dev-only lexical adapter to the db
+index.
+
+Why: the file is a thin `RetrievalIndex` adapter that delegates every access decision to the harness's
+`memoryRetrieval` test double (lead answer 3.9 Q3) and contains no access logic of its own, matching
+the allowlist's existing exemptions for the port's other non-db implementers; 5.4's new access audit
+(rule 4) otherwise flags it as an unlisted `RetrievalIndex` implementer.
 
 ### 20 Oct 2026 · 3.9 ProfileStore test double not exported from harness/testing · decided by tdd-guide
 
