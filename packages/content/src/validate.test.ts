@@ -1,7 +1,15 @@
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BROKEN_ALL, copyValid, edit, tempDir, VALID } from './test-helpers.js';
+import {
+  BROKEN_ALL,
+  copyLocalesValid,
+  copyValid,
+  edit,
+  LOCALES_VALID,
+  tempDir,
+  VALID,
+} from './test-helpers.js';
 import { validateContentDir } from './validate.js';
 
 describe('validateContentDir', () => {
@@ -48,6 +56,24 @@ describe('validateContentDir', () => {
       ok: false,
       issues: ['course.yaml: missing; not a recognised content directory'],
     });
+  });
+
+  it('passes a valid locale-packs directory', () => {
+    expect(validateContentDir(LOCALES_VALID)).toEqual({ ok: true, issues: [] });
+  });
+
+  it('fails a locale pack with a missing field, and runs the locale rules on the rest', () => {
+    const dir = copyLocalesValid();
+    edit(dir, 'XX.yaml', (s) => s.replace(/^ {2}grievance: .*\n/m, ''));
+    edit(dir, 'global.yaml', (s) => s.replace('languages: [en]', 'languages: [en, hi]'));
+    const { ok, issues } = validateContentDir(dir);
+    expect(ok).toBe(false);
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toMatch(/^XX\.yaml: invalid locale pack[\s\S]*compliance\.grievance/);
+    // Without its one market pack, the remaining rules still run on the default pack.
+    expect(issues.slice(1)).toEqual([
+      'global.yaml: languages must be exactly [en] during the pilot; got [en, hi]',
+    ]);
   });
 
   it('fails a directory that does not exist', () => {

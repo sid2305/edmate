@@ -19,9 +19,9 @@ import {
 } from './processors.js';
 
 /** Turns a PermanentJobError into BullMQ's UnrecoverableError (no more attempts). */
-export function permanentToUnrecoverable(
-  process: (job: TurnJob) => Promise<JobOutcome>,
-): (job: TurnJob) => Promise<JobOutcome> {
+export function permanentToUnrecoverable<J = TurnJob, R = JobOutcome>(
+  process: (job: J) => Promise<R>,
+): (job: J) => Promise<R> {
   return async (job) => {
     try {
       return await process(job);

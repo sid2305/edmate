@@ -50,6 +50,14 @@ export {
   type TurnLimits,
 } from './limits.js';
 export { runTurn, type RunTurnOptions } from './runner.js';
+export { buildCaringReply } from './steps/escalate.js';
+export {
+  createPreGuardStep,
+  defaultPreGuardRegistry,
+  HISTORY_TIMEOUT_MS,
+  PRE_GUARD_SLICE_MS,
+  PreGuardChainFailedError,
+} from './steps/preGuard.js';
 export {
   ALERT_ATTEMPT_TIMEOUT_MS,
   ALERT_RETRY_MAX_MS,

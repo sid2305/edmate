@@ -10,6 +10,210 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word · decided by human (B-18, option c) · risk: high
+Decided: drop the game-shaped softening entirely. A hard self-harm or abuse phrase escalates whatever sits near it, including a game word within 5 words on either side ("killed myself in fortnite", "match mein marne ka mann karta hai", "how to kill myself in valorant"). `GAME_WORDS`, `gameTied`, `gameTalk` and the intent-detection helpers that existed only to decide whether to soften a game-shaped hit (`INTENT`, `INTENT_AFTER`, `COMPACT_INTENT`, `intentNear`) are removed from `distressKeywords.ts`. Code context (fix round 3: a soft phrase next to a code word stays out of the combination rules) and method-ready phrases (fix round 3) are unchanged. Occasional on-call pages for plain game talk ("i keep killing myself in minecraft by falling in lava") are accepted as the cost of never missing a real disclosure.
+Why: the round-3 exemption (B-16 answer a) still left a path where a hard phrase next to a game word could be read as soft by the classifier instead of escalating outright; the human chose certainty over precision for this guard.
+Alternatives: keep the fix-round-3 exemption (intent- and abuse-aware game softening, option a/b); narrow the game-word list further (still leaves a gap).
+Reversible: Yes, but only with safety-reviewer sign-off, and only by re-adding a narrower, explicitly-scoped exemption, not by restoring the old message-wide check.
+
+---
+
+### 19 Oct 2026 · 4.3 Game talk softens only game-shaped phrases, never intent or abuse · decided by human (B-16 answer a) and tdd-guide (patterns) · risk: high
+Decided: a hard self-harm phrase counts as soft only when every time it appears it is tied to a game within 5 words ("killed myself in fortnite", "in this round i keep ending my life", "minecraft mein khud ko maar diya"). It stays hard if first-person intent is in the 5 words before it or in the phrase itself (want, wanna, going to, gonna, will, plan, main, mujhe, chahta, ...unga), or if a Hindi intent word comes right after it. Abuse phrases are never softened. A game word elsewhere in the message ("my squad left me", "when i play free fire") changes nothing, and "squad" is no longer a game word.
+Why: in the safety re-check, a game word anywhere in the message downgraded real intent and abuse.
+Alternatives: drop the game exemption entirely (over-escalates plain game talk and pages on-call); keep it message-wide (the HIGH).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Code context keeps a soft phrase out of the combination rules · decided by human (B-16 answer a) and tdd-guide (code word list) · risk: high
+Decided: a soft phrase with a code word within 5 words either side (array, list, null, undefined, function, variable, string, dict, index, length, print, ...; identifiers like `pills_array` normalise to these words) does not count towards the combination rules, so "pills array is empty, nothing matters" goes to the classifier as an ordinary soft hit. It is never dropped: the classifier decides, and a classifier failure still escalates. Code context never changes a hard phrase. Words that are also emotional or school words ("empty", "class", "loop", "return", "none", "value") are left out of the list on purpose.
+Why: coding text was paging on-call through combination rule (a).
+Alternatives: drop soft hits in code context (silently misses real distress); detect code syntax in the raw text (punctuation is gone after normalisation).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 A method in hand and ready, or saved up, is a hard phrase · decided by human (B-16 answer a) and tdd-guide (phrases) · risk: high
+Decided: new hard phrases. English: "have/got/kept/hid <pills|tablets|rope|noose|blade|razor|poison> ... ready / set aside / hidden away / saved up" (not when followed by "for the experiment/project/class/..."), and "saved up / been saving / stockpiling / hoarding pills, tablets, meds". Hinglish: "pills/goliyan/rassi/blade/zehar ready/taiyaar hai/kar li", "goliyan jama/ikatthi kar". Devanagari: "गोलियां/ब्लेड/रस्सी/जहर तैयार है", "गोलियां जमा कर". So these escalate even when the classifier is down.
+Why: "i have the pills ready" relied on the classifier.
+Alternatives: leave it soft (the MEDIUM).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Distress keyword tables: all languages, normalised, hard and soft · decided by lead (safety plan review, safety review fix round) and tdd-guide (phrases) · risk: high
+Decided: built-in English, romanised-Hindi and Devanagari stem tables run on every message whatever `lang` says, over several normalised forms (format characters dropped and as spaces, accents, look-alike letters, leetspeak, digit words, written-together phrases); hard = first-person intent, plan or method and abuse disclosures; soft = bare nouns, third person, past tense, vague farewells and any hard phrase in a game context; obfuscated spellings and eval strings are never in the tables.
+Why: students mix scripts, and hidden characters or spelling tricks must not dodge the check.
+Alternatives: per-language tables chosen by `lang`; locale-pack keyword data (needs a contracts change).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Combinations of soft phrases that count as hard · decided by team lead · risk: high
+Decided: a soft method phrase (rope or noose, pills or goliyan, blade, jumping off or kood, zehar or poison, a roof or chhat) plus any other soft phrase, and a first-person vanish phrase plus a hopelessness phrase, escalate with no classifier call; every other pair of soft phrases still asks the classifier.
+Why: the accept line is "100% of distress cases escalate", and the safe direction is to escalate.
+Alternatives: leave all soft pairs to the classifier (fix round 1); count every soft pair as hard (first build).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Other soft pairs ask the classifier · decided by lead (safety review fix round) · risk: high
+Decided: one soft phrase, or two that match no combination rule, go to the classifier; the turn escalates when the classifier says yes, throws, times out or returns bad output, and not when it says no.
+Why: over-escalation pages on-call every 15 minutes until acknowledged; the classifier failure path keeps the safe side.
+Alternatives: two soft phrases count as hard (the first build).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 `distressCheck` is the hard list; with no preGuard verdict, soft counts too · decided by tdd-guide (lead's 4.2 note) and lead (safety review fix round) · risk: high
+Decided: `PipelineDeps.distressCheck` = `hasDistressKeyword` (hard only; 4.2 ORs it on the raw text into step 5); when preGuard fails (step timeout, chain failure) the runner also escalates on any soft phrase in the scrubbed text through the built-in `hasAnyDistressKeyword`; distressDetect gives its classifier 230 ms inside a 300 ms guard slice, waiting for the earlier messages outside that deadline.
+Why: a soft phrase must not bypass a working classifier, but with no verdict at all the safe side is to escalate.
+Alternatives: hard + soft in `distressCheck`; a second injected seam for soft phrases.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 No keyword and the classifier fails: the turn is blocked · decided by lead (4.1 safety review: never invent ok) · risk: high
+Decided: with no keyword, a classifier throw or timeout fails the chain, preGuard throws, and the turn ends `guard_blocked` (still saved, no reply); a classifier outage therefore blocks non-keyword turns.
+Why: without a verdict the guard cannot say the message is safe.
+Alternatives: pass the turn when no keyword hit (fail open on the classifier).
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Alerts are never lost: check first, unlimited capped retries, repage until acked · decided by lead (safety plan review) and tdd-guide (BullMQ details) · risk: high
+Decided: `queuedAlertSink` enqueues the 15-minute check before the raise; each notifier call times out after 20 s and is retried; alert jobs get 1,000,000 attempts with backoff doubling from 1 s to a 30 s cap and survive 1,000 stalls; every unacknowledged check schedules the next round first, then pages on-call, forever until acknowledged; round ids keep one pending check per alert, and completed jobs are kept 24 h so a replayed raise adds nothing.
+Why: a distress alert must reach a person even if Redis, the worker or the notifier fails for a while.
+Alternatives: BullMQ's 5-attempt default; uncapped exponential backoff; a single 15-minute check.
+Reversible: Yes, but only with safety-reviewer sign-off.
+
+---
+
+### 19 Oct 2026 · 4.3 Delivery and acknowledgement stand-ins · decided by lead (plan Q4, Q5) · risk: medium
+Decided: notifications are a structured log line (ids, kind, level, audience, time; never the excerpt) until a vendor is chosen, the same gap as the cost alarm; acknowledgements are a real 30-day Redis key, but nothing calls `acknowledge` yet, so every alert pages on-call every 15 minutes until a trust-console task lands.
+Why: delivery needs a vendor decision; an unreachable ack is the safe default.
+Alternatives: wire a mail vendor now; stub the ack store as always-acked.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The caring reply is the built-in template plus the pack's helplines · decided by lead (safety plan review) · risk: medium
+Decided: escalate always replies `LAST_RESORT_DISTRESS_REPLY` plus "You can also call <name> on <number>" for each pack helpline, in English, and never uses the alert; with no helpline, the template's generic wording stands.
+Why: it says it is an AI, promises nothing and points to someone the student trusts; no ids or alert wording can leak.
+Alternatives: a model-written reply; per-language templates (pilot is English only).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The classifier sees the last 3 student messages · decided by lead (safety plan review) and tdd-guide (limits) · risk: medium
+Decided: preGuard reads up to 12 history messages (50 ms limit), keeps the last 3 student ones and passes them with the message as JSON data; a failed, slow or malformed read gives none and is reported on `finished.background` with a cause only.
+Why: indirect distress often builds over turns; the read must not eat the guard's budget.
+Alternatives: no history; reuse buildContext's history (it runs concurrently, not before).
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 Abuse-only hits raise `kind: abuse` · decided by tdd-guide · risk: medium
+Decided: when every hard hit is an abuse phrase (for example, being hit or touched by a relative), the alert's kind is `abuse`; otherwise `distress`.
+Why: the trust team needs to know which kind of help is needed.
+Alternatives: always `distress`.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 The classifier call is unmetered · decided by lead (plan Q3) · risk: medium
+Decided: distressDetect reports `usage: []`, because `ModelGateway.generateObject` has no usage channel; a follow-up should add one (it also affects 4.4 and route).
+Why: no contracts change in this task.
+Alternatives: estimate tokens; a contracts ADR now.
+Reversible: Yes.
+
+---
+
+### 19 Oct 2026 · 4.3 `must_escalate` is checked, never passed silently · decided by lead (safety plan review) · risk: low
+Decided: `must_escalate` is a check in packages/evals' own case format, and the agent reply gains `escalated`; the generic runner fails the check when the agent does not report it; `distressEscalate.test.ts` drives the real pipeline.
+Why: a check the runner cannot see must not count as a pass.
+Alternatives: a separate tag outside `expect`; skip it in the generic runner.
+Reversible: Yes.
+
+---
+
+### 20 Oct 2026 · 3.10 Fix round 2: worker 'error' listener, real-worker integration test, structural-check bypasses closed, overclaims reworded · risk: medium
+Decided: `checkSafeRegexGuarded` attaches `worker.on('error', ...)` right after spawning (swallowed: the guard already reports unsafe at the ceiling either way), closing a host-process crash when a worker threw after `Atomics.wait` already returned. `safeRegexGuardIntegration.test.ts` builds the package with its own `tsc` and imports the compiled `dist` so one test exercises the real `Worker`/`Atomics`/`MessagePort` protocol end to end, not a mock or the no-`dist` fallback. `unrolledOverlap` (`safeRegex.ts`) now treats a `{1}` quantifier as unquantified, unwraps a one-branch plain group before the adjacency scan, and no longer lets a possibly-empty term between groups reset the scan. A fourth shape the re-review raised, `a?`×25 then `a`×25 with no group at all, is left to the timing probe and the load-path ceiling (the real IN mobile pattern has that same optional-then-mandatory shape and must not be flagged); a test proves the probe and the ceiling both catch it. ADR-0008 and this handoff are reworded where they overstated the structural check as a proof ("matching the quantified case's ambiguity exactly", "provably safe"); the ADR now also documents the `existsSync` in-process fallback (no ceiling, test-only today) and a strictness note that `(a|b)(a|b)` is refused even though it is not itself exponential. `received.message as string[]` is replaced with a runtime shape check.
+Why: typescript-reviewer and architect re-review of PR #57's fix round 1 found the crash path untested and still possible, the real worker protocol untested, three ways to dodge the unrolled-overlap scan structurally, and wording that claimed more certainty than a heuristic check can give.
+Alternatives: skip the real-worker test and rely on the mocked protocol test alone (rejected: a mock can drift from the real `Atomics`/`MessagePort` behaviour without anyone noticing); catch `a?`×25/`a`×25 structurally too (rejected: no rule the authors could find distinguishes it from the real IN mobile pattern's own optional-then-mandatory shape without also flagging that pattern).
+Reviewers: typescript-reviewer, architect (both raised findings in this round).
+Reversible: yes; no stored data depends on any of these changes, only which patterns validate and how the guard's failure modes are documented.
+
+---
+
+### 20 Oct 2026 · 3.10 Safe-regex structural check also refuses an unrolled ambiguous alternation; timing probe derives units from the pattern; a hard wall-clock ceiling guards the load/validate path · risk: high
+Decided: the structural check refuses not only an alternation whose branches overlap under an explicit repeating quantifier, but also two or more adjacent, unquantified copies of the same alternation group, or of groups whose branches overlap each other -- a manually unrolled ambiguity is exactly as dangerous once the compiled pattern runs. The timing probe's adversarial inputs are built from every distinct literal character and class/escape sample the pattern itself uses, in addition to the existing generic alphabet. `edmate content validate` and start-up `loadLocalePacks` (never the per-turn PII scrub) run the whole check inside a `node:worker_threads` worker with a roughly 2-second hard wall-clock ceiling; a pattern that does not answer in time is terminated and reported unsafe. All four real IN patterns and the global pack still pass.
+Why: security review of PR #57 found `'(x|xx)'.repeat(25) + 'z'` and `'(a|aa)'.repeat(25) + 'z'` passed the round-0 check yet took 0.5–4.7 s to run; a pack author (or anyone who can propose a pack) could spell an exponential-backtracking pattern out longhand to dodge a check gated only on an explicit quantifier. Pack patterns run on every student message in `piiScrub`, so any pattern that reaches that path needs more than one check that happens to catch the shapes its author anticipated: the structural check is a conservative heuristic over the pattern's written shape, the timing probe and the load-path ceiling are the backstop for what it misses, and the per-turn scrub path itself has no check and no ceiling at all (see "Fix round 2" and ADR-0008 for what this does and does not guarantee).
+Alternatives: keep the quantifier-gated check and rely on the timing probe alone to catch an unrolled pattern (rejected: the probe's own fixed generic alphabet could miss a pattern ambiguous only on a character outside it, and a probe-only defence has no structural explanation for pack authors); add the `safe-regex` npm package (still a new dependency, the same Q1 answer as round 0); cap total validate-time instead of per-pattern (rejected: one slow pattern would still block every other pack's validation).
+Reviewers: security-reviewer (raised it), architect, typescript-reviewer (ADR-0008 addendum, the worker-protocol design in `safeRegexGuard.ts`).
+Reversible: yes, with a new ADR note; no stored data depends on the stricter rule, only which packs validate.
+
+---
+
+### 19 Oct 2026 · 3.10 LocalePack gains sign-off fields and a parental-consent flag (ADR-0008) · risk: high
+Decided: each helpline gets required `verifiedBy` (a name or handle, never an email, at most 200 characters) and `verifiedOn` (a calendar date). `compliance` gets a required `parentalConsentRequired` boolean. The pack gets an optional `reviewedBy` / `reviewedOn` pair for the compliance block. The literal `pending` is valid in the schema; the content rules report it, and the runtime loader never serves a helpline that carries it. The build plan's Core contracts text and the spec-type tests are updated to match.
+Why: the task asks for "human-verified helplines and compliance". Code could not tell a verified helpline from a guessed one, and the consent rule differs per market (US no, India yes for 13 to 17).
+Alternatives: one pack-level sign-off only; a side file for verification; making the schema reject `pending` (the pack could not be committed honestly); hard-coding consent per country.
+Reviewers: architect, security-reviewer, typescript-reviewer (contracts, ADR); safety-reviewer (helpline refusal, `content/locales/`, the `piiScrub.test.ts` extraction under `packages/harness/src/guardrails/`); security-reviewer also for the `.claude/skills/locale-context` doc.
+Reversible: yes, with a new ADR; no stored data uses these fields yet.
+
+---
+
+### 19 Oct 2026 · 3.10 At runtime an unverified helpline is removed from its pack; the pack and its PII patterns are kept · decided by the team lead · risk: high
+Decided: `loadLocalePacks` serves each pack with every unverified helpline (a blank or `pending` number, or a `pending` verifier) removed, and reports each removed helpline once (market, helpline name, reason codes; never the number). A pack left with no helplines gets the frame's country-neutral line (local emergency services, someone you trust); its PII patterns and other fields are used. A pack that fails the schema or its PII-pattern checks (gu, safe-regex) is refused whole and its market gets the default pack; loading throws only without a usable default pack. `pickLocalePack` removes unverified helplines again (defence in depth). Pending compliance fields (`grievance`, `reviewedBy`) do not block runtime use: they are for the published privacy notice, which is not built yet. `edmate content validate` still fails on every pending value, so the human sign-off stays visible.
+Why: the first build refused the whole pack (lead revision 4), which would have dropped India's Aadhaar, PAN, UPI and Indian-mobile PII patterns until sign-off, a privacy regression. Removing only the helplines gives the same crisis wording without that loss. Lead decision on the build review, 19 Oct 2026; replaces the earlier "refuse the whole pack" decision. ADR-0008 updated to match.
+Alternatives: refuse the whole pack until every helpline is verified (the first build; rejected for the PII regression); refuse only at `edmate content validate` (rejected: an unverified number could reach a crisis reply).
+Reviewers: safety-reviewer (helpline removal, `content/locales/`), architect, security-reviewer, typescript-reviewer (ADR-0008).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.10 Safe-regex check: strict structure first, timing second; one-character lookbehinds allowed · risk: medium
+Decided: a hand-written parser (no dependency) refuses a quantifier inside a group that repeats (`*`, `+`, `{n,m}` with m > 1), an alternation under a repeat whose branches don't each start with a distinct literal character, any backreference, and any lookbehind wider than one character. Clean patterns then run over adversarial inputs from 32 to 8,192 characters (100 ms budget per attempt; flagged only when 3 attempts all go over, so a busy machine can't fail a good pattern). The check runs at validate and load time, never per turn. The Aadhaar pattern is rewritten without its backreference and nested quantifier; it matched identically on 200,011 strings.
+Why: lead revision 2 (structure first, strict is fine). The real IN patterns need one-character lookbehinds to bound a number without redacting its neighbour, so a total lookbehind ban would fail the acceptance line "the real IN pack passes 4.2's PII pipeline test".
+Alternatives: ban every lookbehind (breaks the IN patterns); the `safe-regex` npm package (a new dependency, Q1); timing only (can hang on an exponential pattern).
+Reversible: yes.
+
+---
+
+### 19 Oct 2026 · 3.10 Packs are English-only during the pilot · risk: low
+Decided: both packs list `languages: [en]`, and a validation rule requires exactly `[en]` while the pilot policy holds.
+Why: the 18 Oct 2026 English-only pilot decision and B-14 (crisis replies stay English). The plan's draft had `[en, hi]`.
+Alternatives: `[en, hi]` describing the market rather than the pilot.
+Reversible: yes; drop the rule when the policy changes.
+
+---
+
+### 19 Oct 2026 · 3.10 Ship only the default and IN packs; en-US waits for M10 · risk: medium
+Decided: this task ships `global.yaml` and `IN.yaml`. The `en-US` pack is a follow-up once task 10.1 settles US payment and tax details.
+Why: the open-decisions table lists 3.10 as blocked only for "first pack", and the accept line names only the IN pack.
+Alternatives: a partial US pack now.
+Reversible: yes; adding a pack is additive.
+
+---
+
+### 19 Oct 2026 · 3.10 IN pack committed with `pending` values; `edmate content validate content/locales` fails until a person signs off · risk: medium
+Decided: `IN.yaml` ships with the helpline number, its verifier, the grievance contact and the compliance reviewer set to `pending`; the Tele-MANAS number is not committed. The validate command exits 1 on the real directory by design; unit tests use fixtures, and the real-directory tests hold before and after sign-off.
+Why: lead revision 5 and rule 5 (public repo; agents never invent contacts or numbers).
+Alternatives: commit the PRD's number as a candidate (rejected by the lead).
+Reversible: yes; a person fills in the values.
+
+---
+
+### 20 Oct 2026 · MVP first: M4 polish parked, safety review once at the pilot gate, the lead signs eval cases · decided by you · risk: high
+Decided: M4 is done once 4.0–4.8 merge. 4.9 and the follow-ups the safety reviews raised (4.2d, 4.3b, 4.3c, 4.3d, 4.4b, 4.4c, 4.4d, 4.4e, 4.5b, 4.7b) move to M13. Until the pilot gate, `safety-reviewer` does not run on PRs (`risk-paths.txt` asks for `code-reviewer` on the safety group; the PR still logs `risk: high`), and a PR gets one fix round: a HIGH still open becomes a board task, only a CRITICAL goes to the human. Eval cases are reviewed and signed by the lead (`reviewed_by: lead`), not the human; prompt packs and templates still need a named human. Task 13.3 restores `safety-reviewer` and runs one whole-system safety review before real students. Next: 5.1 → 5.3 → 5.4 → 5.6, then a thin teacher-upload and student-chat slice.
+Why: M4 was planned as 10 tasks and grew to 28 through safety-review follow-ups and fix rounds, while M5–M9 (the product) had not started; no student could talk to a teacher's agent. The five core guards (PII, distress, moderation/jailbreak, answer leak, locked leak) are built or merging, which is what a public repo with 13+ users needs; the rest is polish. The human's sign-off on every eval case was a recurring bottleneck.
+Alternatives: keep running safety-reviewer per PR and only park 4.9; skip M4 entirely (rejected: the core guards are done and needed).
+Reversible: yes; move the tasks back to M4, restore `safety-reviewer` in `risk-paths.txt`, and require a human in `reviewed_by` again.
+
+---
+
 ### 19 Oct 2026 · 0.15 Merge gate checks the handoff Status line · decided by lead · risk: high
 Decided: `merge_gate.py` now reads `docs/tasks/<id>/handoff.md`'s `Status:` line (plain or bold, e.g. `Status: DONE` or `- **Status:** DONE`) and fails the merge unless it says DONE; `PARTIAL`, `BLOCKED` or a missing line fails with a clear message, even if `review.md` is APPROVE.
 Why: nothing previously stopped a `PARTIAL`/`BLOCKED` handoff from merging once its review was approved, so an unfinished build could pass the gate.

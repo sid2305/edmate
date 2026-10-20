@@ -61,6 +61,26 @@ describe('isFinal', () => {
 });
 
 describe('deadLetterRefs', () => {
+  it('keeps a safety alert job\'s ids, never its excerpt (task 4.3)', () => {
+    const refs = deadLetterRefs({
+      alert: {
+        id: 'alert_1',
+        studentId: 'stu_1',
+        teacherId: 'tch_a',
+        sessionId: 'ses_1',
+        excerptRedacted: CANARY,
+      },
+      round: 2,
+    });
+    expect(refs).toEqual({
+      alertId: 'alert_1',
+      studentId: 'stu_1',
+      teacherId: 'tch_a',
+      sessionId: 'ses_1',
+    });
+    expect(JSON.stringify(refs)).not.toContain(CANARY);
+  });
+
   it('keeps the ids of every job kind and nothing else', () => {
     const scope = { studentId: 'stu_1', teacherId: 'tch_a' };
     expect(deadLetterRefs(job().data)).toEqual({

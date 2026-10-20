@@ -1,6 +1,7 @@
 // Test helpers for the harness and its adapters: the contracts fixtures plus the scripted gateway.
 export * from '@edmate/contracts/fixtures';
 export { type Clock, type ManualClock, manualClock } from './clock.js';
+export { indiaLocalePackWithHelplines } from './distressLocaleFixtures.js';
 export { driveEvents, driveTurn, type TimedEvent } from './driveTurn.js';
 export {
   type FakeGuard,
@@ -31,6 +32,11 @@ export {
   retrievalWorld,
 } from './memoryRetrieval.js';
 export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
+export {
+  PII_SCRUB_CASES,
+  type PiiScrubCase,
+  piiScrubCaseFailures,
+} from './piiScrubCases.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,

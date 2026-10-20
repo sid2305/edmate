@@ -28,7 +28,8 @@ import type { GatewayScript } from '../testing/scriptedGateway.js';
 import type { MemoryAlertSink } from '../testing/memoryPorts.js';
 import { VIRTUAL_EPOCH_MS } from '../testing/virtualClock.js';
 import { TurnAbort, TurnRejection } from './errors.js';
-import { LAST_RESORT_DISTRESS_REPLY, runTurn } from './runner.js';
+import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
+import { runTurn } from './runner.js';
 import { ALERT_ATTEMPT_TIMEOUT_MS, STEP_SPEC, type StepName } from './spec.js';
 import type { StepEnv, Steps, TurnRunResult } from './types.js';
 

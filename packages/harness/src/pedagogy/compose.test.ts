@@ -256,8 +256,20 @@ describe('locale pack', () => {
     const locale = {
       ...demoLocalePack,
       helplines: [
-        { name: 'Line A', number: '000-0001', kind: 'mental_health' },
-        { name: 'Line B', number: '000-0002', kind: 'crisis' },
+        {
+          name: 'Line A',
+          number: '000-0001',
+          kind: 'mental_health',
+          verifiedBy: 'R',
+          verifiedOn: '2026-01-01',
+        },
+        {
+          name: 'Line B',
+          number: '000-0002',
+          kind: 'crisis',
+          verifiedBy: 'R',
+          verifiedOn: '2026-01-01',
+        },
       ],
     };
     const text = prompt(ctx({ locale }), policy());
