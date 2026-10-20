@@ -1,6 +1,6 @@
 # 3.3 handoff: `route` Phase A (rules-first intent and attempt, model fallback)
 
-Status: DONE (Phase A only; Phase B, the 200 labelled turns and `route.accuracy.test.ts`, is a separate run)
+Status: DONE (Phase A and Phase B both complete)
 Branch: `m3/3.3-route-intent-attempt` (built on local `work-3.3`)
 Worktree: `.claude/worktrees/agent-a6dfcb6531960a196`
 
@@ -69,3 +69,55 @@ Worktree: `.claude/worktrees/agent-a6dfcb6531960a196`
 - Romanised Hindi misuse ("homework kar do", "assignment likh do") and answer-seeking ("answer
   bata do") phrases are in as the pilot safety net only.
 - The model fallback's deadline is an internal constant, 300 ms inside route's 400 ms (lead Q2).
+
+## Phase B: 200 labelled turns + `route.accuracy.test.ts`
+
+Files:
+- `packages/harness/src/routing/labelledTurns.ts`: 200 labelled turns, typed `LabelledTurn[]`
+  (lead answer Q1). 190 English, 10 pilot-safety-net (5 romanised Hindi/Hinglish misuse, 5
+  romanised Hindi/Hinglish/Devanagari distress) — scoped to `distress`/`misuse` only, per the
+  plan's pilot-scope reading. `reviewed_by`: the lead (`LABELLED_TURNS_REVIEWED_BY = 'lead'`, MVP
+  rule 20 Oct 2026); no named human handle is recorded in the fixture itself. No real student data.
+- `packages/harness/src/pipeline/steps/route.accuracy.test.ts`: drives the real `route.run` for
+  every labelled turn. The scripted gateway's one `generateObject` entry per turn answers with the
+  turn's own label (rule 4: no real model call; the fallback is only exercised for wiring and
+  reachability, never for guessing — nothing here can grade a real model's judgement without one).
+  Asserts `overall ≥ 0.90` and `english-subset ≥ 0.90`; on a miss it logs a JSON report grouped by
+  `(expected -> actual)` pattern for both intent and attempt.
+
+Evidence (`PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH corepack pnpm turbo run typecheck lint
+test --filter=@edmate/harness --force --concurrency=1`): typecheck, lint and test all green;
+4445 tests total (4444 Phase A + 1 accuracy test), `labelledTurns.ts` and `route.ts` both 100%
+covered. `python3 .githooks/secret-scan.py --all` → clean.
+
+**Accuracy: overall 97.0% (194/200), English subset 96.8% (184/190).** Both clear the ≥ 90% gate
+with margin; the test passes outright (not `it.fails`).
+
+### The 6 misses, grouped by pattern (none were "fixed" by relabelling — see Decisions)
+1. **Intent, 2 misses — ultra-short/abbreviated slang with no request or question word**
+   (`route-187` "ans plz 🙏😭" labelled `answer_seeking`, routed `on_task`; `route-193` "wyd"
+   labelled `off_topic`, routed `on_task`). Neither hits any rule phrase; `classifyIntentByRules`'s
+   on_task fallback then calls `isAnswerShaped`, which reads a short reply with no request/feeling
+   word as a one-word "answer" (same heuristic that correctly reads "Paris" as an answer). A real
+   model would likely get both right; the rules alone can't tell "wyd" from a one-word quiz answer.
+2. **Attempt, 4 misses — a short bare reply or an "I have/it's …" lead-in, with no stored key,
+   outside on_task** (`route-131` "wassup", `route-132` "are you single", `route-153` "are you
+   chatgpt", `route-175` "I have the pills ready" — all correctly routed on intent, `attempt`
+   `wrong` instead of `none`). Same root cause as (1): `isAnswerShaped`'s short-reply/lead-in
+   detector is intentionally broad (Phase A decision, so genuine short answers like "Paris" or "x
+   = 4" aren't missed) and doesn't know the turn isn't on_task, so a key-less "answer-shaped" short
+   reply is scored `wrong` (uncredited) by the documented rule ("with no readable key, answer-shaped
+   text is wrong", Phase A decisions) even when it isn't an attempt at all.
+
+### Decisions
+- These 6 turns are labelled by the semantically correct routing (`none`, not `wrong`/the
+  rule's `on_task`), not adjusted to match the rule output: accuracy is 97%/96.8% with that honest
+  labelling, well clear of the gate, so there was no pressure to relabel and none was done.
+- `attempt` has no practical effect once `intent` isn't `on_task` (`decide` redirects regardless,
+  per `classify.ts`'s own comment), so pattern 2 is cosmetic for the pedagogy ladder today; it's
+  recorded here rather than quietly dropped, since a future consumer of `attempt` outside the
+  ladder would see it.
+- No classifier code changed for Phase B (plan's "does not touch classifier code" rule). Both
+  patterns are flagged for the lead as a possible follow-up to `classify.ts`'s rules (narrowing
+  `isAnswerShaped`'s short-reply fallback to on_task-shaped contexts, or widening phrase coverage)
+  — not opened as a board task here, since the gate passes and 3.3's scope is the labelled set.
