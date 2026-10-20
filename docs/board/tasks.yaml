@@ -392,12 +392,12 @@ tasks:
   deps:
   - '1.3'
   - M0
-  status: planning
+  status: running
   needs_decision:
   - min-age
   risk: risky
-  branch: null
-  model: plan:opus
+  branch: m1/1.7-age-consent
+  model: plan:opus build:opus
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -1229,7 +1229,8 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 5.6a
   milestone: M5
-  title: 'Answer keys out of retrieved context (5.6 architect Q-C): buildContext drops, and reports, any retrieved chunk where revealsAnswerKey is true; an ingest rule that the practice bank and its keys are never chunked or embedded'
+  title: 'Answer keys out of retrieved context (5.6 architect Q-C): buildContext drops, and reports, any retrieved chunk where revealsAnswerKey is true; an ingest rule that the practice bank and its keys
+    are never chunked or embedded'
   accept: a chunk containing an active or bank answer key never reaches the model context (tested); ingest refuses bank files; must land before 5.11
   deps:
   - '5.6'
@@ -1239,7 +1240,8 @@ tasks:
   model: null
 - id: 5.6b
   milestone: M13
-  title: 'Answer-context mode for the matcher (5.6 architect MEDIUM): MCQ bare-label keys and code_output keys that appear in their own prompt can be checked without tripping the leak gate, so the bank can serve those kinds'
+  title: 'Answer-context mode for the matcher (5.6 architect MEDIUM): MCQ bare-label keys and code_output keys that appear in their own prompt can be checked without tripping the leak gate, so the bank
+    can serve those kinds'
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
@@ -2024,7 +2026,8 @@ tasks:
   status: todo
 - id: 3.3a
   milestone: M13
-  title: 'Route follow-ups (3.3 review MEDIUM/LOW): count each student number once when matching answer-key parts (duplicate parts); share one cancel/timeout/validate helper between routing/modelFallback.ts and guardrails/safetyClassifier.ts; drop the redundant text === undefined clause in routing/index.ts; add soft and indirect distress rows to the labelled set'
+  title: 'Route follow-ups (3.3 review MEDIUM/LOW): count each student number once when matching answer-key parts (duplicate parts); share one cancel/timeout/validate helper between routing/modelFallback.ts
+    and guardrails/safetyClassifier.ts; drop the redundant text === undefined clause in routing/index.ts; add soft and indirect distress rows to the labelled set'
   accept: a duplicate-part key with one matching number scores partial; both callers use the shared helper; route accuracy stays at or above 90%
   deps:
   - '3.3'
