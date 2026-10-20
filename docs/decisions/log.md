@@ -10,6 +10,102 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 1.4 Magic-link tokens: hashed, single use by atomic delete, one live link per address · decided by tdd-guide · risk: high
+Decided: `auth_verification_tokens` stores only `sha256(token)`, where the token is the value Auth.js passes in (already `sha256(raw + AUTH_SECRET)`), so the database holds a hash of a hash. Using a link is one `DELETE … WHERE identifier AND token_hash … RETURNING`, so two concurrent clicks can't both win, and an expired row is deleted and read as `null`. The store never returns the token or its hash. The table has no FK to `users`.
+Why: a copy of the database must hold no usable sign-in link, and single use has to hold under races without depending on Auth.js. This is the identity path (`packages/db/src/identity/**`), so it is risk: high.
+
+---
+
+### 20 Oct 2026 · 1.4 One row per address via a unique identifier and an upsert, instead of delete-then-insert · decided by tdd-guide
+Decided: `identifier` is unique, and `createVerificationToken` is one `INSERT … ON CONFLICT (identifier) DO UPDATE` that swaps in the new hash and expiry. The plan had "delete earlier tokens for that identifier in the same transaction" with a plain index on `identifier`.
+Why: under READ COMMITTED, two concurrent delete-then-insert transactions can both insert and leave two live links. The upsert keeps "only the newest link works" atomic, and a test with 6 concurrent creates leaves exactly one row. The unique index also serves the identifier lookups.
+
+---
+
+### 20 Oct 2026 · 1.4 Migration numbered 0013 · decided by tdd-guide
+Decided: the migration is `0013_auth_verification_tokens` (journal idx 13). Open PR #64 (5.3) already uses `0012_material_revision`.
+Why: it avoids a file and snapshot collision with 5.3. Whichever PR merges second fixes the snapshot chain and journal order.
+
+---
+
+### 20 Oct 2026 · 1.4 Web's in-memory identity fake updated in Phase A · decided by tdd-guide
+Decided: `apps/web/test/memory-identity.ts` gains the two link methods now, mirroring the store's rules (one link per address, single use, expired → `null` but consumed).
+Why: the fake implements `IdentityStore`, so the web typecheck fails without them. It's a test-only change; Phase C builds on it.
+
+---
+
+### 20 Oct 2026 · 1.4 Generic `type: 'email'` provider, not the Nodemailer provider · decided by tdd-guide
+Decided: `emailProvider()` returns a plain Auth.js `EmailConfig` (`id: 'email'`, `type: 'email'`) with our own `sendVerificationRequest`. It doesn't use `next-auth/providers/nodemailer`.
+Why: `@auth/core@0.41.3` declares `EmailConfig` as a public type, and its send path (`send-token.js`) only calls `normalizeIdentifier`, `generateVerificationToken` and `sendVerificationRequest` on the provider. The Nodemailer provider would add a `server` config the port doesn't need. nodemailer 8.0.11 is pinned, which is inside Auth.js's peer range (`^7.0.7 || ^8.0.5`); the latest, 10.x, is outside it.
+
+---
+
+### 20 Oct 2026 · 1.4 A forged host is rebased, not refused · decided by tdd-guide
+Decided: `rebuildLink` puts Auth.js's path and query on AUTH_URL's origin whatever host Auth.js saw. It throws, with no mail, only when the path isn't `/api/auth/callback/email`.
+Why: this is what the plan's Design says ("keeps only its pathname + search, rebuilt on env.url.origin"). The Tests-first line ("a forged host and a foreign path both throw") reads as a shorthand for that. Refusing a forged host would also break a legitimate sign-in that reaches the app through a second hostname.
+
+---
+
+### 20 Oct 2026 · 1.4 Address rules: NFKC first, double quote refused, apostrophe allowed · decided by tdd-guide
+Decided: `normalizeEmail` applies NFKC before any check, as Auth.js's own default normaliser does, so a fullwidth `＠` becomes a second `@` and is refused. "A quote" in the plan is the double quote, which RFC 5322 uses for quoted local parts and parser-confusion tricks. The apostrophe stays allowed (`o'brien@…`) because `z.email()` accepts it and real addresses use it. Non-ASCII local parts are refused because `z.email()` is ASCII only.
+Why: it matches Auth.js's hardening and doesn't lock out real names. The address is HTML-escaped in the link anyway.
+
+---
+
+### 20 Oct 2026 · 1.4 Sign-in mail failures throw a bare `MailSendError` · decided by tdd-guide
+Decided: `sendVerificationRequest` logs `[auth] sign-in mail failed: <error name>` through `describeError` (moved out of `config.ts` unchanged) and rethrows a new `MailSendError` with a fixed message and no `cause`.
+Why: nodemailer errors can quote addresses. Rethrowing the original would hand them to Auth.js's logger and error path. Auth.js still gives every address its generic `EmailSignin` redirect.
+
+---
+
+### 20 Oct 2026 · 1.4 IPv4-mapped IPv6 counts as the IPv4 address; zone IDs dropped · decided by tdd-guide
+Decided: `::ffff:a.b.c.d` is bucketed as `a.b.c.d`, and `fe80::1%eth0` loses its `%eth0` before bucketing. Other IPv6 addresses, including NAT64 `64:ff9b::…`, go by their /64. An address with a port or brackets is `unknown`.
+Why: a dual-stack listener can report one client in either form, and both should share a bucket. Caddy's `X-Forwarded-For` holds bare IPs, so anything else is unexpected and falls into the shared, limiting bucket.
+
+---
+
+### 20 Oct 2026 · 1.4 Email sign-in wired: limited in the signIn callback, waits for Redis, redirects pinned to AUTH_URL · decided by tdd-guide · risk: high
+Decided: the `email` provider is listed only when `EMAIL_SERVER` + `EMAIL_FROM` (+ `REDIS_URL`) are set, and building it without a mail sender and a limiter throws. Each link request is counted in the `signIn` callback on Auth.js's normalised address. Over the limit it redirects to `/api/auth/error?error=RateLimited`, the same for known and unknown addresses. Every count first waits up to 3 s for Redis `ready`; on a timeout it fails closed (`AccessDenied`, no token, no mail). Every redirect is pinned to AUTH_URL's origin by parsing it.
+Why: the plan's design plus the lead's answers (bounded cold-start wait, fail closed, identical responses). This is the sign-in path, so it is risk: high.
+
+---
+
+### 20 Oct 2026 · 1.4 `redisUrl` lives inside `AuthEnv.email` · decided by tdd-guide
+Decided: `AuthEnv.email` is `{ server, from, redisUrl }`, not a separate optional `redisUrl` field as the plan sketched.
+Why: the type then says "email implies Redis", so the wiring has no unreachable "email but no Redis" branch. The env rule is the same.
+
+---
+
+### 20 Oct 2026 · 1.4 A bad address or a mail failure shows the generic `Configuration` error · decided by tdd-guide
+Decided: accept Auth.js's mapping. `InvalidEmailError` and `MailSendError` are not AuthErrors, so Auth.js redirects to `error=Configuration` (not `EmailSignin`, as the Phase B note assumed). Neither creates a token or sends mail.
+Why: the page is identical for every address and leaks nothing. Remapping would mean wrapping Auth.js's errors for no security gain. Friendlier copy belongs to the sign-in UI.
+
+---
+
+### 20 Oct 2026 · 1.4 The mail-send promise is marked handled before Auth.js joins it · decided by tdd-guide
+Decided: `sendVerificationRequest` attaches a no-op `catch` to its promise and returns that same promise, so the rejection still reaches Auth.js.
+Why: `@auth/core` 0.41.3 starts the send, awaits `createHash`, and only then joins it. A fast SMTP failure was an unhandled rejection, which Node can treat as fatal. A test proves the error still propagates.
+
+---
+
+### 20 Oct 2026 · 1.4 Switching to a new address by link leaves the old session row until it expires · decided by tdd-guide
+Decided: accept Auth.js's behaviour. Signed in as A, a link for an existing user B deletes A's session. A link for a new address creates the user and replaces the cookie, but A's session row stays until it expires. Both cases are tested.
+Why: the browser no longer holds A's token, so that browser can't use the row, and it expires within 30 days. Deleting it would need adapter side effects that carry more risk than they save. The plan's "Auth.js deletes that session first" holds only for existing users. So `packages/db/src/identity/store.ts` gets no session sweep on an address switch; sign-out-everywhere is later work.
+
+---
+
+### 20 Oct 2026 · 1.4 `signIn('email')` from server code is refused · decided by tdd-guide
+Decided: the exported `signIn` rejects for the `email` provider.
+Why: a server action has no request headers, so it would skip the per-IP limit. Email sign-in goes only through `/api/auth/signin/email`.
+
+---
+
+### 20 Oct 2026 · 1.4 Mailpit v1.31.6 pinned by digest for the local stack · decided by tdd-guide
+Decided: `axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387`, using its built-in healthcheck, with the UI bound to 127.0.0.1. Production SMTP stays B-25, and `env.example` holds only `REPLACE_ME` placeholders.
+Why: it matches how MinIO is pinned, and no real mail can leave a dev stack.
+
+---
+
 ### 5.3 Production RetrievalIndex search/probe and chunk writes in `packages/db/src/repositories`, ownership-checked, material revision bumped in the same transaction · risk: high
 Writes use `INSERT … SELECT` from the owner row (documents from `modules`; chunks from `documents` joined to `modules`), plus a scoped all-or-nothing `UPDATE` for embeddings. Search and probe filter by teacher, allowed modules and module ownership in the same statement, before ranking. These are new access paths for teacher material, so security-reviewer is required (risk group "access filter"). leakCheck stays `{ hit: true }` until Phase B.
 
