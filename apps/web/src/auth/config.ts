@@ -4,6 +4,7 @@ import type { IdentityStore, Role } from '@edmate/db';
 import { customFetch, type NextAuthConfig, type Session } from 'next-auth';
 import Google, { type GoogleProfile } from 'next-auth/providers/google';
 import { toAuthAdapter, type EdmateAdapterUser } from './adapter';
+import { describeError } from './describe-error';
 import type { AuthEnv } from './env';
 import type { CookieReader, Principal } from './guard';
 
@@ -51,13 +52,6 @@ export function principalFromIdentity(identity: IdentityStore, cookieName: strin
     const found = await identity.getSessionAndUser(token);
     return found ? { userId: found.user.id, role: found.user.role } : null;
   };
-}
-
-/** The error's name and Auth.js `type`, never its message or cause (they can hold emails). */
-function describe(error: unknown): string {
-  if (!(error instanceof Error)) return 'non-error';
-  const type = (error as { type?: unknown }).type;
-  return typeof type === 'string' && type !== error.name ? `${error.name} (${type})` : error.name;
 }
 
 export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
@@ -123,7 +117,7 @@ export function createAuthConfig(deps: AuthConfigDeps): NextAuthConfig {
     },
     logger: {
       error(error) {
-        log(`[auth] error ${describe(error)}`);
+        log(`[auth] error ${describeError(error)}`);
       },
       warn(code) {
         log(`[auth] warn ${code}`);

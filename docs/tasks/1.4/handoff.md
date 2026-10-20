@@ -1,8 +1,8 @@
 # 1.4 handoff: Email magic-link sign-in
 
-Status: PARTIAL (Phase A done; Phases B and C go to later builders)
-Branch: `m1/1.4-magic-link-sign-in` (pushed from local `build-1.4a`)
-Worktree: `.claude/worktrees/agent-af9b0a98367d923da` (under the repo root)
+Status: PARTIAL (Phases A and B done; Phase C goes to a later builder)
+Branch: `m1/1.4-magic-link-sign-in` (Phase A pushed from local `build-1.4a`, Phase B from `build-1.4b`)
+Worktree: Phase A `.claude/worktrees/agent-af9b0a98367d923da`; Phase B `.claude/worktrees/agent-a7933fa155256c311` (both under the repo root)
 
 ## Phase A
 
@@ -57,6 +57,75 @@ $ python3 .githooks/secret-scan.py --all
   - env, config, index, compose and Mailpit, the sandbox script, `email-flow.test.ts`.
 - On merge: if #64 (5.3, `0012_material_revision`) merges first, regenerate or rebase this migration so that `0013_snapshot.json`'s `prevId` points at 0012's snapshot and the journal stays in order. If 1.4 merges first, 5.3 renumbers instead. Right now the journal jumps from idx 11 to 13. Drizzle's migrator reads entries by tag, so that works, and `latestSnapshot()` uses the last entry's idx.
 
+## Phase B
+
+### What was built (pure `apps/web/src/auth` modules; nothing wired into Auth.js)
+- **`src/auth/mail.ts`**: the `MailSender` port and `smtpMailSender({ server, from, requireTls, createTransport? })`. It calls `nodemailer.createTransport({ url, connectionTimeout, greetingTimeout, socketTimeout, requireTLS })` with 10 s timeouts. Transport errors propagate unchanged. The factory is injectable, so tests use nodemailer's `jsonTransport` and no socket.
+- **`src/auth/email.ts`**:
+  - `normalizeEmail`: NFKC, trim, lower-case. It throws a bare `InvalidEmailError` ("Invalid email address", never the input) on a non-string, empty input, more than 320 characters, whitespace/CR/LF/tab, a comma, a double quote, a control character, more than one `@` or a failed `z.email()`.
+  - `rebuildLink(url, origin)`: keeps Auth.js's path and query, on AUTH_URL's origin. Any path other than `/api/auth/callback/email` throws.
+  - `renderSignInMail(link)` and `escapeHtml`: the subject "Your Edmate sign-in link", the text and minimal HTML with the escaped link, "expires in 15 minutes" and the ignore line. No images, no tracking, and the address appears only inside the link.
+  - `emailProvider({ origin, from, mail, log? })`: a generic Auth.js `type: 'email'` provider with id `email`, `maxAge: 900` and `normalizeIdentifier: normalizeEmail`. `sendVerificationRequest` rebuilds the link and sends it through the port. On any failure (foreign path or sender error) it logs `[auth] sign-in mail failed: <name>` and throws a bare `MailSendError`, with no message or cause that could hold an address.
+- **`src/auth/rate-limit.ts`**:
+  - constants: 5 per address and 50 per IP per hour, prefix `edmate:signin`, and the `unknown` bucket;
+  - `addressBucket`: lower-case, with the `+tag` dropped for counting only;
+  - `ipBucket`: IPv4 as is; IPv6 cut to its /64; an IPv4-mapped IPv6 address counts as its IPv4; a zone ID is dropped; anything else is `unknown`;
+  - `clientIp(headers, trustHost)`: the rightmost `X-Forwarded-For` entry, and only when `trustHost` is on;
+  - `hmacKey`: `HMAC-SHA256(AUTH_SECRET, kind:value)` in hex;
+  - `createSignInLimiter({ secret, trustHost, counters, limits? }).allow({ email, headers })` checks the IP, then the address. A counter rejection propagates. An empty secret throws;
+  - `redisSignInCounters(redis, { prefix?, now? })` builds two one-hour `redisTurnCounter`s under `edmate:signin:ip` and `edmate:signin:addr`.
+- **`src/auth/describe-error.ts`**: 1.3's private `describe()` was moved out of `config.ts` unchanged as `describeError`, so `email.ts` and `config.ts` share one "name and type only" logger. `config.ts` only changes its import, and its behaviour is the same.
+- **`test/memory-mail.ts`**: an in-memory `MailSender` that records messages and can be told to fail.
+- **Dependencies** (`apps/web/package.json`, exact pins): `nodemailer` 8.0.11, `ioredis` 6.0.0, `@edmate/queue` `workspace:*`, and `@types/nodemailer` 8.0.2 (dev). `pnpm-lock.yaml` is updated.
+- No change to `next.config.ts`: `next build` bundles `@edmate/queue` (bullmq and ioredis) without `serverExternalPackages` (see the evidence).
+
+### Evidence
+Tests were written first. Before the implementation, all three new unit suites failed to import (`Failed to resolve import "./rate-limit"` etc.).
+
+```
+$ docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f apps/worker/test/compose.port.yaml up -d --wait postgres redis
+$ PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH corepack pnpm turbo run typecheck lint test --filter=@edmate/web... --force --concurrency=1
+@edmate/web:test:  ✓ src/auth/rate-limit.test.ts (40 tests)
+@edmate/web:test:  ✓ src/auth/rate-limit.int.test.ts (4 tests)      # ran on real Redis: no SKIPPED line
+@edmate/web:test:  Test Files  12 passed (12)
+@edmate/web:test:       Tests  226 passed (226)
+@edmate/web:test: All files          |     100 |      100 |     100 |     100 |
+@edmate/web:test:  src/auth          |     100 |      100 |     100 |     100 |
+ Tasks:    26 successful, 26 total
+
+$ cd apps/web && corepack pnpm exec next build
+✓ Compiled successfully
+```
+- **`next build` probe.** Nothing imports the new modules yet, so a plain build proves nothing about them. As a throwaway check, `src/auth/index.ts` was made to import and export `redisSignInCounters`, `smtpMailSender` and `emailProvider`. `next build` compiled, and the server chunk held the Lua command (`edmateTurnLimitTake`) and the nodemailer options. The probe was then reverted, and the build above is on the real tree.
+- **Without Redis,** `rate-limit.int.test.ts` prints a `SKIPPED` line and skips; with `CI=true` it throws. `redisSignInCounters` is also unit-tested over a fake `defineCommand`, so `src/auth` coverage stays at 100% without Redis.
+- `python3 .githooks/secret-scan.py --all`: clean. The SMTP URL in `mail.test.ts` is built at runtime from obviously fake parts on `smtp.example.test`. All addresses are `@example.test`, and all IPs are from the documentation ranges (198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32).
+
+Test coverage by plan bullet:
+- `mail.test.ts`: to, from, subject, text and html passed through `jsonTransport`; the 10 s timeouts and the URL; `requireTLS` both ways; the default factory is nodemailer's; errors bubble; the memory fake.
+- `email.test.ts`:
+  - `normalizeEmail`: accept cases (case/space folding, `+tag`, apostrophe, dots); refuse cases (CRLF header injection, comma, whitespace, tab, double quote, NUL, DEL, two `@`, a fullwidth `＠` after NFKC, no `@`, no domain dot, empty, a Cyrillic homoglyph, which `z.email()` refuses, non-strings); exactly 320 accepted and 321 refused; the error never echoes the input;
+  - `rebuildLink`: a forged host is rebased on AUTH_URL; foreign paths and a non-URL throw;
+  - escaping and the mail body;
+  - `maxAge` is 900;
+  - the provider sends one mail on AUTH_URL even for a forged host; a foreign path sends nothing; sender errors are logged by name only, including a non-Error throw.
+- `rate-limit.test.ts`: every bullet in the plan, plus the IP being checked first (an IP refusal never touches the address counter) and the empty-secret guard.
+- `rate-limit.int.test.ts` (real Redis):
+  - the address limit holds across two connections;
+  - the IP limit holds across two connections under 60 concurrent takes (exactly 50 win);
+  - keys are `prefix:(ip|addr):<64 hex>`, members hold no address or IP, and the TTL is about one hour;
+  - an unreachable Redis rejects (fails closed).
+
+### Caddy and X-Forwarded-For
+Caddy 2.10's `reverse_proxy` sets `X-Forwarded-For` by itself. Without `trusted_proxies` (our Caddyfile has none), it ignores the client's incoming value and sends only the peer address. With `trusted_proxies`, it appends the peer to the trusted chain. Either way, the rightmost entry is the peer Caddy saw, which is what `clientIp` reads. This comes from Caddy's `reverse_proxy` header docs; `docs-lookup` isn't available to a builder, so Phase C or the reviewer should confirm it against the docs for the pinned `caddy:2.10.2-alpine`.
+
+### Left for Phase C
+- The wiring (`env.ts`, `config.ts`, `adapter.ts`, `index.ts`), compose with Mailpit, the Caddyfile comment, the sandbox script and `email-flow.test.ts`, as in the plan. Phase A's note still holds: the store returns no token, so the adapter must echo the input token back in Auth.js's `VerificationToken`.
+- **ioredis with `enableOfflineQueue: false`** (the plan's setting) rejects every command until the connection is `ready` ("Stream isn't writeable"). The int test waits for `ready`. In `index.ts`, the lazily created client either needs `await` on `ready` (with a timeout) before the first `allow`, or Phase C must accept that the first sign-in right after a cold start fails closed. Waiting is recommended.
+- `normalizeEmail` throws `InvalidEmailError`. Auth.js calls `normalizeIdentifier` before the `signIn` callback, so check in `email-flow.test.ts` that a bad address gets the same generic error redirect and sends no mail.
+- Wire `emailProvider({ origin: env.url, ... })` and `createSignInLimiter({ secret: env.secret, trustHost: env.trustHost, counters: redisSignInCounters(redis) })`. Use `smtpMailSender({ requireTls: env.secureCookies, ... })` (true when AUTH_URL is https).
+- `test/setup.ts` should also clear `EMAIL_SERVER`, `EMAIL_FROM` and `REDIS_URL` once `env.ts` reads them.
+- The migration renumbering note under Phase A still applies.
+
 ## Decisions
 
 ### 20 Oct 2026 · 1.4 Magic-link tokens: hashed, single use by atomic delete, one live link per address · decided by tdd-guide · risk: high
@@ -74,3 +143,23 @@ Why: it avoids a file and snapshot collision with 5.3. Whichever PR merges secon
 ### 20 Oct 2026 · 1.4 Web's in-memory identity fake updated in Phase A · decided by tdd-guide
 Decided: `apps/web/test/memory-identity.ts` gains the two link methods now, mirroring the store's rules (one link per address, single use, expired → `null` but consumed).
 Why: the fake implements `IdentityStore`, so the web typecheck fails without them. It's a test-only change; Phase C builds on it.
+
+### 20 Oct 2026 · 1.4 Generic `type: 'email'` provider, not the Nodemailer provider · decided by tdd-guide
+Decided: `emailProvider()` returns a plain Auth.js `EmailConfig` (`id: 'email'`, `type: 'email'`) with our own `sendVerificationRequest`. It doesn't use `next-auth/providers/nodemailer`.
+Why: `@auth/core@0.41.3` declares `EmailConfig` as a public type, and its send path (`send-token.js`) only calls `normalizeIdentifier`, `generateVerificationToken` and `sendVerificationRequest` on the provider. The Nodemailer provider would add a `server` config the port doesn't need. nodemailer 8.0.11 is pinned, which is inside Auth.js's peer range (`^7.0.7 || ^8.0.5`); the latest, 10.x, is outside it.
+
+### 20 Oct 2026 · 1.4 A forged host is rebased, not refused · decided by tdd-guide
+Decided: `rebuildLink` puts Auth.js's path and query on AUTH_URL's origin whatever host Auth.js saw. It throws, with no mail, only when the path isn't `/api/auth/callback/email`.
+Why: this is what the plan's Design says ("keeps only its pathname + search, rebuilt on env.url.origin"). The Tests-first line ("a forged host and a foreign path both throw") reads as a shorthand for that. Refusing a forged host would also break a legitimate sign-in that reaches the app through a second hostname.
+
+### 20 Oct 2026 · 1.4 Address rules: NFKC first, double quote refused, apostrophe allowed · decided by tdd-guide
+Decided: `normalizeEmail` applies NFKC before any check, as Auth.js's own default normaliser does, so a fullwidth `＠` becomes a second `@` and is refused. "A quote" in the plan is the double quote, which RFC 5322 uses for quoted local parts and parser-confusion tricks. The apostrophe stays allowed (`o'brien@…`) because `z.email()` accepts it and real addresses use it. Non-ASCII local parts are refused because `z.email()` is ASCII only.
+Why: it matches Auth.js's hardening and doesn't lock out real names. The address is HTML-escaped in the link anyway.
+
+### 20 Oct 2026 · 1.4 Sign-in mail failures throw a bare `MailSendError` · decided by tdd-guide
+Decided: `sendVerificationRequest` logs `[auth] sign-in mail failed: <error name>` through `describeError` (moved out of `config.ts` unchanged) and rethrows a new `MailSendError` with a fixed message and no `cause`.
+Why: nodemailer errors can quote addresses. Rethrowing the original would hand them to Auth.js's logger and error path. Auth.js still gives every address its generic `EmailSignin` redirect.
+
+### 20 Oct 2026 · 1.4 IPv4-mapped IPv6 counts as the IPv4 address; zone IDs dropped · decided by tdd-guide
+Decided: `::ffff:a.b.c.d` is bucketed as `a.b.c.d`, and `fe80::1%eth0` loses its `%eth0` before bucketing. Other IPv6 addresses, including NAT64 `64:ff9b::…`, go by their /64. An address with a port or brackets is `unknown`.
+Why: a dual-stack listener can report one client in either form, and both should share a bucket. Caddy's `X-Forwarded-For` holds bare IPs, so anything else is unexpected and falls into the shared, limiting bucket.
