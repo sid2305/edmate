@@ -185,3 +185,13 @@ risk: low
 Decided: on raw lines, a key may follow any run of markdown list/quote/heading/table markers and opening emphasis, quotes or brackets, or follow "{" or "," (YAML flow key, unquoted only). Lines split on CR, LF or CRLF. A compact JSON array bank (quoted keys after "{") stays the documented 8.x gap.
 Why: the 5.6c raw-line rule replaced main's word-boundary check for markdown, so list, quote, bold, heading, flow-style, tab-marker and CR-only banks were indexed again (security-review MEDIUM regression).
 risk: low
+
+### 20 Oct 2026 · 5.6c a solved item's key is guarded one more turn · decided by lead
+Decided: keep the carried key taken from the loaded state in packages/harness/src/pipeline/runner.ts (review MEDIUM at runner.ts:1144, wontfix). A key solved this turn stays on the do-not-say list for one more saved turn.
+Why: it fails closed: the cost is one extra guarded string, never a leak. Changing it means reading decide's next state, which ADR-0011 did not cover.
+risk: low
+
+### 20 Oct 2026 · 5.6c merge: practice keys out of the prompt (ADR-0011) · decided by lead · risk: high
+Decided: merge PR #77. It changes the harness context path (assemble allow-list, promptKeys, practiceCarriedKey) under ADR-0011, which amends ADR-0010. Architect, security-reviewer (opus), typescript-reviewer (opus) and code-reviewer ran; the fix round was re-verified. LOWs go to 5.6d.
+Why: keys must never reach the model's prompt before a real practice bank ships; the remaining findings are cosmetic or fail closed.
+risk: high
