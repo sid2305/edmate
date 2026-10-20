@@ -607,6 +607,9 @@ importers:
       pdfjs-dist:
         specifier: 6.4.299
         version: 6.4.299
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@edmate/config':
         specifier: workspace:*
