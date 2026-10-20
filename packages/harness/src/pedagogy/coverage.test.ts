@@ -14,7 +14,7 @@ const scored = (score: number, kind: Chunk['kind'] = 'material'): Chunk => ({
 const T = DEFAULT_COVERAGE_THRESHOLD;
 
 describe('coverage', () => {
-  it('has a provisional default threshold of 0.5', () => {
+  it('has the default threshold 0.5, calibrated by 5.3 on the demo Q&A set', () => {
     expect(DEFAULT_COVERAGE_THRESHOLD).toBe(0.5);
   });
 

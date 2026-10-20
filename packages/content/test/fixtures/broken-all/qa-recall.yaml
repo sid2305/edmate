@@ -2,7 +2,13 @@
   moduleId: variables
   question: What is a variable?
   expectedModuleId: variables
+  expectedHeadings:
+    - Variables
+  reviewed_by: lead
 - id: recall-2
   moduleId: loops
   question: How does a for loop work?
   expectedModuleId: dictionaries
+  expectedHeadings:
+    - Loops
+  reviewed_by: lead

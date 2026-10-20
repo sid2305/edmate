@@ -20,6 +20,9 @@ import type { Repositories } from './index.js';
 import { studentScope, type StudentScope } from './scope.js';
 import type { UnmeteredEntry, UsageSource } from './usage-ledger.js';
 
+/** RetrievalIndex (task 5.3): built once per process over the repositories; see retrieval.ts. */
+export { retrievalIndexFor } from './retrieval.js';
+
 /**
  * The frozen TranscriptStore port has no scope parameter, so the scope is a required constructor
  * argument: the caller (web route or worker) builds one store per turn from the signed-in student
@@ -59,7 +62,13 @@ export function traceSinkFor(repos: Repositories, scope: StudentScope): TraceSin
 
 /** A never-seen student's profile (task 3.17 decision): English, no mastery, no mistakes yet. */
 function defaultProfile(scope: StudentScope): LearnerProfile {
-  return { studentId: scope.studentId, teacherId: scope.teacherId, lang: 'en', mastery: {}, mistakes: [] };
+  return {
+    studentId: scope.studentId,
+    teacherId: scope.teacherId,
+    lang: 'en',
+    mastery: {},
+    mistakes: [],
+  };
 }
 
 /**
@@ -94,7 +103,9 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
     },
     async applyEvidence(events: EvidenceEvent[]) {
       const method = 'profileStoreFor.applyEvidence';
-      if (!events.every((e) => e.studentId === bound.studentId && e.teacherId === bound.teacherId)) {
+      if (
+        !events.every((e) => e.studentId === bound.studentId && e.teacherId === bound.teacherId)
+      ) {
         throw new RepositoryError('scope', method);
       }
       if (events.length > 0) {
@@ -127,7 +138,8 @@ export function teacherQuestionStoreFor(
   const bound = studentScope(scope, 'teacherQuestionStoreFor');
   return {
     async findSimilar(teacherId: string) {
-      if (teacherId !== bound.teacherId) throw new RepositoryError('scope', 'teacherQuestionStoreFor.findSimilar');
+      if (teacherId !== bound.teacherId)
+        throw new RepositoryError('scope', 'teacherQuestionStoreFor.findSimilar');
       const noSimilarity: TeacherQuestion[] = [];
       return noSimilarity;
     },

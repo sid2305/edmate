@@ -15,6 +15,7 @@ export const DATA_MODEL_TABLES = [
   'topics',
   'documents',
   'chunks',
+  'teacher_material_revisions',
   'style_cards',
   'agents',
   'agent_versions',
