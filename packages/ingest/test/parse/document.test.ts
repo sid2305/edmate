@@ -29,14 +29,26 @@ describe('parseDocument', () => {
     expect(doc.units.map((u) => u.locator)).toEqual(['page 1', 'page 3']);
   });
 
-  it.each(['docx', 'pptx'] as const)(
-    '%s is not implemented yet (Phase C) and says so',
-    async (kind) => {
-      await expect(
-        parseDocument({ kind, bytes: new Uint8Array([1]), sourceTitle: 'x' }),
-      ).rejects.toMatchObject({ name: 'IngestError', code: 'unsupported' });
-    },
-  );
+  it('dispatches docx bytes to the heading-tracked parser', async () => {
+    const doc = await parseDocument({
+      kind: 'docx',
+      bytes: bytesOf('docx/grammar-table.docx'),
+      sourceTitle: 'Grammar',
+    });
+    expect(doc.units.map((u) => u.locator)).toEqual([
+      'Parts of Speech',
+      'Parts of Speech > Adjectives',
+    ]);
+  });
+
+  it('dispatches pptx bytes to the slide-numbered parser', async () => {
+    const doc = await parseDocument({
+      kind: 'pptx',
+      bytes: bytesOf('pptx/shapes-blank-slide.pptx'),
+      sourceTitle: 'Shapes',
+    });
+    expect(doc.units.map((u) => u.locator)).toEqual(['slide 1', 'slide 3']);
+  });
 
   it('refuses empty input and input over the size cap before parsing', async () => {
     await expect(

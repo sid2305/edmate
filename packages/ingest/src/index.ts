@@ -11,5 +11,8 @@ export {
 } from './fetch/webFetch.js';
 export { htmlTitle, parseHtml } from './parse/html.js';
 export { parseMarkdown } from './parse/markdown.js';
+export { parseDocx } from './parse/docx.js';
 export { parsePdf } from './parse/pdf.js';
+export { parsePptx } from './parse/pptx.js';
+export { MAX_UNZIPPED_BYTES } from './parse/zip.js';
 export { MAX_DOCUMENT_BYTES, type ParsedDocument, type ParsedUnit } from './types.js';

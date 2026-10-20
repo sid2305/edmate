@@ -100,7 +100,8 @@ export type DocxBlock =
 
 function run(part: string | { readonly b: string } | 'BR'): string {
   if (part === 'BR') return '<w:r><w:br/></w:r>';
-  if (typeof part === 'string') return `<w:r><w:t xml:space="preserve">${xmlEscape(part)}</w:t></w:r>`;
+  if (typeof part === 'string')
+    return `<w:r><w:t xml:space="preserve">${xmlEscape(part)}</w:t></w:r>`;
   return `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xmlEscape(part.b)}</w:t></w:r>`;
 }
 
@@ -211,7 +212,9 @@ export function makePptx(
       [
         'ppt/presentation.xml',
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst>` +
-          order.map((n, i) => `<p:sldId id="${String(256 + i)}" r:id="rId${String(n + 10)}"/>`).join('') +
+          order
+            .map((n, i) => `<p:sldId id="${String(256 + i)}" r:id="rId${String(n + 10)}"/>`)
+            .join('') +
           '</p:sldIdLst></p:presentation>',
       ],
       [
@@ -229,7 +232,8 @@ export function makePptx(
       ],
     );
   }
-  for (const n of entryOrder) entries.push([`ppt/slides/slide${String(n)}.xml`, slideXml(files.get(n)!)]);
+  for (const n of entryOrder)
+    entries.push([`ppt/slides/slide${String(n)}.xml`, slideXml(files.get(n)!)]);
   return zip(entries);
 }
 

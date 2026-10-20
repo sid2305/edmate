@@ -2,9 +2,11 @@
 // document always comes back with at least one located unit or an IngestError.
 import { IngestError } from './errors.js';
 import type { WebFetcher } from './fetch/webFetch.js';
+import { parseDocx } from './parse/docx.js';
 import { htmlTitle, parseHtml } from './parse/html.js';
 import { parseMarkdown } from './parse/markdown.js';
 import { parsePdf } from './parse/pdf.js';
+import { parsePptx } from './parse/pptx.js';
 import { MAX_DOCUMENT_BYTES, type ParsedDocument } from './types.js';
 
 export type DocumentKind = 'pdf' | 'docx' | 'pptx' | 'markdown';
@@ -33,13 +35,9 @@ export function parseDocument(input: DocumentInput): Promise<ParsedDocument> {
       case 'pdf':
         return parsePdf(input.bytes, input.sourceTitle);
       case 'docx':
+        return parseDocx(input.bytes, input.sourceTitle);
       case 'pptx':
-        // Task 5.1 Phase C.
-        throw new IngestError(
-          'unsupported',
-          false,
-          `${input.kind} documents are not supported yet`,
-        );
+        return parsePptx(input.bytes, input.sourceTitle);
       default:
         throw new IngestError('unsupported', false, 'unknown document kind');
     }
