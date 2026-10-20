@@ -753,9 +753,9 @@ tasks:
   accept: No agent file tells reviewers to require human approval; safety-reviewer still writes findings the lead turns into safety-review.md.
   deps:
   - '0.7'
-  status: planning
-  branch: null
-  model: plan:haiku
+  status: running
+  branch: m7/0.11-agent-policy
+  model: plan:haiku build:sonnet
 - id: '0.12'
   milestone: M7
   title: 'CI flakes: heavy tests (the harness access property test, apps/web auth import tests) hit Vitest''s 5 s default timeout on CI runners; give them explicit timeouts sized for CI and keep them deterministic'
