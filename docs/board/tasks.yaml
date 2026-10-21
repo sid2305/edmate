@@ -687,7 +687,7 @@ tasks:
   accept: each item has a unit test; a restarted role-play opens at question 1; an errored persona turn leaves the count unchanged; the forged-note eval cases are written as reviewed_by pending.
   deps:
   - 3.11d
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '3.12'
