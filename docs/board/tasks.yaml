@@ -1777,7 +1777,7 @@ tasks:
   branch: m5/5.6e-sign-practice-pack
   risk: risky
   model: build:opus-5.5/medium review:sonnet
-- id: 8.1b
+- id: 8.1c
   milestone: M8
   title: 'Subject change resets verification (human answer B-30, 21 Oct 2026): teacherProfiles.update sets verificationStatus back to pending when subject changes, in the same statement; bio and languages
     edits keep it; the onboarding form says a subject change needs re-verification'

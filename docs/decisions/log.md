@@ -38,7 +38,7 @@ Decided:
 - B-25: production email uses Resend for now; switch by config later if deliverability is a problem.
 - B-26: practice@1.1.0 is signed (reviewed_by: sid2305) with the last sentence of the code-output rule deleted (task 5.6e).
 - B-29: 4.6c is not yours; the lead runs it.
-- B-30: a teacher's subject change resets verification to pending; bio (and later photo) edits do not (task 8.1b).
+- B-30: a teacher's subject change resets verification to pending; bio (and later photo) edits do not (task 8.1c; first logged as 8.1b, which was already taken).
 - B-31: web-link and YouTube uploads are deferred to a follow-up after the thin slice (task 8.2b); 8.2 ships file uploads only.
 - B-32: chat replies render with react-markdown + remark-gfm and an allowlist (no raw HTML, no images; maths later with KaTeX), swapped in after the slice works (task 9.4b).
 - B-33: 9.3 (package compare and start, no payment) joins the thin slice: 8.1, 8.2, 9.1, 9.3, 9.4.
