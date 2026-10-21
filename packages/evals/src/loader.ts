@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { load } from 'js-yaml';
 import { z } from 'zod';
+import { displayPath } from './displayPath.js';
 import { EvalCaseSchema, type EvalCase } from './schema.js';
 
 export class CaseLoadError extends Error {
@@ -15,7 +16,7 @@ export class CaseLoadError extends Error {
     detail: string,
     options?: { cause?: unknown },
   ) {
-    super(`${filePath}: ${detail}`, options);
+    super(`${displayPath(filePath)}: ${detail}`, options);
   }
 }
 
@@ -27,9 +28,16 @@ function listCaseFiles(dir: string): string[] {
 }
 
 function loadOne(filePath: string): EvalCase {
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code ?? (cause as Error).message;
+    throw new CaseLoadError(filePath, `cannot read file: ${code}`, { cause });
+  }
   let doc: unknown;
   try {
-    doc = load(readFileSync(filePath, 'utf8'), { filename: filePath });
+    doc = load(raw, { filename: displayPath(filePath) });
   } catch (cause) {
     throw new CaseLoadError(filePath, `invalid YAML: ${(cause as Error).message}`, { cause });
   }
@@ -63,7 +71,10 @@ export function loadCasesWithFiles(dir: string): LoadedCaseFile[] {
     const evalCase = loadOne(filePath);
     const earlier = seen.get(evalCase.id);
     if (earlier !== undefined) {
-      throw new CaseLoadError(filePath, `duplicate case id "${evalCase.id}" (also in ${earlier})`);
+      throw new CaseLoadError(
+        filePath,
+        `duplicate case id "${evalCase.id}" (also in ${displayPath(earlier)})`,
+      );
     }
     seen.set(evalCase.id, filePath);
     return { file, evalCase };

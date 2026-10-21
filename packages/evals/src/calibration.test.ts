@@ -80,7 +80,26 @@ describe('loadDoubleCheck', () => {
     const path = join(dir, 'bad.yaml');
     writeFileSync(path, '- [unterminated\n', 'utf8');
     expect(() => loadDoubleCheck(path)).toThrow(DoubleCheckLoadError);
-    expect(() => loadDoubleCheck(path)).toThrow(path);
+    expect(() => loadDoubleCheck(path)).toThrow(/invalid YAML/);
+    expect(() => loadDoubleCheck(path)).toThrow('bad.yaml');
+  });
+
+  it('reports a missing file differently from invalid YAML', () => {
+    const path = join(dir, 'missing.yaml');
+    expect(() => loadDoubleCheck(path)).toThrow(/cannot read file: ENOENT/);
+  });
+
+  it('never puts the absolute path (outside cwd) in the message', () => {
+    const path = join(dir, 'bad.yaml');
+    writeFileSync(path, '- [unterminated\n', 'utf8');
+    try {
+      loadDoubleCheck(path);
+      throw new Error('expected a throw');
+    } catch (e) {
+      const err = e as DoubleCheckLoadError;
+      expect(err.message).not.toContain(dir);
+      expect(err.filePath).toBe(path);
+    }
   });
 
   it('throws naming the file when the document is not a list', () => {
@@ -131,13 +150,13 @@ describe('computeAgreement', () => {
         { caseId: 'a', humanPass: true, reviewedBy: 'lead' },
         { caseId: 'b', humanPass: false, reviewedBy: 'lead' },
       ]),
-    ).toEqual({ sampled: 2, reviewed: 2, agreed: 2, rate: 1, disagreements: [] });
+    ).toEqual({ sampled: 2, reviewed: 2, agreed: 2, rate: 1, disagreements: [], unmatched: [] });
   });
 
   it('reports a mismatch', () => {
     expect(
       computeAgreement(results, [{ caseId: 'a', humanPass: false, reviewedBy: 'lead' }]),
-    ).toEqual({ sampled: 1, reviewed: 1, agreed: 0, rate: 0, disagreements: ['a'] });
+    ).toEqual({ sampled: 1, reviewed: 1, agreed: 0, rate: 0, disagreements: ['a'], unmatched: [] });
   });
 
   it('never divides by zero when nothing has been reviewed yet', () => {
@@ -147,12 +166,38 @@ describe('computeAgreement', () => {
       agreed: 0,
       rate: 0,
       disagreements: [],
+      unmatched: [],
     });
   });
 
   it('reports a verdict for an id outside the run without throwing or counting it', () => {
     expect(
       computeAgreement(results, [{ caseId: 'nope', humanPass: true, reviewedBy: 'lead' }]),
-    ).toEqual({ sampled: 0, reviewed: 0, agreed: 0, rate: 0, disagreements: [] });
+    ).toEqual({
+      sampled: 0,
+      reviewed: 0,
+      agreed: 0,
+      rate: 0,
+      disagreements: [],
+      unmatched: ['nope'],
+    });
+  });
+
+  it('deduplicates unmatched ids and keeps input order', () => {
+    expect(
+      computeAgreement(results, [
+        { caseId: 'nope2', humanPass: true, reviewedBy: 'lead' },
+        { caseId: 'a', humanPass: true, reviewedBy: 'lead' },
+        { caseId: 'nope1', humanPass: false, reviewedBy: 'lead' },
+        { caseId: 'nope2', humanPass: false, reviewedBy: 'lead' },
+      ]),
+    ).toEqual({
+      sampled: 1,
+      reviewed: 1,
+      agreed: 1,
+      rate: 1,
+      disagreements: [],
+      unmatched: ['nope2', 'nope1'],
+    });
   });
 });

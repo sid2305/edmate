@@ -119,7 +119,14 @@ describe('toJsonReport', () => {
   });
 
   it('includes judgeModel and calibration only when passed', () => {
-    const calibration = { sampled: 1, reviewed: 1, agreed: 1, rate: 1, disagreements: [] };
+    const calibration = {
+      sampled: 1,
+      reviewed: 1,
+      agreed: 1,
+      rate: 1,
+      disagreements: [],
+      unmatched: [],
+    };
     const r = toJsonReport(results, { judgeModel: 'anthropic:judge-test-model', calibration });
     expect(r).toMatchObject({ judgeModel: 'anthropic:judge-test-model', calibration });
     expect(toJsonReport(results)).not.toHaveProperty('judgeModel');

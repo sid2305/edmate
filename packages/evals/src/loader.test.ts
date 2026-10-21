@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,7 +64,29 @@ describe('loadCasesFromDir', () => {
     const err = catchError(() => loadCasesFromDir(dir));
     expect(err).toBeInstanceOf(CaseLoadError);
     expect((err as CaseLoadError).filePath).toBe(join(dir, 'broken.yaml'));
+    expect(err.message).toContain('invalid YAML');
     expect(err.message).toContain('broken.yaml');
+  });
+
+  it('reports an unreadable file differently from invalid YAML', () => {
+    const path = join(dir, 'locked.yaml');
+    writeFileSync(path, caseYaml('case-locked'));
+    chmodSync(path, 0o000);
+    try {
+      const err = catchError(() => loadCasesFromDir(dir));
+      expect(err).toBeInstanceOf(CaseLoadError);
+      expect(err.message).toContain('cannot read file');
+      expect(err.message).not.toContain('invalid YAML');
+    } finally {
+      chmodSync(path, 0o644);
+    }
+  });
+
+  it('never puts the absolute path (outside cwd) in the message', () => {
+    writeFileSync(join(dir, 'broken.yaml'), 'id: [unclosed\n');
+    const err = catchError(() => loadCasesFromDir(dir)) as CaseLoadError;
+    expect(err.message).not.toContain(dir);
+    expect(err.filePath).toBe(join(dir, 'broken.yaml'));
   });
 
   it('throws CaseLoadError naming the file and the issue for a schema-invalid case', () => {

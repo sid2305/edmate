@@ -112,7 +112,14 @@ describe('eval reports and judge calibration (task 7.1)', () => {
 
     const verdicts = loadDoubleCheck(DOUBLE_CHECK);
     const calibration = computeAgreement(results, verdicts);
-    expect(calibration).toEqual({ sampled: 2, reviewed: 2, agreed: 2, rate: 1, disagreements: [] });
+    expect(calibration).toEqual({
+      sampled: 2,
+      reviewed: 2,
+      agreed: 2,
+      rate: 1,
+      disagreements: [],
+      unmatched: [],
+    });
 
     const report = toJsonReport(results, { suite: 'test', calibration });
 
