@@ -41,3 +41,9 @@ Run `corepack pnpm turbo run test --filter=@edmate/evals...` yourself and confir
 
 ## Return
 The suite, how many cases were added per language, the file paths, and any behaviour the spec leaves ambiguous (these become questions for the human).
+
+## Agent registry
+- Known limitations: not enough runs yet
+- Typical misses: not enough runs yet
+- Average cost per run: not enough runs yet
+- Last reviewed: 2026-10-21

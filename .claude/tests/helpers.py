@@ -20,6 +20,7 @@ SCRIPTS = [
     "skills/merge-gate/risk_labels.py",
     "skills/merge-gate/risk-paths.txt",
     "skills/board/board.py",
+    "skills/board/registry.py",
     "skills/team-lead/closeout.py",
     "skills/team-lead/metrics.py",
 ]
@@ -149,6 +150,10 @@ class Repo:
             f"docs/tasks/{tid}/review.md": review if review is not None else GOOD_REVIEW.format(tid=tid),
             f"docs/tasks/{tid}/handoff.md": handoff if handoff is not None else GOOD_HANDOFF.format(tid=tid),
         }
+
+    def write_agent(self, name, text):
+        """Drop a synthetic `.claude/agents/<name>.md` into the fixture repo."""
+        return self.write(f".claude/agents/{name}.md", text)
 
     def head(self, ref):
         return git(self.root, "rev-parse", ref)

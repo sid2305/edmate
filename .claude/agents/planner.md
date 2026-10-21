@@ -231,3 +231,9 @@ Each phase should be mergeable independently. Avoid plans that require all phase
 - Phases that cannot be delivered independently
 
 **Remember**: A great plan is specific, actionable, and considers both the happy path and edge cases. The best plans enable confident, incremental implementation.
+
+## Agent registry
+- Known limitations: Nearly every risky PR needed a fix round for issues visible at plan time, and planners were among the largest token costs; the lead added a safety-reviewer plan pass and scoped reading lists (decision log, 33-task review)
+- Typical misses: Issues on risky paths that were visible at plan time and surfaced only in review (decision log, 33-task review)
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); plan role (planner only)
+- Last reviewed: 2026-10-21
