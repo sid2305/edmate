@@ -1490,9 +1490,28 @@ tasks:
   deps:
   - '5.6'
   - M3
-  status: review
+  status: done
   branch: m6/6.1-topic-map
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: '6.2'
   milestone: M6
   title: Evidence events, BKT mastery per (student, teacher, topic), rebuild

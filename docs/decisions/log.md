@@ -10,6 +10,47 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 6.1 Topic map cross-references are a planner design choice · decided by tdd-guide · risk: low
+- Decided: `CourseOutlineTopicInput.prerequisiteTopicIds` is the cross-reference `buildTopicMap`
+  validates for "unknown or cyclic"; `skillsBuilt` stays free text, unvalidated against any
+  registry.
+- Why: neither the PRD nor the build plan names a schema for "modules → topics → skills"; a prerequisite
+  graph is the only structure consistent with both halves of the accept line ("unknown or cyclic
+  references rejected") — a plain module→topic tree alone cannot cycle. Lead accepted this reading
+  in the plan's "Lead answers" section (21 Oct 2026).
+- risk: low
+
+---
+
+### 21 Oct 2026 · 6.1 id() is not re-exported from @edmate/contracts · decided by tdd-guide · risk: low
+- Decided: the plan called for validating `courseId`/`teacherId`/`moduleId`/`topicId` with
+  `@edmate/contracts`'s `id()` format via import, but `formats.ts` (where `id()` lives) is not
+  re-exported from the package's public `index.ts` (only `LIMITS` is). `topicMap.ts` instead
+  defines a local `idFormat()` zod schema using the same regex (`^[A-Za-z0-9_-]+$`) and the
+  imported `LIMITS.idMaxLength` bound, matching the contracts format exactly without importing an
+  internal module.
+- Why: importing a non-exported internal module would be a contracts change (or a build error);
+  this keeps the same validation shape with zero contracts diff, per rule 2 (no contracts change
+  without an ADR).
+- risk: low
+
+---
+
+### 21 Oct 2026 · 6.1 duplicate ids and the `'invalid'` reason (planner additions kept as written) · decided by tdd-guide · risk: low
+- Decided: kept the plan's `duplicate_module`/`duplicate_topic` checks (run before any
+  cross-reference check) and the `'invalid'` reason for a `safeParse` failure (distinct from the
+  five structural reasons), exactly as specified in the plan's Design section.
+- Why: plan already worked through the rationale (well-defined lookups; `'invalid'` is a different
+  kind of failure than a missing cross-reference, mirroring `access/entitlement.ts`'s own
+  `'invalid'` reason); no further human judgment call needed here.
+- risk: low
+
+Open follow-ups (not blockers, per lead answers): Q1 (wiring `practiceItems.ts`/`pickItem` to
+`TopicMap`) and Q2 (a converter from `packages/ingest`'s `OutlineDraft` to `CourseOutlineInput`)
+are out of scope for this task; the lead adds them as board follow-ups after merge.
+
+---
+
 ### 21 Oct 2026 · 0.16 board metrics allowlist limits · decided by build-error-resolver · risk: low
 - Decided: `board.py set --metrics` accepts only the keys `metrics.collect()` writes. Strings may be at most 64 characters, dicts and lists at most 20 items and 2 levels deep, and booleans and nulls are refused. Symlinked transcript files are skipped, not resolved.
 - Why: these limits fit everything `collect()` produces (for example findings → by_status → number) and keep free text or paths off the public board. Skipping symlinks is simpler than resolving them and checking containment, and Claude Code does not write symlinked transcripts.
