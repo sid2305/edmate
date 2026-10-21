@@ -49,6 +49,3 @@ Tool calls used: 33
 - Why: neither changes behaviour on the CI or dev machines.
 - risk: low.
 
-### None
-No open decision beyond the plan; `displayPath.ts` placement (new small internal module, shared
-by both loaders, not exported from `index.ts`) was the plan's own implied design, not a new call.
