@@ -245,7 +245,8 @@ Why: the risk-paths group requires it regardless of the change's actual size; ma
 logged precedent for the same file.
 risk: high
 
-## Budget: 35 tool calls
+## Budget
+Budget: 35 tool calls
 
 ## Allowed tools
 
