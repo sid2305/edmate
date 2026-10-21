@@ -216,3 +216,16 @@ Checked every planned path against `.claude/skills/merge-gate/risk-paths.txt`:
 1. **Banding and sign-off.** Use the recommended 3-band scheme. Under MVP-first (human, 20 Oct 2026) the lead signs eval cases, so the 30 cases carry `reviewed_by: lead`, not `pending`. The prompt pack `feedback@1.1.0` still needs a named human: it stays unsigned in the build, and the lead raises the sign-off in blockers once Phase A is reviewed. Never fill in a reviewer name.
 2. **Live agreement number.** CI proves the mechanism on fixtures (rule 4). The live `--record` run that shows the 70% figure needs a real key, so the lead raises it to the human after merge, as with B-24. It doesn't block the merge.
 3. **Phase A author.** Phase A is a prompt-pack change, so `pedagogy-author` (opus) writes the pack and the set; a builder updates the pinned snapshots in the same phase.
+
+## ADR 0012 amends Phase A (21 Oct 2026, lead)
+The architect's ADR 0012 resolves the hint-1 clash and the open points A–D. Phase A now covers:
+- `docs/adr/0012-feedback-pack.md`: the architect's text, saved word for word (the lead hands over the draft).
+- `content/prompt-packs/`:
+  - `feedback@1.1.0.md`: the pedagogy-author draft, plus the C line (no score; verdict in words) and the D line (a fix only for a missed rubric line).
+  - new `frame@1.1.0.md`: `frame@1.0.0` plus an optional `## move-feedback` section.
+  - `set@1.2.0.yaml`: bumps feedback **and** frame.
+  - All three carry `reviewed_by: pending`.
+- `packages/harness/src/pedagogy/`: `promptPacks.ts` (`move-feedback` is the only optional frame section), `compose.ts` (feedback + hint + a frame with the section → that move line; otherwise unchanged) and their tests. `skills.ts` doesn't change.
+- `packages/content/src/promptPacks.snapshot.test.ts`: `SET_VERSION` 1.2.0, the `.snap` regenerated, and a check that every set with feedback newer than 1.0.0 has `move-feedback`.
+- Out of scope: the seed bump in `packages/db` (a follow-up after the named human sign-off), and wiring `edmate eval --record` / `chat` to set 1.2.0.
+- Reviewers: architect, security-reviewer, an opus typescript-reviewer and code-reviewer. risk: high.
