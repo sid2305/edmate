@@ -1685,6 +1685,14 @@ tasks:
   - '9.1'
   status: todo
   branch: null
+- id: 9.1b
+  milestone: M13
+  title: "9.1 review follow-ups: log the error that currentPrincipal swallows before returning null; export HOME_PATH and TEACHER_PATH next to SIGN_IN_PATH; drop the /home self-link"
+  accept: a failed principal lookup leaves a log line; route paths come from one constant each.
+  deps:
+  - '9.1'
+  status: todo
+  branch: null
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
