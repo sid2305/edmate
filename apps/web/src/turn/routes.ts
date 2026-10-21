@@ -96,13 +96,53 @@ export function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
+/** The largest request body either route reads (bytes). A turn's text limit is far below it. */
+export const MAX_BODY_BYTES = 64 * 1024;
+
+const TOO_LARGE = Symbol('too large');
+
+/** The body's bytes, or TOO_LARGE as soon as more than the cap has been read. */
+async function readCapped(body: ReadableStream<Uint8Array>): Promise<Uint8Array | typeof TOO_LARGE> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      void reader.cancel().catch(() => undefined);
+      return TOO_LARGE;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  return bytes;
+}
+
+/**
+ * The body as JSON, `undefined` when it is not JSON or can't be read, or TOO_LARGE. A declared
+ * content-length over the cap is refused before reading; the bytes actually read are capped too,
+ * so a missing or false content-length can't get past it.
+ */
 async function readJson(req: Request): Promise<unknown> {
+  if (Number(req.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return TOO_LARGE;
+  if (req.body === null) return undefined;
   try {
-    return (await req.json()) as unknown;
+    const bytes = await readCapped(req.body);
+    if (bytes === TOO_LARGE) return TOO_LARGE;
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
   } catch {
     return undefined;
   }
 }
+
+const tooLarge = () => apiError('input_too_large', 'The request is too large.', 413);
 
 /** Paused and ended subscriptions can't start a session (the turn's `entitle` refuses them too). */
 function usable(e: Entitlement | null): e is Entitlement {
@@ -167,7 +207,9 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
   }
 
   async function startSession(req: NextRequest, { principal }: RoleContext): Promise<Response> {
-    const body = StartSessionSchema.safeParse(await readJson(req));
+    const raw = await readJson(req);
+    if (raw === TOO_LARGE) return tooLarge();
+    const body = StartSessionSchema.safeParse(raw);
     if (!body.success) return validation();
     const { agentId } = body.data;
     const b = await load();
@@ -203,7 +245,9 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
     const path = ParamsSchema.safeParse(await params);
     if (!path.success) return notFound(MSG.session);
     const sessionId = path.data.id;
-    const body = ClientTurnSchema.safeParse(await readJson(req));
+    const raw = await readJson(req);
+    if (raw === TOO_LARGE) return tooLarge();
+    const body = ClientTurnSchema.safeParse(raw);
     if (!body.success) return validation();
     const input = toTurnInput(body.data, { studentId: principal.userId, sessionId });
     if (input === null) return validation();

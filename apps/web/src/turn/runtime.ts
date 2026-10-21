@@ -40,6 +40,20 @@ export function contentDir(env: Env): string {
   return env.EDMATE_CONTENT_DIR?.trim() || resolvePath(process.cwd(), '../../content');
 }
 
+/**
+ * The one market turns run in, until the identity store exposes the student's market. It picks
+ * the locale pack, and so the distress helplines: production fails closed (`EDMATE_MARKET`) when
+ * it is unset or has no locale pack; dev and tests default to `global`.
+ */
+function configuredMarket(env: Env, packs: ReadonlyMap<string, unknown>): string {
+  const market = env.EDMATE_MARKET?.trim() ?? '';
+  if (env.NODE_ENV === 'production') {
+    if (!packs.has(market)) throw new TurnUnavailableError('EDMATE_MARKET');
+    return market;
+  }
+  return market || 'global';
+}
+
 async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
   const redisUrl = env.REDIS_URL?.trim();
   if (!redisUrl) throw new TurnUnavailableError('REDIS_URL');
@@ -49,8 +63,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
   const dir = contentDir(env);
   const { packs } = loadLocalePacks(join(dir, 'locales'));
   const promptPacks = readPromptPackLibrary(join(dir, 'prompt-packs'));
-  // Until the identity store exposes the student's market, turns run in one configured market.
-  const market = env.EDMATE_MARKET?.trim() || 'global';
+  const market = configuredMarket(env, packs);
   const { repos, identity } = hooks.database();
   const { queues, limits } = hooks.redis(redisUrl);
   const ports = processPorts(repos, {

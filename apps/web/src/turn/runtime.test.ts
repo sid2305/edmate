@@ -78,6 +78,38 @@ describe('createTurnRuntime', () => {
     expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'provider_key' });
   });
 
+  it('in production, an unset or unknown EDMATE_MARKET fails closed by its code alone', async () => {
+    for (const market of [undefined, '  ', 'ZZ', 'not-a-market']) {
+      const { h, log } = hooks();
+      const env = { ...ENV, NODE_ENV: 'production', EDMATE_MARKET: market };
+      const runtime = createTurnRuntime(() => env, h);
+      await expect(runtime()).rejects.toBeInstanceOf(TurnUnavailableError);
+      await expect(runtime()).rejects.toThrow('EDMATE_MARKET');
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'EDMATE_MARKET' });
+      expect(JSON.stringify(log.mock.calls)).not.toContain('not-a-market');
+      expect(h.database).not.toHaveBeenCalled();
+    }
+  });
+
+  it('in production, a known EDMATE_MARKET builds', async () => {
+    for (const market of ['IN', ' US ', 'global']) {
+      const { h, log } = hooks();
+      const env = { ...ENV, NODE_ENV: 'production', EDMATE_MARKET: market };
+      await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
+      expect(log).not.toHaveBeenCalled();
+    }
+  });
+
+  it('outside production, an unset market keeps the global default', async () => {
+    for (const nodeEnv of [undefined, 'development', 'test']) {
+      const { h, log } = hooks();
+      const env = { ...ENV, NODE_ENV: nodeEnv, EDMATE_MARKET: undefined };
+      await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
+      expect(log).not.toHaveBeenCalled();
+    }
+  });
+
   it('any other failure is logged by error name', async () => {
     const { h, log } = hooks();
     h.database.mockImplementation(() => {

@@ -8,7 +8,13 @@ import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 import { memoryBackend, says, type MemoryBackendOptions } from '../../test/turn-backend';
 import { createGuard, type GuardDeps, type Principal } from '../auth/guard';
-import { createSessionHandlers, sseBody, TurnUnavailableError, type TurnBackend } from './routes';
+import {
+  createSessionHandlers,
+  MAX_BODY_BYTES,
+  sseBody,
+  TurnUnavailableError,
+  type TurnBackend,
+} from './routes';
 
 const ORIGIN = 'http://localhost:8080';
 const COOKIE = 'authjs.session-token';
@@ -374,6 +380,95 @@ describe('POST /api/sessions/:id/turns', () => {
     const turn = guard.withRole(['student'], handlers.postTurn);
     const res = await turn(post('/api/sessions/ses_1a/turns', 'clear', turnBody()), ctx('ses_1a'));
     expect(res.status).toBe(503);
+  });
+});
+
+describe('request body cap (64 KB) on both routes', () => {
+  const BIG = 'x'.repeat(MAX_BODY_BYTES + 1);
+
+  /** A request whose body is a stream: no content-length, or a false one. */
+  function streamed(path: string, chunks: string[], contentLength?: string) {
+    currentToken = 'clear';
+    const enc = new TextEncoder();
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks[pulled++];
+        if (next === undefined) controller.close();
+        else controller.enqueue(enc.encode(next));
+      },
+    });
+    const req = new NextRequest(`${ORIGIN}${path}`, {
+      method: 'POST',
+      headers: {
+        origin: ORIGIN,
+        'content-type': 'application/json',
+        cookie: `${COOKIE}=clear`,
+        ...(contentLength === undefined ? {} : { 'content-length': contentLength }),
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+    return { req, pulled: () => pulled };
+  }
+
+  it('a content-length over the cap is 413 input_too_large before any work', async () => {
+    const r = routes();
+    const start = await r.start(post('/api/sessions', 'clear', { agentId: 'agt_a', pad: BIG }));
+    expect(start.status).toBe(413);
+    expect(await errorOf(start)).toBe('input_too_large');
+    const turn = await r.turn(
+      post('/api/sessions/ses_1a/turns', 'clear', turnBody('hi', { pad: BIG })),
+      ctx('ses_1a'),
+    );
+    expect(turn.status).toBe(413);
+    expect(await errorOf(turn)).toBe('input_too_large');
+    expect(r.seen.streams).toBe(0);
+    expect(r.entitlements.calls).toHaveLength(0);
+  });
+
+  it('a body with no content-length is cut off at the cap while reading', async () => {
+    const r = routes();
+    const chunk = 'y'.repeat(16 * 1024);
+    const chunks = ['{"agentId":"agt_a","pad":"', ...Array<string>(64).fill(chunk), '"}'];
+    const s = streamed('/api/sessions', chunks);
+    const res = await r.start(s.req);
+    expect(res.status).toBe(413);
+    expect(await errorOf(res)).toBe('input_too_large');
+    // It stopped reading soon after the cap, not at the end of the 1 MB body.
+    expect(s.pulled()).toBeLessThan(10);
+  });
+
+  it('a false, small content-length can not bypass the cap', async () => {
+    const r = routes();
+    const s = streamed('/api/sessions/ses_1a/turns', [JSON.stringify(turnBody('hi', { pad: BIG }))], '10');
+    const res = await r.turn(s.req, ctx('ses_1a'));
+    expect(res.status).toBe(413);
+    expect(r.seen.streams).toBe(0);
+  });
+
+  it('a streamed body under the cap is read whole', async () => {
+    const r = routes();
+    const json = JSON.stringify({ agentId: 'agt_a' });
+    const s = streamed('/api/sessions', [json.slice(0, 5), json.slice(5)]);
+    expect((await r.start(s.req)).status).toBe(201);
+  });
+
+  it('a body that fails mid-read is a 400, not a crash', async () => {
+    const r = routes();
+    currentToken = 'clear';
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('socket reset'));
+      },
+    });
+    const req = new NextRequest(`${ORIGIN}/api/sessions`, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-type': 'application/json', cookie: `${COOKIE}=clear` },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+    expect((await r.start(req)).status).toBe(400);
   });
 });
 
