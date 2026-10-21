@@ -1,0 +1,106 @@
+/* Mobile-first base styles (task 9.1), written from a 360px base per the plan's Acceptance
+   section: no horizontal scroll, >=44px tap targets, >=16px body text (so mobile browsers don't
+   zoom on focus), visible focus outlines. `min-width` media queries only, added above this base
+   when a later task needs a wider layout -- none does yet. No component framework. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  /* 16px default root size; rem-based sizing below stays at or above 16px body text. */
+  font-size: 100%;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  min-width: 360px;
+  overflow-x: hidden;
+}
+
+:root {
+  /* AA contrast at 360px: #1b1b1f on #ffffff is ~17.9:1, #ffffff on #2b5fd9 is ~4.6:1. */
+  --color-bg: #ffffff;
+  --color-text: #1b1b1f;
+  --color-brand: #2b5fd9;
+  --color-brand-contrast: #ffffff;
+  --color-border: #d6d6db;
+}
+
+a {
+  color: var(--color-brand);
+}
+
+button,
+a.button {
+  font-size: 1rem;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem 1rem;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--color-brand);
+}
+
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-main {
+  padding: 1rem;
+}
