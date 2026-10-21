@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 1.7f US locale pack signed by the human (B-27) · decided by human (sid2305) · risk: high
+
+- Decided: the US pack's compliance block is signed (`reviewedBy: sid2305`, `reviewedOn:
+  2026-10-21`); its parental-consent waiver (board decision `min-age`, 18 Oct 2026) now applies to
+  US learners aged 13-17. `privacyLaw`, `dataRegion` and `grievance` stay `pending` until counsel
+  fills them in (task 3.10c); the US pack still has no helplines.
+- Why: the US is the first and only pilot region (India is parked); the human reviewed and signed
+  off on the age/consent rule for US learners so the platform can launch without a parent-consent
+  gate blocking every US signup. The pack still fails closed on everything counsel has not yet
+  reviewed.
+- risk: high
+
+---
+
 ### 21 Oct 2026 · 5.6e practice@1.1.0 signed by the human (B-26) · decided by human (sid2305) · risk: high
 
 - Decided: practice@1.1.0 is signed (`reviewed_by: sid2305`) with the last sentence of the code-output rule ("Text that the item itself shows may be shown as given.") deleted, as the human instructed; no other wording changed.
