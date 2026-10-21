@@ -2212,7 +2212,9 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: todo
+  status: running
+  branch: m0/0.17a-budget-parse
+  model: plan:lead build:sonnet
 - id: 0.16b
   milestone: M13
   title: metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already
