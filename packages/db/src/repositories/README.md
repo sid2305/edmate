@@ -217,6 +217,40 @@ so the note, the question's status and the student delivery commit together.
 additive tables from migration 0018; `teacher_questions.group_id` (unused since 0001) is backfilled
 to each row's own id so every question starts as its own group once Phase C's grouping lands.
 
+**Grouping (Phase C, § Ask the teacher 2, Q1).** `teacherQuestions.open` lexically groups a new
+question with that teacher's and that agent's own other **open** questions, inside its own
+transaction: `question-similarity.ts`'s `questionSimilarity` (Jaccard over `retrieval.ts`'s
+`queryTerms`, ≥ 0.5 and ≥ 2 shared terms) and `bestGroup` (best score, ties to the oldest candidate,
+then the lowest id) over at most `GROUPING_CANDIDATE_MAX` of that teacher+agent's newest open
+questions. `group_id` becomes the chosen match's group (or its own id when none matches), and
+`similar_ids` becomes the caller's ids plus the group's other members (at most `SIMILAR_IDS_MAX`).
+This is never a real similarity search (`teacherQuestionStoreFor.findSimilar` stays `[]`, see
+`ports.ts`) and never crosses a teacher or an agent. The agent row lock moved from `key share` to
+`no key update`, so two concurrent opens for one agent serialise through this grouping read instead
+of racing it. `teacherQuestions.listGroupsForTeacher(scope, { limit })` groups the teacher's own
+open questions the same way, in memory, over at most `GROUPING_SCAN_MAX` rows (biggest group first,
+then oldest, at most `GROUPS_MAX_LIMIT` groups of at most `GROUP_QUESTIONS_MAX` questions); it never
+selects `student_id`.
+
+**`teacherQuestions.answer(scope, { questionId, moduleId, answer, noteQuestion? })`** answers the
+scope's own open question and every open question sharing its group, in one transaction: locks the
+target `FOR UPDATE`, then every open member of its group `FOR UPDATE` (another teacher's, a missing,
+an already-answered or a dismissed question is `not_found`); calls `insertTeacherNote` once, so the
+note, the members' status and the student delivery commit together; sets every member
+`status 'answered'` with `answer` and `answered_at`; then, for each **distinct student** among the
+members (the earliest, then lowest-id member stands for them), writes one `teacher` message into
+that student's open session with this teacher and agent (`insertSelect`, `order by created_at desc,
+id desc limit 1` in case more than one is somehow open at once — the statement would otherwise try
+to insert one row's id twice and fail its primary key) and one `notifications` row
+(`onConflictDoNothing`, so a retry is harmless). Returns counts only (`answered`, `students`,
+`threadMessages`, `noteChunkId`, `evalCaseId`) — no student id ever leaves.
+
+**`notifications`** (`notifications.ts`) is the student's own read of a teacher's answer: in-app
+only (email and push wait, decision B-25). `listForStudent(scope, { unreadOnly, limit })` joins to
+the scope's own `teacher_questions` row (another scope's notification can't be read through a
+borrowed id), newest first. `markRead(scope, id)` is a scoped UPDATE; another student's or a
+missing id is `not_found`.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

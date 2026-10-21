@@ -131,6 +131,12 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
  * one `openTeacherQuestion` path) without inventing one. `similarIds` on a question opened through
  * this adapter is therefore always `[]` until that task lands — a decision logged in the task
  * handoff, not a contracts change (`TeacherQuestionStore.findSimilar` is unchanged).
+ *
+ * Task 5.10 (§ Ask the teacher 2, Q1) added a *separate*, lexical grouping of a teacher's own open
+ * questions, entirely inside `teacherQuestions.open`'s own transaction
+ * (`question-similarity.ts`'s `bestGroup`) — never a real similarity search, and never through this
+ * port. `findSimilar` stays `[]` here on purpose: it is not where grouping happens, and nothing
+ * about grouping changes this adapter.
  */
 export function teacherQuestionStoreFor(
   repos: Repositories,

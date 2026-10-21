@@ -1,8 +1,9 @@
 # Task 5.10 handoff: Ask-the-teacher path
 
-Status: PARTIAL (Phases A and B of A–D done)
+Status: PARTIAL (Phases A, B and C of A–D done)
 Branch: `m5/5.10-ask-the-teacher`
 Worktree (Phase B): `.claude/worktrees/agent-a4e69cb301edd9e42` (under the repo root)
+Worktree (Phase C): `.claude/worktrees/agent-acdc1d576e76ff106` (under the repo root)
 
 ## Phase A
 
@@ -100,9 +101,50 @@ python3 .githooks/secret-scan.py --all  → clean
 - Added an index on `notifications.teacher_id` alone, beyond the plan's `(student_id, teacher_id, created_at)` composite index, so the table satisfies the existing repo-wide invariant that every teacher-owned table has an index led by `teacher_id` (`test/schema.test.ts`).
 - Tested the `group_id` backfill in its own file (`ask-teacher-migration.int.test.ts`), following the same "folder-before-N" convention `document-status-migration.int.test.ts` and `age-consent-migration.int.test.ts` already use, rather than extending the large shared `test/migrate.int.test.ts`.
 
+## Phase C
+
+db side: lexical grouping of a teacher's open questions inside `teacherQuestions.open`'s own
+transaction, `listGroupsForTeacher`, a transactional `teacherQuestions.answer`, and a new
+`notifications` repository (`listForStudent`, `markRead`). No contracts, ADR, harness or `apps/web`
+change; never a real embeddings search (`teacherQuestionStoreFor.findSimilar` still returns `[]`).
+
+### Acceptance evidence
+
+| Item | Evidence |
+|---|---|
+| Grouping is pure and lexical | `test/question-similarity.test.ts` (20 tests): `questionSimilarity` (Jaccard over shared terms), `bestGroup` (best score, ties to oldest then lowest id, `null` group handled) over ~12 synthetic should/should-not-group pairs. |
+| New questions join only that teacher's and agent's own open questions | `test/teacher-question-answer.int.test.ts`: two similarly-worded questions from the same teacher+agent converge on one `group_id`; a differently-worded one doesn't join; another teacher, or another of this teacher's agents, never groups even with identical wording; two concurrent opens for one agent converge on one group (the agent lock is now `no key update`); a 0011 dedup replay still converges on the identical row. |
+| `answer` answers the whole group, one note, in one transaction | Same file: answering one member answers every open member of its group; one teacher note (`insertTeacherNote`) is written; one message and one notification per distinct student (not per question); a replay of an already-answered question, another teacher's or a dismissed question, and another teacher's module are all `not_found` and write nothing (`teacher_eval_cases` count unchanged); returns counts only. |
+| `listGroupsForTeacher` never selects `student_id`, biggest group first then oldest | Same file: ordering checked directly; `JSON.stringify(groups)` never matches `/stu_/`. |
+| `notifications` is the student's own read | Same file: `markRead` across students is `not_found`, a missing id is `not_found`, a successful `markRead` removes the row from an unread-only list. |
+| Isolation | `test/repositories.int.test.ts` CASES gained `teacherQuestions.listGroupsForTeacher`, `teacherQuestions.answer`, `notifications.listForStudent`, `notifications.markRead`, each with fixed, pre-made fixtures (created once in `beforeAll`, following the file's existing `delDoc`/`repDoc` convention) so a cross-scope `attempt`/`mismatches` closure only calls the method under test and writes nothing when it fails closed. |
+| No model calls | Pure SQL / Postgres via a throwaway db; no gateway involved. |
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --concurrency=1
+  @edmate/db:test   Test Files 49 passed (49)   Tests 838 passed | 4 skipped (842)
+  Coverage: All files 99.89% stmts / 97.64% branch / 99.8% funcs / 99.93% lines
+  Tasks: 26 successful, 26 total
+python3 .githooks/secret-scan.py --all  → clean
+```
+
+### Changes
+
+- New `src/repositories/question-similarity.ts` (`questionSimilarity`, `bestGroup`, `QUESTION_GROUP_MIN`) + `test/question-similarity.test.ts`.
+- New `src/repositories/notifications.ts` (`notificationsRepo`: `listForStudent`, `markRead`) + exports (`NOTIFICATIONS_MAX_LIMIT`, `NotificationRow`) and wiring in `src/repositories/index.ts`.
+- `src/repositories/teacher-questions.ts`: `open`'s agent lock is now `no key update` (was `key share`); it reads up to `GROUPING_CANDIDATE_MAX` of the teacher+agent's own newest open questions as grouping candidates, calls `bestGroup`, and writes `group_id` and the merged `similar_ids` (at most `SIMILAR_IDS_MAX`) in the same insert. New `listGroupsForTeacher(scope, { limit })` (in-memory grouping over at most `GROUPING_SCAN_MAX` open rows) and `answer(scope, { questionId, moduleId, answer, noteQuestion? })` (locks target then group members, calls `insertTeacherNote`, marks every member answered, writes one message — `order by created_at desc, id desc limit 1`, so a stray second open session never fails a message insert's primary key — and one notification per distinct student).
+- `src/repositories/ports.ts`: doc comment on `findSimilar` notes Phase C's lexical grouping is a separate mechanism that never goes through this port.
+- `src/repositories/README.md`: Phase C paragraphs under `## Ask the teacher (task 5.10)`.
+- `src/repositories/index.ts`: exports `GROUPS_MAX_LIMIT`, `GROUP_QUESTIONS_MAX`, `AnswerResult`, `TeacherQuestionGroup`, `NOTIFICATIONS_MAX_LIMIT`, `NotificationRow`.
+- New `test/teacher-question-answer.int.test.ts` (grouping, `answer`, `listGroupsForTeacher`, `notifications`).
+- `test/repositories.int.test.ts`: 4 new CASES entries, fixed fixtures created in `beforeAll` (`answerTarget`/`answerEmpty`/`answerDismissed`/`answerWrongModule`/`answerReplay` per teacher, `notifTarget` per pair), and two pre-existing tests (`listForTeacher never returns studentId`, `round-trips optional fields: ...`) loosened from exact-count assertions to shape/membership assertions now that `answer` exists and other parts of the same suite legitimately answer questions.
+
+### Deviations
+
+See `## Decisions` below.
+
 ## Left to do
 
-- **Phase C** (db): `question-similarity.ts` (+ pure test), grouping inside `teacherQuestions.open`, `listGroupsForTeacher`, `answer` (one transaction), `notifications.ts` (`listForStudent`, `markRead`), `teacher-question-answer.int.test.ts`, CASES.
 - **Phase D** (db): `runTeacherQuestionsCli` + `src/bin/teacher-questions.ts` + `db:questions`, CLI unit test, `test/ask-teacher-loop.int.test.ts` (the Postgres acceptance), merge gate, `review.md` (code-reviewer, security-reviewer), and the planned `risk: high` decision.
 
 ## Decisions
@@ -130,4 +172,24 @@ risk: low
 ### 21 Oct 2026 · `notifications` also gets a lone `teacher_id` index · decided by tdd-guide
 Decided: added `notifications_teacher_id_idx` beyond the plan's named composite index.
 Why: the repo-wide invariant that every teacher-owned table has an index led by `teacher_id` (enforced by `test/schema.test.ts`) applies here too.
+risk: low
+
+### 21 Oct 2026 · One member per distinct student stands for the group, earliest first · decided by tdd-guide
+Decided: when `answer` delivers a message and a notification, it picks one member per distinct student among the group being answered — the earliest (then lowest id) of that student's own member rows — rather than every member.
+Why: the plan calls for "one message, one notification per distinct student", not per question; a student who asked two near-duplicate questions in the same group should get one reply, not two.
+risk: low
+
+### 21 Oct 2026 · The group's message insert picks the newest open session, not "the" one · decided by tdd-guide
+Decided: `answer`'s message insert adds `order by created_at desc, id desc limit 1` to the open-session lookup (`teacher_id`/`student_id`/`agent_id` match, `ended_at is null`), instead of assuming at most one row matches.
+Why: nothing in the schema stops two sessions for the same triple being open at once (found by the isolation suite's own fixtures); without the cap, the insert-select would try to write one generated message id twice and fail the primary key. Picking the newest is a deterministic, harmless choice among an already-unexpected state, not a new invariant.
+risk: low
+
+### 21 Oct 2026 · Isolation fixtures for `answer` and `notifications` are pre-made, not inline · decided by tdd-guide
+Decided: `teacherQuestions.answer`'s and `notifications.markRead`'s cross-scope CASES entries use fixed questions/notifications created once in `beforeAll`, instead of opening a question (or inserting a notification) inside the `attempt`/`mismatches` closure itself.
+Why: `expectFailsClosed`'s whole-database snapshot check covers the entire closure passed to it, including any setup inside it; a closure that both arranges state and performs the (correctly failing) call under test would otherwise be flagged as "writing something" even though the operation under test wrote nothing. This matches the file's existing `delDoc`/`repDoc`/`isoDoc` convention for other write cases.
+risk: low
+
+### 21 Oct 2026 · Two pre-existing exact-count assertions loosened to shape/membership · decided by tdd-guide
+Decided: `listForTeacher never returns studentId` and `round-trips optional fields: ...` no longer assert an empty or single-element `answered` list for a teacher; they assert the known row is present (or absent) and that no row leaks `studentId`.
+Why: before Phase C, `answer` didn't exist, so no `teacher_questions` row was ever `answered` and the exact-count assertions were trivially true; once `answer` is real, other parts of the same shared isolation suite legitimately answer questions for the same teachers, so an exact count is no longer a meaningful invariant — whether the leak and filter rules hold is.
 risk: low
