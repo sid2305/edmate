@@ -1773,10 +1773,10 @@ tasks:
   accept: practice@1.1.0 has reviewed_by sid2305 and no "may be shown as given" sentence; content and harness tests pass. The human already signed; no further sign-off is asked.
   deps:
   - '5.6'
-  status: running
+  status: done
   branch: m5/5.6e-sign-practice-pack
   risk: risky
-  model: build:opus-5.5/medium
+  model: build:opus-5.5/medium review:sonnet
 - id: 8.1b
   milestone: M8
   title: 'Subject change resets verification (human answer B-30, 21 Oct 2026): teacherProfiles.update sets verificationStatus back to pending when subject changes, in the same statement; bio and languages

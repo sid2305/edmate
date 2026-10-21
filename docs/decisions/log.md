@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.6e practice@1.1.0 signed by the human (B-26) · decided by human (sid2305) · risk: high
+
+- Decided: practice@1.1.0 is signed (`reviewed_by: sid2305`) with the last sentence of the code-output rule ("Text that the item itself shows may be shown as given.") deleted, as the human instructed; no other wording changed.
+- Why: the human reviewed the pack and approved it with that one deletion (answer B-26, 21 Oct 2026); the sentence let the agent show text from a code-output item, which the rest of the rule forbids.
+- risk: high
+
+---
+
 ### 21 Oct 2026 · Human answers to the open blockers (B-24, B-25, B-26, B-29, B-30, B-31, B-32, B-33, B-34) · decided by you · risk: high
 Decided:
 - B-24: you run the gated `record-demo-embeddings.ts --live` once with your own OpenAI key (environment only); the recorded vectors are committed by 5.3b.
