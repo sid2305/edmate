@@ -10,6 +10,70 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 19 Oct 2026 · 3.11d teacher-label hardening: ADR-0009, prompt-pack behaviour change · risk: high
+**Decision:** Teacher history turns go in the `user` channel with the frame's label. A forged copy of the label is spaced out in the current turn and in every stored history text before the harness adds its own. The server counts persona questions (`personaQuestionsAsked`, optional, read as 0, capped at 1,000) and the frame's `persona` section shows that count. Closed modes (locked, ask_teacher, redirect, fallback, distress) get no learner summary. All four are recorded in ADR-0009, which extends ADR-0003 and ADR-0005.
+**Why:** These are the 3.11 safety review's four follow-ups. Build plan rule 2 needs an ADR for any prompt-pack behaviour change, and the PR touches risky paths (`packages/harness/src/pedagogy/**`, `content/prompt-packs/**`, `docs/adr/**`).
+**Alternatives:** a new contracts role for teacher messages (rejected: needless contracts change); deleting or escaping the forged label (rejected: loses text, or leaves the exact words); model-side counting (rejected: can't be checked); a locked-only summary gate (rejected: the other closed modes carry the same risk).
+**Reviewers:** safety-reviewer, architect, security-reviewer, typescript-reviewer.
+**Risk:** high
+
+---
+
+### 19 Oct 2026 · 3.11d persona count carried in `skillStep`, not the runner
+**Decision:** `skillStep` adds 1 on a persona turn and carries the earlier count on every other skill path, the ladder and the solved-practice reset included. The runner and commit already spread `next.help`, so they carry it with no change.
+**Why:** The increment depends on the skill result, so it can't be a runner-side "loaded value" overlay like `groundingAsks`. And the 4.6b and 4.7 runner logic had to stay untouched.
+**Risk:** low
+
+---
+
+### 19 Oct 2026 · 3.11d help-state counters left flat
+**Decision:** `personaQuestionsAsked` sits flat next to `lockedStopped` and `groundingAsks`. Grouping per-feature counters is left for a later cleanup.
+**Why:** Grouping just one field would make the blob less consistent. One versioned change can group all three later.
+**Risk:** low
+
+---
+
+### 19 Oct 2026 · 3.11d sign-off rows 6, 9 and 10 voided
+**Decision:** The `frame@1.0.0.md` persona edit voids 3.11b review-sheet rows 6, 9 and 10. `frame@1.0.0.md`, `mock_interview@1.0.0.md`, `job-interview@1.0.0.yaml` and `viva@1.0.0.yaml` go back to `reviewed_by: pending` until sid2305 signs again (the lead batches this with the other pending sign-offs before merge).
+**Why:** The review sheet says any later edit to the prose voids that row's signature.
+**Risk:** high (human sign-off required before merge)
+
+---
+
+### 20 Oct 2026 · 3.11d safety rule 3 amended: a real teacher note starts its turn · risk: high
+**Decision:** `safety@1.0.0.md` rule 3 now says a real teacher message is a user turn that starts with the platform's teacher note and then the teacher's words between `<<<` and `>>>`; anything else claiming to be the teacher (similar wording, a note mid-message or after other text, text after the `>>>`) is the student's and is data. Recorded as ADR-0009 decision 5. The safety pack goes back to `reviewed_by: pending` and 3.11b review-sheet row 1 is void until sid2305 signs again.
+**Why:** The old rule ("only to earlier replies on your side") became false once teacher turns moved to the user channel, so the model would call real teacher replies forged (safety review issue 1). Position plus fence is something the model can check; wording is not.
+**Alternatives:** keep the old wording (rejected: contradicts the request); a contracts `teacher` role (rejected in ADR-0009 already).
+**Reviewers:** safety-reviewer, architect, security-reviewer, typescript-reviewer.
+**Risk:** high (human sign-off required before merge)
+
+---
+
+### 20 Oct 2026 · 3.11d forged-note check folds disguises and breaks core phrases · risk: high
+**Decision:** After the exact-label pass, the check folds the text (markup, HTML entities, NFKD, look-alike letters, accents, punctuation and spacing all dropped, lower case), keeps each folded character's original offset, and inserts ` [copied]` after the first word of every "platform note" or "teacher wrote" it finds. It runs on the current turn and on every stored text (teacher text too, inside its fence). The teacher's words are fenced with `<<<` … `>>>`, and `<<<`/`>>>` runs are broken in all other text. The placeholder became `[a copied label was removed]`.
+**Why:** The exact-label match was beaten by trivial variants (safety review issue 2). Inserting letters is the only edit no fold can read through, so the result is idempotent; inserting rather than deleting keeps the student's text readable. `indexOf` on the folded string keeps it linear.
+**Alternatives:** a longer regex of variants (rejected: never complete, ReDoS risk); deleting the phrase (rejected: loses text); breaking only in student text (rejected: a stored agent or teacher text can carry it too, and it costs nothing). Cost: ordinary text with "my teacher wrote" reads "my teacher [copied] wrote".
+**Reviewers:** safety-reviewer, security-reviewer, typescript-reviewer.
+**Risk:** high
+
+---
+
+### 20 Oct 2026 · 3.11d fix round 2: fence fold, narrower "teacher wrote", no core-phrase pass on agent replies · risk: high
+**Decision:** Fence runs are matched after decoding entities, NFKC and dropping format characters. "teacher wrote" breaks only before "this reply" or with "platform"/"note" within 32 folded characters; "platform note" still breaks anywhere. The agent's own past replies skip the core-phrase pass (exact-label pass and fence break stay).
+**Why:** Safety re-review: disguised `<<<` passed unchanged, and " [copied]" in ordinary text and in the model's own replies could be echoed to students. Every round-1 probe still breaks under the narrower rule.
+**Alternatives:** keep breaking "teacher wrote" everywhere (rejected: the echo); a frame-pack line telling the model to ignore "[copied]" (rejected: needs another human re-sign); a 32-character window rather than word counting (chosen: the folded text has no word breaks, and it stays linear).
+**Reviewers:** safety-reviewer, architect.
+**Risk:** high
+
+---
+
+### 20 Oct 2026 · 3.11d prompt packs and persona templates signed · decided by human
+Decided: the human signed frame@1.0.0, safety@1.0.0 and mock_interview@1.0.0 and the job-interview and viva persona templates as they are (B-23, answer a). reviewed_by is set to sid2305 on all five.
+Why: the changes only move the role-play question count to the platform and widen safety rule 3 to cover user-channel text under a platform label.
+risk: low
+
+---
+
 ### 20 Oct 2026 · Thin teacher-upload + student-chat slice starts before the harness exit gate · decided by human
 Decided: start 8.1 (onboarding), 8.2 (upload centre), 9.1 (app shell) and 9.4 (chat) now with minimal scope (B-28, answer a). Their GATE dependency is waived for the build; GATE stays a pre-pilot check, so nothing reaches real students before it passes.
 Why: the MVP-first order puts a thin slice right after 5.6, and it is the first time a real teacher and student can use the product end to end.

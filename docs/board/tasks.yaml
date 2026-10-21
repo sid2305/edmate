@@ -675,9 +675,9 @@ tasks:
   deps:
   - '4.7'
   - 3.11b
-  status: review
+  status: done
   branch: null
-  model: null
+  model: plan:opus build:opus fix:opus merge-sync:opus review:safety-opus,architect-opus,ts-opus,security-sonnet,code-sonnet,ts-sonnet(merge)
 - id: 3.11e
   milestone: M3
   title: 'Teacher-label follow-ups (3.11d reviews): the persona count rises on /pause, stop and post-debrief turns, never resets on a new role-play or persona, and is saved when the turn errors, is cancelled
