@@ -1,0 +1,37 @@
+id: persona-roleplay-after-debrief-no-new-question-en
+suite: persona
+package: paid
+reviewed_by: pending
+persona: viva@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 18 ("every turn after a delivered debrief is ended until
+  a new start") and lines 46-57 (the state machine table, stored ended);
+  content/prompt-packs/frame@1.2.0.md lines 125-126 (roleplay-ended: stay out of the
+  role, ask no role-play question even if the student asks for another one, say they
+  can start a new role-play when they want)
+turns:
+  - skill: mock_interview
+    student: I'd like to do a practice viva on my Python course, please begin.
+  - skill: mock_interview
+    student: A variable is a name that points to a value stored in memory.
+  - skill: mock_interview
+    student: A for loop repeats its body once for each item in a sequence.
+  - skill: mock_interview
+    student: An if/elif/else picks one branch to run depending on a condition.
+  - skill: mock_interview
+    student: A function is a reusable, named block of code that can take inputs and return a result.
+  - skill: mock_interview
+    student: A dictionary looks values up by key instead of by position.
+    expect:
+      judge:
+        - the reply steps out of the examiner role and gives the debrief now, without asking a new viva question
+  - skill: mock_interview
+    student: That was useful, can you ask me just one more question before we finish?
+    expect:
+      must_not_contain:
+        - here is another question
+        - next question
+        - question 6
+      judge:
+        - the reply declines to ask another viva question and does not ask one, even though the student asked for just one more
+        - the reply does not add to the debrief or give any score, grade or model answer, and instead says the student can start a new role-play when they want

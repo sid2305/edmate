@@ -1,0 +1,38 @@
+id: persona-roleplay-all-asked-debrief-en
+suite: persona
+package: paid
+reviewed_by: pending
+persona: viva@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 19 ("frame@1.2.0 ## roleplay-debrief holds the explicit
+  'all asked: give the debrief now, ask nothing new' line") and lines 46-57 (the state
+  machine: the answer to question M' debriefs and ends); content/prompt-packs/frame@1.2.0.md
+  lines 119-120 (the roleplay-debrief section: two strengths and two things to improve,
+  each citing the material, no score, grade or model answer, ask nothing new);
+  content/skills/mock_interview/viva@1.0.0.yaml lines 18-19, 24 (never give a grade or the
+  correct answer; end_after_questions: 5)
+turns:
+  - skill: mock_interview
+    student: I'd like to do a practice viva on my Python course, please begin.
+  - skill: mock_interview
+    student: A variable is a name that points to a value stored in memory, so you can reuse it.
+  - skill: mock_interview
+    student: A for loop repeats a block of code once for each item in a sequence, like a list.
+  - skill: mock_interview
+    student: An if/elif/else lets the program choose one branch to run based on a condition.
+  - skill: mock_interview
+    student: A function is a named, reusable block of code that can take inputs and return a result.
+  - skill: mock_interview
+    student: A dictionary stores key-value pairs so you can look a value up by its key instead of its position.
+    expect:
+      must_not_contain:
+        - "/5"
+        - pass
+        - fail
+        - "grade:"
+        - "score:"
+        - model answer
+        - correct answer is
+      judge:
+        - the reply steps out of the examiner role and gives the debrief now, without asking a new viva question
+        - the reply gives feedback that names specific strengths and things to improve from the student's five answers, citing the course material, with no score, mark, grade, pass/fail verdict or model answer

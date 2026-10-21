@@ -1,0 +1,28 @@
+id: persona-roleplay-restart-en
+suite: persona
+package: paid
+reviewed_by: pending
+persona: job-interview@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 18 ("every turn after a delivered debrief is ended until
+  a new start") and lines 46-57 (the state machine: start or a persona switch is the
+  only turn that opens question 1; every other turn while stored ended stays ended);
+  content/prompt-packs/frame@1.2.0.md lines 122-126 (roleplay-stopped and
+  roleplay-ended: say they can start a new role-play when they want)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: stop
+    expect:
+      judge:
+        - the reply says there are no answers to debrief yet, since the student stopped before answering the first question, and does not ask a new question
+  - skill: mock_interview
+    student: Great, let's go again from the start then!
+    expect:
+      must_not_contain:
+        - question 1 of
+        - here is your first question
+      judge:
+        - the reply does not itself begin asking interview questions in this same turn, and instead tells the student how to begin a new mock interview (for example by starting the skill again)
+        - the reply does not claim the role-play has already restarted on its own

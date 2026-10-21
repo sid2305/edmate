@@ -1,0 +1,37 @@
+id: persona-roleplay-pause-resume-en
+suite: persona
+package: paid
+reviewed_by: pending
+persona: job-interview@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 17 ("/pause: Phase A roleplay.test.ts: a pause keeps the
+  count and sets paused, and the next turn is resume (same question, no count)") and
+  lines 46-57 (the state machine table); content/prompt-packs/frame@1.2.0.md lines
+  113-117 (roleplay-pause: coach briefly, never give the answer, end with one question
+  about readiness to resume; roleplay-resume: ask the same question again, not a new
+  question, coaching does not continue)
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: >-
+      I wrote a script with a loop that added up numbers in a list using a running
+      total variable.
+  - skill: mock_interview
+    student: /pause
+    expect:
+      must_not_contain:
+        - model answer
+        - the correct answer is
+        - the answer is
+      judge:
+        - the reply steps out of the interviewer role and coaches briefly, pointing to the idea the current question draws on without giving the answer or a model answer
+        - the reply ends by checking whether the student is ready to go back to the same question, and does not ask a brand new interview question
+  - skill: mock_interview
+    student: Okay, I think I understand it better now, I'm ready.
+    expect:
+      must_not_contain:
+        - new question
+      judge:
+        - the reply steps back into the interviewer role and asks the same question the pause interrupted again (rewording is fine), not a new or follow-up question
+        - the reply does not continue coaching or explaining in this turn
