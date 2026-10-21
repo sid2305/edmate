@@ -1392,7 +1392,7 @@ tasks:
   - '1.8'
   - '5.5'
   - M3
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '5.8'
@@ -1889,7 +1889,8 @@ tasks:
   risk: risky
 - id: 9.4c
   milestone: M13
-  title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating "$5-$10" as maths (or documents it as a known limit); drop the unreachable single-character alternative in the MATH regex'
+  title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
+    "$5-$10" as maths (or documents it as a known limit); drop the unreachable single-character alternative in the MATH regex'
   accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
   deps:
   - 9.4b
@@ -2375,6 +2376,17 @@ tasks:
   status: done
   branch: m3/3.9b-cli-chat-flake
   model: build:opus-5.5/medium review:sonnet
+- id: 3.9d
+  milestone: M3
+  title: 'apps/worker safetyEvent.int.test.ts CI flake (seen on PR #90, 21 Oct 2026): the jailbreak turn got a retryable guard_blocked error instead of the block reply, because the cold first turn ran past
+    the preGuard budget on the real clock, as 3.9b found for apps/cli; pass a slack clock to the turn deps in worker tests (production budgets unchanged) and make failing assertions print the error event
+    and trace step outcomes; sweep the other real-clock turn tests for the same pattern'
+  accept: the worker tests run full turns on a slack clock; a forced 10x-slow runner (e.g. a slow-clock test) stays green; production budgets unchanged
+  deps:
+  - 3.9b
+  status: running
+  branch: m3/3.9d-worker-clock-flake
+  model: plan:lead build:opus-5.5/medium
 - id: 3.9c
   milestone: M13
   title: 'Cold first turn (found by 3.9b): the first turn in a fresh process spends about 150 ms in preGuard on an idle laptop against its 400 ms budget, so on a busy server a real student''s first turn
