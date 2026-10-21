@@ -54,6 +54,13 @@ Tool calls used: 24 (Phase B); 56 in total across both phases.
 
 ## Decisions
 
+### 21 Oct 2026 · 0.18 merge: agent registry blocks, board.py registry and docs/agents/registry.md · decided by lead · risk: high
+- Decided: merge 0.18. It touches `.claude/**` (the 14 agent files, board.py, registry.py, tests and the team-lead skill link). security-reviewer and code-reviewer both approved with no CRITICAL, HIGH or MEDIUM findings.
+- Why: the registry blocks are evidence-only data that change no agent permissions or behaviour. The table regenerates byte for byte, and a missing or stale block fails `.claude/tests`.
+- risk: high (a risky path: `.claude/**`, security-reviewer group).
+
+Details (builder):
+
 ### 21 Oct 2026 · 0.18 Phase A: role-level cost, not per named agent · decided by builder · risk: low
 - Decided: cost stays bucketed by role (plan/build/review), as the lead accepted. Lead answer 2 asked for per-agent attribution if a subagent transcript names its agent type cheaply. `metrics.py` records no agent type (no `agentType`/`subagent_type` field is read or stored), and the board's `metrics` map is a whole-task total. So per-agent attribution would need new machinery, which the lead ruled out. Each role a task names gets that task's whole-task numbers; the generated table says so.
 - Why: no cheap per-agent signal exists in the stored data.
