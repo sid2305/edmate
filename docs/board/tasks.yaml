@@ -1654,9 +1654,9 @@ tasks:
   - GATE
   - '1.3'
   - '1.7'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.1-app-shell
+  model: plan:sonnet build:sonnet
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
