@@ -1566,9 +1566,32 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: review
+  status: done
   branch: m6/6.2-mastery-rebuild
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet x2 review:sonnet x4
+  metrics:
+    tool_calls: 571
+    tokens_in: 1908
+    tokens_out: 137286
+    cache_read_tokens: 47413103
+    wall_time_seconds: 1956
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: '6.3'
   milestone: M6
   title: Mistake tagging from the teacher's list, plus proposed tags the teacher approves
@@ -1578,9 +1601,9 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m6/6.3-mistake-tags
+  model: plan:sonnet build:sonnet
 - id: '6.4'
   milestone: M6
   title: Session summary and end-of-topic check

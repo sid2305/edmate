@@ -10,6 +10,46 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 6.2 merge: rebuildMastery and atomic applyEvidence in packages/db/src/repositories · decided by lead · risk: high
+- Decided: merge 6.2. rebuildMastery replays a scope's evidence in one locked transaction. applyEvidence now appends and folds in one transaction (appendAndFold), so a rebuild can't double-count an event. The lock order stays topics then learner_profiles.
+- Why: four reviewers approved. The one HIGH (the two-transaction race) is fixed and verified by typescript-reviewer, with a concurrent race test. The lock-held-over-long-replay MEDIUM is deferred to 6.2a: no operational rebuild trigger exists at pilot scale.
+- risk: high (a risky path: packages/db/src/repositories/**, security-reviewer group).
+
+Details (builder):
+
+---
+
+### Rebuild is a `packages/db`-internal method, not a `ProfileStore` port method
+Matches the plan's design and 3.17's own precedent (`applyMastery`/`applyEvidenceMastery` are not
+on the port either). No ADR.
+risk: low
+
+---
+
+### `risk: high` — new write path in `packages/db/src/repositories/learner.ts` (risky path)
+Per CLAUDE.md rule 6 and the plan: this PR touches `packages/db/src/repositories/**`, the
+security-reviewer group. Reviewers for this PR: security-reviewer (plus default
+code-reviewer/typescript-reviewer).
+risk: high
+
+---
+
+### Fix round 1 — combined `append` + fold into one transaction, kept `applyEvidenceMastery` in place
+Decided: the fix is a new method (`evidenceEventsRepo.appendAndFold`), not a rewrite of
+`applyEvidenceMastery` in place, so `applyEvidenceMastery`'s existing direct tests and isolation-grid
+case stay valid unchanged. `profileStoreFor.applyEvidence` is the only caller moved to the new
+method; `applyEvidenceMastery` itself is now dead in production but still reachable and tested
+directly — left in place rather than deleted, since removing it was not asked for and would have
+touched more call sites for no behaviour change.
+Why: smallest fix that closes the race without touching anything the findings didn't name.
+risk: high (same risky path as the original PR)
+
+Tool calls used (plan + build + fix round 1): 29 + fix round 1's own 44 (slightly over the fix
+round's ~40 budget — the coverage-threshold fallout from finding 3's explicit `locked!` check cost
+an extra debugging round).
+
+---
+
 ### 21 Oct 2026 · 0.18 merge: agent registry blocks, board.py registry and docs/agents/registry.md · decided by lead · risk: high
 - Decided: merge 0.18. It touches `.claude/**` (the 14 agent files, board.py, registry.py, tests and the team-lead skill link). security-reviewer and code-reviewer both approved with no CRITICAL, HIGH or MEDIUM findings.
 - Why: the registry blocks are evidence-only data that change no agent permissions or behaviour. The table regenerates byte for byte, and a missing or stale block fails `.claude/tests`.
