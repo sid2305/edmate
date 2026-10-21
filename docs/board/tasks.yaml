@@ -422,6 +422,17 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 1.7f
+  milestone: M1
+  title: 'Sign the US locale pack (human decision 21 Oct 2026, US is the first region): content/locales/US.yaml reviewedBy: sid2305, reviewedOn: "2026-10-21"; keep the pending privacyLaw/dataRegion/grievance values
+    (counsel fills them in 3.10c); update packages/content/src/realLocales.test.ts so the US pack counts as signed and the no-consent waiver applies to US learners 13-17; no other behaviour change'
+  accept: US.yaml reviewedBy is sid2305; the age rule returns clear for a US learner aged 13-17 and parent_needed for IN and global; content tests pass. The human already signed (answer B-27, 21 Oct 2026); no further sign-off is asked.
+  deps:
+  - '1.7'
+  risky: true
+  status: todo
+  branch: null
+  model: null
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -1081,6 +1092,16 @@ tasks:
   deps:
   - GATE
   - '3.10'
+  status: todo
+  branch: null
+  model: null
+- id: 3.10c
+  milestone: M13
+  title: 'Pre-pilot: counsel checks the US locale pack (privacyLaw, dataRegion, grievance) and writes the real US privacy notice (content/legal/privacy-notice/US.md, signed reviewedBy); `edmate content validate` then passes for US (human answer 21 Oct 2026)'
+  accept: content/locales/US.yaml and content/legal/privacy-notice/US.md have no pending or placeholder value; validate exits 0 for both.
+  deps:
+  - GATE
+  - 1.7f
   status: todo
   branch: null
   model: null
