@@ -15,6 +15,7 @@ export async function TeacherView() {
       nav={[
         { href: '/teacher', label: t('nav') },
         { href: '/teacher/uploads', label: t('uploadsLink') },
+        { href: '/teacher/onboarding', label: t('onboardingLink') },
       ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}

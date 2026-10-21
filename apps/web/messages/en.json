@@ -19,7 +19,23 @@
     "title": "Teacher studio",
     "placeholder": "Teacher studio — coming soon.",
     "nav": "Studio",
-    "uploadsLink": "Uploads"
+    "uploadsLink": "Uploads",
+    "onboardingLink": "Your profile"
+  },
+  "onboarding": {
+    "title": "Your profile",
+    "slugLabel": "Profile URL",
+    "slugHint": "Can't be changed later.",
+    "subjectLabel": "Subject",
+    "bioLabel": "Bio",
+    "languagesLabel": "Languages",
+    "languagesHint": "Comma-separated, e.g. en, pt-BR",
+    "createButton": "Create profile",
+    "saveButton": "Save changes",
+    "saving": "Saving…",
+    "statusPending": "Your profile is pending review. Publishing waits on staff verification.",
+    "statusRejected": "Your profile was not approved. Publishing waits on staff verification.",
+    "statusVerified": "Your profile is verified."
   },
   "chat": {
     "title": "Chat with your teacher's agent",

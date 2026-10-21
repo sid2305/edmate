@@ -50,7 +50,8 @@ export class StudioUnavailableError extends Error {
 /** The largest request body any studio route reads (bytes); the JSON bodies are tiny. */
 export const MAX_BODY_BYTES = 16 * 1024;
 
-const TOO_LARGE = Symbol('too large');
+/** Too large to read fully; shared with other studio routes (profile.ts) via `readJson`. */
+export const TOO_LARGE = Symbol('too large');
 
 /** The body's bytes, or TOO_LARGE as soon as more than the cap has been read. */
 async function readCapped(
@@ -82,7 +83,7 @@ async function readCapped(
  * The body as JSON, `undefined` when it is not JSON, or TOO_LARGE. A declared content-length over
  * the cap is refused before reading; the bytes read are capped too (same as task 9.4's routes).
  */
-async function readJson(req: Request): Promise<unknown> {
+export async function readJson(req: Request): Promise<unknown> {
   if (Number(req.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return TOO_LARGE;
   if (req.body === null) return undefined;
   try {
