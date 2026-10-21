@@ -36,6 +36,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { commitProcessor, createTurnWorkers, meterProcessor } from '../src/commit/index.js';
 import type { LogLine } from '../src/log.js';
+import { slackClock } from './clock.js';
 
 const PG_URL =
   process.env.TEST_DATABASE_URL ?? 'postgres://edmate:edmate-dev@127.0.0.1:55432/edmate';
@@ -178,11 +179,9 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
       { history: (s, n) => db.repos.messages.history(scope, s, n) },
       { get: (studentId, teacherId) => profileStoreFor(db.repos, scope).get(studentId, teacherId) },
     );
-    // A real clock: the enqueue is real I/O, which a virtual clock would read as a deadlock.
-    const clock = {
-      now: () => Date.now(),
-      sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
-    };
+    // A real clock: the enqueue is real I/O, which a virtual clock would read as a deadlock. Every
+    // step budget is widened 10x (3.9d) so a loaded runner can't fail a step on time alone.
+    const clock = slackClock();
     const t = testDeps({ overrides: { ...ports, clock } });
     const steps = { ...testSteps(), meter: defaultSteps.meter, commit: defaultSteps.commit };
     const run = runTurn(demoTurnInput, { deps: t.deps, steps });
@@ -193,6 +192,11 @@ describe.skipIf(!up)(`turn queues on Redis + Postgres${up ? '' : ` (${SKIP})`}`,
       })(),
       run.finished,
     ]);
+    // On failure, print any error event and the trace's step outcomes (3.9d).
+    expect(
+      events.filter((e) => e.type === 'error'),
+      JSON.stringify(result.trace?.steps),
+    ).toEqual([]);
     expect(events.at(-1)?.type).toBe('done');
     expect(result.background).toEqual([]);
 
