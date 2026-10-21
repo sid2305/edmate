@@ -191,3 +191,6 @@ Follow-ups for the board: embed teacher notes; 13.4 retention covers `notificati
 - **Q5. Where does the teacher CLI live?** *Recommend:* `packages/db` `db:questions` (operator tool, like `db:verify-teacher`; the teacher id is a flag) until 8.9's authenticated inbox. The alternative is `apps/cli`, which would add pg to the student-facing CLI.
 - **Q6. What if the chosen module is outside a grouped student's package?** *Recommend:* deliver the answer to every asker anyway. It is the teacher's direct reply. The note itself follows the module's packages. 8.9 can warn in the UI.
 - **Q7. Should notes be embedded?** *Recommend:* not in 5.10. Full text finds a matching note and ranks it first (5.3). Add a board task to embed notes through the ingest worker.
+
+## Lead answers (21 Oct 2026)
+Q1, Q2, Q4, Q5, Q6, Q7: as recommended. Q3: as recommended for now (scrubbed question plus answer, the teacher can rephrase with `--note-question`, citation shows only "Teacher's answer" and a date), raised to the human as B-34; keep the note-text format in the one shared helper so an answer-only switch is a one-place change.
