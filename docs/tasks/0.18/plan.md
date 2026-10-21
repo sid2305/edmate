@@ -70,3 +70,10 @@ Read, Grep, Glob, Edit, Write, Bash (`python3 -m unittest discover .claude/tests
 
 ## Decisions
 None yet (this is the plan; the handoff logs the actual `risk: high` entry, and the two role-bucketing/staleness choices above as lead-decided defaults if the human doesn't override them, once the build lands).
+
+## Lead answers (21 Oct 2026)
+1. `board.py registry` backed by `.claude/skills/board/registry.py`: accepted.
+2. Cost per role (plan/build/review), shared across same-role agents with an explicit note, and "not enough runs yet" where no role token exists: accepted for now. Correction: 0.16a is merged (subagent transcripts are now counted). If a subagent transcript names its agent type cheaply, attribute cost per named agent instead and say so in the handoff; don't build new attribution machinery for it.
+3. Stale = `Last reviewed` older than 60 days, or a block that fails to parse: accepted.
+4. Block in the markdown body (`## Agent registry`), no new front-matter keys: accepted.
+Decided by lead · risk: low.
