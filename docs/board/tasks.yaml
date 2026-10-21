@@ -1938,12 +1938,13 @@ tasks:
     the board
   deps:
   - '0.16'
-  status: running
+  status: review
   branch: m0/0.16a-subagent-transcripts
   model: plan:lead build:opus
 - id: 6.1a
   milestone: M13
-  title: '6.1 follow-ups: topic map zod objects use .strict() so unknown keys are rejected, not dropped; a sorted insert or heap instead of re-sorting the ready queue each round; wire practiceItems/demoPracticeBank topic ids to validate against buildTopicMap (6.1 plan Q1); feed ingest''s OutlineDraft into buildTopicMap (6.1 plan Q2)'
+  title: '6.1 follow-ups: topic map zod objects use .strict() so unknown keys are rejected, not dropped; a sorted insert or heap instead of re-sorting the ready queue each round; wire practiceItems/demoPracticeBank
+    topic ids to validate against buildTopicMap (6.1 plan Q1); feed ingest''s OutlineDraft into buildTopicMap (6.1 plan Q2)'
   accept: tests cover each item; harness tests pass
   deps:
   - '6.1'
@@ -1951,9 +1952,11 @@ tasks:
   branch: null
 - id: 5.8a
   milestone: M5
-  title: "Role-play wiring: personas in CLI chat/eval and web runtime, newest set"
-  accept: "readPersonaLibrary is wired into apps/cli (chat and eval) and the apps/web runtime as deps.personas; every role-play message turn sends skill 'mock_interview' (an integration test shows a role-play answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged"
-  deps: [5.8]
+  title: 'Role-play wiring: personas in CLI chat/eval and web runtime, newest set'
+  accept: readPersonaLibrary is wired into apps/cli (chat and eval) and the apps/web runtime as deps.personas; every role-play message turn sends skill 'mock_interview' (an integration test shows a role-play
+    answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged
+  deps:
+  - 5.8
   status: todo
   branch: null
 - id: 9.4c
