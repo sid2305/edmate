@@ -1415,9 +1415,9 @@ tasks:
   deps:
   - '5.4'
   - M3
-  status: review
+  status: done
   branch: m5/5.9-revision-skill
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
 - id: '5.10'
   milestone: M5
   title: 'Ask-the-teacher path: open and group `TeacherQuestion`s; teacher answer → student thread + notification; `CorrectionStore` turns answers and corrections into teacher notes and eval cases'
