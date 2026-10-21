@@ -283,7 +283,7 @@ Why: the turn routes need the repositories and the same age-policy identity (`le
 guard uses, without opening a second database pool. No guard, age-gate, cookie or session setting
 changed. A new test checks that the instances are shared and that only one database is opened.
 The `src/auth/**` coverage floor holds at 100%.
-risk: high. Needs security-reviewer; the lead finalises.
+risk: high. security-reviewer (opus) reviewed Phase A and passed it (two MEDIUMs fixed in 57ab96e); the lead approves the merge.
 
 ### 20 Oct 2026 · Turns run in one configured market (`EDMATE_MARKET`, default `global`) · decided by tdd-guide
 Decided: the entitlement's market comes from `EDMATE_MARKET`, falling back to `global`.
@@ -369,6 +369,30 @@ Decided:
 
 risk: low.
 
+### 20 Oct 2026 · Bundled prices.yaml shipped as a generated TS module, not read from disk at runtime · decided by build-error-resolver
+Decided: `loadBundledPrices()` parses `PRICES_YAML`, a string constant in the checked-in,
+generated `packages/gateway/src/pricing/prices.generated.ts`, instead of
+`readFileSync(new URL('./prices.yaml', import.meta.url))`. `prices.yaml` remains the source a
+human edits; `node scripts/generate-prices.mjs` regenerates the TS module, and
+`test/pricing/generated.test.ts` fails if the two drift apart. The gateway's `build` script no
+longer copies `prices.yaml` into `dist/`.
+Why: webpack bundles `@edmate/gateway` into `apps/web`'s own server chunk when it builds with
+`--webpack` (the app's own `build` script), and `prices.yaml` never ships as a sibling file next
+to the bundled module, so the old runtime read threw and every `POST /api/sessions` answered 503
+in production — the same class of bug as 1.7b's safe-regex worker, but for a different file and
+package. A statically imported TS module needs no file lookup at runtime, so it is bundler-safe
+under webpack, Turbopack, and plain Node alike.
+risk: medium (fixes a production-blocking 503 on every chat session; no contracts or
+prompt-pack change).
+
+### 20 Oct 2026 · Lead review sign-off for 9.4 · decided by lead
+Decided: 9.4 merges with the reviewers' MEDIUMs fixed and the LOWs deferred to 9.4a. The bundled
+prices fix supersedes the Phase D "flagged, not fixed" note: production webpack builds now load
+the price table with no file read (verified by the relocated build-smoke run).
+Why: the thin slice needs the chat working in a production build; everything else on the list is
+polish or needs data the slice doesn't have yet (the student's market, the subscription list).
+risk: low.
+
 ## Fix round (bundled prices)
 
 Status: DONE.
@@ -402,21 +426,3 @@ Follow-up for apps/web (not done here, out of file scope): `apps/web/playwright.
 `webServer.command` can drop its `next dev` (Turbopack) workaround comment and run
 `next dev --webpack` once this fix lands, matching production more closely; not changed in this
 round since another builder owns `apps/web`.
-
-### Decisions
-
-- **20 Oct 2026 · Bundled prices.yaml shipped as a generated TS module, not read from disk at runtime · decided by build-error-resolver**
-  Decided: `loadBundledPrices()` parses `PRICES_YAML`, a string constant in the checked-in,
-  generated `packages/gateway/src/pricing/prices.generated.ts`, instead of
-  `readFileSync(new URL('./prices.yaml', import.meta.url))`. `prices.yaml` remains the source a
-  human edits; `node scripts/generate-prices.mjs` regenerates the TS module, and
-  `test/pricing/generated.test.ts` fails if the two drift apart. The gateway's `build` script no
-  longer copies `prices.yaml` into `dist/`.
-  Why: webpack bundles `@edmate/gateway` into `apps/web`'s own server chunk when it builds with
-  `--webpack` (the app's own `build` script), and `prices.yaml` never ships as a sibling file next
-  to the bundled module, so the old runtime read threw and every `POST /api/sessions` answered 503
-  in production — the same class of bug as 1.7b's safe-regex worker, but for a different file and
-  package. A statically imported TS module needs no file lookup at runtime, so it is bundler-safe
-  under webpack, Turbopack, and plain Node alike.
-  risk: medium (fixes a production-blocking 503 on every chat session; no contracts or
-  prompt-pack change).
