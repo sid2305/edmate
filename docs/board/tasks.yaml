@@ -1305,7 +1305,8 @@ tasks:
 - id: '5.8'
   milestone: M5
   title: 'Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief'
-  accept: seeded persona cases on fixtures, including the persona-count-claim case from docs/tasks/3.11d/safety-review.md issue 4 (moved here from 3.11e); the explicit "all asked: debrief now" line in frame (one human re-sign with the persona section).
+  accept: 'seeded persona cases on fixtures, including the persona-count-claim case from docs/tasks/3.11d/safety-review.md issue 4 (moved here from 3.11e); the explicit "all asked: debrief now" line in
+    frame (one human re-sign with the persona section).'
   deps:
   - '3.11'
   - '5.5'
@@ -1678,7 +1679,7 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 9.1a
   milestone: M13
-  title: 'Lighthouse accessibility at 360 px on the signed-in pages (/home, /teacher) against a disposable stack, and a Lighthouse CI job (9.1 follow-up; /sign-in scored 100)'
+  title: Lighthouse accessibility at 360 px on the signed-in pages (/home, /teacher) against a disposable stack, and a Lighthouse CI job (9.1 follow-up; /sign-in scored 100)
   accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
   deps:
   - '9.1'
@@ -1719,7 +1720,7 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '9.5'
