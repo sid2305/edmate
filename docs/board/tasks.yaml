@@ -435,6 +435,15 @@ tasks:
   status: running
   branch: m1/1.7f-sign-us-locale
   model: build:sonnet
+- id: 1.7g
+  milestone: M13
+  title: 'US.yaml header comment (1.7f review LOW): the comment still calls the pack a DRAFT whose no-consent waiver waits for a signature; reword it for the signed state (reviewedBy sid2305, 21 Oct 2026),
+    keeping the warning that agents never fill in helplines, contacts, laws or reviewers. Comment only'
+  accept: US.yaml header matches the signed state; content tests pass.
+  deps:
+  - 1.7f
+  risky: true
+  status: todo
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
