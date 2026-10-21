@@ -372,9 +372,9 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/0.18-agent-registry
+  model: plan:sonnet build:opus
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
@@ -2118,7 +2118,8 @@ tasks:
 - id: 0.17a
   milestone: M13
   title: 'Merge-gate budget parse (0.17 security MEDIUM): budget_cap''s `## Budget` fallback takes the first "N ... calls" number in the prose, so a decoy number (another task''s count, an old estimate)
-    sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions. Also accept the budget in the heading itself (`## Budget: 30 tool calls`, as the 7.1 and 6.2 plans wrote it; today that fails as unparseable)'
+    sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions. Also accept the budget in the heading
+    itself (`## Budget: 30 tool calls`, as the 7.1 and 6.2 plans wrote it; today that fails as unparseable)'
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
@@ -2133,7 +2134,8 @@ tasks:
   status: todo
 - id: 7.1a
   milestone: M7
-  title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the JSON and HTML reports; loadDoubleCheck says "invalid YAML" for a missing file too; both loaders (CaseLoadError, DoubleCheckLoadError) put the caller''s absolute path in messages, so relativise it'
+  title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
+    JSON and HTML reports; loadDoubleCheck says "invalid YAML" for a missing file too; both loaders (CaseLoadError, DoubleCheckLoadError) put the caller''s absolute path in messages, so relativise it'
   accept: an unmatched verdict id appears in the report; a missing file and a bad YAML file give different messages; no absolute path in either loader's error text; evals tests green
   deps:
   - '7.1'
