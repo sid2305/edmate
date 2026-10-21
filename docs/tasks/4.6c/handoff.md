@@ -37,6 +37,13 @@ Evidence:
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/evals...` → `Tasks: 14 successful, 14 total`. Harness `5000 passed`, evals `935 passed` (the 2 pending-block tests are gone and the case now runs in the suite's `it.each`), contracts `348 passed`, config `42 passed`. Coverage: `lockedMatch.ts 100 | 100 | 100 | 100`.
 
 ## Decisions
+
+### 21 Oct 2026 · 4.6c lockedLeak follow-ups (markdown in-word padding, post-guard fail-closed) · decided by lead · risk: high
+
+- Decided: merge 4.6c. The rendered reading now pads markdown emphasis inside words (looking past invisible characters on both sides). Any post-guard failure (timeout, error or invalid result) counts as a locked trip and stops the session. The three B-19 cases join evals/suites/locked as sid2305, and the lead signs locked-loops-md-inword-bold-en (`reviewed_by: lead`, MVP-first). The suite now has 38 cases, and both mutations fail all of them.
+- Why: it closes the 4.6b re-review gaps on a guardrail path. code-reviewer (opus) found an invisible-character bypass, which fix round 1 closed and the same reviewer confirmed. Two older MEDIUM gaps (combining marks inside words, missing invisible named entities) are deferred to 4.6d under MVP-first.
+- risk: high
+
 - Fix round 1: the in-word emphasis check looks past every `\p{Cf}` character on both sides of the run (not only the zero-width padding Edmate itself adds), because none of them stops CommonMark rendering the run as emphasis. risk: medium
 - Fix round 1: a single `~` stays a known miss and is not padded. Padding it would also join ordinary `~` uses such as `a~b`. risk: low
 - Fix round 1: `locked-loops-md-inword-bold-en` is signed `reviewed_by: lead` under the MVP-first rule (20 Oct 2026). This replaces the earlier decision to keep it pending. risk: low
