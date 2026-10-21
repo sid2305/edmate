@@ -71,3 +71,7 @@ None yet (this is the plan; the handoff logs the actual `risk: high` entry, and 
 3. "Standing rules" is a hand-picked list; the script only checks that each bullet cites a real `risk: high` heading.
 4. Cite only real log entries or review files. If an example incident has no real source, drop it; never invent a citation.
 Build in two fresh builders: Phase A, then Phase B (with Phase A's handoff).
+
+## Lead answers after Phase A (21 Oct 2026)
+5. Malformed-heading rule: accept Phase A's narrower rule (the real log has blocks with two entries and no `---` between them).
+6. Digest scope: (a) every entry decided by the human (heading says "decided by you" or "decided by human"), at any risk level; plus (b) `risk: high` entries "decided by lead" whose heading is not a routine "<id> merge:" entry. Builder, tdd-guide, planner and team sub-headings are left out. Each entry is ONE line: date, heading text and the first sentence of its `Decided:` line (or of its first bullet), newest first. A superseded entry is shown struck through or tagged "(superseded by …)". Aim for about 110 lines; the test pins the filter, not the count.
