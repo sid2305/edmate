@@ -10,6 +10,101 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.10 Ask the teacher (repositories, risky path) · decided by lead · risk: high
+
+- Decided: merge 5.10. Questions are grouped inside `open` (lexical; same teacher and agent; `findSimilar` stays `[]`). The teacher's answer writes the note, the eval case, the status, the thread messages and the notifications in one teacher-scoped transaction that writes into the asking students' own open sessions. New tables `teacher_eval_cases` and `notifications` (migration 0018, additive). The acceptance test runs on a 10x slack clock. The review's MEDIUM deadlock ordering and the LOW items go to 5.10b.
+- Why: the plan's planned decision. code-reviewer (opus), typescript-reviewer, database-reviewer and security-reviewer found no isolation problem; the one HIGH (real clock) is fixed and re-checked.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 5.10 wontfix: one non-null assertion in teacher-questions.ts · decided by lead · risk: low
+
+- Decided: keep the single `existing!` in packages/db/src/repositories/teacher-questions.ts:235 (typescript-reviewer, LOW).
+- Why: the comment above it shows the insert-or-collide WHERE always matches one row; an explicit throw would be unreachable code.
+- risk: low
+
+Details (builder):
+
+---
+
+### 21 Oct 2026 · Teacher-note validation lives in the shared harness helper · decided by tdd-guide
+Decided: `teacherNote.ts` also exports `teacherNoteParts` and `TEACHER_NOTE_PART_MAX` (the turn text limit, counted in characters), and `teacherNoteText` / `teacherNoteSource` throw a fixed-text `HarnessError` on bad input. The db adapter and the memory double validate through it.
+Why: one place decides what a usable note is, as well as its text and citation, so the two stores cannot drift (lead answer Q3), and no error carries the teacher's or student's words.
+risk: low
+
+---
+
+### 21 Oct 2026 · The note's date locator is the UTC day · decided by tdd-guide
+Decided: `teacherNoteSource` takes an ISO string or epoch ms and uses the UTC calendar day (`YYYY-MM-DD`) as the locator; rolled-over or malformed dates are rejected.
+Why: a deterministic, locale-free date; no market's time zone is assumed in the harness.
+risk: low
+
+---
+
+### 21 Oct 2026 · The memory CorrectionStore can check module ownership · decided by tdd-guide
+Decided: `memoryCorrectionStore` takes an optional `moduleOwners` map and rejects an unknown or another teacher's module with `not_found`, writing nothing.
+Why: lets the memory loop show the same refusal the db adapter gives, without the double needing a module store.
+risk: low
+
+---
+
+### 21 Oct 2026 · `group_id` backfills to each row's own id, before Phase C groups anything · decided by tdd-guide
+Decided: migration `0018` backfills every pre-existing `teacher_questions.group_id` (nullable since 0001, never set) to its own `id`, so a question is always its own group's oldest member until a later, similar question joins it in Phase C.
+Why: Phase C's grouping logic can assume `group_id` is never null without a special case for old rows.
+risk: low
+
+---
+
+### 21 Oct 2026 · `notifications` also gets a lone `teacher_id` index · decided by tdd-guide
+Decided: added `notifications_teacher_id_idx` beyond the plan's named composite index.
+Why: the repo-wide invariant that every teacher-owned table has an index led by `teacher_id` (enforced by `test/schema.test.ts`) applies here too.
+risk: low
+
+---
+
+### 21 Oct 2026 · One member per distinct student stands for the group, earliest first · decided by tdd-guide
+Decided: when `answer` delivers a message and a notification, it picks one member per distinct student among the group being answered — the earliest (then lowest id) of that student's own member rows — rather than every member.
+Why: the plan calls for "one message, one notification per distinct student", not per question; a student who asked two near-duplicate questions in the same group should get one reply, not two.
+risk: low
+
+---
+
+### 21 Oct 2026 · The group's message insert picks the newest open session, not "the" one · decided by tdd-guide
+Decided: `answer`'s message insert adds `order by created_at desc, id desc limit 1` to the open-session lookup (`teacher_id`/`student_id`/`agent_id` match, `ended_at is null`), instead of assuming at most one row matches.
+Why: nothing in the schema stops two sessions for the same triple being open at once (found by the isolation suite's own fixtures); without the cap, the insert-select would try to write one generated message id twice and fail the primary key. Picking the newest is a deterministic, harmless choice among an already-unexpected state, not a new invariant.
+risk: low
+
+---
+
+### 21 Oct 2026 · Isolation fixtures for `answer` and `notifications` are pre-made, not inline · decided by tdd-guide
+Decided: `teacherQuestions.answer`'s and `notifications.markRead`'s cross-scope CASES entries use fixed questions/notifications created once in `beforeAll`, instead of opening a question (or inserting a notification) inside the `attempt`/`mismatches` closure itself.
+Why: `expectFailsClosed`'s whole-database snapshot check covers the entire closure passed to it, including any setup inside it; a closure that both arranges state and performs the (correctly failing) call under test would otherwise be flagged as "writing something" even though the operation under test wrote nothing. This matches the file's existing `delDoc`/`repDoc`/`isoDoc` convention for other write cases.
+risk: low
+
+---
+
+### 21 Oct 2026 · Two pre-existing exact-count assertions loosened to shape/membership · decided by tdd-guide
+Decided: `listForTeacher never returns studentId` and `round-trips optional fields: ...` no longer assert an empty or single-element `answered` list for a teacher; they assert the known row is present (or absent) and that no row leaks `studentId`.
+Why: before Phase C, `answer` didn't exist, so no `teacher_questions` row was ever `answered` and the exact-count assertions were trivially true; once `answer` is real, other parts of the same shared isolation suite legitimately answer questions for the same teachers, so an exact count is no longer a meaningful invariant — whether the leak and filter rules hold is.
+risk: low
+
+---
+
+### 21 Oct 2026 · Postgres-backed acceptance tests need a real clock, not `virtualClock()` · decided by tdd-guide
+Decided: `test/ask-teacher-loop.int.test.ts` drives `runTurn` with a small real clock (real `setTimeout`/`Date.now`) implementing the testing package's `VirtualClock` shape, instead of `virtualClock()` + `driveTurn()`.
+Why: `virtualClock()`'s `drive()` fires a step's timeout as soon as its own microtask queue goes quiet; a step making a real Postgres round trip never settles within that quiet window (real I/O only resolves through the event loop's poll phase, which pure microtask flushing never reaches), so every real-db step timed out at once regardless of actual elapsed time. A real clock's `sleep` races real elapsed time, as production does; `virtualClock()` stays correct and necessary for the harness's own in-memory-port tests, which this decision does not change.
+risk: low
+
+---
+
+### 21 Oct 2026 · 5.10 as a whole: a planned `risk: high` decision now that all four phases are done · decided by tdd-guide
+Decided (plan's own wording, logged now that the grouping and the answer transaction it describes are both built and tested): "5.10 Ask the teacher: questions grouped inside `open` (lexical, same teacher and agent, `findSimilar` stays `[]`); the teacher's answer writes the note, eval case, status, thread messages and notifications in one teacher-scoped transaction that writes into the asking students' open sessions; new tables `teacher_eval_cases` and `notifications`."
+Why: `packages/db/src/repositories/**` is a risk-paths group ("access filter / money / isolation") that needs the security-reviewer's sign-off at merge, per the plan's own Phase A/B/C "Risky paths touched" and "Decisions (draft)" sections; Phase D adds no new risky-path file, so this closes out the one whole-task decision the plan asked the lead to log at merge.
+risk: high
+
+---
+
 ### 21 Oct 2026 · 3.9d apps/worker real-clock turn test flake · decided by lead · risk: low
 
 - Decided: merge 3.9d. The worker integration tests that run full turns (safetyEvent, alert, commit) use a local 10x `slackClock`, as 3.9b did for apps/cli. A slow-runner test reproduces the CI failure without the slack and passes with it. Production budgets and clocks are unchanged.

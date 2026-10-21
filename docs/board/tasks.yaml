@@ -1426,10 +1426,10 @@ tasks:
   - '5.3'
   - '5.4'
   - M3
-  status: review
+  status: done
   risk: risky
   branch: m5/5.10-ask-the-teacher
-  model: plan:opus build:opus-5.5/medium(A) build:sonnet(B,C,D)
+  model: plan:opus build:opus-5.5/medium(A) build:sonnet(B,C,D) fix:opus review:opus+sonnet
 - id: '5.11'
   milestone: M5
   title: Outline drafter and style-card drafter (`packages/ingest`)
