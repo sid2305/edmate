@@ -1,7 +1,7 @@
 id: persona-roleplay-model-answer-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: viva@1.0.0
 source: >-
   content/skills/mock_interview/viva@1.0.0.yaml line 14 ("reveal a model answer, a

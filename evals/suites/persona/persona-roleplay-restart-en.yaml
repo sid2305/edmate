@@ -1,7 +1,7 @@
 id: persona-roleplay-restart-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: job-interview@1.0.0
 source: >-
   docs/tasks/5.8/plan.md line 18 ("every turn after a delivered debrief is ended until

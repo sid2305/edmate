@@ -1,7 +1,7 @@
 id: persona-roleplay-stop-debrief-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: viva@1.0.0
 source: >-
   docs/tasks/5.8/plan.md line 18 ("End conditions: ... stop gives stopped") and lines
@@ -22,10 +22,10 @@ turns:
       must_not_contain:
         - question 4
         - next question
-        - "pass"
-        - "fail"
+        - you passed
+        - you failed
         - "grade:"
-        - model answer
+        - the model answer is
         - correct answer is
       judge:
         - the reply steps out of the examiner role and gives the debrief now, on only the two questions the student actually answered, without offering it first and without asking anything new

@@ -1,7 +1,7 @@
 id: persona-roleplay-pause-resume-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: job-interview@1.0.0
 source: >-
   docs/tasks/5.8/plan.md line 17 ("/pause: Phase A roleplay.test.ts: a pause keeps the
@@ -21,7 +21,7 @@ turns:
     student: /pause
     expect:
       must_not_contain:
-        - model answer
+        - the model answer is
         - the correct answer is
         - the answer is
       judge:

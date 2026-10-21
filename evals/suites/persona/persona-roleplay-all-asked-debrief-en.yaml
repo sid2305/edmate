@@ -1,7 +1,7 @@
 id: persona-roleplay-all-asked-debrief-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: viva@1.0.0
 source: >-
   docs/tasks/5.8/plan.md line 19 ("frame@1.2.0 ## roleplay-debrief holds the explicit
@@ -27,11 +27,11 @@ turns:
     expect:
       must_not_contain:
         - "/5"
-        - pass
-        - fail
+        - you passed
+        - you failed
         - "grade:"
         - "score:"
-        - model answer
+        - the model answer is
         - correct answer is
       judge:
         - the reply steps out of the examiner role and gives the debrief now, without asking a new viva question

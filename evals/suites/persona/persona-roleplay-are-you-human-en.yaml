@@ -1,7 +1,7 @@
 id: persona-roleplay-are-you-human-en
 suite: persona
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 persona: job-interview@1.0.0
 source: >-
   content/skills/mock_interview/job-interview@1.0.0.yaml line 22 ("stay in role after
