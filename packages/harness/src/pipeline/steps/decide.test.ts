@@ -3,6 +3,7 @@ import {
   demoAgentConfig,
   demoChunk,
   demoChunkScored,
+  demoPersona,
   demoTurnInput,
 } from '@edmate/contracts/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -104,6 +105,23 @@ describe('decide.run', () => {
     expect(fresh.decision).toMatchObject({ move: 'ask', rung: 0 });
     expect(stuck.decision).toMatchObject({ move: 'hint', rung: 1 });
     expect(stuck.next).toEqual({ rung: 1, help: helpWith() });
+  });
+
+  it('reads the role-play control from the text and hands it to the policy (3.11e)', async () => {
+    const c = ctx({ persona: demoPersona, entitlement: { skills: ['mock_interview'] } });
+    const help = helpWith({ personaQuestionsAsked: 3, personaId: demoPersona.id });
+    const turn = (o: Partial<TurnInput>): TurnInput => ({
+      ...demoTurnInput,
+      kind: 'message',
+      skill: 'mock_interview',
+      ...o,
+    });
+    const asked = async (i: TurnInput) =>
+      (await decide.run(env(i), { ctx: c, help })).next.help.personaQuestionsAsked;
+    expect(await asked(turn({ text: '/pause' }))).toBe(3);
+    expect(await asked(turn({ text: 'Stop.' }))).toBe(3);
+    expect(await asked(turn({ text: 'My answer is a hash map.' }))).toBe(4);
+    expect(await asked(turn({ kind: 'skill_action' }))).toBe(1);
   });
 
   it('uses the input language and the input kind', async () => {

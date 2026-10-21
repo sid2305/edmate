@@ -6,6 +6,7 @@ import type { TurnContext } from '@edmate/contracts';
 import { composeSystemPrompt } from '../../pedagogy/compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from '../../pedagogy/policy.js';
 import { resolvePromptPackSet } from '../../pedagogy/promptPacks.js';
+import { rolePlayControl } from '../../pedagogy/skills.js';
 import { PilotLanguageClamped } from '../errors.js';
 import { noTools, policyTools } from '../tools.js';
 import type { DecideResult, StepEnv, Steps } from '../types.js';
@@ -37,7 +38,19 @@ export const decide: Steps['decide'] = {
     new Promise<DecideResult>((resolve) => {
       // Only the entitled tools reach the policy (access rule 5); generate checks them again.
       const tools = policyTools(env.deps.tools ?? noTools, ctx.entitlement);
-      resolve(decided(env, ctx, decidePolicy({ ctx, turn: env.input, help, tools })));
+      // The role-play control (3.11e) is read here, so the policy never sees the text.
+      const control = rolePlayControl(env.input);
+      const turn = {
+        kind: env.input.kind,
+        ...(env.input.skill === undefined ? {} : { skill: env.input.skill }),
+      };
+      resolve(
+        decided(
+          env,
+          ctx,
+          decidePolicy({ ctx, turn, help, tools, ...(control === undefined ? {} : { control }) }),
+        ),
+      );
     }),
   // The `ask` fallback (`redirect` for distress) teaches nothing, so it shows no material: a
   // context that made `run` throw still gives a prompt with no retrieved text in it.

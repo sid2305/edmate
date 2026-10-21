@@ -166,8 +166,14 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
         persona_style: fenced(p.style),
         persona_must_not: fenced(p.mustNot.join('; ')),
         persona_end_after: String(p.endAfterQuestions),
-        // The server's count, already including this turn (3.11d): never the model's own.
-        questions_asked: String(personaQuestionsAsked(policy.next.help)),
+        // The server's count, already including this turn (3.11d): never the model's own. Shown
+        // within [1, M] (3.11e), so "question 0 of M" and "question M+1 of M" never appear.
+        questions_asked: String(
+          Math.min(
+            Math.max(1, personaQuestionsAsked(policy.next.help)),
+            Math.max(1, p.endAfterQuestions),
+          ),
+        ),
       }),
     );
   }
