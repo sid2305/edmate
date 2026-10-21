@@ -181,22 +181,11 @@ Status: DONE. Branch `m5/5.8-roleplay` (built on `work-5.8f`).
 - The existing distress tests (policy, runner, fallback) all pass unchanged.
 
 ### Judge lines vs real behaviour
-- `persona-roleplay-are-you-human-en` turn 2: the router labels it `meta`, so the real pipeline redirects with no persona section in the prompt. Judge line 2 (step out, no next question) fits the redirect. Judge line 1 asks for "an AI playing the interviewer role in a practice exercise"; the redirect prompt only says "AI tutor ... not a human", with no mention of the interviewer role, so a live reply may not name the role. The case was not edited.
+- `persona-roleplay-are-you-human-en` turn 2: the router labels it `meta`, so the real pipeline redirects with no persona section in the prompt. Judge line 2 (step out, no next question) fits the redirect. Judge line 1 asks for "an AI playing the interviewer role in a practice exercise"; the redirect prompt only says "AI tutor ... not a human", with no mention of the interviewer role, so a live reply may not name the role. The case was not edited. Lead edit at merge: judge line 1 now asks only that the reply plainly says it is an AI (an AI tutor or an AI running the practice) and does not claim to be human; signed `lead`.
 
-### Decisions
-### Misuse stays ahead of a role-play control (risk: medium)
-`/pause` may be followed by any text, so a control word must never carry a misuse turn past its redirect. A bare "stop" labelled misuse therefore does not stop the role-play; the next turn can.
-### Only an active role-play lets a control skip the meta/off_topic redirect (risk: low)
-Active means the persona id matches and the stored phase is not `ended`. A start with no active role-play that the router labels meta or off_topic still redirects (unchanged).
-### The are-you-human fixture keeps `on_task` plus a separate labelled test (risk: low)
-The per-case replay checks the composed role-play state; the real routed outcome is pinned in its own test, so the eval case's meaning is unchanged.
+Decisions: see `## Decisions` (fix round 1).
 
 Tool calls used: 29 (fix round 1).
-
-## Decisions
-- **`reviewed_by: pending` on all ten new cases, not flipped here** — risk: low. Matches the plan's Phase D text and the 3.11e flow; `src/suites.test.ts`'s real-case check (4.0c, on by default) therefore fails until the lead reads and flips each to `lead`, same as every other pending suite seed. Flagged here rather than silently left for the lead to discover.
-- **`package: paid` on all ten** — risk: low. Neither demo package (`free.yaml`, `paid.yaml`) lists `mock_interview` in its skills yet (5.8a wiring is separate); `paid` was picked for consistency with the `feedback` suite's cases, which are also gated on a skill not yet read back by `suites.test.ts`'s package check (it only checks the name is a known demo package, not skill membership).
-- **No `packages/evals/src/rolePlayFixtures.test.ts` in this part** — risk: low. The prompt scoped this hand-off to the eval cases only ("Phase D, part 1"); the fixtures test (plan, Phase D) is left to a follow-up pass. `runner.ts`, `schema.ts` and `suites.ts` were not touched; the schema already supports everything the cases need (`skill`, `persona`, `expect.judge`/`must_not_contain`).
 
 ## Phase D (fixtures test)
 
@@ -237,12 +226,18 @@ corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --filter=@edm
 python3 .githooks/secret-scan.py --all → exit 0, no output
 ```
 
-### Decisions
-- **In persona eval cases, turn 0 is the start** (risk: low). The case schema has no turn `kind`, and the turn-level `skill: mock_interview` on every turn only selects the skill (`selectSkill`). It never marks a start: in the harness a start is a `skill_action` turn (`rolePlayControl`), and answers are `message` turns. The runner passes `turnIndex` to the agent, so an eval agent (CLI eval wiring, 5.8a) sends turn 0 as `skill_action` and every later turn as `message`. The fixtures test does the same. No schema or runner change was needed.
-- **The test mirrors `rolePlayControl` locally** (risk: low; superseded in fix round 1: now exported and imported). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
-- **`mock_interview` is added to the paid entitlement in the test** (risk: low). `content/demo-teacher/packages/paid.yaml` does not list `mock_interview` yet (Phase D part 1 decision; 5.8a wiring). A live `edmate eval` run of these cases on the paid package would therefore not reach the role-play until the package lists the skill.
+Decisions: see `## Decisions` (Phase D fixtures test).
 
 ## Decisions
+
+### 21 Oct 2026 · 5.8 merge: role-play engine (ADR-0013, frame@1.2.0, set@1.3.0, persona library) · decided by lead · risk: high
+- Decided: merge 5.8. ADR-0013 (role-play state: `personaPhase`, start, `/pause`, `stop`, debrief, ended) is accepted as built. `frame@1.2.0` and `set@1.3.0` ship with `reviewed_by: pending`, so they are not served until the human signs them (B-38). The persona library serves only signed templates. The ten `persona-roleplay-*` eval cases are signed by the lead (MVP first). A role-play control (start, `/pause`, `stop`) in an active role-play now goes ahead of the off_topic/meta redirect, after distress, entitlement and misuse.
+- Why: architect (opus), security-reviewer (sonnet), code-reviewer (sonnet) and typescript-reviewer (opus) all approve; the fix round's four findings are verified by the opus typescript-reviewer; no `packages/contracts` change; harness 5217, evals 1005 and content 503 tests pass. The open coverage-gate questions (B-37 q6 to q9, including `/pause` with extra text and `ended` turns) stay lead defaults until the human answers; follow-ups are in 5.8b.
+- risk: high (ADR, prompt-pack behaviour, pedagogy and the coverage-gate rule).
+
+Details (builder):
+
+Phase A to C:
 - **Role-play phases and `personaPhase`** — risk: high. The ADR-0013 §1 table: a stored `personaPhase?: 'paused' | 'ended'` plus the existing count and id; a start or persona switch opens question 1; `/pause` holds the question; `stop` goes straight to the debrief (lead default, pending B-37) and ends; the answer to question M' debriefs and ends; every later turn is `ended` until a new start; a follow-up question from the interviewer counts toward M. The move stays `ask` in every phase.
 - **Resume fix (intended change, every set)** — risk: medium. The turn after `/pause` no longer adds one: a legacy-frame session shows "question N of M" again on that turn where it used to show N + 1. A pre-5.8 trace of a resume turn re-decides to N.
 - **Post-stop count (intended change, every set)** — risk: medium. After a `stop` with fewer than M questions asked, every later turn is `ended` and keeps the count: a legacy-frame session keeps showing "question N of M" where it used to rise towards M. Pinned by `roleplay.legacy.test.ts`.
@@ -263,7 +258,23 @@ python3 .githooks/secret-scan.py --all → exit 0, no output
 - **A template whose file slug differs from its `id` is an issue** — risk: low. Lead answer; the persona test fixtures' ids were renamed to match their files.
 - **Role-play snapshots only for new-form sets** — risk: low. Sets 1.1.0 and 1.2.0 keep their suites and entries; 1.3.0 adds 16 role-play cases (8 per persona).
 
+Phase D (cases):
+- **`reviewed_by: pending` on all ten new cases, not flipped here** — risk: low. Matches the plan's Phase D text and the 3.11e flow; `src/suites.test.ts`'s real-case check (4.0c, on by default) therefore fails until the lead reads and flips each to `lead`, same as every other pending suite seed. Flagged here rather than silently left for the lead to discover.
+- **`package: paid` on all ten** — risk: low. Neither demo package (`free.yaml`, `paid.yaml`) lists `mock_interview` in its skills yet (5.8a wiring is separate); `paid` was picked for consistency with the `feedback` suite's cases, which are also gated on a skill not yet read back by `suites.test.ts`'s package check (it only checks the name is a known demo package, not skill membership).
+- **No `packages/evals/src/rolePlayFixtures.test.ts` in this part** — risk: low. The prompt scoped this hand-off to the eval cases only ("Phase D, part 1"); the fixtures test (plan, Phase D) is left to a follow-up pass. `runner.ts`, `schema.ts` and `suites.ts` were not touched; the schema already supports everything the cases need (`skill`, `persona`, `expect.judge`/`must_not_contain`).
+
+Phase D (fixtures test):
+- **In persona eval cases, turn 0 is the start** (risk: low). The case schema has no turn `kind`, and the turn-level `skill: mock_interview` on every turn only selects the skill (`selectSkill`). It never marks a start: in the harness a start is a `skill_action` turn (`rolePlayControl`), and answers are `message` turns. The runner passes `turnIndex` to the agent, so an eval agent (CLI eval wiring, 5.8a) sends turn 0 as `skill_action` and every later turn as `message`. The fixtures test does the same. No schema or runner change was needed.
+- **The test mirrors `rolePlayControl` locally** (risk: low; superseded in fix round 1: now exported and imported). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
+- **`mock_interview` is added to the paid entitlement in the test** (risk: low). `content/demo-teacher/packages/paid.yaml` does not list `mock_interview` yet (Phase D part 1 decision; 5.8a wiring). A live `edmate eval` run of these cases on the paid package would therefore not reach the role-play until the package lists the skill.
+
+Fix round 1:
+- **Misuse stays ahead of a role-play control (risk: medium)** — `/pause` may be followed by any text, so a control word must never carry a misuse turn past its redirect. A bare "stop" labelled misuse therefore does not stop the role-play; the next turn can.
+- **Only an active role-play lets a control skip the meta/off_topic redirect (risk: low)** — Active means the persona id matches and the stored phase is not `ended`. A start with no active role-play that the router labels meta or off_topic still redirects (unchanged).
+- **The are-you-human fixture keeps `on_task` plus a separate labelled test (risk: low)** — The per-case replay checks the composed role-play state; the real routed outcome is pinned in its own test, so the eval case's meaning is unchanged.
+
 ## Questions for the human
+(Moved to `.claude/blockers.md` B-37 question 7; lead default 7a until answered.)
 - **Debrief grounding (ADR-0013 point 6).** No judge change or exemption was needed: a debrief that keeps to the teacher's material passes the grounding judge. But a debrief that comments on delivery ("you spoke clearly") or a stop on an uncovered topic is replaced by the ask-teacher reply, because those claims are not in the material. Is that acceptable for the pilot (Phase C prose keeps debrief feedback to the material), or should delivery feedback get its own rule? Changing it would be a judge-prompt change under an ADR.
 
 Tool calls used: about 80 (Phase B).
