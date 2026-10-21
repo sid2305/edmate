@@ -10,6 +10,11 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · Thin teacher-upload + student-chat slice starts before the harness exit gate · decided by human
+Decided: start 8.1 (onboarding), 8.2 (upload centre), 9.1 (app shell) and 9.4 (chat) now with minimal scope (B-28, answer a). Their GATE dependency is waived for the build; GATE stays a pre-pilot check, so nothing reaches real students before it passes.
+Why: the MVP-first order puts a thin slice right after 5.6, and it is the first time a real teacher and student can use the product end to end.
+risk: high
+
 ### 20 Oct 2026 · 5.11a duck-typed GatewayError shape · decided by tdd-guide
 Decided: `classifyGatewayFailure` checks `e instanceof Error && 'code' in e && 'retryable' in e &&
 typeof e.retryable === 'boolean'`, then validates `code` with `ErrorCodeSchema.safeParse`, rather
