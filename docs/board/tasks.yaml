@@ -1640,9 +1640,29 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: review
+  status: done
   branch: m7/7.7-trace-health
-  model: plan:sonnet build:sonnet(A,B)
+  model: plan:sonnet build:sonnet(A,B) review:sonnet x4
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: '7.8'
   milestone: M7
   title: 'Teaching scorecard: per-agent pass rates for hints-before-answers, locked content and accuracy, published with each agent version'

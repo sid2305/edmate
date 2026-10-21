@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.7 turn traces and health metrics (repositories, risky path) · decided by lead · risk: high
+- Decided: merge 7.7. Traces record first-token time (TraceBuilder.markElapsed, first token only); computeHealthMetrics gives p50/p95 latency per step and for first token, plus error and guard rates; turnTracesRepo.listForTeacherSince reads one teacher's traces over a window (join on sessions.teacher_id, limit 1–200). No new index and no report surface yet (7.7a). trace.ts:24 single literal key for markElapsed is wontfix until a second derived metric exists.
+- Why: the plan's acceptance is met; security-reviewer and database-reviewer approved the new risky repository read with an isolation CASE proving another teacher's traces never appear; code and TS reviewers approved.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.7 first-token capture point · decided by tdd-guide · risk: low
+- Decided: `firstToken` is marked in `Turn.emitter()` on the first `token`-type event only (not
+  `skill`), using elapsed ms from `startedAtMs` (set at the very first line of `run()`) to
+  `deps.clock.now()` at emit time; `TraceBuilder.markElapsed` is idempotent (first call wins), so a
+  cleared-and-retried stream doesn't double-count or get overwritten by a later attempt's first
+  token.
+- Why: matches the plan's design exactly (PRD S5 "first words of a reply"); the idempotent map
+  keeps the number meaningful as an operational SLA (time until the student saw *anything*) even
+  across a retry.
+- risk: low — additive, no existing step budget or behaviour changed; only a new derived entry
+  appended to `trace.steps`, which the schema already allows as a plain string.
+
+---
+
+### 21 Oct 2026 · 7.7 collateral exact-step-list fixes · decided by tdd-guide · risk: low
+- Decided: beyond the plan's named files (`runner.test.ts` ~L119, `trace.test.ts` ~L42/L64), also
+  fixed `policies.test.ts`'s `commit` describe block, which asserted `steps.at(-1)` (position-
+  dependent) rather than `.find(name === 'commit')`; `firstToken` now sorts after `commit` in the
+  array when both are present, which broke that one assertion. Changed it to a name-based lookup
+  to match the convention used everywhere else in that file.
+- Why: the plan's audit found only `.find()`/`.map(name).toEqual(exact list)` patterns per the
+  grep, but this one `.at(-1)` position lookup slipped through that search; fixing it the same way
+  (name-based, not position-based) keeps the test meaningful without depending on `steps` array
+  ordering, which is an implementation detail.
+- risk: low — test-only change, no production behaviour affected.
+
+---
+
 ### 21 Oct 2026 · 6.1 Topic map cross-references are a planner design choice · decided by tdd-guide · risk: low
 - Decided: `CourseOutlineTopicInput.prerequisiteTopicIds` is the cross-reference `buildTopicMap`
   validates for "unknown or cyclic"; `skillsBuilt` stays free text, unvalidated against any
