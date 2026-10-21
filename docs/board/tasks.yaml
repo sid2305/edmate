@@ -1450,7 +1450,7 @@ tasks:
   - '3.11'
   - '5.5'
   - M3
-  status: running
+  status: review
   risk: risky
   branch: m5/5.8-roleplay
   model: plan:opus build:opus x3 eval-author:sonnet
@@ -2175,7 +2175,9 @@ tasks:
   model: null
 - id: 6.2a
   milestone: M13
-  title: '6.2 review follow-ups: before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s evidence row having no explicit ts'
+  title: '6.2 review follow-ups: before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long
+    unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s
+    evidence row having no explicit ts'
   accept: rebuild time for a long history is bounded and tested; no non-null assertions left in learner.ts.
   deps:
   - '6.2'
