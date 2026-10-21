@@ -112,6 +112,24 @@ class Collect(MetricsCase):
         self.assertEqual(findings["by_status"]["fixed"], 2)
         self.assertEqual(findings["by_status"]["open"], 1)
 
+    def test_findings_with_multiword_status_bracket(self):
+        (self.root / "docs" / "tasks" / TASK_ID / "review.md").write_text(
+            "# review\n- [LOW] [deferred 0.13a] a.ts:1 -- x\n- [MEDIUM] [fixed] b.ts:2 -- y\n"
+        )
+        findings = self.collect()["findings"]
+        self.assertEqual(findings["total"], 2)
+        self.assertEqual(findings["by_severity"], {"LOW": 1, "MEDIUM": 1})
+        self.assertEqual(findings["by_status"]["deferred"], 1)
+        self.assertEqual(findings["by_status"]["fixed"], 1)
+
+    def test_skips_symlinked_transcripts(self):
+        outside = Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        shutil.copy(FIXTURE, outside / "elsewhere.jsonl")
+        (self.transcripts / "link.jsonl").symlink_to(outside / "elsewhere.jsonl")
+        entries = list(metrics.iter_entries(self.transcripts, BRANCH, TASK_ID))
+        self.assertEqual(len(entries), 4)
+
     def test_human_questions_zero_without_blockers_file(self):
         self.assertEqual(self.collect()["human_questions"], 0)
 
@@ -125,6 +143,36 @@ class Collect(MetricsCase):
     def test_no_transcript_text_leaks(self):
         result = self.collect()
         self.assertNotIn(MARKER, json.dumps(result))
+
+
+class CwdBoundary(unittest.TestCase):
+    """Task "0.1" must not pick up a cwd for "0.16", and the reverse."""
+
+    def entries(self, task_id, branch, lines):
+        with tempfile.TemporaryDirectory(prefix="edmate-metrics-") as tmp:
+            (Path(tmp) / "s.jsonl").write_text("\n".join(json.dumps(x) for x in lines))
+            return list(metrics.iter_entries(tmp, branch, task_id))
+
+    def test_short_id_does_not_match_longer_id_cwd(self):
+        lines = [{"gitBranch": None, "cwd": "/repo/.claude/worktrees/agent-0.16-work"}]
+        self.assertEqual(self.entries("0.1", "m0/0.1-x", lines), [])
+
+    def test_long_id_does_not_match_shorter_id_cwd(self):
+        lines = [{"gitBranch": None, "cwd": "/repo/.claude/worktrees/agent-0.1-work"}]
+        self.assertEqual(self.entries("0.16", "m0/0.16-x", lines), [])
+
+    def test_id_matches_at_boundaries(self):
+        lines = [
+            {"gitBranch": None, "cwd": "/repo/wt/agent-0.1-work"},
+            {"gitBranch": None, "cwd": "/repo/wt/0.1"},
+            {"gitBranch": None, "cwd": "/repo/wt/x_0.1/y"},
+            {"gitBranch": None, "cwd": "/repo/wt/v10.1"},
+        ]
+        self.assertEqual(len(self.entries("0.1", "m0/0.1-x", lines)), 3)
+
+    def test_git_branch_is_exact(self):
+        lines = [{"gitBranch": "m0/0.16-x"}, {"gitBranch": "m0/0.1-x"}]
+        self.assertEqual(len(self.entries("0.1", "m0/0.1-x", lines)), 1)
 
 
 if __name__ == "__main__":

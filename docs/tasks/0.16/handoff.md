@@ -38,7 +38,39 @@ Status: DONE
   `gitBranch`) by reading one real local transcript file under this session's own
   `~/.claude/projects/...` (read-only; nothing from it was copied into the repo or fixture).
 
+## Fix round 1
+
+All 6 review findings are fixed, and each has a test that was written first and failed first.
+
+1. [HIGH] `metrics.py` `FINDING_LINE` now matches any status bracket (`\[([^\]]+)\]`) and buckets
+   by its first word, so `- [LOW] [deferred 0.13a] ...` counts as `deferred`. Test:
+   `test_findings_with_multiword_status_bracket`.
+2. [HIGH] `iter_entries`: the `cwd` fallback now matches the task id only when it is bounded by
+   `/`, `-`, `_` or the string ends, so `0.1` and `0.16` never match each other. `gitBranch` is
+   still an exact equality match, which is stricter than a boundary match. Tests: `CwdBoundary`
+   (4 cases).
+3. [MEDIUM] `board.py set --metrics` accepts only `metrics.collect()`'s 10 known keys. Values
+   may be numbers, strings of 64 characters or fewer, or dicts/lists of those (at most 20 items,
+   at most 2 levels deep). Anything else exits 1 and leaves the board unchanged. Tests:
+   `test_set_metrics_accepts_full_collect_shape` and `test_set_metrics_rejects_*` (4 cases).
+4. [MEDIUM] `iter_entries` skips symlinked `*.jsonl` files and anything that is not a regular
+   file. Test: `test_skips_symlinked_transcripts`.
+5. [LOW] `closeout.py` prints only `type(e).__name__` when metrics collection fails. Test:
+   `test_metrics_error_prints_only_exception_type`. It forces an `IsADirectoryError`, then
+   checks that neither the path nor `review.md` appears in the output.
+6. [LOW] `_load_jsonl` now reads the file one line at a time through an open file handle
+   instead of `read_text()`.
+
+Evidence:
+- `python3 -m unittest discover .claude/tests` → `Ran 185 tests ... OK`
+- `python3 .githooks/secret-scan.py --all` → clean
+
 ## Decisions
+
+### 21 Oct 2026 · 0.16 board metrics allowlist limits · decided by build-error-resolver · risk: low
+- Decided: `board.py set --metrics` accepts only the keys `metrics.collect()` writes. Strings may be at most 64 characters, dicts and lists at most 20 items and 2 levels deep, and booleans and nulls are refused. Symlinked transcript files are skipped, not resolved.
+- Why: these limits fit everything `collect()` produces (for example findings → by_status → number) and keep free text or paths off the public board. Skipping symlinks is simpler than resolving them and checking containment, and Claude Code does not write symlinked transcripts.
+- risk: low
 
 ### 21 Oct 2026 · 0.16 metrics table default grouping · decided by tdd-guide · risk: low
 Decided: `board.py metrics` groups by `--by risk` (risky/expert/none) by default, with

@@ -168,7 +168,8 @@ def main(argv):
             tmp_metrics_path.write_text(json.dumps(data))
             metrics_args = ["--metrics", str(tmp_metrics_path)]
         except Exception as e:
-            print(f"could not collect metrics for {task_id}: {e}")
+            # type name only: str(e) can hold a home-directory path
+            print(f"could not collect metrics for {task_id}: {type(e).__name__}")
 
     code, out = sh(root, "python3", board_py, "set", task_id, "done", *metrics_args)
     print(out)

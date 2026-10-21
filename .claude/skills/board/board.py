@@ -132,6 +132,53 @@ def cmd_status(board):
     print("open decisions:", ", ".join(pending) or "none")
 
 
+# Keys metrics.collect() writes; `set --metrics` refuses anything else so the public board can
+# only ever hold numbers and short strings (no transcript text or paths).
+METRICS_KEYS = {"tool_calls", "tokens_in", "tokens_out", "cache_read_tokens", "wall_time_seconds",
+                "models", "builder_phases", "fix_rounds", "findings", "human_questions"}
+METRICS_MAX_STR = 64
+METRICS_MAX_ITEMS = 20
+METRICS_MAX_DEPTH = 2  # e.g. findings -> by_status -> number
+_METRICS_BAD_VALUE = "values must be numbers, short strings, or small dicts/lists of those"
+
+
+def _metrics_value_problem(v, depth):
+    if isinstance(v, bool) or v is None:
+        return _METRICS_BAD_VALUE
+    if isinstance(v, (int, float)):
+        return None
+    if isinstance(v, str):
+        return None if len(v) <= METRICS_MAX_STR else f"string longer than {METRICS_MAX_STR} chars"
+    if isinstance(v, (list, dict)):
+        if depth >= METRICS_MAX_DEPTH:
+            return "nested too deep"
+        if len(v) > METRICS_MAX_ITEMS:
+            return f"more than {METRICS_MAX_ITEMS} items"
+        items = v.items() if isinstance(v, dict) else enumerate(v)
+        for k, x in items:
+            if isinstance(k, str) and len(k) > METRICS_MAX_STR:
+                return f"key longer than {METRICS_MAX_STR} chars"
+            problem = _metrics_value_problem(x, depth + 1)
+            if problem:
+                return problem
+        return None
+    return _METRICS_BAD_VALUE
+
+
+def metrics_problem(data):
+    """None if `data` is a metrics map board.py may store, else a short reason."""
+    if not isinstance(data, dict):
+        return "must be a JSON object"
+    unknown = sorted(set(data) - METRICS_KEYS)
+    if unknown:
+        return f"unknown keys {unknown}"
+    for v in data.values():
+        problem = _metrics_value_problem(v, 0)
+        if problem:
+            return problem
+    return None
+
+
 def build_model(model_str):
     """The `build:` token out of a `model` string like "plan:sonnet build:opus review:sonnet",
     or "unknown" if there is none."""
@@ -208,7 +255,12 @@ def main(argv):
             t["model"] = args[args.index("--model") + 1]
         if "--metrics" in args:
             mpath = Path(args[args.index("--metrics") + 1])
-            t["metrics"] = json.loads(mpath.read_text())
+            data = json.loads(mpath.read_text())
+            problem = metrics_problem(data)
+            if problem:
+                print(f"refusing --metrics: {problem}", file=sys.stderr)
+                sys.exit(1)
+            t["metrics"] = data
         save(header, board)
         print(f"{args[0]} -> {args[1]}")
     elif cmd == "metrics":

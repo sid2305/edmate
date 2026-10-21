@@ -147,6 +147,39 @@ class SetMetrics(RepoCase):
         self.assertIn("tool_calls: 40", text)
         self.assertNotIn("tool_calls: 12", text)
 
+    def set_metrics(self, data):
+        self.repo.write("docs/tasks/9.9/handoff.md", "# 9.9 handoff\nStatus: DONE\n\n## Decisions\nNone\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            mfile = Path(tmp) / "metrics.json"
+            mfile.write_text(json.dumps(data))
+            return self.repo.script("board", "set", "9.9", "done", "--metrics", str(mfile))
+
+    def test_set_metrics_accepts_full_collect_shape(self):
+        r = self.set_metrics({"tool_calls": 1, "tokens_in": 2, "tokens_out": 3, "cache_read_tokens": 4,
+                              "wall_time_seconds": 5, "models": ["claude-opus-5-5"], "builder_phases": 1,
+                              "fix_rounds": 0, "human_questions": 0,
+                              "findings": {"total": 1, "by_severity": {"LOW": 1},
+                                           "by_status": {"fixed": 1, "open": 0}}})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_set_metrics_rejects_unknown_key(self):
+        r = self.set_metrics({"tool_calls": 1, "transcript": "x"})
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertNotIn("metrics:", self.board_text())
+
+    def test_set_metrics_rejects_long_string(self):
+        r = self.set_metrics({"models": ["x" * 500]})
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertNotIn("metrics:", self.board_text())
+
+    def test_set_metrics_rejects_deep_nesting(self):
+        r = self.set_metrics({"findings": {"by_status": {"fixed": {"deeper": [1]}}}})
+        self.assertEqual(r.returncode, 1, r.stderr)
+
+    def test_set_metrics_rejects_non_object(self):
+        r = self.set_metrics([1, 2])
+        self.assertEqual(r.returncode, 1, r.stderr)
+
 
 class MetricsTable(RepoCase):
     tasks = [

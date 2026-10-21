@@ -12,7 +12,7 @@ from pathlib import Path
 
 PHASE_HEADING = re.compile(r"^##\s+Phase\b", re.M)
 FIX_ROUND_HEADING = re.compile(r"^##\s+Fix round\b", re.M)
-FINDING_LINE = re.compile(r"^[ \t]*-\s*\[([A-Za-z]+)\]\s*\[([A-Za-z]+)\]")
+FINDING_LINE = re.compile(r"^[ \t]*-\s*\[([A-Za-z]+)\]\s*\[([^\]]+)\]")
 STATUSES = ("fixed", "open", "deferred", "wontfix")
 
 
@@ -27,38 +27,52 @@ def transcripts_dir(repo_root):
     return Path.home() / ".claude" / "projects" / slug
 
 
+# A task id counts in a cwd only when bounded by '/', '-', '_' or the string ends, so "0.1"
+# never matches a cwd for "0.16" (or the reverse).
+_ID_START = r"(?:^|(?<=[/_-]))"
+_ID_END = r"(?=$|[/_-])"
+
+
+def _id_in(task_id, text):
+    return re.search(_ID_START + re.escape(task_id) + _ID_END, text or "") is not None
+
+
 def _load_jsonl(path):
+    """Stream one JSONL file line by line; unreadable files and bad lines are skipped."""
     try:
-        lines = path.read_text().splitlines()
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+                if isinstance(entry, dict):
+                    yield entry
     except OSError:
         return
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(entry, dict):
-            yield entry
 
 
 def iter_entries(dir, branch, task_id=None):
     """Every JSON entry across `dir`'s *.jsonl files whose `gitBranch` equals `branch`; for
-    entries with no `gitBranch` at all, fall back to entries whose `cwd` contains `task_id`
-    (older transcripts, or sessions that never set up a worktree)."""
+    entries with no `gitBranch` at all, fall back to entries whose `cwd` contains `task_id` as a
+    whole part bounded by '/', '-', '_' or the string ends (older transcripts, or sessions that
+    never set up a worktree). Symlinked files are skipped so nothing outside `dir` is read."""
     dir = Path(dir)
     if not dir.is_dir():
         return
     for path in sorted(dir.glob("*.jsonl")):
+        if path.is_symlink() or not path.is_file():
+            continue
         for entry in _load_jsonl(path):
             gb = entry.get("gitBranch")
             if gb is not None:
                 if gb == branch:
                     yield entry
                 continue
-            if task_id and task_id in (entry.get("cwd") or ""):
+            if task_id and _id_in(task_id, entry.get("cwd")):
                 yield entry
 
 
@@ -83,7 +97,8 @@ def _findings(path):
             m = FINDING_LINE.match(line)
             if not m:
                 continue
-            sev, status = m.group(1).upper(), m.group(2).lower()
+            # bucket by the bracket's first word: "[deferred 0.13a]" counts as deferred
+            sev, status = m.group(1).upper(), (m.group(2).split() or [""])[0].lower()
             by_severity[sev] = by_severity.get(sev, 0) + 1
             if status in by_status:
                 by_status[status] += 1

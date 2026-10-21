@@ -138,6 +138,17 @@ class Metrics(CloseoutCase):
         self.assertNotIn(MARKER, text)
         self.assertNotIn("sessionId", text)
 
+    def test_metrics_error_prints_only_exception_type(self):
+        # review.md as a directory makes metrics.collect() raise an OSError whose str() holds a path
+        review = self.repo.root / "docs/tasks/9.9/review.md"
+        review.unlink(missing_ok=True)
+        review.mkdir(parents=True)
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertIn("could not collect metrics for 9.9: IsADirectoryError", out)
+        self.assertNotIn("review.md", out)
+        self.assertNotIn(str(self.repo.root), out)
+
     def test_idempotent_rerun_overwrites_same_map(self):
         self.assertEqual(self.closeout("9.9")[0], 0)
         first = self.board_text()
