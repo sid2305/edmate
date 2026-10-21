@@ -1430,7 +1430,7 @@ tasks:
   status: running
   risk: risky
   branch: m5/5.8-roleplay
-  model: plan:sonnet arch:opus build:opus(A,B) review:opus+sonnet(A)
+  model: plan:sonnet arch:opus build:opus(A,B) ped:opus(C) review:opus+sonnet(A)
 - id: '5.9'
   milestone: M5
   title: Revision skill
