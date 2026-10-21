@@ -146,3 +146,8 @@ Deviations: the brief's `quality-no-copied-echo-en` id is `pedagogy-quality-no-c
 **Alternatives:** keep breaking "teacher wrote" everywhere (rejected: the echo); a frame-pack line telling the model to ignore "[copied]" (rejected: needs another human re-sign); a 32-character window rather than word counting (chosen: the folded text has no word breaks, and it stays linear).
 **Reviewers:** safety-reviewer, architect.
 **Risk:** high
+
+### 20 Oct 2026 · 3.11d prompt packs and persona templates signed · decided by human
+Decided: the human signed frame@1.0.0, safety@1.0.0 and mock_interview@1.0.0 and the job-interview and viva persona templates as they are (B-23, answer a). reviewed_by is set to sid2305 on all five.
+Why: the changes only move the role-play question count to the platform and widen safety rule 3 to cover user-channel text under a platform label.
+risk: low
