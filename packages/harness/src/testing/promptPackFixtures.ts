@@ -144,3 +144,60 @@ export const fixturePromptPackSet: PromptPackSet = parsePromptPackSet(fixturePro
 export const fixturePromptPackLibrary: PromptPackLibrary = createPromptPackLibrary([
   fixturePromptPackSet,
 ]);
+
+// The role-play form of the frame (5.8, ADR-0013 §3): the persona section takes
+// `{{roleplay_state}}` instead of the count, plus the seven role-play sections. Test-only: the
+// real `frame@1.2.0` is Phase C (pedagogy-author, human sign-off).
+export const FIXTURE_ROLEPLAY_PROMPT_PACK_VERSION = '0.2.0-fixture-roleplay';
+
+export const FIXTURE_ROLEPLAY_PERSONA_SECTION = `## persona
+[[PERSONA]] Play {{persona_name}}. Style: {{persona_style}} Never: {{persona_must_not}}. The platform tracks the role-play, not you.
+{{roleplay_state}}`;
+
+export const FIXTURE_ROLEPLAY_SECTIONS = `
+## move-roleplay
+[[MOVE-ROLEPLAY]] Carry out the role-play state in the role section.
+
+## roleplay-question
+[[ROLEPLAY-QUESTION]] Ask question {{question_number}} of {{question_total}}, in role.
+
+## roleplay-pause
+[[ROLEPLAY-PAUSE]] Step out and coach briefly; resume at question {{question_number}} of {{question_total}}.
+
+## roleplay-resume
+[[ROLEPLAY-RESUME]] Step back in and ask question {{question_number}} of {{question_total}} again.
+
+## roleplay-debrief
+[[ROLEPLAY-DEBRIEF]] All {{question_total}} questions are asked and answered: give the debrief now; ask nothing new.
+
+## roleplay-stopped
+[[ROLEPLAY-STOPPED]] The student stopped: debrief now on the {{questions_answered}} answered questions.
+
+## roleplay-ended
+[[ROLEPLAY-ENDED]] The role-play is over: ask no role-play question and offer a new start.
+`;
+
+/** `FRAME_BODY` in the role-play form. */
+export const FIXTURE_ROLEPLAY_FRAME_BODY = `${FRAME_BODY.replace(
+  /## persona\n[^\n]*\n/,
+  `${FIXTURE_ROLEPLAY_PERSONA_SECTION}\n`,
+)}${FIXTURE_ROLEPLAY_SECTIONS}`;
+
+/** The fixture set with the role-play frame. Clone it before editing. */
+export const fixtureRolePlayPromptPackRaw: RawPromptPackSet = {
+  ...fixturePromptPackRaw,
+  version: FIXTURE_ROLEPLAY_PROMPT_PACK_VERSION,
+  packs: {
+    ...fixturePromptPackRaw.packs,
+    frame: {
+      version: '0.2.0',
+      kind: 'frame',
+      reviewedBy: FIXTURE_REVIEWER,
+      body: FIXTURE_ROLEPLAY_FRAME_BODY,
+    },
+  },
+};
+
+export const fixtureRolePlayPromptPackSet: PromptPackSet = parsePromptPackSet(
+  fixtureRolePlayPromptPackRaw,
+);

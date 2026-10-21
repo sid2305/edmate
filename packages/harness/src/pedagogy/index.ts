@@ -65,8 +65,16 @@ export {
   type RolePlayStateSection,
   type RolePlayStep,
   type RolePlayStepInput,
+  rolePlaySkipsCoverageGate,
   rolePlayStep,
 } from './roleplay.js';
+export {
+  createPersonaLibrary,
+  type LoadedPersonaHelp,
+  type PersonaLibrary,
+  PersonaStartPayloadSchema,
+  resolvePersona,
+} from './personas.js';
 export { selectSkill, type SkillReason, type SkillStep } from './skills.js';
 export { buildModelRequest, type ModelRequestInput, promptCacheKey } from './modelRequest.js';
 export {
@@ -94,6 +102,8 @@ export {
   renderTemplate,
   REQUIRED_PACKS,
   resolvePromptPackSet,
+  ROLEPLAY_SECTIONS,
+  rolePlaySections,
   SKILL_PACKS,
   type SkillPackName,
   type Slots,

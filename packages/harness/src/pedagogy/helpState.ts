@@ -235,8 +235,8 @@ export function personaFields(
 
 /**
  * `next` with the persona count, persona id and role-play phase taken from `from` (3.11e, 5.8),
- * each removed when `from` has none. The runner uses it to keep the loaded count on a turn whose reply the student never
- * saw; `skillStep` uses it to carry the count over a rebuilt state.
+ * each removed when `from` has none. The runner uses it to keep the loaded count on a turn whose
+ * reply the student never saw; `skillStep` uses it to carry the count over a rebuilt state.
  */
 export function withPersonaCount<T extends { help: HelpState }>(
   next: T,

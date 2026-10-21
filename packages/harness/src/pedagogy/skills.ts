@@ -9,7 +9,12 @@ import {
   nextRung,
   type Rung,
 } from './ladder.js';
-import { type RolePlay, type RolePlayControl, rolePlayStep } from './roleplay.js';
+import {
+  type RolePlay,
+  type RolePlayControl,
+  type RolePlayStep,
+  rolePlayStep,
+} from './roleplay.js';
 
 export type { RolePlayControl } from './roleplay.js';
 
@@ -77,6 +82,12 @@ export interface SkillInput {
   skill: Skill;
   /** The turn's role-play control (`rolePlayControl`), if any. */
   control?: RolePlayControl;
+  /**
+   * `rolePlayStep`'s result when the caller already ran it (decidePolicy runs it before the
+   * coverage gate, 5.8). It must come from the same persona, help and control; absent, it is
+   * computed here.
+   */
+  rolePlayStep?: RolePlayStep;
 }
 
 /**
@@ -94,11 +105,13 @@ export function skillStep(i: SkillInput): SkillStep {
   if (s.reason !== 'mock_interview' || persona === undefined) {
     return { ...s, next: withPersonaCount(s.next, i.help) };
   }
-  const r = rolePlayStep({
-    persona,
-    help: i.help,
-    ...(i.control === undefined ? {} : { control: i.control }),
-  });
+  const r =
+    i.rolePlayStep ??
+    rolePlayStep({
+      persona,
+      help: i.help,
+      ...(i.control === undefined ? {} : { control: i.control }),
+    });
   const help: HelpState = {
     ...s.next.help,
     personaQuestionsAsked: r.asked,

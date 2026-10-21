@@ -39,6 +39,7 @@ import type {
 } from '@edmate/contracts';
 import type { HelpState, SessionHelp } from '../pedagogy/helpState.js';
 import type { PolicyReason } from '../pedagogy/policy.js';
+import type { PersonaLibrary } from '../pedagogy/personas.js';
 import type { PromptPackLibrary, PromptPackRef } from '../pedagogy/promptPacks.js';
 import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
@@ -185,6 +186,12 @@ export interface PipelineDeps {
    * (`@edmate/content` reads the files). decide uses the set `agent.promptPackVersion` pins.
    */
   promptPacks: PromptPackLibrary;
+  /**
+   * The signed persona templates, by id (5.8, ADR-0013 §2), built once at start-up from
+   * `readPersonaLibrary`. Optional: without it no turn has a persona, so `mock_interview` falls
+   * back to coach or locked `no_persona` (the behaviour before 5.8).
+   */
+  personas?: PersonaLibrary;
   /**
    * Last-line distress keyword check, used only when `route.onFailure` itself fails ("distress
    * keywords still escalate"). True escalates the turn. Receives the raw, unscrubbed text on

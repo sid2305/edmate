@@ -12,6 +12,7 @@ import {
 } from '@edmate/contracts/fixtures';
 import type { ModelRequest, PedagogyDecision, RetrievalIndex } from '@edmate/contracts';
 import { copyHelp, INITIAL_HELP_STATE } from '../pedagogy/helpState.js';
+import type { PersonaLibrary } from '../pedagogy/personas.js';
 import { createTurnLimits } from '../pipeline/limits.js';
 import { refusingGateway } from '../pipeline/turnGateway.js';
 import type {
@@ -332,6 +333,8 @@ export function testDeps(
     adviceJudge?: 'clean' | 'advice' | 'script' | AdviceVerdict;
     /** Virtual time each advice judge answer takes. */
     adviceJudgeDelayMs?: number;
+    /** `deps.personas` (5.8). Absent: no persona source, as before. */
+    personas?: PersonaLibrary;
     /** Anything else (a failing gateway, other fallback texts, ...). */
     overrides?: Partial<PipelineDeps>;
   } = {},
@@ -402,6 +405,7 @@ export function testDeps(
     },
     distressCheck: () => false,
     promptPacks: fixturePromptPackLibrary,
+    ...(opts.personas === undefined ? {} : { personas: opts.personas }),
     ...opts.overrides,
   };
   return {

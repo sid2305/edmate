@@ -4,14 +4,15 @@
 //
 // Order of rules, first match wins:
 //   1 distress → redirect   2 skill outside the entitlement → locked   3 off_topic/misuse/meta →
-//   redirect   4 not covered → locked | ask_teacher   5 the skill's default move (the ladder for
-//   coach and practice hints)   then mustNotReveal, tools and the output budget.
+//   redirect   4 not covered → locked | ask_teacher, except a role-play turn that skips the gate
+//   (5.8, `rolePlaySkipsCoverageGate`)   5 the skill's default move (the ladder for coach and
+//   practice hints)   then mustNotReveal, tools and the output budget.
 import type { Skill, ToolName, TurnContext, TurnInput } from '@edmate/contracts';
 import { maxOutputTokensFor, type Move } from './budgets.js';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
 import { copyHelp, type HelpState, holdsPracticeKey, INITIAL_HELP_STATE } from './helpState.js';
 import { effectiveCeiling, type Rung } from './ladder.js';
-import type { RolePlay } from './roleplay.js';
+import { type RolePlay, rolePlaySkipsCoverageGate, rolePlayStep } from './roleplay.js';
 import { type RolePlayControl, selectSkill, type SkillStep, skillStep } from './skills.js';
 
 export interface PolicyTool {
@@ -95,8 +96,19 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
   if (ctx.intent === 'off_topic' || ctx.intent === 'misuse' || ctx.intent === 'meta') {
     return closed('redirect', ctx.intent);
   }
-  const gate = coverageGate(ctx, opts.coverageThreshold);
-  if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
+  const control = i.control === undefined ? {} : { control: i.control };
+  // The role-play phase is worked out before the gate (pure, no state saved yet), so a control,
+  // resume, debrief, ended or opening turn skips it (5.8, open question 6: lead default, pending
+  // B-37). A closed turn below still leaves the role-play state as it was.
+  const persona = ctx.persona;
+  const rp =
+    skill === 'mock_interview' && persona !== undefined
+      ? rolePlayStep({ persona, help, ...control })
+      : undefined;
+  if (rp === undefined || !rolePlaySkipsCoverageGate(rp.rolePlay)) {
+    const gate = coverageGate(ctx, opts.coverageThreshold);
+    if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
+  }
   return finish(
     i,
     skillStep({
@@ -104,7 +116,8 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
       turn,
       help,
       skill,
-      ...(i.control === undefined ? {} : { control: i.control }),
+      ...control,
+      ...(rp === undefined ? {} : { rolePlayStep: rp }),
     }),
   );
 }

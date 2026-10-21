@@ -26,10 +26,22 @@ export type RolePlayPhase = (typeof ROLEPLAY_PHASES)[number];
  * numbers its frame section takes, so no client text and no model count ever reaches it.
  */
 export type RolePlay =
-  | { phase: 'question' | 'pause' | 'resume'; question: number; total: number }
-  | { phase: 'debrief'; total: number }
-  | { phase: 'stopped'; answered: number }
-  | { phase: 'ended' };
+  | Readonly<{ phase: 'question' | 'pause' | 'resume'; question: number; total: number }>
+  | Readonly<{ phase: 'debrief'; total: number }>
+  | Readonly<{ phase: 'stopped'; answered: number }>
+  | Readonly<{ phase: 'ended' }>;
+
+/**
+ * Whether this role-play turn skips the coverage gate (5.8, open question 6: lead default,
+ * pending B-37; ADR-0013 §1). Every turn but an answer to a question skips it: `/pause`, `stop`,
+ * resume, debrief and ended turns judge or steer the role-play, not the material, and the opening
+ * question (N = 1, a start) with no material asks the student which topic to practise. A gated
+ * one would open a teacher question and, on `stop`, never end the role-play. Question N > 1 (the
+ * student's answer to N − 1) still goes through the gate like any other turn.
+ */
+export function rolePlaySkipsCoverageGate(r: RolePlay): boolean {
+  return r.phase !== 'question' || r.question === 1;
+}
 
 /** The frame section that states a phase (`frame@1.2.0`, ADR-0013 §3). */
 export type RolePlayStateSection = `roleplay-${RolePlayPhase}`;
