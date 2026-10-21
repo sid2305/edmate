@@ -342,6 +342,20 @@ describe('runner: the session stop flag (ADR-0007 §8, 4.6b fix round 1)', () =>
     );
   }, 10_000);
 
+  it('a post-guard step that fails counts as a locked trip (fail closed, 4.6c)', async () => {
+    const { steps, events, result } = await turn([main(say(CLEAN), used)], {}, {
+      postGuard: () => Promise.reject(new Error('boom')),
+    });
+    expect(steps.commits[0]?.next?.help.lockedStopped).toBe(true);
+    expect(events.filter((e) => e.type === 'replace').at(-1)).toEqual({
+      type: 'replace',
+      text: 'Let us try that a different way.',
+    });
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'PostGuardStepFailed: postGuard failed: error (Error)',
+    ]);
+  }, 10_000);
+
   it('a post-guard escalate with no locked trip saves no help state (as before)', async () => {
     const { steps } = await turn([main(say(CLEAN), used)], {}, {
       postGuard: escalatingPostGuard('tone'),

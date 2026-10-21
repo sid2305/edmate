@@ -309,6 +309,40 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(lockedTokens('a * b', 'drop', 'rendered').map((t) => t.t)).toEqual(['a', 'b']);
   }, 5_000);
 
+  // 4.6c: the known misses the header lists, pinned so a change to them is deliberate. Each only
+  // matters if raw model HTML is ever rendered to a student (task 9.4 forbids that).
+  const shown = (s: string, r: 'values' | 'rendered') => foldMarkup(s, r).replaceAll(PAD1, '_');
+  const PAD1 = String.fromCharCode(0x200b);
+
+  it('4.6c known miss: in `<a<b>` the first `<` is plain text, only `<b>` is a tag', () => {
+    expect(shown('<a<b>x', 'rendered')).toBe('<a___x');
+    expect(shown('<a<b>x', 'values')).toBe('<a___x');
+    // So a word split by it does not fold back together.
+    expect(lockedTokens('lo<a<b>op', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'aop']);
+  }, 5_000);
+
+  it('4.6c known miss: a `<` inside a quoted attribute value ends the tag attempt', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('<x a="b<c">y z', r)).toBe('<x a="b<c">y z');
+    }
+    expect(index.hits([`<x a="b<c">${SPAN8}`])).toBe(true); // text after it still reads as text
+  }, 5_000);
+
+  it('4.6c known miss: a comment closed by `--!>` is never found closed', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('a<!-- x --!> y', r)).toBe('a<!-- x --!> y');
+    }
+    // It counts as unfinished markup, so the stream holds back from its `<`.
+    expect(unfinishedMarkupStart('a<!-- x --!> y')).toBe(1);
+  }, 5_000);
+
+  it('4.6c known miss: a tag name in a non-ASCII script is never a tag', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('a<Ω>x</Ω>b', r)).toBe('a<Ω>x</Ω>b');
+    }
+    expect(shown('a<b>x</b>b', 'rendered')).toBe('a___x____b');
+  }, 5_000);
+
   it('4.6c: the bold-every-second-letter attack hits in the rendered reading', () => {
     const inWordBold = SPAN8.split(' ')
       .map((word) => `${word.slice(0, 1)}**${word.slice(1, 2)}**${word.slice(2)}`)
