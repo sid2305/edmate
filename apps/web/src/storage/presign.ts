@@ -20,6 +20,12 @@ export interface StorageConfig {
   secretAccessKey: string;
   bucket: string;
   forcePathStyle: boolean;
+  /**
+   * Where the browser reaches the bucket, when that differs from `endpoint` (the dev stack: the
+   * web container talks to http://minio:9000, the browser to http://localhost:9000). Upload URLs
+   * are signed for this host.
+   */
+  publicEndpoint?: string;
 }
 
 /** Dev-only placeholders matching docker/compose.yaml and docker/env.example. Not secrets. */
@@ -69,17 +75,13 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
       if ((env[name] ?? '').trim() === '') throw new StorageConfigError(`${name}_missing`);
     }
   }
-  const endpoint = read(env, 'S3_ENDPOINT');
-  let protocol = '';
-  try {
-    protocol = new URL(endpoint).protocol;
-  } catch {
-    // not a URL: refused below
-  }
-  if (protocol !== 'http:' && protocol !== 'https:') {
-    throw new StorageConfigError('S3_ENDPOINT_invalid');
-  }
-  if (production && protocol !== 'https:') throw new StorageConfigError('S3_ENDPOINT_not_https');
+  // Plain http under production only on the dev stack's explicit opt-in (docker/compose.yaml).
+  const httpsOnly = production && env.S3_ALLOW_HTTP !== 'true';
+  const endpoint = checkedEndpoint('S3_ENDPOINT', read(env, 'S3_ENDPOINT'), httpsOnly);
+  const publicRaw = env.S3_PUBLIC_ENDPOINT?.trim();
+  const publicEndpoint = publicRaw
+    ? checkedEndpoint('S3_PUBLIC_ENDPOINT', publicRaw, httpsOnly)
+    : undefined;
   const pathStyle = read(env, 'S3_FORCE_PATH_STYLE');
   if (pathStyle !== 'true' && pathStyle !== 'false') {
     throw new StorageConfigError('S3_FORCE_PATH_STYLE_invalid');
@@ -91,7 +93,22 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
     secretAccessKey: read(env, 'S3_SECRET_ACCESS_KEY'),
     bucket: read(env, 'S3_BUCKET'),
     forcePathStyle: pathStyle === 'true',
+    ...(publicEndpoint === undefined ? {} : { publicEndpoint }),
   };
+}
+
+/** An http(s) URL (https only when `httpsOnly`); the error names the setting, never the value. */
+function checkedEndpoint(name: string, value: string, httpsOnly: boolean): string {
+  let protocol = '';
+  try {
+    protocol = new URL(value).protocol;
+  } catch {
+    // not a URL: refused below
+  }
+  if (protocol !== 'http:' && protocol !== 'https:')
+    throw new StorageConfigError(`${name}_invalid`);
+  if (httpsOnly && protocol !== 'https:') throw new StorageConfigError(`${name}_not_https`);
+  return value;
 }
 
 /** How long a presigned upload URL stays valid. */
@@ -125,7 +142,15 @@ function isNotFound(error: unknown): boolean {
   return error.name === 'NotFound' || error.name === 'NoSuchKey' || status === 404;
 }
 
-export function s3StudioStorage(client: S3Like, bucket: string): StudioStorage {
+/**
+ * `signer` signs upload URLs (a client on the public endpoint, when the browser reaches the bucket
+ * on another host); `client` makes the server's own calls.
+ */
+export function s3StudioStorage(
+  client: S3Like,
+  bucket: string,
+  signer: S3Like = client,
+): StudioStorage {
   return {
     async createUploadUrl({ key, contentType, contentLength }) {
       if (!Number.isSafeInteger(contentLength) || contentLength < 1) {
@@ -139,7 +164,7 @@ export function s3StudioStorage(client: S3Like, bucket: string): StudioStorage {
       });
       // content-type and content-length stay signed headers (not hoisted to the query), so a PUT
       // with another type or size fails the signature check at the bucket.
-      return getSignedUrl(client as S3Client, command, {
+      return getSignedUrl(signer as S3Client, command, {
         expiresIn: UPLOAD_URL_TTL_SECONDS,
         signableHeaders: new Set(['content-type', 'content-length']),
       });

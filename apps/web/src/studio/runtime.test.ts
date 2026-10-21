@@ -83,6 +83,47 @@ describe('createStudioRuntime', () => {
   });
 });
 
+describe('upload URLs', () => {
+  it('are signed for S3_PUBLIC_ENDPOINT when set, while HEAD uses the internal endpoint', async () => {
+    const { h } = hooks();
+    const real = await import('@aws-sdk/client-s3');
+    h.s3 = vi.fn(
+      (c) =>
+        new real.S3Client({
+          endpoint: c.endpoint,
+          region: c.region,
+          forcePathStyle: c.forcePathStyle,
+          credentials: { accessKeyId: 'synthetic', secretAccessKey: 'synthetic' },
+        }),
+    );
+    const get = createStudioRuntime(
+      () => ({
+        REDIS_URL: 'redis://x',
+        S3_ENDPOINT: 'http://minio:9000',
+        S3_PUBLIC_ENDPOINT: 'http://localhost:9000',
+      }),
+      h,
+    );
+    const b = await get();
+    const url = await b.storage.createUploadUrl({
+      key: 'k.pdf',
+      contentType: 'application/pdf',
+      contentLength: 3,
+    });
+    expect(new URL(url).host).toBe('localhost:9000');
+    expect(vi.mocked(h.s3).mock.calls.map(([c]) => c.endpoint)).toEqual([
+      'http://minio:9000',
+      'http://localhost:9000',
+    ]);
+  });
+
+  it('use the one client when no public endpoint is set', async () => {
+    const { h } = hooks();
+    await createStudioRuntime(() => ({ REDIS_URL: 'redis://x' }), h)();
+    expect(h.s3).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('realHooks.repos', () => {
   it("reuses the auth runtime's database (serverDatabase), never a second pool", () => {
     expect(realHooks.repos()).toBe(shared.repos);

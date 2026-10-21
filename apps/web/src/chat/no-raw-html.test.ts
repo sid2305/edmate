@@ -7,9 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const WEB = fileURLToPath(new URL('../..', import.meta.url));
-const ROOTS = ['src/chat', 'app/learn'];
+const ROOTS = ['src/chat', 'app/learn', 'app/teacher', 'src/studio'];
 const SELF = fileURLToPath(import.meta.url);
-const BANNED = [/dangerouslySetInnerHTML/, /\b(?:inner|outer)HTML\b/, /insertAdjacentHTML/, /rehype-raw/];
+const BANNED = [
+  /dangerouslySetInnerHTML/,
+  /\b(?:inner|outer)HTML\b/,
+  /insertAdjacentHTML/,
+  /rehype-raw/,
+];
 
 function filesUnder(dir: string): string[] {
   if (!existsSync(dir)) return [];

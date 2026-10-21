@@ -1,6 +1,6 @@
 # 8.2 handoff: Upload centre (thin slice)
 
-Status: PARTIAL (Phase 3 of 4 done)
+Status: DONE (Phases 1-4; the manual dev-stack run is left, see Left to do)
 Branch: `m8/8.2-upload-centre` (built on `work-8.2a`)
 Worktree: `.claude/worktrees/agent-a898e7ac11d68d181`
 
@@ -320,21 +320,149 @@ Allowed `contentType`s: `application/pdf`, the docx and pptx OOXML types, `text/
   job id), so it heals itself. A key-conditional `updateStatus` would close it, but that is a
   packages/db change, outside this phase.
 
+## Fix round (Phase 3 review)
+
+Branch `m8/8.2-upload-centre` (pushed from `work-8.2g`), worktree
+`.claude/worktrees/agent-a0e02f32c20b1e10d`. `origin/main` (9.4) merged in first with a normal
+merge commit, no conflicts. Tests written first, red, then green.
+- **(a) No dev fallback in production.** `storageConfigFromEnv` (`src/storage/presign.ts`) under
+  `NODE_ENV=production` throws `StorageConfigError` (a `code` naming the setting, never its value)
+  when `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` or `S3_BUCKET` is missing or
+  blank (`<NAME>_missing`), or the endpoint isn't https (`S3_ENDPOINT_not_https`). The studio
+  runtime turns it into `StudioUnavailableError(code)`: the routes answer 503 and log
+  `studio.unavailable reason=<code>` only. Dev and test defaults are unchanged. The compose stack
+  runs the web image with `NODE_ENV=production` against `http://minio:9000`, so it opts out with
+  an explicit `S3_ALLOW_HTTP: 'true'` (see Decisions).
+- **(b) Sign before replace.** `replace` now checks the document is the teacher's (`get`), signs
+  the new upload URL, and only then calls `startReplace`. A signing failure is a logged 500 with
+  the row, its key and the old file untouched; another teacher's id still gets nothing signed.
+- **(c) One pool.** `realHooks.repos` is `serverDatabase().repos` from `src/auth/index.ts` (9.4);
+  `src/studio/runtime.ts` no longer imports `openDatabase`. No `src/auth/**` file changed.
+
+### Acceptance evidence
+- `src/storage/presign.test.ts` (17): every missing/blank production setting throws its code; an
+  http endpoint throws `S3_ENDPOINT_not_https` and the message doesn't quote the host; the
+  `S3_ALLOW_HTTP=true` opt-in (only the exact `'true'`); `NODE_ENV=development|test` keep the
+  defaults.
+- `src/studio/runtime.test.ts`: a production gap rejects with `StudioUnavailableError` reason
+  `S3_ACCESS_KEY_ID_missing` / `S3_ENDPOINT_not_https` before any repo is opened;
+  `realHooks.repos()` returns the (mocked) `serverDatabase().repos`.
+- `src/studio/routes.test.ts`: "a signing failure commits nothing" (500; row deep-equal to before;
+  no object deleted).
+
+## Phase 4
+
+apps/web: the teacher upload centre at `/teacher/uploads`.
+
+### Acceptance evidence
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test build --filter=@edmate/web...` → `Tasks: 35 successful, 35 total`;
+  `@edmate/web` `Tests 699 passed | 4 skipped (703)`; coverage all files 98.51 / 98.35 / 96.25 /
+  99.22; `presign.ts` 100%; `uploadClient.ts` 100 / 94.44 / 100 / 100; studio `runtime.ts`
+  100 / 88.88 / 100 / 100.
+- `app/teacher/uploads/UploadsView.test.tsx` (14; RTL; fetch stubbed with an in-memory studio API;
+  the PUT injected): status words incl. failure reasons and an unknown code; empty state; no
+  upload control without a module; create sends exactly `{ moduleId, sourceTitle, contentType,
+  byteSize }` (Markdown with an empty browser type → `text/markdown`; the exact `file.size`); the
+  PUT gets exactly `uploadHeaders`; complete runs after the PUT; a failed PUT never calls complete;
+  409 → "hasn't arrived yet" + Try again; 503 → words; `enqueue_failed` rows get Try again;
+  413 → "too big"; an unsupported file is refused before any POST; module picker; replace via the
+  hidden picker then complete; delete only after confirm (Cancel keeps it); list 401 → alert;
+  **fake timers: one list call per 4 s tick while processing, the row flips to Ready, and polling
+  stops once nothing is moving**; a `<b>` title renders as text; **jest-axe: zero violations**
+  (files, retry, module select and an open delete confirm).
+- `src/studio/uploadClient.test.ts` (9): the client type table equals `UPLOAD_TYPES`; error
+  bodies → `{ status, code }`, non-JSON/network → `provider_error`; ids URL-escaped; `putFile`
+  (fake XHR) sends PUT + exactly the headers + the file, reports progress, rejects on 4xx, error
+  and abort.
+- `app/teacher/uploads/page.test.tsx`: `requireRole(['teacher'])` runs before the module read,
+  which uses the session's `userId`; a refused guard reads nothing. `app/teacher/view.test.tsx`:
+  the "Uploads" nav link.
+- `src/chat/no-raw-html.test.ts` now also scans `app/teacher` and `src/studio`: clean.
+- MinIO CORS (`docker compose up -d minio`, preflight `OPTIONS` for a PUT with `content-type`):
+  origin `http://localhost:8080` → `204`, `Access-Control-Allow-Origin: http://localhost:8080`,
+  `Access-Control-Allow-Methods: PUT`; origin `http://evil.test` → `204` with **no** CORS headers.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+- **Not done:** the plan's manual dev-stack run (browser upload of a PDF and an audio clip through
+  MinIO and the worker, then delete + retrieval miss). See Left to do.
+
+### Changes
+- `app/teacher/uploads/page.tsx` (new): teacher guard, the teacher's module ids from
+  `serverDatabase().repos.modules.ids`, `AppShell` with Studio/Uploads nav, only the `uploads`
+  strings sent to the client.
+- `app/teacher/uploads/UploadsView.tsx` (new, client): file picker (`accept` = allowed types),
+  progress %, the status list with ~4 s polling (one timeout per list change while any row is
+  `uploading`/`processing`), Try again (complete) on 409/5xx and `enqueue_failed`, replace via a
+  hidden picker, delete with an inline confirm; errors in a `role="alert"` paragraph.
+- `app/teacher/uploads/uploads.css` (new): mobile-first (stacked rows, 44 px targets).
+- `src/studio/uploadClient.ts` (new, client-safe): the API calls, `contentTypeFor`, `ACCEPT`,
+  `putFile` (XHR for progress; never sets `content-length`: the browser sends `file.size`, which
+  is the signed `byteSize`).
+- `app/teacher/view.tsx`: Studio + Uploads nav. `messages/en.json`: `teacher.nav`,
+  `teacher.uploadsLink`, the `uploads` namespace (words for `input_too_large`,
+  `unsupported_type`, `enqueue_failed`, `unsupported`, `validation`, `provider_error`, and a
+  fallback for any other reason code).
+- `src/storage/presign.ts`: `StorageConfigError`, the production rules, `S3_ALLOW_HTTP`,
+  `S3_PUBLIC_ENDPOINT` (`publicEndpoint`), `s3StudioStorage(client, bucket, signer?)`.
+  `src/studio/runtime.ts`: the code-only 503, `serverDatabase()`, a second S3 client for signing
+  only when a public endpoint is set.
+- `docker/compose.yaml`: MinIO `MINIO_API_CORS_ALLOW_ORIGIN` = `${AUTH_URL}` and
+  `http://localhost:3000`; web `S3_PUBLIC_ENDPOINT=http://localhost:${EDMATE_S3_PORT}` and
+  `S3_ALLOW_HTTP='true'`. `docker/env.example`: notes.
+
+### Deviations
+- `S3_PUBLIC_ENDPOINT` was not in the plan. Without it the compose web app signs upload URLs for
+  `http://minio:9000`, which a browser can't reach, so the CORS rule alone wouldn't make browser
+  uploads work on the dev stack.
+- The CORS rule is MinIO's server-wide `MINIO_API_CORS_ALLOW_ORIGIN`, not a per-bucket rule (env
+  config, no setup script). MinIO always answers `Allow-Credentials: true` for an allowed origin;
+  the origin list is never `*`, and `putFile` sends no credentials.
+- The fetch/PUT helpers live in `src/studio/uploadClient.ts` (not inside `UploadsView.tsx`) so
+  they are unit-tested apart from React.
+
 ## Left to do
-- **Phase 4** (apps/web): the upload-centre page (`app/teacher/uploads/page.tsx`,
-  `UploadsView.tsx` polling every ~4 s while any row is `uploading`/`processing`), the "Uploads"
-  nav link, `messages/en.json` strings, and the manual dev-stack run (a PDF and a short audio clip
-  through MinIO and the worker, then delete and confirm retrieval misses). Notes for that builder:
-  - the browser PUT must send exactly `uploadHeaders` and the file's exact size (both signed).
-    MinIO needs a **bucket CORS rule** allowing `PUT` from the web origin before a browser upload
-    works in the dev stack; none is configured yet (docker/ or a setup script);
-  - call `complete` after the PUT resolves; a 409 means the PUT hasn't landed;
-  - `failureReason` codes the UI should put into words: `input_too_large`, `unsupported_type`,
-    `enqueue_failed`, `validation`, `provider_error` (and any other `IngestErrorCode`).
-- Optional follow-ups: switch the studio pool to 9.4's `serverDatabase()` once it merges; a
-  key-conditional `updateStatus('processing')` in packages/db to close the complete/replace race.
+- **Manual dev-stack run** (plan § Evidence 3): `docker compose up` (web, worker, MinIO), sign in
+  as a teacher with a module, upload a small synthetic PDF and a short synthetic audio clip, watch
+  them reach Ready, delete one and confirm a retrieval search misses it; paste timestamps here.
+  Check the MinIO bucket exists first.
+- Reviews: security-reviewer on the fix round (production config, compose `S3_ALLOW_HTTP`, CORS);
+  code-reviewer on the page.
+- Follow-ups (not blocking): apps/worker's `storageConfigFromEnv` has the same dev fallback under
+  production; a key-conditional `updateStatus('processing')` in packages/db to close the
+  complete/replace race; module names in the picker once a modules repo returns titles;
+  web-link/YouTube ingestion (deferred).
 
 ## Decisions
+
+### 20 Oct 2026 · 8.2 fix round: production S3 config is refused, not defaulted; the dev stack opts out of https explicitly · decided by tdd-guide
+Decided: under `NODE_ENV=production` the web's storage config needs `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_BUCKET` set and an https endpoint; otherwise the studio routes answer 503 and log only a code such as `S3_ENDPOINT_not_https`. `S3_BUCKET` is required too (the review named credentials and endpoint; uploading production files into the dev bucket name is the same mistake). Because the local compose stack runs the web image with `NODE_ENV=production` against `http://minio:9000`, compose sets `S3_ALLOW_HTTP: 'true'`; only the exact string `true` opts out.
+Why: a silent fallback to the dev key pair or plain http in production is the review's finding; an explicit, greppable opt-in keeps the local stack working without weakening the default.
+risk: medium
+
+### 20 Oct 2026 · 8.2 Phase 4: upload URLs are signed for S3_PUBLIC_ENDPOINT when set · decided by tdd-guide
+Decided: a new optional `S3_PUBLIC_ENDPOINT` (same http/https rules) makes the studio sign upload URLs with a second S3 client on that host, while HEAD and DELETE keep the internal endpoint. Compose sets it to MinIO's published port.
+Why: the browser can't reach `minio:9000`; without this no browser upload works on the dev stack. A production deployment with one public S3 endpoint leaves it unset.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 4: MinIO CORS by server env, web origins only · decided by tdd-guide
+Decided: `MINIO_API_CORS_ALLOW_ORIGIN` on the dev MinIO lists `${AUTH_URL:-http://localhost:8080}` and `http://localhost:3000` (next dev). Checked by preflight: the web origin gets `Allow-Origin` for PUT; any other origin gets no CORS headers.
+Why: it is the dev image's CORS switch (env only, no setup script) and replaces MinIO's default `*`. MinIO always adds `Allow-Credentials: true` for an allowed origin, so the list must never be `*`; presigned PUTs send no cookies. Dev only; production bucket CORS belongs to deployment.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 4: the studio backend reuses serverDatabase() · decided by tdd-guide
+Decided: supersedes "studio backend opens its own database pool" below. With 9.4 merged, `realHooks.repos` is `serverDatabase().repos`; no `src/auth/**` change.
+Why: one pool per web process, as the Phase 3 review asked.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 4: upload centre behaviour · decided by tdd-guide
+Decided: the page lists all of the teacher's documents (no module filter); uploads go to the first module, with a "Module n" picker only when the teacher has several (the modules repo returns ids, not titles; MVP is one course per teacher). Polling is one list call 4 s after each list change while anything is `uploading`/`processing`, so an abandoned upload keeps polling while the page is open. On a 409 or 5xx from complete the row offers Try again (complete only, no re-upload); a failed PUT asks the teacher to replace the file. Delete needs an inline confirm. The client takes the browser's content type, else the extension's (Markdown often reports none).
+Why: the plan's thin slice plus the Phase 3 handoff notes (exact headers and size, complete after the PUT, 409 = not landed, words for each reason code), with no new dependency.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 4: web-link ingestion deferred · decided by team lead (per plan)
+Decided: web-link and YouTube ingestion stay out of 8.2; the upload centre takes files only.
+Why: plan § Scope; logged on Phase 4's merge as the plan asked. The open question to the human stands.
+risk: low
 
 ### 20 Oct 2026 · 8.2 Phase 3: DELETE on /api/studio/** in ROUTE_POLICY · decided by tdd-guide · risk: high
 Decided: the `/api/studio/**` row in `apps/web/src/auth/policy.ts` gains `'DELETE'` (one line, as the plan said), so teachers can call `DELETE /api/studio/documents/:id`. Students, staff and anonymous callers are still refused; the guard test's role×route matrix and policy assertions cover it.

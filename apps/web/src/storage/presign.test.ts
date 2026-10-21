@@ -1,11 +1,6 @@
 import { DeleteObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  StorageConfigError,
-  s3StudioStorage,
-  storageConfigFromEnv,
-  type S3Like,
-} from './presign';
+import { StorageConfigError, s3StudioStorage, storageConfigFromEnv, type S3Like } from './presign';
 
 const CONFIG = storageConfigFromEnv({});
 
@@ -76,8 +71,35 @@ describe('storageConfigFromEnv in production', () => {
     expect(String((caught as Error).message)).not.toContain('internal-host');
   });
 
+  it('allows plain http only on the explicit dev-stack opt-in', () => {
+    const local = { ...PROD, S3_ENDPOINT: 'http://minio:9000', S3_ALLOW_HTTP: 'true' };
+    expect(storageConfigFromEnv(local).endpoint).toBe('http://minio:9000');
+    expect(() => storageConfigFromEnv({ ...local, S3_ALLOW_HTTP: 'yes' })).toThrow(
+      expect.objectContaining({ code: 'S3_ENDPOINT_not_https' }),
+    );
+  });
+
+  it('reads an optional public endpoint for upload URLs, under the same rules', () => {
+    expect(storageConfigFromEnv(PROD).publicEndpoint).toBeUndefined();
+    expect(
+      storageConfigFromEnv({ ...PROD, S3_PUBLIC_ENDPOINT: 'https://files.example.test' })
+        .publicEndpoint,
+    ).toBe('https://files.example.test');
+    expect(() =>
+      storageConfigFromEnv({ ...PROD, S3_PUBLIC_ENDPOINT: 'http://files.example.test' }),
+    ).toThrow(expect.objectContaining({ code: 'S3_PUBLIC_ENDPOINT_not_https' }));
+    expect(() => storageConfigFromEnv({ S3_PUBLIC_ENDPOINT: 'ftp://x' })).toThrow(
+      expect.objectContaining({ code: 'S3_PUBLIC_ENDPOINT_invalid' }),
+    );
+    expect(
+      storageConfigFromEnv({ S3_PUBLIC_ENDPOINT: 'http://localhost:9000' }).publicEndpoint,
+    ).toBe('http://localhost:9000');
+  });
+
   it('keeps the dev and test defaults outside production', () => {
-    expect(storageConfigFromEnv({ NODE_ENV: 'development' }).endpoint).toBe('http://localhost:9000');
+    expect(storageConfigFromEnv({ NODE_ENV: 'development' }).endpoint).toBe(
+      'http://localhost:9000',
+    );
     expect(storageConfigFromEnv({ NODE_ENV: 'test' }).bucket).toBe('edmate-dev');
   });
 });

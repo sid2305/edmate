@@ -46,12 +46,19 @@ function build(env: Env, hooks: StudioHooks): StudioBackend {
     config = storageConfigFromEnv(env);
   } catch (error) {
     // the code names the setting only; the value (a host, a key) never reaches a log
-    throw new StudioUnavailableError(error instanceof StorageConfigError ? error.code : 'S3_config');
+    throw new StudioUnavailableError(
+      error instanceof StorageConfigError ? error.code : 'S3_config',
+    );
   }
+  const client = hooks.s3(config);
+  const signer =
+    config.publicEndpoint === undefined
+      ? client
+      : hooks.s3({ ...config, endpoint: config.publicEndpoint });
   const queue = hooks.queue(redisUrl, hooks.log);
   return {
     documents: hooks.repos().documents,
-    storage: s3StudioStorage(hooks.s3(config), config.bucket),
+    storage: s3StudioStorage(client, config.bucket, signer),
     enqueue: (job, storageKey) => enqueueIngest(queue, job, storageKey),
     newDocumentId: () => `doc_${randomUUID()}`,
     log: hooks.log,

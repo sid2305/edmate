@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Task 9.1 Phase C: the teacher placeholder view -- pure, no `requireRole` to stub. 8.1 replaces
 // or extends this. Written and red before `view.tsx` exists (TDD).
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import messages from '../../messages/en.json';
@@ -25,6 +25,15 @@ describe('TeacherView', () => {
     render(await TeacherView());
     expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('links to the upload centre from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Uploads' })).toHaveAttribute(
+      'href',
+      '/teacher/uploads',
+    );
   });
 
   it('has no axe violations', async () => {
