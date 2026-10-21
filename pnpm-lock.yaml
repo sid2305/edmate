@@ -230,6 +230,12 @@ importers:
       '@edmate/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@edmate/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@edmate/queue':
         specifier: workspace:*
         version: link:../../packages/queue
