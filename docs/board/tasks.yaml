@@ -2279,7 +2279,7 @@ tasks:
   model: null
 - id: 5.8b
   milestone: M13
-  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped
+  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip it on every role-play answer turn) on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped
     role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona;
     policy.ts:103 /pause with extra text should not skip the off_topic/meta redirect (only a bare /pause, or per the q8 answer); selectPersonaLibrary skips prerelease versions (or the ADR accepts them);
     typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
@@ -2307,6 +2307,16 @@ tasks:
   accept: a graded check emits a topic-scored EvidenceEvent that reaches CommitRecord.evidence; a real trigger ends a session with a stored summary
   deps:
   - '6.4'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 5.8c
+  milestone: M5
+  title: "Sign the prompt packs per B-36 and B-38 (human answers, 21 Oct 2026): reviewed_by: sid2305 on feedback@1.1.0, frame@1.1.0, set@1.2.0, frame@1.2.0 and set@1.3.0 (B-37 defaults, all a, are already in the frame text); bump the seed and CLI pins to set@1.3.0; check set@1.1.0's pending state against what the seed serves today"
+  accept: the five packs carry reviewed_by sid2305; the live library and seed serve set@1.3.0; content, db and evals tests pass; no frame text change beyond the sign line
+  deps:
+  - '5.8'
   risk: risky
   status: todo
   branch: null
