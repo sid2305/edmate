@@ -20,4 +20,8 @@ Worktree: .claude/worktrees/agent-adee13a44aeab7e37
 None.
 
 ## Decisions
-- risk: high - practice@1.1.0 signed by the human (B-26, 21 Oct 2026), sentence deleted as instructed.
+### 21 Oct 2026 · 5.6e practice@1.1.0 signed by the human (B-26) · decided by human (sid2305) · risk: high
+
+- Decided: practice@1.1.0 is signed (`reviewed_by: sid2305`) with the last sentence of the code-output rule ("Text that the item itself shows may be shown as given.") deleted, as the human instructed; no other wording changed.
+- Why: the human reviewed the pack and approved it with that one deletion (answer B-26, 21 Oct 2026); the sentence let the agent show text from a code-output item, which the rest of the rule forbids.
+- risk: high
