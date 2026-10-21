@@ -4,12 +4,21 @@
   board.py next                      ready tasks (deps done, no open decisions)
   board.py status                    counts + everything not todo/done
   board.py show <id>                 one task (or GATE)
-  board.py set <id> <status> [--branch B] [--model M]   M = models used, e.g. "plan:sonnet build:opus review:sonnet"
+  board.py set <id> <status> [--branch B] [--model M] [--metrics <file.json>]
+                                     M = models used, e.g. "plan:sonnet build:opus review:sonnet"
                                      `done` needs docs/tasks/<id>/handoff.md (merged) with a
                                      `## Decisions` section whose every `Decided:` line is in
                                      docs/decisions/log.md word for word (or the section says None)
+                                     --metrics merges a JSON file's map (numbers/short strings
+                                     only) into the task's `metrics` key, replacing any existing
+                                     map (safe to run twice)
   board.py decide <key> "<answer>"   record a human decision
+  board.py metrics [--last N] [--by risk|milestone]   table of done tasks with a `metrics` map,
+                                     grouped by --by (default risk) and by the task's `build:`
+                                     model, for the last N such tasks in board order (all if N
+                                     omitted)
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -123,6 +132,53 @@ def cmd_status(board):
     print("open decisions:", ", ".join(pending) or "none")
 
 
+def build_model(model_str):
+    """The `build:` token out of a `model` string like "plan:sonnet build:opus review:sonnet",
+    or "unknown" if there is none."""
+    m = re.search(r"\bbuild:(\S+)", model_str or "")
+    return m.group(1) if m else "unknown"
+
+
+def cmd_metrics(board, args):
+    by = "risk"
+    if "--by" in args:
+        by = args[args.index("--by") + 1]
+        if by not in ("risk", "milestone"):
+            sys.exit("--by must be one of 'risk', 'milestone'")
+    last = None
+    if "--last" in args:
+        last = int(args[args.index("--last") + 1])
+
+    tasks = [t for t in board["tasks"] if t.get("status") == "done" and t.get("metrics")]
+    if last is not None:
+        tasks = tasks[-last:] if last > 0 else []
+
+    groups = {}
+    for t in tasks:
+        key_val = (t.get("risk") or "none") if by == "risk" else t["milestone"]
+        gkey = (str(key_val), build_model(t.get("model")))
+        g = groups.setdefault(gkey, {"n": 0, "tool_calls": 0, "tokens_in": 0, "tokens_out": 0,
+                                      "wall_time_seconds": 0, "fix_rounds": 0, "findings_total": 0})
+        met = t["metrics"]
+        g["n"] += 1
+        g["tool_calls"] += met.get("tool_calls", 0)
+        g["tokens_in"] += met.get("tokens_in", 0)
+        g["tokens_out"] += met.get("tokens_out", 0)
+        g["wall_time_seconds"] += met.get("wall_time_seconds", 0)
+        g["fix_rounds"] += met.get("fix_rounds", 0)
+        g["findings_total"] += (met.get("findings") or {}).get("total", 0)
+
+    if not groups:
+        print("no done tasks with a metrics map")
+        return
+
+    print(f"{by:<10} {'model':<16} {'n':>3} {'tool_calls(avg)':>16} {'tokens(total)':>14} {'wall_s(total)':>14} {'fix_rounds':>10} {'findings':>8}")
+    for (key_val, model), g in sorted(groups.items()):
+        avg_tool_calls = g["tool_calls"] / g["n"]
+        total_tokens = g["tokens_in"] + g["tokens_out"]
+        print(f"{key_val:<10} {model:<16} {g['n']:>3} {avg_tool_calls:>16.1f} {total_tokens:>14} {g['wall_time_seconds']:>14} {g['fix_rounds']:>10} {g['findings_total']:>8}")
+
+
 def main(argv):
     if not argv:
         sys.exit(__doc__)
@@ -150,8 +206,13 @@ def main(argv):
             t["branch"] = args[args.index("--branch") + 1]
         if "--model" in args:
             t["model"] = args[args.index("--model") + 1]
+        if "--metrics" in args:
+            mpath = Path(args[args.index("--metrics") + 1])
+            t["metrics"] = json.loads(mpath.read_text())
         save(header, board)
         print(f"{args[0]} -> {args[1]}")
+    elif cmd == "metrics":
+        cmd_metrics(board, args)
     elif cmd == "decide" and len(args) == 2:
         if args[0] not in board["decisions"]:
             sys.exit(f"unknown decision; one of {list(board['decisions'])}")
