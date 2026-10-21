@@ -1,7 +1,7 @@
 // Data model rows: users, teacher_profiles, consents.
 import { sql } from 'drizzle-orm';
 import { check, index, pgTable, smallint, text, uniqueIndex } from 'drizzle-orm/pg-core';
-import { id, timestamps, tstz, userRole } from './_shared.js';
+import { id, teacherVerificationStatus, timestamps, tstz, userRole } from './_shared.js';
 
 /** Students, teachers and staff. */
 export const users = pgTable(
@@ -56,7 +56,7 @@ export const teacherProfiles = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    verificationStatus: text('verification_status').notNull().default('pending'),
+    verificationStatus: teacherVerificationStatus('verification_status').notNull().default('pending'),
     payoutAccountRef: text('payout_account_ref'),
     ...timestamps(),
   },

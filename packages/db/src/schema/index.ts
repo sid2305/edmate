@@ -11,6 +11,7 @@ export {
   modelTier,
   subscriptionStatus,
   teacherQuestionStatus,
+  teacherVerificationStatus,
   usageStatus,
   userRole,
 } from './_shared.js';

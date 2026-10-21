@@ -146,7 +146,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
   it('profileStoreFor and teacherQuestionStoreFor reject a bad scope at construction', () => {
     for (const [, bad] of BAD_SCOPES) {
       expectScopeError(() => profileStoreFor(repos, bad as never), 'profileStoreFor');
-      expectScopeError(() => teacherQuestionStoreFor(repos, bad as never), 'teacherQuestionStoreFor');
+      expectScopeError(
+        () => teacherQuestionStoreFor(repos, bad as never),
+        'teacherQuestionStoreFor',
+      );
     }
   });
 });
@@ -184,5 +187,12 @@ describe('repositories source', () => {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(/\busers\b/.test(src), `${f} mentions users`).toBe(false);
     }
+  });
+
+  it('reads a user only through role-lock.ts, which selects the role column alone (8.1)', () => {
+    const src = readFileSync(join(dir, '..', 'role-lock.ts'), 'utf8');
+    const selects = [...src.matchAll(/\.select\(([^)]*)\)/g)].map((m) => m[1]);
+    expect(selects).toEqual(['{ role: users.role }']);
+    expect(/\busers\.(email|phone|name)\b/.test(src)).toBe(false);
   });
 });

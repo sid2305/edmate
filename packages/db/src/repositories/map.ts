@@ -190,3 +190,46 @@ export function toAuditRow(
     method,
   );
 }
+
+const TeacherProfileRowSchema = z.strictObject({
+  id: z.string().min(1),
+  teacherId: z.string().min(1),
+  slug: z.string().min(1),
+  subject: z.string().min(1),
+  bio: z.string(),
+  languages: z.array(z.string()),
+  verificationStatus: z.enum(['pending', 'verified', 'rejected']),
+});
+
+/**
+ * A teacher_profiles row as the teacher sees it (task 8.1). No contract type exists for it (same
+ * precedent as AuditRow). `photo` (no input yet) and `payoutAccountRef` (M10) are not returned.
+ */
+export type TeacherProfileRow = z.infer<typeof TeacherProfileRowSchema>;
+
+export function toTeacherProfile(
+  row: {
+    id: string;
+    userId: string;
+    slug: string;
+    subject: string;
+    bio: string;
+    languages: string[];
+    verificationStatus: string;
+  },
+  method: string,
+): TeacherProfileRow {
+  return checked(
+    TeacherProfileRowSchema,
+    {
+      id: row.id,
+      teacherId: row.userId,
+      slug: row.slug,
+      subject: row.subject,
+      bio: row.bio,
+      languages: row.languages,
+      verificationStatus: row.verificationStatus,
+    },
+    method,
+  );
+}

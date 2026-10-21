@@ -13,6 +13,7 @@ import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
+import { teacherProfilesRepo } from './teacher-profiles.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
 import { usageLedgerRepo } from './usage-ledger.js';
@@ -54,6 +55,7 @@ export function createRepositories(db: Db) {
     chunks: guardAll('chunks', chunksRepo(db)),
     retrieval: guardAll('retrieval', retrievalRepo(db)),
     safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
+    teacherProfiles: guardAll('teacherProfiles', teacherProfilesRepo(db)),
   };
 }
 
@@ -69,7 +71,12 @@ export type RepositoryMethod = {
 
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
-export type { AuditRow, TeacherQuestionForTeacher } from './map.js';
+export type { AuditRow, TeacherProfileRow, TeacherQuestionForTeacher } from './map.js';
+export type {
+  TeacherProfileCreate,
+  TeacherProfileUpdate,
+  TeacherVerificationInput,
+} from './teacher-profiles.js';
 export {
   AUDIT_JSON_MAX_LENGTH,
   AUDIT_MAX_LIMIT,

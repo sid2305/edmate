@@ -182,6 +182,9 @@ const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 const isoDoc = (t: Teacher) => `doc_iso_${t.toLowerCase()}`;
 /** Unit vector on axis 0: every isolation chunk and query embeds to it (no model is called). */
 const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 ? 1 : 0));
+/** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
+const profileSlug = (t: Teacher) => `teacher-${t.toLowerCase()}`;
+const ISO_STAFF = 'stf_iso';
 const chunkOwners = (cs: Chunk[]) =>
   cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
 const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
@@ -1185,6 +1188,195 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ];
     },
   },
+  // Task 8.1: each teacher's own profile (created in beforeAll). Writes name no target: they always
+  // land on the scope's own row, so the grid checks only the payload mismatches and that nobody
+  // else reads the write back.
+  'teacherProfiles.create': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    // One profile per teacher: the positive control removes the actor's own row first.
+    attempt: async (r, scope, actor) => {
+      await raw.query('delete from teacher_profiles where user_id = $1', [teacherId(actor)]);
+      return r.teacherProfiles.create(scope, {
+        slug: profileSlug(actor),
+        subject: `[${actor}] subject ${++counter}`,
+      });
+    },
+    verify: async (r, actor, res) => {
+      const subject = (res as { subject: string }).subject;
+      for (const t of TEACHERS) {
+        const row = await r.teacherProfiles.get(tScope(t));
+        expect(row?.subject === subject, `${t} sees ${actor}'s profile`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a second profile for the same teacher',
+        (r) => r.teacherProfiles.create(tScope(a), { slug: `${profileSlug(a)}-2`, subject: 'x' }),
+        'invalid',
+      ],
+      [
+        "another teacher's slug",
+        (r) =>
+          r.teacherProfiles.create(tScope(a), { slug: profileSlug(otherTeacher(a)), subject: 'x' }),
+        'invalid',
+      ],
+      [
+        'a verificationStatus key',
+        (r) =>
+          r.teacherProfiles.create(tScope(a), {
+            slug: 'self-verified',
+            subject: 'x',
+            verificationStatus: 'verified',
+          } as never),
+        'invalid',
+      ],
+      [
+        'a student scope id',
+        (r) =>
+          r.teacherProfiles.create({ teacherId: studentId('1') }, { slug: 'stu', subject: 'x' }),
+        'scope',
+      ],
+    ],
+  },
+  'teacherProfiles.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.teacherProfiles.get(scope),
+    random: (r, _scope, rid) => r.teacherProfiles.get({ teacherId: rid }),
+    owners: (x: { teacherId: string; subject: string } | null) =>
+      x ? [teacherOfId(x.teacherId), ...markers(x.subject)] : [],
+  },
+  'teacherProfiles.update': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.teacherProfiles.update(scope, { subject: `[${actor}] edited ${++counter}` }),
+    verify: async (r, actor, res) => {
+      const subject = (res as { subject: string }).subject;
+      for (const t of TEACHERS) {
+        const row = await r.teacherProfiles.get(tScope(t));
+        expect(row?.subject === subject, `${t} sees ${actor}'s edit`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a verificationStatus key (no self-verification)',
+        (r) => r.teacherProfiles.update(tScope(a), { verificationStatus: 'verified' } as never),
+        'invalid',
+      ],
+      [
+        'a userId key naming another teacher',
+        (r) =>
+          r.teacherProfiles.update(tScope(a), {
+            subject: 'x',
+            userId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+      ['an empty patch', (r) => r.teacherProfiles.update(tScope(a), {}), 'invalid'],
+      [
+        'a scope with no profile',
+        (r) => r.teacherProfiles.update({ teacherId: studentId('1') }, { subject: 'x' }),
+        'not_found',
+      ],
+    ],
+  },
+  // Staff verify one named teacher (the audit.appendForTeacher precedent): the staff role is
+  // checked in the same transaction, and the audit row lands in that teacher only.
+  'teacherProfiles.setVerification': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const reason = `[${actor}] verified ${++counter}`;
+      await r.teacherProfiles.setVerification(scope, { status: 'verified', by: ISO_STAFF, reason });
+      return reason;
+    },
+    verify: async (r, actor, reason) => {
+      expect((await r.teacherProfiles.get(tScope(actor)))?.verificationStatus).toBe('verified');
+      for (const t of TEACHERS) {
+        const rows = await r.audit.listForTeacher(tScope(t), { limit: 200 });
+        expect(
+          rows.some((x) => x.reason === reason && x.action === 'teacher.verify'),
+          `${t} sees ${actor}'s verification`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'the teacher verifying themself',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), { status: 'verified', by: teacherId(a) }),
+        'scope',
+      ],
+      [
+        'another teacher as the verifier',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), {
+            status: 'verified',
+            by: teacherId(otherTeacher(a)),
+          }),
+        'scope',
+      ],
+      [
+        'a student as the verifier',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), { status: 'verified', by: studentId('1') }),
+        'scope',
+      ],
+      [
+        'an extra key naming another teacher',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), {
+            status: 'verified',
+            by: ISO_STAFF,
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+      [
+        'a scope with no profile',
+        (r) =>
+          r.teacherProfiles.setVerification(
+            { teacherId: studentId('1') },
+            { status: 'verified', by: ISO_STAFF },
+          ),
+        'not_found',
+      ],
+    ],
+  },
+  // The publish guard: with only the actor verified, only the actor passes it.
+  'teacherProfiles.assertVerifiedForPublish': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope) => {
+      await raw.query(
+        `update teacher_profiles set verification_status =
+           case when user_id = $1 then 'verified' else 'pending' end::teacher_verification_status`,
+        [scope.teacherId],
+      );
+      const passed: string[] = [];
+      for (const t of TEACHERS) {
+        const ok = await r.teacherProfiles.assertVerifiedForPublish(tScope(t)).then(
+          () => true,
+          () => false,
+        );
+        if (ok) passed.push(t);
+      }
+      return passed;
+    },
+    random: async (r, _scope, rid) =>
+      r.teacherProfiles.assertVerifiedForPublish({ teacherId: rid }).then(
+        () => [rid],
+        () => [],
+      ),
+    owners: (passed: string[]) => passed,
+  },
   'audit.appendForStudent': {
     scope: 'student',
     op: 'write',
@@ -1554,6 +1746,16 @@ describe.skipIf(!up)(
         await repos.chunks.insertMany(tScope(t), isoDoc(t), [
           { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
         ]);
+      }
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'Iso Staff', 'en', 'test', 'staff')`,
+        [ISO_STAFF],
+      );
+      for (const t of TEACHERS) {
+        await repos.teacherProfiles.create(tScope(t), {
+          slug: profileSlug(t),
+          subject: `[${t}] subject`,
+        });
       }
       for (const p of PAIRS) {
         const t = teacherOf(p);

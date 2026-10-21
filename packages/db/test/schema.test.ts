@@ -307,6 +307,12 @@ describe('enums match the contracts', () => {
   it('usage_status is recorded, unknown or unpriced (task 2.4)', () => {
     expect(values('usage_status')).toEqual(['recorded', 'unknown', 'unpriced']);
   });
+  it('teacher_verification_status is pending, verified or rejected (task 8.1)', () => {
+    expect(values('teacher_verification_status')).toEqual(['pending', 'verified', 'rejected']);
+    const col = table('teacher_profiles').columns['verification_status'];
+    expect(col?.type).toBe('teacher_verification_status');
+    expect(col?.notNull).toBe(true);
+  });
   it('user_role and agent_status follow the Data model', () => {
     expect(values('user_role')).toEqual(['student', 'teacher', 'staff']);
     expect(values('agent_status')).toEqual(['draft', 'live', 'suspended']);

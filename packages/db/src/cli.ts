@@ -3,6 +3,7 @@ import { createDb } from './client.js';
 import { createIdentityStore, ROLES, type IdentityStore, type Role } from './identity/index.js';
 import { migrateDatabase } from './migrate.js';
 import { redact } from './redact.js';
+import { createRepositories, type Repositories } from './repositories/index.js';
 import { SEED_TABLES, seedDemoTeacher, type SeedOptions, type SeedResult } from './seed.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
@@ -119,6 +120,117 @@ export async function runGrantRoleCli(
     return 0;
   } catch (err) {
     log(`db:grant-role: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
+    return 1;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/** Opens the identity store and the profile repository for the verify CLI (injected in tests). */
+export type OpenVerify = (url: string) => {
+  identity: Pick<IdentityStore, 'getUserByEmail'>;
+  teacherProfiles: Pick<Repositories['teacherProfiles'], 'setVerification'>;
+  close: () => Promise<void>;
+};
+
+const openVerify: OpenVerify = (url) => {
+  const { db, close } = createDb({ DATABASE_URL: url });
+  return {
+    identity: createIdentityStore(db),
+    teacherProfiles: createRepositories(db).teacherProfiles,
+    close,
+  };
+};
+
+const VERIFY_STATUSES = ['verified', 'rejected'] as const;
+type VerifyStatus = (typeof VERIFY_STATUSES)[number];
+
+const VERIFY_USAGE =
+  'usage: db:verify-teacher -- --email <email> --status <verified|rejected> ' +
+  '--by <staff-user-id> [--reason <text>]';
+
+interface VerifyArgs {
+  email: string;
+  status: VerifyStatus;
+  by: string;
+  reason?: string;
+}
+
+/** The parsed arguments, or a one-line reason they are wrong. */
+function parseVerifyArgs(argv: string[]): VerifyArgs | string {
+  let values: Record<string, string | boolean | undefined>;
+  try {
+    ({ values } = parseArgs({
+      args: argv[0] === '--' ? argv.slice(1) : argv,
+      options: {
+        email: { type: 'string' },
+        status: { type: 'string' },
+        by: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch {
+    return VERIFY_USAGE;
+  }
+  const { email, status, by, reason } = values;
+  if (typeof email !== 'string' || typeof status !== 'string' || typeof by !== 'string') {
+    return VERIFY_USAGE;
+  }
+  if (!(VERIFY_STATUSES as readonly string[]).includes(status)) {
+    return `--status must be one of ${VERIFY_STATUSES.join(', ')}`;
+  }
+  return {
+    email,
+    status: status as VerifyStatus,
+    by,
+    ...(typeof reason === 'string' ? { reason } : {}),
+  };
+}
+
+/**
+ * `pnpm --filter @edmate/db db:verify-teacher -- --email <e> --status <verified|rejected> --by
+ * <staff-user-id>` (task 8.1): staff's identity-check tool until the trust console (12.1). Only a
+ * user who is staff now can verify; the repository checks that and writes a `teacher.verify` audit
+ * row. Never prints the email or a connection string. Returns the exit code.
+ */
+export async function runVerifyTeacherCli(
+  argv: string[],
+  env: { DATABASE_URL?: string | undefined },
+  log: (line: string) => void,
+  open: OpenVerify = openVerify,
+): Promise<number> {
+  const args = parseVerifyArgs(argv);
+  if (typeof args === 'string') {
+    log(`db:verify-teacher: ${args}`);
+    return 1;
+  }
+  const url = env.DATABASE_URL;
+  if (!url) {
+    log('db:verify-teacher: DATABASE_URL is not set');
+    return 1;
+  }
+  let handle: ReturnType<OpenVerify> | undefined;
+  try {
+    handle = open(url);
+    const user = await handle.identity.getUserByEmail(args.email);
+    if (!user) {
+      log('db:verify-teacher: no user has that email');
+      return 1;
+    }
+    const row = await handle.teacherProfiles.setVerification(
+      { teacherId: user.id },
+      {
+        status: args.status,
+        by: args.by,
+        ...(args.reason === undefined ? {} : { reason: args.reason }),
+      },
+    );
+    log(`db:verify-teacher: teacher ${row.teacherId} is now ${row.verificationStatus}`);
+    return 0;
+  } catch (err) {
+    log(`db:verify-teacher: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
     return 1;
   } finally {
     await handle?.close().catch(() => undefined);

@@ -26,6 +26,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node dist/bin/migrate.js",
     "db:grant-role": "node dist/bin/grant-role.js",
+    "db:verify-teacher": "node dist/bin/verify-teacher.js",
     "db:seed": "node dist/bin/seed.js"
   },
   "dependencies": {
