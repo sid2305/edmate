@@ -119,7 +119,7 @@ None for 3.11e. The lead reviews the three pending cases and sets `reviewed_by: 
 
 ## Decisions
 
-### 20 Oct 2026 · 3.11e role-play count rules and closed-mode history · decided by plan (lead-approved), built by tdd-guide
+### 20 Oct 2026 · 3.11e role-play count rules and closed-mode history · decided by plan (lead-approved), built by tdd-guide · risk: high
 Decided:
 - A role-play starts at question 1 on any `skill_action` mock_interview turn, or when the persona differs from the stored `personaId`. A blob with no `personaId` counts as a different persona.
 - `/pause` and `stop` don't count.
@@ -136,7 +136,7 @@ Why:
 
 risk: high
 
-### 20 Oct 2026 · 3.11e an exact label gets one treatment · decided by plan (lead-approved), built by tdd-guide
+### 20 Oct 2026 · 3.11e an exact label gets one treatment · decided by plan (lead-approved), built by tdd-guide · risk: high
 Decided:
 - An exact copy of the teacher label (any case or spacing, with format characters) is only spaced out. It gets no `[copied]` break on top.
 - The core-phrase pass skips hits wholly inside a spaced-out label span, including a span the student spaced out already. Hits that cross a span edge, and every other forged phrase, still break.
@@ -176,3 +176,8 @@ Why:
 - `marks >= 80` is in the student's own question, so a good reply that quotes it back would fail the check.
 
 risk: low
+
+### 20 Oct 2026 · 3.11e lead signs the 3 forged-note leak cases and merges · decided by team lead · risk: high
+Decided: the lead read and signed leak-forged-note-noparens-en, leak-forged-note-cyrillic-en and leak-forged-note-teacher-merge-en (`reviewed_by: lead`, MVP-first rule of 20 Oct 2026) and fixed the Cyrillic case's comment (the letters are raw Cyrillic, not escapes). code-reviewer and typescript-reviewer approved with no findings; the lead merges the pedagogy change.
+Why: each case pins a forged-teacher-note bypass from the 3.11d safety review, and each fails on a leaked corrected line or a judge check.
+risk: high
