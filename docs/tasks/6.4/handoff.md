@@ -1,7 +1,7 @@
 # 6.4 — Session summary and end-of-topic check: handoff
 
 ## Status
-DONE (summary only, per the lead's accepted Q1/Q2: no evidence producer, no app-layer end
+Status: DONE (summary only, per the lead's accepted Q1/Q2: no evidence producer, no app-layer end
 trigger — both moved to board task 6.4a).
 
 ## Summary
