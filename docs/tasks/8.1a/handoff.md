@@ -118,17 +118,6 @@ Secret scan: `python3 .githooks/secret-scan.py --all` -> clean (no output, exit 
 
 None -- all acceptance items, tests, typecheck, lint and the secret scan are green.
 
-## Decisions
-
-### 21 Oct 2026 · One client component, no separate onboarding view.tsx · decided by tdd-guide
-Decided: `OnboardingForm.tsx` is the only client component; `page.tsx` renders it directly instead
-of adding a pure `view.tsx` wrapper.
-Why: the plan named this a builder's-discretion call ("fold into page.tsx if ... a separate pure
-view [is] unnecessary for one component"); there is exactly one component here, so a wrapper would
-only forward props with no logic of its own, unlike `uploads/UploadsView.tsx` which the server page
-also has to pass computed data into alongside other page concerns.
-risk: low
-
 ## Fix round (review)
 
 - [HIGH] Unhandled rejection on fetch failure / invalid success JSON: `onSubmit` now has a `catch`
@@ -140,12 +129,28 @@ risk: low
   both use this key instead of the misleading `t('saving')` fallback.
 - [LOW] The unguarded success-path `res.json()` is now covered by the new `catch` above.
 
+## Decisions
+
+### 21 Oct 2026 · One client component, no separate onboarding view.tsx · decided by tdd-guide
+Decided: `OnboardingForm.tsx` is the only client component; `page.tsx` renders it directly instead
+of adding a pure `view.tsx` wrapper.
+Why: the plan named this a builder's-discretion call ("fold into page.tsx if ... a separate pure
+view [is] unnecessary for one component"); there is exactly one component here, so a wrapper would
+only forward props with no logic of its own, unlike `uploads/UploadsView.tsx` which the server page
+also has to pass computed data into alongside other page concerns.
+risk: low
+
 ### 21 Oct 2026 · Server error text shown directly, no client errors map · decided by tdd-guide
 Decided: `OnboardingForm` shows the API response's `error.message` text directly in the
-`role="alert"` box, with no `onboarding.errors.*` translation map in `en.json`.
+`role="alert"` box, with no per-code translation map in `en.json`; the one fallback key `onboarding.errors.generic` (fix round) covers a missing message or a network failure.
 Why: the plan called the errors map optional and capped it at "one or two lines, not a full
 exhaustive switch"; this route's `fromError` in `profile.ts` only ever returns five fixed,
 already-English, non-identifying messages (same reasoning the chat error banner uses for its own
 fixed strings, per the plan), so a second copy of the same five strings in `en.json` would be pure
 duplication with no behavioural difference.
+risk: low
+
+### 21 Oct 2026 · 8.1a merged with code-reviewer and typescript-reviewer only · decided by team lead
+Decided: no security-reviewer run; the diff touches no risky path (no auth, policy, db or contracts file), and code-reviewer checked the security properties explicitly: scope from the session only, body teacherId/userId/verificationStatus ignored or rejected, 16 KB body cap reused, fixed error text only, the route under the teacher-only /api/studio/** row. The typescript-reviewer HIGH (no catch in the submit handler) was fixed in bf633b7 and the lead read the fix diff.
+Why: MVP first (human, 20 Oct 2026), one fix round, reviewers only where the diff needs them.
 risk: low
