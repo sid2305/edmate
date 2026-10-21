@@ -1590,9 +1590,31 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: review
+  status: done
   branch: m7/7.1-eval-reports
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 193
+    tokens_in: 594
+    tokens_out: 77063
+    cache_read_tokens: 10849337
+    wall_time_seconds: 659
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: '7.2'
   milestone: M7
   title: Grow platform suites to target sizes, each case human-reviewed

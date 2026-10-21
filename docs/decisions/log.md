@@ -10,6 +10,16 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.1 eval reports and judge calibration · decided by lead · risk: low
+
+- Decided: merge 7.1. packages/evals gains a static, escaped HTML report next to the JSON report (optional `judgeModel` and `calibration` meta), and calibration: a strict human-verdict schema, a deterministic 10% sample (ceil, min 1, sorted case ids) and an agreement summary. Reports are generated in the existing CI test task from the synthetic fixture suite, written to gitignored `packages/evals/reports/`. Plan answers: double-check files for real suites start in 7.2; no CI artifact upload. The MEDIUM (an unmatched verdict id is dropped silently, not reported) and two LOWs go to 7.1a.
+- Why: code-reviewer and typescript-reviewer both approved with no CRITICAL/HIGH (1014 tests, coverage 100/97.23); the blockers-only rule defers MEDIUM/LOW.
+- risk: low
+
+Tool calls used: 21
+
+---
+
 ### 21 Oct 2026 · 5.11c leak-check SLO test is best of 3 rounds · decided by lead · risk: low
 
 - Decided: merge 5.11c. The ADR-0007 point 6 SLO test keeps p95 <= 50 ms and p99 <= 100 ms, discards 30 more warm-up calls, and passes when one of up to 3 rounds of 300 calls meets both in that same round. No CI margin and no CI skip; the SLO stays enforced in this test.
