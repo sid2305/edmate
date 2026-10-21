@@ -6,7 +6,7 @@ import type { LocalePack } from './locale.js';
 import type { TranscribeInput, Transcript } from './media.js';
 import type { EvidenceEvent, LearnerProfile } from './memory.js';
 import type { ModelChunk, ModelRequest } from './model.js';
-import type { GuardResult, SafetyAlert } from './safety.js';
+import type { GuardResult, SafetyAlert, SafetyEventCode } from './safety.js';
 import type { Skill, ToolName, Usage } from './shared.js';
 import type { AgentConfig, PackageConfig, StyleCard } from './teacher.js';
 import type { TurnTrace } from './trace.js';
@@ -145,4 +145,21 @@ export interface TraceSink {
 
 export interface AlertSink {
   raise(a: SafetyAlert): Promise<void>;
+}
+
+/**
+ * Where moderationIn and jailbreak record a block (ADR-0006, which extends ADR-0002's port list).
+ * Ids, the guard, a fixed code and whether a rule or the classifier decided: never text. Resolves
+ * once the event is durably queued; `${turnId}:${guard}` is its dedupe key.
+ */
+export interface SafetyEventSink {
+  record(e: {
+    studentId: string;
+    teacherId: string;
+    sessionId: string;
+    turnId: string;
+    guard: 'moderationIn' | 'jailbreak';
+    code: SafetyEventCode;
+    source: 'rule' | 'classifier';
+  }): Promise<void>;
 }

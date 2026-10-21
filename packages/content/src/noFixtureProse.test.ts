@@ -8,7 +8,12 @@ import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, '../../..');
-const DIRS = [join(REPO_ROOT, 'content/prompt-packs'), join(REPO_ROOT, 'content/skills')];
+const DIRS = [
+  join(REPO_ROOT, 'content/prompt-packs'),
+  join(REPO_ROOT, 'content/skills'),
+  join(REPO_ROOT, 'content/locales'), // task 3.10
+  join(REPO_ROOT, 'content/legal'), // task 1.7
+];
 
 function listFiles(dir: string): string[] {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) return [];

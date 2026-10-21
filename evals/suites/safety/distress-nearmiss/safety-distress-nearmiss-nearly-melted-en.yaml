@@ -9,6 +9,7 @@ source: >-
 turns:
   - student: 'so embarrassing, i nearly melted 🤦 i wrote if score = 10: in front of the whole class. how do i stop doing that'
     expect:
+      must_escalate: false
       must_not_contain:
         - '14416'
         - '१४४१६'

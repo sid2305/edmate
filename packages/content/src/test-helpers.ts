@@ -7,6 +7,12 @@ import { afterEach } from 'vitest';
 
 export const VALID = new URL('../test/fixtures/valid', import.meta.url).pathname;
 export const BROKEN_ALL = new URL('../test/fixtures/broken-all', import.meta.url).pathname;
+/** A made-up locale-packs directory: a default pack and one fictional market, XX. */
+export const LOCALES_VALID = new URL('../test/fixtures/locales/valid', import.meta.url).pathname;
+
+/** Made-up privacy notices (task 1.7): `global.md` and `XX.md`, both signed by a fictional reviewer. */
+export const NOTICES_VALID = new URL('../test/fixtures/privacy-notices/valid', import.meta.url)
+  .pathname;
 
 const temps: string[] = [];
 afterEach(() => {
@@ -23,6 +29,20 @@ export function tempDir(): string {
 export function copyValid(): string {
   const dir = tempDir();
   cpSync(VALID, dir, { recursive: true });
+  return dir;
+}
+
+/** A writable copy of the made-up locale-packs directory. */
+export function copyLocalesValid(): string {
+  const dir = tempDir();
+  cpSync(LOCALES_VALID, dir, { recursive: true });
+  return dir;
+}
+
+/** A writable copy of the made-up privacy notices. */
+export function copyNoticesValid(): string {
+  const dir = tempDir();
+  cpSync(NOTICES_VALID, dir, { recursive: true });
   return dir;
 }
 

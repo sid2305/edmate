@@ -15,8 +15,23 @@ export {
   userRole,
 } from './_shared.js';
 export { consents, teacherProfiles, users } from './users.js';
-export { authAccounts, authSessions, platformActorRole, platformAuditLog } from './auth.js';
-export { chunks, corrections, courses, documents, modules, styleCards, topics } from './content.js';
+export {
+  authAccounts,
+  authSessions,
+  authVerificationTokens,
+  platformActorRole,
+  platformAuditLog,
+} from './auth.js';
+export {
+  chunks,
+  corrections,
+  courses,
+  documents,
+  modules,
+  styleCards,
+  teacherMaterialRevisions,
+  topics,
+} from './content.js';
 export { agents, agentVersions, packages, packageVersions } from './agents.js';
 export {
   invoices,

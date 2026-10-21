@@ -1,0 +1,181 @@
+// `edmate chat`'s composition root (task 3.9 Phase A): assembles the full `PipelineDeps` the
+// harness's `runTurn`/`defaultSteps` need, over the real demo-teacher content and a real model
+// gateway, with no database (lead answer Q2/Q3; see world.ts and retrieval.ts).
+import { randomUUID } from 'node:crypto';
+import type { DemoTeacherContent } from '@edmate/content';
+import type {
+  EvidenceEvent,
+  LearnerProfile,
+  Lang,
+  LocalePack,
+  ModelGateway,
+  ProfileStore,
+} from '@edmate/contracts';
+import {
+  computeCostMicroUsd,
+  loadBundledPrices,
+  type MeterSink,
+  type ProviderAdapterFactories,
+} from '@edmate/gateway';
+import {
+  createTurnLimits,
+  hasDistressKeyword,
+  type Clock,
+  type FallbackReplies,
+  type IdKind,
+  type IdSource,
+  type PipelineDeps,
+} from '@edmate/harness';
+import {
+  memoryAlertSink,
+  memorySafetyEventSink,
+  memorySessionStateStore,
+  memoryTeacherQuestionStore,
+  memoryTraceSink,
+  memoryTranscriptStore,
+  memoryTurnLog,
+  memoryTurnConfigStore,
+  memoryEntitlementStore,
+  memoryUsageMeter,
+} from '@edmate/harness/testing';
+import { createChatGateway, gatewayFor, type Env } from './gateway.js';
+import { buildChatRetrieval } from './retrieval.js';
+import { buildChatWorld, loadChatContent, loadChatPromptPacks, type ChatWorldOptions } from './world.js';
+
+/** A real clock: `Date.now()`/`setTimeout`, cancellable only by letting the sleep elapse. */
+export function systemClock(): Clock {
+  return {
+    now: () => Date.now(),
+    sleep: (ms, cancel) =>
+      new Promise((resolve) => {
+        const t = setTimeout(resolve, ms);
+        cancel?.onCancel(() => {
+          clearTimeout(t);
+          resolve();
+        });
+      }),
+  };
+}
+
+/** Real ids: `crypto.randomUUID()`, prefixed by kind (contracts ids allow `_`). */
+export function systemIds(): IdSource {
+  return { next: (kind: IdKind) => `${kind}_${randomUUID()}` };
+}
+
+/**
+ * The simplest in-memory `ProfileStore` (contracts port): starts every student x teacher pair at
+ * empty defaults and never moves mastery (no BKT here, same scope as the harness's own
+ * `memoryProfileStore` test double, which the harness package does not publish from its `testing`
+ * barrel — see the handoff's Decisions).
+ */
+export function memoryProfileStore(): ProfileStore {
+  const profiles = new Map<string, LearnerProfile>();
+  const key = (studentId: string, teacherId: string) => `${studentId}\u0000${teacherId}`;
+  const of = (studentId: string, teacherId: string): LearnerProfile =>
+    profiles.get(key(studentId, teacherId)) ?? {
+      studentId,
+      teacherId,
+      lang: 'en',
+      mastery: {},
+      mistakes: [],
+    };
+  return {
+    get: (studentId, teacherId) => Promise.resolve(of(studentId, teacherId)),
+    applyEvidence: (events: EvidenceEvent[]) => {
+      const [first] = events;
+      return Promise.resolve(of(first?.studentId ?? '', first?.teacherId ?? ''));
+    },
+  };
+}
+
+const SAFE_REPLY = "Sorry, I can't answer that right now. Please try again.";
+function distressReply(_lang: Lang, locale: LocalePack): string {
+  const lines = locale.helplines.map((h) => `${h.name}: ${h.number}`).join('; ');
+  return `I'm really glad you told me. You're not alone, and it's worth talking to someone right away: ${lines}`;
+}
+
+export function chatFallbackReplies(): FallbackReplies {
+  return {
+    safeReply: () => SAFE_REPLY,
+    distress: (lang, locale) => distressReply(lang, locale),
+  };
+}
+
+export interface ChatDepsOptions extends ChatWorldOptions {
+  env: Env;
+  contentDir?: string;
+  /**
+   * Replaces the real Anthropic gateway with a given one (the scripted gateway in tests, never a
+   * real model call). `createChatGateway`/`ANTHROPIC_API_KEY` are skipped entirely.
+   */
+  gateway?: ModelGateway;
+}
+
+export interface ChatSetup {
+  deps: PipelineDeps;
+  teacherId: string;
+  agentId: string;
+  studentId: string;
+  sessionId: string;
+  content: DemoTeacherContent;
+}
+
+/** Builds one run's full `PipelineDeps`, ready for `runTurn(input, { deps, steps: defaultSteps })`. */
+export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
+  const content = loadChatContent(opts.contentDir);
+  const { world, accessOptions, teacherId, agentId, studentId, sessionId } = buildChatWorld(
+    content,
+    opts,
+  );
+  const { library: promptPacks } = loadChatPromptPacks();
+
+  const clock = systemClock();
+  const usage = memoryUsageMeter();
+  const prices = loadBundledPrices();
+
+  let gatewayForDeps: PipelineDeps['gatewayFor'];
+  if (opts.gateway !== undefined) {
+    // Test injection (rule 4): never calls createChatGateway, so no key is ever loaded.
+    const injected = opts.gateway;
+    gatewayForDeps = () => ({ gateway: injected, metered: false });
+  } else {
+    const factories: ProviderAdapterFactories = await createChatGateway(opts.env);
+    const sink: MeterSink = {
+      record: (u, ctx) => usage.record(u, ctx),
+      recordUnmetered: (u) => {
+        // Ids, model and reason only, never request content (ADR-0006-style discipline).
+        console.error(
+          `edmate chat: unmetered usage (${u.reason}) model=${u.model} tier=${u.tier} turn=${u.turnId}`,
+        );
+        return Promise.resolve();
+      },
+    };
+    gatewayForDeps = gatewayFor({ factories, sink, prices });
+  }
+
+  const deps: PipelineDeps = {
+    clock,
+    ids: systemIds(),
+    gatewayFor: gatewayForDeps,
+    priceUsage: (u) => computeCostMicroUsd(prices, u.model, u.inputTokens, u.outputTokens),
+    log: memoryTurnLog(),
+    entitlements: memoryEntitlementStore(world, accessOptions),
+    turnConfig: memoryTurnConfigStore(world),
+    entitlementSource: opts.source,
+    limits: createTurnLimits(clock),
+    profiles: memoryProfileStore(),
+    transcripts: memoryTranscriptStore(),
+    sessionState: memorySessionStateStore(),
+    retrieval: buildChatRetrieval(content, teacherId),
+    teacherQuestions: memoryTeacherQuestionStore(),
+    usage,
+    traces: memoryTraceSink(),
+    alerts: memoryAlertSink(),
+    safetyEvents: memorySafetyEventSink(),
+    fallbackReplies: chatFallbackReplies(),
+    promptPacks,
+    distressCheck: (text, lang) => hasDistressKeyword(text, lang),
+  };
+
+  return { deps, teacherId, agentId, studentId, sessionId, content };
+}

@@ -1,0 +1,20 @@
+# The default locale pack (task 3.10). It serves every market that has no usable pack of its own
+# (none, or one refused for a bad schema or PII pattern). Deliberately generic: no helpline,
+# no law, no contact. With no helplines, a distress reply tells the student to contact local
+# emergency services if they are in danger now and to reach out to someone they trust (the
+# frame prompt pack's no-helplines line), and the safety alert is raised as for any market.
+market: global
+languages: [en] # the pilot teaches and replies in English only (18 Oct 2026; crisis replies too, B-14)
+timezone: UTC
+currency: { code: USD, format: "$#,##0.00" }
+payments: { methods: [], provider: tbd } # decided per market with payments (task 10.1)
+helplines: []
+compliance:
+  privacyLaw: "None verified for this market; check local law before launching here."
+  minAge: 13
+  dataRegion: "Not set for this market."
+  grievance: "None verified for this market."
+  parentalConsentRequired: true # the safe default: ask for consent unless a market's pack says otherwise
+regulatedDisclaimers:
+  investing: "Educational only; not investment advice."
+piiPatterns: [] # the guard's built-in phone, email, card, OTP and name checks still run

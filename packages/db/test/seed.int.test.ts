@@ -6,7 +6,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AgentConfigSchema, PackageConfigSchema } from '@edmate/contracts';
-import { createRepositories, entitlementStoreFor } from '../src/index.js';
+import { createIdentityStore, createRepositories, entitlementStoreFor } from '../src/index.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import * as s from '../src/internal.js';
 import { runSeedCli } from '../src/cli.js';
@@ -105,7 +105,11 @@ describe.skipIf(!up)(`demo seed on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       expect(st.email).toMatch(/@example\.invalid$/);
       expect(st.market).toBe('global');
       expect(st.ageConfirmedAt).not.toBeNull();
+      expect(st.birthYear).toBe(1990);
     }
+    // Past the age gate (1.7), so the demo learners can use the agent.
+    const identity = createIdentityStore(db);
+    expect(await identity.learnerStatus('demo-student-01')).toBe('clear');
     const split = await db
       .select({
         price: sql<number>`(${s.packageVersions.config}->'pricePerMonth'->>'amountMinor')::int`,
@@ -185,7 +189,11 @@ describe.skipIf(!up)(`demo seed on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
 
   it('the entitlement store resolves the seeded students', async () => {
     const repos = createRepositories(handle.db);
-    const store = entitlementStoreFor(repos, { market: 'global', packMarket: () => 'global' });
+    const store = entitlementStoreFor(repos, {
+      market: 'global',
+      packMarket: () => 'global',
+      learnerClear: async () => true,
+    });
     const at = '2026-10-18T10:00:00.000Z';
     const resolve = (studentId: string) =>
       store.resolve({ studentId, agentId: DEMO_IDS.agent, source: 'subscription' }, at);

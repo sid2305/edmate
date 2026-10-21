@@ -1,6 +1,7 @@
 import type { Chunk, RetrievalIndex } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { memoryRetrieval, OUT_OF_SCOPE_TEXT, retrievalWorld } from './memoryRetrieval.js';
+import { RETRIEVAL_CONTRACT } from './retrievalContract.js';
 
 const SCOPE = { teacherId: 'tch_test_01', allowedModuleIds: ['mod_test_01'] };
 
@@ -199,4 +200,10 @@ describe('memoryRetrieval.leakCheck (ADR-0007): one boolean, complement scope', 
     await expect(leakCheck('q', scope([]))).rejects.toThrow(/candidates/);
     await expect(leakCheck([1], scope([]))).rejects.toThrow(/candidates/);
   }, 5_000);
+});
+
+describe('memoryRetrieval: the shared RetrievalIndex contract (task 5.3)', () => {
+  for (const c of RETRIEVAL_CONTRACT) {
+    it(c.name, () => c.run((chunks) => Promise.resolve(memoryRetrieval({ chunks }))), 5_000);
+  }
 });

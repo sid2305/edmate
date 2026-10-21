@@ -54,8 +54,20 @@ describe('edmate cli', () => {
 
   it('rejects an unknown command', async () => {
     const { io, err } = capture();
-    expect(await run(['chat'], io)).toBe(1);
-    expect(err.join('')).toContain("unknown command 'chat'");
+    expect(await run(['bogus'], io)).toBe(1);
+    expect(err.join('')).toContain("unknown command 'bogus'");
+  });
+
+  it('lists the chat command in the usage text', async () => {
+    const { io, out } = capture();
+    await run(['--help'], io);
+    expect(out.join('')).toContain('chat');
+  });
+
+  it('routes chat to the chat command', async () => {
+    const { io, out } = capture();
+    expect(await run(['chat', '--help'], io)).toBe(0);
+    expect(out.join('')).toContain('Usage: edmate chat');
   });
 
   it('lists the eval command in the usage text', async () => {

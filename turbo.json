@@ -17,6 +17,11 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+    "build-smoke": {
+      "dependsOn": ["build"],
+      "env": ["TEST_DATABASE_URL"],
+      "passThroughEnv": ["CI"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

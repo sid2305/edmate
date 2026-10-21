@@ -22,8 +22,9 @@ class Labels(RepoCase):
     def test_payments_needs_security(self):
         self.assertEqual(self.labels({"packages/payments/x.ts": "x\n"}), ["needs:security-reviewer", "risk:touched"])
 
-    def test_prompt_pack_needs_safety(self):
-        self.assertEqual(self.labels({"content/prompt-packs/x.md": "x\n"}), ["needs:safety-reviewer", "risk:touched"])
+    def test_prompt_pack_needs_code_reviewer_until_pilot_gate(self):
+        # MVP first (20 Oct 2026): the safety group needs code-reviewer only; 13.3 restores safety-reviewer.
+        self.assertEqual(self.labels({"content/prompt-packs/x.md": "x\n"}), ["needs:code-reviewer", "risk:touched"])
 
     def test_harness_hooks_need_security(self):
         self.assertEqual(self.labels({".claude/hooks/x.sh": "x\n"}), ["needs:security-reviewer", "risk:touched"])
@@ -39,7 +40,7 @@ class Labels(RepoCase):
 
     def test_several_groups_union_without_duplicates(self):
         got = self.labels({"packages/payments/x.ts": "x\n", ".github/a.yml": "x\n", "content/skills/s.md": "x\n"})
-        self.assertEqual(got, ["needs:safety-reviewer", "needs:security-reviewer", "risk:touched"])
+        self.assertEqual(got, ["needs:code-reviewer", "needs:security-reviewer", "risk:touched"])
 
     def test_normal_file_has_no_labels(self):
         self.assertEqual(self.labels({"apps/cli/src/x.ts": "x\n"}), [])
@@ -82,7 +83,7 @@ class Labels(RepoCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(
             r.stdout.split(),
-            ["needs:architect", "needs:database-reviewer", "needs:safety-reviewer",
+            ["needs:architect", "needs:code-reviewer", "needs:database-reviewer",
              "needs:security-reviewer", "needs:typescript-reviewer", "risk:touched"],
         )
 

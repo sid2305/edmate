@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { runChatCommand } from './commands/chat.js';
 import { runContentCommand } from './commands/content.js';
 import { runEvalCommand, unwiredAgent } from './commands/eval.js';
 
@@ -13,6 +14,8 @@ Commands:
   eval <dir>                run eval cases offline from recorded fixtures (see edmate eval --help)
   content validate [dir]    check a content tree's files, licences and rules
                             (default dir: content/demo-teacher; see edmate content --help)
+  chat                      an interactive session with the demo teacher's agent
+                            (see edmate chat --help)
 
 Options:
   -v, --version             print the edmate version
@@ -52,6 +55,8 @@ export async function run(argv: readonly string[], io: CliIo = defaultIo): Promi
       });
     case 'content':
       return runContentCommand(rest, io, { cwd: process.cwd() });
+    case 'chat':
+      return runChatCommand(rest, io, { env: process.env, cwd: process.cwd() });
     case undefined:
       io.stderr(USAGE);
       return 1;

@@ -12,6 +12,8 @@ export {
 // Every HarnessError's message is fixed text, codes and ids only, never student or model text
 // (errors.ts); the background log relies on that.
 export {
+  AdviceJudgeUnavailable,
+  DisclaimerLocaleGap,
   errorName,
   GenerateAttemptFailed,
   HarnessError,
@@ -34,8 +36,10 @@ export {
   noTools,
   offeredTools,
   policyTools,
+  type IssuedItem,
   type RegisteredTool,
   type SkillPresentation,
+  type ToolSessionState,
   type ToolRegistry,
   toolSpec,
 } from './tools.js';
@@ -48,6 +52,14 @@ export {
   type TurnLimits,
 } from './limits.js';
 export { runTurn, type RunTurnOptions } from './runner.js';
+export { buildCaringReply } from './steps/escalate.js';
+export {
+  createPreGuardStep,
+  defaultPreGuardRegistry,
+  HISTORY_TIMEOUT_MS,
+  PRE_GUARD_SLICE_MS,
+  PreGuardChainFailedError,
+} from './steps/preGuard.js';
 export {
   ALERT_ATTEMPT_TIMEOUT_MS,
   ALERT_RETRY_MAX_MS,
@@ -70,6 +82,9 @@ export { ATTACHMENT_REFUSED_REPLY } from './steps/scrub.js';
 export { createGenerate, type GenerateOptions, SourceDropped } from './steps/generate.js';
 export { lockedCheckFor, lockedReplyFor } from './steps/locked.js';
 export {
+  ADVICE_JUDGE_TIMEOUT_MS,
+  ADVICE_REWRITE_MIN_MS,
+  ADVICE_SLICE_MARGIN_MS,
   askTeacherReplyFor,
   createPostGuard,
   GROUNDING_JUDGE_MAX_OUTPUT_TOKENS,
@@ -82,6 +97,7 @@ export {
   postGuardSliceMs,
   REWRITE_MAX_OUTPUT_TOKENS,
   REWRITE_SHARE,
+  redirectReplyFor,
   REWRITE_SYSTEM,
 } from './steps/postGuard.js';
 export { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
@@ -116,3 +132,4 @@ export type {
   TurnRun,
   TurnRunResult,
 } from './types.js';
+export { blockedTurnNote, isWithheld, WITHHELD_MESSAGE, withheldMessage } from './policies.js';

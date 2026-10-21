@@ -1,5 +1,5 @@
 import { LIMITS, type EvidenceEvent, type Message } from '@edmate/contracts';
-import { demoTurnTrace, usageMain, usageSmall } from '@edmate/contracts/fixtures';
+import { demoSafetyAlert, demoTurnTrace, usageMain, usageSmall } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import {
   COMMIT_QUEUE,
@@ -286,13 +286,30 @@ describe('queuedTraceSink', () => {
 });
 
 describe('queuedTurnPorts', () => {
-  it('meter jobs go to the meter queue; everything else (including evidence) to the commit queue', async () => {
+  it('meter jobs go to the meter queue, alerts and safety events to their own, the rest (including evidence) to commit', async () => {
     const meter = fakeQueue();
     const commit = fakeQueue();
-    const ports = queuedTurnPorts({ meter, commit }, scope, { history: () => Promise.resolve([]) }, {
-      get: (studentId, teacherId) =>
-        Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+    const alert = fakeQueue();
+    const safetyEvent = fakeQueue();
+    const ports = queuedTurnPorts(
+      { meter, commit, alert, safetyEvent },
+      scope,
+      { history: () => Promise.resolve([]) },
+      {
+        get: (studentId, teacherId) =>
+          Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+      },
+    );
+    await ports.alerts.raise(demoSafetyAlert);
+    await ports.safetyEvents.record({
+      ...scope,
+      sessionId: 'ses_1',
+      turnId: 'trn_1',
+      guard: 'moderationIn',
+      code: 'hate',
+      source: 'rule',
     });
+    expect(safetyEvent.added.map((j) => j.name)).toEqual(['safety_event.record']);
     await ports.usage.record(usageMain, ctx);
     await ports.transcripts.append('ses_1', message);
     await ports.sessionState.saveHelpState('ses_1', {});
@@ -305,6 +322,23 @@ describe('queuedTurnPorts', () => {
       'trace.record',
       'evidence.apply',
     ]);
+    expect(alert.added.map((j) => j.name)).toEqual(['alert.escalate_check', 'alert.raise']);
+  });
+
+  it('passes the alert options through (a shorter escalation delay)', async () => {
+    const alert = fakeQueue();
+    const ports = queuedTurnPorts(
+      { meter: fakeQueue(), commit: fakeQueue(), alert, safetyEvent: fakeQueue() },
+      scope,
+      { history: () => Promise.resolve([]) },
+      {
+        get: (studentId, teacherId) =>
+          Promise.resolve({ studentId, teacherId, lang: 'en', mastery: {}, mistakes: [] }),
+      },
+      { escalateAfterMs: 25 },
+    );
+    await ports.alerts.raise(demoSafetyAlert);
+    expect(alert.added[0]?.opts.delay).toBe(25);
   });
 });
 
@@ -387,14 +421,20 @@ describe('queuedProfileStore', () => {
       store.applyEvidence([{ ...evidenceEvent, teacherId: 'tch_other' }]),
     ).rejects.toThrow(/not this store/);
     expect(q.added).toEqual([]);
-    expect(() => queuedProfileStore(q, { studentId: '', teacherId: 'tch' }, { get: () => Promise.resolve(null as never) })).toThrow(/invalid scope/);
+    expect(() =>
+      queuedProfileStore(
+        q,
+        { studentId: '', teacherId: 'tch' },
+        { get: () => Promise.resolve(null as never) },
+      ),
+    ).toThrow(/invalid scope/);
   });
 
   it('a malformed event or a failed add rejects', async () => {
     await expect(
-      queuedProfileStore(fakeQueue(), scope, { get: () => Promise.resolve(null as never) }).applyEvidence([
-        { ...evidenceEvent, weight: Number.NaN },
-      ]),
+      queuedProfileStore(fakeQueue(), scope, {
+        get: () => Promise.resolve(null as never),
+      }).applyEvidence([{ ...evidenceEvent, weight: Number.NaN }]),
     ).rejects.toThrow();
     await expect(
       queuedProfileStore(fakeQueue({ fail: true }), scope, {

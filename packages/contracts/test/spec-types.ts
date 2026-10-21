@@ -121,6 +121,8 @@ export type GuardResult =
   | { ok: false; action: 'block'; reason: string }
   | { ok: false; action: 'rewrite'; text: string; reason: string }   // text = the replacement input or reply
   | { ok: false; action: 'escalate'; alert: SafetyAlert };
+export type SafetyEventCode = 'self_harm' | 'harm_to_others' | 'sexual' | 'sexual_minors' | 'hate' | 'harassment' | 'threat' | 'weapons' | 'extremism' | 'cheating' | 'other_unsafe'
+  | 'jailbreak_override' | 'jailbreak_roleplay' | 'jailbreak_prompt_leak' | 'jailbreak_encoded' | 'jailbreak_authority_claim' | 'jailbreak_other';   // fixed codes, never free text (ADR-0006)
 export interface Guard { name: string; stage: 'pre' | 'post'; check(x: { input?: TurnInput; draft?: string; ctx: TurnContext }): Promise<GuardResult> }
 export interface LearnerProfile {          // one per (student, teacher)
   studentId: string; teacherId: string; lang: Lang;
@@ -137,8 +139,9 @@ export interface LocalePack {
   market: string; languages: Lang[]; timezone: string;            // IANA, e.g. 'Asia/Kolkata'
   currency: { code: string; format: string };
   payments: { methods: string[]; provider: string };
-  helplines: { name: string; number: string; kind: string }[];
-  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string };
+  helplines: { name: string; number: string; kind: string; verifiedBy: string; verifiedOn: string }[];   // verifiedBy: the person who checked the line (a name or handle, never an email); verifiedOn: YYYY-MM-DD; a loaded pack refuses the literal 'pending' (ADR-0008)
+  compliance: { privacyLaw: string; minAge: number; dataRegion: string; grievance: string; parentalConsentRequired: boolean };   // parentalConsentRequired: learners under 18 need verifiable parental consent in this market (ADR-0008)
+  reviewedBy?: string; reviewedOn?: string;                       // sign-off for the compliance block, both or neither; same formats as verifiedBy / verifiedOn (ADR-0008)
   regulatedDisclaimers: Partial<Record<'investing' | 'health' | 'law', string>>; piiPatterns: string[];
 }
 
@@ -182,3 +185,6 @@ export interface Tool<I, O> {
 export interface EvidenceEvent { studentId: string; teacherId: string; topicId: string; correct: boolean; source: 'check' | 'practice' | 'rubric'; weight: number; ts: string }
 export interface TraceSink { record(t: TurnTrace): Promise<void> }
 export interface AlertSink { raise(a: SafetyAlert): Promise<void> }
+export interface SafetyEventSink {                // moderationIn and jailbreak blocks; ids and a code, never text; dedupe key `${turnId}:${guard}` (ADR-0006)
+  record(e: { studentId: string; teacherId: string; sessionId: string; turnId: string; guard: 'moderationIn' | 'jailbreak'; code: SafetyEventCode; source: 'rule' | 'classifier' }): Promise<void>;
+}

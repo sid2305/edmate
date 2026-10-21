@@ -16,6 +16,10 @@ export default defineConfig({
         'src/pedagogy/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
         // Guard logic is 100% (build plan Definition of done; task 4.1).
         'src/guardrails/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // The access filter is 100% (build plan Definition of done; task 5.4).
+        'src/access/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // The calculator sandbox runs model-chosen input (task 5.5).
+        'src/tools/**': { lines: 100, branches: 100, functions: 100, statements: 100 },
       },
     },
   },

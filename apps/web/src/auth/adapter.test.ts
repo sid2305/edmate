@@ -161,13 +161,31 @@ describe('toAuthAdapter', () => {
     expect(await adapter.getSessionAndUser!(TOKEN)).toBeNull();
   });
 
+  it('createVerificationToken passes through and echoes the token the store never returns', async () => {
+    const { identity, adapter } = setup();
+    const expires = SOON();
+    const token = randomUUID();
+    const out = await adapter.createVerificationToken!({ identifier: 'Link@Example.TEST', token, expires });
+    expect(out).toEqual({ identifier: 'link@example.test', token, expires });
+    expect(identity.links.get('link@example.test')).toEqual({ token, expires });
+  });
+
+  it('useVerificationToken returns the link once, with the token passed in, then null', async () => {
+    const { adapter } = setup();
+    const expires = SOON();
+    const [good, wrong] = [randomUUID(), randomUUID()];
+    const use = (t: string) => adapter.useVerificationToken!({ identifier: 'a@example.test', token: t });
+    await adapter.createVerificationToken!({ identifier: 'a@example.test', token: good, expires });
+    expect(await use(wrong)).toBeNull();
+    expect(await use(good)).toEqual({ identifier: 'a@example.test', token: good, expires });
+    expect(await use(good)).toBeNull();
+  });
+
   it('refuses deleteUser and unlinkAccount', async () => {
     const { adapter } = setup();
     expect(() => adapter.deleteUser!('usr_1')).toThrow('deleteUser is not supported');
     expect(() => adapter.unlinkAccount!({ provider: 'google', providerAccountId: 'g' })).toThrow(
       'unlinkAccount is not supported',
     );
-    expect(adapter.createVerificationToken).toBeUndefined();
-    expect(adapter.useVerificationToken).toBeUndefined();
   });
 });

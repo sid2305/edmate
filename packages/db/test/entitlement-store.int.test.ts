@@ -12,7 +12,7 @@ import {
   RepositoryError,
   type Repositories,
 } from '../src/index.js';
-import { EVAL_STUDENT, packMarket, seedAccess } from './access-seed.js';
+import { EVAL_STUDENT, learnerClear, packMarket, seedAccess } from './access-seed.js';
 import {
   createDatabase,
   dropDatabase,
@@ -30,7 +30,7 @@ let repos: Repositories;
 let raw: pg.Client;
 
 const AT = '2026-10-18T10:00:00.000Z';
-const OPTS: EntitlementStoreOptions = { market: 'IN', packMarket };
+const OPTS: EntitlementStoreOptions = { market: 'IN', packMarket, learnerClear };
 const PREVIEW: EntitlementStoreOptions = { ...OPTS, preview: { packageId: 'pkg_a' } };
 const EVAL: EntitlementStoreOptions = {
   ...OPTS,
@@ -178,6 +178,40 @@ describe.skipIf(!up)(`entitlementStoreFor on Postgres${up ? '' : ` (${SKIP_REASO
       expect(
         await evalRun('agt_a', { ...OPTS, eval: { ...ev, packageId: 'pkg_a_draft' } }),
       ).toBeNull();
+    });
+  });
+
+  describe('learnerClear (1.7): a learner held at the age gate has no subscription entitlement', () => {
+    const held = (calls: string[], clear = false): EntitlementStoreOptions => ({
+      ...OPTS,
+      preview: { packageId: 'pkg_a' },
+      eval: { teacherId: 'tch_a', packageId: 'pkg_a', version: 1, market: 'US' },
+      learnerClear: async (studentId) => {
+        calls.push(studentId);
+        return clear;
+      },
+    });
+
+    it('false: a live subscription resolves to null; asked fresh on every resolve', async () => {
+      const calls: string[] = [];
+      expect(await sub('stu_1', 'agt_a', held(calls))).toBeNull();
+      expect(await sub('stu_1', 'agt_a', held(calls))).toBeNull();
+      expect(calls).toEqual(['stu_1', 'stu_1']);
+      expect(await sub('stu_1', 'agt_a', held(calls, true))).toMatchObject({
+        subscriptionId: 'sub_1a',
+      });
+    });
+
+    it('teacher preview and eval do not ask', async () => {
+      const calls: string[] = [];
+      expect(await preview('tch_a', 'agt_a', held(calls))).toMatchObject({ packageId: 'pkg_a' });
+      expect(await evalRun('agt_a', held(calls))).toMatchObject({ packageId: 'pkg_a' });
+      expect(calls).toEqual([]);
+    });
+
+    it('an error from it fails the resolve, never clears', async () => {
+      const failing = { ...OPTS, learnerClear: () => Promise.reject(new Error('identity down')) };
+      await expect(sub('stu_1', 'agt_a', failing)).rejects.toThrow('identity down');
     });
   });
 });

@@ -1,6 +1,7 @@
 // Test helpers for the harness and its adapters: the contracts fixtures plus the scripted gateway.
 export * from '@edmate/contracts/fixtures';
 export { type Clock, type ManualClock, manualClock } from './clock.js';
+export { indiaLocalePackWithHelplines } from './distressLocaleFixtures.js';
 export { driveEvents, driveTurn, type TimedEvent } from './driveTurn.js';
 export {
   type FakeGuard,
@@ -25,16 +26,38 @@ export {
   twoTeacherWorld,
 } from './memoryAccess.js';
 export {
+  junkProbeRetrieval,
+  MARKED_MODULES,
+  MARKED_TEACHERS,
+  MARKED_VOCAB,
+  markedWorld,
+  markOf,
+  textLeakingRetrieval,
+  wideningRetrieval,
+} from './hostileRetrieval.js';
+export {
   type MemoryRetrieval,
   memoryRetrieval,
   OUT_OF_SCOPE_TEXT,
   retrievalWorld,
 } from './memoryRetrieval.js';
+export {
+  CONTRACT,
+  CONTRACT_LOCKED_SPAN,
+  contractWorld,
+  type MakeRetrieval,
+  RETRIEVAL_CONTRACT,
+  type RetrievalContractCase,
+} from './retrievalContract.js';
 export { IN_PII_PATTERNS, indiaLocalePackWithPii } from './piiLocaleFixtures.js';
+export { PII_SCRUB_CASES, type PiiScrubCase, piiScrubCaseFailures } from './piiScrubCases.js';
 export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,
   memoryAlertSink,
+  type MemorySafetyEventSink,
+  memorySafetyEventSink,
+  type SafetyEvent,
   type MemorySessionStateStore,
   memorySessionStateStore,
   type MemoryTeacherQuestionStore,
@@ -76,6 +99,17 @@ export {
 export { VIRTUAL_EPOCH_MS, type VirtualClock, virtualClock } from './virtualClock.js';
 export { type MemoryToolRegistry, memoryToolRegistry, testTool } from './memoryToolRegistry.js';
 export { type SpyGateway, spyGateway } from './spyGateway.js';
+export {
+  ADVICE_VERDICT,
+  type AdviceJudgeGateway,
+  adviceJudgeGateway,
+  type AdviceJudgeInput,
+  type AdviceVerdict,
+  CLEAN_ADVICE_VERDICT,
+  hasAdviceMarker,
+  markerJudge,
+  readAdviceJudgeRequest,
+} from './adviceJudge.js';
 export {
   GROUNDED_VERDICT,
   type JudgeGateway,

@@ -44,6 +44,8 @@ export async function skillEvent(
   ctx: TurnContext,
   mustNotReveal: readonly string[],
   lockedCheck: LockedCheck,
+  /** An issued item's shown text (5.6 review): the key check reads only this, not the JSON. */
+  shownText?: readonly string[],
 ): Promise<Extract<TurnEvent, { type: 'skill' }> | SkillEventDropped | undefined> {
   if (entry.present === undefined) return undefined;
   const drop = (reason: SkillDropReason) => new SkillEventDropped(entry.tool.name, reason);
@@ -59,7 +61,7 @@ export async function skillEvent(
   if (!ctx.entitlement.skills.includes(p.data.skill)) return drop('not_entitled');
   const json = jsonSafe(p.data.payload);
   if (!json.ok || json.json.length > LIMITS.skillPayloadMaxJsonLength) return drop('too_large');
-  if (revealsAnswerKey(json.value, mustNotReveal)) return drop('answer_key');
+  if (revealsAnswerKey(shownText ?? json.value, mustNotReveal)) return drop('answer_key');
   try {
     if (await lockedCheck(stringLeaves(json.value))) return drop('locked');
   } catch (e) {

@@ -7,6 +7,16 @@ import { z } from 'zod';
 
 /** The highest persona question count stored; the count stops there (3.11d). */
 export const PERSONA_QUESTIONS_MAX = 1_000;
+/** Most served practice item ids kept for the exclude list (oldest dropped first). */
+export const PRACTICE_SERVED_MAX = 20;
+/** Longest stored practice item or module id. */
+export const PRACTICE_ID_MAX = 200;
+/**
+ * Longest JSON of the practice keys a turn may save (the union of its issued items' keys, 5.6
+ * review). With the id limits above it keeps a full state under LIMITS.helpStateMaxJsonLength,
+ * so a saved key is never dropped by `serializeSessionHelp` throwing.
+ */
+export const PRACTICE_KEYS_MAX_JSON = 2_048;
 
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */
@@ -15,7 +25,11 @@ export const HelpStateSchema = z.strictObject({
   attemptLogged: z.boolean(),
   /** The last move was `solution` or `explain`, so this turn is a `check`. */
   pendingCheck: z.boolean(),
-  /** The current problem's answer; goes to `mustNotReveal`. Filled by 5.6. */
+  /**
+   * The current problem's answer; goes to `mustNotReveal`. Filled by the runner (5.6, ADR-0010)
+   * when a `practice.next_item` item went out: looked up server-side by item id, never read from
+   * the model or the tool's model-visible output.
+   */
   answerKey: z.array(z.string()),
   /**
    * Set once a turn has a locked hit or failed locked check anywhere (ADR-0007 §8, 4.6b). Stays
@@ -39,6 +53,33 @@ export const HelpStateSchema = z.strictObject({
    * its rung. Capped at PERSONA_QUESTIONS_MAX so a long session never makes the state unsavable.
    */
   personaQuestionsAsked: z.int().min(0).max(PERSONA_QUESTIONS_MAX).exactOptional(),
+  /**
+   * The practice item whose key `answerKey` holds (5.6, ADR-0010). While it is set and
+   * `answerKey` is not empty, the ladder uses the practice cap whatever skill the turn chose
+   * (`holdsPracticeKey`). Optional, so a blob saved before 5.6 still parses.
+   */
+  practiceItemId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
+  /** The active practice item's module: the tool's second module tier (5.6). */
+  practiceModuleId: z.string().min(1).max(PRACTICE_ID_MAX).exactOptional(),
+  /** Practice item ids already served this session, oldest first (the tool's exclude list). */
+  practiceServed: z
+    .array(z.string().min(1).max(PRACTICE_ID_MAX))
+    .max(PRACTICE_SERVED_MAX)
+    .exactOptional(),
+  /**
+   * A skipped practice item's key (5.6c, ADR-0011 §2-3): when a turn issues a new item while the
+   * loaded state held an unsolved one, the runner saves the old key here for exactly one turn.
+   * Guarded (policy puts it in `mustNotReveal` on every move, never released) but never in the
+   * prompt, never graded (`classifyAttempt` reads only `answerKey`) and never read by
+   * `holdsPracticeKey`. buildContext drops chunks that hold it. The runner alone sets it and
+   * removes it from every other saved state; `copyHelp` keeps it and `practiceFields` leaves it
+   * out. The JSON of `answerKey` plus this stays within PRACTICE_KEYS_MAX_JSON (the practice
+   * tool's cap counts held keys). Optional, so a blob saved before 5.6c still parses. No entry cap
+   * of its own (5.6c fix round): the carried key is a subset of a loaded `answerKey`, which has
+   * none, so a cap here could make `serializeSessionHelp` throw on a state the tool let through.
+   * The JSON caps above and LIMITS.helpStateMaxJsonLength bound it.
+   */
+  practiceCarriedKey: z.array(z.string()).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
 
@@ -57,7 +98,33 @@ export const INITIAL_HELP_STATE: Readonly<HelpState> = Object.freeze({
 
 /** A fresh copy, so a result never aliases (possibly frozen) input state. */
 export function copyHelp(h: Readonly<HelpState>): HelpState {
-  return { ...h, answerKey: [...h.answerKey] };
+  return {
+    ...h,
+    answerKey: [...h.answerKey],
+    ...(h.practiceServed === undefined ? {} : { practiceServed: [...h.practiceServed] }),
+    ...(h.practiceCarriedKey === undefined
+      ? {}
+      : { practiceCarriedKey: [...h.practiceCarriedKey] }),
+  };
+}
+
+/** The help state holds a practice item's key (5.6): the practice cap applies (ADR-0010 §5). */
+export function holdsPracticeKey(h: Readonly<HelpState>): boolean {
+  return h.practiceItemId !== undefined && h.answerKey.length > 0;
+}
+
+/**
+ * The practice fields of `h` (5.6), for carrying them over a state decide rebuilt without them.
+ * Never `practiceCarriedKey`: it lasts one turn (5.6c, ADR-0011).
+ */
+export function practiceFields(
+  h: Readonly<HelpState>,
+): Pick<HelpState, 'practiceItemId' | 'practiceModuleId' | 'practiceServed'> {
+  return {
+    ...(h.practiceItemId === undefined ? {} : { practiceItemId: h.practiceItemId }),
+    ...(h.practiceModuleId === undefined ? {} : { practiceModuleId: h.practiceModuleId }),
+    ...(h.practiceServed === undefined ? {} : { practiceServed: [...h.practiceServed] }),
+  };
 }
 
 /** The stored `sessions.help_state` (ADR-0005): a version, the rung and the HelpState fields. */
@@ -107,6 +174,10 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
       ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
+      ...practiceFields(r.data),
+      ...(r.data.practiceCarriedKey === undefined
+        ? {}
+        : { practiceCarriedKey: r.data.practiceCarriedKey }),
     }),
   };
 }

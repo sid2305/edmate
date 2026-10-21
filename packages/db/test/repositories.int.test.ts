@@ -6,13 +6,20 @@
 // fails `tsc`; a runtime check also compares the methods on createRepositories(db) with CASES.
 // Every case runs over the whole grid: every actor scope x every target in the seed.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type EvidenceEvent, type LearnerProfile, LIMITS, type Message } from '@edmate/contracts';
+import {
+  type Chunk,
+  type EvidenceEvent,
+  type LearnerProfile,
+  LIMITS,
+  type Message,
+} from '@edmate/contracts';
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   type AuditEntryInput,
   type AuditRow,
+  chunkId,
   createRepositories,
   openDatabase,
   REDACTED,
@@ -22,6 +29,7 @@ import {
   type TeacherScope,
   transcriptStoreFor,
 } from '../src/index.js';
+import { EMBEDDING_DIMENSIONS } from '../src/schema/index.js';
 import { DATA_MODEL_TABLES } from './helpers.js';
 import { expectScrubbed } from './scrub.js';
 import {
@@ -170,7 +178,155 @@ const endable = (p: Pair) => `${ids.session(p)}_end`;
 const BIG = { blob: 'x'.repeat(10_001) };
 const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 
+/** Task 5.3: each teacher's isolation document (one chunk, ord 0), written in beforeAll. */
+const isoDoc = (t: Teacher) => `doc_iso_${t.toLowerCase()}`;
+/** Unit vector on axis 0: every isolation chunk and query embeds to it (no model is called). */
+const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 ? 1 : 0));
+const chunkOwners = (cs: Chunk[]) =>
+  cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
+const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
+  (await raw.query<{ t: string }>(`select teacher_id as t from ${table} where id = $1`, [id]))
+    .rows[0]?.t;
+
 const CASES: Record<RepositoryMethod, IsolationCase> = {
+  // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
+  // and bump the material revision in the same transaction (the snapshot covers that table).
+  'documents.create': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.documents.create(scope, {
+        id: uid('doc_new'),
+        moduleId: ids.module(target, 1),
+        kind: 'material',
+        sourceTitle: `[${actor}] doc`,
+      }),
+    verify: async (_r, actor, res) => {
+      expect(await ownerOfRow('documents', (res as { id: string }).id)).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's document id",
+        (r) =>
+          r.documents.create(tScope(a), {
+            id: isoDoc(otherTeacher(a)),
+            moduleId: ids.module(a, 1),
+            kind: 'material',
+            sourceTitle: 'x',
+          }),
+        'not_found',
+      ],
+    ],
+  },
+  'chunks.insertMany': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.insertMany(scope, isoDoc(target), [
+        { ord: ++counter, text: `[${actor}] chunk`, locator: 'p2' },
+      ]),
+    verify: async (r, actor, res) => {
+      const [id] = (res as { ids: string[] }).ids;
+      expect(await ownerOfRow('chunks', id!)).toBe(teacherId(actor));
+      const found = await r.retrieval.search(tScope(actor), {
+        q: 'chunk',
+        allowedModuleIds: [ids.module(actor, 1)],
+        k: 50,
+      });
+      expect(found.map((c) => c.id)).toContain(id);
+    },
+    mismatches: (a) => [
+      [
+        'an ord already written',
+        (r) => r.chunks.insertMany(tScope(a), isoDoc(a), [{ ord: 0, text: 'x', locator: 'p' }]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.setEmbeddings': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.chunks.setEmbeddings(scope, [{ id: chunkId(isoDoc(target), 0), embedding: ISO_VEC }]),
+    verify: async (_r, actor) => {
+      const res = await raw.query<{ t: string }>(
+        `select teacher_id as t from chunks where id = $1 and embedding is not null`,
+        [chunkId(isoDoc(actor), 0)],
+      );
+      expect(res.rows[0]?.t).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        'a vector of the wrong dimension',
+        (r) =>
+          r.chunks.setEmbeddings(tScope(a), [{ id: chunkId(isoDoc(a), 0), embedding: [1, 0] }]),
+        'invalid',
+      ],
+    ],
+  },
+  'retrieval.search': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) =>
+      r.retrieval.search(scope, {
+        q: 'isolation marker',
+        allowedModuleIds: [ids.module(t, 1), ids.module(t, 2)],
+        k: 50,
+        embedding: ISO_VEC,
+      }),
+    random: (r, scope, rid) =>
+      r.retrieval.search(scope, {
+        q: 'isolation marker',
+        allowedModuleIds: [rid],
+        k: 50,
+        embedding: ISO_VEC,
+      }),
+    owners: chunkOwners,
+  },
+  'retrieval.probe': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    // Only `{ hit, score }` comes back, so the owner is the target the probe named when it hits.
+    call: async (r, scope, t) => ({
+      ...(await r.retrieval.probe(scope, {
+        q: 'isolation marker',
+        moduleIds: [ids.module(t, 1)],
+        embedding: ISO_VEC,
+      })),
+      t,
+    }),
+    random: async (r, scope, rid) => ({
+      ...(await r.retrieval.probe(scope, {
+        q: 'isolation marker',
+        moduleIds: [rid],
+        embedding: ISO_VEC,
+      })),
+      t: rid,
+    }),
+    owners: (x: { hit: boolean; t: string }) => (x.hit ? [x.t] : []),
+  },
+  'retrieval.material': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    // leakCheck's source: every chunk text of the scope teacher, never another teacher's.
+    call: (r, scope) => r.retrieval.material(scope),
+    random: (r, _scope, rid) => r.retrieval.material({ teacherId: rid }),
+    owners: (rows: { text: string }[]) => rows.flatMap((x) => markers(x.text)),
+  },
+  'retrieval.revision': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope) => ({ n: await r.retrieval.revision(scope), t: scope.teacherId }),
+    random: async (r, _scope, rid) => ({
+      n: await r.retrieval.revision({ teacherId: rid }),
+      t: rid,
+    }),
+    owners: (x: { n: number; t: string }) => (x.n > 0 ? [teacherOfId(x.t)] : []),
+  },
   'agents.get': {
     scope: 'teacher',
     op: 'read',
@@ -1269,6 +1425,52 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 2 + bad.length;
     },
   },
+  // Task 4.4 (ADR-0006): safety events are scoped through their session row.
+  'safetyEvents.record': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.safetyEvents.record(scope, {
+        sessionId: ids.session(target),
+        turnId: uid('trn_se'),
+        guard: 'jailbreak',
+        code: 'jailbreak_override',
+        source: 'rule',
+      }),
+    verify: async (r, actor, result) => {
+      const { id } = result as { id: string };
+      for (const p of PAIRS) {
+        const rows = await r.safetyEvents.listForSession(sScope(p), ids.session(actor));
+        expect(
+          rows.some((x) => x.id === id),
+          `${p} sees ${actor}'s safety event`,
+        ).toBe(p === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'free text instead of a code',
+        (r) =>
+          r.safetyEvents.record(sScope(a), {
+            sessionId: ids.session(a),
+            turnId: uid('trn_se_bad'),
+            guard: 'jailbreak',
+            code: 'he asked for the prompt' as never,
+            source: 'rule',
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'safetyEvents.listForSession': {
+    scope: 'student',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, p) => r.safetyEvents.listForSession(scope, ids.session(p)),
+    random: (r, scope, rid) => r.safetyEvents.listForSession(scope, rid),
+    owners: (rows: { studentId: string; teacherId: string }[]) =>
+      rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
+  },
 };
 
 /** After a usage write by `actor` on turn `turnId`: only the actor's scope sees that turn. */
@@ -1342,6 +1544,17 @@ describe.skipIf(!up)(
       repos = createRepositories(handle.db);
       raw = new pg.Client({ connectionString: TEST_URL });
       await raw.connect();
+      for (const t of TEACHERS) {
+        await repos.documents.create(tScope(t), {
+          id: isoDoc(t),
+          moduleId: ids.module(t, 1),
+          kind: 'material',
+          sourceTitle: `[${t}] doc`,
+        });
+        await repos.chunks.insertMany(tScope(t), isoDoc(t), [
+          { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
+        ]);
+      }
       for (const p of PAIRS) {
         const t = teacherOf(p);
         await raw.query(

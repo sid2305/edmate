@@ -17,11 +17,11 @@
     "@edmate/content": "workspace:*",
     "@edmate/contracts": "workspace:*",
     "@edmate/evals": "workspace:*",
-    "@edmate/gateway": "workspace:*"
+    "@edmate/gateway": "workspace:*",
+    "@edmate/harness": "workspace:*"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
-    "@edmate/harness": "workspace:*",
     "@types/node": "22.20.5",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",

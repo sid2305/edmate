@@ -6,8 +6,11 @@
 # one. merge_gate.py parses these lines; a glob with no reviewers line above it fails the gate.
 # Updated for task 0.7 (18 Oct 2026): the lead decides every merge (human decision).
 
-# Student safety and teaching behaviour (build plan rule 6); also needs safety-review.md
-# reviewers: safety-reviewer
+# Student safety and teaching behaviour (build plan rule 6). MVP first (human decision, 20 Oct 2026):
+# until the pilot gate this group needs only code-reviewer, which runs on every PR anyway; the PR
+# still logs `risk: high`. Task 13.3 restores `safety-reviewer` here (and safety-review.md) and runs
+# one whole-system safety review before real students.
+# reviewers: code-reviewer
 packages/harness/src/guardrails/**
 content/prompt-packs/**
 content/skills/**
@@ -15,6 +18,8 @@ evals/suites/safety/**
 evals/suites/locked/**
 apps/worker/src/alerts/**
 content/locales/**
+# Privacy notices: the text a learner (or parent) consents to, by version (task 1.7)
+content/legal/**
 # Teaching policy, prompt-pack parsing and the system-prompt composer, and the prompt-pack
 # loader (task 3.6, lead answer Q5: what reaches the model and how distress turns are worded)
 packages/harness/src/pedagogy/**

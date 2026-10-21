@@ -29,6 +29,12 @@ export interface StreamGate {
   flush(): readonly string[];
   /** True once the gate withheld text as a leak; postGuard then replaces the reply (4.5). */
   readonly tripped?: boolean;
+  /**
+   * Adds answer keys mid-attempt (5.6, ADR-0010 §4): a practice item's key, the moment the tool
+   * that issued it returns. Text still held is judged with them; text already shown is kept as
+   * the window in front. Optional: a gate without it leaves the new key to postGuard.
+   */
+  addKeys?(keys: readonly string[]): void;
 }
 
 /** What a gate is built from: the turn, the decision and the student's (scrubbed) message. */
@@ -78,9 +84,20 @@ function windowStart(released: string, reach: number): number {
   return i;
 }
 
-/** The gate over one matcher; with no keys it shows every piece as it comes. */
-export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE_CAP): StreamGate {
-  if (keys.empty) return { push: (t) => (t === '' ? [] : [t]), flush: () => [], tripped: false };
+/**
+ * The gate over one matcher; with no keys it shows every piece as it comes. `grow` (5.6) rebuilds
+ * the matcher with keys added mid-attempt; without it, `addKeys` is absent.
+ */
+export function sentenceGate(
+  initial: AnswerKeyMatcher,
+  cap: number = SENTENCE_GATE_CAP,
+  grow?: (extra: readonly string[]) => AnswerKeyMatcher,
+): StreamGate {
+  if (initial.empty && grow === undefined) {
+    return { push: (t) => (t === '' ? [] : [t]), flush: () => [], tripped: false };
+  }
+  let keys = initial;
+  const extra: string[] = [];
   let released = '';
   let buf = '';
   /** Units of `buf` already scanned for sentence ends (never rescanned). */
@@ -184,10 +201,16 @@ export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE
     return out;
   };
 
-  return {
+  const gate: StreamGate = {
     push(text) {
       if (tripped || text === '') return [];
       pushed += text.length;
+      // No keys yet (a growable gate before its first addKeys): shown as it comes, as above, but
+      // kept as the window in front of what a later key judges.
+      if (keys.empty) {
+        released += text;
+        return [text];
+      }
       // More than a reply may hold: never judged piece by piece (bounded work), never shown.
       if (pushed > LIMITS.modelTextMaxLength) {
         trip();
@@ -204,10 +227,19 @@ export function sentenceGate(keys: AnswerKeyMatcher, cap: number = SENTENCE_GATE
       return tripped;
     },
   };
+  if (grow !== undefined) {
+    gate.addKeys = (more) => {
+      extra.push(...more);
+      keys = grow(extra);
+    };
+  }
+  return gate;
 }
 
 /** The default gate: the turn's do-not-say list, with the student's own code allowed back. */
-export const answerLeakStreamGate: StreamGateFactory = ({ decision, studentText }) =>
-  sentenceGate(
-    compileAnswerKeys(decision.mustNotReveal, studentText === undefined ? {} : { studentText }),
+export const answerLeakStreamGate: StreamGateFactory = ({ decision, studentText }) => {
+  const opts = studentText === undefined ? {} : { studentText };
+  return sentenceGate(compileAnswerKeys(decision.mustNotReveal, opts), SENTENCE_GATE_CAP, (extra) =>
+    compileAnswerKeys([...decision.mustNotReveal, ...extra], opts),
   );
+};

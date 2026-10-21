@@ -3,7 +3,12 @@
 // to `ask_teacher`. Never general knowledge.
 import type { Chunk, TurnContext } from '@edmate/contracts';
 
-/** Provisional, on a 0–1 scale; 5.3 calibrates it on the demo Q&A set. */
+/**
+ * On the 0–1 relevance scale of `Chunk.score`. Calibrated by 5.3 on the demo Q&A set: the
+ * production index maps its scores so this line separates in-course from out-of-course questions
+ * (full text: 27 of 30 in-course at or above, 1 of 8 out-of-course). The vector side stays
+ * provisional until the real model's vectors are recorded (B-24).
+ */
 export const DEFAULT_COVERAGE_THRESHOLD = 0.5;
 
 /** Covered = some chunk scores at or above the threshold. An unscored chunk does not count. */

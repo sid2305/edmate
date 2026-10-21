@@ -14,6 +14,8 @@ export {
   checkMaxChars,
   checkMaxWords,
   checkMustCiteSource,
+  checkMustBlock,
+  checkMustEscalate,
   countChars,
   countWords,
 } from './checks/structure.js';

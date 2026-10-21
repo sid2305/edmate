@@ -1,0 +1,5 @@
+[
+  "Good, you converted the input with int() first. Now what happens if the learner types a word instead of a number?",
+  "What do you think this prints? Try running it and see.",
+  "That line is missing its colon, so Python cannot tell where the if-block starts."
+]

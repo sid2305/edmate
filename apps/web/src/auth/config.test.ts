@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { IdentityStore } from '@edmate/db';
+import { RepositoryError, type IdentityStore } from '@edmate/db';
 import type { Account, Profile, Session, User } from 'next-auth';
 import type { AdapterUser } from 'next-auth/adapters';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { memoryIdentity } from '../../test/memory-identity';
+import { memoryMail } from '../../test/memory-mail';
 import {
   createAuthConfig,
+  RATE_LIMITED_PATH,
+  safeRedirect,
   principalFromIdentity,
   sessionCookieName,
   SESSION_MAX_AGE_S,
@@ -24,6 +27,165 @@ function envFor(url: string, trust?: string) {
 }
 
 const identity = memoryIdentity() as IdentityStore;
+const NO_HEADERS = new Headers();
+const SMTP = ['smtp://', 'sandbox.example.test:1025'].join('');
+
+function emailEnv(withGoogle: boolean) {
+  return readAuthEnv({
+    AUTH_SECRET: 'test-only-'.padEnd(40, 'x'),
+    AUTH_URL: 'http://localhost:8080',
+    EMAIL_SERVER: SMTP,
+    EMAIL_FROM: 'Edmate <sign-in@example.test>',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    ...(withGoogle
+      ? {
+          AUTH_GOOGLE_ID: 'test-client.apps.example',
+          AUTH_GOOGLE_SECRET: 'test-google-client-value',
+        }
+      : {}),
+  });
+}
+
+describe('safeRedirect', () => {
+  const app = new URL('http://localhost:8080');
+  it.each([
+    ['/teachers', 'http://localhost:8080/teachers'],
+    ['/teachers?x=1#y', 'http://localhost:8080/teachers?x=1#y'],
+    ['http://localhost:8080/me', 'http://localhost:8080/me'],
+    [RATE_LIMITED_PATH, `http://localhost:8080${RATE_LIMITED_PATH}`],
+  ])('keeps %s', (url, out) => {
+    expect(safeRedirect(url, app)).toBe(out);
+  });
+
+  it.each([
+    'https://evil.test',
+    'https://evil.test/api/auth/callback/email',
+    '//evil.test',
+    '/\\evil.test',
+    '/\t/evil.test',
+    'javascript:alert(1)',
+    'http://localhost:8080.evil.test',
+    'http://localhost:9090/me',
+    'https://localhost:8080/me',
+    'http://[::1',
+  ])('maps %s to the AUTH_URL origin', (url) => {
+    expect(safeRedirect(url, app)).toBe('http://localhost:8080');
+  });
+
+  it('the redirect callback compares with AUTH_URL, not the (forwardable) baseUrl', async () => {
+    const c = createAuthConfig({ identity, env: envFor('http://localhost:8080', 'true') });
+    const redirect = (url: string, baseUrl: string) => c.callbacks!.redirect!({ url, baseUrl });
+    expect(await redirect('https://evil.test/x', 'https://evil.test')).toBe(
+      'http://localhost:8080',
+    );
+    expect(await redirect('/teachers', 'https://evil.test')).toBe('http://localhost:8080/teachers');
+  });
+});
+
+describe('providers by env', () => {
+  const emailSignIn = { mail: memoryMail(), limiter: { allow: vi.fn(async () => true) } };
+  const ids = (c: ReturnType<typeof createAuthConfig>) =>
+    (c.providers as unknown as { id: string }[]).map((p) => p.id);
+
+  it('email only: just the email provider, 15-minute links', () => {
+    const c = createAuthConfig({ identity, env: emailEnv(false), emailSignIn });
+    expect(ids(c)).toEqual(['email']);
+    expect((c.providers[0] as unknown as { maxAge: number }).maxAge).toBe(900);
+  });
+
+  it('both: Google then email', () => {
+    expect(ids(createAuthConfig({ identity, env: emailEnv(true), emailSignIn }))).toEqual([
+      'google',
+      'email',
+    ]);
+  });
+
+  it('email env without a mail sender and limiter is refused (no unlimited links)', () => {
+    expect(() => createAuthConfig({ identity, env: emailEnv(false) })).toThrow(
+      'email sign-in needs a mail sender and a limiter',
+    );
+  });
+});
+
+describe('signIn callback: email', () => {
+  const account = (over: Partial<Account> = {}) =>
+    ({
+      provider: 'email',
+      type: 'email',
+      providerAccountId: 'link@example.test',
+      ...over,
+    }) as Account;
+  const xff = new Headers({ 'x-forwarded-for': '203.0.113.7' });
+
+  function make(allowed: boolean | Error, request: boolean = true) {
+    const allow = vi.fn(async () => {
+      if (allowed instanceof Error) throw allowed;
+      return allowed;
+    });
+    const c = createAuthConfig({
+      identity,
+      env: emailEnv(false),
+      emailSignIn: { mail: memoryMail(), limiter: { allow } },
+      ...(request ? { request: { cookies: { get: () => undefined }, headers: xff } } : {}),
+    });
+    const signIn = (verificationRequest: boolean | undefined, acc: Account = account()) =>
+      c.callbacks!.signIn!({
+        user: { id: 'stand-in', email: 'link@example.test' } as User,
+        account: acc,
+        ...(verificationRequest === undefined ? {} : { email: { verificationRequest } }),
+      });
+    return { allow, signIn };
+  }
+
+  it('a link request under the limit is allowed; the limiter sees the address and the headers', async () => {
+    const { allow, signIn } = make(true);
+    expect(await signIn(true)).toBe(true);
+    expect(allow).toHaveBeenCalledWith({ email: 'link@example.test', headers: xff });
+  });
+
+  it('over the limit: the RateLimited error page, never a branch on the user', async () => {
+    const { signIn } = make(false);
+    expect(await signIn(true)).toBe(RATE_LIMITED_PATH);
+  });
+
+  it('a limiter error propagates (Auth.js fails the request closed)', async () => {
+    const { signIn } = make(new Error('redis down'));
+    await expect(signIn(true)).rejects.toThrow('redis down');
+  });
+
+  it('no request (a server action) is refused without touching the limiter', async () => {
+    const { allow, signIn } = make(true, false);
+    expect(await signIn(true)).toBe(false);
+    expect(allow).not.toHaveBeenCalled();
+  });
+
+  it('a request but no email wiring is refused', async () => {
+    const c = createAuthConfig({
+      identity,
+      env: envFor('http://localhost:8080'),
+      request: { cookies: { get: () => undefined }, headers: NO_HEADERS },
+    });
+    expect(
+      await c.callbacks!.signIn!({
+        user: {} as User,
+        account: account(),
+        email: { verificationRequest: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('the link callback (token already used up by Auth.js) is allowed without a limiter take', async () => {
+    const { allow, signIn } = make(false);
+    expect(await signIn(undefined)).toBe(true);
+    expect(await signIn(false)).toBe(true);
+    expect(allow).not.toHaveBeenCalled();
+  });
+
+  it('a provider called email that is not of type email falls to the Google rules (refused)', async () => {
+    const { signIn } = make(true);
+    expect(await signIn(true, account({ type: 'oauth' }))).toBe(false);
+  });
+});
 
 describe('createAuthConfig', () => {
   it('uses database sessions with 30-day expiry refreshed daily, and no debug output', () => {
@@ -96,7 +258,7 @@ describe('createAuthConfig', () => {
   });
 
   describe('signIn callback', () => {
-    const noCookies = { cookies: { get: () => undefined } };
+    const noCookies = { cookies: { get: () => undefined }, headers: NO_HEADERS };
     const c = createAuthConfig({
       identity,
       env: envFor('http://localhost:8080'),
@@ -135,6 +297,41 @@ describe('createAuthConfig', () => {
       expect(await signIn(account, profile)).toBe(false);
     });
 
+    it('refuses every sign-in from a browser the age gate closed (1.7), before any lookup', async () => {
+      for (const secure of [false, true]) {
+        const url = secure ? 'https://edmate.example' : 'http://localhost:8080';
+        const blockName = secure ? '__Host-edmate.age-block' : 'edmate.age-block';
+        const allow = vi.fn(async () => true);
+        const blocked = createAuthConfig({
+          identity,
+          env: { ...envFor(url), email: emailEnv(false).email! },
+          emailSignIn: { mail: memoryMail(), limiter: { allow } },
+          request: {
+            cookies: { get: (n: string) => (n === blockName ? { value: '1' } : undefined) },
+            headers: NO_HEADERS,
+          },
+        });
+        const call = (account: Partial<Account>, extra: object = {}) =>
+          blocked.callbacks!.signIn!({ user: {} as User, account: account as Account, ...extra });
+        expect(
+          await call(
+            { provider: 'google', providerAccountId: 'g' },
+            { profile: { email: 'a@example.test', email_verified: true } },
+          ),
+        ).toBe(false);
+        expect(
+          await call(
+            { provider: 'email', type: 'email', providerAccountId: 'a@example.test' },
+            { email: { verificationRequest: true } },
+          ),
+        ).toBe(false);
+        expect(
+          await call({ provider: 'email', type: 'email', providerAccountId: 'a@example.test' }),
+        ).toBe(false);
+        expect(allow).not.toHaveBeenCalled();
+      }
+    });
+
     it('fails closed with no request to read the current session from', async () => {
       const bare = createAuthConfig({ identity, env: envFor('http://localhost:8080') });
       expect(
@@ -144,6 +341,30 @@ describe('createAuthConfig', () => {
           profile: { email: 'a@example.test', email_verified: true } as Profile,
         }),
       ).toBe(false);
+    });
+
+    it('an owner whose standing cannot be read (not a student) is not treated as blocked (fix round 1)', async () => {
+      const owner = { id: 'owner-1' };
+      const fake: Partial<IdentityStore> = {
+        getUserByAccount: vi.fn(async () => owner as never),
+        getUserByEmail: vi.fn(async () => owner as never),
+        learnerStatus: vi.fn(async () => {
+          throw new RepositoryError('scope', 'learnerStatus');
+        }),
+        getSessionAndUser: vi.fn(async () => null),
+      };
+      const notAStudent = createAuthConfig({
+        identity: fake as IdentityStore,
+        env: envFor('http://localhost:8080'),
+        request: noCookies,
+      });
+      expect(
+        await notAStudent.callbacks!.signIn!({
+          user: {} as User,
+          account: { provider: 'google', providerAccountId: 'g' } as Account,
+          profile: { email: 'a@example.test', email_verified: true } as Profile,
+        }),
+      ).toBe(true);
     });
   });
 
@@ -178,6 +399,7 @@ describe('createAuthConfig', () => {
         cookies: {
           get: (n: string) => (n === 'authjs.session-token' ? { value: token } : undefined),
         },
+        headers: NO_HEADERS,
       };
       const config = createAuthConfig({
         identity: id,

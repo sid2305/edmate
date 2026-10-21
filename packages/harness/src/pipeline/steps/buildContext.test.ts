@@ -19,6 +19,7 @@ import {
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
+import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
 import { INITIAL_HELP_STATE } from '../../pedagogy/helpState.js';
 import {
   memoryRetrieval,
@@ -31,13 +32,17 @@ import { BuiltContextSchema } from '../results.js';
 import type { Entitled, PipelineDeps, StepEnv } from '../types.js';
 import {
   buildContext,
+  contextAnswerKeys,
+  dropAnswerKeyChunks,
   HISTORY_FETCH_LIMIT,
   HISTORY_MAX_CHARS,
   MAX_CONTEXT_CHARS,
   RETRIEVAL_K,
   RetrievalScopeError,
 } from './buildContext.js';
+import { WITHHELD_MESSAGE, withheldMessage } from '../policies.js';
 import { historyChars } from './historyTrim.js';
+import { compileAnswerKeys } from '../generate/answerKey.js';
 
 const ENTITLED: Entitled = {
   entitlement: demoEntitlementSubscription,
@@ -129,6 +134,17 @@ describe('buildContext: history', () => {
     expect(b.history).toEqual(history);
   });
 
+  it('a withheld (blocked) student message is dropped from the history and the query (4.4 fix round)', async () => {
+    const history = [
+      msg(0, 'student', withheldMessage('jailbreak_override')),
+      msg(1, 'student', WITHHELD_MESSAGE),
+      msg(2, 'agent', 'My rules stay the same.'),
+      msg(3, 'student', 'what is a list'),
+    ];
+    const b = await run(world({ history }));
+    expect(b.history.map((m) => m.text)).toEqual(['My rules stay the same.', 'what is a list']);
+  });
+
   it('a long history is trimmed oldest first and keeps the latest message', async () => {
     const history = Array.from({ length: 40 }, (_, i) =>
       msg(i, i % 2 === 0 ? 'agent' : 'student', `${String(i)} ${'z'.repeat(2000)}`),
@@ -141,7 +157,7 @@ describe('buildContext: history', () => {
 });
 
 describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
-  it('every search carries the entitlement teacher and allowed modules, k = RETRIEVAL_K', async () => {
+  it('with no agent history, one search carries the entitlement teacher and allowed modules, k = RETRIEVAL_K', async () => {
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     await run(world({ retrieval: r }));
     expect(r.searches).toEqual([
@@ -156,7 +172,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
     ]);
   });
 
-  it('the query adds the latest agent question, so a bare "42" still retrieves', async () => {
+  it('the query adds the latest agent question, so a bare "42" still retrieves (now via the context search, 3.4c)', async () => {
     const r = memoryRetrieval({ chunks: retrievalWorld() });
     const history = [msg(1, 'agent', 'Add fractions with a common denominator: 1/2 + 1/3?')];
     const b = await run(world({ retrieval: r, history }), ENTITLED, {
@@ -164,6 +180,7 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
       text: '42',
     });
     expect(r.searches.map((s) => s.q)).toEqual([
+      '42',
       '42\nAdd fractions with a common denominator: 1/2 + 1/3?',
     ]);
     expect(b.retrieved.length).toBeGreaterThan(0);
@@ -229,6 +246,78 @@ describe('buildContext: access-filtered retrieval (ADR-0003)', () => {
       leakCheck: () => Promise.resolve({ hit: false }),
     };
     await expect(run(world({ retrieval: r }))).rejects.toThrow('index down');
+  });
+
+  it('dilution fixed (3.4c): the agent reply in history no longer drags a covered chunk below threshold', async () => {
+    // The student's own words alone fully cover chk_world_02; a long, unrelated agent reply would
+    // dilute the combined query's overlap on main, but the student-only search keeps the score.
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [
+      msg(
+        1,
+        'agent',
+        `Let's talk about something totally different for a long while: ${'z'.repeat(200)}`,
+      ),
+    ];
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...demoTurnInput,
+      text: 'fractions name equal parts of a whole',
+    });
+    const own = b.retrieved.find((c) => c.id === 'chk_world_02');
+    expect(own?.score).toBeGreaterThanOrEqual(0.5);
+    expect(coverageGate(b, DEFAULT_COVERAGE_THRESHOLD)).toBeNull();
+  });
+
+  it('locked precedence (3.4c): a real locked request still ends locked even though the agent context alone would cover', async () => {
+    // The student's own words hit the locked module; the agent's last question is on allowed
+    // material. The context search would cover, but locked precedence means it never gets to.
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [
+      msg(1, 'agent', 'Fractions name equal parts of a whole; a common denominator is shared.'),
+    ];
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...demoTurnInput,
+      text: 'integration by parts: choose u and dv',
+    });
+    expect(b.lockedHit).toBe(true);
+    expect(coverageGate(b, DEFAULT_COVERAGE_THRESHOLD)).toBe('locked');
+    // found comes from the student-only search: no chunk from the agent-widened query leaks in.
+    for (const c of b.retrieved) expect(c.moduleId).not.toBe('mod_test_02');
+  });
+
+  it('merges own and context searches by score, deduping by id, unscored last, capped at K', async () => {
+    const shared: Chunk = { ...demoChunk, id: 'chk_shared', score: 0.4 };
+    const ownOnly: Chunk = { ...demoChunk, id: 'chk_own', score: 0.9 };
+    const ctxOnly: Chunk = { ...demoChunk, id: 'chk_ctx', score: 0.6 };
+    const sharedBetter: Chunk = { ...shared, score: 0.7 };
+    let call = 0;
+    const r: RetrievalIndex = {
+      search: () => {
+        call += 1;
+        return Promise.resolve(call === 1 ? [ownOnly, shared] : [ctxOnly, sharedBetter]);
+      },
+      probe: () => Promise.resolve({ hit: false, score: 0 }),
+      leakCheck: () => Promise.resolve({ hit: false }),
+    };
+    const history = [msg(1, 'agent', 'a different question entirely')];
+    const b = await run(world({ retrieval: r, history }));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_own', 'chk_shared', 'chk_ctx']);
+    expect(b.retrieved.find((c) => c.id === 'chk_shared')?.score).toBe(0.7);
+  });
+
+  it('a hint request with agent history: the context search runs (student text is blank, no probe)', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    const history = [msg(1, 'agent', 'A common denominator is a shared multiple.')];
+    const noText: TurnInput = { ...demoTurnInput };
+    delete noText.text;
+    const b = await run(world({ retrieval: r, history }), ENTITLED, {
+      ...noText,
+      kind: 'hint_request',
+    });
+    expect(r.searches.map((s) => s.q)).toEqual(['A common denominator is a shared multiple.']);
+    expect(r.probes).toEqual([]);
+    expect(b.lockedHit).toBe(false);
+    expect(b.retrieved.length).toBeGreaterThan(0);
   });
 
   it('stops before retrieval when the step was cancelled', async () => {
@@ -382,5 +471,201 @@ describe('buildContext: never exceeds the model context', () => {
     const b = await run(world({ history }));
     expect(b.history).toHaveLength(1);
     expect(historyChars(b.history)).toBe(HISTORY_MAX_CHARS);
+  });
+});
+
+describe('buildContext: answer keys never reach the model context (5.6a)', () => {
+  const KEY = 'Mitochondria';
+  const helpWith = (answerKey: string[]) => ({
+    v: 1,
+    rung: 2,
+    stuckTurns: 0,
+    attemptLogged: false,
+    pendingCheck: false,
+    answerKey,
+  });
+  const chunk = (id: string, text: string, score: number, source = demoChunk.source): Chunk => ({
+    ...demoChunk,
+    id,
+    text,
+    score,
+    source,
+  });
+  const clean = chunk('chk_clean', 'CLEAN-MARKER cells have parts', 0.5);
+  const poisoned = chunk('chk_poison', `POISON-MARKER the powerhouse is the ${KEY}`, 0.9);
+
+  /** Own and context searches return fixed lists (call 1 own, call 2 context). */
+  function twoSearches(own: Chunk[], ctx: Chunk[], hit = false) {
+    let call = 0;
+    const probes: string[] = [];
+    const r: RetrievalIndex = {
+      search: () => {
+        call += 1;
+        return Promise.resolve(call === 1 ? own : ctx);
+      },
+      probe: (q) => {
+        probes.push(q);
+        return Promise.resolve({ hit, score: hit ? 0.9 : 0 });
+      },
+      leakCheck: () => Promise.resolve({ hit: false }),
+    };
+    return { r, probes };
+  }
+  const agentAsked = [msg(1, 'agent', 'a different question entirely')];
+  const withKey = (keys: string[]): Entitled => ({ ...ENTITLED, helpState: helpWith(keys) });
+
+  it('(a) a held text key drops the chunk holding it, keeps the clean one, counts 1', async () => {
+    const { r } = twoSearches([poisoned, clean], []);
+    const b = await run(world({ retrieval: r }), withKey([KEY]));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(1);
+    expect(BuiltContextSchema.safeParse(b).success).toBe(true);
+    expect(JSON.stringify(b.retrieved)).not.toContain(KEY);
+  });
+
+  it('(b) the key only in source.title or source.locator also drops', async () => {
+    const t = chunk('chk_t', 'plain text', 0.8, { ...demoChunk.source, title: `${KEY} notes` });
+    const l = chunk('chk_l', 'plain text', 0.7, { ...demoChunk.source, locator: `§ ${KEY}` });
+    const { r } = twoSearches([t, l, clean], []);
+    const b = await run(world({ retrieval: r }), withKey([KEY]));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(2);
+  });
+
+  it('(c) a zero-width-split or base64 form of the key drops (the shared matcher)', async () => {
+    const zw = chunk('chk_zw', 'it is the Mito\u200bchondria', 0.8);
+    const b64 = chunk('chk_b64', 'decode dGhlIGFuc3dlciBpcyBNaXRvY2hvbmRyaWE= now', 0.7);
+    const { r } = twoSearches([zw, b64, clean], []);
+    const b = await run(world({ retrieval: r }), withKey([KEY]));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(2);
+  });
+
+  it('(c2) a carried practice key drops the chunk holding it too (5.6c, ADR-0011 §3)', async () => {
+    const { r } = twoSearches([poisoned, clean], []);
+    const b = await run(world({ retrieval: r }), {
+      ...ENTITLED,
+      helpState: { ...helpWith(['7']), practiceItemId: 'item-2', practiceCarriedKey: [KEY] },
+    });
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(1);
+    expect(b.helpState.practiceCarriedKey).toEqual([KEY]);
+  });
+
+  it('(c3) a short whole-number carried key keeps 5.6a’s exemption', async () => {
+    const seven = chunk('chk_seven', 'there are 7 days in a week', 0.9);
+    const { r } = twoSearches([seven, clean], []);
+    const b = await run(world({ retrieval: r }), {
+      ...ENTITLED,
+      helpState: { ...helpWith([]), practiceCarriedKey: ['7'] },
+    });
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_seven', 'chk_clean']);
+    expect('answerKeyDropped' in b).toBe(false);
+  });
+
+  it('(d) no held key: output as before, no answerKeyDropped', async () => {
+    const { r } = twoSearches([poisoned, clean], []);
+    const b = await run(world({ retrieval: r }), withKey([]));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_poison', 'chk_clean']);
+    expect('answerKeyDropped' in b).toBe(false);
+  });
+
+  it('(e) locked hit: lockedHit stays true, a dropped own chunk is not backfilled from ctx, one probe on the student words', async () => {
+    const ctxClean = chunk('chk_ctx', 'CTX-MARKER more on cells', 0.6);
+    const { r, probes } = twoSearches([poisoned, clean], [ctxClean], true);
+    const b = await run(world({ retrieval: r, history: agentAsked }), withKey([KEY]));
+    expect(b.lockedHit).toBe(true);
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(1);
+    expect(probes).toEqual([demoTurnInput.text]);
+  });
+
+  it('(f) not locked: a ctx chunk fills the slot a dropped own chunk freed', async () => {
+    const own = [poisoned, ...[1, 2, 3, 4].map((i) => chunk(`chk_o${String(i)}`, 'cells', 0.8))];
+    const ctxClean = chunk('chk_ctx', 'CTX-MARKER more on cells', 0.7);
+    const { r } = twoSearches(own, [ctxClean]);
+    const b = await run(world({ retrieval: r, history: agentAsked }), withKey([KEY]));
+    expect(b.retrieved).toHaveLength(RETRIEVAL_K);
+    expect(b.retrieved.map((c) => c.id)).toContain('chk_ctx');
+    expect(b.retrieved.map((c) => c.id)).not.toContain('chk_poison');
+  });
+
+  it('(g) a chunk found by both searches is dropped once and never comes back', async () => {
+    const better = { ...poisoned, score: 0.99 };
+    const { r } = twoSearches([poisoned, clean], [better]);
+    const b = await run(world({ retrieval: r, history: agentAsked }), withKey([KEY]));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(1);
+  });
+
+  it('(h) unreadable help state: fail closed, nothing retrieved, every found chunk counted', async () => {
+    const { r } = twoSearches([poisoned, clean], [clean]);
+    const b = await run(world({ retrieval: r, history: agentAsked }), {
+      ...ENTITLED,
+      helpState: 'rung 4',
+    });
+    expect(b.retrieved).toEqual([]);
+    expect(b.helpStateUnreadable).toBe(true);
+    expect(b.answerKeyDropped).toBe(2);
+    expect(BuiltContextSchema.safeParse(b).success).toBe(true);
+  });
+
+  it('(h) unreadable help state with nothing found: no answerKeyDropped', async () => {
+    const { r } = twoSearches([], []);
+    const b = await run(world({ retrieval: r }), { ...ENTITLED, helpState: 'rung 4' });
+    expect(b.retrieved).toEqual([]);
+    expect('answerKeyDropped' in b).toBe(false);
+  });
+
+  it('(i) short numeric keys never drop chunks (lead answer, 20 Oct): "1", "one", "7", "42"', async () => {
+    const loop = chunk('chk_loop', 'for i in range(1, 5): total = total + 7 * 42', 0.8);
+    const { r } = twoSearches([loop, clean], []);
+    const b = await run(world({ retrieval: r }), withKey(['1', 'one', '7', '42']));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_loop', 'chk_clean']);
+    expect('answerKeyDropped' in b).toBe(false);
+  });
+
+  it('(i) a 3-digit or non-integer numeric key still drops', async () => {
+    const big = chunk('chk_big', 'the total is 120 marks', 0.8);
+    const half = chunk('chk_half', 'half is 0.5 of a whole', 0.7);
+    const { r } = twoSearches([big, half, clean], []);
+    const b = await run(world({ retrieval: r }), withKey(['120', '0.5']));
+    expect(b.retrieved.map((c) => c.id)).toEqual(['chk_clean']);
+    expect(b.answerKeyDropped).toBe(2);
+  });
+});
+
+describe('contextAnswerKeys and dropAnswerKeyChunks (5.6a)', () => {
+  it.each([
+    ['1', false],
+    ['7', false],
+    ['42', false],
+    ['one', false],
+    ['forty-two', false],
+    [' 7 ', false],
+    ['100', true],
+    ['-5', true],
+    ['0.5', true],
+    ['5/6', true],
+    ['Warm', true],
+    ['ab', true],
+    ['x1', true],
+  ])('%j kept for context checks: %s', (key, kept) => {
+    expect(contextAnswerKeys([key])).toEqual(kept ? [key] : []);
+  });
+
+  it('drops leaking chunks, keeps order, and reports the dropped ids', () => {
+    const m = compileAnswerKeys(['Warm']);
+    const a: Chunk = { ...demoChunk, id: 'chk_a', text: 'it is WARM.' };
+    const c: Chunk = { ...demoChunk, id: 'chk_c', text: 'it is warmer' };
+    const out = dropAnswerKeyChunks([a, c], m);
+    expect(out.kept.map((x) => x.id)).toEqual(['chk_c']);
+    expect([...out.dropped]).toEqual(['chk_a']);
+  });
+
+  it('an empty matcher keeps everything', () => {
+    const out = dropAnswerKeyChunks([demoChunk], compileAnswerKeys([]));
+    expect(out.kept).toEqual([demoChunk]);
+    expect(out.dropped.size).toBe(0);
   });
 });

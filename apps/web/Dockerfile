@@ -22,10 +22,20 @@ FROM node:22.22.3-alpine3.22 AS runtime
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    EDMATE_CONTENT_DIR=/app/content \
+    # Fix round (security review of PR #76, task 1.7b): `next build --webpack` bundles
+    # `@edmate/content` into the app's own server chunk and bakes the build machine's own absolute
+    # path for the safe-regex worker file into it (see safeRegexGuard.ts). That baked path does not
+    # exist here (built in a different directory than this image runs from), so the safe-regex
+    # guard needs this explicit, correct location for the package's compiled `dist/` instead.
+    EDMATE_CONTENT_WORKER_DIR=/app/packages/content/dist
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+# The age gate (1.7) reads the locale packs and privacy notices at run time.
+COPY --from=build --chown=node:node /repo/content/locales ./content/locales
+COPY --from=build --chown=node:node /repo/content/legal ./content/legal
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \

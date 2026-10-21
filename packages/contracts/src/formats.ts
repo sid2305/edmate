@@ -19,3 +19,15 @@ export const market = () =>
 /** Currency: an ISO 4217 code. */
 export const currencyCode = () => z.string().regex(/^[A-Z]{3}$/, 'ISO 4217 code');
 export const tier = () => z.enum(['small', 'main']);
+/** Calendar dates: YYYY-MM-DD, a real day (ADR-0008). */
+export const date = () => z.iso.date();
+/**
+ * Who signed something off (ADR-0008): a name or handle, not blank, at most 200 characters, never
+ * an email address (the repo is public). Same rule as the content package's reviewer field.
+ */
+export const signer = () =>
+  z
+    .string()
+    .max(LIMITS.signerMaxLength)
+    .refine((s) => s.trim() !== '', 'must not be blank')
+    .refine((s) => !/\S@\S+\.\S/.test(s), 'a name or handle, not an email address');

@@ -29,7 +29,7 @@ describe('buildDemoSeed', () => {
       teacherId: DEMO_IDS.teacher,
       courseId: 'python-basics-demo',
       styleCardId: DEMO_IDS.styleCard,
-      promptPackVersion: '1.0.0',
+      promptPackVersion: '1.1.0',
       languages: ['en'],
     });
     // Provisional: the same policy as the gateway's DEFAULT_MODEL_POLICY (2.3), no fallback.
@@ -88,6 +88,8 @@ describe('buildDemoSeed', () => {
       expect(s.email).toMatch(/^demo-student-\d{2}@example\.invalid$/);
       expect(s.market).toBe('global');
       expect(s.ageConfirmedAt).toBeInstanceOf(Date);
+      // A fictional adult year (1.7): past the age gate, needing no parent.
+      expect(s.birthYear).toBe(1990);
     }
     const teachers = seed.users.filter((u) => u.role === 'teacher');
     expect(teachers.map((t) => t.id)).toEqual([DEMO_IDS.teacher]);

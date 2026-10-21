@@ -15,6 +15,7 @@ export const DATA_MODEL_TABLES = [
   'topics',
   'documents',
   'chunks',
+  'teacher_material_revisions',
   'style_cards',
   'agents',
   'agent_versions',
@@ -47,6 +48,8 @@ export const DATA_MODEL_TABLES = [
   'auth_accounts',
   'auth_sessions',
   'platform_audit_log',
+  // Magic-link verification tokens (task 1.4), also behind the identity store.
+  'auth_verification_tokens',
 ] as const;
 
 /** Drizzle's view of every table the schema exports. */

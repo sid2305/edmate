@@ -15,7 +15,7 @@ import {
   type Repositories,
   turnConfigStoreFor,
 } from '../src/index.js';
-import { locales, packMarket, seedAccess } from './access-seed.js';
+import { learnerClear, locales, packMarket, seedAccess } from './access-seed.js';
 import { packageConfig } from './isolation-seed.js';
 import {
   createDatabase,
@@ -43,7 +43,7 @@ const input: TurnInput = {
 };
 
 async function entitlementFor(studentId = 'stu_1', agentId = 'agt_a'): Promise<Entitlement> {
-  const e = await entitlementStoreFor(repos, { market: 'IN', packMarket }).resolve(
+  const e = await entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear }).resolve(
     { studentId, agentId, source: 'subscription' },
     AT,
   );
@@ -52,10 +52,14 @@ async function entitlementFor(studentId = 'stu_1', agentId = 'agt_a'): Promise<E
 }
 
 /** The real entitle on the db adapters: 'ok' or the rejection code. */
-async function entitleCode(sessionId: string, store = turnConfigStoreFor(repos, { locales })) {
+async function entitleCode(
+  sessionId: string,
+  store = turnConfigStoreFor(repos, { locales }),
+  clear: (studentId: string) => Promise<boolean> = learnerClear,
+) {
   const t = testDeps({
     overrides: {
-      entitlements: entitlementStoreFor(repos, { market: 'IN', packMarket }),
+      entitlements: entitlementStoreFor(repos, { market: 'IN', packMarket, learnerClear: clear }),
       turnConfig: store,
       entitlementSource: 'subscription',
     },
@@ -90,6 +94,13 @@ describe.skipIf(!up)(`turnConfigStoreFor on Postgres${up ? '' : ` (${SKIP_REASON
     await raw?.end();
     await handle?.close();
     await dropDatabase(dbName);
+  });
+
+  it('1.7: a learner held at the age gate (learnerClear false) is refused as no_access', async () => {
+    expect((await entitleCode('ses_1a')).code).toBe('ok');
+    const { code, out } = await entitleCode('ses_1a', undefined, async () => false);
+    expect(code).toBe('no_access');
+    expect(out).toBeNull();
   });
 
   it('(b) loads the agent at the session row version while a newer one is live', async () => {

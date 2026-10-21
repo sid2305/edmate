@@ -26,7 +26,7 @@ Curriculum content (`content/tracks/**`) also needs a named subject expert in `r
 ## Checklist (all must hold)
 
 1. **Reviews ran:** `code-reviewer` + `typescript-reviewer`, plus the specialist for the area (`database-reviewer`, `security-reviewer`, `rag-pipeline-reviewer`, `silent-failure-hunter`), and every reviewer the risk tiers above require. `review.md`'s `Reviewers:` line lists them all.
-2. **CRITICAL and HIGH findings are fixed**, and a reviewer re-ran its checks to confirm the fix. Never accept the builder's word for it.
+2. **CRITICAL findings are fixed**, and a reviewer re-ran its checks to confirm the fix. Never accept the builder's word for it. **HIGH findings are fixed** the same way, or, after the one fix round (MVP first, human decision 20 Oct 2026), `[deferred <task-id>]` with the task on the board; the gate checks the id exists.
 3. **MEDIUM and LOW findings** are fixed, or `[deferred <task-id>]` with a follow-up task added to the board, or `[wontfix]` with a decision entry. A wontfix decision entry names the file(s) it covers, and its heading has the task id; the finding starts with `path[:line]`.
 4. **Gates are green:** typecheck, lint, tests, and the eval fixtures for anything touching the harness, prompts, guards or content.
 5. **Decisions are recorded** in the handoff's `## Decisions` section. `None` is allowed, except on a risky branch: then at least one entry is `risk: high` and says, in plain words, what risky thing changed and why it is safe.
@@ -69,5 +69,5 @@ Log anything the spec did not dictate: a library choice, a data shape, a trade-o
 ## Never
 - Add the old `human-approved` label, or ask an agent to (a hook blocks it).
 - List a reviewer in `Reviewers:` that did not run, or mark a risky merge anything but `risk: high`.
-- Merge with any CRITICAL/HIGH finding not fixed, or a failing gate, "to unblock" other work.
+- Merge with a CRITICAL not fixed, a HIGH still `[open]`, or a failing gate, "to unblock" other work.
 - Merge two PRs that touch the same package without rebasing and re-running the gate on the second.

@@ -1,17 +1,21 @@
 // Task 1.3: the identity store on a real Postgres 16 (see test/pg.ts; skipped locally without
 // one, fails in CI). New users are always students, only grantRole changes a role (with an audit
 // row in the same transaction), session tokens are stored hashed, and driver errors are scrubbed.
+// Task 1.4: magic-link verification tokens are stored hashed, single use, newest only per address.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
+  type AgePolicy,
   createIdentityStore,
+  DEFAULT_AGE_POLICY,
+  OPERATOR,
   openDatabase,
   RepositoryError,
   type IdentityStore,
 } from '../src/index.js';
-import { hashSessionToken } from '../src/identity/token-hash.js';
+import { hashSessionToken, hashToken } from '../src/identity/token-hash.js';
 import { expectScrubbed } from './scrub.js';
 import {
   createDatabase,
@@ -455,6 +459,495 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
     });
   });
 
+  describe('verification tokens (1.4 magic links)', () => {
+    const MIN = 60_000;
+    const soon = () => new Date(Date.now() + 15 * MIN);
+
+    async function rowsFor(identifier: string) {
+      const { rows } = await raw.query<Record<string, unknown>>(
+        `select * from auth_verification_tokens where identifier = $1`,
+        [identifier],
+      );
+      return rows;
+    }
+
+    it('stores only the SHA-256 of the token, under the lower-cased address', async () => {
+      const addr = email('link');
+      const t = token('link');
+      const expires = soon();
+      const made = await identity.createVerificationToken({
+        identifier: `  ${addr.toUpperCase()} `,
+        token: t,
+        expires,
+      });
+      expect(made).toEqual({ identifier: addr, expires });
+      const rows = await rowsFor(addr);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.token_hash).toBe(hashToken(t));
+      expect(Object.keys(rows[0] ?? {}).sort()).toEqual(
+        ['created_at', 'expires_at', 'id', 'identifier', 'token_hash', 'updated_at'].sort(),
+      );
+      expect(JSON.stringify(rows)).not.toContain(t);
+    });
+
+    it('is single use: the first use returns it, the second is null and the row is gone', async () => {
+      const addr = email('once');
+      const t = token('once');
+      const expires = soon();
+      await identity.createVerificationToken({ identifier: addr, token: t, expires });
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).toEqual({
+        identifier: addr,
+        expires,
+      });
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('two concurrent uses: exactly one wins', async () => {
+      const addr = email('race');
+      const t = token('race');
+      await identity.createVerificationToken({ identifier: addr, token: t, expires: soon() });
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          identity.useVerificationToken({ identifier: addr, token: t }),
+        ),
+      );
+      expect(results.filter((r) => r !== null)).toHaveLength(1);
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('an expired token reads as null and is still deleted (injected clock)', async () => {
+      let clock = new Date('2026-10-20T10:00:00Z');
+      const store = createIdentityStore(handle.db, { now: () => clock });
+      const addr = email('expired');
+      const t = token('expired');
+      await store.createVerificationToken({
+        identifier: addr,
+        token: t,
+        expires: new Date('2026-10-20T10:15:00Z'),
+      });
+      clock = new Date('2026-10-20T10:15:00Z');
+      expect(await store.useVerificationToken({ identifier: addr, token: t })).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(0);
+    });
+
+    it('needs the matching address: the right token for another address is null and kept', async () => {
+      const addr = email('bound');
+      const t = token('bound');
+      await identity.createVerificationToken({ identifier: addr, token: t, expires: soon() });
+      expect(
+        await identity.useVerificationToken({ identifier: email('other'), token: t }),
+      ).toBeNull();
+      expect(await rowsFor(addr)).toHaveLength(1);
+      expect(
+        await identity.useVerificationToken({ identifier: addr, token: token('x') }),
+      ).toBeNull();
+      expect(await identity.useVerificationToken({ identifier: addr, token: t })).not.toBeNull();
+    });
+
+    it('a new link replaces older ones for that address only', async () => {
+      const a = email('newest');
+      const b = email('bystander');
+      const [a1, a2, b1] = [token('a1'), token('a2'), token('b1')];
+      await identity.createVerificationToken({ identifier: a, token: a1, expires: soon() });
+      await identity.createVerificationToken({ identifier: b, token: b1, expires: soon() });
+      await identity.createVerificationToken({ identifier: a, token: a2, expires: soon() });
+      expect(await rowsFor(a)).toHaveLength(1);
+      expect(await identity.useVerificationToken({ identifier: a, token: a1 })).toBeNull();
+      expect(await identity.useVerificationToken({ identifier: a, token: a2 })).not.toBeNull();
+      expect(await identity.useVerificationToken({ identifier: b, token: b1 })).not.toBeNull();
+    });
+
+    it('concurrent new links for one address leave exactly one live token', async () => {
+      const addr = email('burst');
+      const toks = Array.from({ length: 6 }, (_, i) => token(`burst${i}`));
+      await Promise.all(
+        toks.map((t) =>
+          identity.createVerificationToken({ identifier: addr, token: t, expires: soon() }),
+        ),
+      );
+      const rows = await rowsFor(addr);
+      expect(rows).toHaveLength(1);
+      const live = toks.filter((t) => hashToken(t) === rows[0]?.token_hash);
+      expect(live).toHaveLength(1);
+    });
+
+    it('rejects bad input as invalid before any SQL', async () => {
+      const ok = { identifier: email('bad'), token: token('bad'), expires: soon() };
+      const bad: unknown[] = [
+        { ...ok, identifier: 'not-an-email' },
+        { ...ok, identifier: 'a@example.test, b@example.test' },
+        { ...ok, token: 'short' },
+        { ...ok, token: 42 },
+        { ...ok, expires: '2026-10-20' },
+        { ...ok, extra: true },
+        null,
+      ];
+      for (const input of bad) {
+        expect(
+          await kindOf(() =>
+            identity.createVerificationToken(
+              input as Parameters<IdentityStore['createVerificationToken']>[0],
+            ),
+          ),
+        ).toBe('invalid');
+      }
+      const useBad: unknown[] = [
+        { identifier: 'nope', token: ok.token },
+        { identifier: ok.identifier, token: 'short' },
+        { identifier: ok.identifier, token: ok.token, expires: ok.expires },
+        undefined,
+      ];
+      for (const input of useBad) {
+        expect(
+          await kindOf(() =>
+            identity.useVerificationToken(
+              input as Parameters<IdentityStore['useVerificationToken']>[0],
+            ),
+          ),
+        ).toBe('invalid');
+      }
+      expect(await rowsFor(ok.identifier)).toHaveLength(0);
+    });
+
+    it('indexes identifier (unique) and expires_at, with no foreign key to users', async () => {
+      const { rows } = await raw.query<{ indexname: string; indexdef: string }>(
+        `select indexname, indexdef from pg_indexes where tablename = 'auth_verification_tokens'`,
+      );
+      const defs = Object.fromEntries(rows.map((r) => [r.indexname, r.indexdef]));
+      expect(defs.auth_verification_tokens_identifier_key).toMatch(/UNIQUE.*\(identifier\)/);
+      expect(defs.auth_verification_tokens_token_hash_key).toMatch(/UNIQUE.*\(token_hash\)/);
+      expect(defs.auth_verification_tokens_expires_at_idx).toMatch(/\(expires_at\)/);
+      const fks = await raw.query(
+        `select 1 from pg_constraint where conrelid = 'auth_verification_tokens'::regclass and contype = 'f'`,
+      );
+      expect(fks.rowCount).toBe(0);
+    });
+  });
+
+  describe('age and consent (1.7)', () => {
+    const NOW = new Date('2026-10-20T12:00:00Z');
+    const policy = (market: string): AgePolicy =>
+      market === 'US' ? { minAge: 13, consentRequired: false } : DEFAULT_AGE_POLICY;
+    let aged: IdentityStore;
+
+    beforeAll(() => {
+      aged = createIdentityStore(handle.db, { now: () => NOW, agePolicy: policy });
+    });
+
+    const student = () =>
+      identity.createStudent({ email: email('age'), emailVerifiedAt: null, name: 'Learner' });
+    const answer = (userId: string, birthYear: unknown, market: unknown = 'IN', store = aged) =>
+      store.recordAgeAnswer({ userId, market, birthYear, noticeVersion: 'draft-0' } as never);
+
+    async function userRow(id: string) {
+      const { rows } = await raw.query(
+        `select market, birth_year, age_confirmed_at from users where id = $1`,
+        [id],
+      );
+      return rows[0] as
+        { market: string; birth_year: number | null; age_confirmed_at: Date | null } | undefined;
+    }
+    async function consentRows(id: string) {
+      const { rows } = await raw.query(
+        `select kind, version, granted_by, withdrawn_at, ts from consents where user_id = $1`,
+        [id],
+      );
+      return rows;
+    }
+    async function parental(id: string, withdrawn: Date | null = null, by = 'parent') {
+      await raw.query(
+        `insert into consents (id, user_id, kind, version, granted_by, withdrawn_at)
+           values ($1, $2, 'parental', $1, $3, $4)`,
+        [`cns_${(n += 1)}`, id, by, withdrawn],
+      );
+    }
+
+    it('an adult: clear; stores the birth year, market and time, and the notice version', async () => {
+      const u = await student();
+      expect(await aged.learnerStatus(u.id)).toBe('age_needed');
+      expect(await answer(u.id, 1990)).toEqual({ status: 'clear' });
+      expect(await userRow(u.id)).toEqual({
+        market: 'IN',
+        birth_year: 1990,
+        age_confirmed_at: NOW,
+      });
+      expect(await consentRows(u.id)).toEqual([
+        {
+          kind: 'privacy_notice',
+          version: 'draft-0',
+          granted_by: 'self',
+          withdrawn_at: null,
+          ts: expect.any(Date),
+        },
+      ]);
+      expect(await aged.learnerStatus(u.id)).toBe('clear');
+    });
+
+    it('13-17 in a consent market: parent_needed until a live parental consent', async () => {
+      const u = await student();
+      expect(await answer(u.id, 2012)).toEqual({ status: 'parent_needed' });
+      expect(await aged.learnerStatus(u.id)).toBe('parent_needed');
+      await parental(u.id, null, 'self');
+      expect(await aged.learnerStatus(u.id), 'a self-granted parental row').toBe('parent_needed');
+      await parental(u.id, new Date('2026-10-19T00:00:00Z'));
+      expect(await aged.learnerStatus(u.id), 'a withdrawn consent').toBe('parent_needed');
+      await parental(u.id);
+      expect(await aged.learnerStatus(u.id)).toBe('clear');
+      await raw.query(
+        `update consents set withdrawn_at = now() where user_id = $1 and kind = 'parental'`,
+        [u.id],
+      );
+      expect(await aged.learnerStatus(u.id), 'after withdrawal').toBe('parent_needed');
+    });
+
+    it('a market whose policy waives consent clears 13-17; "somewhere else" uses the default', async () => {
+      const us = await student();
+      expect(await answer(us.id, 2010, 'US')).toEqual({ status: 'clear' });
+      const elsewhere = await student();
+      expect(await answer(elsewhere.id, 2010, 'global')).toEqual({ status: 'parent_needed' });
+      expect((await userRow(elsewhere.id))?.market).toBe('global');
+    });
+
+    it('with no agePolicy option every market needs consent for 13-17', async () => {
+      const plain = createIdentityStore(handle.db, { now: () => NOW });
+      const u = await student();
+      expect(await answer(u.id, 2010, 'US', plain)).toEqual({ status: 'parent_needed' });
+      expect(await plain.learnerStatus(u.id)).toBe('parent_needed');
+    });
+
+    it('under 13: erases the user and its sign-in rows in one go and keeps no birth year', async () => {
+      const u = await student();
+      const other = await student();
+      await identity.linkAccount({
+        userId: u.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: `g-${(n += 1)}`,
+      });
+      await identity.createSession(token('child'), u.id, later());
+      await identity.createSession(token('other'), other.id, later());
+      await identity.createVerificationToken({
+        identifier: u.email ?? '',
+        token: token('child-link'),
+        expires: later(),
+      });
+      await identity.createVerificationToken({
+        identifier: other.email ?? '',
+        token: token('other-link'),
+        expires: later(),
+      });
+
+      expect(await answer(u.id, 2014)).toEqual({ status: 'under_age' });
+
+      expect(await userRow(u.id)).toBeUndefined();
+      for (const [table, col, value] of [
+        ['auth_accounts', 'user_id', u.id],
+        ['auth_sessions', 'user_id', u.id],
+        ['consents', 'user_id', u.id],
+        ['auth_verification_tokens', 'identifier', u.email],
+      ] as const) {
+        const { rowCount } = await raw.query(`select 1 from ${table} where ${col} = $1`, [value]);
+        expect(rowCount, table).toBe(0);
+      }
+      const { rowCount: years } = await raw.query(`select 1 from users where birth_year = 2014`);
+      expect(years).toBe(0);
+      // Another user's rows are untouched.
+      expect(await identity.getUser(other.id)).not.toBeNull();
+      const { rowCount: kept } = await raw.query(
+        `select 1 from auth_verification_tokens where identifier = $1`,
+        [other.email],
+      );
+      expect(kept).toBe(1);
+      await expect(aged.learnerStatus(u.id)).rejects.toMatchObject({ kind: 'not_found' });
+    });
+
+    it('a blocking foreign row: the sign-in rows go, the account stays blocked forever (fix round 1)', async () => {
+      const u = await student();
+      // A row the erase does not own blocks deleting the user (foreign key), but only that delete.
+      await raw.query(
+        `insert into platform_audit_log (id, actor, actor_role, action, target, subject_user_id)
+           values ($1, 'operator', 'operator', 'test', 'user', $2)`,
+        [`pal_${(n += 1)}`, u.id],
+      );
+      await identity.linkAccount({
+        userId: u.id,
+        type: 'oidc',
+        provider: 'google',
+        providerAccountId: `g-${(n += 1)}`,
+      });
+      await identity.createSession(token('kept'), u.id, later());
+      await identity.createVerificationToken({
+        identifier: u.email ?? '',
+        token: token('kept-link'),
+        expires: later(),
+      });
+
+      expect(await answer(u.id, 2014)).toEqual({ status: 'erase_blocked' });
+
+      // The user row stays (no birth year ever stored), but every sign-in row is gone.
+      expect(await userRow(u.id)).toEqual({
+        market: 'global',
+        birth_year: null,
+        age_confirmed_at: null,
+      });
+      for (const [table, col, value] of [
+        ['auth_accounts', 'user_id', u.id],
+        ['auth_sessions', 'user_id', u.id],
+        ['consents', 'user_id', u.id],
+        ['auth_verification_tokens', 'identifier', u.email],
+      ] as const) {
+        const { rowCount } = await raw.query(`select 1 from ${table} where ${col} = $1`, [value]);
+        expect(rowCount, table).toBe(0);
+      }
+      const { rows } = await raw.query<{ age_blocked_at: Date | null }>(
+        `select age_blocked_at from users where id = $1`,
+        [u.id],
+      );
+      expect(rows[0]?.age_blocked_at).not.toBeNull();
+
+      // Blocked forever: no second answer from this browser or any other, and the standing shows.
+      expect(await kindOf(() => answer(u.id, 1990))).toBe('invalid');
+      expect(await aged.learnerStatus(u.id)).toBe('under_age');
+    });
+
+    it('an unexpected failure on the erase rolls back everything (the savepoint is not a shield for it)', async () => {
+      const u = await student();
+      await identity.createSession(token('unexpected'), u.id, later());
+      // Not a constraint violation (no RepositoryError translation): the savepoint's own catch
+      // rethrows it, and that aborts the whole answer, sign-in rows included.
+      await raw.query(`create or replace function edmate_test_fail() returns trigger as $$
+        begin raise exception 'erase down'; end $$ language plpgsql`);
+      await raw.query(
+        `create trigger edmate_test_fail before delete on users for each row execute function edmate_test_fail()`,
+      );
+      try {
+        const err = await answer(u.id, 2014).catch((e: unknown) => e);
+        expectScrubbed(err, 'identity.recordAgeAnswer', [u.id, 'erase down']);
+      } finally {
+        await raw.query(`drop trigger edmate_test_fail on users`);
+      }
+      expect(await userRow(u.id)).toEqual({
+        market: 'global',
+        birth_year: null,
+        age_confirmed_at: null,
+      });
+      const { rowCount } = await raw.query(`select 1 from auth_sessions where user_id = $1`, [
+        u.id,
+      ]);
+      expect(rowCount).toBe(1);
+    });
+
+    it('the answer is given once: a second one is invalid and changes nothing', async () => {
+      const u = await student();
+      await answer(u.id, 1990);
+      expect(await kindOf(() => answer(u.id, 2014, 'US'))).toBe('invalid');
+      expect(await userRow(u.id)).toMatchObject({ market: 'IN', birth_year: 1990 });
+      expect(await consentRows(u.id)).toHaveLength(1);
+    });
+
+    it('two concurrent answers: exactly one is stored', async () => {
+      const u = await student();
+      const results = await Promise.allSettled([answer(u.id, 1990), answer(u.id, 2014)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const row = await userRow(u.id);
+      if (row) expect(row.birth_year).toBe(1990);
+      else expect(results[1]).toMatchObject({ status: 'fulfilled' });
+    });
+
+    it('rejects a bad year, market, version or extra field as invalid before any SQL', async () => {
+      const u = await student();
+      for (const year of [1899, 2101, 2027, 1990.5, '1990', null]) {
+        expect(await kindOf(() => answer(u.id, year)), `year ${String(year)}`).toBe('invalid');
+      }
+      for (const market of ['in', 'IND', '', 'GLOBAL', 'I N', 42]) {
+        expect(await kindOf(() => answer(u.id, 1990, market)), `market ${String(market)}`).toBe(
+          'invalid',
+        );
+      }
+      for (const noticeVersion of ['', 'x'.repeat(65)]) {
+        expect(
+          await kindOf(() =>
+            aged.recordAgeAnswer({ userId: u.id, market: 'IN', birthYear: 1990, noticeVersion }),
+          ),
+        ).toBe('invalid');
+      }
+      expect(
+        await kindOf(() =>
+          aged.recordAgeAnswer({
+            userId: u.id,
+            market: 'IN',
+            birthYear: 1990,
+            noticeVersion: 'v1',
+            role: 'staff',
+          } as never),
+        ),
+      ).toBe('invalid');
+      expect(await userRow(u.id)).toEqual({
+        market: 'global',
+        birth_year: null,
+        age_confirmed_at: null,
+      });
+    });
+
+    it('an unknown user is not_found; a teacher or staff user is scope and is never erased', async () => {
+      expect(await kindOf(() => answer('usr_missing_age', 1990))).toBe('not_found');
+      expect(await kindOf(() => aged.learnerStatus('usr_missing_age'))).toBe('not_found');
+      expect(await kindOf(() => aged.learnerStatus('bad id!'))).toBe('invalid');
+      const t = await student();
+      await identity.grantRole({ userId: t.id, role: 'teacher', by: OPERATOR });
+      expect(await kindOf(() => answer(t.id, 2014))).toBe('scope');
+      expect(await identity.getUser(t.id)).not.toBeNull();
+      // learnerStatus is for students only (the web gate never asks for other roles).
+      expect(await kindOf(() => aged.learnerStatus(t.id))).toBe('scope');
+      const s = await student();
+      await identity.grantRole({ userId: s.id, role: 'staff', by: OPERATOR });
+      expect(await kindOf(() => aged.learnerStatus(s.id))).toBe('scope');
+    });
+
+    it('with a noticeVersion option, only the version the server shows for that market is taken', async () => {
+      const shown = (market: string) => (market === 'IN' ? 'in-3' : 'global-1');
+      const store = createIdentityStore(handle.db, {
+        now: () => NOW,
+        agePolicy: policy,
+        noticeVersion: shown,
+      });
+      const u = await student();
+      const at = (market: string, noticeVersion: string, birthYear = 1990) =>
+        store.recordAgeAnswer({ userId: u.id, market, birthYear, noticeVersion });
+      expect(await kindOf(() => at('IN', 'draft-0'))).toBe('invalid');
+      expect(await kindOf(() => at('IN', 'global-1'))).toBe('invalid');
+      // A wrong version on an under-13 answer erases nothing.
+      expect(await kindOf(() => at('IN', 'x', 2020))).toBe('invalid');
+      expect(await userRow(u.id)).toMatchObject({ birth_year: null });
+      expect(await at('IN', 'in-3')).toEqual({ status: 'clear' });
+      expect(await consentRows(u.id)).toEqual([expect.objectContaining({ version: 'in-3' })]);
+    });
+
+    it('a broken market policy fails the call and erases no one', async () => {
+      const broken = createIdentityStore(handle.db, {
+        now: () => NOW,
+        agePolicy: () => ({ minAge: Number.NaN, consentRequired: true }),
+      });
+      const u = await student();
+      expect(await kindOf(() => answer(u.id, 2020, 'IN', broken))).toBe('failed');
+      expect(await userRow(u.id)).toMatchObject({ birth_year: null });
+      await answer(u.id, 2010);
+      expect(await kindOf(() => broken.learnerStatus(u.id))).toBe('failed');
+    });
+
+    it('a learner below a market minimum raised after they answered is not cleared', async () => {
+      const u = await student();
+      await answer(u.id, 2010);
+      await parental(u.id);
+      const raised = createIdentityStore(handle.db, {
+        now: () => NOW,
+        agePolicy: () => ({ minAge: 16, consentRequired: true }),
+      });
+      expect(await raised.learnerStatus(u.id)).toBe('parent_needed');
+    });
+  });
+
   it('indexes auth_sessions.expires_at and allows one account per provider per user', async () => {
     const { rows } = await raw.query<{ indexname: string; indexdef: string }>(
       `select indexname, indexdef from pg_indexes where tablename in ('auth_sessions', 'auth_accounts')`,
@@ -479,12 +972,51 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       'identity.getSessionAndUser',
       [t, hashSessionToken(t)],
     );
+    const addr = 'link.private.person@example.test';
+    const lt = token('scrub-link');
+    expectScrubbed(
+      await store
+        .createVerificationToken({ identifier: addr, token: lt, expires: later() })
+        .catch((e: unknown) => e),
+      'identity.createVerificationToken',
+      [addr, lt, hashToken(lt)],
+    );
+    expectScrubbed(
+      await store.useVerificationToken({ identifier: addr, token: lt }).catch((e: unknown) => e),
+      'identity.useVerificationToken',
+      [addr, lt, hashToken(lt)],
+    );
   });
 
   it('openDatabase exposes the identity store', async () => {
     const opened = openDatabase({ DATABASE_URL: TEST_URL });
     try {
       expect(await opened.identity.getUser('usr_missing')).toBeNull();
+    } finally {
+      await opened.close();
+    }
+  });
+
+  it('openDatabase passes the age policy and notice versions to the identity store', async () => {
+    const opened = openDatabase(
+      { DATABASE_URL: TEST_URL },
+      {
+        identity: {
+          agePolicy: () => ({ minAge: 13, consentRequired: false }),
+          noticeVersion: () => 'v-open',
+        },
+      },
+    );
+    try {
+      const u = await opened.identity.createStudent({
+        email: email('open'),
+        emailVerifiedAt: null,
+        name: 'Learner',
+      });
+      const at = (noticeVersion: string) =>
+        opened.identity.recordAgeAnswer({ userId: u.id, market: 'US', birthYear: 2010, noticeVersion });
+      expect(await kindOf(() => at('draft-0'))).toBe('invalid');
+      expect(await at('v-open')).toEqual({ status: 'clear' });
     } finally {
       await opened.close();
     }

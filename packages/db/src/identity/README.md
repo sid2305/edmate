@@ -1,4 +1,4 @@
-# Identity store: sign-in's own path to users and sessions (task 1.3)
+# Identity store: sign-in's own path to users and sessions (task 1.3; sign-in links 1.4)
 
 Sign-in has to read `users` by email, look up linked provider accounts and delete sessions. The
 repository rules 1 (scope first), 7 (no deletes) and 9 (never select from `users`) forbid all
@@ -12,7 +12,8 @@ three, so sign-in does not use a repository. It uses this small store, which has
    repositories (README rule 10 there): only the driver's code and constraint name survive.
 4. **New users are students.** `createStudent` hard-codes `role: 'student'`, `market: 'global'`
    and `locale: 'en'`, and takes only `{ email, emailVerifiedAt, name }`. Market and locale are
-   never guessed from IP or headers; the student's own answer sets them later (1.7).
+   never guessed from IP or headers. The market is set only by the student's own answer at the
+   age gate (`recordAgeAnswer`, 1.7, rule 12); the locale stays `en` (English-only pilot).
 5. **Only `grantRole` changes a role.** `by` must be exactly `operator` (the CLI) or a user who is
    staff at that moment (share-locked), else `scope`. In the same transaction it writes a
    `role.grant` row to `platform_audit_log`: actor, actor role `operator` or `staff`,
@@ -24,11 +25,46 @@ three, so sign-in does not use a repository. It uses this small store, which has
    its read path.
 7. **One account per provider per user** (unique `(user_id, provider)`), as well as one user per
    provider account: a second Google account can't be attached to an existing user.
-8. **Session tokens are stored hashed** (SHA-256 hex in `auth_sessions.session_token_hash`). An
-   expired session reads as `null` and can't be extended.
+8. **Session tokens and sign-in link tokens are stored hashed** (SHA-256 hex in
+   `auth_sessions.session_token_hash` and `auth_verification_tokens.token_hash`). An expired
+   session reads as `null` and can't be extended; an expired link reads as `null`. Auth.js already
+   hands the store `sha256(token + AUTH_SECRET)` for a link, so the database holds a hash of a
+   hash, but the rule does not rely on that.
 9. **No provider tokens or photos.** `linkAccount` stores the provider, its account id and type
    only; OAuth access, refresh and id tokens are never stored (Edmate never calls Google APIs).
-10. **No raw SQL strings** (`sql.raw(`), and the only delete is `deleteSession`.
+10. **No raw SQL strings** (`sql.raw(`), and the only deletes are `deleteSession`, the
+    verification-token deletes (`useVerificationToken`; `createVerificationToken` replaces the
+    address's earlier link in place) and the under-age erase (1.7): when `recordAgeAnswer` finds
+    a student under the market's minimum it deletes, in one transaction, the student's
+    `auth_sessions`, `auth_accounts`, the `auth_verification_tokens` row for their email, any
+    `consents`, and the `users` row. If any other row still points at the user, the whole erase
+    fails and nothing changes; it never deletes a teacher or staff user (`scope`).
+11. **One live link per address; single use by atomic delete** (1.4). `auth_verification_tokens`
+    has one row per lower-cased address (unique `identifier`): `createVerificationToken` upserts,
+    so a new link replaces the old one in one statement, even under concurrent requests.
+    `useVerificationToken` is one `DELETE … RETURNING` matching both the address and the hash, so
+    of two concurrent clicks only one gets the row, and an expired row is deleted and read as
+    `null`. There is no foreign key to `users`: the address may not be a user yet.
+
+12. **Age data is a birth year and a market, nothing more** (1.7). `recordAgeAnswer` takes
+    `{ userId, market, birthYear, noticeVersion }` once per student (a second answer is
+    `invalid`; a later change goes through staff, 12.1). The market is `global` or two capital
+    letters; the year is a whole number from 1900 to this year. Age is the youngest possible for
+    the year (`currentYearUTC - birthYear - 1`, `age.ts`). The market's rule comes from the
+    injected `agePolicy(market)` (default 13+, consent needed for 13-17), and fails closed: the
+    minimum is never below 13 and only `consentRequired: false` waives consent. An answer at or
+    above the minimum stores `birth_year`, `market` and `age_confirmed_at`, plus a
+    `privacy_notice` consent at the shown notice version, `granted_by = 'self'`. `learnerStatus`
+    reads the standing fresh: `age_needed`, `parent_needed` (13-17 in a consent market without a
+    live parental consent: `kind = 'parental'`, `granted_by = 'parent'`, `withdrawn_at` null), or
+    `clear`. A learner below a minimum raised after their answer reads `parent_needed`, never
+    `clear`. The entitlement store's required `learnerClear` (ports.ts) is the agent-use block.
+    A broken policy (a minimum that is not finite or above 18) throws: the call fails, nobody is
+    erased, and the learner stays blocked. With the `noticeVersion(market)` option (the web wires
+    it from the notices it loads), an answer naming any other version is `invalid`. An under-age
+    erase blocked by a row the store does not own is `not_found` with nothing changed; the web
+    closes that browser's session and staff erase the account (12.1). `learnerStatus` is for
+    students only: a teacher or staff user is `scope`.
 
 `@edmate/db` exports `createIdentityStore`, and `openDatabase()` returns `{ repos, identity,
 close }`. Only `apps/web/src/auth/**` should use `identity`.

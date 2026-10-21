@@ -1,7 +1,17 @@
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BROKEN_ALL, copyValid, edit, tempDir, VALID } from './test-helpers.js';
+import {
+  BROKEN_ALL,
+  copyLocalesValid,
+  copyNoticesValid,
+  copyValid,
+  edit,
+  LOCALES_VALID,
+  NOTICES_VALID,
+  tempDir,
+  VALID,
+} from './test-helpers.js';
 import { validateContentDir } from './validate.js';
 
 describe('validateContentDir', () => {
@@ -50,11 +60,47 @@ describe('validateContentDir', () => {
     });
   });
 
+  it('passes a valid locale-packs directory', () => {
+    expect(validateContentDir(LOCALES_VALID)).toEqual({ ok: true, issues: [] });
+  });
+
+  it('fails a locale pack with a missing field, and runs the locale rules on the rest', () => {
+    const dir = copyLocalesValid();
+    edit(dir, 'XX.yaml', (s) => s.replace(/^ {2}grievance: .*\n/m, ''));
+    edit(dir, 'global.yaml', (s) => s.replace('languages: [en]', 'languages: [en, hi]'));
+    const { ok, issues } = validateContentDir(dir);
+    expect(ok).toBe(false);
+    expect(issues).toHaveLength(2);
+    expect(issues[0]).toMatch(/^XX\.yaml: invalid locale pack[\s\S]*compliance\.grievance/);
+    // Without its one market pack, the remaining rules still run on the default pack.
+    expect(issues.slice(1)).toEqual([
+      'global.yaml: languages must be exactly [en] during the pilot; got [en, hi]',
+    ]);
+  });
+
   it('fails a directory that does not exist', () => {
     const missing = join(tempDir(), 'nope');
     expect(validateContentDir(missing)).toEqual({
       ok: false,
       issues: [`${missing}: no such content directory`],
+    });
+  });
+
+  it('passes a signed privacy-notices directory', () => {
+    expect(validateContentDir(NOTICES_VALID)).toEqual({ ok: true, issues: [] });
+  });
+
+  it('fails a privacy notice left "pending", with file errors collected too', () => {
+    const dir = copyNoticesValid();
+    edit(dir, 'XX.md', (s) => s.replace('reviewedBy: Example Reviewer', 'reviewedBy: pending'));
+    edit(dir, 'global.md', (s) => s.replace('market: global', 'market: XX'));
+    expect(validateContentDir(dir)).toEqual({
+      ok: false,
+      issues: [
+        'global.md: market "XX" does not match the file name (expected "global")',
+        'global.md: missing; the default notice is required (it serves every market without one)',
+        'XX.md: reviewedBy is "pending"; a named person must sign this notice',
+      ],
     });
   });
 });

@@ -102,6 +102,16 @@ Evidence:
 
 Deviations: the brief's `quality-no-copied-echo-en` id is `pedagogy-quality-no-copied-echo-en`, because the suite rules require an id to start with its folder name. The 4 new cases need the lead's sign-off.
 
+## Merge with main (20 Oct 2026)
+
+Merged `origin/main` (5.6a/5.6c practice keys out of the prompt, ADR-0010/0011, and later work) into this branch. No behaviour changed on either side.
+
+- `packages/harness/src/pedagogy/compose.ts`: import conflict only; kept 3.11d's `personaQuestionsAsked` import and main's `fenced`/`inline` and `resolveDisclaimer` imports.
+- `packages/harness/src/pedagogy/helpState.ts`: kept both. `PERSONA_QUESTIONS_MAX` sits beside `PRACTICE_SERVED_MAX`, `PRACTICE_ID_MAX` and `PRACTICE_KEYS_MAX_JSON`; the strict `HelpStateSchema` holds `personaQuestionsAsked` (0..PERSONA_QUESTIONS_MAX) and the practice fields plus `practiceCarriedKey`, each with its own bounds; `parseSessionHelp` restores the persona count, `practiceFields(...)` and `practiceCarriedKey`.
+- `packages/harness/src/pedagogy/helpState.test.ts`: kept both import lists and both describe blocks (persona count; practice fields; carried key; limits). The "every practice limit" size test now also sets `personaQuestionsAsked: PERSONA_QUESTIONS_MAX`, so the full state with both features is proven to fit `LIMITS.helpStateMaxJsonLength`.
+- Semantic checks: 3.11d adds no TurnContext keys, so assemble's allow-list is unchanged. The runner's practice paths (`withPractice`) spread the loaded or decided help, so the persona count rides through them. The prompt-pack, compose and model-request snapshots auto-merged and pass unchanged; none were regenerated.
+- Verified: `corepack pnpm turbo run typecheck lint test` (whole repo, Postgres up) 46/46 tasks pass; `python3 .githooks/secret-scan.py --all` is clean.
+
 ## Decisions
 
 ### 19 Oct 2026 · 3.11d teacher-label hardening: ADR-0009, prompt-pack behaviour change · risk: high

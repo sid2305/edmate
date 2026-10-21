@@ -2,13 +2,18 @@ import { LIMITS } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   copyHelp,
+  holdsPracticeKey,
   INITIAL_HELP_STATE,
+  PRACTICE_SERVED_MAX,
+  practiceFields,
   loadSessionHelp,
   PERSONA_QUESTIONS_MAX,
   parseSessionHelp,
   personaQuestionsAsked,
   serializeSessionHelp,
   SessionHelpSchema,
+  PRACTICE_ID_MAX,
+  PRACTICE_KEYS_MAX_JSON,
 } from './helpState.js';
 
 const VALID = {
@@ -246,5 +251,147 @@ describe('personaQuestionsAsked (3.11d: the server counts, absent = 0)', () => {
   it('reads the stored count, or 0 when absent', () => {
     expect(personaQuestionsAsked(INITIAL_HELP_STATE)).toBe(0);
     expect(personaQuestionsAsked({ ...INITIAL_HELP_STATE, personaQuestionsAsked: 3 })).toBe(3);
+  });
+});
+
+describe('practice fields (5.6, ADR-0010)', () => {
+  const PRACTICE = {
+    ...VALID,
+    practiceItemId: 'item-2',
+    practiceModuleId: 'mod-1',
+    practiceServed: ['item-1', 'item-2'],
+  };
+
+  it('parse and serialise round-trip the active item, its module and the served ids', () => {
+    const s = parseSessionHelp(PRACTICE);
+    expect(s.help).toMatchObject({
+      practiceItemId: 'item-2',
+      practiceModuleId: 'mod-1',
+      practiceServed: ['item-1', 'item-2'],
+    });
+    expect(serializeSessionHelp(s)).toEqual(PRACTICE);
+  });
+
+  it('a blob saved before 5.6 parses without them', () => {
+    const s = parseSessionHelp(VALID);
+    expect(s.help).not.toHaveProperty('practiceItemId');
+    expect(s.help).not.toHaveProperty('practiceServed');
+  });
+
+  it(`refuses more than PRACTICE_SERVED_MAX (${PRACTICE_SERVED_MAX}) served ids or an empty id`, () => {
+    const many = Array.from({ length: PRACTICE_SERVED_MAX + 1 }, (_, i) => `item-${i}`);
+    expect(parseSessionHelp({ ...VALID, practiceServed: many })).toEqual(DEFAULT);
+    expect(parseSessionHelp({ ...VALID, practiceItemId: '' })).toEqual(DEFAULT);
+  });
+
+  it('copyHelp copies the served list, so it never aliases', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    const c = copyHelp(h);
+    expect(c.practiceServed).toEqual(h.practiceServed);
+    expect(c.practiceServed).not.toBe(h.practiceServed);
+  });
+
+  it('holdsPracticeKey: an active item and a non-empty key', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    expect(holdsPracticeKey(h)).toBe(true);
+    expect(holdsPracticeKey({ ...h, answerKey: [] })).toBe(false);
+    expect(holdsPracticeKey(parseSessionHelp(VALID).help)).toBe(false);
+  });
+
+  it('practiceFields picks only the practice fields, copied', () => {
+    const h = parseSessionHelp(PRACTICE).help;
+    const f = practiceFields(h);
+    expect(f).toEqual({
+      practiceItemId: 'item-2',
+      practiceModuleId: 'mod-1',
+      practiceServed: ['item-1', 'item-2'],
+    });
+    expect(f.practiceServed).not.toBe(h.practiceServed);
+    expect(practiceFields(parseSessionHelp(VALID).help)).toEqual({});
+  });
+});
+
+describe('practiceCarriedKey: a skipped item key, guarded one more turn (5.6c, ADR-0011)', () => {
+  const CARRIED = {
+    ...VALID,
+    practiceItemId: 'item-2',
+    practiceServed: ['item-1', 'item-2'],
+    practiceCarriedKey: ['7', 'seven'],
+  };
+
+  it('parses and round-trips through serialise', () => {
+    const s = parseSessionHelp(CARRIED);
+    expect(s.help.practiceCarriedKey).toEqual(['7', 'seven']);
+    expect(serializeSessionHelp(s)).toEqual(CARRIED);
+    expect(loadSessionHelp(CARRIED).unreadable).toBe(false);
+  });
+
+  it('a blob saved before 5.6c parses without it', () => {
+    const s = parseSessionHelp(VALID);
+    expect(s.help).not.toHaveProperty('practiceCarriedKey');
+    expect(loadSessionHelp(VALID).unreadable).toBe(false);
+  });
+
+  it('a non-string entry is unreadable; no entry cap of its own (5.6c fix round)', () => {
+    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: [7] })).toEqual(DEFAULT);
+    expect(loadSessionHelp({ ...VALID, practiceCarriedKey: [7] }).unreadable).toBe(true);
+    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: undefined })).toEqual(DEFAULT);
+    // As many entries as answerKey may hold: the JSON caps bound it, not an entry count.
+    const many = Array.from({ length: 65 }, (_, i) => `k${i}`);
+    expect(
+      parseSessionHelp({ ...VALID, practiceCarriedKey: many }).help.practiceCarriedKey,
+    ).toEqual(many);
+    const saved = serializeSessionHelp({
+      rung: 0,
+      help: { ...parseSessionHelp(VALID).help, practiceCarriedKey: many },
+    });
+    expect(saved.practiceCarriedKey).toEqual(many);
+  });
+
+  it('copyHelp keeps it, copied, so it never aliases', () => {
+    const h = parseSessionHelp(CARRIED).help;
+    const c = copyHelp(h);
+    expect(c.practiceCarriedKey).toEqual(['7', 'seven']);
+    expect(c.practiceCarriedKey).not.toBe(h.practiceCarriedKey);
+  });
+
+  it('practiceFields leaves it out (the runner drops it explicitly too)', () => {
+    const f = practiceFields(parseSessionHelp(CARRIED).help);
+    expect(f).not.toHaveProperty('practiceCarriedKey');
+  });
+
+  it('holdsPracticeKey never reads it', () => {
+    const h = parseSessionHelp({ ...CARRIED, answerKey: [] }).help;
+    expect(holdsPracticeKey(h)).toBe(false);
+  });
+});
+
+describe('practice limits fit the stored blob (5.6 review)', () => {
+  it('a state at every practice limit, with a carried key, still serialises under LIMITS.helpStateMaxJsonLength', () => {
+    const id = 'i'.repeat(PRACTICE_ID_MAX);
+    // The JSON of answerKey plus practiceCarriedKey is exactly PRACTICE_KEYS_MAX_JSON long.
+    const half = PRACTICE_KEYS_MAX_JSON / 2;
+    const key = 'k'.repeat(half - 4);
+    const carried = 'c'.repeat(half - 4);
+    expect(JSON.stringify([key]).length + JSON.stringify([carried]).length).toBe(
+      PRACTICE_KEYS_MAX_JSON,
+    );
+    const out = serializeSessionHelp({
+      rung: 4,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: true,
+        answerKey: [key],
+        lockedStopped: true,
+        groundingAsks: 1_000,
+        personaQuestionsAsked: PERSONA_QUESTIONS_MAX,
+        practiceItemId: id,
+        practiceModuleId: id,
+        practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),
+        practiceCarriedKey: [carried],
+      },
+    });
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(LIMITS.helpStateMaxJsonLength);
   });
 });

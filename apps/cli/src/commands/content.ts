@@ -13,6 +13,13 @@ export const CONTENT_USAGE = `Usage: edmate content validate [dir]
 Validates content under <dir> (default: ${DEFAULT_CONTENT_DIR}) against its schemas
 and content rules (licence coverage, reviewer, counts, references). Exits 1 and
 prints every issue found if any file or rule fails.
+<dir> may also be a locale-packs directory (e.g. content/locales): each
+<market>.yaml is checked against the LocalePack schema, and helplines and
+compliance must be signed off by a person (not "pending"); PII patterns must
+compile with the flags gu and pass the safe-regex check.
+<dir> may also be a privacy-notice directory (e.g. content/legal/privacy-notice):
+each <market>.md needs front matter (version, market, reviewedBy, reviewedOn),
+a default global.md, a person's sign-off (not "pending") and no [PLACEHOLDER].
 A relative <dir> is looked up under the current directory, then under the
 workspace root (the folder holding pnpm-workspace.yaml).
 `;

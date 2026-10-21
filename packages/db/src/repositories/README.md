@@ -79,7 +79,8 @@ per turn by the caller. `entitlementStoreFor(repos, opts)` (3.2) binds the trust
 three sources; `turnConfigStoreFor(repos, { locales })` (3.2, ADR-0004) loads a turn's agent,
 package, style card and locale pack and returns null unless the session is the entitlement's and
 open. Other port adapters (ProfileStore 6.2,
-TeacherQuestionStore / CorrectionStore 5.10, TraceSink 3.8 / 7.7, RetrievalIndex 5.3 / 5.4)
+TeacherQuestionStore / CorrectionStore 5.10, TraceSink 3.8 / 7.7, RetrievalIndex 5.3 / 5.4; see
+§ Retrieval)
 belong to their tasks and must add their isolation cases here.
 
 **UsageMeter (task 2.4, done).** `usageMeterFor(repos, scope)` binds one student x teacher and
@@ -108,6 +109,71 @@ for the rest of the month. Both have cases in `CASES`; `test/cost-alarm.int.test
 sums against raw SQL, the free/paid split, the audit rows, the once-a-month rule and concurrency.
 The audit `system` role (enum `audit_actor_role`, separate from `user_role` so no user can hold
 it) requires an actor id starting `system_`, and no other role may use that prefix.
+
+## Retrieval (task 5.3)
+
+**Writes.** `documents.create(scope, { id, moduleId, kind, sourceTitle, storageKey? })` is
+`INSERT … SELECT FROM modules WHERE id = $m AND teacher_id = $t`; another teacher's module, a
+missing one and a document id already taken by anyone are all `not_found`.
+`chunks.insertMany(scope, documentId, drafts)` reads the document in the scope (and its module,
+still the teacher's) in the same statement, and takes teacher, module, kind and source title from
+it, so a chunk can't be filed under another teacher's module. Chunk ids are
+`<documentId>-c<0000>` (document order without an `ord` column); writing the same `ord` twice is
+`invalid`. `chunks.setEmbeddings(scope, items)` is all or nothing: any id that is not the scope's
+is `not_found` and nothing is written; vectors are checked (1536 finite numbers) before SQL.
+
+**Material revision.** Every write above bumps `teacher_material_revisions.revision` for the
+scope's teacher in the same transaction (`retrieval.revision(scope)` reads it; 0 before any
+write). leakCheck's cache key includes it (ADR-0007). **Any future path that deletes or edits a
+teacher's documents or chunks (8.x, 13.4) must bump it too**, or a cached leak index goes stale.
+
+**Search and probe.** `retrieval.search(scope, { q, allowedModuleIds, k, embedding? })` runs
+one statement per signal (full text over the generated `'simple'` tsvector with prefix terms and a
+short stop-word list; vector by cosine distance when an embedding is given), each with
+`teacher_id = $t AND module_id IN (allowed) AND module_id IN (the teacher's modules)` in the same
+WHERE clause, before ranking. Results are fused by reciprocal rank (k = 60, ties by id), matching
+teacher notes go first, and `score` is an absolute 0-1 relevance (not the RRF value; constants
+calibrated in 5.3 Phase D). Allowed ids the teacher does not own are ignored. Module ids are part
+of the scope: malformed is `scope`. `retrieval.probe(scope, { q, moduleIds, embedding? })` ranks
+the same way over the scope's own `moduleIds` and returns only `{ hit, score }` (ADR-0003).
+
+**Port.** `retrievalIndexFor(repos, { embedder?, embedTimeoutMs?, onEmbedFallback? })` is the
+production `RetrievalIndex`: it validates the port scope before embedding the query, and an
+embedder that throws, times out (800 ms default) or returns a bad vector falls back to full text,
+reporting only a fixed code (`embed_failed` / `embed_timeout` / `embed_invalid`), never the
+query or the error.
+
+**leakCheck (ADR-0007).** `retrieval.material(scope)` returns every chunk text of the teacher's own
+modules, ordered by module, document and chunk; only leakCheck reads it, and it never leaves the
+adapter. leakCheck rejects a malformed scope (`scope`) or candidate list (`invalid`) before any
+SQL (at most `LEAK_CANDIDATES_MAX` candidates of `LEAK_CANDIDATE_MAX_LENGTH` characters, 4x the
+harness's largest legitimate batch), then reads the revision and the teacher's module ids
+together and takes the locked index for (teacher, revision, sorted **owned** allowed ids) from an
+LRU cache of 64 (`leakCache.ts`), or builds it with the shared `lockedIndex` from
+`@edmate/harness`: modules outside the owned allowed set are locked (draft and unpackaged ones
+included), a span also in an allowed module is ignored. Another teacher's or an unknown module id
+in the allowed list is dropped before the key, so it widens nothing and shares the owned key
+(task 5.4). The call races
+`leakTimeoutMs` (100 ms default); a timeout or any error is `{ hit: true }`, reported to
+`onLeakFallback` as `leak_timeout` / `leak_failed` only. A cold build that loses the race keeps
+running (dropped after `leakBuildTimeoutMs`, 30 s), so the next call is warm. A newer revision
+drops the teacher's older entries; a failed build is never cached. Nothing here logs.
+
+**Full-text terms.** Each query term goes to `to_tsquery` as a quoted literal (`'term':*`,
+`tsTerm`), so no character, Unicode or tsquery syntax, can make the query raise.
+
+**The cache rule (task 5.4, ADR-0003 point 6).** A cache that holds anything derived from teacher
+material or an entitlement is keyed by everything that decides access: the package id and version,
+or the exact owned allowed-module set, plus the material revision for material. The inventory is
+the harness `promptCacheKey` and the `leakCache` here; adding a cache means adding it to this list
+and to `harness/src/access/index.ts`.
+
+**No unfiltered search (task 5.4).** `test/access-audit.test.ts` reads every package's and app's
+source and fails when: the `chunks` table is named outside the schema, `internal.ts` and the
+`chunks` / `retrieval` repositories; `retrieval.ts` gains a read of `chunks` (the count is pinned)
+or has one whose statement lacks the scope; anything but `retrieval.ts` calls `.material(`; a file
+off the allowlist implements `RetrievalIndex`; or harness code outside `access/scopedRetrieval.ts`
+searches or probes the index (`.leakCheck(` only in `guardrails/lockedLeak.ts`).
 
 ## Package surface
 
