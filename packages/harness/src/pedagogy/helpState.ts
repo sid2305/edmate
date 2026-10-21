@@ -5,6 +5,8 @@
 import { LIMITS, type TurnContext, TurnContextSchema } from '@edmate/contracts';
 import { z } from 'zod';
 
+/** The highest persona question count stored; the count stops there (3.11d). */
+export const PERSONA_QUESTIONS_MAX = 1_000;
 /** Most served practice item ids kept for the exclude list (oldest dropped first). */
 export const PRACTICE_SERVED_MAX = 20;
 /** Longest stored practice item or module id. */
@@ -44,6 +46,14 @@ export const HelpStateSchema = z.strictObject({
    */
   groundingAsks: z.int().min(0).max(1_000).exactOptional(),
   /**
+   * How many role-play questions the persona has asked this session (task 3.11d, ADR-0009). The
+   * server counts it (`skillStep`, once per `mock_interview` turn with a persona), never the
+   * model, and the composer shows it in the persona section. Absent until the first persona turn
+   * and read as 0 (`personaQuestionsAsked`), so a blob saved before 3.11d still parses and keeps
+   * its rung. Capped at PERSONA_QUESTIONS_MAX so a long session never makes the state unsavable.
+   */
+  personaQuestionsAsked: z.int().min(0).max(PERSONA_QUESTIONS_MAX).exactOptional(),
+  /**
    * The practice item whose key `answerKey` holds (5.6, ADR-0010). While it is set and
    * `answerKey` is not empty, the ladder uses the practice cap whatever skill the turn chose
    * (`holdsPracticeKey`). Optional, so a blob saved before 5.6 still parses.
@@ -72,6 +82,11 @@ export const HelpStateSchema = z.strictObject({
   practiceCarriedKey: z.array(z.string()).exactOptional(),
 });
 export type HelpState = z.infer<typeof HelpStateSchema>;
+
+/** The server's persona question count for this session: absent reads as 0 (3.11d). */
+export function personaQuestionsAsked(h: Readonly<HelpState>): number {
+  return h.personaQuestionsAsked ?? 0;
+}
 
 export const INITIAL_HELP_STATE: Readonly<HelpState> = Object.freeze({
   stuckTurns: 0,
@@ -139,8 +154,16 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
   }
   if (!r.success) return { rung: 0, help: copyHelp(INITIAL_HELP_STATE) };
-  const { rung, stuckTurns, attemptLogged, pendingCheck, answerKey, lockedStopped, groundingAsks } =
-    r.data;
+  const {
+    rung,
+    stuckTurns,
+    attemptLogged,
+    pendingCheck,
+    answerKey,
+    lockedStopped,
+    groundingAsks,
+    personaQuestionsAsked: asked,
+  } = r.data;
   return {
     rung,
     help: copyHelp({
@@ -150,6 +173,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       answerKey,
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
+      ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
       ...practiceFields(r.data),
       ...(r.data.practiceCarriedKey === undefined
         ? {}

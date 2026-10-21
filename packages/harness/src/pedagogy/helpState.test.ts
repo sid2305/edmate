@@ -7,7 +7,9 @@ import {
   PRACTICE_SERVED_MAX,
   practiceFields,
   loadSessionHelp,
+  PERSONA_QUESTIONS_MAX,
   parseSessionHelp,
+  personaQuestionsAsked,
   serializeSessionHelp,
   SessionHelpSchema,
   PRACTICE_ID_MAX,
@@ -90,6 +92,59 @@ describe('parseSessionHelp (ADR-0005: invalid → rung 0 / INITIAL_HELP_STATE)',
       help: { ...INITIAL_HELP_STATE, answerKey: [], groundingAsks: 3 },
     };
     expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
+  });
+
+  it('keeps the persona question count next to the 4.6b and 4.7 fields (task 3.11d)', () => {
+    const raw = { ...VALID, lockedStopped: true, groundingAsks: 1, personaQuestionsAsked: 4 };
+    expect(parseSessionHelp(raw)).toEqual({
+      rung: 3,
+      help: {
+        stuckTurns: 1,
+        attemptLogged: true,
+        pendingCheck: false,
+        answerKey: ['42'],
+        lockedStopped: true,
+        groundingAsks: 1,
+        personaQuestionsAsked: 4,
+      },
+    });
+    for (const bad of [-1, 1.5, '2', PERSONA_QUESTIONS_MAX + 1, null]) {
+      expect(parseSessionHelp({ ...VALID, personaQuestionsAsked: bad })).toEqual(DEFAULT);
+    }
+    const s = {
+      rung: 2 as const,
+      help: { ...INITIAL_HELP_STATE, answerKey: [], personaQuestionsAsked: 7 },
+    };
+    expect(parseSessionHelp(serializeSessionHelp(s))).toEqual(s);
+  });
+
+  it('an old blob without personaQuestionsAsked (before 3.11d) keeps its rung; the count reads as 0', () => {
+    const old = { ...VALID, groundingAsks: 2 };
+    const parsed = parseSessionHelp(old);
+    expect(parsed.rung).toBe(3);
+    expect(parsed.help).toEqual({
+      stuckTurns: 1,
+      attemptLogged: true,
+      pendingCheck: false,
+      answerKey: ['42'],
+      lockedStopped: false,
+      groundingAsks: 2,
+    });
+    expect(personaQuestionsAsked(parsed.help)).toBe(0);
+    expect(loadSessionHelp(old).unreadable).toBe(false);
+  });
+
+  it('an old blob from before 4.6b, 4.7 and 3.11d alike still keeps its rung', () => {
+    const old = {
+      v: 1,
+      rung: 4,
+      stuckTurns: 0,
+      attemptLogged: true,
+      pendingCheck: true,
+      answerKey: [],
+    };
+    expect(parseSessionHelp(old).rung).toBe(4);
+    expect(personaQuestionsAsked(parseSessionHelp(old).help)).toBe(0);
   });
 
   it('an old blob without lockedStopped (before 4.6b) parses with its rung intact (absent = false)', () => {
@@ -189,6 +244,13 @@ describe('serializeSessionHelp (for 3.8 commit)', () => {
     expect(() =>
       serializeSessionHelp({ rung: 0, help: { ...INITIAL_HELP_STATE, answerKey: [big] } }),
     ).toThrow(/helpStateMaxJsonLength/);
+  });
+});
+
+describe('personaQuestionsAsked (3.11d: the server counts, absent = 0)', () => {
+  it('reads the stored count, or 0 when absent', () => {
+    expect(personaQuestionsAsked(INITIAL_HELP_STATE)).toBe(0);
+    expect(personaQuestionsAsked({ ...INITIAL_HELP_STATE, personaQuestionsAsked: 3 })).toBe(3);
   });
 });
 
@@ -323,6 +385,7 @@ describe('practice limits fit the stored blob (5.6 review)', () => {
         answerKey: [key],
         lockedStopped: true,
         groundingAsks: 1_000,
+        personaQuestionsAsked: PERSONA_QUESTIONS_MAX,
         practiceItemId: id,
         practiceModuleId: id,
         practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),
