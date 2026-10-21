@@ -1728,9 +1728,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.4-student-chat
+  model: plan:sonnet build:opus
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
