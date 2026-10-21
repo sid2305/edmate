@@ -1143,9 +1143,9 @@ tasks:
     with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m4/4.6c-lockedleak-followups
+  model: build:opus-5.5/medium
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
