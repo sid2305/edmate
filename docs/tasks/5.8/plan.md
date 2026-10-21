@@ -179,3 +179,14 @@ Each of phases A, B and C logs a `risk: high` decision in the handoff. The PR na
    - Recommend a follow-up board task before the harness exit gate: "CLI chat/eval: skill commands and personas, pin the newest set". The gate's recorded demo includes a mock interview, and `edmate eval --record` has no agent yet (ADR-0012).
    - The interview-state `skill` event goes to 9.5.
 5. **Pause length:** default: one coaching turn, then the next turn resumes the same question. The student can send `/pause` again for more coaching.
+
+## Lead answers (21 Oct 2026)
+- **ADR-0013** is drafted by the architect: `0013-roleplay-state.md` (the lead passes its path to the Phase A builder, who saves it as `docs/adr/0013-roleplay-state.md` unchanged apart from reviewer fixes). It overrides this plan where they differ:
+  - `roleplay-stopped` takes `questions_answered` (server-computed `before − 1`), not `question_number`.
+  - The new frame form requires `roleplay_state` and has neither `questions_asked` nor `persona_end_after`; anything mixed is a `PromptPackError`.
+  - The start payload id uses `PersonaSchema.shape.id`, not `PERSONA_ID_MAX`.
+  - `readPersonaLibrary` keeps the version, rejects a slug that differs from `id`, and rejects duplicate id+version.
+- **Phase A** must also update `parseSessionHelp` (`helpState.ts`) to carry `personaPhase`, with a save-and-load test, and log the resume fix (no +1 on the turn after `/pause`, under every set) as an intended change.
+- **Open questions 1–5:** build with the defaults (B-37, pending the human).
+- **New open question 6 (coverage gate, B-37 item 6):** the gate runs before `skillStep`, so a start with no text, and `/pause`, `stop` or debrief turns, can route to `ask_teacher`. Not needed for Phase A; must be decided before Phase B's integration test. Lead default: role-play control turns (pause, stop, resume, debrief, ended) skip the gate; a start that has no material asks the student which topic to practise and never opens a teacher question. Phase B adds an uncovered-fixture pipeline test.
+- **Wiring** is board task 5.8a. It must make every role-play message turn send `skill: 'mock_interview'` (otherwise it silently becomes a coach turn); Phase B's integration test checks the harness side.
