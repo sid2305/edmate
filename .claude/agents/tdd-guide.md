@@ -116,3 +116,9 @@ Integrate eval-driven development into TDD flow:
 4. Re-run tests and evals; report pass@1 and pass@3.
 
 Release-critical paths should target pass^3 stability before merge.
+
+## Agent registry
+- Known limitations: Long single builds cost more than split ones (cost grows with calls times context), so builds are capped near 150 tool calls and split into phases (decision log, 0.15); nearly every risky PR needed a fix round (decision log, 33-task review)
+- Typical misses: Reviews don't name the builder, but most builds are tdd-guide's. Recurring review HIGHs: silent failures (failed generate attempts unreported, a discarded tool exception, unpriced usage recorded as $0; 3.x and 4.x reviews); normalisation gaps in guard matchers (look-alike letters, invisible characters, Hindi-Latin number words; 4.x reviews); boundary bugs in tooling regexes (0.16 metrics ids, 0.17 budget lines); tests or snapshots left stale so CI went red (1.7b, 5.6)
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); shared across build-role agents because board data doesn't name which one ran (docs/tasks/0.18/plan.md, Open question 2)
+- Last reviewed: 2026-10-21

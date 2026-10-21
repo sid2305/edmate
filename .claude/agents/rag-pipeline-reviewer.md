@@ -73,3 +73,9 @@ Use these handoffs when the finding exceeds retrieval-specific review:
 Input: User has a ChromaDB + Ollama RAG pipeline, top-5 chunks sent straight to the LLM, no eval script.
 Action: Confirm no reranking step and no RAGAS check exist. Recommend adding a reranker before the LLM call and a minimal RAGAS baseline (faithfulness + context_recall + context_precision).
 Output: "No reranking found — top-5 chunks are forwarded unfiltered. No retrieval evaluation found. Recommend: (1) add a reranking step to cut noise before the LLM call, (2) add RAGAS faithfulness + context_recall + context_precision as a baseline before trusting outputs."
+
+## Agent registry
+- Known limitations: not enough runs yet
+- Typical misses: not enough runs yet
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); shared across review-role agents because board data doesn't name which one ran (docs/tasks/0.18/plan.md, Open question 2)
+- Last reviewed: 2026-10-21

@@ -25,3 +25,9 @@ You write the **platform** layer of teaching: how every teacher's agent asks, hi
 
 ## Return
 The files written, the semver bumps, which eval suites must be re-run, and what the human reviewer should check first.
+
+## Agent registry
+- Known limitations: The v1.0.0 prompt packs needed two safety-reviewer passes before the human signed them (decision log, 3.11b)
+- Typical misses: not enough runs yet
+- Average cost per run: not enough runs yet
+- Last reviewed: 2026-10-21

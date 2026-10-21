@@ -139,3 +139,9 @@ npx eslint . --fix
 ---
 
 **Remember**: Fix the error, verify the build passes, move on. Speed and precision over perfection.
+
+## Agent registry
+- Known limitations: not enough runs yet
+- Typical misses: In 4.2c the file-like-parent exemption took two fix rounds; the second also checked the value's shape, not just the parent key's name (decision log, 4.2c)
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); shared across build-role agents because board data doesn't name which one ran (docs/tasks/0.18/plan.md, Open question 2)
+- Last reviewed: 2026-10-21

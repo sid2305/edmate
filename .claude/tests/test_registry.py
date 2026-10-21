@@ -7,7 +7,7 @@ import datetime
 import sys
 import unittest
 
-from helpers import HARNESS, RepoCase, require_tools, task
+from helpers import HARNESS, REPO, RepoCase, require_tools, task
 
 sys.path.insert(0, str(HARNESS / "skills" / "board"))
 import registry  # noqa: E402
@@ -250,6 +250,57 @@ class BoardRegistryCommand(RepoCase):
         r = self.repo.script("board", "metrics")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("opus", r.stdout)
+
+
+# --- Part 2 (Phase B): static checks on the real repo -------------------------------------
+
+REAL_AGENTS = REPO / ".claude" / "agents"
+REAL_TABLE = REPO / "docs" / "agents" / "registry.md"
+
+
+def real_agent_files():
+    return {p.stem: p.read_text() for p in sorted(REAL_AGENTS.glob("*.md"))}
+
+
+def agents_section(text):
+    """The generated table's `## Agents` section only. The cost-per-role section follows the
+    board's metrics, which closeouts update on main, so it is not pinned here."""
+    start = text.index("## Agents")
+    end = text.index("## Cost per role")
+    return text[start:end]
+
+
+class RealAgentBlocks(unittest.TestCase):
+    def test_agents_exist(self):
+        self.assertGreater(len(real_agent_files()), 0)
+
+    def test_every_agent_has_a_fresh_complete_block(self):
+        today = datetime.date.today()
+        for name, text in real_agent_files().items():
+            with self.subTest(agent=name):
+                got = registry.parse_agent_block(text)
+                self.assertIsNotNone(got, f".claude/agents/{name}.md: missing or malformed "
+                                          "'## Agent registry' block")
+                for field, value in got.items():
+                    self.assertTrue(value.strip(), f"{name}: empty {field}")
+                self.assertFalse(registry.is_stale(got["last_reviewed"], today),
+                                 f".claude/agents/{name}.md: Last reviewed {got['last_reviewed']} "
+                                 f"is more than {registry.STALE_DAYS} days old; re-review it")
+
+    def test_every_agent_with_a_role_is_a_real_file(self):
+        self.assertLessEqual(set(registry.AGENT_ROLES), set(real_agent_files()))
+
+    def test_committed_table_matches_agent_blocks(self):
+        self.assertTrue(REAL_TABLE.is_file(), "docs/agents/registry.md missing; run "
+                                              "`python3 .claude/skills/board/board.py registry`")
+        fresh = registry.render(real_agent_files(), {"tasks": []})
+        self.assertEqual(agents_section(REAL_TABLE.read_text()), agents_section(fresh),
+                         "docs/agents/registry.md is stale; run "
+                         "`python3 .claude/skills/board/board.py registry`")
+
+    def test_team_lead_skill_links_to_table(self):
+        skill = (REPO / ".claude" / "skills" / "team-lead" / "SKILL.md").read_text()
+        self.assertIn("docs/agents/registry.md", skill)
 
 
 if __name__ == "__main__":

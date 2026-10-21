@@ -329,3 +329,9 @@ When reviewing AI-generated changes, prioritize:
 Cost-awareness check:
 - Flag workflows that escalate to higher-cost models without clear reasoning need.
 - Recommend defaulting to lower-cost tiers for deterministic refactors.
+
+## Agent registry
+- Known limitations: A review pass does not run CI, so CI-only breakage can pass (1.7b review)
+- Typical misses: CI-only breakage: in 1.7b a workflow step name with an unquoted ': ' passed review, so GitHub could not parse ci.yml and CI never ran; the lead fixed it (1.7b review)
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); shared across review-role agents because board data doesn't name which one ran (docs/tasks/0.18/plan.md, Open question 2)
+- Last reviewed: 2026-10-21

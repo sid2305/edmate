@@ -130,3 +130,9 @@ This repo does not yet ship a dedicated `typescript-patterns` skill. For detaile
 ---
 
 Review with the mindset: "Would this code pass review at a top TypeScript shop or well-maintained open-source project?"
+
+## Agent registry
+- Known limitations: Often also covers silent failures in place of silent-failure-hunter (3.14, 4.2, 4.2b reviews); its severity can differ from security-reviewer's on the same finding (4.6: HIGH vs MEDIUM for the holdAll re-send)
+- Typical misses: CI-only breakage: in 1.7b a workflow step name with an unquoted ': ' passed review, so GitHub could not parse ci.yml and CI never ran; the lead fixed it (1.7b review)
+- Average cost per run: 174 tool calls, 35609 tokens out and 2092 s wall time per task (average over 7 done tasks with board metrics, 21 Oct 2026; whole-task totals); shared across review-role agents because board data doesn't name which one ran (docs/tasks/0.18/plan.md, Open question 2)
+- Last reviewed: 2026-10-21
