@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.16 board metrics allowlist limits · decided by build-error-resolver · risk: low
+- Decided: `board.py set --metrics` accepts only the keys `metrics.collect()` writes. Strings may be at most 64 characters, dicts and lists at most 20 items and 2 levels deep, and booleans and nulls are refused. Symlinked transcript files are skipped, not resolved.
+- Why: these limits fit everything `collect()` produces (for example findings → by_status → number) and keep free text or paths off the public board. Skipping symlinks is simpler than resolving them and checking containment, and Claude Code does not write symlinked transcripts.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16 metrics table default grouping · decided by tdd-guide · risk: low
+Decided: `board.py metrics` groups by `--by risk` (risky/expert/none) by default, with
+`--by milestone` available as an alternative.
+Why: the token-budget question this serves is "does a cheaper model hold up on risky work",
+which is about risk, not about which milestone a task happened to land in.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16 transcript-to-task matching is a heuristic · decided by tdd-guide · risk: low
+Decided: entries are matched to a task by the transcript's `gitBranch` field, falling back to
+`cwd` containing the task id when `gitBranch` is absent.
+Why: there is no first-party transcript-to-task link; this mirrors 0.15's by-hand count as a
+best-effort signal, not an audit trail.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16 agent metrics at closeout (.claude, risky path) · decided by lead · risk: high
+
+- Decided: merge 0.16. Closeout records counted agent metrics on the board, and `board.py metrics` reports them. security-reviewer and code-reviewer reviewed it. Fix round 1 fixed 2 HIGH, 2 MEDIUM and 2 LOW findings, and both reviewers re-checked their own.
+- Why: the human asked for agent-factory metrics (0.16). Only allow-listed numbers reach the public board.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 0.16 risky paths: security-reviewer · decided by tdd-guide · risk: high
+Decided: all touched/created files are under `.claude/**` (the agent harness itself per
+risk-paths.txt), so this PR needs security-reviewer sign-off before merge.
+Why: `.claude/skills/team-lead/metrics.py`, `.claude/skills/team-lead/closeout.py`,
+`.claude/skills/board/board.py` and their tests are part of the harness/CI tooling the human
+flagged as risky; no `packages/contracts`, guardrails/pedagogy, access/payments/auth or
+migration paths were touched.
+- risk: high
+
+---
+
 ### 21 Oct 2026 · 5.9 cases use the real prompt-pack set, parsed locally in the test · decided by tdd-guide · risk: low
 - Decided: `revisionFixtures.test.ts` reads `content/prompt-packs/set@1.1.0.yaml` and its pinned
   pack files directly (front-matter + body, the same layout `@edmate/content`'s loader reads) and

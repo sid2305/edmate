@@ -303,9 +303,30 @@ tasks:
   deps:
   - '0.15'
   risk: risky
-  status: running
+  status: done
   branch: m0/0.16-agent-metrics
-  model: plan:sonnet build:sonnet fix:opus
+  model: plan:sonnet build:sonnet fix:opus review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 6
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '0.17'
   milestone: M7
   title: 'Agent factory, limits (human decision 21 Oct 2026): the per-task budget becomes a line in plan.md (tool calls, phases, packages touched) and is enforced, not only requested: a hook or the harness
@@ -1906,6 +1927,14 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
+  status: todo
+  branch: null
+- id: 0.16a
+  milestone: M0
+  title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch == task branch misses builders (they run on work-<id>[a-z] branches) and reviewers (they run from the main checkout, whose branch is whatever the lead is on). Read subagent files too and attribute a whole subagent file to a task when its first prompt names the task id (boundary-aware) or its gitBranch is the task branch or work-<id>[a-z]; then re-run metrics for 0.16 by hand'
+  accept: a fixture with a session dir and subagents/ files counts the right agents per task; 0.1 vs 0.16 still separate; closeout on a real merged task records non-zero tool calls; no transcript text on the board
+  deps:
+  - '0.16'
   status: todo
   branch: null
 - id: 9.4c
