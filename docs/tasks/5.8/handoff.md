@@ -273,6 +273,11 @@ Fix round 1:
 - **Only an active role-play lets a control skip the meta/off_topic redirect (risk: low)** — Active means the persona id matches and the stored phase is not `ended`. A start with no active role-play that the router labels meta or off_topic still redirects (unchanged).
 - **The are-you-human fixture keeps `on_task` plus a separate labelled test (risk: low)** — The per-case replay checks the composed role-play state; the real routed outcome is pinned in its own test, so the eval case's meaning is unchanged.
 
+### 21 Oct 2026 · 5.8 wontfix: two LOW findings in packages/harness/src/pedagogy/compose.ts · decided by lead · risk: low
+- Decided: leave `packages/harness/src/pedagogy/compose.ts` as it is for two LOW findings: the legacy M is not clamped to PERSONA_QUESTIONS_MAX (legacy sets must compose byte-identically; noted in ADR-0013 §5), and `rolePlayTurn` also checks `mode === 'mock_interview'` (a no-op, since `composeMode` returns it only when the reason is `mock_interview`).
+- Why: neither changes behaviour, and changing the first would break the byte-identical legacy snapshots.
+- risk: low.
+
 ## Questions for the human
 (Moved to `.claude/blockers.md` B-37 question 7; lead default 7a until answered.)
 - **Debrief grounding (ADR-0013 point 6).** No judge change or exemption was needed: a debrief that keeps to the teacher's material passes the grounding judge. But a debrief that comments on delivery ("you spoke clearly") or a stop on an uncovered topic is replaced by the ask-teacher reply, because those claims are not in the material. Is that acceptable for the pilot (Phase C prose keeps debrief feedback to the material), or should delivery feedback get its own rule? Changing it would be a judge-prompt change under an ADR.
