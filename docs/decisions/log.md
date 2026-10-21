@@ -10,6 +10,67 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.18 merge: agent registry blocks, board.py registry and docs/agents/registry.md · decided by lead · risk: high
+- Decided: merge 0.18. It touches `.claude/**` (the 14 agent files, board.py, registry.py, tests and the team-lead skill link). security-reviewer and code-reviewer both approved with no CRITICAL, HIGH or MEDIUM findings.
+- Why: the registry blocks are evidence-only data that change no agent permissions or behaviour. The table regenerates byte for byte, and a missing or stale block fails `.claude/tests`.
+- risk: high (a risky path: `.claude/**`, security-reviewer group).
+
+Details (builder):
+
+---
+
+### 21 Oct 2026 · 0.18 Phase A: role-level cost, not per named agent · decided by builder · risk: low
+- Decided: cost stays bucketed by role (plan/build/review), as the lead accepted. Lead answer 2 asked for per-agent attribution if a subagent transcript names its agent type cheaply. `metrics.py` records no agent type (no `agentType`/`subagent_type` field is read or stored), and the board's `metrics` map is a whole-task total. So per-agent attribution would need new machinery, which the lead ruled out. Each role a task names gets that task's whole-task numbers; the generated table says so.
+- Why: no cheap per-agent signal exists in the stored data.
+
+---
+
+### 21 Oct 2026 · 0.18 Phase A: role_model lives in registry.py, re-exported by board.py · decided by builder · risk: low
+- Decided: `role_model()` is defined in the pure `registry.py` and imported into `board.py` (so `board.role_model` exists and `build_model` wraps it), not defined in `board.py` as the plan worded it. This avoids a circular import, since `registry.role_buckets` needs it and `board.py` imports `registry`. One behaviour change: the role token must now start at a whitespace boundary (`(?<!\S)build:`), not a word boundary, so `x-build:opus` no longer counts as a build token. Real model strings are unaffected.
+- Why: one definition and no import cycle.
+
+---
+
+### 21 Oct 2026 · 0.18 Phase A: board.py writes no bytecode · decided by builder · risk: low
+- Decided: `board.py` sets `sys.dont_write_bytecode = True` before importing `registry`. Otherwise a `__pycache__/` appears beside the script. The real repo ignores it in git, but fixture repos commit it with `git add -A`, and the merge gate then flags it as a risky `.claude/**` change (3 merge-gate tests failed this way). A regression test covers it.
+- Why: keeps generated files out of every repo the script runs in.
+
+---
+
+### 21 Oct 2026 · 0.18 Phase A: block and table rules · decided by builder · risk: low
+- Decided:
+  - An empty or duplicated field, or a `Last reviewed` that is not a real `YYYY-MM-DD` date, makes the block malformed (`None`).
+  - A block is stale only when it is more than 60 days old: exactly 60 days is fresh, and a future date is not stale.
+  - Averages are rounded to whole numbers.
+  - The table has no timestamp, so regeneration is byte-identical.
+  - On any bad block, `board.py registry` writes nothing.
+- Why: the plan's "stale or missing block fails" needed concrete edges, and idempotency requires deterministic output.
+
+---
+
+### 21 Oct 2026 · 0.18 Phase B: the static test pins only the Agents section of the table · decided by builder · risk: low
+- Decided: the real-repo check compares only the `## Agents` section of the committed `docs/agents/registry.md` with a fresh render. It does not compare the cost-per-role section. That section follows the board's `metrics`, and closeouts update those on `main` after a merge, so pinning it would turn the suite red on every closeout until someone regenerated the table. The cost numbers inside each agent block are a dated snapshot ("21 Oct 2026").
+- Why: it catches a stale table whenever an agent block changes, and the board's normal bookkeeping cannot break CI.
+
+---
+
+### 21 Oct 2026 · 0.18 Phase B: registry prose comes from evidence only · decided by builder · risk: low
+- Decided:
+  - Every prose field cites the review or decision-log entry it comes from.
+  - An agent whose reviews and log entries show no recurring limitation or miss gets "not enough runs yet", even with many runs (for example database-reviewer and architect).
+  - Findings that an agent raised itself are not counted as its misses (for example pedagogy-author's 5.6 LOW).
+  - The 1.7b CI break (an unparseable workflow, fixed by the lead) counts as a miss for all three 1.7b reviewers.
+  - Builder misses go on tdd-guide's block, since reviews don't name the builder; the block says so.
+- Why: the task forbids guessing.
+
+---
+
+### 21 Oct 2026 · 0.18 merge: agent registry blocks, generator and table · decided by builder (for the lead) · risk: high
+- Decided: merge 0.18. It adds the `## Agent registry` block to all 14 agent files, the `board.py registry` generator (`registry.py`), the generated `docs/agents/registry.md`, the team-lead skill link and `test_registry.py` (36 tests). A missing, malformed or more-than-60-days-old block, or a stale Agents table, now fails the `.claude` test suite.
+- Why: it changes `.claude/**` (agent files, board skill, team-lead skill, tests), a risky path that needs security-reviewer and a risk: high entry.
+
+---
+
 ### 21 Oct 2026 · 7.1 eval reports and judge calibration · decided by lead · risk: low
 
 - Decided: merge 7.1. packages/evals gains a static, escaped HTML report next to the JSON report (optional `judgeModel` and `calibration` meta), and calibration: a strict human-verdict schema, a deterministic 10% sample (ceil, min 1, sorted case ids) and an agreement summary. Reports are generated in the existing CI test task from the synthetic fixture suite, written to gitignored `packages/evals/reports/`. Plan answers: double-check files for real suites start in 7.2; no CI artifact upload. The MEDIUM (an unmatched verdict id is dropped silently, not reported) and two LOWs go to 7.1a.

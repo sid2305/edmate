@@ -372,9 +372,30 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: review
+  status: done
   branch: m7/0.18-agent-registry
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus x2 review:sonnet x2
+  metrics:
+    tool_calls: 337
+    tokens_in: 1144
+    tokens_out: 88671
+    cache_read_tokens: 27651858
+    wall_time_seconds: 1573
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
@@ -2187,7 +2208,10 @@ tasks:
   model: null
 - id: 5.8b
   milestone: M13
-  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona; selectPersonaLibrary skips prerelease versions (or the ADR accepts them); typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
+  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped
+    role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona;
+    selectPersonaLibrary skips prerelease versions (or the ADR accepts them); typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and
+    status Accepted'
   accept: each item fixed or recorded in ADR-0013; the coverage-gate rule matches the human's B-37 answers with tests.
   deps:
   - '5.8'
