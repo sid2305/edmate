@@ -1,5 +1,7 @@
 // Task 9.1 Phase C: the student home view -- pure (no `requireRole`, so `view.test.tsx` renders
 // it directly). 9.4: a link to the chat for each live subscription; with none, the placeholder.
+// 9.3 Phase C: a second list, "packages you can start", for a live agent with no live
+// subscription -- each links to the compare-and-start page, not straight to chat.
 import { getTranslations } from 'next-intl/server';
 import { AppShell } from '../../src/ui/AppShell';
 import { signOutAndRedirect } from './actions';
@@ -7,9 +9,11 @@ import { signOutAndRedirect } from './actions';
 export interface HomeViewProps {
   /** Agent ids the student has a live subscription with (task 9.4). */
   chats?: readonly string[];
+  /** Agent ids the student can start a package with -- no live subscription yet (task 9.3). */
+  startable?: readonly string[];
 }
 
-export async function HomeView({ chats = [] }: HomeViewProps = {}) {
+export async function HomeView({ chats = [], startable = [] }: HomeViewProps = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('home');
   return (
@@ -21,18 +25,36 @@ export async function HomeView({ chats = [] }: HomeViewProps = {}) {
       signOutLabel={shell('signOut')}
     >
       <h1>{t('title')}</h1>
-      {chats.length === 0 ? (
+      {chats.length === 0 && startable.length === 0 ? (
         <p>{t('placeholder')}</p>
       ) : (
-        <ul className="home-chats">
-          {chats.map((agentId) => (
-            <li key={agentId}>
-              <a className="button" href={`/learn/${encodeURIComponent(agentId)}`}>
-                {t('chatLink')}
-              </a>
-            </li>
-          ))}
-        </ul>
+        <>
+          {chats.length > 0 && (
+            <ul className="home-chats">
+              {chats.map((agentId) => (
+                <li key={agentId}>
+                  <a className="button" href={`/learn/${encodeURIComponent(agentId)}`}>
+                    {t('chatLink')}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {startable.length > 0 && (
+            <>
+              <h2>{t('startableTitle')}</h2>
+              <ul className="home-startable">
+                {startable.map((agentId) => (
+                  <li key={agentId}>
+                    <a className="button" href={`/packages/${encodeURIComponent(agentId)}`}>
+                      {t('startLink')}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
       )}
     </AppShell>
   );

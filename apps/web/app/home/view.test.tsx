@@ -47,6 +47,33 @@ describe('HomeView', () => {
     expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
   });
 
+  it('with a startable agent, links to its compare-and-start page (task 9.3)', async () => {
+    const { container } = render(await HomeView({ startable: ['demo-agent'] }));
+    expect(screen.getByRole('link', { name: 'Start a package' })).toHaveAttribute(
+      'href',
+      '/packages/demo-agent',
+    );
+    expect(screen.getByText('Packages you can start')).toBeInTheDocument();
+    expect(screen.queryByText(/teacher.*agent.*here soon/i)).toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('shows both a chat link and a start link together, no placeholder', async () => {
+    render(await HomeView({ chats: ['agt_a'], startable: ['agt_b'] }));
+    expect(screen.getByRole('link', { name: "Chat with your teacher's agent" })).toHaveAttribute(
+      'href',
+      '/learn/agt_a',
+    );
+    expect(screen.getByRole('link', { name: 'Start a package' })).toHaveAttribute('href', '/packages/agt_b');
+    expect(screen.queryByText(/teacher.*agent.*here soon/i)).toBeNull();
+  });
+
+  it('with neither chats nor startable agents, only the placeholder shows', async () => {
+    render(await HomeView({ chats: [], startable: [] }));
+    expect(screen.queryByText('Packages you can start')).toBeNull();
+    expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await HomeView());
     const results = await axe(container);

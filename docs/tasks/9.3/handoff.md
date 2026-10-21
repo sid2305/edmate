@@ -1,7 +1,77 @@
 # Handoff: 9.3 — Package compare and start
 
 ## Status
-Phase A and B done; C left (per plan: three phases, one PR each).
+DONE. Phases A, B and C all on this one branch/PR (lead decision: one task, one branch, one PR —
+the plan's "depends on Phase B merged" sequencing between phases does not apply here).
+
+## Phase C — apps/web: `/home` "start a package" link
+
+### Files
+- `apps/web/src/chat/liveChats.ts` — new `startableAgents(deps, principal, candidates)`: for each
+  live agent candidate, pushes the agent id when `subscriptions.findLive` is `null` (never
+  subscribed) or its row's `status === 'ended'` (the explicit `ended` check covers a stub/test
+  double that still returns the row; the real repository already excludes `ended` rows, so `null`
+  is the normal production signal). A `paused` subscription is neither a chat link nor a start
+  link (resuming it is 9.6, out of scope). New `homeStartLinks(open, principal, candidates, log)`
+  mirrors `homeChatLinks`: a database failure or a thrown error shows no links and logs only the
+  error name (`home.start_links_failed`), same as `homeChatLinks`'s `home.chat_links_failed`.
+- `apps/web/src/chat/liveChats.test.ts` — new `describe` blocks for `startableAgents` (never
+  subscribed and ended both qualify; trial/active/past_due/paused all excluded) and
+  `homeStartLinks` (repository error shows nothing and logs only the error name, like
+  `homeChatLinks`'s own case; no candidates opens nothing; returns the startable ones).
+- `apps/web/app/home/page.tsx` — calls `homeStartLinks` alongside the existing `homeChatLinks`,
+  from the same `chatAgentCandidates(process.env)` list and the same opened repos (`open = () =>
+  serverDatabase().repos`, hoisted out so both calls share it); passes both lists to `HomeView`.
+- `apps/web/app/home/page.test.tsx` (new — none existed for this page before; plan said "add if
+  not") — mocks `../../src/auth`, `../../src/chat/liveChats` and `../../src/turn/runtime`
+  (`consoleLog`), stubs `./view` to a small marker component, and asserts both `homeChatLinks` and
+  `homeStartLinks` are called with the same candidate list and principal, and that `HomeView`
+  receives both lists. `.tsx` (not `.ts`) because the `HomeView` mock needs JSX.
+- `apps/web/app/home/view.tsx` — new optional `startable` prop; renders a second list, "packages
+  you can start", each item linking to `/packages/[agentId]` (not straight to chat); the single
+  placeholder now shows only when *both* `chats` and `startable` are empty.
+- `apps/web/app/home/view.test.tsx` — new cases: a startable-only list renders the heading and
+  link with no axe violations; chats and startable together render both lists with no placeholder;
+  both empty still shows the placeholder, with no "Packages you can start" heading.
+- `apps/web/messages/en.json` — new `home.startableTitle` ("Packages you can start") and
+  `home.startLink` ("Start a package").
+
+### Tests
+- `corepack pnpm vitest run src/chat/liveChats.test.ts` → 18 passed (10 new).
+- `corepack pnpm vitest run app/home` → 2 files, 8 passed (6 new: 4 in `view.test.tsx`, 1 new
+  `page.test.tsx` file, plus the pre-existing suites).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` → 34 tasks successful;
+  coverage: `src/chat/liveChats.ts` 100%/100%/100%/100% (stmt/branch/func/line).
+- `python3 .githooks/secret-scan.py --all` → clean.
+
+### Decisions
+
+### 21 Oct 2026 · a paused subscription shows neither a chat nor a start link · decided by tdd-guide · risk: low
+- Decided: `startableAgents` only includes an agent when the student has never subscribed or that
+  subscription ended; a `paused` subscription (handled already by `liveChatAgents`'s own
+  `NOT_LIVE` exclusion for the chat list) is likewise excluded here, so `/home` shows the student
+  nothing for a paused pair — no chat link, no start link.
+- Why: resuming a paused subscription is 9.6 (upgrade/downgrade/pause), explicitly out of scope
+  for this task per the plan's own Context section; showing a start link there would let a student
+  open a second, conflicting subscription attempt against the one-live-row-per-pair unique index
+  instead of the real resume flow 9.6 will add.
+- risk: low
+
+### 21 Oct 2026 · a repository error shows nothing on the new start-link list · decided by tdd-guide · risk: low
+- Decided: `homeStartLinks` follows `homeChatLinks`'s exact failure shape — any thrown error
+  (including a repository error) returns an empty list and logs only the error's constructor name
+  (`home.start_links_failed`), never the error's message or any row content.
+- Why: matches the plan's explicit instruction ("A repository error shows nothing, like
+  `homeChatLinks`") and the existing silent-failure convention in this file, so a flaky or failing
+  read never breaks the whole `/home` page, only hides that one list.
+- risk: low
+
+### 21 Oct 2026 · `home/page.test.tsx` added, as a new file, in `.tsx` not `.ts` · decided by tdd-guide · risk: low
+- Decided: no test file existed yet for `app/home/page.tsx`, so one was added per the plan's "if
+  one exists — check; add if not"; it is `.test.tsx` because its `./view` mock renders JSX.
+- Why: keeps the new page wiring (both link lists passed through from the same candidate list and
+  opened repos) under test, consistent with every other route's page test in this app.
+- risk: low
 
 ## Phase B — apps/web: the compare-and-start page and route
 
