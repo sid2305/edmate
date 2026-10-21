@@ -21,6 +21,11 @@
                                      .claude/agents/*.md `## Agent registry` block plus the
                                      board's metrics; fails (writes nothing) if any block is
                                      missing or malformed
+  board.py digest                    regenerate docs/decisions/digest.md from
+                                     docs/decisions/log.md (every risk: high entry, superseded
+                                     ones marked) and docs/decisions/standing-rules.md; fails
+                                     (writes nothing) on a malformed log or a rule that doesn't
+                                     cite a risk: high heading
 """
 import json
 import re
@@ -37,12 +42,15 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry  # noqa: E402  (sibling module: pure parsing/rendering for `board.py registry`)
 from registry import role_model  # noqa: E402,F401  (re-exported: board.role_model)
+import digest  # noqa: E402  (sibling module: pure parsing/rendering for `board.py digest`)
 
 ROOT = Path(__file__).resolve().parents[3]
 BOARD = ROOT / "docs" / "board" / "tasks.yaml"
 LOG = ROOT / "docs" / "decisions" / "log.md"
 AGENTS = ROOT / ".claude" / "agents"
 REGISTRY_OUT = ROOT / "docs" / "agents" / "registry.md"
+STANDING_RULES = ROOT / "docs" / "decisions" / "standing-rules.md"
+DIGEST_OUT = ROOT / "docs" / "decisions" / "digest.md"
 STATUSES = {"todo", "planning", "running", "review", "blocked", "done"}
 # A "Decided:" line, bare or bullet-prefixed ("- Decided: ..."), matched the same way as a
 # "Status:" line (see merge_gate.py's STATUS_LINE): closeout.py copies handoff entries into
@@ -208,6 +216,20 @@ def cmd_registry(board):
     print(f"wrote {REGISTRY_OUT.relative_to(ROOT)} ({len(files)} agents)")
 
 
+def cmd_digest():
+    try:
+        entries = digest.parse_log_entries(LOG.read_text() if LOG.exists() else "")
+        rules = digest.parse_standing_rules(STANDING_RULES.read_text() if STANDING_RULES.exists() else "")
+        text = digest.render_digest(entries, rules)
+    except ValueError as e:
+        print(f"refusing to write {DIGEST_OUT.relative_to(ROOT)}: {e}", file=sys.stderr)
+        sys.exit(1)
+    DIGEST_OUT.parent.mkdir(parents=True, exist_ok=True)
+    DIGEST_OUT.write_text(text)
+    high = sum(e["risk"] == "high" for e in entries)
+    print(f"wrote {DIGEST_OUT.relative_to(ROOT)} ({high} risk: high entries, {len(rules)} standing rules)")
+
+
 def cmd_metrics(board, args):
     by = "risk"
     if "--by" in args:
@@ -289,6 +311,8 @@ def main(argv):
         cmd_metrics(board, args)
     elif cmd == "registry":
         cmd_registry(board)
+    elif cmd == "digest":
+        cmd_digest()
     elif cmd == "decide" and len(args) == 2:
         if args[0] not in board["decisions"]:
             sys.exit(f"unknown decision; one of {list(board['decisions'])}")

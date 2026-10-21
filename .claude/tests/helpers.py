@@ -21,6 +21,7 @@ SCRIPTS = [
     "skills/merge-gate/risk-paths.txt",
     "skills/board/board.py",
     "skills/board/registry.py",
+    "skills/board/digest.py",
     "skills/team-lead/closeout.py",
     "skills/team-lead/metrics.py",
 ]
