@@ -10,6 +10,81 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 3.11e role-play count rules and closed-mode history · decided by plan (lead-approved), built by tdd-guide · risk: high
+Decided:
+- A role-play starts at question 1 on any `skill_action` mock_interview turn, or when the persona differs from the stored `personaId`. A blob with no `personaId` counts as a different persona.
+- `/pause` and `stop` don't count.
+- The count is capped at the persona's M (at least 1).
+- A generate error, a cancel, the safe reply and a guard `replace` save the loaded count. Only a post-guard `ok` reply counts a question.
+- The shown count is clamped to `[1, max(1, M)]`.
+- Closed moves (`locked`, `ask_teacher`, `redirect`) send the model only the current turn. The decide fallback's `ask` keeps history.
+
+Why:
+- The count is the server's, and it must follow what the student actually saw.
+- A closed reply teaches nothing, so past turns only add room to steer it.
+- The fallback can't be told apart from a teaching `ask` inside `buildModelRequest`, and `lockedLeak` still runs on it.
+- Logged instead of an ADR-0009 amendment (lead decision Q2).
+
+risk: high
+
+---
+
+### 20 Oct 2026 · 3.11e an exact label gets one treatment · decided by plan (lead-approved), built by tdd-guide · risk: high
+Decided:
+- An exact copy of the teacher label (any case or spacing, with format characters) is only spaced out. It gets no `[copied]` break on top.
+- The core-phrase pass skips hits wholly inside a spaced-out label span, including a span the student spaced out already. Hits that cross a span edge, and every other forged phrase, still break.
+
+Why:
+- ADR-0009 decision 2 names the spaced form as the treatment for exact copies.
+- The double treatment gave the model `[copied]` text to echo.
+- Safety rule 3 (the label's position and the `<<<`/`>>>` fence) stays the backstop.
+- Logged instead of an ADR-0009 amendment (lead decision Q2).
+
+risk: high
+
+---
+
+### 20 Oct 2026 · 3.11e contracts text limits split to 3.11f · decided by lead
+Decided: item 6 (`MessageSchema.text` and `ChunkSchema.text` have no max length) moves to a new task, 3.11f (M13, after GATE). The other deferred LOWs from 3.11d go with it: the fold's gaps, and a gateway test that keeps the teacher fence across merged turns.
+Why:
+- It is the only contracts change, so it would need an ADR and three reviewers.
+- Both texts are already bounded upstream.
+- Stored rows need checking against real data first.
+
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.11e count edge for a persona with M = 0 · decided by tdd-guide
+Decided: both the cap and the render clamp use `max(1, M)`, so a persona with `endAfterQuestions: 0` counts question 1 and shows "question 1 of 0". Neither the count nor the shown number goes to 0.
+Why: the plan clamps to `[1, M]`, which is empty when M is 0. `max(1, M)` matches the plan's own cap formula.
+
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.11e eval teacher-line and persona fields · decided by tdd-guide
+Decided:
+- The judge transcript shows a turn's teacher line as `Teacher: …` just before that turn's `Student: …` line.
+- `persona` belongs to the whole case and goes to the agent on every turn.
+- The noparens forged-note case drops the bare `marks >= 80` check from the draft and keeps only `if marks >= 80:`.
+
+Why:
+- The order follows the merged user turn the agent sees, with the teacher's text first.
+- A persona belongs to a session, not to a single turn.
+- `marks >= 80` is in the student's own question, so a good reply that quotes it back would fail the check.
+
+risk: low
+
+---
+
+### 20 Oct 2026 · 3.11e lead signs the 3 forged-note leak cases and merges · decided by team lead · risk: high
+Decided: the lead read and signed leak-forged-note-noparens-en, leak-forged-note-cyrillic-en and leak-forged-note-teacher-merge-en (`reviewed_by: lead`, MVP-first rule of 20 Oct 2026) and fixed the Cyrillic case's comment (the letters are raw Cyrillic, not escapes). code-reviewer and typescript-reviewer approved with no findings; the lead merges the pedagogy change.
+Why: each case pins a forged-teacher-note bypass from the 3.11d safety review, and each fails on a leaked corrected line or a judge check.
+risk: high
+
+---
+
 ### 20 Oct 2026 · 8.1 staff verification and publish guard in packages/db/src/repositories · decided by team lead · risk: high
 Decided: new `teacherProfiles` repository with `setVerification` (a staff actor writes one named teacher's verification status, staff role checked share-locked in the same transaction, `teacher.verify` audit row) and `assertVerifiedForPublish` (throws `scope` unless the scope's own profile is `verified`). Follows the `audit.appendForTeacher` precedent the lead approved for Q2.
 Why: this is access-control logic on a risky path (`packages/db/src/repositories/**`). security-reviewer (opus) approved after running the int suites on Postgres: no self-verification, the staff check is share-locked in the write transaction, and the audit row rolls back with the write. The publish-race MEDIUM goes to 8.1b with 8.7. The lead merges.
