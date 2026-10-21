@@ -10,6 +10,15 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 3.9b review LOWs left as they are · decided by lead · risk: low
+
+- Decided: the two review LOWs are wontfix: the 10x slack in apps/cli/src/commands/chat.test.ts (and the
+  other chat tests) stays at 10, and the loose timing bounds in the slackClock unit test in
+  apps/cli/src/commands/chat/deps.test.ts stay loose on purpose.
+- Why: both are deliberate tolerance for CI timing; the cold-start cost itself is follow-up 3.9c.
+
+---
+
 ### 21 Oct 2026 · 1.7f US locale pack signed by the human (B-27) · decided by human (sid2305) · risk: high
 
 - Decided: the US pack's compliance block is signed (`reviewedBy: sid2305`, `reviewedOn:

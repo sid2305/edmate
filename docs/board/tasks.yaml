@@ -2316,9 +2316,9 @@ tasks:
     loop) and on CI
   deps:
   - '3.9'
-  status: running
+  status: done
   branch: m3/3.9b-cli-chat-flake
-  model: build:opus-5.5/medium
+  model: build:opus-5.5/medium review:sonnet
 - id: 3.9c
   milestone: M13
   title: 'Cold first turn (found by 3.9b): the first turn in a fresh process spends about 150 ms in preGuard on an idle laptop against its 400 ms budget, so on a busy server a real student''s first turn
