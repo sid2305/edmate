@@ -1534,6 +1534,15 @@ tasks:
   needs_decision: null
   branch: null
   model: null
+- id: 8.1a
+  milestone: M8
+  title: 'Onboarding form in apps/web (8.1 Phase C): bare teacher profile form and thin API route on the 9.1 shell'
+  accept: a signed-in teacher can create and edit their profile; an unverified teacher sees that publishing waits on staff verification.
+  deps:
+  - '8.1'
+  - '9.1'
+  status: todo
+  branch: null
 - id: '8.2'
   milestone: M8
   title: Upload centre with live processing status, delete and replace
