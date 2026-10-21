@@ -1392,9 +1392,9 @@ tasks:
   - '1.8'
   - '5.5'
   - M3
-  status: running
+  status: done
   branch: m5/5.7-feedback-skill
-  model: plan:sonnet author:pedagogy-opus
+  model: plan:sonnet arch:opus build:opus(A) sonnet(B) review:opus+sonnet
 - id: '5.8'
   milestone: M5
   title: 'Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief'
@@ -1808,9 +1808,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: review
+  status: done
   branch: m9/9.3-package-start
-  model: plan:sonnet build:sonnet(A)
+  model: plan:sonnet build:sonnet(A,B,C) fix:opus review:opus+sonnet
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'

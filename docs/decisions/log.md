@@ -10,6 +10,101 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 9.3 package compare and start (repositories, risky path) · decided by lead · risk: high
+
+- Decided: merge 9.3. A student compares a live agent's packages and starts one with no payment (payments come in M10). The change touches `packages/db/src/repositories/**` (subscriptions, package-versions), so security-reviewer, code-reviewer (opus) and typescript-reviewer ran. Fix round 1 closed both MEDIUMs: the browser gets a public offer projection only, and `liveForAgent` excludes agents that aren't live. The security reviewer re-checked both. The remaining MEDIUM and LOWs go to 9.3b.
+- Why: no CRITICAL/HIGH findings, and the data-exposure MEDIUMs were fixed in the same round under the blockers-only rule. The other findings were deferred.
+- risk: high
+- **Isolation-grid shape for `subscriptions.start`**: every seeded pair already has a live
+  subscription (isolation-seed.ts), so a positive-control write for `actor === target` would always
+  hit the unique-index conflict. The write case's `attempt` ends that pair's own seeded row via raw
+  SQL only when `actor === target` (never for the non-owns loop, which fails on ownership before any
+  uniqueness check), then calls `start`; `verify` restores the seed (deletes the new row, reactivates
+  the seeded one) so later tests see the original fixture. The "a pair that already has a live
+  subscription" mismatch relies on that same seeded row still being live at the point it runs (grid
+  order: non-owns loop, then mismatches, then positive control — confirmed by reading `runGrid`).
+  `risk: low` (test-only shape, no production behavior).
+  `owns` is defined as "same teacher" (`teacherOf(a) === teacherOf(t)`, matching
+  `teacherQuestions.open`'s precedent): a same-teacher, different-student pair's `packageVersionId` is
+  always ownership-valid for the scope's teacher, so only cross-teacher targets are genuine
+  ownership failures for the ungrid's generic `not_found`/`scope` check. `risk: low`.
+- **`packageVersions.liveForAgent`'s draft/suspended fixture reuses new agent ids** (`agt_live_pkg_
+  draft`/`agt_live_pkg_susp`) instead of `agents.owner`'s (`agt_owner_draft`/`agt_owner_susp`), to
+  avoid a cross-test insertion-order dependency on `CASES`'s object key order. `risk: low`.
+- Both methods added to `leak.test.ts`'s "every other method that reaches the database" list, even
+  though that list isn't exhaustive over every repo method today — the plan's Files to create/modify
+  section called for it. `risk: low`.
+
+---
+
+### Phase B
+- **Period length with no payment (30 days active, package's own `trialDays` for trial)**: per the
+  plan's own recommendation (Question 1) — `entitle` never checks `periodEnd` against now yet, so
+  this is cosmetic until 9.6/M10. `risk: low`.
+- **Already-live pair refuses with a fixed 409** (Question 2): the plan's own recommendation;
+  9.6 (upgrade/downgrade) picks up switching packages later. `risk: low`.
+- **The already-subscribed `RepositoryError('invalid')` maps to API error code `validation`, not a
+  new `'invalid'` code**: `ErrorCode` (`@edmate/contracts`) has no `'invalid'` member, so the route
+  uses `validation` with HTTP 409 and the fixed `alreadySubscribed` message, matching the plan's
+  recommended status code without adding a new contracts value (which would need an ADR). `risk:
+  low`.
+- **`app/packages/[agentId]/page.test.tsx` is `.tsx`, not `.ts`** (plan's "mirrors
+  `teacher/onboarding/page.test.ts`"): that file's own mock factories are plain objects, but this
+  page's `PackageCompare` child needs a JSX mock, so the test file itself needs JSX. `risk: low`.
+- **`packages.skills` is its own namespace in `en.json`**, duplicating `chat.skills`'s labels,
+  rather than passing `chat` messages into the packages page too (plan's Files section left the
+  choice to the builder). Keeps the page's `NextIntlClientProvider` scoped to one namespace, same
+  as `onboarding`/`chat` do today. `risk: low`.
+- **No discovery link yet** (Phase C, not started): `/packages/[agentId]` is reachable only by
+  typed URL, same as `/learn/[agentId]` before 9.2 existed, per the plan's own State-after-phase
+  note.
+
+---
+
+### 21 Oct 2026 · 5.7 Phase A feedback pack 1.1.0 + frame move-feedback (ADR 0012) · decided by lead · risk: high
+- Decided:
+  - Feedback turns get their own frame move line, `move-feedback`, in a new `frame@1.1.0`. It is the only optional frame section. When present it gets the same checks as the other sections (not empty, no placeholders, no duplicates).
+  - The composer uses it only when the skill is feedback, the move is hint and the frame has the section. Every other turn, and every turn on sets 1.0.0 and 1.1.0, composes exactly as before. `skills.ts` and `packages/contracts` don't change.
+  - `feedback@1.1.0`:
+    - never runs, traces or predicts the output of code;
+    - never gives a score, mark, grade or points total, and gives the verdict in words in three bands (meets, partly meets, doesn't meet yet);
+    - names a fix only for a rubric line the work misses.
+  - `set@1.2.0` = set 1.1.0 with feedback 1.1.0 and frame 1.1.0. All three new files say `reviewed_by: pending` until a named human signs them.
+  - The demo seed stays on 1.1.0 until a `packages/db` follow-up.
+- Why:
+  - The hint-1 line ("don't name the idea that solves it") clashed with the feedback pack ("describe the fix in words"). A separate, versioned move line removes the clash without a contracts change and without changing old sets, which traces and the seed still name.
+  - Prose stays in the packs.
+  - A model-written score is a numeric claim nothing can check, and it reads like an official grade.
+  - Nothing on the platform can run code.
+- Where the two new lines go: the ADR quotes them but doesn't place them in the pack. The builder put the Decision 5 line right after "pick the two or three most important fixes", and the Decision 4 line right after the three-band verdict line.
+- risk: high (prompt-pack behaviour change: `content/prompt-packs/**` and `packages/harness/src/pedagogy/**`, under ADR 0012).
+
+---
+
+### 21 Oct 2026 · 5.7 Phase B feedback suite: 32 cases and the 3/4 band · decided by builder · risk: low
+- Decided:
+  - One case per rubric sample, so 32 cases, not 30. Task 1.8 asked for at least 30 and wrote 32; dropping two would drop real gold data.
+  - A 3/4 sample is partial, not high. The plan's ranges overlap at 0.75 (high ≥ 0.75, partial 0.25 to 0.75). Each 3/4 sample's rubric notes name a missed line, and `feedback@1.1.0` names a fix for any missed line. So a "meets, no fix" judge line would mark the pack's correct reply as disagreeing. 1/4 (0.25) is partial, as the plan's "low < 0.25" says.
+  - Judge lines never ask the reply to say what code prints or whether it errors (the no-execution rule). They ask for the rubric rule the work breaks instead.
+- Why: the plan's mapping, kept consistent with the pack's behaviour.
+- Reversible: yes. The band is the first judge line of each case.
+
+---
+
+### 21 Oct 2026 · 5.7 move-feedback only at rung 0 · decided by builder · risk: low
+- Decided: `compose.ts` uses `move-feedback` only when skill is feedback, move is hint, rung is 0 and the frame has the section. A feedback hint at any other rung keeps the ladder line.
+- Why: review follow-up 2. Of the two options (guard or a pinning test), the guard is the safer default. `skills.ts` always gives feedback rung 0, so no prompt changes today. A test covers rungs 1 and 2.
+- Reversible: yes.
+
+---
+
+### 21 Oct 2026 · 5.7 snapshots kept for sets 1.1.0 and 1.2.0 · decided by builder · risk: low
+- Decided: the content snapshot test composes every case on both sets. Set 1.1.0 keeps the original suite name, so its snapshot entries are unchanged from main; set 1.2.0 has its own suite name.
+- Why: review follow-up 1. The seed pins 1.1.0, so its prompts must stay pinned until the seed moves.
+- Reversible: yes.
+
+---
+
 ### 21 Oct 2026 · 5.10 Ask the teacher (repositories, risky path) · decided by lead · risk: high
 
 - Decided: merge 5.10. Questions are grouped inside `open` (lexical; same teacher and agent; `findSimilar` stays `[]`). The teacher's answer writes the note, the eval case, the status, the thread messages and the notifications in one teacher-scoped transaction that writes into the asking students' own open sessions. New tables `teacher_eval_cases` and `notifications` (migration 0018, additive). The acceptance test runs on a 10x slack clock. The review's MEDIUM deadlock ordering and the LOW items go to 5.10b.
