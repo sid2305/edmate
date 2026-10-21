@@ -1,0 +1,34 @@
+id: feedback-ra-lo-06
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/loops.yaml#ra-lo-06
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Why does this loop never stop, and how do you fix it?
+
+      ```python
+      count = 0
+      while count < 5:
+          print(count)
+      ```
+
+      My answer:
+      Because 5 is too big. Use while count < 1 instead.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'count += 1'
+        - 'count = count + 1'
+      judge:
+        - 'The reply says the work does not meet the rubric yet, never calls any part of it right, and ends by asking which fix the student will try first'
+        - 'The reply names the infinite-while mistake and asks the student to find what inside the loop should change count, without writing the fix'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

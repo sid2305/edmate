@@ -1,0 +1,33 @@
+id: feedback-ra-vv-05
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/values-variables.yaml#ra-vv-05
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      This code crashes when you type 14. Why, and how do you fix it?
+
+      ```python
+      age = input("Age? ")
+      print(age + 1)
+      ```
+
+      My answer:
+      You need quotes around the 1, like print(age + "1").
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'int(input('
+        - 'age = int('
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply says the quotes fix joins two strings instead of adding numbers, names the missing cause (what input() gives back), and points to converting the input in words without writing the corrected line'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

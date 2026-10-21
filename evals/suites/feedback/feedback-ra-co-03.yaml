@@ -1,0 +1,36 @@
+id: feedback-ra-co-03
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/conditions.yaml#ra-co-03
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What does this print?
+
+      ```python
+      temp = 25
+      if temp > 30:
+          print("Hot")
+      elif temp > 20:
+          print("Warm")
+      else:
+          print("Cool")
+      ```
+
+      My answer:
+      Warm
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits the answer against the rubric line for which branch runs, without claiming to have run the code'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

@@ -1,0 +1,31 @@
+id: feedback-ra-vv-02
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/values-variables.yaml#ra-vv-02
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What does `print(7 // 2)` show, and why is it different from `print(7 / 2)`?
+
+      My answer:
+      3.5
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'answer is 3'
+        - '7 // 2 is 3'
+        - '7 // 2 gives 3'
+        - 'it prints 3'
+        - 'shows 3'
+      judge:
+        - 'The reply says the work does not meet the rubric yet, never calls any part of it right, and ends by asking which fix the student will try first'
+        - 'The reply names the mix-up between / and // (integer division), points to the operator table in Module 1, and does not give the right result'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

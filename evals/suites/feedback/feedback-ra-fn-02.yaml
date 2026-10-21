@@ -1,0 +1,30 @@
+id: feedback-ra-fn-02
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/functions.yaml#ra-fn-02
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Write a function `square(n)` that returns `n` multiplied by itself.
+
+      My answer:
+      def square(n):
+          print(n * n)
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'return n * n'
+        - 'return n*n'
+        - 'return n ** 2'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the def line and names printing instead of returning as the unmet line (print-vs-return), without writing the corrected body'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

@@ -1,0 +1,31 @@
+id: feedback-ra-ld-05
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/lists-dicts.yaml#ra-ld-05
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Write a loop that prints each fruit and its count from `stock`, like `apples: 3`.
+
+      My answer:
+      for fruit in stock:
+          print(fruit + ": " + stock[fruit])
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'f"{fruit}'
+        - "f'{fruit}"
+        - 'str(stock[fruit])'
+        - 'typeerror'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the loop over every key and the value lookup, and names joining the count to a string as the unmet line, pointing to an f-string in words without writing the corrected line'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

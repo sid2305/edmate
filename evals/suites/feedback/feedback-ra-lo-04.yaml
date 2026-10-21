@@ -1,0 +1,32 @@
+id: feedback-ra-lo-04
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/loops.yaml#ra-lo-04
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Write a loop that adds up the numbers from 1 to 10 and prints the total.
+
+      My answer:
+      for n in range(1, 10):
+          total = 0
+          total += n
+      print(total)
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'range(1, 11)'
+        - 'prints 9'
+        - '55'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits adding each number and printing after the loop, and names both unmet steps (the total is reset inside the loop, and the range stops before 10) without writing the corrected loop or saying what it prints'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

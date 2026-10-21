@@ -8,6 +8,7 @@ import {
   createPromptPackLibrary,
   FRAME_SECTIONS,
   MODE_PACKS,
+  OPTIONAL_FRAME_SECTIONS,
   packKindOf,
   parsePromptPackSet,
   placeholdersOf,
@@ -78,7 +79,11 @@ describe('parsePromptPackSet', () => {
     const set = parsePromptPackSet(raw());
     expect(set.version).toBe(FIXTURE_PROMPT_PACK_VERSION);
     expect(Object.keys(set.packs).sort()).toEqual([...REQUIRED_PACKS].sort());
-    expect(Object.keys(set.frame).sort()).toEqual(Object.keys(FRAME_SECTIONS).sort());
+    // Every required section; the fixture frame leaves out the optional `move-feedback`.
+    const required = Object.keys(FRAME_SECTIONS).filter(
+      (k) => !(OPTIONAL_FRAME_SECTIONS as readonly string[]).includes(k),
+    );
+    expect(Object.keys(set.frame).sort()).toEqual(required.sort());
     expect(set.packs.coach).toMatchObject({ name: 'coach', kind: 'skill', version: '0.1.0' });
     expect(Object.isFrozen(set)).toBe(true);
     expect(Object.isFrozen(set.packs.coach)).toBe(true);
@@ -186,6 +191,49 @@ describe('parsePromptPackSet', () => {
   it('does not treat a `##` inside a line as a section', () => {
     const r = withFrame((b) => b.replace('[[TOOLS]]', '[[TOOLS]] a ## b'));
     expect(parsePromptPackSet(r).frame.tools).toContain('a ## b');
+  });
+});
+
+describe('optional frame section move-feedback (ADR-0012)', () => {
+  const SECTION = '\n## move-feedback\n[[MOVE-FEEDBACK]] Give rubric feedback.\n';
+
+  it('is the only optional section', () => {
+    expect(OPTIONAL_FRAME_SECTIONS).toEqual(['move-feedback']);
+    expect(Object.keys(FRAME_SECTIONS)).toContain('move-feedback');
+  });
+
+  it('a frame without it loads, and the set has no such key', () => {
+    const set = parsePromptPackSet(raw());
+    expect(Object.hasOwn(set.frame, 'move-feedback')).toBe(false);
+    expect(set.frame['move-feedback']).toBeUndefined();
+  });
+
+  it('a frame with it loads, trimmed', () => {
+    const set = parsePromptPackSet(withFrame((b) => `${b}${SECTION}`));
+    expect(set.frame['move-feedback']).toBe('[[MOVE-FEEDBACK]] Give rubric feedback.');
+    expect(Object.keys(set.frame).sort()).toEqual(Object.keys(FRAME_SECTIONS).sort());
+  });
+
+  it('when present it may not be empty', () => {
+    expect(issuesOf(withFrame((b) => `${b}\n## move-feedback\n\n`))).toEqual([
+      'packs.frame.move-feedback: empty',
+    ]);
+  });
+
+  it('when present it may not hold a placeholder', () => {
+    const r = withFrame((b) => `${b}\n## move-feedback\nGive {{move}} feedback.\n`);
+    expect(issuesOf(r)).toEqual(['packs.frame.move-feedback: unknown placeholder {{move}}']);
+  });
+
+  it('when present it may not appear twice', () => {
+    expect(issuesOf(withFrame((b) => `${b}${SECTION}${SECTION}`))).toEqual([
+      'packs.frame.move-feedback: duplicate section',
+    ]);
+  });
+
+  it('every other section stays required', () => {
+    const missing = withFrame((b) => b.replace(/## move-hint-1\n[^#]*/, ''));
+    expect(issuesOf(missing)).toEqual(['packs.frame.move-hint-1: missing section']);
   });
 });
 

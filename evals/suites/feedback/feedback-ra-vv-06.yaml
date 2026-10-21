@@ -1,0 +1,30 @@
+id: feedback-ra-vv-06
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/values-variables.yaml#ra-vv-06
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Which of these are valid variable names: `score`, `2nd_place`, `my-name`, `_total`, `Total`?
+      Give a reason for each invalid one.
+
+      My answer:
+      score, _total and Total are fine. 2nd_place can't start with a number. my-name isn't allowed.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'as minus'
+        - 'as a minus'
+        - 'minus sign'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the three valid names and the reason for 2nd_place, and names the missing reason for my-name without giving that reason'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'
