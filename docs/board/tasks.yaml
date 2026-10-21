@@ -2384,9 +2384,9 @@ tasks:
   accept: the worker tests run full turns on a slack clock; a forced 10x-slow runner (e.g. a slow-clock test) stays green; production budgets unchanged
   deps:
   - 3.9b
-  status: review
+  status: done
   branch: m3/3.9d-worker-clock-flake
-  model: plan:lead build:opus-5.5/medium
+  model: plan:lead build:opus-5.5/medium review:sonnet
 - id: 3.9c
   milestone: M13
   title: 'Cold first turn (found by 3.9b): the first turn in a fresh process spends about 150 ms in preGuard on an idle laptop against its 400 ms budget, so on a busy server a real student''s first turn

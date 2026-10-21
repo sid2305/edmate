@@ -10,6 +10,21 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 3.9d apps/worker real-clock turn test flake · decided by lead · risk: low
+
+- Decided: merge 3.9d. The worker integration tests that run full turns (safetyEvent, alert, commit) use a local 10x `slackClock`, as 3.9b did for apps/cli. A slow-runner test reproduces the CI failure without the slack and passes with it. Production budgets and clocks are unchanged.
+- Why: PR #90's CI failed on a cold first turn that ran past preGuard's budget on the real clock. The code-reviewer approved with no findings.
+- risk: low
+
+Details (builder):
+- A slack test clock (10x), not a longer production budget, same as 3.9b · risk: low.
+- A local copy of `slackClock` in `apps/worker/test/clock.ts` rather than moving apps/cli's into a
+  shared package (no shared test-helper place exists; plan step 2) · risk: low.
+- The slow-runner test slows the safety-event port (real I/O inside the guard slice) rather than the
+  model, because the jailbreak block is rule-based and makes no model call · risk: low.
+
+---
+
 ### 21 Oct 2026 · 9.4b chat markdown with react-markdown + remark-gfm · decided by lead · risk: low
 
 - Decided: merge 9.4b. Chat replies render through react-markdown 10.1.0 + remark-gfm 4.0.1 (exact pins), with an element allowlist and no raw HTML or images. Links render only for http/https/mailto. `singleTilde: false` matches the locked-content guard, and `protectMath` keeps TeX literal until KaTeX. No ADR: the human chose the libraries in B-32, and the stack doesn't change. The review's MEDIUM (`safeHref` returns the original href) and two LOWs go to 9.4c.
