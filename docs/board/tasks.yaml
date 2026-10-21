@@ -1530,10 +1530,10 @@ tasks:
   - '1.3'
   - '5.1'
   - '5.2'
-  status: running
+  status: done
   needs_decision: null
   branch: m8/8.1-teacher-onboarding
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:security-opus,db-sonnet,ts-sonnet,code-sonnet
 - id: 8.1a
   milestone: M8
   title: 'Onboarding form in apps/web (8.1 Phase C): bare teacher profile form and thin API route on the 9.1 shell'
@@ -1545,7 +1545,8 @@ tasks:
   branch: null
 - id: 8.1b
   milestone: M13
-  title: 'Teacher-verification follow-ups (8.1 reviews): publish guard runs in the publish transaction with FOR SHARE and a reject suspends live agents (with 8.7); update/setVerification use translateWrite; verify/grant-role CLIs show the redacted target and accept --user-id; usage says no personal details in --reason; 0016 cast style note'
+  title: 'Teacher-verification follow-ups (8.1 reviews): publish guard runs in the publish transaction with FOR SHARE and a reject suspends live agents (with 8.7); update/setVerification use translateWrite;
+    verify/grant-role CLIs show the redacted target and accept --user-id; usage says no personal details in --reason; 0016 cast style note'
   accept: a reject racing a publish never leaves the agent live (test); each item has a unit test or a note.
   deps:
   - '8.1'

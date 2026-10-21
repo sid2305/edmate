@@ -10,6 +10,34 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 8.1 staff verification and publish guard in packages/db/src/repositories · decided by team lead · risk: high
+Decided: new `teacherProfiles` repository with `setVerification` (a staff actor writes one named teacher's verification status, staff role checked share-locked in the same transaction, `teacher.verify` audit row) and `assertVerifiedForPublish` (throws `scope` unless the scope's own profile is `verified`). Follows the `audit.appendForTeacher` precedent the lead approved for Q2.
+Why: this is access-control logic on a risky path (`packages/db/src/repositories/**`). security-reviewer (opus) approved after running the int suites on Postgres: no self-verification, the staff check is share-locked in the write transaction, and the audit row rolls back with the write. The publish-race MEDIUM goes to 8.1b with 8.7. The lead merges.
+risk: high
+
+---
+
+### 20 Oct 2026 · 8.1 role reads through src/role-lock.ts · decided by tdd-guide
+Decided: the "is this user staff / a teacher now" check reads `users.role` through a one-function module outside `repositories/` (`lockRole`), instead of selecting from `users` inside `teacher-profiles.ts` or loosening the guard test.
+Why: `scope.test.ts` bans the word `users` in repository source so no repository reads names, emails or phones. The plan's role check needs the role column only; a separate module keeps the existing guard intact and a new test pins that it selects `role` alone.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.1 only teacher users get a profile; no self-verification · decided by tdd-guide
+Decided: `create` is `scope` when the scope user is not a `teacher` (a ghost id is `not_found`); `setVerification` is `scope` when `by` is the teacher themself, even if that user were staff.
+Why: defence in depth beyond the plan: a student or staff id must never get a publishable teacher profile, and nobody verifies their own identity.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.1 profile input limits · decided by tdd-guide
+Decided: slug 3-60 lower-case letters/digits joined by single hyphens; subject 1-100 characters (trimmed); bio up to 2000; languages up to 10 BCP 47-style tags. Slug is set at create only (not editable through `update`). The read row has no `photo` or `payoutAccountRef`.
+Why: the plan named the fields but not their limits; slugs appear in public URLs, so they are kept URL-safe and stable. Photo is out of this slice (lead Q1), payouts are M10.
+risk: low
+
+---
+
 ### 19 Oct 2026 · 3.11d teacher-label hardening: ADR-0009, prompt-pack behaviour change · risk: high
 **Decision:** Teacher history turns go in the `user` channel with the frame's label. A forged copy of the label is spaced out in the current turn and in every stored history text before the harness adds its own. The server counts persona questions (`personaQuestionsAsked`, optional, read as 0, capped at 1,000) and the frame's `persona` section shows that count. Closed modes (locked, ask_teacher, redirect, fallback, distress) get no learner summary. All four are recorded in ADR-0009, which extends ADR-0003 and ADR-0005.
 **Why:** These are the 3.11 safety review's four follow-ups. Build plan rule 2 needs an ADR for any prompt-pack behaviour change, and the PR touches risky paths (`packages/harness/src/pedagogy/**`, `content/prompt-packs/**`, `docs/adr/**`).
