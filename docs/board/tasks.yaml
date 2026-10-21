@@ -1333,7 +1333,7 @@ tasks:
   - '5.3'
   - '5.4'
   - M3
-  status: planning
+  status: todo
   risk: risky
   branch: null
   model: plan:opus
@@ -1542,7 +1542,7 @@ tasks:
   deps:
   - '8.1'
   - '9.1'
-  status: running
+  status: todo
   branch: m8/8.1a-onboarding-form
   model: plan:sonnet build:sonnet
 - id: 8.1b
