@@ -286,6 +286,124 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(foldMarkup('<x a="b <y>c', 'rendered')).toBe(`<x a="b ${pad(3)}c`);
   }, 5_000);
 
+  it('4.6c: markdown emphasis inside a word is padded only in the rendered reading', () => {
+    expect(lockedTokens('t**h**e l**o**op r**e**peats', 'drop', 'rendered').map((t) => t.t)).toEqual(
+      ['the', 'loop', 'repeats'],
+    );
+    // Other readings split on the markdown punctuation as before (no change there).
+    expect(lockedTokens('t**h**e', 'drop', 'text').map((t) => t.t)).toEqual(['t', 'h', 'e']);
+    expect(lockedTokens('t**h**e', 'drop', 'values').map((t) => t.t)).toEqual(['t', 'h', 'e']);
+  }, 5_000);
+
+  it('4.6c: in-word strikethrough and backticks fold away in the rendered reading', () => {
+    expect(lockedTokens('lo~~o~~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['loop']);
+    expect(lockedTokens('lo`o`p', 'drop', 'rendered').map((t) => t.t)).toEqual(['loop']);
+    // Not doubled: a single tilde stays a separator even between letters.
+    expect(lockedTokens('lo~o~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'o', 'p']);
+  }, 5_000);
+
+  it('4.6c fix round 1: invisible characters between the letter and the run do not hide it', () => {
+    const forms = [
+      'l\u00ad**o**op', // soft hyphen
+      'l\u200b**o**op', // zero-width space
+      'l\u2060**o**op', // word joiner
+      'l**o**\u00adop', // after the run
+      'l\u00ad\u200b**o**\u2060\u00adop', // several, both sides
+      'l&#8203;**o**op', // decoded entity
+      'l<b></b>**o**op', // empty-tag padding
+      'l**o**<i></i>op',
+      'l\u{e0020}**o**op', // astral Cf (a tag character, a surrogate pair)
+      'l\u00ad__o__\u00adop',
+      'lo\u00ad~~o~~p',
+    ];
+    for (const f of forms) {
+      expect(lockedTokens(f, 'drop', 'rendered').map((t) => t.t), f).toEqual(['loop']);
+    }
+    const bolded = SPAN8.split(' ')
+      .map((w) => `${w.slice(0, 1)}\u00ad**${w.slice(1, 2)}**${w.slice(2)}`)
+      .join(' ');
+    expect(index.hits([bolded])).toBe(true);
+    const tagged = SPAN8.split(' ')
+      .map((w) => `${w.slice(0, 1)}<b></b>**${w.slice(1, 2)}**${w.slice(2)}`)
+      .join(' ');
+    expect(index.hits([tagged])).toBe(true);
+  }, 5_000);
+
+  it('4.6c fix round 1: a run with only invisible characters or a non-letter beyond them stays', () => {
+    // Nothing but invisible characters to the start or end of the text: no letter, no padding.
+    expect(foldMarkup('\u00ad**op', 'rendered')).toBe('\u00ad**op');
+    expect(foldMarkup('lo**\u00ad', 'rendered')).toBe('lo**\u00ad');
+    // A space or a number beyond the invisible characters: markdown syntax, left alone.
+    expect(foldMarkup('a \u00ad* b', 'rendered')).toBe('a \u00ad* b');
+    expect(foldMarkup('2\u00ad**3', 'rendered')).toBe('2\u00ad**3');
+    // A lone low surrogate at the start is looked at as one character, not past.
+    expect(foldMarkup('\udc00**o', 'rendered')).toBe('\udc00**o');
+  }, 5_000);
+
+  it('4.6c known miss: a single `~` between letters is never padded', () => {
+    expect(lockedTokens('lo~o~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'o', 'p']);
+    expect(foldMarkup('lo~o~p', 'rendered')).toBe('lo~o~p');
+  }, 5_000);
+
+  it('4.6c fix round 1: long runs of invisible characters around emphasis stay linear', () => {
+    const units = ['\u00ad', 'l\u00ad**', '\u200b*', 'a\u2060~~\u2060', '\u{e0020}`'];
+    for (const unit of units) {
+      const text = unit.repeat(Math.ceil(200_000 / unit.length)).slice(0, 200_000);
+      const start = Date.now();
+      foldMarkup(`l${text}**o**${text}p`, 'rendered');
+      // Measured linear at about 40 ms locally; the bound only has to catch quadratic, which would take minutes at this size.
+      expect(Date.now() - start, JSON.stringify(unit)).toBeLessThan(5_000);
+    }
+  }, 30_000);
+
+  it('4.6c: unaffected forms stay unaffected (snake_case identifiers, spaced `*` as code)', () => {
+    expect(lockedTokens('snake_case_name', 'drop', 'rendered').map((t) => t.t)).toEqual([
+      'snake_case_name',
+    ]);
+    expect(lockedTokens('a * b', 'drop', 'rendered').map((t) => t.t)).toEqual(['a', 'b']);
+  }, 5_000);
+
+  // 4.6c: the known misses the header lists, pinned so a change to them is deliberate. Each only
+  // matters if raw model HTML is ever rendered to a student (task 9.4 forbids that).
+  const shown = (s: string, r: 'values' | 'rendered') => foldMarkup(s, r).replaceAll(PAD1, '_');
+  const PAD1 = String.fromCharCode(0x200b);
+
+  it('4.6c known miss: in `<a<b>` the first `<` is plain text, only `<b>` is a tag', () => {
+    expect(shown('<a<b>x', 'rendered')).toBe('<a___x');
+    expect(shown('<a<b>x', 'values')).toBe('<a___x');
+    // So a word split by it does not fold back together.
+    expect(lockedTokens('lo<a<b>op', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'aop']);
+  }, 5_000);
+
+  it('4.6c known miss: a `<` inside a quoted attribute value ends the tag attempt', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('<x a="b<c">y z', r)).toBe('<x a="b<c">y z');
+    }
+    expect(index.hits([`<x a="b<c">${SPAN8}`])).toBe(true); // text after it still reads as text
+  }, 5_000);
+
+  it('4.6c known miss: a comment closed by `--!>` is never found closed', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('a<!-- x --!> y', r)).toBe('a<!-- x --!> y');
+    }
+    // It counts as unfinished markup, so the stream holds back from its `<`.
+    expect(unfinishedMarkupStart('a<!-- x --!> y')).toBe(1);
+  }, 5_000);
+
+  it('4.6c known miss: a tag name in a non-ASCII script is never a tag', () => {
+    for (const r of ['values', 'rendered'] as const) {
+      expect(shown('a<Ω>x</Ω>b', r)).toBe('a<Ω>x</Ω>b');
+    }
+    expect(shown('a<b>x</b>b', 'rendered')).toBe('a___x____b');
+  }, 5_000);
+
+  it('4.6c: the bold-every-second-letter attack hits in the rendered reading', () => {
+    const inWordBold = SPAN8.split(' ')
+      .map((word) => `${word.slice(0, 1)}**${word.slice(1, 2)}**${word.slice(2)}`)
+      .join(' ');
+    expect(index.hits([inWordBold])).toBe(true);
+  }, 5_000);
+
   it('is linear: 8,000 characters of unclosed tags, quotes and comments fold well inside 1 s', () => {
     for (const unit of ['<a b="', '<a ', "<a b='c ", '<!--', '<a b c d e f ', '<a b=c d=e ']) {
       const text = unit.repeat(Math.ceil(8_000 / unit.length)).slice(0, 8_000);

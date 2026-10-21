@@ -332,6 +332,30 @@ describe('runner: the session stop flag (ADR-0007 §8, 4.6b fix round 1)', () =>
     });
   }, 10_000);
 
+  it('a post-guard step that times out counts as a locked trip (fail closed, 4.6c)', async () => {
+    const { steps, result } = await turn([main(say(CLEAN), used)], {}, {
+      postGuard: () => new Promise<PostGuardResult>(() => undefined),
+    });
+    expect(steps.commits[0]?.next?.help.lockedStopped).toBe(true);
+    expect(result.background.map((b) => String(b.error))).toContain(
+      'PostGuardStepFailed: postGuard failed: timeout',
+    );
+  }, 10_000);
+
+  it('a post-guard step that fails counts as a locked trip (fail closed, 4.6c)', async () => {
+    const { steps, events, result } = await turn([main(say(CLEAN), used)], {}, {
+      postGuard: () => Promise.reject(new Error('boom')),
+    });
+    expect(steps.commits[0]?.next?.help.lockedStopped).toBe(true);
+    expect(events.filter((e) => e.type === 'replace').at(-1)).toEqual({
+      type: 'replace',
+      text: 'Let us try that a different way.',
+    });
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'PostGuardStepFailed: postGuard failed: error (Error)',
+    ]);
+  }, 10_000);
+
   it('a post-guard escalate with no locked trip saves no help state (as before)', async () => {
     const { steps } = await turn([main(say(CLEAN), used)], {}, {
       postGuard: escalatingPostGuard('tone'),
@@ -360,13 +384,22 @@ describe('runner: the session stop flag (ADR-0007 §8, 4.6b fix round 1)', () =>
   }, 10_000);
 
   it('an unreadable stored help state runs holdAll and does not write the help state', async () => {
-    const { steps, events } = await turn([main(say(TWO[0] ?? ''), say(TWO[1] ?? ''), used)], {}, {
-      buildContext: () => Promise.resolve(builtWith({}, { helpRung: 0, helpStateUnreadable: true })),
-    });
+    const { steps, events, result } = await turn(
+      [main(say(TWO[0] ?? ''), say(TWO[1] ?? ''), used)],
+      {},
+      {
+        buildContext: () =>
+          Promise.resolve(builtWith({}, { helpRung: 0, helpStateUnreadable: true })),
+      },
+    );
     expect(events.filter((e) => e.type === 'token')).toEqual([
       { type: 'token', text: TWO.join('') },
     ]);
     expect(steps.commits[0]?.next).toBeUndefined();
+    // 4.6c: reported once per turn, by kind only, never the stored blob.
+    expect(result.background.map((b) => String(b.error))).toEqual([
+      'HelpStateUnreadable: session help state could not be read; holding this turn closed',
+    ]);
   }, 10_000);
 
   it('an unreadable help state with a locked trip still writes nothing (never false over true)', async () => {

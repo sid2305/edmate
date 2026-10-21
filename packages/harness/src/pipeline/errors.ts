@@ -216,3 +216,17 @@ export class UnpricedUsage extends HarnessError {
     super(`usage for an unpriced model: ${model.slice(0, 100)}`);
   }
 }
+
+/**
+ * The session's stored help-state blob could not be parsed (it may hold `lockedStopped: true`
+ * from an earlier turn, 4.6b amendment); the turn runs with the whole reply held back and its
+ * commit carries no `next`, so the stored state is left untouched (4.6b fix round 1 LEAD
+ * DECISION). Reported once per turn, by kind only, never the stored blob (4.6c).
+ */
+export class HelpStateUnreadable extends HarnessError {
+  override readonly name = 'HelpStateUnreadable';
+
+  constructor() {
+    super('session help state could not be read; holding this turn closed');
+  }
+}

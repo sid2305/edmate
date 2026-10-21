@@ -46,6 +46,7 @@ import {
   errorName,
   GenerateAttemptFailed,
   HarnessError,
+  HelpStateUnreadable,
   InvalidEventError,
   PostGuardStepFailed,
   ScrubFailedError,
@@ -535,6 +536,10 @@ class Turn {
     // last check before decide. A failure is treated as a buildContext failure.
     let built = bc.ok ? bc.value : fallbackContext(scrubbed, e);
     let helpLoaded = bc.ok && built.helpStateUnreadable !== true;
+    // 4.6c: a corrupt stored help state is reported once per turn, by kind only (never the blob).
+    if (bc.ok && built.helpStateUnreadable === true) {
+      this.background.push({ task: 'runner', error: new HelpStateUnreadable() });
+    }
     let ctx = assemble(e, built, intent, attempt);
     if (ctx === null && bc.ok) {
       this.trace.outcome('buildContext', 'fallback');
@@ -1037,6 +1042,9 @@ class Turn {
       };
     }
     this.trace.step('postGuard', p.ms, 'fallback');
+    // A failed or timed-out post-guard step counts as a locked trip too (4.6c, fail closed): we
+    // cannot tell whether lockedLeak itself would have hit, so the session stops streaming anyway.
+    this.lockedTrip = true;
     // Reported like every other step failure: kind and error name only, never a message.
     this.background.push({ task: 'runner', error: postGuardFailure(raw) });
     let safe = '';
