@@ -25,6 +25,11 @@ Checks, in order (both modes run the same checks):
      Reviewers: line names every reviewer each touched group requires (`# reviewers:` lines in
      risk-paths.txt; database-reviewer for destructive migrations), and the handoff's
      `## Decisions` has a `### ... risk: high` entry.
+  6. Budget: the plan's `Budget: <N> tool calls` line (docs/tasks/<id>/plan.md) vs. the handoff's
+     `Tool calls used: <M>` line. Either missing is silently skipped (note, no fail -- plans and
+     handoffs written before this check still pass). Both present and M > 1.2x N fails, unless the
+     handoff's `## Decisions` has a `### ... <task-id> ... budget ...` entry (same escape pattern
+     as [wontfix]), which turns it into a note instead. M > N but <= 1.2x N is a note either way.
 """
 import fnmatch
 import json
@@ -54,6 +59,9 @@ MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
+BUDGET_LINE = re.compile(r"\bBudget\s*:\s*(\d+)\s*tool\s*calls", re.I)
+TOOL_CALLS_USED_LINE = re.compile(r"\bTool\s*calls\s*used\s*:\s*(\d+)", re.I)
+BUDGET_OVERRUN_TOLERANCE = 1.2
 
 
 def sh(*cmd, cwd=ROOT):
@@ -150,6 +158,24 @@ def status_is_done(value):
     return value is not None and STATUS_DONE.search(value) and not STATUS_BAD.search(value)
 
 
+def budget_cap(plan):
+    """The plan's `Budget: <N> tool calls` cap, or None if there is no such line (old-style plan)."""
+    m = BUDGET_LINE.search(plan or "")
+    return int(m.group(1)) if m else None
+
+
+def tool_calls_used(handoff):
+    """The handoff's `Tool calls used: <M>` count, or None if there is no such line."""
+    m = TOOL_CALLS_USED_LINE.search(handoff or "")
+    return int(m.group(1)) if m else None
+
+
+def has_budget_decision(decisions, task):
+    """A `### ...` decision entry whose heading names the task and the word 'budget' (same escape
+    pattern as [wontfix]: the human's call is the entry existing, not any particular wording)."""
+    return any(names_task(h, task) and "budget" in h.lower() for h, _ in entries(decisions))
+
+
 def first_path(text):
     """The first `path[:line]` token in a finding: has a `/` or a file extension (`...` is not one)."""
     for word in text.split():
@@ -184,6 +210,22 @@ def evaluate(task, branch, pr=None):
             fails.append(f"handoff.md Status is '{status}', not DONE (PARTIAL/BLOCKED handoffs may not merge)")
         if decisions is None:
             fails.append("handoff.md has no '## Decisions' section (write 'None' if there were none)")
+
+    # Check 6: Budget (plan.md) vs. Tool calls used (handoff.md). Either side missing is a silent
+    # skip (backward-compatible with every plan/handoff written before this task).
+    cap = budget_cap(show(f"docs/tasks/{task}/plan.md"))
+    used = tool_calls_used(handoff)
+    if cap is not None and used is not None:
+        if used > cap * BUDGET_OVERRUN_TOLERANCE:
+            if has_budget_decision(decisions, task):
+                notes.append(f"budget overrun: plan cap {cap}, handoff reported {used} tool calls (decision on file)")
+            else:
+                fails.append(
+                    f"budget overrun: plan cap {cap} tool calls, handoff reported {used} (over "
+                    f"{BUDGET_OVERRUN_TOLERANCE}x cap; add a '### ... {task} ... budget ...' decision "
+                    "to explain, or bring the count down)")
+        elif used > cap:
+            notes.append(f"budget: plan cap {cap} tool calls, handoff reported {used} (over cap, within tolerance)")
 
     review = show(f"docs/tasks/{task}/review.md")
     reviewers = set()

@@ -545,6 +545,46 @@ class FixRound1(GateCase):
         self.assertEqual(self.gate()[0], 0)
 
 
+class BudgetCheck(GateCase):
+    """Check 6: a plan's Budget: cap vs. the handoff's reported Tool calls used:."""
+
+    def plan(self, cap):
+        return f"# plan\n## Budget\nBudget: {cap} tool calls (1 phase, .claude/)\n"
+
+    def handoff(self, used, decision=None):
+        decisions = decision or "None"
+        return f"# h\nStatus: DONE\nTool calls used: {used}\n\n## Decisions\n{decisions}\n"
+
+    def test_no_budget_line_no_note(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff=self.handoff(999))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("budget", out.lower())
+
+    def test_within_cap_no_note(self):
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("budget overrun", out)
+
+    def test_over_cap_fails(self):
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)}, handoff=self.handoff(70))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("budget overrun", out)
+        self.assertIn("cap 50", out)
+        self.assertIn("reported 70", out)
+
+    def test_over_cap_with_lead_decision_passes(self):
+        decision = "### 21 Oct 2026 · 9.9 budget overrun · decided by lead · risk: low\nDecided: fine, worth it.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)},
+                   handoff=self.handoff(70, decision=decision))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("budget overrun", out)
+        self.assertIn("note", out)
+
+
 class Wontfix(GateCase):
     REVIEW = review() + "- [LOW] [wontfix] apps/cli.ts:12 — long function, see decision log.\n"
 
