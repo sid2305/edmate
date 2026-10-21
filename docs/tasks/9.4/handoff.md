@@ -368,3 +368,55 @@ Decided:
 - The page loads the newest 50 history messages.
 
 risk: low.
+
+## Fix round (bundled prices)
+
+Status: DONE.
+
+Bug: `loadBundledPrices()` (`packages/gateway/src/pricing/load.ts`) did
+`readFileSync(new URL('./prices.yaml', import.meta.url))`. Under `next build --webpack`
+(`apps/web`'s own `build` script) the module is bundled into a server chunk and `prices.yaml`
+never ships as a sibling file, so the read throws and every `POST /api/sessions` answers 503.
+Phase D's Playwright config already names this and runs Turbopack to dodge it
+(`apps/web/playwright.config.ts`); it is a different failure from, but the same root cause as,
+1.7b's safe-regex worker bug (`docs/decisions/log.md`).
+
+Fix: `prices.yaml` stays the source of truth, but `loadBundledPrices` no longer reads a file at
+runtime. `packages/gateway/scripts/generate-prices.mjs` embeds its raw text as a template literal
+in a checked-in, statically imported TS module, `packages/gateway/src/pricing/prices.generated.ts`
+(`PRICES_YAML`); `load.ts` calls `parsePriceTable(PRICES_YAML)`. `parsePriceTable`'s validation is
+unchanged. `test/pricing/generated.test.ts` reads `prices.yaml` and asserts it is byte-identical to
+`PRICES_YAML`, so an edit to `prices.yaml` without regenerating fails CI. The `build` script no
+longer copies `prices.yaml` into `dist/` (nothing reads it there anymore); a new
+`generate:prices` script runs the generator.
+
+Verification:
+- `corepack pnpm --filter @edmate/gateway build && corepack pnpm --filter @edmate/web exec next build --webpack` succeeds (one pre-existing, unrelated warning: `@valkey/valkey-glide` optional dep for `bullmq`/`@edmate/queue`).
+- `grep -rl "Model prices in plain USD" apps/web/.next/server` finds the embedded YAML text baked into the bundled server chunk — proof the price table is now a static value, not a runtime file read.
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm --filter @edmate/web build-smoke` passes against the relocated standalone build (same shape as `apps/web/Dockerfile`), proving the webpack-bundled server starts and serves real requests.
+- `node -e "import('./packages/gateway/dist/index.js').then(m => console.log(m.loadBundledPrices().models()))"` prints `['claude-haiku-4-5','claude-sonnet-4-5']` from the compiled `dist` output.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/gateway... --filter=@edmate/web...` — 34/34 tasks pass; `src/pricing` is at 100% coverage.
+- `python3 .githooks/secret-scan.py --all` — clean.
+
+Follow-up for apps/web (not done here, out of file scope): `apps/web/playwright.config.ts`'s
+`webServer.command` can drop its `next dev` (Turbopack) workaround comment and run
+`next dev --webpack` once this fix lands, matching production more closely; not changed in this
+round since another builder owns `apps/web`.
+
+### Decisions
+
+- **20 Oct 2026 · Bundled prices.yaml shipped as a generated TS module, not read from disk at runtime · decided by build-error-resolver**
+  Decided: `loadBundledPrices()` parses `PRICES_YAML`, a string constant in the checked-in,
+  generated `packages/gateway/src/pricing/prices.generated.ts`, instead of
+  `readFileSync(new URL('./prices.yaml', import.meta.url))`. `prices.yaml` remains the source a
+  human edits; `node scripts/generate-prices.mjs` regenerates the TS module, and
+  `test/pricing/generated.test.ts` fails if the two drift apart. The gateway's `build` script no
+  longer copies `prices.yaml` into `dist/`.
+  Why: webpack bundles `@edmate/gateway` into `apps/web`'s own server chunk when it builds with
+  `--webpack` (the app's own `build` script), and `prices.yaml` never ships as a sibling file next
+  to the bundled module, so the old runtime read threw and every `POST /api/sessions` answered 503
+  in production — the same class of bug as 1.7b's safe-regex worker, but for a different file and
+  package. A statically imported TS module needs no file lookup at runtime, so it is bundler-safe
+  under webpack, Turbopack, and plain Node alike.
+  risk: medium (fixes a production-blocking 503 on every chat session; no contracts or
+  prompt-pack change).

@@ -1,8 +1,14 @@
 // Loads prices.yaml (task 2.4). A malformed file fails fast at load time, naming the bad model and
-// field, like keys/load.ts. The bundled file sits next to this module in both src/ (tests) and
-// dist/ (the build script copies it).
-import { readFileSync } from 'node:fs';
+// field, like keys/load.ts.
+//
+// loadBundledPrices parses PRICES_YAML, a TS module generated from prices.yaml and imported
+// statically (fix round 9.4e), instead of reading prices.yaml off disk at runtime. The earlier
+// `readFileSync(new URL('./prices.yaml', import.meta.url))` could not find the file once webpack
+// bundled this module (`next build --webpack`), 503-ing every POST /api/sessions in production.
+// Regenerate prices.generated.ts with `node scripts/generate-prices.mjs` after editing
+// prices.yaml; test/pricing/generated.test.ts fails if the two drift apart.
 import { load } from 'js-yaml';
+import { PRICES_YAML } from './prices.generated.js';
 import { ModelPriceSchema, PriceFileSchema, toMicroUsdPerMillion } from './schema.js';
 
 export class PriceTableError extends Error {
@@ -61,5 +67,5 @@ export function parsePriceTable(text: string): PriceTable {
 
 /** The prices.yaml shipped with this package. */
 export function loadBundledPrices(): PriceTable {
-  return parsePriceTable(readFileSync(new URL('./prices.yaml', import.meta.url), 'utf8'));
+  return parsePriceTable(PRICES_YAML);
 }
