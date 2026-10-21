@@ -10,6 +10,160 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · Phase D e2e: Turbopack dev server, `.chat-error` over bare `role=alert` · decided by tdd-guide
+Decided: `playwright.config.ts`'s `webServer` runs plain `next dev` (Turbopack), not
+`next dev --webpack`, and `chat.spec.ts` asserts the chat error banner by `.chat-error`, not
+`getByRole('alert')` alone.
+Why: `next dev --webpack` makes `@edmate/gateway`'s `loadBundledPrices()` throw (`import.meta.url`
+rewritten in a way `readFileSync` rejects), 503-ing every `POST /api/sessions`; Turbopack does not
+hit this. Separately, Next's own `#__next-route-announcer__` is also `role="alert"` and always
+present, so two tests needed a more specific locator. Neither is a fix to the underlying
+`@edmate/gateway` bug (out of this task's file scope) — see handoff "Follow-ups".
+risk: medium (a real, if latent, production bug under `--webpack`; flagged, not fixed, here).
+
+---
+
+### 20 Oct 2026 · `apps/web/src/auth/**` touched: `serverDatabase()` export · decided by tdd-guide · risk: high
+Decided: `src/auth/index.ts`'s runtime now keeps the `repos` that `openDatabase` already returned.
+A new export, `serverDatabase()`, returns `{ repos, identity }` from the same memoised runtime.
+Why: the turn routes need the repositories and the same age-policy identity (`learnerStatus`) the
+guard uses, without opening a second database pool. No guard, age-gate, cookie or session setting
+changed. A new test checks that the instances are shared and that only one database is opened.
+The `src/auth/**` coverage floor holds at 100%.
+risk: high. security-reviewer (opus) reviewed Phase A and passed it (two MEDIUMs fixed in 57ab96e); the lead approves the merge.
+
+---
+
+### 20 Oct 2026 · Turns run in one configured market (`EDMATE_MARKET`, default `global`) · decided by tdd-guide
+Decided: the entitlement's market comes from `EDMATE_MARKET`, falling back to `global`.
+Why: the identity store has no API that reads a student's market. Follow-up: expose the
+student's market and use it per turn.
+risk: medium.
+
+---
+
+### 20 Oct 2026 · The web copies the CLI's fallback replies · decided by tdd-guide
+Decided: `src/turn/fallbackReplies.ts` holds English copies of the CLI's safe and distress replies.
+Why: this follows the plan. Follow-up: move them into `@edmate/content`.
+risk: medium.
+
+---
+
+### 20 Oct 2026 · Full-text retrieval for the slice · decided by tdd-guide
+Decided: `retrievalIndexFor(repos, {})` is used with no embedder, the same as the CLI default.
+risk: medium.
+
+---
+
+### 20 Oct 2026 · Small route choices · decided by tdd-guide
+Decided:
+- A paused subscription gets 403 `no_access` at session start.
+- Start answers 201.
+- A hint request may omit `text`.
+- Redis uses two clients: the queues get no retry cap (BullMQ needs that), and the limits fail
+  fast with one retry.
+- `TurnUnavailableError` carries a fixed `reason` code, which is the only part logged.
+- The route-test backend uses the repo's real `content/prompt-packs`, because the world's agents
+  pin set 1.0.0.
+
+risk: low.
+
+---
+
+### 20 Oct 2026 · Phase B client choices · decided by tdd-guide
+Decided:
+- An invalid SSE event (bad JSON or failing `TurnEventSchema`) ends the turn as a retryable
+  `provider_error` and the reader stops; nothing after it is read.
+- A non-2xx without a known JSON code maps by status: 400 `validation`, 401 `unauthorized`,
+  403 `forbidden`, 404 `not_found`, 429 `rate_limited` (retryable), else `provider_error`
+  (retryable).
+- One SSE event is capped at 1,000,000 characters; bigger ends the turn as an error.
+- A network failure or an abort of `sendTurn` yields `ended`, which drops the turn.
+- `replaced` is sticky within a turn, and an `error` resets it (the turn is dropped).
+- The renderer supports paragraphs, fenced and inline code only; no links or images, TeX literal.
+- The error strings live in `src/chat/errorText.ts` for now (Phase C may move them to en.json).
+
+risk: low.
+
+---
+
+### 20 Oct 2026 · Fix round: turn request bodies capped at 64 KB · decided by tdd-guide
+Decided: both turn routes refuse a body over 64 KB with 413 `input_too_large`. A declared
+content-length over the cap is refused before reading, and the bytes read are capped as well.
+Why: this fixes the security review's MEDIUM finding. 64 KB is far above the contracts' turn text
+limit and a strict JSON body.
+risk: medium.
+
+---
+
+### 20 Oct 2026 · Fix round: in production the turn market fails closed · decided by tdd-guide
+Decided: with `NODE_ENV=production`, an unset `EDMATE_MARKET`, or one that has no locale pack,
+makes the turn runtime unavailable. The routes answer 503, and the log says only
+`reason=EDMATE_MARKET`. Dev and test keep the `global` default.
+Why: the market picks the locale pack, so the distress helplines. A silent `global` in production
+could show the wrong helplines. This supersedes the production half of the earlier
+`EDMATE_MARKET` decision. A per-student market is still a follow-up.
+risk: medium.
+
+---
+
+### 20 Oct 2026 · /home chat links come from configured candidate agents · decided by tdd-guide
+Decided: `/home` checks the agents named in `EDMATE_CHAT_AGENTS` (a comma list). Outside
+production the seeded `demo-agent` is checked when the variable is unset; in production, none
+is. Each candidate gets a link only if the agent is live and `subscriptions.findLive` with its
+teacher returns a status other than paused or ended.
+Why: no repository method lists a student's subscriptions, and adding one is a risky
+`packages/db` change outside this phase. Follow-up: add that method and drop the variable.
+Open for the lead (plan Q2): is this good enough for the pilot, or should 9.3 come in?
+risk: medium.
+
+---
+
+### 20 Oct 2026 · Phase C client choices · decided by tdd-guide
+Decided:
+- The chat strings, including the error texts, are in `messages/en.json` under `chat.*`.
+  `errorText.ts` reads them through its exhaustive switch.
+- The page gives `NextIntlClientProvider` only the `chat` messages, with locale `en` (English-only
+  pilot).
+- A new session is written to the URL with `history.replaceState`, not `router.replace`.
+- A retry resends the last request with a new `clientTs`. The student's message is not repeated.
+- The hint button shows the rung of the current turn only. A hint request shows "Can I have a
+  hint?" as the student's message.
+- The `safety` event has no UI in this slice.
+- The page loads the newest 50 history messages.
+
+risk: low.
+
+---
+
+### 20 Oct 2026 · Bundled prices.yaml shipped as a generated TS module, not read from disk at runtime · decided by build-error-resolver
+Decided: `loadBundledPrices()` parses `PRICES_YAML`, a string constant in the checked-in,
+generated `packages/gateway/src/pricing/prices.generated.ts`, instead of
+`readFileSync(new URL('./prices.yaml', import.meta.url))`. `prices.yaml` remains the source a
+human edits; `node scripts/generate-prices.mjs` regenerates the TS module, and
+`test/pricing/generated.test.ts` fails if the two drift apart. The gateway's `build` script no
+longer copies `prices.yaml` into `dist/`.
+Why: webpack bundles `@edmate/gateway` into `apps/web`'s own server chunk when it builds with
+`--webpack` (the app's own `build` script), and `prices.yaml` never ships as a sibling file next
+to the bundled module, so the old runtime read threw and every `POST /api/sessions` answered 503
+in production — the same class of bug as 1.7b's safe-regex worker, but for a different file and
+package. A statically imported TS module needs no file lookup at runtime, so it is bundler-safe
+under webpack, Turbopack, and plain Node alike.
+risk: medium (fixes a production-blocking 503 on every chat session; no contracts or
+prompt-pack change).
+
+---
+
+### 20 Oct 2026 · Lead review sign-off for 9.4 · decided by lead
+Decided: 9.4 merges with the reviewers' MEDIUMs fixed and the LOWs deferred to 9.4a. The bundled
+prices fix supersedes the Phase D "flagged, not fixed" note: production webpack builds now load
+the price table with no file read (verified by the relocated build-smoke run).
+Why: the thin slice needs the chat working in a production build; everything else on the list is
+polish or needs data the slice doesn't have yet (the student's market, the subscription list).
+risk: low.
+
+---
+
 ### 20 Oct 2026 · `apps/web/src/auth/**` touched in Phase B · decided by tdd-guide · risk: high
 Decided: `src/auth/guard.ts` and `src/auth/index.ts` are both edited in this phase (the
 `SIGN_IN_PATH` rename and the new `currentPrincipal()` soft read), matching the plan's own call-out

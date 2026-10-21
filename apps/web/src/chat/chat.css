@@ -1,0 +1,139 @@
+/* Task 9.4 Phase C: the student chat. Plain CSS on the 9.1 base (mobile-first, 360px). Muted
+   text stays AA: #4a4a55 on #f4f4f6 is about 8:1. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-thread {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bubble {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.bubble-student {
+  background: #eef3ff;
+  margin-left: 2rem;
+}
+
+.bubble-agent {
+  background: var(--color-bg);
+  margin-right: 2rem;
+}
+
+.bubble-teacher {
+  background: #fff6e0;
+  border-color: #b37a00;
+  margin-right: 2rem;
+}
+
+.bubble-provisional {
+  background: #f4f4f6;
+  color: #4a4a55;
+  border-style: dashed;
+}
+
+.bubble-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.bubble-status,
+.bubble-updated {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.bubble-text p,
+p.bubble-text {
+  margin: 0.25rem 0;
+  white-space: pre-wrap;
+}
+
+.bubble-text pre {
+  overflow-x: auto;
+  background: #f4f4f6;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.chat-sources {
+  font-size: 0.875rem;
+}
+
+.chat-sources-title {
+  margin: 0.5rem 0 0;
+  font-weight: 600;
+}
+
+.chat-sources ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.chat-notice,
+.skill-card {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem;
+  border-left: 3px solid var(--color-brand);
+  background: #f4f4f6;
+}
+
+.chat-error {
+  border: 1px solid #b00020;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.chat-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chat-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chat-composer textarea {
+  font: inherit;
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
+
+.home-chats {
+  list-style: none;
+  padding: 0;
+}

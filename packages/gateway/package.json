@@ -15,7 +15,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"require('node:fs').copyFileSync('src/pricing/prices.yaml', 'dist/pricing/prices.yaml')\"",
+    "build": "tsc -p tsconfig.build.json",
+    "generate:prices": "node scripts/generate-prices.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run --coverage",

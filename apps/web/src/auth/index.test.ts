@@ -9,7 +9,7 @@ import type { MemoryIdentity } from '../../test/memory-identity';
 import { REDIS_READY_TIMEOUT_MS } from './redis-ready';
 
 const fakes = vi.hoisted(() => ({
-  db: [] as Array<{ options: unknown; identity: MemoryIdentity }>,
+  db: [] as Array<{ options: unknown; identity: MemoryIdentity; repos: object }>,
   redis: [] as Array<{ url: string; options: Record<string, unknown>; take: unknown[][] }>,
   transports: [] as Array<{ options: Record<string, unknown>; sent: Record<string, unknown>[] }>,
 }));
@@ -45,8 +45,9 @@ vi.mock('@edmate/db', async (importOriginal) => {
       options: { identity?: { agePolicy?: (m: string) => AgePolicy } } = {},
     ) => {
       const identity = memoryIdentity(undefined, options.identity?.agePolicy);
-      fakes.db.push({ options, identity });
-      return { identity };
+      const repos = { fake: 'repos' };
+      fakes.db.push({ options, identity, repos });
+      return { identity, repos };
     },
   };
 });
@@ -369,6 +370,35 @@ describe('src/auth wiring', () => {
       set: vi.fn(),
     }));
     await expect(auth.currentPrincipal()).resolves.toBeNull();
+    pageCookies.mockImplementation(async () => ({
+      get: (_name: string) => undefined,
+      set: vi.fn(),
+    }));
+  });
+
+  it('serverDatabase shares the guard\'s identity (market age policy) and opens one database', async () => {
+    setAuthEnv();
+    fakes.db.length = 0;
+    const auth = await load();
+    const db = auth.serverDatabase();
+    expect(fakes.db).toHaveLength(1);
+    expect(db.identity).toBe(fakes.db[0]!.identity);
+    expect(db.repos).toBe(fakes.db[0]!.repos);
+    // The guard reads the same instance: a student it creates is the one the guard resolves.
+    const u = await db.identity.createStudent({
+      email: 'sd@example.test',
+      emailVerifiedAt: null,
+      name: 'SD',
+    });
+    const sid = 'sdb'.padEnd(32, '1');
+    await db.identity.createSession(sid, u.id, new Date(Date.now() + 60_000));
+    pageCookies.mockImplementation(async () => ({
+      get: (name: string) => (name === 'authjs.session-token' ? { value: sid } : undefined),
+      set: vi.fn(),
+    }));
+    expect(await auth.currentPrincipal()).toEqual({ userId: u.id, role: 'student' });
+    expect(auth.serverDatabase().identity).toBe(db.identity);
+    expect(fakes.db).toHaveLength(1);
     pageCookies.mockImplementation(async () => ({
       get: (_name: string) => undefined,
       set: vi.fn(),

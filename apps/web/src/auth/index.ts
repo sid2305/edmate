@@ -3,7 +3,7 @@
 // call, so `/api/health` and `next build` work without AUTH_* set.
 // Only this folder imports next-auth (lint rule in @edmate/config/eslint/app).
 import { resolve as resolvePath } from 'node:path';
-import { openDatabase, type IdentityStore } from '@edmate/db';
+import { openDatabase, type IdentityStore, type Repositories } from '@edmate/db';
 import { Redis } from 'ioredis';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
@@ -36,6 +36,7 @@ import { readyCounters } from './redis-ready';
 interface Runtime {
   env: AuthEnv;
   identity: IdentityStore;
+  repos: Repositories;
   nextAuth: NextAuthResult;
   guard: GuardDeps;
 }
@@ -84,7 +85,7 @@ function emailSignIn(env: AuthEnv): AuthConfigDeps['emailSignIn'] {
 function getRuntime(): Runtime {
   if (runtime) return runtime;
   const env = readAuthEnv(process.env);
-  const { identity } = openDatabase(undefined, {
+  const { identity, repos } = openDatabase(undefined, {
     identity: {
       agePolicy: (market) => getAgeContent().agePolicy(market),
       // The store takes only the version the server shows for the market.
@@ -95,6 +96,7 @@ function getRuntime(): Runtime {
   runtime = {
     env,
     identity,
+    repos,
     // Per-request config: the signIn callback needs the request's cookies and headers.
     nextAuth: NextAuth((req) =>
       createAuthConfig({
@@ -111,6 +113,15 @@ function getRuntime(): Runtime {
     },
   };
   return runtime;
+}
+
+/**
+ * The scoped repositories and the identity store the guard uses (task 9.4: the chat routes), so
+ * a turn's age check uses the same market age policy as sign-in. Opened lazily, like the rest.
+ */
+export function serverDatabase(): { repos: Repositories; identity: IdentityStore } {
+  const { repos, identity } = getRuntime();
+  return { repos, identity };
 }
 
 /** Auth.js's route handlers for `app/api/auth/[...nextauth]/route.ts`. */

@@ -31,6 +31,22 @@ describe('HomeView', () => {
     expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
   });
 
+  it('with a live subscription, links to its chat instead of the placeholder (task 9.4)', async () => {
+    const { container } = render(await HomeView({ chats: ['demo-agent'] }));
+    expect(screen.getByRole('link', { name: "Chat with your teacher's agent" })).toHaveAttribute(
+      'href',
+      '/learn/demo-agent',
+    );
+    expect(screen.queryByText(/teacher.*agent.*here soon/i)).toBeNull();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('with no live subscription, the placeholder stays', async () => {
+    render(await HomeView({ chats: [] }));
+    expect(screen.queryByRole('link', { name: "Chat with your teacher's agent" })).toBeNull();
+    expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await HomeView());
     const results = await axe(container);
