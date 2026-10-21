@@ -1668,9 +1668,9 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '7.1'
   milestone: M7
   title: 'Eval reports and judge calibration: JSON + HTML reports per suite and model; 10% human double-check with agreement tracking'
@@ -1728,9 +1728,9 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '7.4'
   milestone: M7
   title: 'Quality gate, scoped by change: first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case
