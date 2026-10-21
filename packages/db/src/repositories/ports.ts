@@ -1,4 +1,5 @@
 import {
+  type CorrectionStore,
   type Entitlement,
   EntitlementSchema,
   type EntitlementStore,
@@ -17,7 +18,7 @@ import {
 } from '@edmate/contracts';
 import { RepositoryError } from './errors.js';
 import type { Repositories } from './index.js';
-import { studentScope, type StudentScope } from './scope.js';
+import { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
 import type { UnmeteredEntry, UsageSource } from './usage-ledger.js';
 
 /** RetrievalIndex (task 5.3): built once per process over the repositories; see retrieval.ts. */
@@ -153,6 +154,29 @@ export function teacherQuestionStoreFor(
         text: q.text,
         ...(q.moduleHint === undefined ? {} : { moduleHint: q.moduleHint }),
         similarIds: q.similarIds,
+      });
+    },
+  };
+}
+
+/**
+ * CorrectionStore (task 5.10) for one bound teacher: `addTeacherNote` writes through
+ * `repos.chunks.addTeacherNote` (the one transaction that creates the note, its chunk, the eval
+ * case and bumps the material revision). A payload `teacherId` other than the bound one is
+ * `scope`, so a step handed the wrong teacher can never file a note under someone else's modules.
+ */
+export function correctionStoreFor(repos: Repositories, scope: TeacherScope): CorrectionStore {
+  const bound = teacherScope(scope, 'correctionStoreFor');
+  return {
+    addTeacherNote(n) {
+      if (n.teacherId !== bound.teacherId) {
+        return Promise.reject(new RepositoryError('scope', 'correctionStoreFor.addTeacherNote'));
+      }
+      return repos.chunks.addTeacherNote(bound, {
+        moduleId: n.moduleId,
+        question: n.question,
+        answer: n.answer,
+        origin: n.origin,
       });
     },
   };

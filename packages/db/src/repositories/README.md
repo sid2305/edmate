@@ -197,6 +197,26 @@ failure), and bump the material revision, all in one transaction: the next searc
 miss the old material at once. They return the old storage key for the caller to delete the file.
 Another teacher's or a missing document is `not_found` and nothing is written.
 
+## Ask the teacher (task 5.10)
+
+**`insertTeacherNote(tx, teacherId, input, method)`** (`chunks.ts`, the only file allowed to name
+`chunks`) is the one transaction that turns a teacher's answer or correction into a teacher note:
+a `documents` row (`kind 'teacher_note'`, `status 'ready'`, no storage key, source title from
+`@edmate/harness`'s `teacherNoteSource`) via `INSERT … SELECT FROM modules WHERE id = $m AND
+teacher_id = $t` (another teacher's module or a missing one is `not_found`), its one chunk (text
+from `teacherNoteText`, locator the answer's UTC date), one `teacher_eval_cases` row and a
+material-revision bump. `question` / `answer` are validated by `teacherNoteParts` (the same helper
+the harness's memory `CorrectionStore` double uses, so the two formats can't drift): empty after
+trimming or over `TEACHER_NOTE_PART_MAX` is `invalid`, before any SQL. `chunks.addTeacherNote(scope,
+input)` wraps it in its own transaction; `correctionStoreFor(repos, scope)` (`ports.ts`) is the
+bound `CorrectionStore` adapter — a payload `teacherId` other than the bound one is `scope`, before
+any write. Phase C's `teacherQuestions.answer` calls `insertTeacherNote` directly (not the port),
+so the note, the question's status and the student delivery commit together.
+
+`teacher_eval_cases` (7.3 converts rows into eval suite cases) and `notifications` (Phase C) are
+additive tables from migration 0018; `teacher_questions.group_id` (unused since 0001) is backfilled
+to each row's own id so every question starts as its own group once Phase C's grouping lands.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

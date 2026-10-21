@@ -106,6 +106,7 @@ export type {
   TeacherUsageTotals,
 } from './usage-ledger.js';
 export {
+  correctionStoreFor,
   type EntitlementStoreOptions,
   entitlementStoreFor,
   profileStoreFor,
@@ -130,6 +131,8 @@ export {
   DOCUMENT_LIST_MAX,
   type DocumentInput,
   type DocumentListOptions,
+  insertTeacherNote,
+  type TeacherNoteWriteInput,
 } from './chunks.js';
 export { DOCUMENT_STATUSES, type DocumentRow, type DocumentStatus } from './map.js';
 export {

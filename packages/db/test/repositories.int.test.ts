@@ -376,6 +376,40 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  'chunks.addTeacherNote': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.addTeacherNote(scope, {
+        moduleId: ids.module(target, 1),
+        question: `[${actor}] isolation question ${++counter}`,
+        answer: `[${actor}] isolation answer`,
+        origin: 'teacher_answer',
+      }),
+    verify: async (r, actor, res) => {
+      const { chunkId: noteChunkId } = res as { chunkId: string; evalCaseId: string };
+      expect(await ownerOfRow('chunks', noteChunkId)).toBe(teacherId(actor));
+      const found = await r.retrieval.search(tScope(actor), {
+        q: 'isolation question',
+        allowedModuleIds: [ids.module(actor, 1)],
+        k: 50,
+      });
+      expect(found.map((c) => c.id)).toContain(noteChunkId);
+    },
+    mismatches: (a) => [
+      [
+        'an empty question after trimming',
+        (r) =>
+          r.chunks.addTeacherNote(tScope(a), {
+            moduleId: ids.module(a, 1),
+            question: '   ',
+            answer: 'x',
+            origin: 'teacher_answer',
+          }),
+        'invalid',
+      ],
+    ],
+  },
   'retrieval.search': {
     scope: 'teacher',
     op: 'read',

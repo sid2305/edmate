@@ -2,7 +2,9 @@
 // chunks take their teacher, module, kind and source title from their document, so a chunk can
 // never be filed under another teacher's module. Every write bumps the teacher's material
 // revision in the same transaction (leakCheck's cache key, ADR-0007).
+import { randomUUID } from 'node:crypto';
 import { ChunkKindSchema } from '@edmate/contracts';
+import { teacherNoteParts, teacherNoteSource, teacherNoteText } from '@edmate/harness';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -11,6 +13,7 @@ import {
   documents,
   EMBEDDING_DIMENSIONS,
   modules,
+  teacherEvalCases,
   teacherMaterialRevisions,
 } from '../schema/index.js';
 import { vectorToDriver } from '../schema/_shared.js';
@@ -102,6 +105,72 @@ const EmbeddingsSchema = z
 /** `<documentId>-c<0000>`: ids sort in document order, so no `ord` column is needed. */
 export function chunkId(documentId: string, ord: number): string {
   return `${documentId}-c${String(ord).padStart(4, '0')}`;
+}
+
+const TeacherNoteInputSchema = z.strictObject({
+  moduleId: IdSchema,
+  question: z.string(),
+  answer: z.string(),
+  origin: z.enum(['teacher_answer', 'correction']),
+  teacherQuestionId: IdSchema.optional(),
+});
+export type TeacherNoteWriteInput = z.infer<typeof TeacherNoteInputSchema>;
+
+/**
+ * Task 5.10 (§ Ask the teacher 5, § Staying true to the teacher "Corrections"): the one place that
+ * turns a teacher's answer or correction into a teacher note, in one transaction: a `documents` row
+ * (`kind 'teacher_note'`, `status 'ready'`, no storage key), its one chunk (text and locator from
+ * `@edmate/harness`'s `teacherNote.ts`, the single place that decides that format), one
+ * `teacher_eval_cases` row and a material-revision bump. `moduleId` must be one of `teacherId`'s own
+ * modules (`INSERT … SELECT FROM modules WHERE id = $m AND teacher_id = $t`, else `not_found`).
+ * `question` / `answer` must be non-empty after trimming and within `TEACHER_NOTE_PART_MAX`
+ * (`invalid`), checked by the same helper the harness's memory double uses, so the two can't drift.
+ * Shared with `teacherQuestions.answer` (task 5.10 Phase C), which calls this instead of the port
+ * so the note, the question's status and the student delivery commit together.
+ */
+export async function insertTeacherNote(
+  tx: Tx,
+  teacherId: string,
+  input: TeacherNoteWriteInput,
+  method: string,
+): Promise<{ chunkId: string; evalCaseId: string }> {
+  const parts = teacherNoteParts({ question: input.question, answer: input.answer });
+  if (parts === null) throw new RepositoryError('invalid', method);
+  const text = teacherNoteText(parts);
+  const source = teacherNoteSource(input.origin, Date.now());
+  const docId = randomUUID();
+  const res = await tx.execute(
+    insertSelect(
+      documents,
+      [
+        [documents.id, sql`${docId}::text`],
+        [documents.teacherId, sql`${modules.teacherId}`],
+        [documents.moduleId, sql`${modules.id}`],
+        [documents.kind, sql`'teacher_note'::chunk_kind`],
+        [documents.sourceTitle, sql`${source.title}::text`],
+        [documents.status, sql`'ready'::document_status`],
+      ],
+      sql`from ${modules} where ${modules.id} = ${input.moduleId} and ${modules.teacherId} = ${teacherId}`,
+    ),
+  );
+  if (written(res) !== 1) throw new RepositoryError('not_found', method);
+  const noteChunkId = chunkId(docId, 0);
+  await insertChunkRows(tx, teacherId, docId, [
+    { id: noteChunkId, text, locator: source.locator },
+  ]);
+  await bumpRevision(tx, teacherId);
+  const evalCaseId = randomUUID();
+  await tx.insert(teacherEvalCases).values({
+    id: evalCaseId,
+    teacherId,
+    moduleId: input.moduleId,
+    origin: input.origin,
+    question: parts.question,
+    answer: parts.answer,
+    chunkId: noteChunkId,
+    teacherQuestionId: input.teacherQuestionId ?? null,
+  });
+  return { chunkId: noteChunkId, evalCaseId };
 }
 
 /** +1 on the teacher's material revision (row created at 1). */
@@ -441,6 +510,23 @@ export function chunksRepo(db: Db) {
         }),
       );
       return { updated: rows.length };
+    },
+
+    /**
+     * `CorrectionStore.addTeacherNote` (task 5.10): wraps `insertTeacherNote` in its own
+     * transaction. Another teacher's module is `not_found`; an empty or over-cap question or
+     * answer is `invalid`. See `correctionStoreFor` (ports.ts) for the bound adapter.
+     */
+    async addTeacherNote(
+      scope: TeacherScope,
+      input: TeacherNoteWriteInput,
+    ): Promise<{ chunkId: string; evalCaseId: string }> {
+      const method = 'chunks.addTeacherNote';
+      const { teacherId } = teacherScope(scope, method);
+      const i = parseArg(TeacherNoteInputSchema, input, method);
+      return translateWrite(method, () =>
+        db.transaction((tx) => insertTeacherNote(tx, teacherId, i, method)),
+      );
     },
   };
 }
