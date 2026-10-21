@@ -20,6 +20,16 @@ export class TraceBuilder {
   private readonly steps = new Map<StepName, { ms: number; outcome: StepOutcome }>();
   private readonly guards: GuardTrace[] = [];
   private readonly usageRows: Usage[] = [];
+  /** Derived metrics riding in the same `steps` array (the schema allows any string name). */
+  private readonly extra = new Map<'firstToken', number>();
+
+  /**
+   * Records a derived metric's elapsed ms, idempotently: the first call wins, so a cleared and
+   * retried stream doesn't double-count or get overwritten by a fallback attempt's first token.
+   */
+  markElapsed(name: 'firstToken', ms: number): void {
+    if (!this.extra.has(name)) this.extra.set(name, ms);
+  }
 
   step(name: StepName, ms: number, outcome: StepOutcome): void {
     const prev = this.steps.get(name);
@@ -62,10 +72,13 @@ export class TraceBuilder {
   }): TurnTrace {
     return TurnTraceSchema.parse({
       ...x,
-      steps: STEP_NAMES.flatMap((name) => {
-        const s = this.steps.get(name);
-        return s === undefined ? [] : [{ name, ms: s.ms, outcome: s.outcome }];
-      }),
+      steps: [
+        ...STEP_NAMES.flatMap((name) => {
+          const s = this.steps.get(name);
+          return s === undefined ? [] : [{ name, ms: s.ms, outcome: s.outcome }];
+        }),
+        ...Array.from(this.extra, ([name, ms]) => ({ name, ms, outcome: 'ok' as const })),
+      ],
       guards: this.guards,
       usage: this.usage,
     });

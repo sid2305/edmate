@@ -116,7 +116,10 @@ describe('runTurn happy path', () => {
     const trace = t.traces.records[0];
     expect(TurnTraceSchema.parse(trace)).toEqual(trace);
     expect(result.trace).toEqual(trace);
-    expect(trace?.steps.map((s) => s.name)).toEqual(STEP_NAMES.filter((n) => n !== 'escalate'));
+    expect(trace?.steps.map((s) => s.name)).toEqual([
+      ...STEP_NAMES.filter((n) => n !== 'escalate'),
+      'firstToken',
+    ]);
     expect(trace?.steps.every((s) => s.outcome === 'ok')).toBe(true);
     expect(trace).toMatchObject({
       turnId: 'turn_1',

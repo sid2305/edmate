@@ -963,7 +963,9 @@ describe(`commit: ${policy('commit')}`, () => {
     const { events, result, t } = await run({ commit: boom });
     expect(events.at(-1)?.type).toBe('done');
     expect(result.background.map((b) => b.task)).toEqual(['commit']);
-    expect((t.traces.records[0] as TurnTrace).steps.at(-1)).toMatchObject({
+    expect(
+      (t.traces.records[0] as TurnTrace).steps.find((s) => s.name === 'commit'),
+    ).toMatchObject({
       name: 'commit',
       outcome: 'failed',
     });

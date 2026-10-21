@@ -1,14 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { TurnTraceSchema, type TurnTrace } from '@edmate/contracts';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { sessions, turnTraces } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { checked, iso } from './map.js';
-import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
+import {
+  IdSchema,
+  parseArg,
+  studentScope,
+  teacherScope,
+  type StudentScope,
+  type TeacherScope,
+} from './scope.js';
 import { ownSession } from './sessions.js';
+
+/** Largest page of a teacher's traces read in one call (`listForTeacherSince`). */
+export const TEACHER_TRACES_MAX_LIMIT = 200;
+const Since = z.iso.datetime({ offset: true });
+const Limit = z.int().min(1).max(TEACHER_TRACES_MAX_LIMIT);
 
 /** A stored trace: the whole TurnTrace contract plus its row id, time and usage summary. */
 export interface TurnTraceRow extends TurnTrace {
@@ -155,6 +167,31 @@ export function turnTracesRepo(db: Db) {
         )
         .limit(1);
       return row ? toRow(row, method) : null;
+    },
+
+    /**
+     * The scope's teacher's traces across every session, created at or after `since`, oldest
+     * first, capped at `limit` (default `TEACHER_TRACES_MAX_LIMIT`): the health-metrics read
+     * (task 7.7), mirroring `usageLedger.sumForTeacherSince`'s join-on-session-ownership shape.
+     * Another teacher's traces never appear.
+     */
+    async listForTeacherSince(
+      scope: TeacherScope,
+      since: string,
+      limit = TEACHER_TRACES_MAX_LIMIT,
+    ): Promise<TurnTraceRow[]> {
+      const method = 'turnTraces.listForTeacherSince';
+      const sc = teacherScope(scope, method);
+      const from = new Date(parseArg(Since, since, method));
+      const lim = parseArg(Limit, limit, method);
+      const rows = await db
+        .select(COLUMNS)
+        .from(turnTraces)
+        .innerJoin(sessions, eq(sessions.id, turnTraces.sessionId))
+        .where(and(eq(sessions.teacherId, sc.teacherId), gte(turnTraces.createdAt, from)))
+        .orderBy(asc(turnTraces.createdAt), asc(turnTraces.id))
+        .limit(lim);
+      return rows.map((r) => toRow(r, method));
     },
   };
 }

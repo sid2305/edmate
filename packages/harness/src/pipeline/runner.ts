@@ -186,6 +186,8 @@ class Turn {
   private turnId = '';
   private messageId = '';
   private receivedAt = '';
+  /** Drawn at the start of run(), for the firstToken derived metric (7.7). */
+  private startedAtMs = 0;
   private terminated = false;
   /** What meter and commit see: the scrubbed input once the scrub passed; never unscrubbed text. */
   private safeInput: TurnInput;
@@ -279,6 +281,10 @@ class Turn {
       }
       // A `replace ''` also tells the client to drop skill events shown so far (sse.ts).
       if (parsed.data.type === 'token' || parsed.data.type === 'skill') this.shown = true;
+      // First words of a reply (PRD S5): only a real token counts, not a skill event.
+      if (parsed.data.type === 'token') {
+        this.trace.markElapsed('firstToken', this.deps.clock.now() - this.startedAtMs);
+      }
       this.queue.push(parsed.data);
     };
   }
@@ -397,6 +403,7 @@ class Turn {
 
   async run(): Promise<TurnRunResult> {
     const { input, steps } = this;
+    this.startedAtMs = this.deps.clock.now();
     this.turnId = this.deps.ids.next('turn');
     this.messageId = this.deps.ids.next('message');
     this.receivedAt = isoAt(this.deps.clock.now());

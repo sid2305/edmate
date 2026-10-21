@@ -2,6 +2,7 @@
 // on the scope's own session only; listForSession returns it as the contract. See test/pg.ts.
 import { type TurnTrace, TurnTraceSchema } from '@edmate/contracts';
 import { demoTurnTrace } from '@edmate/contracts/fixtures';
+import { computeHealthMetrics } from '@edmate/harness';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
@@ -145,5 +146,65 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
       ),
     ).toBe('integrity');
     await raw.query(`delete from turn_traces where turn_id = 'trn_corrupt'`);
+  });
+
+  // Task 7.7: listForTeacherSince reads across a teacher's sessions for a window, capped, and
+  // another teacher's traces never appear (CASE 'turnTraces.listForTeacherSince' in
+  // repositories.int.test.ts covers the full isolation grid; this is the window/cap/compose
+  // demonstration).
+  it('listForTeacherSince bounds by time, caps rows, and never returns another teacher’s traces', async () => {
+    const teacherA = { teacherId: teacherId('A') };
+    const other = { studentId: studentId('2'), teacherId: teacherId('A') };
+    await traceSinkFor(repos, own).record(trace({ turnId: 'trn_window_old' }));
+    await traceSinkFor(repos, other).record(
+      trace({ turnId: 'trn_window_new', sessionId: ids.session('2A') }),
+    );
+    await raw.query(
+      `update turn_traces set created_at = '2020-01-01T00:00:00Z' where turn_id = 'trn_window_old'`,
+    );
+    await raw.query(
+      `update turn_traces set created_at = '2026-06-01T00:00:00Z' where turn_id = 'trn_window_new'`,
+    );
+
+    const windowed = await repos.turnTraces.listForTeacherSince(teacherA, '2025-01-01T00:00:00Z');
+    const windowedIds = windowed.map((r) => r.turnId);
+    expect(windowedIds).toContain('trn_window_new');
+    expect(windowedIds).not.toContain('trn_window_old');
+    // Another teacher's (B's) traces, seeded on sessions '1B'/'2B', never appear for teacher A.
+    expect(windowed.every((r) => r.sessionId === ids.session('1A') || r.sessionId === ids.session('2A'))).toBe(
+      true,
+    );
+
+    const capped = await repos.turnTraces.listForTeacherSince(
+      teacherA,
+      '2000-01-01T00:00:00Z',
+      1,
+    );
+    expect(capped).toHaveLength(1);
+
+    const unlimited = await repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z');
+    expect(unlimited.length).toBeGreaterThan(1);
+    expect(unlimited.map((r) => r.turnId)).toContain('trn_window_old');
+
+    await raw.query(
+      `delete from turn_traces where turn_id in ('trn_window_old', 'trn_window_new')`,
+    );
+  });
+
+  it('listForTeacherSince’s output round-trips through computeHealthMetrics to a sane report', async () => {
+    const teacherA = { teacherId: teacherId('A') };
+    await traceSinkFor(repos, own).record(trace({ turnId: 'trn_health' }));
+    const rows = await repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z');
+    expect(rows.length).toBeGreaterThan(0);
+
+    const metrics = computeHealthMetrics(rows);
+    expect(metrics.turns).toBe(rows.length);
+    expect(metrics.errorRate).toBeGreaterThanOrEqual(0);
+    expect(metrics.errorRate).toBeLessThanOrEqual(1);
+    expect(metrics.guardRate).toBeGreaterThanOrEqual(0);
+    expect(metrics.guardRate).toBeLessThanOrEqual(1);
+    expect(Object.keys(metrics.stepLatencyMs).length).toBeGreaterThan(0);
+
+    await raw.query(`delete from turn_traces where turn_id = 'trn_health'`);
   });
 });

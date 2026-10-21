@@ -39,9 +39,24 @@ describe('trace capture', () => {
         return testSteps().buildContext(env, e);
       },
     });
-    expect(trace.steps.map((s) => s.name)).toEqual(STEP_NAMES.filter((n) => n !== 'escalate'));
+    expect(trace.steps.map((s) => s.name)).toEqual([
+      ...STEP_NAMES.filter((n) => n !== 'escalate'),
+      'firstToken',
+    ]);
     const ms = Object.fromEntries(trace.steps.map((s) => [s.name, s.ms]));
     expect(ms).toMatchObject({ preGuard: 250, route: 200, buildContext: 10, admit: 0 });
+  });
+
+  it('records firstToken only once a token streams, and omits it on a turn that never shows one', async () => {
+    const streamed = await traceOf({});
+    expect(streamed.steps.find((s) => s.name === 'firstToken')).toMatchObject({ outcome: 'ok' });
+    expect(streamed.steps.find((s) => s.name === 'firstToken')?.ms).toBeGreaterThanOrEqual(0);
+
+    const escalated = await traceOf({
+      preGuard: () =>
+        Promise.resolve({ result: 'escalate', alert: demoSafetyAlert, guards: [], usage: [] }),
+    });
+    expect(escalated.steps.find((s) => s.name === 'firstToken')).toBeUndefined();
   });
 
   it("preGuard's ms is the scrub plus the checks", async () => {
@@ -122,5 +137,38 @@ describe('TraceBuilder', () => {
       { name: 'generate', ms: 15, outcome: 'fallback' },
     ]);
     expect(t.guards).toEqual([{ name: 'g', ok: true }]);
+  });
+
+  it('markElapsed is idempotent: the first call wins and appears after the spec steps', () => {
+    const b = new TraceBuilder();
+    b.step('admit', 0, 'ok');
+    b.markElapsed('firstToken', 120);
+    b.markElapsed('firstToken', 9999);
+    const t = b.build({
+      turnId: 't',
+      sessionId: 's',
+      agentVersion: 1,
+      packageVersion: 1,
+      intent: 'on_task',
+      move: 'ask',
+    });
+    expect(t.steps).toEqual([
+      { name: 'admit', ms: 0, outcome: 'ok' },
+      { name: 'firstToken', ms: 120, outcome: 'ok' },
+    ]);
+  });
+
+  it('omits firstToken entirely when markElapsed was never called', () => {
+    const b = new TraceBuilder();
+    b.step('admit', 0, 'ok');
+    const t = b.build({
+      turnId: 't',
+      sessionId: 's',
+      agentVersion: 1,
+      packageVersion: 1,
+      intent: 'on_task',
+      move: 'ask',
+    });
+    expect(t.steps.find((s) => s.name === 'firstToken')).toBeUndefined();
   });
 });
