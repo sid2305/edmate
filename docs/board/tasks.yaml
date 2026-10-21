@@ -372,7 +372,7 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: running
+  status: review
   branch: m7/0.18-agent-registry
   model: plan:sonnet build:opus
 - id: '0.19'
@@ -1453,7 +1453,7 @@ tasks:
   status: running
   risk: risky
   branch: m5/5.8-roleplay
-  model: plan:sonnet arch:opus build:opus(A,B) ped:opus(C) review:opus+sonnet(A)
+  model: plan:opus build:opus x3 eval-author:sonnet
 - id: '5.9'
   milestone: M5
   title: Revision skill
