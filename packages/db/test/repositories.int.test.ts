@@ -982,6 +982,16 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (rows: { sessionId: string; steps: { name: string }[] }[]) =>
       rows.flatMap((t) => t.steps.flatMap((st) => markers(st.name))),
   },
+  'turnTraces.listForTeacherSince': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.turnTraces.listForTeacherSince(scope, '2000-01-01T00:00:00Z'),
+    random: (r, _scope, rid) =>
+      r.turnTraces.listForTeacherSince({ teacherId: rid }, '2000-01-01T00:00:00Z'),
+    owners: (rows: { steps: { name: string }[] }[]) =>
+      rows.flatMap((t) => t.steps.flatMap((st) => markers(st.name).map((p) => p.slice(-1)))),
+  },
   'learnerProfiles.get': {
     scope: 'student',
     op: 'read',

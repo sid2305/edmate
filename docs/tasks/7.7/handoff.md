@@ -1,6 +1,6 @@
 # Task 7.7 — Turn traces and health metrics
 
-Status: PARTIAL (Phase A done; Phase B left)
+**Status:** DONE
 
 ## Files
 - `packages/harness/src/pipeline/trace.ts` — `TraceBuilder.markElapsed('firstToken', ms)`
@@ -76,3 +76,97 @@ No `packages/contracts` change (`TurnTraceSchema.steps[].name` is already `z.str
   (name-based, not position-based) keeps the test meaningful without depending on `steps` array
   ordering, which is an implementation detail.
 - risk: low — test-only change, no production behaviour affected.
+
+## Phase B — packages/db (teacher-scoped trace reads)
+
+### Files
+- `packages/db/src/repositories/turn-traces.ts` — new `listForTeacherSince(scope: TeacherScope,
+  since: string, limit = TEACHER_TRACES_MAX_LIMIT): Promise<TurnTraceRow[]>`, modelled exactly on
+  `usageLedgerRepo.sumForTeacherSince`: joins `turnTraces` → `sessions` on
+  `sessions.teacherId = scope.teacherId`, filters `turnTraces.createdAt >= since` (`z.iso.datetime
+  ({ offset: true })`, same `Since` pattern as `usage-ledger.ts`), orders oldest-first
+  (`asc(createdAt), asc(id)`), capped at `limit` (`z.int().min(1).max(TEACHER_TRACES_MAX_LIMIT)`).
+  New exported constant `TEACHER_TRACES_MAX_LIMIT = 200` (same value as `AUDIT_MAX_LIMIT`/
+  `NOTIFICATIONS_MAX_LIMIT`/`QUESTIONS_MAX_LIMIT`).
+- `packages/db/src/repositories/index.ts` — exports `TEACHER_TRACES_MAX_LIMIT` alongside the
+  existing `TurnTraceRow` export.
+- `packages/db/test/repositories.int.test.ts` — new `'turnTraces.listForTeacherSince'` CASE
+  (`scope: 'teacher'`, `targeted: false`), modelled on `'usageLedger.sumForTeacherSince'`; `owners`
+  extracts `[pair]` markers from `steps[].name` (the existing convention, same as
+  `'turnTraces.listForSession'`) and maps each pair marker (for example `1A`) to its teacher letter
+  (`p.slice(-1)`) since `Pair = ${Student}${Teacher}` — the isolation grid's `owners` must return
+  the acting teacher's own key (`A`), not the student x teacher pair key.
+- `packages/db/test/trace-sink.int.test.ts` — two new tests:
+  1. time-window bound + row cap + isolation: inserts two extra traces on teacher A's two
+     sessions, back-dates one via `raw.query(update ... set created_at = ...)` to before the
+     window, asserts the windowed read excludes it, includes the in-window one, every row's
+     `sessionId` belongs to teacher A (never B's seeded `1B`/`2B` sessions), and a `limit: 1` call
+     returns exactly one row.
+  2. compose test: pipes `listForTeacherSince`'s output straight into `@edmate/harness`'s
+     `computeHealthMetrics` and asserts a sane `HealthMetrics` shape (`turns` equals the row
+     count, `errorRate`/`guardRate` in `[0, 1]`, `stepLatencyMs` non-empty) — the closest thing to
+     an end-to-end demonstration of the accept line without a CLI.
+
+No `packages/contracts` change. No migration: `turn_traces` already has every column needed
+(`session_id`, `created_at`); no new index added (see Decisions below — logged as a follow-up, not
+a blocker, per the plan).
+
+## Tests (Phase B)
+- `corepack pnpm --filter @edmate/db exec vitest run test/trace-sink.int.test.ts` — 1 file, 8
+  tests (6 existing + 2 new), all green, against a real Postgres 16 + pgvector (started with
+  `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres`).
+- `corepack pnpm --filter @edmate/db exec vitest run test/repositories.int.test.ts` — 1 file, 87
+  tests (86 existing + 1 new isolation CASE), all green, including the `'has a case for exactly
+  the methods createRepositories returns'` guard (confirms `CASES` matches
+  `createRepositories(db)`'s real method set with no gaps) and the new CASE's own isolation-grid
+  assertions and 20 random-id leak probes.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` — 26/26 tasks green (db +
+  everything that imports it, including `@edmate/harness` built first so the db int test's
+  `import { computeHealthMetrics } from '@edmate/harness'` resolves). Full db suite: 51 test files,
+  862 tests passed, 4 skipped (unrelated, pre-existing `.skipIf(!up)` guards not hit once Postgres
+  was started). `turn-traces.ts` at 100% line/branch/function coverage.
+- `python3 .githooks/secret-scan.py --all` — clean.
+
+## Decisions (Phase B)
+
+### 21 Oct 2026 · 7.7 `TEACHER_TRACES_MAX_LIMIT` value · decided by tdd-guide · risk: low
+- Decided: `200`, matching `AUDIT_MAX_LIMIT`, `NOTIFICATIONS_MAX_LIMIT` and `QUESTIONS_MAX_LIMIT` —
+  the repo's existing convention for a page-sized read limit, with no stated reason to pick
+  differently for traces.
+- Why: the plan flagged this value as a decision, not a spec requirement; reusing the existing
+  convention keeps every `*_MAX_LIMIT` constant mentally interchangeable and avoids inventing a
+  new number with no data behind it.
+- risk: low — a read-size cap, not a correctness or isolation boundary; raising it later needs no
+  migration.
+
+### 21 Oct 2026 · 7.7 no new `turn_traces` index · decided by tdd-guide · risk: low
+- Decided: no migration, no new index for this task. The query joins `turn_traces.session_id` to
+  `sessions` (already indexed: `turn_traces_session_id_idx`) and filters
+  `sessions.teacher_id = scope.teacherId` (already indexed via
+  `sessions_teacher_id_student_id_idx`) plus `turn_traces.created_at >= since` (not separately
+  indexed). At pilot scale (a handful of teachers, each with a bounded number of sessions and
+  traces per session) this is fine; a composite index joining through `sessions` isn't a plain
+  column index Drizzle/Postgres can declare directly on `turn_traces` without duplicating
+  `teacher_id` onto that table, which is a schema change out of this task's scope.
+- Why: the plan explicitly flagged this as optional, "note as a follow-up if query plans in the
+  int test look slow" — the int test (seed scale: 2 teachers x 2 students x a handful of traces
+  each, plus a few more inserted in the new tests) runs in well under a second; no slowness
+  observed to act on.
+- risk: low — follow-up only; recommend a board task once real traffic volume is known (same
+  recommendation as the plan's Decision 4), to be paired with whether `turn_traces` should also
+  carry a denormalised `teacher_id` column (would change the schema, needs its own task/ADR
+  discussion, not decided here).
+- risk: high — **isolation**: `packages/db/src/repositories/**` is a risky path
+  (`.claude/skills/merge-gate/risk-paths.txt`); `listForTeacherSince` is a new cross-session SQL
+  read. The isolation CASE (`'turnTraces.listForTeacherSince'` in `repositories.int.test.ts`) and
+  the dedicated `trace-sink.int.test.ts` test both prove another teacher's traces never appear
+  (grid: every actor teacher reads only its own marker; 20 random-id probes return `[]`; the
+  window test asserts every returned row's `sessionId` belongs to teacher A's own two seeded
+  sessions, never teacher B's `1B`/`2B`). `review.md` for the PR must name **security-reviewer**
+  and **database-reviewer** per the plan's lead answer ("Phase B adds database-reviewer next to
+  security-reviewer").
+
+## Left to do
+None for 7.7 itself. Follow-ups noted above (not blocking): a CLI/staff-facing report surface
+(lead said this is a separate board task, added on merge), and revisiting the `turn_traces` index
+question once real traffic volume is known.

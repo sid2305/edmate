@@ -98,7 +98,7 @@ export {
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
 export { type SafetyEventInput, type SafetyEventRow, safetyEventRowId } from './safety-events.js';
-export type { TurnTraceRow } from './turn-traces.js';
+export { TEACHER_TRACES_MAX_LIMIT, type TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,
   COST_ALARM_PAUSE_ACTION,
