@@ -30,14 +30,16 @@
     "nodemailer": "8.0.11",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
     "@playwright/test": "1.64.1",
     "@testing-library/jest-dom": "7.0.1",
-    "@types/jest-axe": "3.5.9",
     "@testing-library/react": "16.3.3",
+    "@types/jest-axe": "3.5.9",
     "@types/node": "22.20.5",
     "@types/nodemailer": "8.0.2",
     "@types/react": "19.3.0",

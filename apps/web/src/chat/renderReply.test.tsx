@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-// Task 9.4 Phase B: the reply renderer never renders raw model HTML (4.6b safety review). HTML in
-// the text shows literally as text; fenced code becomes <pre><code>; TeX stays literal (KaTeX is
-// parked). Swapping in a markdown library later must keep these tests green.
+// Task 9.4 Phase B / 9.4b: the reply renderer never renders raw model HTML (4.6b safety review).
+// Raw HTML in the text shows literally as text (react-markdown with no raw-HTML plugin); markdown images
+// render not at all; links only for http/https/mailto; TeX stays literal (KaTeX is parked).
+// 9.4b swapped in react-markdown + remark-gfm (B-32) under these tests.
 import type { TurnEvent } from '@edmate/contracts';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderReply } from './renderReply';
+import { protectMath, renderReply, safeHref } from './renderReply';
 import { initialTurn, reduceTurn } from './turnState';
 
 function show(text: string): HTMLElement {
@@ -43,11 +44,29 @@ describe('renderReply', () => {
     ['an HTML comment', 'before <!-- hidden --> after'],
     ['an svg with onload', '<svg onload="alert(1)"><circle/></svg>'],
     ['a style tag', '<style>body{display:none}</style>'],
-    ['a markdown image', '![x](https://example.invalid/a.png)'],
+    ['an object tag', '<object data="x.swf"></object>'],
+    ['a form with an input', '<form action="/x"><input name="a"></form>'],
+    ['a meta refresh', '<meta http-equiv="refresh" content="0;url=https://example.invalid">'],
   ])('%s shows literally and makes no element', (_name, text) => {
     const el = show(text);
     assertInert(el);
     expect(el.textContent).toContain(text);
+  });
+
+  it.each([
+    ['inline', 'See ![x](https://example.invalid/a.png) here'],
+    ['reference style', 'See ![x][r] here\n\n[r]: https://example.invalid/a.png'],
+    ['javascript src', '![x](javascript:alert(1))'],
+  ])('a markdown image (%s) renders not at all', (_name, text) => {
+    const el = show(text);
+    assertInert(el);
+    expect(el.textContent).not.toContain('example.invalid');
+  });
+
+  it('raw HTML inside a markdown table cell stays text', () => {
+    const el = show('| a | b |\n| - | - |\n| <img src=x onerror=alert(1)> | <script>x</script> |');
+    assertInert(el);
+    expect(el.querySelectorAll('td')[0]?.textContent).toBe('<img src=x onerror=alert(1)>');
   });
 
   it('a tag split across tokens shows literally once the turn joins them', () => {
@@ -65,13 +84,14 @@ describe('renderReply', () => {
   it('HTML inside a fenced code block stays text', () => {
     const el = show('```html\n<script>alert(1)</script>\n```');
     assertInert(el);
-    expect(el.querySelector('pre > code')?.textContent).toBe('<script>alert(1)</script>');
+    expect(el.querySelector('pre > code')?.textContent).toBe('<script>alert(1)</script>\n');
   });
 
+  // react-markdown keeps the code block's final newline (CommonMark), unlike 9.4's renderer.
   it('a fenced code block becomes <pre><code> with its text kept exactly', () => {
     const el = show('Try this:\n\n```ts\nconst x = 1;\n  if (x) {}\n```\n\nThen run it.');
     const code = el.querySelector('pre > code');
-    expect(code?.textContent).toBe('const x = 1;\n  if (x) {}');
+    expect(code?.textContent).toBe('const x = 1;\n  if (x) {}\n');
     expect(el.querySelectorAll('p')).toHaveLength(2);
     expect(el.querySelectorAll('p')[0]?.textContent).toBe('Try this:');
     expect(el.querySelectorAll('p')[1]?.textContent).toBe('Then run it.');
@@ -79,13 +99,89 @@ describe('renderReply', () => {
 
   it('an unclosed fence (still streaming) renders the rest as code', () => {
     const el = show('Code:\n```\nlet a = 2;');
-    expect(el.querySelector('pre > code')?.textContent).toBe('let a = 2;');
+    expect(el.querySelector('pre > code')?.textContent).toBe('let a = 2;\n');
   });
 
   it('text right before a fence without a blank line is its own paragraph', () => {
     const el = show('Here:\n```\nx\n```\nDone');
     expect(Array.from(el.querySelectorAll('p'), (p) => p.textContent)).toEqual(['Here:', 'Done']);
-    expect(el.querySelector('pre > code')?.textContent).toBe('x');
+    expect(el.querySelector('pre > code')?.textContent).toBe('x\n');
+  });
+
+  it('a GFM table renders as table/thead/tbody/tr/th/td', () => {
+    const el = show('| Step | Result |\n| :--- | ---: |\n| 1 | **x = 2** |\n| 2 | `y` |');
+    expect(Array.from(el.querySelectorAll('thead th'), (c) => c.textContent)).toEqual(['Step', 'Result']);
+    expect(el.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(el.querySelector('tbody td strong')?.textContent).toBe('x = 2');
+    expect(el.querySelector('tbody td code')?.textContent).toBe('y');
+  });
+
+  it('bulleted and numbered lists render as ul/ol with li', () => {
+    const el = show('Steps:\n\n- one\n- two\n\n1. first\n2. second\n3. third');
+    expect(Array.from(el.querySelectorAll('ul > li'), (li) => li.textContent)).toEqual(['one', 'two']);
+    expect(el.querySelectorAll('ol > li')).toHaveLength(3);
+  });
+
+  it('a task list shows its checkboxes as plain text, not inputs', () => {
+    const el = show('- [x] done\n- [ ] todo');
+    assertInert(el);
+    expect(Array.from(el.querySelectorAll('li'), (li) => li.textContent)).toEqual(['[x] done', '[ ] todo']);
+  });
+
+  it('bold, emphasis, blockquote and a rule render', () => {
+    const el = show('**bold** and _em_ and *em2*\n\n> quoted\n\n---\n\nafter');
+    expect(el.querySelector('strong')?.textContent).toBe('bold');
+    expect(Array.from(el.querySelectorAll('em'), (e) => e.textContent)).toEqual(['em', 'em2']);
+    expect(el.querySelector('blockquote')?.textContent?.trim()).toBe('quoted');
+    expect(el.querySelector('hr')).not.toBeNull();
+  });
+
+  it('double-tilde strikethrough renders as <del>', () => {
+    const el = show('this is ~~wrong~~ right');
+    expect(el.querySelector('del')?.textContent).toBe('wrong');
+  });
+
+  it('a single tilde is not strikethrough (lead decision: matches the locked-content guard)', () => {
+    const el = show('l~o~op and ~one~');
+    expect(el.querySelector('del')).toBeNull();
+    expect(el.textContent).toBe('l~o~op and ~one~');
+  });
+
+  it('headings are not rendered as headings; their text stays', () => {
+    const el = show('# Title\n\nbody');
+    expect(el.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
+    expect(el.textContent).toContain('Title');
+  });
+
+  it.each([
+    ['https', '[docs](https://example.org/a?b=1)', 'https://example.org/a?b=1'],
+    ['http', '[docs](http://example.org/)', 'http://example.org/'],
+    ['mailto', '[mail](mailto:teacher@example.org)', 'mailto:teacher@example.org'],
+    ['autolink literal', 'see https://example.org/x', 'https://example.org/x'],
+  ])('a safe %s link renders as <a> with a safe rel', (_name, text, href) => {
+    const el = show(text);
+    const a = el.querySelector('a');
+    expect(a?.getAttribute('href')).toBe(href);
+    expect(a?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(a?.getAttribute('target')).toBe('_blank');
+    expect(el.querySelectorAll('[href]')).toHaveLength(1);
+  });
+
+  it.each([
+    ['javascript', '[click](javascript:alert(1))'],
+    ['mixed-case javascript', '[click](JaVaScRiPt:alert(1))'],
+    ['entity-encoded javascript', '[click](jav&#x09;ascript:alert(1))'],
+    ['data', '[click](data:text/html;base64,PHNjcmlwdD4=)'],
+    ['vbscript', '[click](vbscript:msgbox(1))'],
+    ['protocol-relative', '[click](//example.invalid/x)'],
+    ['relative path', '[click](/api/x)'],
+    ['fragment', '[click](#top)'],
+    ['empty', '[click]()'],
+    ['reference to javascript', '[click][r]\n\n[r]: javascript:alert(1)'],
+  ])('an unsafe %s link renders as its text with no href', (_name, text) => {
+    const el = show(text);
+    assertInert(el);
+    expect(el.textContent).toContain('click');
   });
 
   it('paragraphs split on blank lines and keep single newlines (pre-wrap)', () => {
@@ -113,6 +209,43 @@ describe('renderReply', () => {
     const el = show(tex);
     expect(el.textContent).toBe(tex);
     expect(el.querySelector('math, svg, span.katex')).toBeNull();
+  });
+
+  it.each([
+    ['subscripts and stars', 'Let $x_1 * y_2 = a_1 * b_2$ hold', 'Let $x_1 * y_2 = a_1 * b_2$ hold'],
+    ['display maths over lines', '$$\n\\sum_{i=1}^n i\n$$', '$$\n\\sum_{i=1}^n i\n$$'],
+    ['bracket display', 'so \\[a_b \\cdot c_d\\] ok', 'so \\[a_b \\cdot c_d\\] ok'],
+    ['a one-character span', 'take $x$ now', 'take $x$ now'],
+    ['TeX with angle brackets', '$a<b>c$', '$a<b>c$'],
+  ])('TeX with markdown-like characters stays literal (%s)', (_name, text, shown) => {
+    const el = show(text);
+    expect(el.textContent).toBe(shown);
+    expect(el.querySelector('em, strong, b')).toBeNull();
+  });
+
+  it('TeX inside inline code and fenced code is not escaped', () => {
+    const el = show('Use `$a_b\\,c$` and\n\n```\n$x_1\\,y$\n```\n\n~~~\n\\(z\\)\n~~~');
+    expect(Array.from(el.querySelectorAll('code'), (c) => c.textContent)).toEqual([
+      '$a_b\\,c$',
+      '$x_1\\,y$\n',
+      '\\(z\\)\n',
+    ]);
+  });
+
+  it('protectMath only escapes maths segments', () => {
+    expect(protectMath('a $b_c$ d `$e_f$` g')).toBe('a \\$b\\_c\\$ d `$e_f$` g');
+    expect(protectMath('$5 and $ 6 and no maths')).toBe('$5 and $ 6 and no maths');
+    expect(protectMath('```\n$a_b$')).toBe('```\n$a_b$');
+  });
+
+  it('safeHref allows only absolute http, https and mailto URLs', () => {
+    expect(safeHref('https://example.org')).toBe('https://example.org');
+    expect(safeHref('MAILTO:a@example.org')).toBe('MAILTO:a@example.org');
+    expect(safeHref(undefined)).toBeNull();
+    expect(safeHref('java\tscript:alert(1)')).toBeNull();
+    expect(safeHref('java\u200bscript:alert(1)')).toBeNull();
+    expect(safeHref('https://[bad')).toBeNull();
+    expect(safeHref('ftp://example.org')).toBeNull();
   });
 
   it('empty or blank text renders nothing', () => {
