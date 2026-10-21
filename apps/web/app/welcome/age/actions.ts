@@ -3,7 +3,7 @@
 // src/auth (age.ts), which checks the session, parses strictly, takes the notice version from the
 // server's own content, and sets the cookies. Next checks the Origin of server actions itself.
 import { redirect } from 'next/navigation';
-import { submitAgeAnswer } from '../../../src/auth';
+import { SIGN_IN_PATH, submitAgeAnswer } from '../../../src/auth';
 
 const GATE = '/welcome/age';
 
@@ -17,7 +17,7 @@ export async function answerAge(form: FormData): Promise<void> {
   const answer = { ...field(form, 'market'), ...field(form, 'birthYear') };
   const result = await submitAgeAnswer(answer);
   if ('error' in result) {
-    if (result.error.code === 'unauthorized') redirect('/api/auth/signin');
+    if (result.error.code === 'unauthorized') redirect(SIGN_IN_PATH);
     const market = encodeURIComponent(answer.market ?? '');
     redirect(`${GATE}?market=${market}&error=${result.error.code}`);
   }

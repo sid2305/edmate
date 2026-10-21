@@ -49,7 +49,9 @@ export interface RoleContext {
 type RouteHandler = (req: NextRequest, ctx?: unknown) => Promise<Response>;
 
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const SIGN_IN = '/api/auth/signin';
+
+/** The app's one sign-in page (task 9.1); every anonymous redirect lands here. */
+export const SIGN_IN_PATH = '/sign-in';
 
 function brand<H extends object>(handler: H, access: Access): Guarded<H> {
   return Object.defineProperty(handler, GUARD, { value: access, enumerable: false }) as Guarded<H>;
@@ -176,7 +178,7 @@ export function createGuard(guardDeps: () => GuardDeps, pageDeps: () => PageDeps
   ): Promise<Principal> {
     const page = pageDeps();
     const resolved = await resolvePrincipal(guardDeps(), await page.cookies());
-    if (!resolved) return page.redirect(SIGN_IN);
+    if (!resolved) return page.redirect(SIGN_IN_PATH);
     if (!roles.includes(resolved.principal.role)) return page.notFound();
     if (!cleared(resolved.status, options.clearance ?? 'age')) return page.redirect(AGE_GATE_PATH);
     return resolved.principal;

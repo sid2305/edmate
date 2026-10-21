@@ -7,7 +7,11 @@ packages:
 # pnpm is a root devDependency so Turborepo finds a `pnpm` binary without a global install;
 # its install script links the platform binary.
 # esbuild (via drizzle-kit, task 1.1) needs no install script: its platform binary is an optional dependency.
+# @swc/core and @parcel/watcher (via next-intl 4.14.9, task 9.1 fix round) need no install script either:
+# both ship prebuilt platform binaries as optional dependencies.
 allowBuilds:
   esbuild: false
   msgpackr-extract: false
+  "@swc/core": false
+  "@parcel/watcher": false
   pnpm: true
