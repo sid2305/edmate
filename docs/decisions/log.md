@@ -10,6 +10,58 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.8 merge: role-play engine (ADR-0013, frame@1.2.0, set@1.3.0, persona library) · decided by lead · risk: high
+- Decided: merge 5.8. ADR-0013 (role-play state: `personaPhase`, start, `/pause`, `stop`, debrief, ended) is accepted as built. `frame@1.2.0` and `set@1.3.0` ship with `reviewed_by: pending`, so they are not served until the human signs them (B-38). The persona library serves only signed templates. The ten `persona-roleplay-*` eval cases are signed by the lead (MVP first). A role-play control (start, `/pause`, `stop`) in an active role-play now goes ahead of the off_topic/meta redirect, after distress, entitlement and misuse.
+- Why: architect (opus), security-reviewer (sonnet), code-reviewer (sonnet) and typescript-reviewer (opus) all approve; the fix round's four findings are verified by the opus typescript-reviewer; no `packages/contracts` change; harness 5217, evals 1005 and content 503 tests pass. The open coverage-gate questions (B-37 q6 to q9, including `/pause` with extra text and `ended` turns) stay lead defaults until the human answers; follow-ups are in 5.8b.
+- risk: high (ADR, prompt-pack behaviour, pedagogy and the coverage-gate rule).
+
+Details (builder):
+
+Phase A to C:
+- **Role-play phases and `personaPhase`** — risk: high. The ADR-0013 §1 table: a stored `personaPhase?: 'paused' | 'ended'` plus the existing count and id; a start or persona switch opens question 1; `/pause` holds the question; `stop` goes straight to the debrief (lead default, pending B-37) and ends; the answer to question M' debriefs and ends; every later turn is `ended` until a new start; a follow-up question from the interviewer counts toward M. The move stays `ask` in every phase.
+- **Resume fix (intended change, every set)** — risk: medium. The turn after `/pause` no longer adds one: a legacy-frame session shows "question N of M" again on that turn where it used to show N + 1. A pre-5.8 trace of a resume turn re-decides to N.
+- **Post-stop count (intended change, every set)** — risk: medium. After a `stop` with fewer than M questions asked, every later turn is `ended` and keeps the count: a legacy-frame session keeps showing "question N of M" where it used to rise towards M. Pinned by `roleplay.legacy.test.ts`.
+- **Clamps on the numbers handed on** — risk: low. `total = M'`, pause/resume `N = clamp(before, 1, M')`, `answered = clamp(before − 1, 0, M')`; the saved count is never clamped down.
+- **`SKILL_OUTPUT_TOKENS.mock_interview = 350`** — risk: low. Applies to every persona turn (debrief room); the coach fallback and locked `no_persona` keep their budgets.
+- **`pedagogy/roleplay.ts`, not `src/roleplay/`** — risk: low. Keeps it under the `pedagogy/**` risk group; the empty `src/roleplay/.gitkeep` is left as it is.
+- **`RolePlayControl` lives in `roleplay.ts`**, re-exported by `skills.ts` — risk: low.
+- **Role-play turns skip the coverage gate except answers to question N > 1** — risk: medium. Lead default, pending B-37. `/pause`, `stop`, resume, debrief, ended and question-1 turns skip it, so `stop` always ends and a start never opens a teacher question; an answer turn still meets it. Recorded in ADR-0013 §1.
+- **An uncovered or locked-hit start still opens question 1** — risk: medium. Lead default, pending B-37. No material section is shown; the Phase C prose asks which topic to practise.
+- **`rolePlayStep` runs before the gate and is handed into `skillStep`** — risk: low. One computation per turn; `skillStep` still computes it when not given.
+- **A compose role-play turn is `policy.reason === 'mock_interview'` with a new-form frame** — risk: low. Closed moves keep their own move lines.
+- **Legacy count slots optional in the slot table, required by the form check** — risk: low.
+- **`FrozenMap` shared by the prompt-pack and persona libraries** — risk: low. Neutral error text.
+
+- **`frame@1.2.0` and `set@1.3.0` (Phase C)** — risk: high. Prompt-pack behaviour change under ADR-0013: the new persona form and the seven role-play sections, `reviewed_by: pending`; sets 1.0.0 to 1.2.0 compose byte-identically (the snapshot file only grew).
+- **`readPersonaLibrary`: signed-only, highest version per id** — risk: high. "Signed" is `reviewed_by` not `pending` after trim and lower-case; an id with no signed version is left out; any directory issue or duplicate throws.
+- **Persona version order is semver precedence** — risk: low. Numeric parts, a release above its prereleases, build metadata ignored, so `1.0.0` and `1.0.0+b` count as a duplicate.
+- **A template whose file slug differs from its `id` is an issue** — risk: low. Lead answer; the persona test fixtures' ids were renamed to match their files.
+- **Role-play snapshots only for new-form sets** — risk: low. Sets 1.1.0 and 1.2.0 keep their suites and entries; 1.3.0 adds 16 role-play cases (8 per persona).
+
+Phase D (cases):
+- **`reviewed_by: pending` on all ten new cases, not flipped here** — risk: low. Matches the plan's Phase D text and the 3.11e flow; `src/suites.test.ts`'s real-case check (4.0c, on by default) therefore fails until the lead reads and flips each to `lead`, same as every other pending suite seed. Flagged here rather than silently left for the lead to discover.
+- **`package: paid` on all ten** — risk: low. Neither demo package (`free.yaml`, `paid.yaml`) lists `mock_interview` in its skills yet (5.8a wiring is separate); `paid` was picked for consistency with the `feedback` suite's cases, which are also gated on a skill not yet read back by `suites.test.ts`'s package check (it only checks the name is a known demo package, not skill membership).
+- **No `packages/evals/src/rolePlayFixtures.test.ts` in this part** — risk: low. The prompt scoped this hand-off to the eval cases only ("Phase D, part 1"); the fixtures test (plan, Phase D) is left to a follow-up pass. `runner.ts`, `schema.ts` and `suites.ts` were not touched; the schema already supports everything the cases need (`skill`, `persona`, `expect.judge`/`must_not_contain`).
+
+Phase D (fixtures test):
+- **In persona eval cases, turn 0 is the start** (risk: low). The case schema has no turn `kind`, and the turn-level `skill: mock_interview` on every turn only selects the skill (`selectSkill`). It never marks a start: in the harness a start is a `skill_action` turn (`rolePlayControl`), and answers are `message` turns. The runner passes `turnIndex` to the agent, so an eval agent (CLI eval wiring, 5.8a) sends turn 0 as `skill_action` and every later turn as `message`. The fixtures test does the same. No schema or runner change was needed.
+- **The test mirrors `rolePlayControl` locally** (risk: low; superseded in fix round 1: now exported and imported). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
+- **`mock_interview` is added to the paid entitlement in the test** (risk: low). `content/demo-teacher/packages/paid.yaml` does not list `mock_interview` yet (Phase D part 1 decision; 5.8a wiring). A live `edmate eval` run of these cases on the paid package would therefore not reach the role-play until the package lists the skill.
+
+Fix round 1:
+- **Misuse stays ahead of a role-play control (risk: medium)** — `/pause` may be followed by any text, so a control word must never carry a misuse turn past its redirect. A bare "stop" labelled misuse therefore does not stop the role-play; the next turn can.
+- **Only an active role-play lets a control skip the meta/off_topic redirect (risk: low)** — Active means the persona id matches and the stored phase is not `ended`. A start with no active role-play that the router labels meta or off_topic still redirects (unchanged).
+- **The are-you-human fixture keeps `on_task` plus a separate labelled test (risk: low)** — The per-case replay checks the composed role-play state; the real routed outcome is pinned in its own test, so the eval case's meaning is unchanged.
+
+---
+
+### 21 Oct 2026 · 5.8 wontfix: two LOW findings in packages/harness/src/pedagogy/compose.ts · decided by lead · risk: low
+- Decided: leave `packages/harness/src/pedagogy/compose.ts` as it is for two LOW findings: the legacy M is not clamped to PERSONA_QUESTIONS_MAX (legacy sets must compose byte-identically; noted in ADR-0013 §5), and `rolePlayTurn` also checks `mode === 'mock_interview'` (a no-op, since `composeMode` returns it only when the reason is `mock_interview`).
+- Why: neither changes behaviour, and changing the first would break the byte-identical legacy snapshots.
+- risk: low.
+
+---
+
 ### 21 Oct 2026 · 6.2 merge: rebuildMastery and atomic applyEvidence in packages/db/src/repositories · decided by lead · risk: high
 - Decided: merge 6.2. rebuildMastery replays a scope's evidence in one locked transaction. applyEvidence now appends and folds in one transaction (appendAndFold), so a rebuild can't double-count an event. The lock order stays topics then learner_profiles.
 - Why: four reviewers approved. The one HIGH (the two-transaction race) is fixed and verified by typescript-reviewer, with a concurrent race test. The lock-held-over-long-replay MEDIUM is deferred to 6.2a: no operational rebuild trigger exists at pilot scale.

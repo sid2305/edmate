@@ -1471,10 +1471,33 @@ tasks:
   - '3.11'
   - '5.5'
   - M3
-  status: review
+  status: done
   risk: risky
   branch: m5/5.8-roleplay
-  model: plan:opus build:opus x3 eval-author:sonnet
+  model: plan:opus build:opus x5 pedagogy-author:opus eval-author:sonnet review:architect-opus ts-opus x2 security-sonnet code-sonnet
+  metrics:
+    tool_calls: 1082
+    tokens_in: 3490
+    tokens_out: 292222
+    cache_read_tokens: 100279752
+    wall_time_seconds: 5506
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 20
+      by_severity:
+        HIGH: 1
+        MEDIUM: 14
+        LOW: 5
+      by_status:
+        fixed: 14
+        open: 0
+        deferred: 4
+        wontfix: 2
+    human_questions: 9
 - id: '5.9'
   milestone: M5
   title: Revision skill
@@ -2205,7 +2228,7 @@ tasks:
   accept: an unmatched verdict id appears in the report; a missing file and a bad YAML file give different messages; no absolute path in either loader's error text; evals tests green
   deps:
   - '7.1'
-  status: running
+  status: review
   branch: m7/7.1a-calibration-followups
   model: plan:lead build:sonnet
 - id: 6.3a
@@ -2246,7 +2269,8 @@ tasks:
   model: null
 - id: 6.3b
   milestone: M13
-  title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes re-checks tags against the teacher''s list or the contract caps mistakes.tag length (contracts change needs an ADR)'
+  title: '6.3 review follow-ups: a concurrent applyMistakes test (Promise.all on one tag, assert the summed count, like 6.2''s race test); cap the patch length and the stored mistakes array; applyMistakes
+    re-checks tags against the teacher''s list or the contract caps mistakes.tag length (contracts change needs an ADR)'
   accept: race test green; caps tested; any contracts change has its ADR
   deps:
   - '6.3'
