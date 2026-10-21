@@ -170,25 +170,45 @@ describe('draftOutline', () => {
   it('drafts independent modules in parallel, keeping output order equal to input order', async () => {
     const modules = DEMO_MODULES.map((m) => demoModuleInput(m.id, m.title));
     const resolveOrder: string[] = [];
-    // The second module's call resolves first; output order must still match input order.
+    // No timers: each module's reply is a deferred promise, resolved by this test in an order
+    // chosen explicitly (second module first), never left to the event loop under load. Replies
+    // are matched to a module by id found in the request content, never by call order.
+    const deferred = new Map<string, { resolve: (value: unknown) => void }>();
+    const pending = new Map(
+      modules.map(
+        (m) =>
+          [
+            m.moduleId,
+            new Promise<unknown>((resolve) => deferred.set(m.moduleId, { resolve })),
+          ] as const,
+      ),
+    );
     const gateway = {
       generateObject: <T>(req: { messages: readonly { content: string }[] }): Promise<T> => {
         const module = modules.find((m) =>
           m.chunks.some((c) => req.messages.some((msg) => msg.content.includes(c.id))),
         )!;
-        const delayMs = module.moduleId === modules[0]!.moduleId ? 10 : 0;
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolveOrder.push(module.moduleId);
-            resolve({
-              topics: [{ topic: `${module.title}: part one`, chunkIds: [module.chunks[0]!.id] }],
-            } as T);
-          }, delayMs);
+        return pending.get(module.moduleId)!.then((v) => {
+          resolveOrder.push(module.moduleId);
+          return v as T;
         });
       },
     };
 
-    const outline = await draftOutline(gateway, modules);
+    const outlinePromise = draftOutline(gateway, modules);
+    // Resolve the second module's reply first; the first module's reply resolves after.
+    deferred.get(modules[1]!.moduleId)!.resolve({
+      topics: [
+        { topic: `${modules[1]!.title}: part one`, chunkIds: [modules[1]!.chunks[0]!.id] },
+      ],
+    });
+    deferred.get(modules[0]!.moduleId)!.resolve({
+      topics: [
+        { topic: `${modules[0]!.title}: part one`, chunkIds: [modules[0]!.chunks[0]!.id] },
+      ],
+    });
+
+    const outline = await outlinePromise;
 
     expect(resolveOrder[0]).toBe(modules[1]!.moduleId);
     expect(outline.modules.map((m) => m.moduleId)).toEqual(modules.map((m) => m.moduleId));
