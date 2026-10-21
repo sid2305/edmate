@@ -1158,8 +1158,8 @@ tasks:
   model: build:opus-5.5/medium review:opus+sonnet
 - id: 4.6d
   milestone: M13
-  title: 'lockedLeak follow-ups (4.6c review MEDIUMs, older gaps): drop default-ignorable combining marks (variation selectors U+FE00-FE0F, U+034F) when folding text and count \\p{M} as part of the
-    letter in the in-word emphasis check, so rep\uFE0Featso and l\u034F**o**op still hit; decode invisible named entities (&shy;, &ZeroWidthSpace;, &NoBreak; and the like) or list them as known misses'
+  title: 'lockedLeak follow-ups (4.6c review MEDIUMs, older gaps): drop default-ignorable combining marks (variation selectors U+FE00-FE0F, U+034F) when folding text and count \\p{M} as part of the letter
+    in the in-word emphasis check, so rep\uFE0Featso and l\u034F**o**op still hit; decode invisible named entities (&shy;, &ZeroWidthSpace;, &NoBreak; and the like) or list them as known misses'
   accept: each form has a unit test and a suite-wide fixture form that fails when the fix is reverted; no new false trips on prose or code; the scan stays linear
   deps:
   - 4.6c
@@ -1813,8 +1813,9 @@ tasks:
   accept: lists, bold, tables and code render; raw HTML and images in a reply render as text or not at all; no-raw-html test still passes.
   deps:
   - '9.4'
-  status: todo
-  branch: null
+  status: running
+  branch: m9/9.4b-chat-markdown
+  model: plan:sonnet build:opus-5.5/medium
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
