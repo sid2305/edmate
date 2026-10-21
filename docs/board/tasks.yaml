@@ -1676,6 +1676,14 @@ tasks:
   status: running
   branch: m9/9.1-app-shell
   model: plan:sonnet build:sonnet
+- id: 9.1a
+  milestone: M13
+  title: 'Lighthouse accessibility at 360 px on the signed-in pages (/home, /teacher) against a disposable stack, and a Lighthouse CI job (9.1 follow-up; /sign-in scored 100)'
+  accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
+  deps:
+  - '9.1'
+  status: todo
+  branch: null
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
