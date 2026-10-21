@@ -336,9 +336,9 @@ tasks:
   deps:
   - '0.15'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: review
+  branch: m0/0.17-agent-limits
+  model: plan:sonnet build:sonnet
 - id: '0.18'
   milestone: M7
   title: 'Agent factory, registry (human decision 21 Oct 2026): each .claude/agents/*.md file gains a short registry block, known limitations, typical misses, average cost per run, last reviewed date, and
@@ -1425,10 +1425,10 @@ tasks:
   - '3.11'
   - '5.5'
   - M3
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: null
+  branch: m5/5.8-roleplay
+  model: plan:sonnet arch:opus build:opus(A)
 - id: '5.9'
   milestone: M5
   title: Revision skill
@@ -1640,9 +1640,9 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: running
+  status: review
   branch: m7/7.7-trace-health
-  model: plan:sonnet build:sonnet(A)
+  model: plan:sonnet build:sonnet(A,B)
 - id: '7.8'
   milestone: M7
   title: 'Teaching scorecard: per-agent pass rates for hints-before-answers, locked content and accuracy, published with each agent version'
@@ -1975,7 +1975,24 @@ tasks:
   accept: readPersonaLibrary is wired into apps/cli (chat and eval) and the apps/web runtime as deps.personas; every role-play message turn sends skill 'mock_interview' (an integration test shows a role-play
     answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged
   deps:
-  - 5.8
+  - '5.8'
+  status: todo
+  branch: null
+- id: 7.7a
+  milestone: M13
+  title: '7.7 follow-ups: a health report surface (CLI or staff console) over listForTeacherSince + computeHealthMetrics; a (session_id, created_at) composite index on turn_traces once real traffic is known;
+    negative-path tests for listForTeacherSince limit and since'
+  accept: the report shows p50/p95 latency (incl. first token), error and guard rates for one teacher over a window; the index lands in a migration; invalid limit/since tests fail closed
+  deps:
+  - '7.7'
+  status: todo
+  branch: null
+- id: 5.11b
+  milestone: M7
+  title: 'Flaky ingest test (CI on PR #98): draftOutline ''drafts independent modules in parallel, keeping output order equal to input order'' got ''values-variables'' instead of ''conditions''; the scripted
+    gateway maps replies by a 10 ms vs 0 ms setTimeout race. Make it deterministic (resolve by module id or a controlled deferred, not timers) and check the drafter really keeps input order'
+  accept: the test passes 50 runs in a row under load (e.g. --repeat or a loop); no timer race decides which reply a module gets; production drafter order is proven, not assumed
+  deps: []
   status: todo
   branch: null
 - id: 9.4c
