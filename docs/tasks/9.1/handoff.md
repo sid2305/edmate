@@ -207,7 +207,7 @@ emulation flags above replace it) against a locally built Chrome.app, headless:
 
 ## Decisions
 
-### 20 Oct 2026 · `apps/web/src/auth/**` touched in Phase B · decided by tdd-guide
+### 20 Oct 2026 · `apps/web/src/auth/**` touched in Phase B · decided by tdd-guide · risk: high
 Decided: `src/auth/guard.ts` and `src/auth/index.ts` are both edited in this phase (the
 `SIGN_IN_PATH` rename and the new `currentPrincipal()` soft read), matching the plan's own call-out
 and `.claude/skills/merge-gate/risk-paths.txt`'s existing `apps/web/src/auth/**` entry.
@@ -216,7 +216,7 @@ was weakened — `requireRole`'s only behaviour change is the string it redirect
 `currentPrincipal()` is explicitly not security-enforcing (`requireRole` still gates `/home` and
 `/teacher` in Phase C). `src/auth/**`'s 100%-lines/functions/statements, 90%-branches coverage
 floor holds (100% branches, measured).
-risk: high (this group's reviewers: security-reviewer; the lead finalises).
+risk: high. security-reviewer (opus) ran on the branch and approved; the lead approves the merge.
 
 ### 20 Oct 2026 · next-intl's server `getTranslations` is mocked in jsdom component tests · decided by tdd-guide
 Decided: `app/sign-in/page.test.tsx` mocks `next-intl/server`'s `getTranslations` to read
@@ -292,10 +292,19 @@ own types (written for Jest) don't provide. The plan asked for "an axe runner fo
 `vitest-axe` by name.
 risk: low.
 
+### 20 Oct 2026 · next-intl moves to 4.14.9, replacing the 4.4.0 pin · decided by lead
+Decided: pin `next-intl@4.14.9` and set `@swc/core` and `@parcel/watcher` to `false` in
+`pnpm-workspace.yaml`'s `allowBuilds`, replacing the 4.4.0 pin above.
+Why: 4.4.0 carries two advisories (an open redirect and prototype pollution, both fixed in 4.9.2).
+Neither is reachable today, but the open redirect turns live once a second market enables
+next-intl routing. Two extra prebuilt binaries with their install scripts blocked cost less than
+an old version with known advisories. The build, typecheck and all 363 web tests pass on 4.14.9.
+risk: low.
+
 ## Fix round
 
-Security review (HIGH): `apps/web/package.json` pinned `next-intl@4.4.0`, which has a known
-advisory fixed in 4.9.2.
+Security review (MEDIUM, fixed by the lead's choice): `apps/web/package.json` pinned
+`next-intl@4.4.0`, which has two advisories (GHSA-8f24-v5vv-gm5j, GHSA-4c35-wcg5-mm9h) fixed in 4.9.2.
 
 - Pinned `next-intl` to `4.14.9` (latest 4.x patch), same exact-pin style.
 - `corepack pnpm install` updated `pnpm-lock.yaml`. This pulled in `@swc/core` and
