@@ -53,6 +53,11 @@ No `packages/contracts` change (`TurnTraceSchema.steps[].name` is already `z.str
 
 ## Decisions
 
+### 21 Oct 2026 · 7.7 turn traces and health metrics (repositories, risky path) · decided by lead · risk: high
+- Decided: merge 7.7. Traces record first-token time (TraceBuilder.markElapsed, first token only); computeHealthMetrics gives p50/p95 latency per step and for first token, plus error and guard rates; turnTracesRepo.listForTeacherSince reads one teacher's traces over a window (join on sessions.teacher_id, limit 1–200). No new index and no report surface yet (7.7a). trace.ts:24 single literal key for markElapsed is wontfix until a second derived metric exists.
+- Why: the plan's acceptance is met; security-reviewer and database-reviewer approved the new risky repository read with an isolation CASE proving another teacher's traces never appear; code and TS reviewers approved.
+- risk: high
+
 ### 21 Oct 2026 · 7.7 first-token capture point · decided by tdd-guide · risk: low
 - Decided: `firstToken` is marked in `Turn.emitter()` on the first `token`-type event only (not
   `skill`), using elapsed ms from `startedAtMs` (set at the very first line of `run()`) to
