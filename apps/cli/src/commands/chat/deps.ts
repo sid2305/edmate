@@ -57,6 +57,23 @@ export function systemClock(): Clock {
   };
 }
 
+/**
+ * A real clock that runs `factor` times slower: `sleep(ms)` waits `ms * factor` real ms and
+ * `now()` advances by 1 ms per `factor` real ms (from the moment it was made). Both must slow
+ * together: the harness races step timeouts on `sleep` and also subtracts `now()` deltas from
+ * budgets (preGuard gets `400 - scrub ms`), so scaling only `sleep` still fails under load. For
+ * tests only (task 3.9b): on a loaded CI runner a cold first turn overran preGuard's 400 ms budget
+ * on the real clock and ended in an `error` event; production keeps `systemClock()`.
+ */
+export function slackClock(factor: number): Clock {
+  const real = systemClock();
+  const origin = real.now();
+  return {
+    now: () => origin + Math.floor((real.now() - origin) / factor),
+    sleep: (ms, cancel) => real.sleep(ms * factor, cancel),
+  };
+}
+
 /** Real ids: `crypto.randomUUID()`, prefixed by kind (contracts ids allow `_`). */
 export function systemIds(): IdSource {
   return { next: (kind: IdKind) => `${kind}_${randomUUID()}` };
@@ -109,6 +126,8 @@ export interface ChatDepsOptions extends ChatWorldOptions {
    * real model call). `createChatGateway`/`ANTHROPIC_API_KEY` are skipped entirely.
    */
   gateway?: ModelGateway;
+  /** Replaces the real clock (tests pass `slackClock`, task 3.9b). Defaults to `systemClock()`. */
+  clock?: Clock;
 }
 
 export interface ChatSetup {
@@ -129,7 +148,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
   );
   const { library: promptPacks } = loadChatPromptPacks();
 
-  const clock = systemClock();
+  const clock = opts.clock ?? systemClock();
   const usage = memoryUsageMeter();
   const prices = loadBundledPrices();
 

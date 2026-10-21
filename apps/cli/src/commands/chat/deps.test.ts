@@ -6,7 +6,7 @@
 // `adviceJudgeGateway` test wrappers (the same technique `testDeps()` uses), so only the turn's one
 // real reply needs a scripted stream entry.
 import type { TurnEvent, TurnInput } from '@edmate/contracts';
-import { defaultSteps, runTurn } from '@edmate/harness';
+import { cancelSource, defaultSteps, runTurn } from '@edmate/harness';
 import {
   adviceJudgeGateway,
   CLEAN_ADVICE_VERDICT,
@@ -16,7 +16,11 @@ import {
 } from '@edmate/harness/testing';
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { buildChatDeps, memoryProfileStore } from './deps.js';
+import { buildChatDeps, memoryProfileStore, slackClock } from './deps.js';
+
+// Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
+// clock and ended in an `error` event. Tests widen every step budget 10x; production is unchanged.
+const STEP_BUDGET_SLACK = 10;
 
 const say = (text: string) => ({ type: 'text' as const, text });
 const used = {
@@ -68,6 +72,7 @@ describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
         packageId: 'free',
         source: 'teacher_preview',
         gateway,
+        clock: slackClock(STEP_BUDGET_SLACK),
       });
 
       const input: TurnInput = {
@@ -84,7 +89,11 @@ describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
       const events = await collect(run.events);
       const result = await run.finished;
 
-      expect(events.some((e) => e.type === 'error')).toBe(false);
+      // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
+      expect(
+        events.filter((e) => e.type === 'error'),
+        JSON.stringify(result.trace?.steps),
+      ).toEqual([]);
       expect(events.at(-1)?.type).toBe('done');
       expect(result.background).toEqual([]);
       expect(result.trace?.steps.some((s) => s.name === 'generate' && s.outcome === 'ok')).toBe(true);
@@ -100,6 +109,7 @@ describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
       packageId: 'free',
       source: 'teacher_preview',
       gateway,
+      clock: slackClock(STEP_BUDGET_SLACK),
     });
 
     const input: TurnInput = {
@@ -134,6 +144,30 @@ describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
     });
     expect(tg.metered).toBe(true);
     expect(typeof tg.gateway.stream).toBe('function');
+  });
+});
+
+describe('slackClock (3.9b)', () => {
+  it('slows sleep and now() together by the factor, and still cancels early', async () => {
+    const clock = slackClock(10);
+    expect(Math.abs(clock.now() - Date.now())).toBeLessThan(1000);
+
+    const t0 = Date.now();
+    const c0 = clock.now();
+    await clock.sleep(5);
+    const real = Date.now() - t0;
+    expect(real).toBeGreaterThanOrEqual(45);
+    // now() moved about a tenth of the real time: a budget minus a now() delta stays consistent.
+    const virtual = clock.now() - c0;
+    expect(virtual).toBeGreaterThanOrEqual(4);
+    expect(virtual).toBeLessThanOrEqual(Math.ceil(real / 10) + 1);
+
+    const source = cancelSource();
+    const t1 = Date.now();
+    const slept = clock.sleep(60_000, source.token);
+    source.cancel();
+    await slept;
+    expect(Date.now() - t1).toBeLessThan(1000);
   });
 });
 
