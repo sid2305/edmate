@@ -307,12 +307,14 @@ tasks:
   branch: m0/0.16-agent-metrics
   model: plan:sonnet build:sonnet fix:opus review:sonnet
   metrics:
-    tool_calls: 0
-    tokens_in: 0
-    tokens_out: 0
-    cache_read_tokens: 0
-    wall_time_seconds: 0
-    models: []
+    tool_calls: 329
+    tokens_in: 1064
+    tokens_out: 63195
+    cache_read_tokens: 26726032
+    wall_time_seconds: 5044
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
     builder_phases: 1
     fix_rounds: 1
     findings:
@@ -1644,12 +1646,14 @@ tasks:
   branch: m7/7.7-trace-health
   model: plan:sonnet build:sonnet(A,B) review:sonnet x4
   metrics:
-    tool_calls: 0
-    tokens_in: 0
-    tokens_out: 0
-    cache_read_tokens: 0
-    wall_time_seconds: 0
-    models: []
+    tool_calls: 298
+    tokens_in: 988
+    tokens_out: 73413
+    cache_read_tokens: 22533759
+    wall_time_seconds: 1360
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
     builder_phases: 2
     fix_rounds: 0
     findings:
@@ -2039,12 +2043,14 @@ tasks:
   branch: m5/5.11b-outline-flake
   model: plan:lead build:sonnet review:sonnet
   metrics:
-    tool_calls: 0
-    tokens_in: 0
-    tokens_out: 0
-    cache_read_tokens: 0
-    wall_time_seconds: 0
-    models: []
+    tool_calls: 61
+    tokens_in: 212
+    tokens_out: 6657
+    cache_read_tokens: 3537335
+    wall_time_seconds: 277
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
     builder_phases: 1
     fix_rounds: 0
     findings:
