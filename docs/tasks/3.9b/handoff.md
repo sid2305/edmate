@@ -63,3 +63,10 @@ first attempt that scaled only `sleep`.
   Scaling only `sleep` was tried and still failed under load.
 - Factor 10: it gives preGuard 4 s against a worst-case cold cost of about 2 s seen under extreme
   overload, while a genuinely hung step still fails inside the tests' 20 s timeout.
+
+### 21 Oct 2026 · 3.9b review LOWs left as they are · decided by lead · risk: low
+
+- Decided: the two review LOWs are wontfix: the 10x slack in apps/cli/src/commands/chat.test.ts (and the
+  other chat tests) stays at 10, and the loose timing bounds in the slackClock unit test in
+  apps/cli/src/commands/chat/deps.test.ts stay loose on purpose.
+- Why: both are deliberate tolerance for CI timing; the cold-start cost itself is follow-up 3.9c.
