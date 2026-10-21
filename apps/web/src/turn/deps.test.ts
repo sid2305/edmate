@@ -30,6 +30,7 @@ function turnProcess(log = vi.fn()): TurnProcess {
     factories: { anthropic: () => ({ capabilities: {} }) as never },
     prices: loadBundledPrices(),
     promptPacks: { get: () => undefined } as unknown as TurnProcess['promptPacks'],
+    personas: new Map() as TurnProcess['personas'],
     ...ports,
     clock,
     ids: systemIds(),
@@ -83,6 +84,11 @@ describe('turnDepsFor', () => {
     });
     expect(tg.metered).toBe(true);
     expect(typeof tg.gateway.stream).toBe('function');
+  });
+
+  it('passes the process persona library through as deps.personas (5.8a)', () => {
+    const p = turnProcess();
+    expect(turnDepsFor(p, scope).personas).toBe(p.personas);
   });
 
   it('prices usage from the bundled table', () => {

@@ -11,7 +11,9 @@ import {
   CHAT_CONTENT_DIR,
   CHAT_IDS,
   loadChatContent,
+  CHAT_PERSONAS_DIR,
   loadChatLocalePack,
+  loadChatPersonas,
   loadChatPromptPacks,
 } from './world.js';
 
@@ -29,6 +31,20 @@ describe('loadChatPromptPacks', () => {
     const { library, version, source } = loadChatPromptPacks();
     expect(source).toBe('real');
     expect(library.get(version)).toBeDefined();
+  });
+});
+
+describe('loadChatPersonas (5.8a)', () => {
+  it('reads the real signed personas from content/skills/mock_interview', () => {
+    expect(CHAT_PERSONAS_DIR.replaceAll('\\', '/')).toMatch(/content\/skills\/mock_interview\/?$/);
+    const { personas, source } = loadChatPersonas();
+    expect(source).toBe('real');
+    expect([...(personas?.keys() ?? [])].sort()).toEqual(['job-interview', 'viva']);
+    expect(personas?.get('job-interview')?.endAfterQuestions).toBe(6);
+  });
+
+  it('gives no personas (role-play off) when the directory does not load', () => {
+    expect(loadChatPersonas('/no/such/dir')).toEqual({ personas: undefined, source: 'none' });
   });
 });
 

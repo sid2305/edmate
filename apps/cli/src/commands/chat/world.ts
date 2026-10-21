@@ -8,6 +8,7 @@ import {
   loadDemoTeacherContent,
   loadLocalePacks,
   pickLocalePack,
+  readPersonaLibrary,
   readPromptPackLibrary,
   type DemoTeacherContent,
 } from '@edmate/content';
@@ -30,7 +31,7 @@ import {
   type AccessWorld,
   type MemoryAgent,
 } from '@edmate/harness/testing';
-import type { PromptPackLibrary } from '@edmate/harness';
+import type { PersonaLibrary, PromptPackLibrary } from '@edmate/harness';
 
 /** Repo-root-relative content directories the CLI reads by default (read-only). */
 export const CHAT_CONTENT_DIR = fileURLToPath(
@@ -41,6 +42,10 @@ export const CHAT_LOCALES_DIR = fileURLToPath(
 );
 export const CHAT_PROMPT_PACKS_DIR = fileURLToPath(
   new URL('../../../../../content/prompt-packs/', import.meta.url),
+);
+
+export const CHAT_PERSONAS_DIR = fileURLToPath(
+  new URL('../../../../../content/skills/mock_interview/', import.meta.url),
 );
 
 /** Fixed ids the CLI's one-agent, one-teacher demo world owns. */
@@ -100,6 +105,23 @@ export function loadChatPromptPacks(dir: string = CHAT_PROMPT_PACKS_DIR): {
       version: FIXTURE_PROMPT_PACK_VERSION,
       source: 'fixture',
     };
+  }
+}
+
+/**
+ * The real signed persona library (`content/skills/mock_interview`, task 5.8a), or none when it
+ * fails to load: then no turn has a persona and a role-play falls back to coach (the harness's
+ * `resolvePersona`). Same rule as the prompt packs (3.9 lead answer Q2: try real, record which);
+ * there are no fixture personas, so the fallback is `none`.
+ */
+export function loadChatPersonas(dir: string = CHAT_PERSONAS_DIR): {
+  personas: PersonaLibrary | undefined;
+  source: 'real' | 'none';
+} {
+  try {
+    return { personas: readPersonaLibrary(dir), source: 'real' };
+  } catch {
+    return { personas: undefined, source: 'none' };
   }
 }
 

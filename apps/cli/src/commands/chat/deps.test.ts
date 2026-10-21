@@ -59,6 +59,23 @@ async function collect(events: AsyncIterable<TurnEvent>): Promise<TurnEvent[]> {
   return out;
 }
 
+describe('buildChatDeps personas (5.8a)', () => {
+  it.each(['teacher_preview', 'eval'] as const)(
+    'wires the real persona library as deps.personas for --source %s',
+    async (source) => {
+      const setup = await buildChatDeps({
+        env: {},
+        market: 'global',
+        packageId: 'paid',
+        source,
+        gateway: scriptedChatGateway(),
+      });
+      expect([...(setup.deps.personas?.keys() ?? [])].sort()).toEqual(['job-interview', 'viva']);
+      expect(setup.personasSource).toBe('real');
+    },
+  );
+});
+
 describe('buildChatDeps + defaultSteps (Phase A acceptance)', () => {
   it(
     'runs one teacher_preview turn over the real demo-teacher content to done',
