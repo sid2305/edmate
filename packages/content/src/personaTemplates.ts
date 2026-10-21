@@ -41,7 +41,7 @@ const RawPersonaTemplateSchema = z.strictObject({
   end_after_questions: z.coerce.number().pipe(PersonaSchema.shape.endAfterQuestions),
   version: Semver,
   kind: z.literal('persona'),
-  reviewed_by: z.string().min(1),
+  reviewed_by: z.string().trim().min(1),
 });
 
 function listFiles(dir: string): string[] {

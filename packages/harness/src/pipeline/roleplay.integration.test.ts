@@ -5,6 +5,7 @@
 // never counts. The grounding cases run the real postGuard with the fake overlap judge.
 import {
   type EntitlementStore,
+  type Intent,
   type ModelRequest,
   type ModelChunk,
   type Persona,
@@ -66,6 +67,8 @@ interface WorldOpts {
   grounded?: boolean;
   /** The model's main replies, in turn order (default: a neutral question each turn). */
   replies?: string[];
+  /** The router's label for a turn's text (default on_task). */
+  intentFor?: (text: string) => Intent;
 }
 
 /** One session: `turn(input)` runs a turn and saves its help state for the next. */
@@ -134,6 +137,18 @@ function session(o: WorldOpts) {
     decide,
     generate,
     ...(o.grounded === true ? { postGuard } : {}),
+    ...(o.intentFor === undefined
+      ? {}
+      : {
+          route: {
+            run: (env: { input: TurnInput }) =>
+              Promise.resolve({
+                intent: o.intentFor?.(env.input.text ?? '') ?? 'on_task',
+                attempt: 'none' as const,
+                usage: [],
+              }),
+          },
+        }),
   });
 
   async function turn(input: Partial<TurnInput>) {
@@ -251,6 +266,46 @@ describe('role-play through the pipeline (5.8)', () => {
     const stopped = await s.turn({ text: 'Stop.' });
     expect(stateLine(stopped.system)).toMatch(/^\[\[ROLEPLAY-STOPPED\]\]/u);
     expect(stopped.help.personaPhase).toBe('ended');
+  });
+});
+
+describe('role-play controls the router does not label on_task (5.8 fix round 1)', () => {
+  it.each(['meta', 'off_topic'] as const)(
+    'a bare /pause then a bare stop routed %s still pause and stop the role-play',
+    async (label) => {
+      const s = session({
+        covered: true,
+        intentFor: (text) => (text === '/pause' || text === 'stop' ? label : 'on_task'),
+      });
+      await s.turn(START);
+      await s.turn({ text: 'First answer.' });
+      const paused = await s.turn({ text: '/pause' });
+      expect(paused.record?.decision?.move).toBe('ask');
+      expect(stateLine(paused.system)).toBe(
+        '[[ROLEPLAY-PAUSE]] Step out and coach briefly; resume at question 2 of 5.',
+      );
+      expect(paused.help.personaPhase).toBe('paused');
+      const stopped = await s.turn({ text: 'stop' });
+      expect(stateLine(stopped.system)).toBe(
+        '[[ROLEPLAY-STOPPED]] The student stopped: debrief now on the 1 answered questions.',
+      );
+      expect(stopped.help.personaPhase).toBe('ended');
+    },
+  );
+
+  it('a stop the router flags as distress gets the distress handling, not the role-play stop', async () => {
+    const s = session({
+      covered: true,
+      intentFor: (text) => (text === 'stop' ? 'distress' : 'on_task'),
+    });
+    await s.turn(START);
+    const a1 = await s.turn({ text: 'First answer.' });
+    const before = a1.help;
+    const stopped = await s.turn({ text: 'stop' });
+    expect(stopped.record).toMatchObject({ outcome: 'escalated', intent: 'distress' });
+    expect(stopped.system).toBe('');
+    expect(stopped.help).toEqual(before);
+    expect(stopped.help.personaPhase).toBeUndefined();
   });
 });
 

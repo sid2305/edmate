@@ -165,7 +165,35 @@ packages/evals: EDMATE_ALLOW_PENDING=1 corepack pnpm vitest run src/suites.test.
   structural problem once the reviewer gate is set aside.
 ```
 
+### Fix round 1 (typescript-reviewer findings)
+
+Status: DONE. Branch `m5/5.8-roleplay` (built on `work-5.8f`).
+
+### Changes
+- **Control before the intent redirect** (`pedagogy/policy.ts`). Rule order is now: distress, entitlement, misuse, then off_topic/meta, except a role-play control (start, `/pause`, `stop`) in an active role-play (persona id matches, phase not ended), which goes on to `rolePlayStep`. Distress is still escalated by the runner before decide, and `decidePolicy` still closes on distress first. ADR-0013 §1 "Rule order" updated in one paragraph.
+- **Shared `rolePlayControl`**: exported from `pedagogy/index.ts` (so from `@edmate/harness`); the evals fixtures test imports it, and the hand copy `controlOf` and its self-test are gone.
+- **Are-you-human turn**: the main per-case replay stays `on_task` with a comment that it checks the composed role-play state only; a new test replays that turn with the router's label (`meta`) and pins the real outcome: `redirect`/`meta`, no role-play state line, no `[[MOVE-ROLEPLAY]]`, the safety line "not a human; if asked, say so plainly" present.
+- **`reviewed_by: "  "` no longer counts as signed** (`personaTemplates.ts`: `z.string().trim().min(1)`), plus a test.
+
+### Tests (acceptance evidence)
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/evals --filter=@edmate/content` → `Tasks: 17 successful, 17 total`; harness 5217 passed, evals 1005 passed, content 503 passed.
+- New, written red first: `policy.test.ts` meta/off_topic-routed `stop` and `/pause` change the phase (4 cases); distress and misuse still close before stop/pause/start; meta/off_topic with no control or no active role-play still redirect. `roleplay.integration.test.ts`: a bare `/pause` then a bare `stop` routed meta and off_topic pause and stop through the real pipeline; a `stop` the router flags as distress is escalated (outcome `escalated`, no main-model call, help state unchanged). `personaTemplates.test.ts`: blank `reviewed_by`. `rolePlayFixtures.test.ts`: the are-you-human turn with the meta label.
+- The existing distress tests (policy, runner, fallback) all pass unchanged.
+
+### Judge lines vs real behaviour
+- `persona-roleplay-are-you-human-en` turn 2: the router labels it `meta`, so the real pipeline redirects with no persona section in the prompt. Judge line 2 (step out, no next question) fits the redirect. Judge line 1 asks for "an AI playing the interviewer role in a practice exercise"; the redirect prompt only says "AI tutor ... not a human", with no mention of the interviewer role, so a live reply may not name the role. The case was not edited.
+
 ### Decisions
+### Misuse stays ahead of a role-play control (risk: medium)
+`/pause` may be followed by any text, so a control word must never carry a misuse turn past its redirect. A bare "stop" labelled misuse therefore does not stop the role-play; the next turn can.
+### Only an active role-play lets a control skip the meta/off_topic redirect (risk: low)
+Active means the persona id matches and the stored phase is not `ended`. A start with no active role-play that the router labels meta or off_topic still redirects (unchanged).
+### The are-you-human fixture keeps `on_task` plus a separate labelled test (risk: low)
+The per-case replay checks the composed role-play state; the real routed outcome is pinned in its own test, so the eval case's meaning is unchanged.
+
+Tool calls used: 29 (fix round 1).
+
+## Decisions
 - **`reviewed_by: pending` on all ten new cases, not flipped here** — risk: low. Matches the plan's Phase D text and the 3.11e flow; `src/suites.test.ts`'s real-case check (4.0c, on by default) therefore fails until the lead reads and flips each to `lead`, same as every other pending suite seed. Flagged here rather than silently left for the lead to discover.
 - **`package: paid` on all ten** — risk: low. Neither demo package (`free.yaml`, `paid.yaml`) lists `mock_interview` in its skills yet (5.8a wiring is separate); `paid` was picked for consistency with the `feedback` suite's cases, which are also gated on a skill not yet read back by `suites.test.ts`'s package check (it only checks the name is a known demo package, not skill membership).
 - **No `packages/evals/src/rolePlayFixtures.test.ts` in this part** — risk: low. The prompt scoped this hand-off to the eval cases only ("Phase D, part 1"); the fixtures test (plan, Phase D) is left to a follow-up pass. `runner.ts`, `schema.ts` and `suites.ts` were not touched; the schema already supports everything the cases need (`skill`, `persona`, `expect.judge`/`must_not_contain`).
@@ -211,7 +239,7 @@ python3 .githooks/secret-scan.py --all → exit 0, no output
 
 ### Decisions
 - **In persona eval cases, turn 0 is the start** (risk: low). The case schema has no turn `kind`, and the turn-level `skill: mock_interview` on every turn only selects the skill (`selectSkill`). It never marks a start: in the harness a start is a `skill_action` turn (`rolePlayControl`), and answers are `message` turns. The runner passes `turnIndex` to the agent, so an eval agent (CLI eval wiring, 5.8a) sends turn 0 as `skill_action` and every later turn as `message`. The fixtures test does the same. No schema or runner change was needed.
-- **The test mirrors `rolePlayControl` locally** (risk: low). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
+- **The test mirrors `rolePlayControl` locally** (risk: low; superseded in fix round 1: now exported and imported). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
 - **`mock_interview` is added to the paid entitlement in the test** (risk: low). `content/demo-teacher/packages/paid.yaml` does not list `mock_interview` yet (Phase D part 1 decision; 5.8a wiring). A live `edmate eval` run of these cases on the paid package would therefore not reach the role-play until the package lists the skill.
 
 ## Decisions

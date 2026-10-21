@@ -120,6 +120,13 @@ describe('validatePersonaTemplateDir: each broken fixture gives one named issue'
       /^viva@1\.0\.0\.yaml: invalid persona template: /,
     ],
     [
+      'blank reviewed_by (spaces only)',
+      (d) => {
+        editFile(d, 'viva@1.0.0.yaml', (t) => t.replace(/reviewed_by:.*/, 'reviewed_by: "  "'));
+      },
+      /^viva@1\.0\.0\.yaml: invalid persona template: /,
+    ],
+    [
       'invalid YAML',
       (d) => {
         writeFileSync(join(d, 'viva@1.0.0.yaml'), 'id: [unclosed\n');

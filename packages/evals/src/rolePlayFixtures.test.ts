@@ -25,7 +25,13 @@
 // Test names and messages carry case ids only.
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { type Persona, PersonaSchema, type Skill, type TurnContext } from '@edmate/contracts';
+import {
+  type Intent,
+  type Persona,
+  PersonaSchema,
+  type Skill,
+  type TurnContext,
+} from '@edmate/contracts';
 import { demoChunkScored, turnContextFull } from '@edmate/contracts/fixtures';
 import {
   composeSystemPrompt,
@@ -37,6 +43,7 @@ import {
   type RawPromptPackSet,
   type RolePlay,
   type RolePlayControl,
+  rolePlayControl,
 } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -114,21 +121,6 @@ const TEMPLATE_FILES = readdirSync(PERSONA_DIR).filter((f) => f.endsWith('.yaml'
 
 const PAID_SKILLS = (yaml(`${REPO}content/demo-teacher/packages/paid.yaml`) as { skills: Skill[] })
   .skills;
-
-// ---- the role-play control, as decide reads it from the text ------------------------------------
-
-/**
- * Mirrors the harness's `rolePlayControl` (pedagogy/skills.ts, 3.11e), which `@edmate/harness`
- * does not export: `skill_action` is the start; text starting `/pause` pauses; the bare word
- * `stop` or `/stop` (case, spaces, a trailing `.` or `!` aside) stops. Pinned below.
- */
-function controlOf(kind: 'skill_action' | 'message', text: string): RolePlayControl | undefined {
-  if (kind === 'skill_action') return 'start';
-  const t = text.trim().toLowerCase();
-  if (t.startsWith('/pause')) return 'pause';
-  const bare = t.replace(/[.!\s]+$/u, '');
-  return bare === 'stop' || bare === '/stop' ? 'stop' : undefined;
-}
 
 // ---- the expected states, written by hand from ADR-0013 §1 (not derived from the code) ----------
 
@@ -273,6 +265,9 @@ function ctx(persona: Persona): TurnContext {
     retrieved: [demoChunkScored],
     lockedHit: false,
     helpRung: 0,
+    // Every turn is replayed on_task: the main per-case test checks the composed role-play state
+    // only, not the router. The are-you-human turn, which the router labels meta, is replayed with
+    // that label in its own test below (fix round 1).
     intent: 'on_task',
     attempt: 'none',
     persona,
@@ -288,13 +283,13 @@ interface Replayed {
 }
 
 /** Replays a case: turn 0 is the start; each turn loads the help state the last one saved. */
-function replay(c: EvalCase, persona: Persona): Replayed[] {
+function replay(c: EvalCase, persona: Persona, intents: readonly Intent[] = []): Replayed[] {
   let help: HelpState = help0;
   let helpRung: TurnContext['helpRung'] = 0;
   return c.turns.map((t, i) => {
     const kind = i === 0 ? 'skill_action' : 'message';
-    const control = controlOf(kind, t.student);
-    const turnCtx: TurnContext = { ...ctx(persona), helpRung };
+    const control = rolePlayControl({ kind, text: t.student });
+    const turnCtx: TurnContext = { ...ctx(persona), helpRung, intent: intents[i] ?? 'on_task' };
     const policy = decidePolicy({
       ctx: turnCtx,
       turn: { kind, skill: t.skill as Skill },
@@ -362,7 +357,10 @@ describe('role-play persona cases (evals/suites/persona/persona-roleplay-*)', ()
     for (const c of CASES) {
       const r = replay(c, templateFor(c).persona);
       expect(r[0]?.control, c.id).toBe('start');
-      expect(controlOf('message', c.turns[0]?.student ?? ''), c.id).toBeUndefined();
+      expect(
+        rolePlayControl({ kind: 'message', text: c.turns[0]?.student ?? '' }),
+        c.id,
+      ).toBeUndefined();
       for (const t of r.slice(1)) expect(t.control, c.id).not.toBe('start');
     }
   });
@@ -429,13 +427,19 @@ describe('role-play persona cases (evals/suites/persona/persona-roleplay-*)', ()
     }
   });
 
-  it('the control mirror matches the documented rule', () => {
-    expect(controlOf('skill_action', 'anything')).toBe('start');
-    expect(controlOf('message', '/pause')).toBe('pause');
-    expect(controlOf('message', '  /PAUSE please')).toBe('pause');
-    expect(controlOf('message', 'Stop!')).toBe('stop');
-    expect(controlOf('message', '/stop.')).toBe('stop');
-    expect(controlOf('message', "let's stop here")).toBeUndefined();
-    expect(controlOf('message', 'Great, go again')).toBeUndefined();
+  it('are-you-human with the router label (meta): the real pipeline redirects', () => {
+    // The router labels "is it a human or an AI?" meta (labelledTurns route-141/142/155). No
+    // role-play control is in the text, so the meta redirect runs: no role-play state is composed,
+    // the count does not move, and the always-on safety line is what tells the model to say it is
+    // an AI. The case's judge lines are the live bar; this pins what the pipeline hands the model.
+    const c = CASES.find((x) => x.id === 'persona-roleplay-are-you-human-en') as EvalCase;
+    const r = replay(c, templateFor(c).persona, ['on_task', 'on_task', 'meta']);
+    expect(r.map((t) => t.label)).toEqual(['q1/6', 'q2/6', 'none']);
+    const t = r[2] as Replayed;
+    expect({ move: t.move, reason: t.reason }).toEqual({ move: 'redirect', reason: 'meta' });
+    expect(t.prompt).toContain('[[MOVE-REDIRECT]]');
+    expect(t.prompt).toContain('not a human; if asked, say so plainly');
+    expect(t.prompt).not.toContain('[[MOVE-ROLEPLAY]]');
+    for (const tag of STATE_TAGS) expect(t.prompt).not.toContain(tag);
   });
 });

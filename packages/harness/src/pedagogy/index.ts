@@ -75,7 +75,7 @@ export {
   PersonaStartPayloadSchema,
   resolvePersona,
 } from './personas.js';
-export { selectSkill, type SkillReason, type SkillStep } from './skills.js';
+export { rolePlayControl, selectSkill, type SkillReason, type SkillStep } from './skills.js';
 export { buildModelRequest, type ModelRequestInput, promptCacheKey } from './modelRequest.js';
 export {
   createPromptPackLibrary,

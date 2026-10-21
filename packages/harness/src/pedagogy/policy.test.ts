@@ -471,13 +471,53 @@ describe('role-play turns and the coverage gate (5.8, open question 6: lead defa
     expect([r.move, r.reason]).toEqual(['locked', 'locked_module']);
   });
 
-  it('off_topic and distress still close before the role-play, whatever the phase', () => {
-    const help = { personaQuestionsAsked: M, personaId: id };
-    const r1 = run(help, 'stop', 'message', uncovered({ intent: 'off_topic' }));
-    const r2 = run(help, 'pause', 'message', uncovered({ intent: 'distress' }));
-    expect([r1.move, r1.reason]).toEqual(['redirect', 'off_topic']);
-    expect([r2.move, r2.reason]).toEqual(['redirect', 'distress']);
-    expect(r1.next.help.personaPhase).toBeUndefined();
+  it.each([
+    ['meta', 'stop', 'stopped', 'ended'],
+    ['off_topic', 'stop', 'stopped', 'ended'],
+    ['meta', 'pause', 'pause', 'paused'],
+    ['off_topic', 'pause', 'pause', 'paused'],
+  ] as const)(
+    'a %s-routed `%s` during an active role-play still changes the phase (fix round 1)',
+    (intent, control, phase, stored) => {
+      const help = { personaQuestionsAsked: 2, personaId: id };
+      const r = run(help, control, 'message', uncovered({ intent }));
+      expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+      expect(r.rolePlay?.phase).toBe(phase);
+      expect(r.next.help.personaPhase).toBe(stored);
+    },
+  );
+
+  it('distress and misuse still close before a role-play control (safety first)', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    for (const control of ['stop', 'pause', 'start'] as const) {
+      for (const intent of ['distress', 'misuse'] as const) {
+        const r = run(help, control, 'message', uncovered({ intent }));
+        expect([r.move, r.reason]).toEqual(['redirect', intent]);
+        expect(r).not.toHaveProperty('rolePlay');
+        expect(r.next.help.personaPhase).toBeUndefined();
+        expect(r.next.help.personaQuestionsAsked).toBe(2);
+      }
+    }
+  });
+
+  it('a meta or off_topic turn with no control, or with no active role-play, still redirects', () => {
+    const active = { personaQuestionsAsked: 2, personaId: id };
+    const ended = { ...active, personaPhase: 'ended' as const };
+    const cases = [
+      run(active, undefined, 'message', uncovered({ intent: 'meta' })),
+      run(ended, 'stop', 'message', uncovered({ intent: 'off_topic' })),
+      run({}, 'stop', 'message', uncovered({ intent: 'meta' })),
+      run(
+        { personaQuestionsAsked: 2, personaId: 'other' },
+        'pause',
+        'message',
+        uncovered({ intent: 'meta' }),
+      ),
+    ];
+    for (const r of cases) {
+      expect(r.move).toBe('redirect');
+      expect(r).not.toHaveProperty('rolePlay');
+    }
   });
 
   it('a covered role-play turn is unchanged by the gate rule', () => {
