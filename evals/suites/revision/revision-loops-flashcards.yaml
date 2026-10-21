@@ -1,0 +1,14 @@
+id: revision-loops-flashcards
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/loops/notes.md (sections 3.4, 3.5)
+turns:
+  - student: Make me flashcards for while loops, break and continue.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+      must_not_contain:
+        - continue stops the whole loop

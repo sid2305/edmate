@@ -1,0 +1,15 @@
+id: revision-lists-dicts-notes
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/lists-dicts/notes.md (sections 5.1, 5.2, 5.3)
+turns:
+  - student: Give me revision notes for lists and dictionaries.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+        - '[3]'
+      must_not_contain:
+        - list indexes start at 1
