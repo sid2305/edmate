@@ -2308,6 +2308,14 @@ tasks:
   status: running
   branch: m3/3.9b-cli-chat-flake
   model: build:opus-5.5/medium
+- id: 3.9c
+  milestone: M13
+  title: 'Cold first turn (found by 3.9b): the first turn in a fresh process spends about 150 ms in preGuard on an idle laptop against its 400 ms budget, so on a busy server a real student''s first turn can
+    fail closed (safe message). Warm the harness (classifiers, mathjs, access) at web/worker start, or measure cold-start latency on the deploy target and confirm the budget has headroom'
+  accept: a cold-process first turn under CPU load passes preGuard in a test or a measured run on the deploy target; the warm-up (if added) is covered by a test; no step budget is loosened without a logged decision
+  deps:
+  - 3.9b
+  status: todo
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
