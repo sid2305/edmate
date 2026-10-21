@@ -10,6 +10,49 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · Human answers to the open blockers (B-24, B-25, B-26, B-29, B-30, B-31, B-32, B-33, B-34) · decided by you · risk: high
+Decided:
+- B-24: you run the gated `record-demo-embeddings.ts --live` once with your own OpenAI key (environment only); the recorded vectors are committed by 5.3b.
+- B-25: production email uses Resend for now; switch by config later if deliverability is a problem.
+- B-26: practice@1.1.0 is signed (reviewed_by: sid2305) with the last sentence of the code-output rule deleted (task 5.6e).
+- B-29: 4.6c is not yours; the lead runs it.
+- B-30: a teacher's subject change resets verification to pending; bio (and later photo) edits do not (task 8.1b).
+- B-31: web-link and YouTube uploads are deferred to a follow-up after the thin slice (task 8.2b); 8.2 ships file uploads only.
+- B-32: chat replies render with react-markdown + remark-gfm and an allowlist (no raw HTML, no images; maths later with KaTeX), swapped in after the slice works (task 9.4b).
+- B-33: 9.3 (package compare and start, no payment) joins the thin slice: 8.1, 8.2, 9.1, 9.3, 9.4.
+- B-34: a teacher's answer is saved as a note holding the scrubbed student question plus the answer; the teacher can rephrase the question before saving (5.10).
+Why: your answers, 21 Oct 2026, recorded in the local blockers file.
+
+### 21 Oct 2026 · One client component, no separate onboarding view.tsx · decided by tdd-guide
+Decided: `OnboardingForm.tsx` is the only client component; `page.tsx` renders it directly instead
+of adding a pure `view.tsx` wrapper.
+Why: the plan named this a builder's-discretion call ("fold into page.tsx if ... a separate pure
+view [is] unnecessary for one component"); there is exactly one component here, so a wrapper would
+only forward props with no logic of its own, unlike `uploads/UploadsView.tsx` which the server page
+also has to pass computed data into alongside other page concerns.
+risk: low
+
+---
+
+### 21 Oct 2026 · Server error text shown directly, no client errors map · decided by tdd-guide
+Decided: `OnboardingForm` shows the API response's `error.message` text directly in the
+`role="alert"` box, with no per-code translation map in `en.json`; the one fallback key `onboarding.errors.generic` (fix round) covers a missing message or a network failure.
+Why: the plan called the errors map optional and capped it at "one or two lines, not a full
+exhaustive switch"; this route's `fromError` in `profile.ts` only ever returns five fixed,
+already-English, non-identifying messages (same reasoning the chat error banner uses for its own
+fixed strings, per the plan), so a second copy of the same five strings in `en.json` would be pure
+duplication with no behavioural difference.
+risk: low
+
+---
+
+### 21 Oct 2026 · 8.1a merged with code-reviewer and typescript-reviewer only · decided by team lead
+Decided: no security-reviewer run; the diff touches no risky path (no auth, policy, db or contracts file), and code-reviewer checked the security properties explicitly: scope from the session only, body teacherId/userId/verificationStatus ignored or rejected, 16 KB body cap reused, fixed error text only, the route under the teacher-only /api/studio/** row. The typescript-reviewer HIGH (no catch in the submit handler) was fixed in bf633b7 and the lead read the fix diff.
+Why: MVP first (human, 20 Oct 2026), one fix round, reviewers only where the diff needs them.
+risk: low
+
+---
+
 ### 21 Oct 2026 · US is the first region; India parked · decided by you · risk: high
 Decided: The pilot targets the US only. India support, the India parental-consent flow (1.7c, now in M13 behind the gate) and the open India questions (B-27 Q1, the IN.yaml verification from B-20) wait until India is picked up. The India locale pack and notice placeholders stay in the repo; nothing is deleted.
 Why: One market first gets a working product sooner. India adds DPDP parental consent for 13–17 and counsel work the pilot does not need.
