@@ -13,19 +13,14 @@ import type { SafetyAlert, TurnEvent } from '@edmate/contracts';
 import { demoSafetyAlert, demoTurnInput } from '@edmate/contracts/fixtures';
 import { defaultSteps, hasDistressKeyword, runTurn } from '@edmate/harness';
 import { memoryTranscriptStore, testDeps, testSteps } from '@edmate/harness/testing';
-import {
-  ALERT_QUEUE,
-  DEAD_LETTER_QUEUE,
-  JOB,
-  jobId,
-  queuedAlertSink,
-} from '@edmate/queue';
+import { ALERT_QUEUE, DEAD_LETTER_QUEUE, JOB, jobId, queuedAlertSink } from '@edmate/queue';
 import { type Job, Queue, type Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type AckStore, createAlertWorker, redisAckStore } from '../src/alerts/index.js';
 import type { AlertAudience, AlertNotifier } from '../src/alerts/types.js';
 import type { LogLine } from '../src/log.js';
+import { slackClock } from './clock.js';
 
 const REDIS_URL = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:56379';
 
@@ -170,13 +165,10 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
   }, 30_000);
 
   it('a distress turn → the trust team is told in < 5 min although delivery fails 6 times; the turn is saved', async () => {
-    const realClock = {
-      now: () => Date.now(),
-      sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
-    };
+    // Real time with every step budget widened 10x (3.9d): a loaded runner can't fail the guards.
     const t = testDeps({
       overrides: {
-        clock: realClock,
+        clock: slackClock(),
         ids: { next: (kind) => (kind === 'alert' ? 'alert_e2e' : `${kind}_e2e`) },
         alerts: queuedAlertSink(prodQueue),
         transcripts: memoryTranscriptStore(),
@@ -196,7 +188,14 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
       })(),
       run.finished,
     ]);
-    expect(events[0]).toEqual({ type: 'safety', level: 'alert' });
+    // On failure, print any error event and the trace's step outcomes (3.9d).
+    expect(
+      events[0],
+      JSON.stringify({
+        errors: events.filter((e) => e.type === 'error'),
+        steps: result.trace?.steps,
+      }),
+    ).toEqual({ type: 'safety', level: 'alert' });
     expect(result.background).toEqual([]);
     expect(steps.commits[0]).toMatchObject({ outcome: 'escalated', intent: 'distress' });
 
@@ -238,7 +237,11 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
 
     await ackStore.acknowledge(id);
     // The next check sees the ack and schedules nothing more.
-    await until(() => pendingChecks(fastQueue, id), (j) => j.length === 0, 5_000);
+    await until(
+      () => pendingChecks(fastQueue, id),
+      (j) => j.length === 0,
+      5_000,
+    );
     const after = pages().length;
     await sleep(FAST_ESCALATE_MS * 3);
     expect(pages().length).toBe(after);
@@ -253,7 +256,11 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
       (d) => d.length === 1,
       5_000,
     );
-    await until(() => pendingChecks(fastQueue, id), (j) => j.length === 0, 5_000);
+    await until(
+      () => pendingChecks(fastQueue, id),
+      (j) => j.length === 0,
+      5_000,
+    );
     await sleep(FAST_ESCALATE_MS * 2);
     expect(fast.delivered.filter((d) => d.alertId === id).map((d) => d.audience)).toEqual([
       'trust_team',
