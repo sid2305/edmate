@@ -43,6 +43,12 @@ None.
 Tool calls used: 33
 
 ## Decisions
+
+### 21 Oct 2026 · 7.1a: two LOW review notes left as they are · decided by lead · risk: low
+- Decided: keep `packages/evals/src/loader.test.ts`'s `chmod 0o000` read-failure test (CI is non-root) and `packages/evals/src/displayPath.ts`'s cross-drive handling (already falls back to the basename).
+- Why: neither changes behaviour on the CI or dev machines.
+- risk: low.
+
 ### None
 No open decision beyond the plan; `displayPath.ts` placement (new small internal module, shared
 by both loaders, not exported from `index.ts`) was the plan's own implied design, not a new call.
