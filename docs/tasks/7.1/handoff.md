@@ -47,6 +47,10 @@ combination — both exercised indirectly via other cases, not a gap in behaviou
 
 ## Decisions
 
-- None beyond the plan's own "Lead answers (21 Oct 2026)" (risk: low, already logged by the plan).
+### 21 Oct 2026 · 7.1 eval reports and judge calibration · decided by lead · risk: low
+
+- Decided: merge 7.1. packages/evals gains a static, escaped HTML report next to the JSON report (optional `judgeModel` and `calibration` meta), and calibration: a strict human-verdict schema, a deterministic 10% sample (ceil, min 1, sorted case ids) and an agreement summary. Reports are generated in the existing CI test task from the synthetic fixture suite, written to gitignored `packages/evals/reports/`. Plan answers: double-check files for real suites start in 7.2; no CI artifact upload. The MEDIUM (an unmatched verdict id is dropped silently, not reported) and two LOWs go to 7.1a.
+- Why: code-reviewer and typescript-reviewer both approved with no CRITICAL/HIGH (1014 tests, coverage 100/97.23); the blockers-only rule defers MEDIUM/LOW.
+- risk: low
 
 Tool calls used: 21
