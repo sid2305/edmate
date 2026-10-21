@@ -305,7 +305,7 @@ tasks:
   risk: risky
   status: running
   branch: m0/0.16-agent-metrics
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:opus
 - id: '0.17'
   milestone: M7
   title: 'Agent factory, limits (human decision 21 Oct 2026): the per-task budget becomes a line in plan.md (tool calls, phases, packages touched) and is enforced, not only requested: a hook or the harness
@@ -1404,7 +1404,7 @@ tasks:
   - '3.11'
   - '5.5'
   - M3
-  status: todo
+  status: planning
   risk: risky
   branch: null
   model: null
@@ -1415,9 +1415,9 @@ tasks:
   deps:
   - '5.4'
   - M3
-  status: planning
+  status: review
   branch: m5/5.9-revision-skill
-  model: null
+  model: plan:sonnet build:sonnet
 - id: '5.10'
   milestone: M5
   title: 'Ask-the-teacher path: open and group `TeacherQuestion`s; teacher answer → student thread + notification; `CorrectionStore` turns answers and corrections into teacher notes and eval cases'
@@ -1469,7 +1469,7 @@ tasks:
   deps:
   - '5.6'
   - M3
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '6.2'
@@ -1600,7 +1600,7 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '7.8'
@@ -1900,7 +1900,9 @@ tasks:
   branch: null
 - id: 9.3b
   milestone: M13
-  title: '9.3 review follow-ups: /home loads chat and start links in parallel (Promise.all); PackageCompare logs the error name on a network failure; fromError gets an exhaustiveness guard and maps only the unique-violation constraint to 409 already-subscribed; subscriptions.start accepts only the live package version (9.6/10.8); paused subscriptions get their own text on the compare page (9.6); price formatting uses the currency''s own fraction digits'
+  title: '9.3 review follow-ups: /home loads chat and start links in parallel (Promise.all); PackageCompare logs the error name on a network failure; fromError gets an exhaustiveness guard and maps only
+    the unique-violation constraint to 409 already-subscribed; subscriptions.start accepts only the live package version (9.6/10.8); paused subscriptions get their own text on the compare page (9.6); price
+    formatting uses the currency''s own fraction digits'
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
