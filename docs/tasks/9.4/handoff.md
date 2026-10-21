@@ -1,8 +1,8 @@
 # 9.4 handoff: student chat, thin slice (Phases A and B)
 
-- **Status:** PARTIAL (Phases A and B done; Phases C–D left, as planned)
-- **Branch:** `m9/9.4-student-chat` (Phase A on local `work-9.4a`, Phase B on `work-9.4b`)
-- **Worktree:** Phase A `.claude/worktrees/agent-a6a4f425d4b399de3`; Phase B `.claude/worktrees/agent-ab5debadc399c0ca9`
+- **Status:** PARTIAL (Phases A, B and C done, plus the Phase A security fix round; Phase D left, as planned)
+- **Branch:** `m9/9.4-student-chat` (Phase A on local `work-9.4a`, Phase B on `work-9.4b`, fix round and Phase C on `work-9.4c`)
+- **Worktree:** Phase A `.claude/worktrees/agent-a6a4f425d4b399de3`; Phase B `.claude/worktrees/agent-ab5debadc399c0ca9`; fix round and Phase C `.claude/worktrees/agent-adf8336e683b6cfaf`
 
 ## Phase A
 
@@ -111,12 +111,103 @@
   `chat.*` and keep the switch as the key map.
 - Abort the handle on unmount; the reducer then drops the turn.
 
+## Fix round (security, Phase A)
+
+Two MEDIUM findings from the security review, tests first (both seen red, then green).
+- **Unbounded body** (`src/turn/routes.ts`). `readJson` now refuses a declared `content-length`
+  over `MAX_BODY_BYTES` (64 KB) before reading, and reads the body through a stream reader that
+  stops (and cancels the stream) as soon as more than 64 KB has arrived, so a missing or false
+  `content-length` can't bypass it. Both routes answer 413 `input_too_large` before the backend
+  is loaded. A body that fails mid-read is a 400. Tests in `routes.test.ts`
+  ("request body cap (64 KB) on both routes", 5 cases: declared too large on both routes, a
+  1 MB streamed body with no content-length is cut off after a few chunks, a false small
+  content-length, a streamed body under the cap, a read failure).
+- **Silent market default** (`src/turn/runtime.ts`). `configuredMarket(env, packs)`: with
+  `NODE_ENV=production`, an unset or unknown `EDMATE_MARKET` (no locale pack for it) throws
+  `TurnUnavailableError('EDMATE_MARKET')`, so the runtime fails closed, logs only
+  `turn.runtime_unavailable reason=EDMATE_MARKET`, and both routes answer 503. Dev and test keep
+  the `global` default. Tests in `runtime.test.ts` (unset, blank, unknown, known markets in
+  production; unset outside production).
+
+## Phase C
+
+### What was built
+- `src/chat/ChatView.tsx` (client): `useReducer(chatTurn, undefined, initialTurn)`, where
+  `chatTurn` is `reduceTurn` plus a `reset` action; `sendTurn`'s `onItem` dispatches into it.
+  - A streaming turn renders outside the `aria-live="polite"` thread (`.chat-provisional`), with
+    `aria-busy="true"` and "Still checking…". On `done` it renders inside the live thread; on the
+    next send it becomes an ordinary thread entry.
+  - `failed` shows the fixed text in a `role="alert"` box, with "Try again" when retryable. The
+    retry resends the last request (new `clientTs`) and does not repeat the student's message.
+  - Each turn gets a sequence number. Items for an older turn are dropped, and unmount bumps the
+    sequence and aborts the handle.
+  - With no session, the first send calls `startSession`, writes `?s=<id>` with
+    `history.replaceState` (no server re-render), then sends. A failed start shows its error.
+  - The composer and the hint button are disabled while a reply streams.
+  - `send`, `start` and `now` are injectable for tests.
+- `MessageBubble.tsx`: roles student, agent and teacher ("Your teacher", own style). It has the
+  provisional style and label, the "Updated" marker (`title` plus visually hidden "This reply was
+  corrected"), agent and teacher text through `renderReply`, and student text as plain text.
+- `HintButton.tsx` (rungs 1–2 "Hint", 3 "Worked example", 4 "Full solution", else nothing),
+  `SourcesList.tsx` (text only, no links), `LockedNotice.tsx`, `TeacherQuestionNotice.tsx`,
+  `SkillCard.tsx` (name and "Coming soon", never the payload), `Composer.tsx` (Enter sends,
+  Shift+Enter is a new line, blank is never sent, `maxLength` is the contracts limit), and
+  `chat.css`.
+- `src/chat/loadChat.ts`: the page's loader. It runs the guard first, so nothing opens the
+  database before the guard passes. A malformed or non-live agent gives `notFound()`, and `?s=` is
+  used only when it is the student's own open session with this agent. It loads the newest 50
+  messages.
+- `app/learn/[agentId]/page.tsx`: `requireRole(['student'], { clearance: 'agent' })` →
+  `loadChat` → `AppShell` → `NextIntlClientProvider` (only the `chat` messages) → `ChatView`.
+- `/home`: `HomeView({ chats })` shows one link per agent id to `/learn/<id>`, or the placeholder
+  when there are none. `app/home/page.tsx` gets the ids from `src/chat/liveChats.ts` (see
+  Decisions). A database failure there shows the placeholder and logs only the error name.
+- `messages/en.json` `chat.*` holds every chat string, including `chat.errors.*`.
+  `errorText.ts` now reads its text from there and keeps the exhaustive switch as the key map, so
+  the Phase B tests are unchanged and green.
+- `test/intl.tsx`: renders under the real `NextIntlClientProvider` with the real `en.json`.
+
+### Tests
+- `MessageBubble.test.tsx` (6), `parts.test.tsx` (21: HintButton, SourcesList, LockedNotice,
+  TeacherQuestionNotice, SkillCard, Composer), `ChatView.test.tsx` (14: history, provisional
+  outside the live region then final inside it, `replace ''` clearing text, skill cards and
+  sources in the DOM, replace with text, a cut stream with retry, a non-retryable error, hint,
+  locked and teacher question, two turns, session start and URL, failed start, late items,
+  abort on unmount). Axe finds no violations in the idle, streaming, final, updated and failed
+  states and on the notices.
+- `app/learn/[agentId]/page.test.tsx` (6) runs the real `createGuard` with fake deps. A
+  `parent_needed` student is redirected to `/welcome/age` with no database opened. A teacher gets
+  notFound, anonymous goes to `/sign-in`, and a `clear` student gets the chat with history (axe
+  clean). Another student's `?s=` is ignored, and a non-live agent gives notFound.
+- `loadChat.test.ts` (13), `liveChats.test.ts` (10), `clearance-scan.test.ts` (2: the scan and
+  proof that it catches a bare `requireRole`, a wrong clearance and an unguarded server action),
+  and `app/home/view.test.tsx` (+2: link with a live subscription, placeholder without).
+- `corepack pnpm turbo run typecheck lint test build --filter=@edmate/web...` →
+  `Tasks: 35 successful, 35 total`; `@edmate/web: Tests 596 passed (596)`; web coverage All files
+  98.32 / 98.43 / 95.94 / 99.08, `src/chat` 99.46 / 99.12 / 100 / 100. (The coverage `include` is
+  `src/**/*.ts`, so the `.tsx` components are tested but not counted; unchanged from 9.1.)
+- `python3 .githooks/secret-scan.py --all` is clean.
+- There is no new dependency, no `packages/contracts` change and no `src/auth/**` edit.
+
+### Deviations
+- `HintButton`, `SourcesList` and `LockedNotice` share one test file, `parts.test.tsx`, instead of
+  three.
+- `ChatView` records the new session with `window.history.replaceState`, not
+  `router.replace`. That avoids a server re-render mid-turn, and Next's app router supports it.
+
 ## Left to do
-- **Phase C:** the components and the `/learn/[agentId]` page, plus the `/home` link (see
-  "Notes for Phase C" above). Server facts from Phase A still hold: tokens arrive in bursts after
-  the check; a `replace ''` can still come; start a session with `POST /api/sessions {agentId}`
-  (201 `{sessionId}`), send turns to `/api/sessions/:id/turns` with
-  `{agentId, kind, text?, lang:'en', clientTs}`.
+- **Phase D:** Playwright and `e2e/chat.spec.ts`, run locally only. Notes:
+  - Selectors: the thread is `ol[aria-live="polite"]` and the provisional reply is
+    `.chat-provisional .bubble[aria-busy="true"]` with "Still checking…". The marker reads
+    "Updated", errors are `role="alert"`, and the retry is the "Try again" button.
+  - The composer is the "Your message" textbox; Enter sends. The hint is the "Get a hint" button,
+    and its rung reads "Last help: …".
+  - The first send with no `?s=` POSTs `/api/sessions` and then rewrites the URL to `?s=<id>`. A
+    `page.route` fixture for `/api/sessions/*/turns` is enough once a session exists.
+  - The /home link shows only for `EDMATE_CHAT_AGENTS` candidates (default `demo-agent` outside
+    production).
+- **A repo method that lists a student's live subscriptions** (`packages/db/src/repositories/**`,
+  risky). With it, `/home` can drop `EDMATE_CHAT_AGENTS`. Board follow-up.
 - **Markdown library (Q1):** still open with the human; swap it in behind `renderReply` and keep
   `renderReply.test.tsx` green.
 - **Phase D:** Playwright and `e2e/chat.spec.ts`, run locally only.
@@ -179,5 +270,46 @@ Decided:
 - `replaced` is sticky within a turn, and an `error` resets it (the turn is dropped).
 - The renderer supports paragraphs, fenced and inline code only; no links or images, TeX literal.
 - The error strings live in `src/chat/errorText.ts` for now (Phase C may move them to en.json).
+
+risk: low.
+
+### 20 Oct 2026 · Fix round: turn request bodies capped at 64 KB · decided by tdd-guide
+Decided: both turn routes refuse a body over 64 KB with 413 `input_too_large`. A declared
+content-length over the cap is refused before reading, and the bytes read are capped as well.
+Why: this fixes the security review's MEDIUM finding. 64 KB is far above the contracts' turn text
+limit and a strict JSON body.
+risk: medium.
+
+### 20 Oct 2026 · Fix round: in production the turn market fails closed · decided by tdd-guide
+Decided: with `NODE_ENV=production`, an unset `EDMATE_MARKET`, or one that has no locale pack,
+makes the turn runtime unavailable. The routes answer 503, and the log says only
+`reason=EDMATE_MARKET`. Dev and test keep the `global` default.
+Why: the market picks the locale pack, so the distress helplines. A silent `global` in production
+could show the wrong helplines. This supersedes the production half of the earlier
+`EDMATE_MARKET` decision. A per-student market is still a follow-up.
+risk: medium.
+
+### 20 Oct 2026 · /home chat links come from configured candidate agents · decided by tdd-guide
+Decided: `/home` checks the agents named in `EDMATE_CHAT_AGENTS` (a comma list). Outside
+production the seeded `demo-agent` is checked when the variable is unset; in production, none
+is. Each candidate gets a link only if the agent is live and `subscriptions.findLive` with its
+teacher returns a status other than paused or ended.
+Why: no repository method lists a student's subscriptions, and adding one is a risky
+`packages/db` change outside this phase. Follow-up: add that method and drop the variable.
+Open for the lead (plan Q2): is this good enough for the pilot, or should 9.3 come in?
+risk: medium.
+
+### 20 Oct 2026 · Phase C client choices · decided by tdd-guide
+Decided:
+- The chat strings, including the error texts, are in `messages/en.json` under `chat.*`.
+  `errorText.ts` reads them through its exhaustive switch.
+- The page gives `NextIntlClientProvider` only the `chat` messages, with locale `en` (English-only
+  pilot).
+- A new session is written to the URL with `history.replaceState`, not `router.replace`.
+- A retry resends the last request with a new `clientTs`. The student's message is not repeated.
+- The hint button shows the rung of the current turn only. A hint request shows "Can I have a
+  hint?" as the student's message.
+- The `safety` event has no UI in this slice.
+- The page loads the newest 50 history messages.
 
 risk: low.

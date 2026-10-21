@@ -408,7 +408,7 @@ describe('request body cap (64 KB) on both routes', () => {
       },
       body,
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' });
+    } as ConstructorParameters<typeof NextRequest>[1]);
     return { req, pulled: () => pulled };
   }
 
@@ -467,7 +467,7 @@ describe('request body cap (64 KB) on both routes', () => {
       headers: { origin: ORIGIN, 'content-type': 'application/json', cookie: `${COOKIE}=clear` },
       body,
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' });
+    } as ConstructorParameters<typeof NextRequest>[1]);
     expect((await r.start(req)).status).toBe(400);
   });
 });
