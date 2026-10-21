@@ -17,6 +17,10 @@
                                      grouped by --by (default risk) and by the task's `build:`
                                      model, for the last N such tasks in board order (all if N
                                      omitted)
+  board.py registry                  regenerate docs/agents/registry.md from every
+                                     .claude/agents/*.md `## Agent registry` block plus the
+                                     board's metrics; fails (writes nothing) if any block is
+                                     missing or malformed
 """
 import json
 import re
@@ -28,9 +32,17 @@ try:
 except ImportError:
     sys.exit("board.py needs PyYAML: python3 -m pip install --user pyyaml")
 
+# No __pycache__ next to the script: it would land in git (and trip the risky-path gate).
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import registry  # noqa: E402  (sibling module: pure parsing/rendering for `board.py registry`)
+from registry import role_model  # noqa: E402,F401  (re-exported: board.role_model)
+
 ROOT = Path(__file__).resolve().parents[3]
 BOARD = ROOT / "docs" / "board" / "tasks.yaml"
 LOG = ROOT / "docs" / "decisions" / "log.md"
+AGENTS = ROOT / ".claude" / "agents"
+REGISTRY_OUT = ROOT / "docs" / "agents" / "registry.md"
 STATUSES = {"todo", "planning", "running", "review", "blocked", "done"}
 # A "Decided:" line, bare or bullet-prefixed ("- Decided: ..."), matched the same way as a
 # "Status:" line (see merge_gate.py's STATUS_LINE): closeout.py copies handoff entries into
@@ -180,10 +192,20 @@ def metrics_problem(data):
 
 
 def build_model(model_str):
-    """The `build:` token out of a `model` string like "plan:sonnet build:opus review:sonnet",
-    or "unknown" if there is none."""
-    m = re.search(r"\bbuild:(\S+)", model_str or "")
-    return m.group(1) if m else "unknown"
+    """The `build:` token out of a `model` string (see registry.role_model)."""
+    return role_model(model_str, "build")
+
+
+def cmd_registry(board):
+    files = {p.stem: p.read_text() for p in sorted(AGENTS.glob("*.md"))} if AGENTS.is_dir() else {}
+    try:
+        text = registry.render(files, board)
+    except ValueError as e:
+        print(f"refusing to write {REGISTRY_OUT.relative_to(ROOT)}: {e}", file=sys.stderr)
+        sys.exit(1)
+    REGISTRY_OUT.parent.mkdir(parents=True, exist_ok=True)
+    REGISTRY_OUT.write_text(text)
+    print(f"wrote {REGISTRY_OUT.relative_to(ROOT)} ({len(files)} agents)")
 
 
 def cmd_metrics(board, args):
@@ -265,6 +287,8 @@ def main(argv):
         print(f"{args[0]} -> {args[1]}")
     elif cmd == "metrics":
         cmd_metrics(board, args)
+    elif cmd == "registry":
+        cmd_registry(board)
     elif cmd == "decide" and len(args) == 2:
         if args[0] not in board["decisions"]:
             sys.exit(f"unknown decision; one of {list(board['decisions'])}")

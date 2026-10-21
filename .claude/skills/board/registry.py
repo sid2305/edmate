@@ -1,0 +1,164 @@
+"""Agent registry (task 0.18): parse each `.claude/agents/*.md` `## Agent registry` block and
+render `docs/agents/registry.md` from those blocks plus the board's per-task `metrics` maps.
+
+Pure functions, no I/O: `board.py registry` reads the files and writes the output.
+
+Block format (in the markdown body, never front-matter):
+
+    ## Agent registry
+    - Known limitations: <prose or "not enough runs yet">
+    - Typical misses: <prose or "not enough runs yet">
+    - Average cost per run: <text or "not enough runs yet">
+    - Last reviewed: YYYY-MM-DD
+"""
+import datetime
+import re
+
+FIELDS = {
+    "Known limitations": "known_limitations",
+    "Typical misses": "typical_misses",
+    "Average cost per run": "average_cost_per_run",
+    "Last reviewed": "last_reviewed",
+}
+ROLES = ("plan", "build", "review")
+METRIC_KEYS = ("tool_calls", "tokens_in", "tokens_out", "wall_time_seconds")
+NO_RUNS = "not enough runs yet"
+STALE_DAYS = 60
+# Which board role each agent's work is recorded under (the board's `model` string names a
+# role, never an agent). Agents missing here have no role token and show "-".
+AGENT_ROLES = {
+    "planner": "plan",
+    "tdd-guide": "build",
+    "build-error-resolver": "build",
+    "architect": "review",
+    "code-reviewer": "review",
+    "typescript-reviewer": "review",
+    "database-reviewer": "review",
+    "security-reviewer": "review",
+    "silent-failure-hunter": "review",
+    "rag-pipeline-reviewer": "review",
+    "safety-reviewer": "review",
+}
+
+_HEADING = re.compile(r"^##[ \t]+Agent registry[ \t]*$", re.M)
+_NEXT_HEADING = re.compile(r"^#{1,2}[ \t]", re.M)
+_FIELD = re.compile(r"^[ \t]*-[ \t]+([^:\n]+?):[ \t]*(.*?)[ \t]*$")
+
+
+def _date(value):
+    if isinstance(value, datetime.date):
+        return value
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value or ""):
+            return None
+        return datetime.date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_agent_block(text):
+    """The 4 registry fields as a dict (snake_case keys), or None if the `## Agent registry`
+    section is missing, a field is missing/empty/duplicated, or `Last reviewed` is not a
+    valid YYYY-MM-DD date."""
+    m = _HEADING.search(text or "")
+    if not m:
+        return None
+    body = text[m.end():]
+    nxt = _NEXT_HEADING.search(body)
+    body = body[: nxt.start()] if nxt else body
+    found = {}
+    for line in body.splitlines():
+        fm = _FIELD.match(line)
+        if not fm or fm.group(1) not in FIELDS:
+            continue
+        key = FIELDS[fm.group(1)]
+        if key in found or not fm.group(2):
+            return None
+        found[key] = fm.group(2)
+    if len(found) != len(FIELDS) or _date(found["last_reviewed"]) is None:
+        return None
+    return {k: found[k] for k in FIELDS.values()}
+
+
+def role_model(model_str, role):
+    """The `<role>:` token out of a `model` string like "plan:sonnet build:opus review:sonnet",
+    or "unknown" if there is none."""
+    m = re.search(rf"(?<!\S){re.escape(role)}:(\S+)", model_str or "")
+    return m.group(1) if m else "unknown"
+
+
+def role_buckets(board):
+    """For each role in ROLES: the average of METRIC_KEYS over done tasks that have a `metrics`
+    map and a `<role>:` token in their `model` string, plus `n`; None when no task matches.
+    Metrics are whole-task numbers, so every role a task names gets the same task total."""
+    out = {}
+    for role in ROLES:
+        tasks = [t for t in board.get("tasks") or []
+                 if t.get("status") == "done" and isinstance(t.get("metrics"), dict)
+                 and role_model(t.get("model"), role) != "unknown"]
+        if not tasks:
+            out[role] = None
+            continue
+        avg = {"n": len(tasks)}
+        for k in METRIC_KEYS:
+            total = sum(t["metrics"].get(k) or 0 for t in tasks)
+            avg[k] = round(total / len(tasks))
+        out[role] = avg
+    return out
+
+
+def is_stale(last_reviewed, today, max_days=STALE_DAYS):
+    """True if `last_reviewed` (YYYY-MM-DD or date) is more than `max_days` before `today`,
+    or cannot be read as a date."""
+    d = _date(last_reviewed)
+    return d is None or (today - d).days > max_days
+
+
+def _cell(value):
+    return " ".join(str(value).split()).replace("|", "\\|")
+
+
+def render(agent_files, board):
+    """Markdown for docs/agents/registry.md. `agent_files` maps agent name -> file text.
+    Raises ValueError naming every file whose block is missing or malformed."""
+    if not agent_files:
+        raise ValueError("no agent files found under .claude/agents/")
+    parsed = {name: parse_agent_block(text) for name, text in agent_files.items()}
+    bad = sorted(name for name, p in parsed.items() if p is None)
+    if bad:
+        raise ValueError("missing or malformed '## Agent registry' block in: "
+                         + ", ".join(f".claude/agents/{n}.md" for n in bad))
+    lines = [
+        "# Agent registry",
+        "",
+        "Generated by `python3 .claude/skills/board/board.py registry` from each",
+        "`.claude/agents/*.md` `## Agent registry` block and the board's per-task `metrics`.",
+        "Do not edit by hand; edit the agent file and regenerate.",
+        "",
+        "## Agents",
+        "",
+        "| Agent | Role | Known limitations | Typical misses | Average cost per run | Last reviewed |",
+        "|---|---|---|---|---|---|",
+    ]
+    for name in sorted(parsed):
+        p = parsed[name]
+        lines.append("| " + " | ".join(_cell(v) for v in (
+            name, AGENT_ROLES.get(name, "-"), p["known_limitations"], p["typical_misses"],
+            p["average_cost_per_run"], p["last_reviewed"])) + " |")
+    lines += [
+        "",
+        "## Cost per role (board metrics, averages per done task)",
+        "",
+        "Board tasks name a role and model (`plan:` / `build:` / `review:`), not the agent that",
+        "ran, and their metrics are whole-task totals; so every role a task names gets that",
+        "task's numbers, and agents sharing a role share one number.",
+        "",
+        "| Role | Tasks | Tool calls | Tokens in | Tokens out | Wall time (s) |",
+        "|---|---|---|---|---|---|",
+    ]
+    for role, b in role_buckets(board).items():
+        if b is None:
+            lines.append(f"| {role} | 0 | {NO_RUNS} | - | - | - |")
+        else:
+            lines.append(f"| {role} | " + " | ".join(str(b[k]) for k in ("n",) + METRIC_KEYS) + " |")
+    return "\n".join(lines) + "\n"
