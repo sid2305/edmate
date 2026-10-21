@@ -15,6 +15,12 @@ import {
 } from '@edmate/harness/testing';
 import { describe, expect, it } from 'vitest';
 import { CHAT_USAGE, renderEvent, runChatCommand } from './chat.js';
+import { buildChatDeps, slackClock, type ChatDepsOptions } from './chat/deps.js';
+
+// Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
+// clock and ended in an `error` event. Tests widen every step budget 10x; production is unchanged.
+const slackBuildDeps = (opts: ChatDepsOptions) =>
+  buildChatDeps({ ...opts, clock: slackClock(10) });
 
 function capture() {
   const out: string[] = [];
@@ -121,7 +127,7 @@ describe('edmate chat: a scripted multi-turn session', () => {
       const code = await runChatCommand(
         ['--package', 'free', '--source', 'teacher_preview'],
         rec.io,
-        { env: {}, cwd: '.', gateway: scriptedChatGateway(2) },
+        { env: {}, cwd: '.', gateway: scriptedChatGateway(2), buildDeps: slackBuildDeps },
         linesStream(['What is a variable?', 'Teach me loops please', 'exit']),
       );
       expect(code).toBe(0);
@@ -140,7 +146,7 @@ describe('edmate chat: a scripted multi-turn session', () => {
     const code = await runChatCommand(
       [],
       rec.io,
-      { env: {}, cwd: '.', gateway: scriptedChatGateway(1) },
+      { env: {}, cwd: '.', gateway: scriptedChatGateway(1), buildDeps: slackBuildDeps },
       linesStream(['', 'What is a variable?', 'exit']),
     );
     expect(code).toBe(0);
@@ -152,7 +158,7 @@ describe('edmate chat: a scripted multi-turn session', () => {
     const code = await runChatCommand(
       [],
       rec.io,
-      { env: {}, cwd: '.', gateway: scriptedChatGateway(1) },
+      { env: {}, cwd: '.', gateway: scriptedChatGateway(1), buildDeps: slackBuildDeps },
       linesStream(['What is a variable?']),
     );
     expect(code).toBe(0);

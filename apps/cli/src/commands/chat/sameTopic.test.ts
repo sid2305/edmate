@@ -17,7 +17,11 @@ import {
   ScriptedGateway,
 } from '@edmate/harness/testing';
 import { describe, expect, it } from 'vitest';
-import { buildChatDeps } from './deps.js';
+import { buildChatDeps, slackClock } from './deps.js';
+
+// Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
+// clock and ended in an `error` event. Tests widen every step budget 10x; production is unchanged.
+const STEP_BUDGET_SLACK = 10;
 
 const say = (text: string) => ({ type: 'text' as const, text });
 const used = {
@@ -131,12 +135,18 @@ describe('same-topic turns climb the help ladder and never fall to locked (3.4c)
         packageId: 'free',
         source: 'teacher_preview',
         gateway,
+        clock: slackClock(STEP_BUDGET_SLACK),
       });
       const deps = withHelpStateReload(setup.deps);
 
       let sawRungAboveZero = false;
       for (const text of allowedTurns) {
         const { events, result } = await runOneTurn(deps, setup, text);
+        // On failure, print the error event (code, retryable) and the trace's step outcomes (3.9b).
+        expect(
+          events.filter((e) => e.type === 'error'),
+          JSON.stringify(result.trace?.steps),
+        ).toEqual([]);
         expect(events.some((e) => e.type === 'locked')).toBe(false);
         expect(result.trace?.move).not.toBe('locked');
         expect(events.at(-1)?.type).toBe('done');
@@ -161,6 +171,7 @@ describe('same-topic turns climb the help ladder and never fall to locked (3.4c)
         packageId: 'free',
         source: 'teacher_preview',
         gateway: lockedGateway,
+        clock: slackClock(STEP_BUDGET_SLACK),
       });
       const lockedDeps = withHelpStateReload(lockedSetup.deps);
       for (const text of allowedTurns) {
@@ -168,6 +179,10 @@ describe('same-topic turns climb the help ladder and never fall to locked (3.4c)
       }
       for (const text of lockedTurns) {
         const { events, result } = await runOneTurn(lockedDeps, lockedSetup, text);
+        expect(
+          events.filter((e) => e.type === 'error'),
+          JSON.stringify(result.trace?.steps),
+        ).toEqual([]);
         expect(events.some((e) => e.type === 'locked')).toBe(true);
         expect(result.trace?.move).toBe('locked');
         expect(events.at(-1)?.type).toBe('done');
