@@ -46,6 +46,14 @@ Acceptance: worker tests run full turns on a slack clock (all three int files); 
 - Risky paths touched: none.
 
 ## Decisions
+
+### 21 Oct 2026 · 3.9d apps/worker real-clock turn test flake · decided by lead · risk: low
+
+- Decided: merge 3.9d. The worker integration tests that run full turns (safetyEvent, alert, commit) use a local 10x `slackClock`, as 3.9b did for apps/cli. A slow-runner test reproduces the CI failure without the slack and passes with it. Production budgets and clocks are unchanged.
+- Why: PR #90's CI failed on a cold first turn that ran past preGuard's budget on the real clock. The code-reviewer approved with no findings.
+- risk: low
+
+Details (builder):
 - A slack test clock (10x), not a longer production budget, same as 3.9b · risk: low.
 - A local copy of `slackClock` in `apps/worker/test/clock.ts` rather than moving apps/cli's into a
   shared package (no shared test-helper place exists; plan step 2) · risk: low.
