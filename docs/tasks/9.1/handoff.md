@@ -291,3 +291,19 @@ Jest runtime; `apps/web/test/jest-axe.d.ts` supplies the Vitest-side type augmen
 own types (written for Jest) don't provide. The plan asked for "an axe runner for vitest", not
 `vitest-axe` by name.
 risk: low.
+
+## Fix round
+
+Security review (HIGH): `apps/web/package.json` pinned `next-intl@4.4.0`, which has a known
+advisory fixed in 4.9.2.
+
+- Pinned `next-intl` to `4.14.9` (latest 4.x patch), same exact-pin style.
+- `corepack pnpm install` updated `pnpm-lock.yaml`. This pulled in `@swc/core` and
+  `@parcel/watcher` as new transitive deps of `next-intl` with blocked install scripts; added
+  both as `false` to `pnpm-workspace.yaml`'s `allowBuilds` (same convention as `esbuild` and
+  `msgpackr-extract`) since both ship prebuilt platform binaries and need no install script.
+- No API breakage: `apps/web/src/i18n/request.ts`, `next.config.ts` and the `next-intl/server`
+  test mock all still work unchanged against 4.14.9.
+- `turbo run typecheck lint test build --filter=@edmate/web...` — all green (363 tests passed,
+  4 skipped as before; build succeeded).
+- `python3 .githooks/secret-scan.py --all` — clean.
