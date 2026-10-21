@@ -1674,9 +1674,9 @@ tasks:
   - GATE
   - '1.3'
   - '1.7'
-  status: running
+  status: done
   branch: m9/9.1-app-shell
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:opus fix:sonnet review:security-opus,code-sonnet,ts-sonnet
 - id: 9.1a
   milestone: M13
   title: Lighthouse accessibility at 360 px on the signed-in pages (/home, /teacher) against a disposable stack, and a Lighthouse CI job (9.1 follow-up; /sign-in scored 100)

@@ -10,6 +10,116 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · `apps/web/src/auth/**` touched in Phase B · decided by tdd-guide · risk: high
+Decided: `src/auth/guard.ts` and `src/auth/index.ts` are both edited in this phase (the
+`SIGN_IN_PATH` rename and the new `currentPrincipal()` soft read), matching the plan's own call-out
+and `.claude/skills/merge-gate/risk-paths.txt`'s existing `apps/web/src/auth/**` entry.
+Why: both are named in the plan's Phase B file list; no guard, age-gate or cookie/session setting
+was weakened — `requireRole`'s only behaviour change is the string it redirects to, and
+`currentPrincipal()` is explicitly not security-enforcing (`requireRole` still gates `/home` and
+`/teacher` in Phase C). `src/auth/**`'s 100%-lines/functions/statements, 90%-branches coverage
+floor holds (100% branches, measured).
+risk: high. security-reviewer (opus) ran on the branch and approved; the lead approves the merge.
+
+---
+
+### 20 Oct 2026 · next-intl's server `getTranslations` is mocked in jsdom component tests · decided by tdd-guide
+Decided: `app/sign-in/page.test.tsx` mocks `next-intl/server`'s `getTranslations` to read
+`messages/en.json` directly, instead of calling the library's real implementation under jsdom.
+Why: Vitest's jsdom environment has no server/client runtime split the way Next's build does;
+next-intl's package exports resolve to its client-only bundle whenever `document` is defined
+(true for every `.tsx` test in this suite), and that bundle throws
+`` `getTranslations` is not supported in Client Components `` outright — there is no way to make
+the real server API callable under jsdom. The mock still exercises the page's real namespace keys
+(`shell.*`, `signIn.*`) against the real `en.json` the production `src/i18n/request.ts` loads, so
+a typo'd or missing key still fails the test; only next-intl's own request-context plumbing (which
+only exists inside a real Next request) is replaced.
+risk: low.
+
+---
+
+### 20 Oct 2026 · next-intl pinned to 4.4.0, not the registry's latest 4.14.9 · decided by tdd-guide
+Decided: `next-intl@4.4.0`, the newest 4.x release that both (a) lists `next@^16.0.0` and
+`react@^19.0.0` in its peer ranges and (b) has no `@swc/core`/`@parcel/watcher` hard dependency.
+Why: `next-intl`'s current `latest` (4.14.9) added a message-extraction/catalog feature (new
+`@eloqnt/*`, `icu-minify`, `next-intl-swc-plugin-extractor` dependencies) that pulls in
+`@swc/core` and `@parcel/watcher` as plain (non-optional) dependencies needing native install-time
+build scripts — a public repo should not need to run two extra native builds for a feature (PO
+catalog extraction) this task never uses, and the lead's existing `pnpm-workspace.yaml`
+`allowBuilds: false` pattern is for *optional* speed-ups, not a dependency a package can't function
+without installing a build for. `next-intl@4.4.0` (the commit just before `@swc/core` was added as
+a hard dependency, per the registry's version history) still fully supports the non-routing
+`getRequestConfig`/`createNextIntlPlugin` API this task uses, with no feature gap for this scope.
+risk: low (within the plan's own "not a tech-stack ADR" carve-out for this task's chosen next-intl
+version).
+
+---
+
+### 20 Oct 2026 · `environmentMatchGlobs` replaced with a per-file `@vitest-environment` docblock · decided by tdd-guide
+Decided: `apps/web/vitest.config.ts` keeps `environment: 'node'` as the suite default and the new
+`.test.tsx` files each carry a `// @vitest-environment jsdom` docblock comment, instead of the
+plan's suggested `environmentMatchGlobs` config option.
+Why: the installed vitest (`5.0.5`, already pinned in the workspace) removed `environmentMatchGlobs`
+from its config type; the per-file docblock override is still supported in 5.0.5 and gives the same
+per-file environment selection the plan asked for, without introducing Vitest's `projects`
+(workspace) config — which the plan itself called overkill for two environments in one small
+package — for just this one override.
+risk: low.
+
+---
+
+### 20 Oct 2026 · `/`, `/home` and `/teacher` all export `dynamic = 'force-dynamic'` · decided by tdd-guide
+Decided: all three Phase C pages export `export const dynamic = 'force-dynamic'`, the same
+pattern `app/welcome/age/page.tsx` already used.
+Why: `next build --webpack` tries to prerender every page it can at build time; these three call
+`currentPrincipal()`/`requireRole()`, which construct the auth runtime (reading `AUTH_SECRET`
+among other env) on first use. With no `AUTH_*` env set at build time (by design — rule 4,
+tests/build never touch real secrets), prerendering `/home` failed the build outright with
+`AuthConfigError: AUTH_SECRET is not set`. Marking the route dynamic defers that work to each
+real request, matching `/welcome/age`'s existing, already-reviewed approach.
+risk: low.
+
+---
+
+### 20 Oct 2026 · `/home` and `/teacher` Lighthouse scores not captured (signed-in session) · decided by tdd-guide
+Decided: ship Phase C with a real Lighthouse score for `/sign-in` only (100); `/home` and
+`/teacher` are left to a follow-up, not faked or skipped silently.
+Why: both routes are `requireRole`-gated and only render for a real signed-in session, which
+needs a working Postgres + Redis + `AUTH_SECRET` stack. This worktree has none of its own, and
+the only stack found running on the host machine was a shared sandbox compose stack already
+serving a different build; reusing or restarting it for this task's evidence capture risked
+disrupting other concurrent work, so it was left alone. The plan's own fallback ("if a manual
+Lighthouse run isn't possible in your environment, say so instead of faking a number") is written
+for "no Chrome"; this is the same principle applied to "no safe-to-touch signed-in session",
+which is the actual blocker here (Chrome itself works — see the `/sign-in` run above).
+risk: low (nothing here ships to real students before the harness exit gate).
+
+---
+
+### 20 Oct 2026 · jest-axe over vitest-axe for the axe runner · decided by tdd-guide
+Decided: `jest-axe@11.0.0` (published 2 months before this task, actively maintained) is the axe
+runner, not `vitest-axe` (latest tagged release `0.1.0`, four years old; its `pre` tag
+`1.0.0-pre.5` is a year old and still pre-release).
+Why: `jest-axe`'s matcher (`expect.extend({ toHaveNoViolations })`) is framework-agnostic — it only
+needs `expect.extend`, which Vitest's `expect` also supports — so it works under Vitest without a
+Jest runtime; `apps/web/test/jest-axe.d.ts` supplies the Vitest-side type augmentation `jest-axe`'s
+own types (written for Jest) don't provide. The plan asked for "an axe runner for vitest", not
+`vitest-axe` by name.
+risk: low.
+
+---
+
+### 20 Oct 2026 · next-intl moves to 4.14.9, replacing the 4.4.0 pin · decided by lead
+Decided: pin `next-intl@4.14.9` and set `@swc/core` and `@parcel/watcher` to `false` in
+`pnpm-workspace.yaml`'s `allowBuilds`, replacing the 4.4.0 pin above.
+Why: 4.4.0 carries two advisories (an open redirect and prototype pollution, both fixed in 4.9.2).
+Neither is reachable today, but the open redirect turns live once a second market enables
+next-intl routing. Two extra prebuilt binaries with their install scripts blocked cost less than
+an old version with known advisories. The build, typecheck and all 363 web tests pass on 4.14.9.
+risk: low.
+
+---
+
 ### 20 Oct 2026 · 3.11e role-play count rules and closed-mode history · decided by plan (lead-approved), built by tdd-guide · risk: high
 Decided:
 - A role-play starts at question 1 on any `skill_action` mock_interview turn, or when the persona differs from the stored `personaId`. A blob with no `personaId` counts as a different persona.
