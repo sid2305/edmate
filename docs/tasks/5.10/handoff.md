@@ -186,6 +186,13 @@ python3 .githooks/secret-scan.py --all  → clean
 
 ## Decisions
 
+### 21 Oct 2026 · 5.10 Ask the teacher (repositories, risky path) · decided by lead · risk: high
+
+- Decided: merge 5.10. Questions are grouped inside `open` (lexical; same teacher and agent; `findSimilar` stays `[]`). The teacher's answer writes the note, the eval case, the status, the thread messages and the notifications in one teacher-scoped transaction that writes into the asking students' own open sessions. New tables `teacher_eval_cases` and `notifications` (migration 0018, additive). The acceptance test runs on a 10x slack clock. The review's MEDIUM deadlock ordering and the LOW items go to 5.10b.
+- Why: the plan's planned decision. code-reviewer (opus), typescript-reviewer, database-reviewer and security-reviewer found no isolation problem; the one HIGH (real clock) is fixed and re-checked.
+- risk: high
+
+Details (builder):
 ### 21 Oct 2026 · Teacher-note validation lives in the shared harness helper · decided by tdd-guide
 Decided: `teacherNote.ts` also exports `teacherNoteParts` and `TEACHER_NOTE_PART_MAX` (the turn text limit, counted in characters), and `teacherNoteText` / `teacherNoteSource` throw a fixed-text `HarnessError` on bad input. The db adapter and the memory double validate through it.
 Why: one place decides what a usable note is, as well as its text and citation, so the two stores cannot drift (lead answer Q3), and no error carries the teacher's or student's words.
