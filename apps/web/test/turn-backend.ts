@@ -1,0 +1,205 @@
+// A memory TurnBackend for the chat route tests (task 9.4): the harness's two-teacher access world,
+// memory ports, the real `defaultSteps`, a real clock and the scripted gateway (rule 4: no real
+// model call). preGuard's classifiers are scripted by their fixed system prompts; postGuard's
+// grounding and advice judges are answered by the harness's own judge wrappers (as in the CLI's
+// chat deps test), so a script only needs the reply streams.
+import type { Chunk, LearnerProfile, ModelGateway, ProfileStore } from '@edmate/contracts';
+import { createTurnLimits, defaultSteps, type PipelineDeps } from '@edmate/harness';
+import {
+  adviceJudgeGateway,
+  CLEAN_ADVICE_VERDICT,
+  GROUNDED_VERDICT,
+  judgeGateway,
+  memoryAlertSink,
+  memoryEntitlementStore,
+  memoryRetrieval,
+  memorySafetyEventSink,
+  memorySessionStateStore,
+  memoryTeacherQuestionStore,
+  memoryTraceSink,
+  memoryTranscriptStore,
+  memoryTurnConfigStore,
+  memoryTurnLog,
+  memoryUsageMeter,
+  ScriptedGateway,
+  twoTeacherWorld,
+  type AccessWorld,
+  type ScriptedObjectCall,
+  type ScriptedStreamCall,
+} from '@edmate/harness/testing';
+import { readPromptPackLibrary } from '@edmate/content';
+import type { StudentScope } from '@edmate/db';
+import { fileURLToPath } from 'node:url';
+import { systemClock, systemIds } from '../src/turn/deps';
+import { webFallbackReplies } from '../src/turn/fallbackReplies';
+import type { TurnBackend } from '../src/turn/routes';
+
+/** preGuard's three classifiers, all clear. */
+export function clearClassifiers(): ScriptedObjectCall[] {
+  return [
+    { match: (r) => r.system.includes('thoughts of suicide or self-harm'), value: { distress: false } },
+    { match: (r) => r.system.includes('self_harm (wants to hurt themselves)'), value: { category: 'none' } },
+    { match: (r) => r.system.includes('jailbreak_override'), value: { category: 'none' } },
+  ];
+}
+
+/** A stream that says `parts` in order, then reports usage. */
+export function says(...parts: string[]): ScriptedStreamCall {
+  return {
+    steps: [
+      ...parts.map((text) => ({ type: 'text' as const, text })),
+      {
+        type: 'usage' as const,
+        usage: { model: 'claude-haiku-4-5', tier: 'main' as const, inputTokens: 10, outputTokens: 10, costMicroUsd: 1 },
+      },
+    ],
+  };
+}
+
+/** Wraps a gateway to see each stream and whether its consumer stopped before it ended. */
+export function observedGateway(inner: ModelGateway) {
+  const seen = { streams: 0, closedEarly: 0 };
+  const gateway: ModelGateway = {
+    stream(req) {
+      seen.streams += 1;
+      return (async function* observe() {
+        let ended = false;
+        try {
+          for await (const chunk of inner.stream(req)) yield chunk;
+          ended = true;
+        } catch (error) {
+          ended = true;
+          throw error;
+        } finally {
+          if (!ended) seen.closedEarly += 1;
+        }
+      })();
+    },
+    generateObject: (req, schema) => inner.generateObject(req, schema),
+    embed: (texts) => inner.embed(texts),
+  };
+  return { gateway, seen };
+}
+
+/** The repo's real prompt packs (read-only): the world's agents use set 1.0.0. */
+const promptPacks = readPromptPackLibrary(
+  fileURLToPath(new URL('../../../content/prompt-packs/', import.meta.url)),
+);
+
+function chunk(id: string, teacherId: string, moduleId: string, text: string): Chunk {
+  return {
+    id,
+    teacherId,
+    documentId: `doc_${moduleId}`,
+    moduleId,
+    kind: 'material',
+    text,
+    source: { title: `Notes ${moduleId}`, locator: 'p1', kind: 'material' },
+  };
+}
+
+function profiles(): ProfileStore {
+  const of = (studentId: string, teacherId: string): LearnerProfile => ({
+    studentId,
+    teacherId,
+    lang: 'en',
+    mastery: {},
+    mistakes: [],
+  });
+  return {
+    get: (s, t) => Promise.resolve(of(s, t)),
+    applyEvidence: (events) =>
+      Promise.resolve(of(events[0]?.studentId ?? 'stu_none', events[0]?.teacherId ?? 'tch_none')),
+  };
+}
+
+export interface MemoryBackendOptions {
+  /** Reply streams, in order (classifier calls are scripted already). */
+  stream?: ScriptedStreamCall[];
+  /** Extra or replacement object calls (default: the three clear classifiers). */
+  objects?: ScriptedObjectCall[];
+  world?: AccessWorld;
+}
+
+export function memoryBackend(opts: MemoryBackendOptions = {}) {
+  const world = opts.world ?? twoTeacherWorld();
+  const clock = systemClock();
+  const scripted = new ScriptedGateway(
+    { generateObject: opts.objects ?? clearClassifiers(), stream: opts.stream ?? [says('Hello')] },
+    clock,
+  );
+  const observed = observedGateway(
+    adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
+  );
+  const entitlements = memoryEntitlementStore(world, { market: 'IN' });
+  const transcripts = memoryTranscriptStore();
+  const scopes: StudentScope[] = [];
+  const logs: { event: string; fields: Readonly<Record<string, string>> }[] = [];
+  const retrieval = memoryRetrieval({
+    chunks: [
+      chunk('chk_a1', 'tch_a', 'mod_a1', 'Fractions have a numerator and a denominator.'),
+      chunk('chk_a3', 'tch_a', 'mod_a3', 'Photosynthesis makes sugar from sunlight in chlorophyll.'),
+    ],
+  });
+  let created = 0;
+
+  const depsFor = (scope: StudentScope): PipelineDeps => {
+    scopes.push(scope);
+    return {
+      clock,
+      ids: systemIds(),
+      gatewayFor: () => ({ gateway: observed.gateway, metered: false }),
+      priceUsage: (u) => u.costMicroUsd,
+      log: memoryTurnLog(),
+      entitlements,
+      turnConfig: memoryTurnConfigStore(world),
+      entitlementSource: 'subscription',
+      limits: createTurnLimits(clock),
+      profiles: profiles(),
+      transcripts,
+      sessionState: memorySessionStateStore(),
+      retrieval,
+      teacherQuestions: memoryTeacherQuestionStore(),
+      usage: memoryUsageMeter(),
+      traces: memoryTraceSink(),
+      alerts: memoryAlertSink(),
+      safetyEvents: memorySafetyEventSink(),
+      fallbackReplies: webFallbackReplies(),
+      promptPacks,
+      distressCheck: () => false,
+    };
+  };
+
+  const backend: TurnBackend = {
+    agents: {
+      owner: async ({ agentId }) => {
+        const a = world.agents.find((x) => x.id === agentId && x.status === 'live');
+        return a ? { teacherId: a.teacherId } : null;
+      },
+      get: async ({ teacherId }, agentId) => {
+        const a = world.agents.find((x) => x.id === agentId && x.teacherId === teacherId);
+        if (!a) return null;
+        const live = a.status === 'live' ? Math.max(...a.versions.map((v) => v.version)) : null;
+        return { status: a.status, liveVersion: live };
+      },
+    },
+    sessions: {
+      create: async (scope, input) => {
+        created += 1;
+        const id = `ses_new_${created}`;
+        world.sessions.push({ id, ...scope, ...input, endedAt: null });
+        return { id };
+      },
+      get: async (scope, id) =>
+        world.sessions.find(
+          (s) => s.id === id && s.studentId === scope.studentId && s.teacherId === scope.teacherId,
+        ) ?? null,
+    },
+    entitlements,
+    depsFor,
+    steps: defaultSteps,
+    now: () => new Date(),
+    log: { error: (event, fields = {}) => void logs.push({ event, fields }) },
+  };
+  return { backend, world, scripted, seen: observed.seen, entitlements, transcripts, scopes, logs };
+}

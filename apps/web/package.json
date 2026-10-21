@@ -11,12 +11,15 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run --coverage",
-    "build-smoke": "vitest run --config vitest.build-smoke.config.ts"
+    "build-smoke": "vitest run --config vitest.build-smoke.config.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@edmate/content": "workspace:*",
     "@edmate/contracts": "workspace:*",
     "@edmate/db": "workspace:*",
+    "@edmate/gateway": "workspace:*",
+    "@edmate/harness": "workspace:*",
     "@edmate/queue": "workspace:*",
     "ioredis": "6.0.0",
     "next": "16.4.2",
@@ -29,6 +32,7 @@
   },
   "devDependencies": {
     "@edmate/config": "workspace:*",
+    "@playwright/test": "1.64.1",
     "@testing-library/jest-dom": "7.0.1",
     "@types/jest-axe": "3.5.9",
     "@testing-library/react": "16.3.3",

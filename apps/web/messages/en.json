@@ -12,10 +12,61 @@
   "home": {
     "nav": "Home",
     "title": "Home",
-    "placeholder": "Your teacher's agent will be here soon."
+    "placeholder": "Your teacher's agent will be here soon.",
+    "chatLink": "Chat with your teacher's agent"
   },
   "teacher": {
     "title": "Teacher studio",
     "placeholder": "Teacher studio — coming soon."
+  },
+  "chat": {
+    "title": "Chat with your teacher's agent",
+    "threadLabel": "Conversation",
+    "empty": "Ask your first question below.",
+    "you": "You",
+    "agent": "Tutor",
+    "teacher": "Your teacher",
+    "stillChecking": "Still checking…",
+    "updated": "Updated",
+    "updatedHint": "This reply was corrected",
+    "composerLabel": "Your message",
+    "send": "Send",
+    "sending": "The tutor is replying…",
+    "hint": "Get a hint",
+    "hintAsked": "Can I have a hint?",
+    "lastHelp": "Last help: {level}",
+    "rung1": "Hint",
+    "rung2": "Hint",
+    "rung3": "Worked example",
+    "rung4": "Full solution",
+    "sources": "Sources",
+    "locked": "This is part of {packageName}.",
+    "lockedGeneric": "This is not part of your package.",
+    "teacherQuestion": "Sent to your teacher. They'll answer in a live class or here.",
+    "skillComingSoon": "Coming soon",
+    "retry": "Try again",
+    "skills": {
+      "explain": "Explain",
+      "coach": "Coach",
+      "practice": "Practice",
+      "feedback": "Feedback",
+      "mock_interview": "Mock interview",
+      "revision": "Revision",
+      "study_plan": "Study plan"
+    },
+    "errors": {
+      "unauthorized": "Please sign in again to keep chatting.",
+      "forbidden": "You can't use this chat yet.",
+      "not_found": "This chat is not available any more. Start a new one.",
+      "validation": "That message couldn't be sent. Please check it and try again.",
+      "no_access": "You need a live package with this teacher to chat.",
+      "limit_reached": "You've used today's messages in your package. Come back tomorrow.",
+      "rate_limited": "You're sending messages quickly. Wait a moment, then try again.",
+      "input_too_large": "That message is too long. Please make it shorter.",
+      "turn_cost_exceeded": "That question needs too much work for one reply. Try asking a smaller part.",
+      "provider_error": "Something went wrong. Please try again.",
+      "guard_blocked": "I can't help with that here. Let's get back to your learning.",
+      "payment_required": "Your package needs a payment before you can keep chatting."
+    }
   }
 }
