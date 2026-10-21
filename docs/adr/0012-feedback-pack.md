@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted (lead, 21 Oct 2026; architect, security-reviewer and typescript-reviewer approved).
 
 ## Date
 

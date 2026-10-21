@@ -95,7 +95,8 @@ export type FrameSection = keyof typeof FRAME_SECTIONS;
  */
 export const OPTIONAL_FRAME_SECTIONS = Object.freeze(['move-feedback'] as const);
 export type OptionalFrameSection = (typeof OPTIONAL_FRAME_SECTIONS)[number];
-type RequiredFrameSection = Exclude<FrameSection, OptionalFrameSection>;
+/** Every frame section a set must have (all but `OPTIONAL_FRAME_SECTIONS`). */
+export type RequiredFrameSection = Exclude<FrameSection, OptionalFrameSection>;
 
 function isOptionalSection(name: string): boolean {
   return (OPTIONAL_FRAME_SECTIONS as readonly string[]).includes(name);
@@ -314,7 +315,7 @@ export function parsePromptPackSet(raw: unknown): PromptPackSet {
     version: top.data.version,
     reviewedBy: top.data.reviewedBy,
     packs: packs as Record<PackName, PromptPack>,
-    frame: frame as Record<FrameSection, string>,
+    frame: frame as PromptPackSet['frame'],
   });
 }
 

@@ -1,0 +1,26 @@
+id: feedback-ra-vv-01
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/values-variables.yaml#ra-vv-01
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What does `print(7 // 2)` show, and why is it different from `print(7 / 2)`?
+
+      My answer:
+      It prints 3 because // is floor division and throws away the .5. 7 / 2 would print 3.5.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits both rubric lines: the result of floor division and the reason it differs from / (the remainder is dropped)'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

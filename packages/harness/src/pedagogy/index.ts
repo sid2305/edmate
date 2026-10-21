@@ -69,6 +69,7 @@ export {
   placeholdersOf,
   OPTIONAL_FRAME_SECTIONS,
   type OptionalFrameSection,
+  type RequiredFrameSection,
   type PromptPack,
   PromptPackError,
   type PromptPackIssue,

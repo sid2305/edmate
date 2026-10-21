@@ -1,0 +1,35 @@
+id: feedback-ra-co-06
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/conditions.yaml#ra-co-06
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      This code never prints "Distinction", even for 85 marks. Why, and how do you fix it?
+
+      ```python
+      if marks >= 50:
+          print("Pass")
+      elif marks >= 80:
+          print("Distinction")
+      ```
+
+      My answer:
+      Change the elif to if.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'elif marks >= 50:'
+        - 'prints both'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply names the missing reason, says two separate ifs only half fix it, and points to keeping the chain with the >= 80 check first, in words, without writing the code'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

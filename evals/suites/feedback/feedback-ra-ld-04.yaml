@@ -1,0 +1,29 @@
+id: feedback-ra-ld-04
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/lists-dicts.yaml#ra-ld-04
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      With the same `stock`, `stock["kiwis"]` crashes. Why? Give two safe ways to look up a key
+      that might be missing.
+
+      My answer:
+      Because kiwis isn't in the dictionary. Use try.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - '"kiwis" in stock'
+        - 'stock.get('
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the reason (the key is missing) and names that neither safe way (an in check or .get()) is given, pointing to Module 5, section 5.5, without writing the code'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

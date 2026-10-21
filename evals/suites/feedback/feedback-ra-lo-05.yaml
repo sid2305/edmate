@@ -1,0 +1,33 @@
+id: feedback-ra-lo-05
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/loops.yaml#ra-lo-05
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Why does this loop never stop, and how do you fix it?
+
+      ```python
+      count = 0
+      while count < 5:
+          print(count)
+      ```
+
+      My answer:
+      count never goes up, so count < 5 is always true. Put count += 1 inside the loop under
+      the print.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits both the reason (nothing changes count, so the condition stays true) and the fix (adding to count inside the loop)'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

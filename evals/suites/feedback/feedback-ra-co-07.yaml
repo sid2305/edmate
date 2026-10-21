@@ -1,0 +1,31 @@
+id: feedback-ra-co-07
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/conditions.yaml#ra-co-07
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Write code that prints "Even" if `n` is even and "Odd" otherwise.
+
+      My answer:
+      if n % 2 = 0:
+          print("Even")
+      else:
+          print("Odd")
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'if n % 2 == 0:'
+        - 'syntaxerror'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the remainder test and the if/else shape, and names = instead of == in the test as the unmet line, without saying what error the code raises'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

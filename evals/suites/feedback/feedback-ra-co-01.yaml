@@ -1,0 +1,26 @@
+id: feedback-ra-co-01
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/conditions.yaml#ra-co-01
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What is wrong with `if score = 10:`, and how do you fix it?
+
+      My answer:
+      You need two equals signs: if score == 10:. One = means store a value.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits both the problem (= stores a value, == compares) and the fix'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

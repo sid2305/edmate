@@ -1,0 +1,30 @@
+id: feedback-ra-vv-03
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/values-variables.yaml#ra-vv-03
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What does `print(7 // 2)` show, and why is it different from `print(7 / 2)`?
+
+      My answer:
+      It prints 3. The other one prints 3.5.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'drops the remainder'
+        - 'throws away the remainder'
+        - 'discards the remainder'
+        - 'rounds down'
+      judge:
+        - 'The reply says the work partly meets the rubric, credits at least one rubric line it meets, and names at least one specific rubric line it misses'
+        - 'The reply credits the result and names the missing reason, asking the student to say what // does to the remainder without saying it for them'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

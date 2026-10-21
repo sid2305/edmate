@@ -630,6 +630,9 @@ describe('move instructions', () => {
         policy({ move: 'hint', rung: 1, skill: 'coach' }),
         policy({ move: 'hint', rung: 2, skill: 'coach' }),
         policy({ move: 'hint', rung: 0, skill: 'practice' }),
+        // Only rung 0 takes move-feedback; a feedback hint at a higher rung keeps the ladder line.
+        policy({ move: 'hint', rung: 1, skill: 'feedback' }),
+        policy({ move: 'hint', rung: 2, skill: 'feedback' }),
         policy({ move: 'explain', skill: 'feedback' }),
         policy({ move: 'ask', skill: 'feedback' }),
         policy({ move: 'ask', skill: null, reason: 'fallback' }),

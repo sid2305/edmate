@@ -1,0 +1,30 @@
+id: feedback-ra-fn-06
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/functions.yaml#ra-fn-06
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Write a function `is_even(n)` that returns True if `n` is even and False otherwise.
+
+      My answer:
+      def is_even(n):
+          if n % 2 == 0:
+              return True
+          else:
+              return False
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits the n % 2 == 0 test and the True or False return in both cases, and does not ask for the shorter one-line version'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

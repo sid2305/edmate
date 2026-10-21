@@ -1,0 +1,27 @@
+id: feedback-ra-co-02
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/conditions.yaml#ra-co-02
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      What is wrong with `if score = 10:`, and how do you fix it?
+
+      My answer:
+      Nothing is wrong, it checks if score is 10.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'if score == 10'
+      judge:
+        - 'The reply says the work does not meet the rubric yet, never calls any part of it right, and ends by asking which fix the student will try first'
+        - 'The reply names the assign-vs-equals mistake and points to the "Watch out" box in Module 2, section 2.1, without writing the fixed line'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

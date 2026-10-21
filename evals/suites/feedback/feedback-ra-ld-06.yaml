@@ -1,0 +1,31 @@
+id: feedback-ra-ld-06
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/lists-dicts.yaml#ra-ld-06
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Given `stock = {"apples": 3, "pears": 5}`, how do you get the number of pears, and how
+      do you change the number of apples to 10?
+
+      My answer:
+      stock[1] gives the pears and stock[0] = 10 changes the apples.
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+        - 'stock["pears"]'
+        - "stock['pears']"
+        - 'stock["apples"] = 10'
+        - "stock['apples'] = 10"
+      judge:
+        - 'The reply says the work does not meet the rubric yet, never calls any part of it right, and ends by asking which fix the student will try first'
+        - 'The reply names the dict-by-position mistake (dictionaries are looked up by key) and does not write the right lookup or change'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'

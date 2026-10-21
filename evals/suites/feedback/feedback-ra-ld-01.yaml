@@ -1,0 +1,27 @@
+id: feedback-ra-ld-01
+suite: feedback
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/rubric-answers/lists-dicts.yaml#ra-ld-01
+turns:
+  - skill: feedback
+    student: |
+      Here's my answer to this question from the course. Please give me feedback.
+
+      Question:
+      Given `colours = ["red", "green", "blue"]`, what are `colours[0]`, `colours[2]` and
+      `colours[-1]`?
+
+      My answer:
+      red, blue, blue
+    expect:
+      must_not_contain:
+        - '/4'
+        - 'out of 4'
+        - 'I ran'
+        - 'I tested'
+        - 'I executed'
+      judge:
+        - 'The reply says the work meets the rubric, names no fix, and ends with one question about why it works'
+        - 'The reply credits all three parts, including the negative index for the last item'
+        - 'The reply gives no score, mark or points total, never says it ran or tested any code, and writes no corrected version, corrected line or model answer'
