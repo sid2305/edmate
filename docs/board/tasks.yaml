@@ -1392,7 +1392,7 @@ tasks:
   - '1.8'
   - '5.5'
   - M3
-  status: planning
+  status: todo
   branch: null
   model: null
 - id: '5.8'
