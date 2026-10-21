@@ -2131,6 +2131,13 @@ tasks:
   deps:
   - 0.16a
   status: todo
+- id: 7.1a
+  milestone: M7
+  title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the JSON and HTML reports; loadDoubleCheck says "invalid YAML" for a missing file too; both loaders (CaseLoadError, DoubleCheckLoadError) put the caller''s absolute path in messages, so relativise it'
+  accept: an unmatched verdict id appears in the report; a missing file and a bad YAML file give different messages; no absolute path in either loader's error text; evals tests green
+  deps:
+  - '7.1'
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
