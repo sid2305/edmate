@@ -251,6 +251,17 @@ the scope's own `teacher_questions` row (another scope's notification can't be r
 borrowed id), newest first. `markRead(scope, id)` is a scoped UPDATE; another student's or a
 missing id is `not_found`.
 
+**`db:questions` (Phase D).** The teacher's own command-line view onto the two reads/writes above,
+after `pnpm --filter @edmate/db build`: `pnpm --filter @edmate/db db:questions -- list --teacher
+<id>` prints each open group (id, count, oldest) and its member questions (id, text); `pnpm
+--filter @edmate/db db:questions -- answer --teacher <id> --question <id> --module <id>
+--answer-file <path> [--note-question <text>]` reads the answer from a file (never the shell's
+argv or history) and calls `teacherQuestions.answer`, printing counts only (never a student id).
+A bad usage or a missing `--answer-file` never opens the database; a `RepositoryError('not_found',
+...)` (another teacher's or an already-answered question, a missing module) prints a fixed
+message; any other failure is `redact()`ed before it reaches the terminal. See
+`runTeacherQuestionsCli` (`src/cli.ts`) and `src/bin/teacher-questions.ts`.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

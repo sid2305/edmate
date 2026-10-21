@@ -1,9 +1,10 @@
 # Task 5.10 handoff: Ask-the-teacher path
 
-Status: PARTIAL (Phases A, B and C of A–D done)
+Status: DONE (Phases A, B, C and D)
 Branch: `m5/5.10-ask-the-teacher`
 Worktree (Phase B): `.claude/worktrees/agent-a4e69cb301edd9e42` (under the repo root)
 Worktree (Phase C): `.claude/worktrees/agent-acdc1d576e76ff106` (under the repo root)
+Worktree (Phase D): `.claude/worktrees/agent-a2df51270fe6a409c` (under the repo root)
 
 ## Phase A
 
@@ -143,9 +144,45 @@ python3 .githooks/secret-scan.py --all  → clean
 
 See `## Decisions` below.
 
-## Left to do
+## Phase D
 
-- **Phase D** (db): `runTeacherQuestionsCli` + `src/bin/teacher-questions.ts` + `db:questions`, CLI unit test, `test/ask-teacher-loop.int.test.ts` (the Postgres acceptance), merge gate, `review.md` (code-reviewer, security-reviewer), and the planned `risk: high` decision.
+db side: a `db:questions` CLI over Phase C's `teacherQuestions.listGroupsForTeacher`/`answer`, and
+the task's own Postgres acceptance test running the real harness steps (admit, entitle,
+buildContext, decide, generate) over the real db ports with the scripted gateway. No contracts,
+ADR, harness, pedagogy, access or `apps/web` change.
+
+### Acceptance evidence
+
+| Item | Evidence |
+|---|---|
+| CLI: list / answer, usage, redaction | `test/teacher-questions-cli.test.ts` (15 tests): list formats each group and its questions, or a plain "no open questions"; answer reads the answer file and prints counts only (never a student id), passes `--note-question` through; an unreadable `--answer-file` is a fixed message and never opens the db; `RepositoryError('not_found')` is "not found or already answered"; every bad usage (no args, unknown subcommand, missing flags, unknown flag, a stray positional) prints `usage: ` and exits 1 without opening the db; a missing `DATABASE_URL` is a fixed message; a generic failure is `redact()`ed (no connection password in the output) and still closes the handle; a failing `close()` is ignored. |
+| The acceptance, on Postgres | `test/ask-teacher-loop.int.test.ts`: student 1's uncovered question gives `ask_teacher` and one `teacher_question` event; student 2's similarly worded question opens a second question in the **same group**; the teacher answers both at once through `runTeacherQuestionsCli(['answer', …])` with a module; both students get one `teacher` message in their own open session and one notification; a `teacher_note` document and chunk exist in that module, one `teacher_eval_cases` row exists, and the material revision went up; a third, similarly worded turn from student 1 is not `ask_teacher`, opens no new question, and the `sources` event cites the note (`{ title: "Teacher's answer", kind: 'teacher_note' }`, equal to `teacherNoteSource('teacher_answer', ...)`). |
+| No model calls | Scripted gateway only (a fixed reply stream per turn); no real model or payment call anywhere in Phase D. |
+
+```
+corepack pnpm --filter @edmate/db exec vitest run
+  Test Files 51 passed (51)   Tests 854 passed | 4 skipped (858)
+corepack pnpm turbo run typecheck lint test --filter=@edmate/db...
+  Tasks: 26 successful, 26 total
+  Coverage: All files 99.89% stmts / 97.62% branch / 99.8% funcs / 99.94% lines
+python3 .githooks/secret-scan.py --all  → clean
+```
+
+### Changes
+
+- New `src/bin/teacher-questions.ts`: entry point for `db:questions` (built by `tsc`, run as `node dist/bin/teacher-questions.js`).
+- `src/cli.ts`: `runTeacherQuestionsCli(argv, env, log, open?)` (+ `OpenTeacherQuestions` type, `parseTqArgs`, fixed usage text) — list and answer subcommands over `createRepositories(db).teacherQuestions`; a `RepositoryError('not_found')` is a fixed message, anything else is `redact()`ed; the db handle always closes.
+- `package.json`: `"db:questions": "node dist/bin/teacher-questions.js"`.
+- `src/repositories/README.md`: a `db:questions` paragraph under `## Ask the teacher (task 5.10)`.
+- New `test/teacher-questions-cli.test.ts` (the CLI, with a fake repository — never opens a real db) and `test/ask-teacher-loop.int.test.ts` (the Postgres acceptance, seeded with `isolation-seed.ts`'s `seed()`).
+
+### Deviations
+
+- Used `isolation-seed.ts`'s plain `seed()` for the acceptance test rather than `access-seed.ts`/`retrieval-seed.ts`: it already seeds one subscribed student x teacher pair per teacher (with an open session, a live agent, and a package version with one in-package module), which is everything the five-step acceptance needs; the extra fixtures `access-seed.ts` adds (a second agent/package version, draft/suspended agents, an eval student) are not exercised by this test.
+- The acceptance test drives `runTurn` with a small hand-written real clock (`realClock()`, implementing the testing package's `VirtualClock` shape with real `setTimeout`/`Date.now`, `advance()` a no-op and `drive()` just awaiting the promise) instead of `virtualClock()` + `driveTurn()`. The steps under test make real Postgres round trips, which only ever settle through the event loop's real I/O phase; `virtualClock()`'s `drive()` fires a step's timeout as soon as its own microtask queue goes quiet, which always happens before a real query can return, so every real-db step timed out at once under the virtual clock regardless of actual elapsed time. A real clock's `sleep` races real elapsed time instead, the same as production. This stayed within full-runner wiring (not a manual `defaultSteps` chain), so the plan's ~30-tool-call fallback note does not apply.
+- The acceptance test also overrides `deps.promptPacks` with a small library built from the testing package's fixture pack text re-pinned to version `'1.0.0'` (`createPromptPackLibrary([parsePromptPackSet({ ...fixturePromptPackRaw, version: '1.0.0' })])`), instead of the default `fixturePromptPackLibrary` (pinned to `'0.1.0-fixture'`): the seeded agent's `promptPackVersion` comes from `@edmate/contracts/fixtures`' `demoAgentConfig` (`'1.0.0'`), which the default testing library doesn't have.
+- The third turn's scripted reply includes an explicit `[1]` citation marker (`generate`'s real citation extraction only emits a `sources` event when the model's own text contains a bracket citation that resolves to a provided source), matching the acceptance's own requirement that the `sources` event cite the note.
+- The note's retrieval score was not independently checked against `DEFAULT_COVERAGE_THRESHOLD`: the acceptance only asserts it is the top hit and is cited, which it is; no change was needed to any ranking constant.
 
 ## Decisions
 
@@ -193,3 +230,13 @@ risk: low
 Decided: `listForTeacher never returns studentId` and `round-trips optional fields: ...` no longer assert an empty or single-element `answered` list for a teacher; they assert the known row is present (or absent) and that no row leaks `studentId`.
 Why: before Phase C, `answer` didn't exist, so no `teacher_questions` row was ever `answered` and the exact-count assertions were trivially true; once `answer` is real, other parts of the same shared isolation suite legitimately answer questions for the same teachers, so an exact count is no longer a meaningful invariant — whether the leak and filter rules hold is.
 risk: low
+
+### 21 Oct 2026 · Postgres-backed acceptance tests need a real clock, not `virtualClock()` · decided by tdd-guide
+Decided: `test/ask-teacher-loop.int.test.ts` drives `runTurn` with a small real clock (real `setTimeout`/`Date.now`) implementing the testing package's `VirtualClock` shape, instead of `virtualClock()` + `driveTurn()`.
+Why: `virtualClock()`'s `drive()` fires a step's timeout as soon as its own microtask queue goes quiet; a step making a real Postgres round trip never settles within that quiet window (real I/O only resolves through the event loop's poll phase, which pure microtask flushing never reaches), so every real-db step timed out at once regardless of actual elapsed time. A real clock's `sleep` races real elapsed time, as production does; `virtualClock()` stays correct and necessary for the harness's own in-memory-port tests, which this decision does not change.
+risk: low
+
+### 21 Oct 2026 · 5.10 as a whole: a planned `risk: high` decision now that all four phases are done · decided by tdd-guide
+Decided (plan's own wording, logged now that the grouping and the answer transaction it describes are both built and tested): "5.10 Ask the teacher: questions grouped inside `open` (lexical, same teacher and agent, `findSimilar` stays `[]`); the teacher's answer writes the note, eval case, status, thread messages and notifications in one teacher-scoped transaction that writes into the asking students' open sessions; new tables `teacher_eval_cases` and `notifications`."
+Why: `packages/db/src/repositories/**` is a risk-paths group ("access filter / money / isolation") that needs the security-reviewer's sign-off at merge, per the plan's own Phase A/B/C "Risky paths touched" and "Decisions (draft)" sections; Phase D adds no new risky-path file, so this closes out the one whole-task decision the plan asked the lead to log at merge.
+risk: high

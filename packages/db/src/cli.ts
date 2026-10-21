@@ -1,9 +1,15 @@
+import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { createDb } from './client.js';
 import { createIdentityStore, ROLES, type IdentityStore, type Role } from './identity/index.js';
 import { migrateDatabase } from './migrate.js';
 import { redact } from './redact.js';
-import { createRepositories, type Repositories } from './repositories/index.js';
+import {
+  createRepositories,
+  GROUPS_MAX_LIMIT,
+  RepositoryError,
+  type Repositories,
+} from './repositories/index.js';
 import { SEED_TABLES, seedDemoTeacher, type SeedOptions, type SeedResult } from './seed.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
@@ -279,5 +285,155 @@ export async function runSeedCli(
   } catch (err) {
     log(`seed: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
     return 1;
+  }
+}
+
+/** Opens the teacherQuestions repository for the teacher-questions CLI (injected in tests). */
+export type OpenTeacherQuestions = (url: string) => {
+  teacherQuestions: Pick<Repositories['teacherQuestions'], 'listGroupsForTeacher' | 'answer'>;
+  close: () => Promise<void>;
+};
+
+const openTeacherQuestions: OpenTeacherQuestions = (url) => {
+  const { db, close } = createDb({ DATABASE_URL: url });
+  return { teacherQuestions: createRepositories(db).teacherQuestions, close };
+};
+
+const TQ_USAGE =
+  'usage: db:questions -- list --teacher <id>\n' +
+  '       db:questions -- answer --teacher <id> --question <id> --module <id> ' +
+  '--answer-file <path> [--note-question <text>]';
+
+interface TqListArgs {
+  cmd: 'list';
+  teacherId: string;
+}
+interface TqAnswerArgs {
+  cmd: 'answer';
+  teacherId: string;
+  questionId: string;
+  moduleId: string;
+  answerFile: string;
+  noteQuestion?: string;
+}
+type TqArgs = TqListArgs | TqAnswerArgs;
+
+/** The parsed teacher-questions arguments, or a one-line usage string. */
+function parseTqArgs(argv0: string[]): TqArgs | string {
+  const argv = argv0[0] === '--' ? argv0.slice(1) : argv0;
+  const [cmd, ...rest] = argv;
+  if (cmd !== 'list' && cmd !== 'answer') return TQ_USAGE;
+  let values: Record<string, string | boolean | undefined>;
+  try {
+    ({ values } = parseArgs({
+      args: rest,
+      options: {
+        teacher: { type: 'string' },
+        question: { type: 'string' },
+        module: { type: 'string' },
+        'answer-file': { type: 'string' },
+        'note-question': { type: 'string' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch {
+    return TQ_USAGE;
+  }
+  const { teacher, question, module: moduleId, 'answer-file': answerFile } = values;
+  const noteQuestion = values['note-question'];
+  if (typeof teacher !== 'string') return TQ_USAGE;
+  if (cmd === 'list') return { cmd, teacherId: teacher };
+  if (
+    typeof question !== 'string' ||
+    typeof moduleId !== 'string' ||
+    typeof answerFile !== 'string'
+  ) {
+    return TQ_USAGE;
+  }
+  return {
+    cmd,
+    teacherId: teacher,
+    questionId: question,
+    moduleId,
+    answerFile,
+    ...(typeof noteQuestion === 'string' ? { noteQuestion } : {}),
+  };
+}
+
+/**
+ * `pnpm --filter @edmate/db db:questions -- list --teacher <id>` and
+ * `db:questions -- answer --teacher <id> --question <id> --module <id> --answer-file <path>
+ * [--note-question <text>]` (task 5.10 Q5): the operator's way to read and answer a teacher's
+ * open-question inbox until the authenticated teacher console (8.9). `list` never prints a
+ * student id (`listGroupsForTeacher` never selects one); `answer` reads the answer text from a
+ * file so a long answer never goes on the command line, and prints counts only. Errors are fixed
+ * messages, never driver text. Returns the exit code.
+ */
+export async function runTeacherQuestionsCli(
+  argv: string[],
+  env: { DATABASE_URL?: string | undefined },
+  log: (line: string) => void,
+  open: OpenTeacherQuestions = openTeacherQuestions,
+): Promise<number> {
+  const args = parseTqArgs(argv);
+  if (typeof args === 'string') {
+    log(`db:questions: ${args}`);
+    return 1;
+  }
+  const url = env.DATABASE_URL;
+  if (!url) {
+    log('db:questions: DATABASE_URL is not set');
+    return 1;
+  }
+  let handle: ReturnType<OpenTeacherQuestions> | undefined;
+  try {
+    if (args.cmd === 'answer') {
+      let answer: string;
+      try {
+        answer = await readFile(args.answerFile, 'utf8');
+      } catch {
+        log('db:questions: could not read --answer-file');
+        return 1;
+      }
+      handle = open(url);
+      const result = await handle.teacherQuestions.answer(
+        { teacherId: args.teacherId },
+        {
+          questionId: args.questionId,
+          moduleId: args.moduleId,
+          answer,
+          ...(args.noteQuestion === undefined ? {} : { noteQuestion: args.noteQuestion }),
+        },
+      );
+      log(
+        `db:questions: answered ${result.answered} question(s), ${result.students} student(s), ` +
+          `${result.threadMessages} message(s) sent`,
+      );
+      return 0;
+    }
+    handle = open(url);
+    const groups = await handle.teacherQuestions.listGroupsForTeacher(
+      { teacherId: args.teacherId },
+      { limit: GROUPS_MAX_LIMIT },
+    );
+    if (groups.length === 0) {
+      log('db:questions: no open questions');
+      return 0;
+    }
+    for (const g of groups) {
+      log(`db:questions: group ${g.groupId} (${g.count}) oldest ${g.oldestAt}`);
+      for (const q of g.questions) log(`db:questions:   ${q.id} ${q.text}`);
+    }
+    return 0;
+  } catch (err) {
+    if (err instanceof RepositoryError && err.kind === 'not_found') {
+      log('db:questions: not found or already answered');
+      return 1;
+    }
+    log(`db:questions: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
+    return 1;
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 }
