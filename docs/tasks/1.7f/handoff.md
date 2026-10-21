@@ -56,6 +56,41 @@ $ python3 .githooks/secret-scan.py --all
 (clean, no output)
 ```
 
+## Fix round 1
+
+CI (PR #86) failed: two `apps/web` tests still assumed the US pack was unsigned, since they load
+the real `content/` directly (not the mocked packs `realLocales.test.ts` uses).
+
+- `apps/web/src/auth/age-flow.test.ts`: "the US pack is unsigned, so US 13-17 also wait for a
+  parent" renamed to "the US pack is signed, so US 13-17 may use the site without a parent" and now
+  expects `{ status: 'clear' }` for a US 13-17 answer (was `parent_needed`).
+- `apps/web/src/auth/age.test.ts`: "takes each market rule from its pack, failing closed while the
+  pack is unsigned" split into two cases — US now expects `{ minAge: 13, consentRequired: false }`
+  from the real (signed) pack, IN/global/FR keep `{ minAge: 13, consentRequired: true }`. Added a
+  new case, "an unsigned copy of the US pack still fails closed (consent required)", that copies
+  `content/` to a temp dir, rewrites `reviewedBy: sid2305` back to `pending` in the copied
+  `US.yaml`, loads that copy with `loadAgeContent`, and asserts `consentRequired: true` — the same
+  fail-closed pattern `packages/content/src/realLocales.test.ts` uses. No production code changed;
+  no other assertion weakened.
+- Grepped `apps/` and `packages/` for other tests pinning US as unsigned
+  (`grep -rn "US.*unsigned\|unsigned.*US\|US.*pending"` plus a scan of every test file touching
+  `'US'`): the only other US-market tests are `packages/db/test/identity.int.test.ts` (already
+  mocks the signed waiver directly) and `apps/web/src/auth/index.test.ts` /
+  `apps/web/src/auth/guard.test.ts` (unrelated to the age-policy sign-off). None needed changes.
+
+```
+$ export PATH=$HOME/.nvm/versions/node/v22.22.3/bin:$PATH
+$ corepack pnpm install        # up to date, no changes
+$ corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/content
+...
+@edmate/web:test:  Test Files  45 passed | 1 skipped (46)
+@edmate/web:test:       Tests  700 passed | 4 skipped (704)
+...
+ Tasks:    13 successful, 13 total
+$ python3 .githooks/secret-scan.py --all
+(clean, no output)
+```
+
 ## Decisions
 
 ### 21 Oct 2026 · 1.7f US locale pack signed by the human (B-27) · decided by human (sid2305) · risk: high

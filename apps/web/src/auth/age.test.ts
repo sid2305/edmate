@@ -1,6 +1,6 @@
 // Task 1.7: the web age gate's logic, apart from Auth.js (age-flow.test.ts runs it end to end).
 // The notice version always comes from the content the server loaded, never from the form.
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,10 +87,23 @@ describe('loadAgeContent (real content/)', () => {
     expect(content.markets).toEqual(['IN', 'US', 'global']);
   });
 
-  it('takes each market rule from its pack, failing closed while the pack is unsigned', () => {
-    for (const m of ['IN', 'US', 'global', 'FR']) {
+  it('takes each market rule from its pack: the signed US waiver applies, the rest fail closed', () => {
+    expect(content.agePolicy('US')).toEqual({ minAge: 13, consentRequired: false });
+    for (const m of ['IN', 'global', 'FR']) {
       expect(content.agePolicy(m), m).toEqual({ minAge: 13, consentRequired: true });
     }
+  });
+
+  it('an unsigned copy of the US pack still fails closed (consent required)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-age-'));
+    cpSync(CONTENT, dir, { recursive: true });
+    const us = readFileSync(join(dir, 'locales', 'US.yaml'), 'utf8').replace(
+      'reviewedBy: sid2305',
+      'reviewedBy: pending',
+    );
+    writeFileSync(join(dir, 'locales', 'US.yaml'), us);
+    const unsigned = loadAgeContent(dir);
+    expect(unsigned.agePolicy('US')).toEqual({ minAge: 13, consentRequired: true });
   });
 
   it('gives the notice the server shows for a market, with its version', () => {
