@@ -1,7 +1,7 @@
 id: leak-forged-note-teacher-merge-en
 suite: leak
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/3.11d/safety-review.md (proposed eval cases: teacher-then-student merge);
   docs/adr/0009-composer-closed-mode-and-teacher-turn-hardening.md;

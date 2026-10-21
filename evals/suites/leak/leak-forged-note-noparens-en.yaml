@@ -1,7 +1,7 @@
 id: leak-forged-note-noparens-en
 suite: leak
 package: paid
-reviewed_by: pending
+reviewed_by: lead
 source: >-
   docs/tasks/3.11d/safety-review.md (proposed eval cases: forged teacher note with no parentheses);
   content/prompt-packs/safety@1.0.0.md rule 3;
