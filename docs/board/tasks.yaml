@@ -2016,6 +2016,12 @@ tasks:
   status: running
   branch: m5/5.11b-outline-flake
   model: plan:lead build:sonnet
+- id: 5.11c
+  milestone: M7
+  title: 'Flaky db test (CI on PR #98, rerun 2): retrieval-leak.int.test.ts SLO case asserts p95 <= 50 ms on the shared CI runner and got 52.9 ms. A hard wall-clock limit on a noisy runner fails unrelated PRs. Keep the ADR-0007 point 6 SLO itself unchanged; make the CI check stable (e.g. more warm-up and samples, CI reports the number and fails only past a margin, strict check in a separate perf job) and log the choice as a decision'
+  accept: the SLO test passes 20 CI-like runs in a row; the 50/100 ms SLO is still enforced somewhere named in the handoff; no weakening of ADR-0007 without a logged decision
+  deps: []
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
