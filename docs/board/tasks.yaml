@@ -1530,10 +1530,10 @@ tasks:
   - '1.3'
   - '5.1'
   - '5.2'
-  status: planning
+  status: running
   needs_decision: null
-  branch: null
-  model: null
+  branch: m8/8.1-teacher-onboarding
+  model: plan:sonnet build:opus
 - id: 8.1a
   milestone: M8
   title: 'Onboarding form in apps/web (8.1 Phase C): bare teacher profile form and thin API route on the 9.1 shell'
