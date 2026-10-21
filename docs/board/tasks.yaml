@@ -2342,9 +2342,9 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m5/5.8c-sign-packs
+  model: plan:lead build:sonnet
 - id: 5.8d
   milestone: M13
   title: 'Pipeline-backed `edmate eval` agent (5.8a plan Q3): `edmate eval` runs cases through the real pipeline with personas and the newest signed set, not only `chat --source eval`'
@@ -2356,7 +2356,8 @@ tasks:
   model: null
 - id: 0.19a
   milestone: M13
-  title: "closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest after each closeout"
+  title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
+    after each closeout
   accept: closeout leaves digest.md fresh; a test covers it
   deps:
   - '0.19'
