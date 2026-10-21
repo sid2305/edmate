@@ -769,3 +769,68 @@ class Wontfix(GateCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _load_gate():
+    import importlib.util
+    path = os.path.join(os.path.dirname(__file__), "..", "skills", "merge-gate", "merge_gate.py")
+    spec = importlib.util.spec_from_file_location("merge_gate_under_test", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class FenceParseTest(unittest.TestCase):
+    """Fix round 2: an unclosed or mismatched code fence must never silently switch a check off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_unclosed_fence_hiding_budget_section_is_unparseable(self):
+        cap = self.g.budget_cap("# plan\n```\nstray unclosed fence\n## Budget\nBudget: 30 tool calls\n")
+        self.assertIs(cap, self.g.UNPARSEABLE)
+
+    def test_unclosed_tilde_fence_hiding_budget_line_is_unparseable(self):
+        cap = self.g.budget_cap("# plan\n~~~\nstray\nBudget: 30 tool calls\n")
+        self.assertIs(cap, self.g.UNPARSEABLE)
+
+    def test_unclosed_fence_with_no_budget_at_all_is_silent_skip(self):
+        self.assertIsNone(self.g.budget_cap("# plan\n```\nstray unclosed fence\nno cap here\n"))
+
+    def test_unclosed_fence_after_readable_budget_section_keeps_cap(self):
+        self.assertEqual(self.g.budget_cap("# plan\n## Budget\nBudget: 30 tool calls\n## Notes\n```\nstray\n"), 30)
+
+    def test_mismatched_marker_does_not_close_fence(self):
+        # ``` is not closed by ~~~, so the decoy stays fenced and the real cap wins.
+        plan = "# plan\n```\n~~~\n## Budget: 999 tool calls\n```\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_mismatched_tilde_marker_does_not_close_fence(self):
+        plan = "# plan\n~~~\n```\nBudget: 999 tool calls\n~~~\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_shorter_marker_does_not_close_longer_fence(self):
+        plan = "# plan\n````\n```\n## Budget: 999 tool calls\n````\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_info_string_line_does_not_close_fence(self):
+        plan = "# plan\n```\n```md\n## Budget: 999 tool calls\n```\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_closed_fences_still_work(self):
+        plan = "# plan\n```ts\nBudget: 999 tool calls\n```\n~~~\nx\n~~~\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_reviewers_mismatched_marker_cannot_fake_reviewer(self):
+        # Before the fix, ~~~ "closed" the ``` fence and the fenced decoy line counted as real.
+        review = "# r\n```\n~~~\nReviewers: code-reviewer, security-reviewer\n```\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_reviewers_unclosed_fence_fails_closed(self):
+        review = "# r\n```\nstray\nReviewers: code-reviewer\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_reviewers_after_closed_fence_found(self):
+        review = "# r\n~~~\nReviewers: fake\n~~~\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})

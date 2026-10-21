@@ -100,6 +100,31 @@ def matches(path, glob):
     return fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(path, glob.replace("/**", "/*"))
 
 
+FENCE_OPEN = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+
+
+def fence_mask(lines):
+    """(hidden, unclosed_at): hidden[i] is True for a fence marker line or a line inside a fenced
+    code block. A fence opened by a run of N backticks (or tildes) closes only on a line that is
+    a run of at least N of the SAME character with nothing else after it (CommonMark), so ```
+    is never closed by ~~~, a shorter run, or a line like ```md. unclosed_at is the index of the
+    opening line of a fence the document never closes, else None (callers must not silently treat
+    everything after it as absent)."""
+    hidden, opener, opened_at = [], None, None
+    for i, line in enumerate(lines):
+        m = FENCE_OPEN.match(line)
+        if opener is None:
+            if m:
+                opener, opened_at = m.group(1), i
+            hidden.append(m is not None)
+            continue
+        hidden.append(True)
+        run = m.group(1) if m else ""
+        if run and run[0] == opener[0] and len(run) >= len(opener) and not line[m.end():].strip():
+            opener, opened_at = None, None
+    return hidden, opened_at
+
+
 REVIEWERS_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Reviewers?:\s*(\S.*)$", re.I)
 
 
@@ -109,11 +134,9 @@ def reviewer_names(review):
     STATUS_LINE). The value is a comma-separated list; each item is a name with an optional
     `(model)` suffix; a trailing period on the whole line is ignored. Any other item
     ("security-reviewer skipped", "not architect") does not count."""
-    fenced = False
-    for line in (review or "").splitlines():
-        if line.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
-            continue
+    lines = (review or "").splitlines()
+    hidden, _ = fence_mask(lines)
+    for line, fenced in zip(lines, hidden):
         m = None if fenced else REVIEWERS_LINE.match(line)
         if m:
             items = [i.strip() for i in m.group(1).rstrip().rstrip(".").split(",")]
@@ -142,14 +165,9 @@ def unfenced(text):
     """Text with the contents of ``` / ~~~ fenced code blocks blanked out (line positions kept),
     the same fence-tracking convention as reviewer_names(), so a decoy inside a quoted code
     example never matches as if it were real document structure."""
-    out, fenced = [], False
-    for line in (text or "").splitlines():
-        if line.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
-            out.append("")
-            continue
-        out.append("" if fenced else line)
-    return "\n".join(out)
+    lines = (text or "").splitlines()
+    hidden, _ = fence_mask(lines)
+    return "\n".join("" if h else line for line, h in zip(lines, hidden))
 
 
 def section(text, heading):
@@ -207,8 +225,19 @@ def budget_cap(plan):
     skip). Only when there is no `## Budget` section at all does a whole-document `Budget: <N>
     tool calls` line (outside fences) set the cap; a decoy such a line elsewhere in the document
     can't win once a real `## Budget` section exists, since that section is then checked first.
+    A stray UNCLOSED code fence whose hidden tail holds a `## Budget` heading or a `Budget: <N>
+    tool calls` line gives UNPARSEABLE (visible FAIL) rather than a silent skip; an unclosed fence
+    with nothing budget-like after it changes nothing.
     Returns None if nothing at all is present (old-style plan, silent skip)."""
     text = plan or ""
+    lines = text.splitlines()
+    _, unclosed_at = fence_mask(lines)
+    if unclosed_at is not None:
+        # A stray unclosed fence would blank out the rest of the document. If anything
+        # budget-like sits in that hidden tail, the cap can't be read safely: fail visibly.
+        tail = "\n".join(lines[unclosed_at + 1:])
+        if re.search(r"^##\s+Budget\b", tail, re.M | re.I) or BUDGET_LINE.search(tail):
+            return UNPARSEABLE
     heading_line = section_heading_line(text, "Budget")
     sect = section(text, "Budget")
     if sect is not None:

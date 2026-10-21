@@ -89,4 +89,51 @@ $ python3 .githooks/secret-scan.py --all
 (exit 0, no findings)
 ```
 
-Tool calls used: 14 (0.17a) + 19 (fix round 1) = 33
+## Fix round 2
+
+Finding (HIGH, security-reviewer re-check): a stray UNCLOSED code fence in plan.md blanked out
+everything after it, including the real `## Budget` section, so `budget_cap` returned None
+(silent skip) and the budget check was off. The fence toggle also let any marker close any fence
+(``` closed by ~~~).
+
+Fix (`.claude/skills/merge-gate/merge_gate.py`): one shared `fence_mask()` now drives
+`unfenced()` (so `section()`/`budget_cap()`) and `reviewer_names()`. A fence opened by N
+backticks or tildes closes only on a line that is at least N of the same character with nothing
+after it (CommonMark), so ``` is not closed by ~~~, by a shorter run, or by a ```md line.
+`fence_mask()` also reports where an unclosed fence starts.
+
+Rule picked for an unclosed fence (simplest safe one): if the hidden tail after the unclosed
+opener contains a `## Budget` heading or a `Budget: <N> tool calls` line, `budget_cap` returns
+UNPARSEABLE (visible gate FAIL). Otherwise the result is unchanged, so a plan with no budget at
+all is still a silent skip, and a real `## Budget` section *before* the stray fence still sets
+the cap.
+
+`reviewer_names()`: an unclosed fence alone can only hide `Reviewers:` lines (fails closed: names
+go missing, the gate fails), so no fail-visible rule was added there. But the mismatched-marker
+bug could make a missing reviewer look present: in "```\n~~~\nReviewers: code-reviewer,
+security-reviewer\n```" the ~~~ "closed" the fence and the fenced decoy counted as the real
+line. The shared matching-marker rule fixes that (test below).
+
+Tests added (`FenceParseTest` in `.claude/tests/test_merge_gate.py`, direct-import unit tests;
+7 of 12 red before the fix, all green after): the reviewer's repro (unclosed ``` before
+`## Budget` → UNPARSEABLE); unclosed ~~~ before a `Budget:` line → UNPARSEABLE; unclosed fence
+with no budget at all → None; unclosed fence after a readable section → 30; ``` not closed by
+~~~; ~~~ not closed by ```; ```` not closed by ```; ``` not closed by ```md; closed fences still
+work; reviewers decoy behind a mismatched marker → None; reviewers after an unclosed fence →
+None; reviewers after a properly closed fence found.
+
+Every `docs/tasks/*/plan.md` on origin/main re-checked with the pre-round-2 and post-round-2
+`budget_cap`: 99 plans, 0 changed cap.
+
+```
+$ python3 -m unittest discover .claude/tests
+Ran 279 tests in 59.299s
+
+OK
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(exit 0, no findings)
+```
+
+Tool calls used: 75 (harness counts: 22 build + 36 fix round 1; 17 fix round 2, my own count)
