@@ -14,12 +14,13 @@ isolation: worktree
 - Coverage: 80% on new code; 100% for `packages/harness/src/access/`, guard logic and the subscription state machine.
 - No real model or payment calls in tests (scripted gateway, fixtures). Never touch `packages/contracts` without an approved ADR; stop and report BLOCKED instead.
 - Finish by committing `docs/tasks/<id>/handoff.md` with: Status (DONE | PARTIAL | BLOCKED), branch, worktree path, acceptance evidence (command → trimmed output), changes, deviations, and a `## Decisions` section (plain words, or `None`).
-- **Token budget** (task 0.15). Every tool call re-sends your whole conversation, so a long build costs far more than a short one: the 4.4 build made 290 calls, grew to 630k tokens of context and processed 107M tokens to write 81k. Keep the context small:
+- **Token budget** (task 0.15, 0.17). Every tool call re-sends your whole conversation, so a long build costs far more than a short one: the 4.4 build made 290 calls, grew to 630k tokens of context and processed 107M tokens to write 81k. Keep the context small:
   - Fewer, bigger calls. Read a file once, whole, with Read; don't page through it in many `sed -n`/`cat` slices, and don't re-read a file you just wrote. Chain related shell commands in one call.
   - Search narrowly: `grep -rn <pattern> <dir>` on the package you're changing, not the repo; add `-m 20` or `| head -40` when a match could be broad.
   - While iterating, run only the affected test file (`corepack pnpm vitest run <path>`); run the full `turbo run typecheck lint test --filter=<pkg>...` once before the handoff. Trim output: `2>&1 | tail -40`, and grep failures instead of printing whole reports.
   - Prefer Edit for small changes; Write re-sends the whole file.
   - **Stop early when it's big.** If you pass about 150 tool calls, or the work is clearly bigger than the plan, stop at a green, committed state and write the handoff with `Status: PARTIAL` plus a short "Left to do" list. A `PARTIAL` handoff still needs the full `turbo run typecheck lint test --filter=<pkg>...` green and a clean `python3 .githooks/secret-scan.py --all` before the commit — never commit a red or unscanned state just to stop early. The lead starts a fresh agent for the rest, which is cheaper than carrying this context further.
+  - **Read the plan's cap, report your count** (task 0.17). The plan's `## Budget` section names a `Budget: <N> tool calls (...)` line — that `N`, not 150, is your real cap (fall back to ~150 only if the plan predates this and has no such line). In the handoff, report `Tool calls used: <N>` with your own actual count, so `merge_gate.py` can compare it to the plan's cap.
 
 
 ## Prompt Defense Baseline

@@ -25,6 +25,14 @@ Checks, in order (both modes run the same checks):
      Reviewers: line names every reviewer each touched group requires (`# reviewers:` lines in
      risk-paths.txt; database-reviewer for destructive migrations), and the handoff's
      `## Decisions` has a `### ... risk: high` entry.
+  6. Budget: the plan's cap (a `Budget: <N> tool calls` line, or the first `<N> ... calls` number
+     inside a `## Budget` section -- tolerates bold, bullets, `~` and `About`/`about`) vs. the
+     handoff's `Tool calls used: <M>` line (also bold/bullet tolerant). Both missing is silently
+     skipped (note, no fail -- plans and handoffs written before this check still pass). A
+     `## Budget` section or a `Tool calls used:` line present with no number parseable is a visible
+     FAIL (not a silent skip). Both present and M > 1.2x N fails, unless the handoff's
+     `## Decisions` has a `### ... <task-id> ... budget ... decided by lead ...` entry (same escape
+     pattern as [wontfix]), which turns it into a note instead. M > N but <= 1.2x N is a note either way.
 """
 import fnmatch
 import json
@@ -54,6 +62,15 @@ MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
+# "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE).
+BUDGET_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls", re.I | re.M)
+# The first "<N> ... calls" number inside a `## Budget` section's prose, e.g. "~70 tool calls",
+# "About 40 builder calls", "~60 tool calls". The leading `~`/`About` is optional and not captured.
+BUDGET_SECTION_NUM = re.compile(r"(?:~\s*|\babout\b\s+)?(\d+)\s*(?:[a-zA-Z][a-zA-Z-]*\s+)?calls?\b", re.I)
+TOOL_CALLS_USED_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*\*{0,2}Tool\s*calls\s*used[ \t*]*:[ \t*]*(\d+)", re.I | re.M)
+TOOL_CALLS_USED_PRESENT = re.compile(r"^[ \t]*[-*\d.]*[ \t]*\*{0,2}Tool\s*calls\s*used[ \t*]*:", re.I | re.M)
+BUDGET_OVERRUN_TOLERANCE = 1.2
+UNPARSEABLE = object()  # a '## Budget' section or 'Tool calls used:' line exists but no number parsed
 
 
 def sh(*cmd, cwd=ROOT):
@@ -150,6 +167,43 @@ def status_is_done(value):
     return value is not None and STATUS_DONE.search(value) and not STATUS_BAD.search(value)
 
 
+def budget_cap(plan):
+    """The plan's tool-call cap: a `Budget: <N> tool calls` line, or (failing that) the first
+    `<N> ... calls` number inside a `## Budget` section. Returns None if neither is present at all
+    (old-style plan, silent skip) or UNPARSEABLE if a `## Budget` section exists but no number
+    could be found in it (must surface as a visible FAIL, not a silent skip)."""
+    text = plan or ""
+    m = BUDGET_LINE.search(text)
+    if m:
+        return int(m.group(1))
+    sect = section(text, "Budget")
+    if sect is None:
+        return None
+    m2 = BUDGET_SECTION_NUM.search(sect)
+    return int(m2.group(1)) if m2 else UNPARSEABLE
+
+
+def tool_calls_used(handoff):
+    """The handoff's `Tool calls used: <M>` count. Returns None if there is no such line at all
+    (silent skip), or UNPARSEABLE if the phrase is present but no number could be parsed (must
+    surface as a visible FAIL, not a silent skip)."""
+    text = handoff or ""
+    m = TOOL_CALLS_USED_LINE.search(text)
+    if m:
+        return int(m.group(1))
+    return UNPARSEABLE if TOOL_CALLS_USED_PRESENT.search(text) else None
+
+
+def has_budget_decision(decisions, task):
+    """A `### ...` decision entry whose heading names the task, the word 'budget' and 'decided by
+    lead' (same escape pattern as [wontfix]: the human's call is the entry existing with the right
+    shape, not any particular wording beyond that)."""
+    return any(
+        names_task(h, task) and "budget" in h.lower() and "decided by lead" in h.lower()
+        for h, _ in entries(decisions)
+    )
+
+
 def first_path(text):
     """The first `path[:line]` token in a finding: has a `/` or a file extension (`...` is not one)."""
     for word in text.split():
@@ -184,6 +238,26 @@ def evaluate(task, branch, pr=None):
             fails.append(f"handoff.md Status is '{status}', not DONE (PARTIAL/BLOCKED handoffs may not merge)")
         if decisions is None:
             fails.append("handoff.md has no '## Decisions' section (write 'None' if there were none)")
+
+    # Check 6: Budget (plan.md) vs. Tool calls used (handoff.md). Either side missing is a silent
+    # skip (backward-compatible with every plan/handoff written before this task).
+    cap = budget_cap(show(f"docs/tasks/{task}/plan.md"))
+    used = tool_calls_used(handoff)
+    if cap is UNPARSEABLE:
+        fails.append("plan.md has a '## Budget' section but no '<N> ... calls' number could be parsed")
+    if used is UNPARSEABLE:
+        fails.append("handoff.md has a 'Tool calls used:' line but no number could be parsed")
+    if isinstance(cap, int) and isinstance(used, int):
+        if used > cap * BUDGET_OVERRUN_TOLERANCE:
+            if has_budget_decision(decisions, task):
+                notes.append(f"budget overrun: plan cap {cap}, handoff reported {used} tool calls (decision on file)")
+            else:
+                fails.append(
+                    f"budget overrun: plan cap {cap} tool calls, handoff reported {used} (over "
+                    f"{BUDGET_OVERRUN_TOLERANCE}x cap; add a '### ... {task} ... budget ...' decision "
+                    "to explain, or bring the count down)")
+        elif used > cap:
+            notes.append(f"budget: plan cap {cap} tool calls, handoff reported {used} (over cap, within tolerance)")
 
     review = show(f"docs/tasks/{task}/review.md")
     reviewers = set()

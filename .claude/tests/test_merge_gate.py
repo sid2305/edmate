@@ -545,6 +545,113 @@ class FixRound1(GateCase):
         self.assertEqual(self.gate()[0], 0)
 
 
+class BudgetCheck(GateCase):
+    """Check 6: a plan's Budget: cap vs. the handoff's reported Tool calls used:."""
+
+    def plan(self, cap):
+        return f"# plan\n## Budget\nBudget: {cap} tool calls (1 phase, .claude/)\n"
+
+    def handoff(self, used, decision=None):
+        decisions = decision or "None"
+        return f"# h\nStatus: DONE\nTool calls used: {used}\n\n## Decisions\n{decisions}\n"
+
+    def test_no_budget_line_no_note(self):
+        self.make({"apps/cli.ts": "x\n"}, handoff=self.handoff(999))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("budget", out.lower())
+
+    def test_within_cap_no_note(self):
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("budget overrun", out)
+
+    def test_over_cap_fails(self):
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)}, handoff=self.handoff(70))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("budget overrun", out)
+        self.assertIn("cap 50", out)
+        self.assertIn("reported 70", out)
+
+    def test_over_cap_with_lead_decision_passes(self):
+        decision = "### 21 Oct 2026 · 9.9 budget overrun · decided by lead · risk: low\nDecided: fine, worth it.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)},
+                   handoff=self.handoff(70, decision=decision))
+        code, out = self.gate()
+        self.assertEqual(code, 0, out)
+        self.assertIn("budget overrun", out)
+        self.assertIn("note", out)
+
+    def test_over_cap_decision_without_decided_by_lead_still_fails(self):
+        decision = "### 21 Oct 2026 · 9.9 budget overrun · risk: low\nDecided: fine, worth it.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)},
+                   handoff=self.handoff(70, decision=decision))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("budget overrun", out)
+
+    def section_plan(self, prose):
+        return f"# plan\n## Budget\n{prose}\n\n## Allowed tools\nx\n"
+
+    def test_tilde_prose_budget_parses(self):
+        plan = self.section_plan("~70 tool calls, one phase, one package: `.claude/` only.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(100))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 70", out)
+
+    def test_about_builder_calls_prose_parses(self):
+        plan = self.section_plan("About 40 builder calls, one phase.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(60))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 40", out)
+
+    def test_about_tool_calls_prose_parses(self):
+        plan = self.section_plan("About 50 tool calls, one phase.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        self.assertEqual(self.gate()[0], 0)
+
+    def test_about_lowercase_prose_parses(self):
+        plan = self.section_plan("about 30 tool calls, two groups.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(50))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_tilde_prose_no_about_parses(self):
+        plan = self.section_plan("~60 tool calls, two groups: a and b.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(100))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 60", out)
+
+    def test_bold_budget_and_tool_calls_used_parse(self):
+        plan = "# plan\n- **Budget:** 50 tool calls\n"
+        handoff = "# h\nStatus: DONE\n- **Tool calls used:** 70\n\n## Decisions\nNone\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=handoff)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 50", out)
+
+    def test_budget_section_no_number_fails(self):
+        plan = self.section_plan("Small task, well within the usual limits.")
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("no", out)
+        self.assertIn("could be parsed", out)
+
+    def test_tool_calls_used_present_unparseable_fails(self):
+        handoff = "# h\nStatus: DONE\nTool calls used: a bunch\n\n## Decisions\nNone\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": self.plan(50)}, handoff=handoff)
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could be parsed", out)
+
+
 class Wontfix(GateCase):
     REVIEW = review() + "- [LOW] [wontfix] apps/cli.ts:12 — long function, see decision log.\n"
 

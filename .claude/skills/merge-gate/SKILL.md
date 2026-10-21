@@ -60,7 +60,7 @@ Alternatives: A separate help_states table.
 Reversible: Yes, one migration.
 ```
 
-Log anything the spec did not dictate: a library choice, a data shape, a trade-off, how an unclear line was read, a deviation from the plan, a finding left unfixed. Don't log naming or formatting. Use plain words a non-engineer can follow, under 60 words an entry. `risk: high` entries (risky merges and the human's own decisions) are the ones the user skims first, then `risk: medium`.
+Log anything the spec did not dictate: a library choice, a data shape, a trade-off, how an unclear line was read, a deviation from the plan, a finding left unfixed. Don't log naming or formatting. Use plain words a non-engineer can follow, under 60 words an entry. `risk: high` entries (risky merges and the human's own decisions) are the ones the user skims first, then `risk: medium`. A budget-overrun escape hatch (check 6) is the same pattern: the lead writes the `### ... <task-id> ... budget ... decided by lead ...` heading to excuse an overrun, and the gate reads that exact heading back.
 
 ## Limits
 - The gate checks that reviewer names appear in `review.md`, not that the reviews were good. The lead writes `review.md` only from the reviewers' real outputs.
