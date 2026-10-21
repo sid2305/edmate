@@ -15,6 +15,18 @@
 
 Tool calls used: 24
 
+## Fix round 1
+Both reviewers flagged the budget check: `BUDGET_LINE`/`TOOL_CALLS_USED_LINE` only matched a literal `Budget: N tool calls` line, but real plans write a `## Budget` section with prose (`~70 tool calls`, `About 50 tool calls`, `about 30 tool calls`) that silently skipped check 6. Fixed:
+- `budget_cap()` now falls back to the first `<N> ... calls` number inside a `## Budget` section (new `BUDGET_SECTION_NUM` regex, tolerant of `~`/`About`/`about`) when no literal `Budget:` line matches. A `## Budget` section with no parseable number returns a new `UNPARSEABLE` sentinel, which `evaluate()` turns into a visible FAIL (chosen over a silent note, since the section is clearly there and its intent unmet).
+- `tool_calls_used()` same treatment: a `Tool calls used:` phrase with no parseable number is `UNPARSEABLE` -> FAIL. Both lines are now bold/bullet tolerant (`[ \t*]*` between the label, colon and number, so `**Budget:** 50` and `- **Tool calls used:** 70` both parse).
+- `has_budget_decision()` now also requires `decided by lead` in the heading (not just the task id and the word "budget"), matching the risk:high decision pattern elsewhere in the gate.
+- `.claude/skills/merge-gate/SKILL.md`: one line noting the lead writes and reads the `### ... budget ... decided by lead ...` heading.
+- `.claude/tests/test_merge_gate.py`: 11 new `BudgetCheck` cases (decision missing "decided by lead", each real prose phrasing, bold forms, section-present-unparseable, tool-calls-used-present-unparseable).
+
+Tests: `python3 -m unittest discover .claude/tests`: 198 tests, OK. `python3 .githooks/secret-scan.py --all`: clean.
+
+Tool calls used: 18
+
 ## Open question 1 — the hard automatic stop (not shipped; human decision B-35, default option a)
 
 Per the lead's answer, the human owns `.claude/hooks/*` and `.claude/settings.json`; this task does not touch them. Proposed design, ready to apply:
