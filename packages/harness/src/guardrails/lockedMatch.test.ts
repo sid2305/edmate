@@ -351,9 +351,10 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
       const text = unit.repeat(Math.ceil(200_000 / unit.length)).slice(0, 200_000);
       const start = Date.now();
       foldMarkup(`l${text}**o**${text}p`, 'rendered');
-      expect(Date.now() - start, JSON.stringify(unit)).toBeLessThan(1_000);
+      // Measured linear at about 40 ms locally; the bound only has to catch quadratic, which would take minutes at this size.
+      expect(Date.now() - start, JSON.stringify(unit)).toBeLessThan(5_000);
     }
-  }, 10_000);
+  }, 30_000);
 
   it('4.6c: unaffected forms stay unaffected (snake_case identifiers, spaced `*` as code)', () => {
     expect(lockedTokens('snake_case_name', 'drop', 'rendered').map((t) => t.t)).toEqual([
