@@ -36,11 +36,51 @@ describe('toHtmlReport', () => {
     const html = toHtmlReport(
       toJsonReport(results, {
         suite: 'test',
-        calibration: { sampled: 1, reviewed: 1, agreed: 1, rate: 1, disagreements: [] },
+        calibration: {
+          sampled: 1,
+          reviewed: 1,
+          agreed: 1,
+          rate: 1,
+          disagreements: [],
+          unmatched: [],
+        },
       }),
     );
     expect(html).toContain('Human double-check');
     expect(html).toMatchSnapshot();
+  });
+
+  it('shows unmatched verdict ids only when present', () => {
+    const withUnmatched = toHtmlReport(
+      toJsonReport(results, {
+        suite: 'test',
+        calibration: {
+          sampled: 0,
+          reviewed: 0,
+          agreed: 0,
+          rate: 0,
+          disagreements: [],
+          unmatched: ['ghost-case'],
+        },
+      }),
+    );
+    expect(withUnmatched).toContain('Verdicts with no case in this run');
+    expect(withUnmatched).toContain('ghost-case');
+
+    const withoutUnmatched = toHtmlReport(
+      toJsonReport(results, {
+        suite: 'test',
+        calibration: {
+          sampled: 1,
+          reviewed: 1,
+          agreed: 1,
+          rate: 1,
+          disagreements: [],
+          unmatched: [],
+        },
+      }),
+    );
+    expect(withoutUnmatched).not.toContain('Verdicts with no case in this run');
   });
 
   it('omits the calibration block when the report carries none', () => {
@@ -89,10 +129,29 @@ describe('toHtmlReport', () => {
           agreed: 0,
           rate: 0,
           disagreements: ['<script>alert(3)</script>'],
+          unmatched: [],
         },
       }),
     );
     expect(html).not.toContain('<script>alert(3)');
     expect(html).toContain('&lt;script&gt;alert(3)&lt;/script&gt;');
+  });
+
+  it('escapes a hostile unmatched verdict id', () => {
+    const html = toHtmlReport(
+      toJsonReport(results, {
+        suite: 'test',
+        calibration: {
+          sampled: 0,
+          reviewed: 0,
+          agreed: 0,
+          rate: 0,
+          disagreements: [],
+          unmatched: ['<script>alert(4)</script>'],
+        },
+      }),
+    );
+    expect(html).not.toContain('<script>alert(4)');
+    expect(html).toContain('&lt;script&gt;alert(4)&lt;/script&gt;');
   });
 });

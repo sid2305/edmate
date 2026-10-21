@@ -50,6 +50,7 @@ exports[`toHtmlReport > renders a calibration block when the report carries one 
       <li>agreed: 1</li>
       <li>rate: 100.0%</li>
       
+      
     </ul>
 </body>
 </html>

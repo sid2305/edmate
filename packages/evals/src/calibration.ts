@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { load } from 'js-yaml';
 import { z } from 'zod';
+import { displayPath } from './displayPath.js';
 import type { CaseResult } from './runner.js';
 
 export const HumanVerdictSchema = z.strictObject({
@@ -23,15 +24,22 @@ export class DoubleCheckLoadError extends Error {
     detail: string,
     options?: { cause?: unknown },
   ) {
-    super(`${filePath}: ${detail}`, options);
+    super(`${displayPath(filePath)}: ${detail}`, options);
   }
 }
 
 /** Reads one YAML file of human double-check verdicts; throws naming the file on a bad entry. */
 export function loadDoubleCheck(path: string): HumanVerdict[] {
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code ?? (cause as Error).message;
+    throw new DoubleCheckLoadError(path, `cannot read file: ${code}`, { cause });
+  }
   let doc: unknown;
   try {
-    doc = load(readFileSync(path, 'utf8'), { filename: path });
+    doc = load(raw, { filename: displayPath(path) });
   } catch (cause) {
     throw new DoubleCheckLoadError(path, `invalid YAML: ${(cause as Error).message}`, { cause });
   }
@@ -80,6 +88,8 @@ export interface CalibrationSummary {
   rate: number;
   /** Case ids with a verdict that disagrees with the automated result. */
   disagreements: string[];
+  /** Verdict case ids with no matching result in this run, deduplicated, in input order. */
+  unmatched: string[];
 }
 
 /** Agreement between the automated run and a set of human double-check verdicts. */
@@ -96,6 +106,13 @@ export function computeAgreement(
     if (result.pass === v.humanPass) agreed++;
     else disagreements.push(v.caseId);
   }
+  const unmatched: string[] = [];
+  const seenUnmatched = new Set<string>();
+  for (const v of verdicts) {
+    if (byId.has(v.caseId) || seenUnmatched.has(v.caseId)) continue;
+    seenUnmatched.add(v.caseId);
+    unmatched.push(v.caseId);
+  }
   const reviewed = matched.length;
   return {
     sampled: reviewed,
@@ -103,5 +120,6 @@ export function computeAgreement(
     agreed,
     rate: reviewed === 0 ? 0 : agreed / reviewed,
     disagreements,
+    unmatched,
   };
 }

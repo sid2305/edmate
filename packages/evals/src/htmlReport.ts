@@ -57,6 +57,13 @@ export function toHtmlReport(report: JsonReport): string {
           ? ''
           : `<li>disagreements: ${calibration.disagreements.map((id) => esc(id)).join(', ')}</li>`
       }
+      ${
+        calibration.unmatched.length === 0
+          ? ''
+          : `<li>Verdicts with no case in this run: ${calibration.unmatched
+              .map((id) => esc(id))
+              .join(', ')}</li>`
+      }
     </ul>`;
 
   return `<!doctype html>
