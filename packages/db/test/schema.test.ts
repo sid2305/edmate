@@ -129,6 +129,8 @@ describe('acceptance: teacher-owned tables are indexed on teacher_id', () => {
       'learner_profiles',
       'corrections',
       'teacher_questions',
+      'teacher_eval_cases',
+      'notifications',
       'live_classes',
       'insights',
     ]) {
@@ -359,10 +361,14 @@ const RELAX_NOT_NULL = /ALTER TABLE "(\w+)" ALTER COLUMN "(\w+)" DROP NOT NULL;/
  * Review fix round (3.17): 0011 closes duplicate open `teacher_questions` rows (keeps the oldest,
  * dismisses the rest) before it creates the open-dedup unique index, else the index build would
  * fail on any duplicate that already exists. No row is deleted.
+ *
+ * Task 5.10: 0018 backfills `group_id = id` on every `teacher_questions` row that predates
+ * grouping (the column has existed, unset, since 0001). No row is deleted.
  */
 const REVIEWED_UPDATES: Record<string, string[]> = {
   '0009_session_package_pin.sql': ['sessions', 'learner_profiles', 'sessions'],
   '0011_teacher_question_open_dedup.sql': ['teacher_questions'],
+  '0018_ask_the_teacher.sql': ['teacher_questions'],
 };
 const UPDATE_SET = /UPDATE "(\w+)" SET/g;
 
