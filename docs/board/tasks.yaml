@@ -1887,6 +1887,14 @@ tasks:
   status: todo
   branch: null
   risk: risky
+- id: 5.10b
+  milestone: M13
+  title: '5.10 review follow-ups: teacherQuestions.answer locks the group rows in one id-ordered statement (no 40P01 deadlock between two answers in one group) and takes the agent lock first like open; store the trimmed answer in the thread message and teacher_questions.answer; a unique partial index on open sessions per (teacher, student, agent); a (teacher_id, agent_id, status, created_at) index for grouping; tokenise once per bestGroup call'
+  accept: a concurrency test answers two members of one group at once with no deadlock; a question opened during an answer doesn't stay open after its group is answered; the stored answer has no trailing newline; the migration is additive; the db tests pass
+  deps:
+  - '5.10'
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
