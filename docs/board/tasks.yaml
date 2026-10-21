@@ -1690,9 +1690,9 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: planning
-  branch: null
-  model: plan:opus
+  status: running
+  branch: m6/6.5-memory-reset
+  model: plan:opus build:sonnet
 - id: '7.1'
   milestone: M7
   title: 'Eval reports and judge calibration: JSON + HTML reports per suite and model; 10% human double-check with agreement tracking'
@@ -2383,6 +2383,17 @@ tasks:
   accept: closeout leaves digest.md fresh; a test covers it
   deps:
   - '0.19'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.5a
+  milestone: M13
+  title: 'Memory reset watermark: a memory_reset_at per learner profile; evidence append/appendAndFold drop events older than it and sessions.end skips sessions started before it, so a job queued before
+    a reset cannot re-seed memory. Land with or before 6.4a.'
+  accept: A test queues an evidence event and a session end from before a reset, applies them after it, and the profile stays empty.
+  deps:
+  - '6.5'
   risk: risky
   status: todo
   branch: null
