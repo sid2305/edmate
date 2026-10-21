@@ -1563,7 +1563,7 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '8.3'
