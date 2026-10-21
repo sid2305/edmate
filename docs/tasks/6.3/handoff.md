@@ -64,6 +64,11 @@ Tool calls used: 24
 
 ## Decisions
 
+### 21 Oct 2026 · 6.3 merge: mistake tags (classifier and applyMistakes) · decided by lead · risk: high
+- Decided: merge 6.3. `classifyMistakeTags` splits tags into known (on the style card's `mistakeTags`) and proposed; `applyMistakes` in `packages/db/src/repositories/learner.ts` merges known tags under the profile row lock. Proposed tags are returned, not stored (6.3a). The concurrency test and the tag and array caps go to 6.3b. Three cosmetic LOWs in `packages/harness/src/memory/mistakeTags.test.ts`, `packages/db/test/repositories.int.test.ts` and `packages/db/src/repositories/learner.ts` are left as they are (wontfix).
+- Why: code-reviewer, typescript-reviewer, security-reviewer and database-reviewer (all sonnet) approve with no CRITICAL or HIGH; the lock pattern matches 6.2's race-tested one; no contracts change.
+- risk: high (a new write path under `packages/db/src/repositories/**`).
+
 ### Runtime "teacher's list" is the style card's `mistakeTags`, not a new catalogue copy
 Decided: `classifyMistakeTags` takes `allowedTags: readonly string[]`, the caller's job to supply
 (expected to be `styleCard.mistakeTags` wherever this is eventually wired into a turn). No new
