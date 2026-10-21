@@ -30,6 +30,15 @@ p99 <= 100 ms per 8,000-character batch`), best of 3 rounds.
 - Secret scan (`python3 .githooks/secret-scan.py --all`): clean.
 
 ## Decisions
+
+### 21 Oct 2026 · 5.11c leak-check SLO test is best of 3 rounds · decided by lead · risk: low
+
+- Decided: merge 5.11c. The ADR-0007 point 6 SLO test keeps p95 <= 50 ms and p99 <= 100 ms, discards 30 more warm-up calls, and passes when one of up to 3 rounds of 300 calls meets both in that same round. No CI margin and no CI skip; the SLO stays enforced in this test.
+- Why: one sample of a wall-clock percentile on the shared runner (p95 52.9 ms on PR #98) failed an unrelated PR. A real regression misses every round. Code-reviewer approved with no findings; 20 of 20 local runs passed.
+- risk: low
+
+Details (builder):
+
 - Best-of-3 rounds instead of a margin or a CI skip; thresholds unchanged · risk: low.
 
 Tool calls used: 19
