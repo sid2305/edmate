@@ -1543,6 +1543,15 @@ tasks:
   - '9.1'
   status: todo
   branch: null
+- id: 8.1b
+  milestone: M13
+  title: 'Teacher-verification follow-ups (8.1 reviews): publish guard runs in the publish transaction with FOR SHARE and a reject suspends live agents (with 8.7); update/setVerification use translateWrite; verify/grant-role CLIs show the redacted target and accept --user-id; usage says no personal details in --reason; 0016 cast style note'
+  accept: a reject racing a publish never leaves the agent live (test); each item has a unit test or a note.
+  deps:
+  - '8.1'
+  - '8.7'
+  status: todo
+  branch: null
 - id: '8.2'
   milestone: M8
   title: Upload centre with live processing status, delete and replace

@@ -151,3 +151,6 @@ READY.
 - Q1 photo: no photo input in the thin slice. Keep the column nullable and leave it unset; photo upload arrives with the storage port in 8.2 or later. A pasted third-party URL would make students' browsers fetch from arbitrary hosts, so it is not accepted.
 - Q2 setVerification: in bounds. Follow the `audit.appendForTeacher` precedent (staff actor writes to one named teacher, staff role checked in the same transaction, audit row written). security-reviewer checks it.
 - Q3: this task is Phases A and B only and merges on its own. Phase C (the bare apps/web onboarding form) becomes task 8.1a, which starts after 9.1 merges.
+
+## Note for 8.1a (lead, 20 Oct 2026)
+security-reviewer (8.1): the web form and any staff route must take the acting staff id (`by`) from the signed-in session, never from request input.
