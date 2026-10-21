@@ -44,8 +44,9 @@ const slots = (required: string[], optional: string[] = []): Slots =>
   Object.freeze({ required: Object.freeze(required), optional: Object.freeze(optional) });
 
 /**
- * The frame pack's `## sections` and the placeholders each may use. Every section is required;
- * an unknown one is an error, so a typo never silently drops text.
+ * The frame pack's `## sections` and the placeholders each may use. Every section is required
+ * except those in `OPTIONAL_FRAME_SECTIONS`; an unknown one is an error, so a typo never silently
+ * drops text.
  */
 export const FRAME_SECTIONS = Object.freeze({
   style: slots(['style_card'], ['mistake_tags']),
@@ -83,8 +84,22 @@ export const FRAME_SECTIONS = Object.freeze({
   'move-locked': NONE,
   'move-ask_teacher': NONE,
   'move-distress': NONE,
+  /** Feedback turns' move line (ADR-0012). Optional: frames before 1.1.0 leave it out. */
+  'move-feedback': NONE,
 } satisfies Record<string, Slots>);
 export type FrameSection = keyof typeof FRAME_SECTIONS;
+
+/**
+ * The only frame sections a frame may leave out (ADR-0012). When present, each is checked like
+ * every other section: not empty, and only its allowed placeholders (none for `move-feedback`).
+ */
+export const OPTIONAL_FRAME_SECTIONS = Object.freeze(['move-feedback'] as const);
+export type OptionalFrameSection = (typeof OPTIONAL_FRAME_SECTIONS)[number];
+type RequiredFrameSection = Exclude<FrameSection, OptionalFrameSection>;
+
+function isOptionalSection(name: string): boolean {
+  return (OPTIONAL_FRAME_SECTIONS as readonly string[]).includes(name);
+}
 
 export interface PromptPack {
   readonly name: PackName;
@@ -100,8 +115,10 @@ export interface PromptPackSet {
   readonly version: string;
   readonly reviewedBy: string;
   readonly packs: Readonly<Record<PackName, PromptPack>>;
-  /** The frame pack's body split into its sections (trimmed). */
-  readonly frame: Readonly<Record<FrameSection, string>>;
+  /** The frame pack's body split into its sections (trimmed); optional ones may be absent. */
+  readonly frame: Readonly<
+    Record<RequiredFrameSection, string> & Partial<Record<OptionalFrameSection, string>>
+  >;
 }
 
 /** Set version → set. Built once by the composition root and passed in as `deps.promptPacks`. */
@@ -224,7 +241,7 @@ function parseFrame(body: string, out: PromptPackIssue[]): Record<string, string
   }
   close();
   for (const name of Object.keys(FRAME_SECTIONS)) {
-    if (!Object.hasOwn(sections, name)) {
+    if (!Object.hasOwn(sections, name) && !isOptionalSection(name)) {
       out.push({ path: `packs.frame.${name}`, message: 'missing section' });
     }
   }

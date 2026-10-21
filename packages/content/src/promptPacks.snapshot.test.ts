@@ -40,7 +40,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, '../../..');
 const DIR = resolve(REPO_ROOT, 'content/prompt-packs');
 const PERSONA_DIR = resolve(REPO_ROOT, 'content/skills/mock_interview');
-const SET_VERSION = '1.1.0';
+const SET_VERSION = '1.2.0';
 
 const library = readPromptPackLibrary(DIR);
 const set = resolvePromptPackSet(library, SET_VERSION);
@@ -270,8 +270,52 @@ const CASES: Case[] = [
   ),
 ];
 
+/** Compares two `x.y.z` versions numerically; prerelease tags are not used in real sets. */
+function versionAbove(v: string, floor: string): boolean {
+  const a = v.split('.').map(Number);
+  const b = floor.split('.').map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return false;
+}
+
+describe('feedback move line in real sets (ADR-0012)', () => {
+  it('every set whose feedback pack is newer than 1.0.0 has move-feedback', () => {
+    const newer = [...library.values()].filter((s) =>
+      versionAbove(s.packs.feedback.version, '1.0.0'),
+    );
+    expect(newer.map((s) => s.version)).toContain(SET_VERSION);
+    for (const s of newer) {
+      expect(s.frame['move-feedback'], `set ${s.version}`).toMatch(/^\[\[MOVE-FEEDBACK\]\] /);
+    }
+  });
+
+  it('a feedback turn on this set uses move-feedback, not hint-1, and keeps no-execution', () => {
+    const c = skillCase('feedback');
+    const r = composeSystemPrompt({ ctx: c.ctx, policy: c.policy, lang: 'en', set });
+    expect(r.systemPrompt).toContain('[[MOVE-FEEDBACK]]');
+    expect(r.systemPrompt).not.toContain('[[MOVE-HINT-1]]');
+    expect(r.systemPrompt).toContain('Never run, execute, trace or step through it');
+  });
+
+  it('sets 1.0.0 and 1.1.0 keep the old frame and feedback pack', () => {
+    for (const v of ['1.0.0', '1.1.0']) {
+      const old = resolvePromptPackSet(library, v);
+      expect(old.packs.feedback.version).toBe('1.0.0');
+      expect(old.frame['move-feedback']).toBeUndefined();
+    }
+  });
+
+  it('versionAbove compares numerically', () => {
+    expect(versionAbove('1.10.0', '1.9.0')).toBe(true);
+    expect(versionAbove('1.0.0', '1.0.0')).toBe(false);
+    expect(versionAbove('0.9.9', '1.0.0')).toBe(false);
+  });
+});
+
 describe('on-disk prompt-pack set: composed-prompt snapshots', () => {
-  it('loads with no issues and exposes set 1.1.0', () => {
+  it('loads with no issues and exposes set 1.2.0', () => {
     expect(set.version).toBe(SET_VERSION);
   });
 

@@ -67,6 +67,8 @@ export {
   packKindOf,
   parsePromptPackSet,
   placeholdersOf,
+  OPTIONAL_FRAME_SECTIONS,
+  type OptionalFrameSection,
   type PromptPack,
   PromptPackError,
   type PromptPackIssue,

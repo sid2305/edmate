@@ -118,7 +118,18 @@ function checkScope(ctx: TurnContext): void {
   });
 }
 
-function moveSection(p: PolicyResult): FrameSection {
+/**
+ * The decision block's move line. A feedback turn (always `hint`, rung 0) gets the frame's
+ * `move-feedback` line when the set's frame has one (ADR-0012); a frame without it (sets 1.0.0 and
+ * 1.1.0) composes exactly as before.
+ */
+function moveInstruction(p: PolicyResult, f: PromptPackSet['frame']): string {
+  const feedback = f['move-feedback'];
+  if (p.skill === 'feedback' && p.move === 'hint' && feedback !== undefined) return feedback;
+  return f[moveSection(p)];
+}
+
+function moveSection(p: PolicyResult): Exclude<FrameSection, 'move-feedback'> {
   if (p.move === 'hint') return p.rung >= 2 ? 'move-hint-2' : 'move-hint-1';
   return `move-${p.move}` as const;
 }
@@ -220,7 +231,7 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
           move: policy.move,
           rung: String(policy.rung),
           skills: ctx.entitlement.skills.join(', '),
-          move_instruction: f[moveSection(policy)],
+          move_instruction: moveInstruction(policy, f),
         }),
   );
   // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and

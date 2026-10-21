@@ -598,6 +598,51 @@ describe('move instructions', () => {
     expect(prompt(ctx(), policy({ move: 'hint', rung: 2 }))).toContain(set.frame['move-hint-2']);
   });
 
+  describe('feedback move line (ADR-0012)', () => {
+    const fbRaw = clone(fixturePromptPackRaw);
+    const fbFrame = fbRaw.packs.frame;
+    if (fbFrame === undefined) throw new Error('fixture has no frame');
+    fbFrame.body = `${fbFrame.body}\n## move-feedback\n[[MOVE-FEEDBACK]] Give rubric feedback.\n`;
+    const withSection = parsePromptPackSet(fbRaw);
+    const fb = policy({ move: 'hint', rung: 0, skill: 'feedback' });
+    const promptWith = (p: PolicyResult) =>
+      composeSystemPrompt({ ctx: ctx(), policy: p, lang: 'en', set: withSection }).systemPrompt;
+
+    it('a feedback turn uses move-feedback when the frame has it, not hint-1', () => {
+      const text = promptWith(fb);
+      expect(text).toContain('[[MOVE-FEEDBACK]] Give rubric feedback.');
+      expect(text).not.toContain('[[MOVE-HINT-1]]');
+      expect(text).toContain('Move hint, rung 0.');
+    });
+
+    it('without the section a feedback turn composes exactly as before (hint-1)', () => {
+      const before = prompt(ctx(), fb);
+      expect(before).toContain('[[MOVE-HINT-1]]');
+      expect(before).not.toContain('[[MOVE-FEEDBACK]]');
+      // The added section changes nothing but the move line.
+      expect(
+        promptWith(fb).replace('[[MOVE-FEEDBACK]] Give rubric feedback.', set.frame['move-hint-1']),
+      ).toBe(before);
+    });
+
+    it('every non-feedback turn is unchanged by the section', () => {
+      const cases = [
+        policy({ move: 'hint', rung: 1, skill: 'coach' }),
+        policy({ move: 'hint', rung: 2, skill: 'coach' }),
+        policy({ move: 'hint', rung: 0, skill: 'practice' }),
+        policy({ move: 'explain', skill: 'feedback' }),
+        policy({ move: 'ask', skill: 'feedback' }),
+        policy({ move: 'ask', skill: null, reason: 'fallback' }),
+      ];
+      for (const p of cases) {
+        const text = promptWith(p);
+        expect(text).not.toContain('[[MOVE-FEEDBACK]]');
+        expect(text).toBe(prompt(ctx(), p));
+      }
+      expect(promptWith(cases[0] as PolicyResult)).toContain('[[MOVE-HINT-1]]');
+    });
+  });
+
   it('every other move uses its own line', () => {
     for (const move of ['ask', 'worked_example', 'explain', 'solution', 'check'] as const) {
       expect(prompt(ctx(), policy({ move }))).toContain(set.frame[`move-${move}`]);
