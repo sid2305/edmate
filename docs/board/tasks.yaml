@@ -2080,6 +2080,13 @@ tasks:
   deps:
   - '0.17'
   status: todo
+- id: 0.16b
+  milestone: M13
+  title: 'metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already passes an absolute path), and test that "." and the absolute root give the same numbers'
+  accept: collect(".") equals collect(abs root) in a test; .claude tests green
+  deps:
+  - '0.16a'
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
