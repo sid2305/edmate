@@ -10,6 +10,21 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.17 agent limits and merge-gate budget check (.claude, risky path) · decided by lead · risk: high
+
+- Decided: merge 0.17. Planner, tdd-guide and build-error-resolver now carry Budget, Allowed tools and Exit conditions; builders report `Tool calls used: N`. merge_gate.py check 6 reads the plan's cap (a `Budget: N` line or the first number in the `## Budget` section, tolerating ~, About, bold and bullets) and the handoff's count. Over 1.2x the cap fails unless the handoff's `## Decisions` has a heading naming the task, "budget" and "decided by lead"; a present but unparseable budget or count fails visibly; plans and handoffs with neither line skip silently. The hard automatic stop hook is not shipped (B-35, pending the human). The security MEDIUM (a decoy number earlier in the `## Budget` prose sets the cap) goes to 0.17a.
+- Why: the human's 21 Oct 2026 decision that limits are enforced, not only requested. security-reviewer and code-reviewer each raised the same HIGH (prose budgets never parsed); fix round 1 fixed it and the re-check passed (198 .claude tests). It changes `.claude/**`, so it is risk: high.
+- risk: high
+
+Details (builder):
+
+---
+
+### 0.17 budget overrun escape hatch is a visible decision, not silent · risk: medium
+- merge_gate.py's budget check fails a handoff whose reported tool-call count exceeds 1.2x the plan's cap, unless the handoff's `## Decisions` names the task id and the word "budget" in a heading — mirroring the existing `[wontfix]` escape pattern used elsewhere in the gate. A missing `Budget:` or `Tool calls used:` line is always a silent no-op (note, never fail), so every plan/handoff written before this task keeps passing the gate unchanged.
+
+---
+
 ### 21 Oct 2026 · 0.16a metrics read subagent transcripts (.claude, risky path) · decided by lead · risk: high
 - Decided: merge 0.16a. Closeout metrics now read `<session>/subagents/*.jsonl` and attribute a whole subagent file to a task when its first prompt names "task <id>" exactly or its branch is the task branch or `work-<id>` (a letter suffix counts only when it is not itself a board task). Top-level lead files keep per-entry branch matching. No prompt text reaches the output.
 - Why: 0.16's first closeout recorded 0 tool calls because subagent transcripts were never read. Both reviewers' shared HIGH (sibling-id over-match, from the lead's own plan) was fixed and re-checked by security-reviewer.

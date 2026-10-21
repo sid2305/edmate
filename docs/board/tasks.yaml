@@ -338,9 +338,32 @@ tasks:
   deps:
   - '0.15'
   risk: risky
-  status: review
+  status: done
   branch: m0/0.17-agent-limits
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 227
+    tokens_in: 722
+    tokens_out: 65754
+    cache_read_tokens: 18943269
+    wall_time_seconds: 6312
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 2
+    human_questions: 3
 - id: '0.18'
   milestone: M7
   title: 'Agent factory, registry (human decision 21 Oct 2026): each .claude/agents/*.md file gains a short registry block, known limitations, typical misses, average cost per run, last reviewed date, and
