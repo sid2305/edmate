@@ -10,6 +10,13 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.1a: two LOW review notes left as they are · decided by lead · risk: low
+- Decided: keep `packages/evals/src/loader.test.ts`'s `chmod 0o000` read-failure test (CI is non-root) and `packages/evals/src/displayPath.ts`'s cross-drive handling (already falls back to the basename).
+- Why: neither changes behaviour on the CI or dev machines.
+- risk: low.
+
+---
+
 ### 21 Oct 2026 · 6.3 merge: mistake tags (classifier and applyMistakes) · decided by lead · risk: high
 - Decided: merge 6.3. `classifyMistakeTags` splits tags into known (on the style card's `mistakeTags`) and proposed; `applyMistakes` in `packages/db/src/repositories/learner.ts` merges known tags under the profile row lock. Proposed tags are returned, not stored (6.3a). The concurrency test and the tag and array caps go to 6.3b. Three cosmetic LOWs in `packages/harness/src/memory/mistakeTags.test.ts`, `packages/db/test/repositories.int.test.ts` and `packages/db/src/repositories/learner.ts` are left as they are (wontfix).
 - Why: code-reviewer, typescript-reviewer, security-reviewer and database-reviewer (all sonnet) approve with no CRITICAL or HIGH; the lock pattern matches 6.2's race-tested one; no contracts change.

@@ -2231,9 +2231,29 @@ tasks:
   accept: an unmatched verdict id appears in the report; a missing file and a bad YAML file give different messages; no absolute path in either loader's error text; evals tests green
   deps:
   - '7.1'
-  status: review
+  status: done
   branch: m7/7.1a-calibration-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 134
+    tokens_in: 452
+    tokens_out: 52180
+    cache_read_tokens: 12215214
+    wall_time_seconds: 419
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 6.3a
   milestone: M13
   title: 'Proposed mistake tags the teacher approves (deferred from 6.3, MVP first): persist the classifier''s proposed tags per teacher and add a teacher approve/reject action that adds an approved tag
