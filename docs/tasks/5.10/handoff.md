@@ -1,8 +1,8 @@
 # Task 5.10 handoff: Ask-the-teacher path
 
-Status: PARTIAL (Phase A of A–D done)
-Branch: `m5/5.10-ask-the-teacher` (built on local `work-5.10a`)
-Worktree: `.claude/worktrees/agent-a2780f9d3b337cf96` (under the repo root)
+Status: PARTIAL (Phases A and B of A–D done)
+Branch: `m5/5.10-ask-the-teacher`
+Worktree (Phase B): `.claude/worktrees/agent-a4e69cb301edd9e42` (under the repo root)
 
 ## Phase A
 
@@ -53,9 +53,55 @@ python3 .githooks/secret-scan.py --all  → clean
 - Added `teacherNoteParts` and `TEACHER_NOTE_PART_MAX` to the plan's two functions, so the db adapter validates and caps from the same helper rather than its own copy.
 - The loop test uses the test-double postGuard (as `turn.integration.test.ts` does), so grounding's judge is not exercised here; Phase D's Postgres run can add it.
 
+## Phase B
+
+db side: migration `0018_ask_the_teacher.sql`, the new schema, and a `CorrectionStore` db adapter
+that writes a teacher note (document + chunk + eval case) and bumps the material revision, all in
+one transaction, scrubbed the same way every other repository is. No contracts, ADR, harness or
+`apps/web` change. `packages/db` still imports `@edmate/harness` only for the shared teacher-note
+helpers (already a dependency, already used by `retrieval.ts`).
+
+### Acceptance evidence
+
+| Item | Evidence |
+|---|---|
+| Schema | `teacher_eval_cases` (teacher_id, module_id, origin, question, answer, chunk_id, teacher_question_id) and `notifications` (student_id, teacher_id, kind, teacher_question_id, read_at) tables; `note_origin` and `notification_kind` enums. `test/schema.test.ts` (teacher-owned-table index rule, create-only rule with `0018` listed in `REVIEWED_UPDATES`), `test/helpers.ts` (`DATA_MODEL_TABLES`). |
+| Migration backfill | `test/ask-teacher-migration.int.test.ts` (folder-before-0018 pattern): a pre-existing `teacher_questions` row with `group_id = null` backfills to its own id; a later row's explicit `group_id` is untouched; the new tables exist after migrating to head. |
+| CorrectionStore writes one note, in one transaction | `test/correction-store.int.test.ts`: `correctionStoreFor(repos, scope).addTeacherNote(...)` writes one `documents` + one `chunks` (`kind: 'teacher_note'`, exact `Question: ...\nAnswer: ...` text, `source_title: "Teacher's answer"`) + one `teacher_eval_cases` row, and bumps `teacher_material_revisions` by 1, all asserted by exact counts before/after. |
+| Scope and validation, before any write | Same file: another teacher's module → `not_found`; a payload `teacherId` other than the bound scope → `scope`; empty (after trim) or over-`LIMITS.turnTextMaxLength` text → `invalid`; all three leave row counts and the revision unchanged. |
+| The note is retrievable, and only under an allowed scope | Same file: `retrievalIndexFor(repos).search(...)` finds the note first by full text under a scope that allows its module, and not at all under a scope that doesn't. |
+| Isolation | `test/repositories.int.test.ts` CASES gained `'chunks.addTeacherNote'` (own module → ok, another teacher's module → `not_found`). |
+| No model calls | Pure SQL / Postgres via Testcontainers-style throwaway db; no gateway involved. |
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --force --concurrency=1
+  @edmate/db:test   Test Files 47 passed (47)   Tests 799 passed | 4 skipped (803)
+  Coverage: All files 99.88% stmts / 98.59% branch / 99.79% funcs / 99.93% lines
+  Tasks: 26 successful, 26 total
+python3 .githooks/secret-scan.py --all  → clean
+```
+
+### Changes
+
+- `src/schema/_shared.ts`: `noteOrigin` and `notificationKind` enums.
+- `src/schema/content.ts`: `teacherEvalCases` table.
+- `src/schema/learning.ts`: `notifications` table.
+- `migrations/0018_ask_the_teacher.sql` (+ updated `meta/_journal.json`, generated `meta/0018_snapshot.json`): the two enums, two tables, and a hand-added `UPDATE teacher_questions SET group_id = id WHERE group_id IS NULL` backfill (Phase C's grouping needs every row to already have a `group_id`).
+- `src/repositories/chunks.ts`: `TeacherNoteInputSchema` / `TeacherNoteWriteInput`, `insertTeacherNote(tx, teacherId, input, method)` (document + chunk + eval-case row + revision bump, one transaction, using the existing `insertSelect` ownership pattern and the existing `insertChunkRows` helper), and `chunksRepo().addTeacherNote`.
+- `src/repositories/ports.ts`: `correctionStoreFor(repos, scope)`.
+- `src/repositories/index.ts`: exports `correctionStoreFor`, `insertTeacherNote`, `TeacherNoteWriteInput`.
+- `src/repositories/README.md`: new `## Ask the teacher (task 5.10)` section.
+- `test/helpers.ts`, `test/schema.test.ts`: new tables registered; `0018` added to `REVIEWED_UPDATES`.
+- `test/repositories.int.test.ts`: `'chunks.addTeacherNote'` isolation case.
+- New `test/ask-teacher-migration.int.test.ts`, `test/correction-store.int.test.ts`.
+
+### Deviations
+
+- Added an index on `notifications.teacher_id` alone, beyond the plan's `(student_id, teacher_id, created_at)` composite index, so the table satisfies the existing repo-wide invariant that every teacher-owned table has an index led by `teacher_id` (`test/schema.test.ts`).
+- Tested the `group_id` backfill in its own file (`ask-teacher-migration.int.test.ts`), following the same "folder-before-N" convention `document-status-migration.int.test.ts` and `age-consent-migration.int.test.ts` already use, rather than extending the large shared `test/migrate.int.test.ts`.
+
 ## Left to do
 
-- **Phase B** (db): migration `0018_ask_the_teacher.sql` (`teacher_eval_cases`, `notifications`, `group_id` backfill), schema enums and tables, `chunks.insertTeacherNote` / `chunks.addTeacherNote`, `correctionStoreFor` in `ports.ts`, `test/correction-store.int.test.ts`, CASES and schema/migrate tests, README § Ask the teacher.
 - **Phase C** (db): `question-similarity.ts` (+ pure test), grouping inside `teacherQuestions.open`, `listGroupsForTeacher`, `answer` (one transaction), `notifications.ts` (`listForStudent`, `markRead`), `teacher-question-answer.int.test.ts`, CASES.
 - **Phase D** (db): `runTeacherQuestionsCli` + `src/bin/teacher-questions.ts` + `db:questions`, CLI unit test, `test/ask-teacher-loop.int.test.ts` (the Postgres acceptance), merge gate, `review.md` (code-reviewer, security-reviewer), and the planned `risk: high` decision.
 
@@ -74,4 +120,14 @@ risk: low
 ### 21 Oct 2026 · The memory CorrectionStore can check module ownership · decided by tdd-guide
 Decided: `memoryCorrectionStore` takes an optional `moduleOwners` map and rejects an unknown or another teacher's module with `not_found`, writing nothing.
 Why: lets the memory loop show the same refusal the db adapter gives, without the double needing a module store.
+risk: low
+
+### 21 Oct 2026 · `group_id` backfills to each row's own id, before Phase C groups anything · decided by tdd-guide
+Decided: migration `0018` backfills every pre-existing `teacher_questions.group_id` (nullable since 0001, never set) to its own `id`, so a question is always its own group's oldest member until a later, similar question joins it in Phase C.
+Why: Phase C's grouping logic can assume `group_id` is never null without a special case for old rows.
+risk: low
+
+### 21 Oct 2026 · `notifications` also gets a lone `teacher_id` index · decided by tdd-guide
+Decided: added `notifications_teacher_id_idx` beyond the plan's named composite index.
+Why: the repo-wide invariant that every teacher-owned table has an index led by `teacher_id` (enforced by `test/schema.test.ts`) applies here too.
 risk: low
