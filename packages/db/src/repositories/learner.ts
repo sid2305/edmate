@@ -4,7 +4,7 @@ import {
   type EvidenceEvent,
   type LearnerProfile,
 } from '@edmate/contracts';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { foldMastery } from '../mastery.js';
@@ -178,6 +178,91 @@ export function learnerProfilesRepo(db: Db) {
             .where(
               and(eq(learnerProfiles.teacherId, sc.teacherId), eq(learnerProfiles.studentId, sc.studentId)),
             );
+        }),
+      );
+    },
+
+    /**
+     * Task 6.2: discards whatever `mastery` is currently stored and recomputes it from scratch by
+     * replaying the scope's *complete* `evidence_events` history, ordered `ts ASC, id ASC` (the
+     * id tie-break makes same-timestamp events deterministic, same convention as 6.1's
+     * `topicOrder`). Unlike `applyEvidenceMastery` (which folds only newly-appended events onto
+     * whatever is already stored), this folds every event the scope has ever produced onto an
+     * *empty* mastery map — so it also recovers from a corrupted/stale stored value, and a rebuild
+     * can never be confused with an incremental apply. Same row-lock pattern as
+     * `applyEvidenceMastery`: a concurrent `applyEvidence` and a rebuild for the same scope can
+     * never interleave a partial read. Always uses `BKT_DEFAULTS` (no `BktParams` override — see
+     * docs/tasks/6.2/plan.md Q3). Returns the rebuilt profile, same shape `get()` returns.
+     */
+    async rebuildMastery(scope: StudentScope): Promise<LearnerProfile> {
+      const method = 'learnerProfiles.rebuildMastery';
+      const sc = studentScope(scope, method);
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({
+              studentId: learnerProfiles.studentId,
+              teacherId: learnerProfiles.teacherId,
+              lang: learnerProfiles.lang,
+              mastery: learnerProfiles.mastery,
+              mistakes: learnerProfiles.mistakes,
+              lastSummary: learnerProfiles.lastSummary,
+            })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+
+          const rows = await tx
+            .select({
+              topicId: evidenceEvents.topicId,
+              correct: evidenceEvents.correct,
+              ts: evidenceEvents.ts,
+            })
+            .from(evidenceEvents)
+            .where(
+              and(
+                eq(evidenceEvents.teacherId, sc.teacherId),
+                eq(evidenceEvents.studentId, sc.studentId),
+              ),
+            )
+            .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id));
+
+          const next = foldMastery(
+            {},
+            rows.map((r) => ({ topicId: r.topicId, correct: r.correct, ts: r.ts.toISOString() })),
+          );
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mastery: next, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
+
+          return toLearnerProfile({ ...locked!, mastery: next }, method);
         }),
       );
     },

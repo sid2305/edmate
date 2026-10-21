@@ -258,4 +258,89 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
     },
     15_000,
   );
+
+  it(
+    // Task 6.2: rebuildMastery discards stored mastery and replays the complete evidence_events
+    // history, ordered ts ASC (not insertion order), reproducing the hand-computed plan values to
+    // 3 decimals, and matches the pure foldMastery({}, events) fold for the same event history.
+    'rebuildMastery replays the complete evidence_events history in ts order (not insertion order) and matches the pure fold',
+    async () => {
+      const scope = { studentId: 'stu_rebuild', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${scope.studentId}, 'Rebuild', 'en', 'test', 'student')`,
+      );
+      // A second topic for own.teacherId (the seed gives each teacher only one topic): the plan's
+      // "Topic B" needs its own id under the *same* teacher as "Topic A" (topicId).
+      const topicB = 'top_rebuild_b';
+      await handle.db.execute(
+        sql`insert into topics (id, teacher_id, module_id, title, "order")
+            values (${topicB}, ${own.teacherId}, ${ids.module('A', 1)}, 'rebuild topic B', 1)`,
+      );
+      // Stale/corrupted mastery, and a target row to prove the rebuild discards (not merges) it.
+      await repos.learnerProfiles.save(scope, {
+        ...scope,
+        lang: 'en',
+        mastery: { [topicB]: { p: 0.999, n: 999, updatedAt: '2000-01-01T00:00:00.000Z' } },
+        mistakes: [],
+        lastSummary: 'stale summary, must survive untouched',
+      });
+
+      // Topic A: 3 events (correct, correct, incorrect). Topic B: 1 event (incorrect).
+      // Inserted out of chronological order to prove the rebuild sorts by ts, not insertion order.
+      const rawEvents: { topicId: string; correct: boolean; ts: string }[] = [
+        { topicId: topicId, correct: false, ts: '2026-10-19T10:10:00.000Z' },
+        { topicId: topicB, correct: false, ts: '2026-10-19T09:00:00.000Z' },
+        { topicId: topicId, correct: true, ts: '2026-10-19T10:00:00.000Z' },
+        { topicId: topicId, correct: true, ts: '2026-10-19T10:05:00.000Z' },
+      ];
+      await repos.evidenceEvents.append(
+        scope,
+        rawEvents.map((e) => ({
+          ...scope,
+          topicId: e.topicId,
+          correct: e.correct,
+          source: 'practice',
+          weight: 1,
+          ts: e.ts,
+        })),
+      );
+
+      const rebuilt = await repos.learnerProfiles.rebuildMastery(scope);
+
+      const expected = foldMastery(
+        {},
+        [...rawEvents].sort((a, b) => a.ts.localeCompare(b.ts)),
+      );
+      expect(rebuilt.mastery[topicId]!.n).toBe(3);
+      expect(rebuilt.mastery[topicId]!.p).toBeCloseTo(0.5781021897810219, 3);
+      expect(rebuilt.mastery[topicId]!.p).toBeCloseTo(expected[topicId]!.p, 10);
+      expect(rebuilt.mastery[topicB]!.n).toBe(1);
+      expect(rebuilt.mastery[topicB]!.p).toBeCloseTo(0.17575757575757575, 3);
+      expect(rebuilt.mastery[topicB]!.p).toBeCloseTo(expected[topicB]!.p, 10);
+
+      // Stale value discarded, not merged: n is 1 (not 999), and mistakes/lastSummary untouched.
+      expect(rebuilt.mastery[topicB]!.n).toBe(1);
+      expect(rebuilt.mistakes).toEqual([]);
+      expect(rebuilt.lastSummary).toBe('stale summary, must survive untouched');
+
+      // Stored row matches the returned value.
+      const stored = await repos.learnerProfiles.get(scope);
+      expect(stored!.mastery).toEqual(rebuilt.mastery);
+    },
+    15_000,
+  );
+
+  it(
+    'rebuildMastery rejects a malformed scope before any SQL',
+    async () => {
+      expect(await kind(repos.learnerProfiles.rebuildMastery({ studentId: 'a b', teacherId: own.teacherId }))).toBe(
+        'scope',
+      );
+      expect(await kind(repos.learnerProfiles.rebuildMastery({ studentId: own.studentId, teacherId: '' }))).toBe(
+        'scope',
+      );
+    },
+    15_000,
+  );
 });

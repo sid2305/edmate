@@ -111,4 +111,35 @@ describe('foldMastery', () => {
     expect(next).toEqual(start);
     expect(next).not.toBe(start);
   });
+
+  // Task 6.2: hand-computed from BKT_DEFAULTS (docs/tasks/6.2/plan.md's table), to 3 decimals —
+  // these are the rebuild path's reference values (replayed from an empty mastery map).
+  it('rebuild reference: topic A (correct, correct, incorrect) from no prior', () => {
+    const events = [
+      { topicId: 'top_a', correct: true, ts: '2026-10-19T10:00:00.000Z' },
+      { topicId: 'top_a', correct: true, ts: '2026-10-19T10:05:00.000Z' },
+      { topicId: 'top_a', correct: false, ts: '2026-10-19T10:10:00.000Z' },
+    ];
+    // Step 1: 51/85 = 3/5 exactly.
+    const afterOne = foldMastery({}, events.slice(0, 1)).top_a!;
+    expect(afterOne.n).toBe(1);
+    expect(afterOne.p).toBeCloseTo(0.6, 3);
+    // Step 2: 138/155 ~= 0.8903225806451613
+    const afterTwo = foldMastery({}, events.slice(0, 2)).top_a!;
+    expect(afterTwo.n).toBe(2);
+    expect(afterTwo.p).toBeCloseTo(0.8903225806451613, 3);
+    // Step 3: 396/685 ~= 0.5781021897810219
+    const afterThree = foldMastery({}, events).top_a!;
+    expect(afterThree.n).toBe(3);
+    expect(afterThree.p).toBeCloseTo(0.5781021897810219, 3);
+  });
+
+  it('rebuild reference: topic B (incorrect) from no prior', () => {
+    const next = foldMastery({}, [
+      { topicId: 'top_b', correct: false, ts: '2026-10-19T10:00:00.000Z' },
+    ]);
+    expect(next.top_b!.n).toBe(1);
+    // ~= 0.175757...
+    expect(next.top_b!.p).toBeCloseTo(0.17575757575757575, 3);
+  });
 });
