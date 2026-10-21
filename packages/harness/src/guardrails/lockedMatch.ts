@@ -62,7 +62,11 @@
 // (it is a word character itself, so `snake_case_name` stays one token), and a run with a space or
 // punctuation on either side (markdown's actual syntax, `a * b`, a bullet list `* item`) is never
 // padding: pad only runs that already touch a letter on both sides, exactly as HTML markup and
-// entities do.
+// entities do. Invisible characters (`\p{Cf}`) between the letter and the run are looked past on
+// each side (4.6c fix round 1), so a soft hyphen, U+200B, U+2060, a decoded `&#8203;` or the
+// padding an empty tag leaves (`l<b></b>**o**op`) does not hide the emphasis. Known miss: a single
+// `~` (`lo~o~p`; GFM may render it as strikethrough) is never padded, so it still splits the word
+// there; pinned by a unit test.
 import { decodedBase64Spans } from '../pipeline/generate/base64Leak.js';
 import { foldText } from './textFold.js';
 
@@ -207,6 +211,33 @@ const isLetter = (c: string): boolean => c !== '' && /\p{L}/u.test(c);
 /** Markdown emphasis characters `foldMarkup`'s `rendered` reading may pad (see the header). */
 const EMPHASIS = new Set(['*', '_', '~', '`']);
 
+const isFormat = (c: string): boolean => /^\p{Cf}$/u.test(c);
+
+/** The character before `i`, looking past invisible (`\p{Cf}`) ones; '' at the start. */
+function letterBefore(text: string, i: number): string {
+  let k = i;
+  for (;;) {
+    if (k <= 0) return '';
+    const lo = text.charCodeAt(k - 1);
+    // An astral `\p{Cf}` (U+E0001, the tag characters) is a surrogate pair.
+    const w = lo >= 0xdc00 && lo <= 0xdfff && k >= 2 ? 2 : 1;
+    const c = text.slice(k - w, k);
+    if (!isFormat(c)) return text.charAt(k - 1);
+    k -= w;
+  }
+}
+
+/** The character at `j`, looking past invisible (`\p{Cf}`) ones; '' at the end. */
+function letterAfter(text: string, j: number): string {
+  let k = j;
+  while (k < text.length) {
+    const c = String.fromCodePoint(text.codePointAt(k) as number);
+    if (!isFormat(c)) return text.charAt(k);
+    k += c.length;
+  }
+  return '';
+}
+
 /**
  * Pads a run of `*` or `` ` `` of any length, or an exact doubled run (`__`, `~~`) of `_` or `~`,
  * with zero-width padding when it sits directly between two letters on both sides (4.6c; see the
@@ -228,9 +259,11 @@ function padMarkdownEmphasis(text: string): string {
     let j = i;
     while (j < n && text.charAt(j) === c) j++;
     const len = j - i;
-    const touchesLetters = isLetter(i > 0 ? text.charAt(i - 1) : '') && isLetter(text.charAt(j));
-    const pad =
-      touchesLetters && ((c === '*' || c === '`') ? true : len === 2);
+    // Fix round 1: invisible characters (`\p{Cf}`: a soft hyphen, U+200B, U+2060, a decoded
+    // `&#8203;`, or the padding an empty tag left) between the letter and the run do not stop the
+    // run rendering as emphasis, so look past them on each side.
+    const touchesLetters = isLetter(letterBefore(text, i)) && isLetter(letterAfter(text, j));
+    const pad = touchesLetters && (c === '*' || c === '`' ? true : len === 2);
     out += pad ? PAD.repeat(len) : text.slice(i, j);
     i = j;
   }

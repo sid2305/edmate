@@ -23,7 +23,23 @@
 ## Deviations
 - The accept list names a case `locked-loops-md-inword-bold-en (pending)` that did not exist yet. I wrote it as a pending case and did not add it to the suite (it needs a human reviewer).
 
+## Fix round 1
+From the code-reviewer findings (HIGH and LOW) and the lead's sign-off of the parked case.
+1. **[HIGH] Invisible characters next to in-word emphasis** (`lockedMatch.ts`, `letterBefore` / `letterAfter`): when deciding whether a `*`, `` ` ``, `__` or `~~` run touches a letter, the check now looks past `\p{Cf}` characters on each side (soft hyphen, U+200B, U+2060, a decoded `&#8203;`, the padding an empty tag leaves, and astral `\p{Cf}` such as U+E0020). So `l­**o**op` and `l<b></b>**o**op` fold to `loop` in the `rendered` reading. Each scan stops at the first visible character, so the whole pass stays linear.
+2. **[LOW] Single `~`** is now in the known-miss list in the `lockedMatch.ts` header; a unit test pins it (`lo~o~p` stays `lo`, `o`, `p`). Behaviour unchanged.
+3. **Parked case signed by the lead** (MVP first, 20 Oct 2026): `locked-loops-md-inword-bold-en` moved from `docs/tasks/4.6/pending-cases/` to `evals/suites/locked/` with `reviewed_by: lead`. Its span is now in `SPANS`, and the separate pending describe block is gone. The suite now has 38 cases, 43 steps and 35 failing by phrase.
+4. **Two new fixture-gate forms** run across all 38 cases: "soft hyphen before in-word bold" (`l­**o**op`) and "empty tag before in-word bold" (`l<b></b>**o**op`), both sent in 5-character chunks.
+
+Evidence:
+- Unit tests (`lockedMatch.test.ts`): 11 invisible-character forms fold to `loop`, including an 8-token span bolded with a soft hyphen and with `<b></b>` (`index.hits` true). There are also no-letter and non-letter edge cases, the single-`~` pin, and a timing guard: 200,000 characters of `\p{Cf}` runs around emphasis fold in under 1 s.
+- Reverting the fix (old immediate-neighbour check): `lockedFixtures.test.ts` gives `38 failed | 10 passed`. Each new form fails on all 43 steps ("not the locked reply") and no other form fails. The new unit test fails as well. The fix was then restored.
+- Both mutations (`no-op guard`, `index says no`) fail all 38 cases.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --filter=@edmate/evals...` → `Tasks: 14 successful, 14 total`. Harness `5000 passed`, evals `935 passed` (the 2 pending-block tests are gone and the case now runs in the suite's `it.each`), contracts `348 passed`, config `42 passed`. Coverage: `lockedMatch.ts 100 | 100 | 100 | 100`.
+
 ## Decisions
+- Fix round 1: the in-word emphasis check looks past every `\p{Cf}` character on both sides of the run (not only the zero-width padding Edmate itself adds), because none of them stops CommonMark rendering the run as emphasis. risk: medium
+- Fix round 1: a single `~` stays a known miss and is not padded. Padding it would also join ordinary `~` uses such as `a~b`. risk: low
+- Fix round 1: `locked-loops-md-inword-bold-en` is signed `reviewed_by: lead` under the MVP-first rule (20 Oct 2026). This replaces the earlier decision to keep it pending. risk: low
 - Markdown in-word padding applies to the `rendered` reading only, and only to runs with a letter directly on both sides (`*`/`` ` `` of any length, `_`/`~` only doubled). Kept from the WIP. risk: medium
 - Any post-guard failure (timeout, error or invalid result) sets the session stop flag, failing closed. risk: high
 - `HelpStateUnreadable` is a new harness error, pushed to `background` once per turn when the stored help state can't be read. risk: low

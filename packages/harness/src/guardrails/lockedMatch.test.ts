@@ -302,6 +302,59 @@ describe('foldMarkup (4.6b fix round 1: markup is padded, text is never removed)
     expect(lockedTokens('lo~o~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'o', 'p']);
   }, 5_000);
 
+  it('4.6c fix round 1: invisible characters between the letter and the run do not hide it', () => {
+    const forms = [
+      'l\u00ad**o**op', // soft hyphen
+      'l\u200b**o**op', // zero-width space
+      'l\u2060**o**op', // word joiner
+      'l**o**\u00adop', // after the run
+      'l\u00ad\u200b**o**\u2060\u00adop', // several, both sides
+      'l&#8203;**o**op', // decoded entity
+      'l<b></b>**o**op', // empty-tag padding
+      'l**o**<i></i>op',
+      'l\u{e0020}**o**op', // astral Cf (a tag character, a surrogate pair)
+      'l\u00ad__o__\u00adop',
+      'lo\u00ad~~o~~p',
+    ];
+    for (const f of forms) {
+      expect(lockedTokens(f, 'drop', 'rendered').map((t) => t.t), f).toEqual(['loop']);
+    }
+    const bolded = SPAN8.split(' ')
+      .map((w) => `${w.slice(0, 1)}\u00ad**${w.slice(1, 2)}**${w.slice(2)}`)
+      .join(' ');
+    expect(index.hits([bolded])).toBe(true);
+    const tagged = SPAN8.split(' ')
+      .map((w) => `${w.slice(0, 1)}<b></b>**${w.slice(1, 2)}**${w.slice(2)}`)
+      .join(' ');
+    expect(index.hits([tagged])).toBe(true);
+  }, 5_000);
+
+  it('4.6c fix round 1: a run with only invisible characters or a non-letter beyond them stays', () => {
+    // Nothing but invisible characters to the start or end of the text: no letter, no padding.
+    expect(foldMarkup('\u00ad**op', 'rendered')).toBe('\u00ad**op');
+    expect(foldMarkup('lo**\u00ad', 'rendered')).toBe('lo**\u00ad');
+    // A space or a number beyond the invisible characters: markdown syntax, left alone.
+    expect(foldMarkup('a \u00ad* b', 'rendered')).toBe('a \u00ad* b');
+    expect(foldMarkup('2\u00ad**3', 'rendered')).toBe('2\u00ad**3');
+    // A lone low surrogate at the start is looked at as one character, not past.
+    expect(foldMarkup('\udc00**o', 'rendered')).toBe('\udc00**o');
+  }, 5_000);
+
+  it('4.6c known miss: a single `~` between letters is never padded', () => {
+    expect(lockedTokens('lo~o~p', 'drop', 'rendered').map((t) => t.t)).toEqual(['lo', 'o', 'p']);
+    expect(foldMarkup('lo~o~p', 'rendered')).toBe('lo~o~p');
+  }, 5_000);
+
+  it('4.6c fix round 1: long runs of invisible characters around emphasis stay linear', () => {
+    const units = ['\u00ad', 'l\u00ad**', '\u200b*', 'a\u2060~~\u2060', '\u{e0020}`'];
+    for (const unit of units) {
+      const text = unit.repeat(Math.ceil(200_000 / unit.length)).slice(0, 200_000);
+      const start = Date.now();
+      foldMarkup(`l${text}**o**${text}p`, 'rendered');
+      expect(Date.now() - start, JSON.stringify(unit)).toBeLessThan(1_000);
+    }
+  }, 10_000);
+
   it('4.6c: unaffected forms stay unaffected (snake_case identifiers, spaced `*` as code)', () => {
     expect(lockedTokens('snake_case_name', 'drop', 'rendered').map((t) => t.t)).toEqual([
       'snake_case_name',
