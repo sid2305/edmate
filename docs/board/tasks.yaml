@@ -1750,9 +1750,9 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/7.3-suite-generator
+  model: plan:sonnet build:opus
 - id: '7.4'
   milestone: M7
   title: 'Quality gate, scoped by change: first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case
@@ -2395,6 +2395,16 @@ tasks:
   deps:
   - '6.5'
   risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.3a
+  milestone: M13
+  title: 'Per-agent suite generator: Hindi (Devanagari), romanised Hindi and Hinglish variants of the locked templates, as a safety net after the English-only pilot.'
+  accept: The demo teacher's generated suite includes locked cases in all three forms and they pass.
+  deps:
+  - '7.3'
+  risk: normal
   status: todo
   branch: null
   model: null
