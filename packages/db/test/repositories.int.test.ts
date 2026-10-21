@@ -173,6 +173,8 @@ const newSession = (t: Teacher) => ({
 });
 /** A spare open session per pair, for sessions.endOnPackageChange (inserted in beforeAll). */
 const endable = (p: Pair) => `${ids.session(p)}_end`;
+/** A second spare open session per pair, for sessions.end (inserted in beforeAll). */
+const endable2 = (p: Pair) => `${ids.session(p)}_end2`;
 
 /** Over the 10 000-character cap on a serialised before/after. */
 const BIG = { blob: 'x'.repeat(10_001) };
@@ -835,6 +837,51 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'a session that does not exist',
         (r) => r.sessions.endOnPackageChange(sScope(a), 'ses_nowhere'),
         'not_found',
+      ],
+    ],
+  },
+  // Task 6.4: ends the scope's own session normally and upserts its own pair's summary; anything
+  // else is not_found and writes nothing. Targets a second spare session per pair (seeded in
+  // beforeAll, distinct from endOnPackageChange's so the two write cases never share a row).
+  'sessions.end': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.sessions.end(scope, endable2(target), `[${actor}] wrap-up`),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ ended: true });
+      for (const p of PAIRS) {
+        const row = await r.sessions.get(sScope(p), endable2(actor));
+        if (p === actor) {
+          expect(row?.endedAt).not.toBeNull();
+          expect(row?.summary).toBe(`[${actor}] wrap-up`);
+        } else {
+          expect(row, `${p} reads ${actor}'s session`).toBeNull();
+        }
+        const summary = (await r.learnerProfiles.get(sScope(p)))?.lastSummary;
+        expect(summary, `${p}'s summary`).toBe(p === actor ? `[${actor}] wrap-up` : `[${p}] last time`);
+      }
+      // Put the summary back to the seed's own value, same as endOnPackageChange's own case.
+      await raw.query(
+        'update learner_profiles set last_summary = $1 where student_id = $2 and teacher_id = $3',
+        [`[${actor}] last time`, sScope(actor).studentId, sScope(actor).teacherId],
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a session id that is not an id',
+        (r) => r.sessions.end(sScope(a), 'ses not an id', 'summary'),
+        'invalid',
+      ],
+      [
+        'a session that does not exist',
+        (r) => r.sessions.end(sScope(a), 'ses_nowhere', 'summary'),
+        'not_found',
+      ],
+      [
+        'a summary over the word limit',
+        (r) => r.sessions.end(sScope(a), endable2(a), Array(LIMITS.lastSummaryMaxWords + 1).fill('w').join(' ')),
+        'invalid',
       ],
     ],
   },
@@ -2384,6 +2431,11 @@ describe.skipIf(!up)(
           `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
            values ($1, $2, $3, $4, 1, $5, 1)`,
           [endable(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
+        );
+        await raw.query(
+          `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+           values ($1, $2, $3, $4, 1, $5, 1)`,
+          [endable2(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
         );
       }
       // Task 5.10: fixed fixtures for teacherQuestions.answer / notifications' isolation cases.
