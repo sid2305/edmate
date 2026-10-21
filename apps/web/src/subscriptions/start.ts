@@ -58,13 +58,13 @@ function fromError(error: unknown): Response {
 }
 
 function findPackage(packages: LivePackage[], packageId: string): LivePackage | null {
-  return packages.find((p) => p.config.id === packageId) ?? null;
+  return packages.find((p) => p.offer.packageId === packageId) ?? null;
 }
 
 /** `status`/`periodEnd` from the package's own `trialDays` (9.3 Phase B's own call, logged). */
 function startParams(pkg: LivePackage, now: Date): { status: 'trial' | 'active'; periodEnd: string } {
-  const trialDays = pkg.config.trialDays;
-  if (trialDays !== undefined && trialDays > 0) {
+  const trialDays = pkg.offer.trialDays;
+  if (trialDays > 0) {
     const periodEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
     return { status: 'trial', periodEnd: periodEnd.toISOString() };
   }

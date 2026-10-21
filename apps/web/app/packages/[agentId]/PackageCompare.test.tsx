@@ -4,7 +4,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LivePackage } from '@edmate/db';
+import type { PackageOffer } from '@edmate/db';
 import { renderIntl } from '../../../test/intl';
 import { PackageCompare } from './PackageCompare';
 
@@ -28,37 +28,25 @@ afterEach(() => {
   Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
 });
 
-const FREE: LivePackage = {
-  packageVersionId: 'pv_free_1',
-  config: {
-    id: 'pkg_free',
-    version: 1,
-    teacherId: 'tch_asha',
-    agentId: 'agt_demo',
-    name: 'Free',
-    moduleIds: [],
-    skills: ['explain'],
-    helpCeiling: 2,
-    finalAnswers: 'never',
-    dailyMessageLimit: 20,
-    liveClassesPerMonth: 0,
-    pricePerMonth: { amountMinor: 0, currency: 'USD' },
-    lockedReply: 'generic',
-  },
+const FREE: PackageOffer = {
+  packageId: 'pkg_free',
+  name: 'Free',
+  skills: ['explain'],
+  dailyMessageLimit: 20,
+  liveClassesPerMonth: 0,
+  pricePerMonth: { amountMinor: 0, currency: 'USD' },
+  trialDays: 0,
 };
 
-const PAID: LivePackage = {
-  packageVersionId: 'pv_paid_1',
-  config: {
-    ...FREE.config,
-    id: 'pkg_paid',
-    name: 'Full Course',
-    skills: ['explain', 'coach'],
-    dailyMessageLimit: 100,
-    liveClassesPerMonth: 2,
-    pricePerMonth: { amountMinor: 1999, currency: 'USD' },
-    trialDays: 7,
-  },
+const PAID: PackageOffer = {
+  ...FREE,
+  packageId: 'pkg_paid',
+  name: 'Full Course',
+  skills: ['explain', 'coach'],
+  dailyMessageLimit: 100,
+  liveClassesPerMonth: 2,
+  pricePerMonth: { amountMinor: 1999, currency: 'USD' },
+  trialDays: 7,
 };
 
 function jsonResponse(status: number, body: unknown): Response {

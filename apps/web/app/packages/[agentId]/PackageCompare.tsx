@@ -3,13 +3,13 @@
 // `/api/subscriptions` and, on success, goes to `/learn/[agentId]` -- the package unlocks on the
 // next message there. No payment screen anywhere (CLAUDE.md: a paid package starts as an active
 // subscription with no payment until M10).
-import type { LivePackage } from '@edmate/db';
+import type { PackageOffer } from '@edmate/db';
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 
 export interface PackageCompareProps {
   agentId: string;
-  packages: readonly LivePackage[];
+  packages: readonly PackageOffer[];
 }
 
 interface ErrorBody {
@@ -56,26 +56,26 @@ export function PackageCompare({ agentId, packages }: PackageCompareProps) {
     <div>
       {error ? <p role="alert">{error}</p> : null}
       <ul className="package-compare">
-        {packages.map(({ config }) => (
-          <li key={config.id}>
-            <h2>{config.name}</h2>
-            <p>{formatPrice(config.pricePerMonth.amountMinor, config.pricePerMonth.currency)}</p>
-            {config.trialDays !== undefined && config.trialDays > 0 ? (
-              <p>{t('trialDays', { days: config.trialDays })}</p>
+        {packages.map((offer) => (
+          <li key={offer.packageId}>
+            <h2>{offer.name}</h2>
+            <p>{formatPrice(offer.pricePerMonth.amountMinor, offer.pricePerMonth.currency)}</p>
+            {offer.trialDays > 0 ? (
+              <p>{t('trialDays', { days: offer.trialDays })}</p>
             ) : null}
-            <p>{t('dailyMessageLimit', { count: config.dailyMessageLimit })}</p>
-            <p>{t('liveClassesPerMonth', { count: config.liveClassesPerMonth })}</p>
+            <p>{t('dailyMessageLimit', { count: offer.dailyMessageLimit })}</p>
+            <p>{t('liveClassesPerMonth', { count: offer.liveClassesPerMonth })}</p>
             <ul>
-              {config.skills.map((skill) => (
+              {offer.skills.map((skill) => (
                 <li key={skill}>{t(`skills.${skill}`)}</li>
               ))}
             </ul>
             <button
               type="button"
               disabled={startingId !== null}
-              onClick={() => void onStart(config.id)}
+              onClick={() => void onStart(offer.packageId)}
             >
-              {startingId === config.id ? t('starting') : t('startButton')}
+              {startingId === offer.packageId ? t('starting') : t('startButton')}
             </button>
           </li>
         ))}

@@ -12,28 +12,22 @@ const STUDENT: Principal = { userId: 'std_amy', role: 'student' };
 
 const FREE_PKG: LivePackage = {
   packageVersionId: 'pv_free_1',
-  config: {
-    id: 'pkg_free',
-    version: 1,
-    teacherId: 'tch_asha',
-    agentId: 'agt_demo',
+  offer: {
+    packageId: 'pkg_free',
     name: 'Free',
-    moduleIds: [],
     skills: ['explain'],
-    helpCeiling: 2,
-    finalAnswers: 'never',
     dailyMessageLimit: 20,
     liveClassesPerMonth: 0,
     pricePerMonth: { amountMinor: 0, currency: 'USD' },
-    lockedReply: 'generic',
+    trialDays: 0,
   },
 };
 
 const PAID_PKG: LivePackage = {
   packageVersionId: 'pv_paid_1',
-  config: {
-    ...FREE_PKG.config,
-    id: 'pkg_paid',
+  offer: {
+    ...FREE_PKG.offer,
+    packageId: 'pkg_paid',
     name: 'Full Course',
     pricePerMonth: { amountMinor: 1999, currency: 'USD' },
     trialDays: 7,

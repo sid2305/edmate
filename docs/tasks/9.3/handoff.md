@@ -180,3 +180,33 @@ the plan's "depends on Phase B merged" sequencing between phases does not apply 
 - **No discovery link yet** (Phase C, not started): `/packages/[agentId]` is reachable only by
   typed URL, same as `/learn/[agentId]` before 9.2 existed, per the plan's own State-after-phase
   note.
+
+## Fix round 1
+
+Status: DONE. Two MEDIUM review findings fixed, tests first.
+
+1. **Public projection only** (`packages/db/src/repositories/package-versions.ts`):
+   `liveForAgent` now returns `{ packageVersionId, offer }`, where `offer` (new exported type
+   `PackageOffer`) holds only `packageId, name, pricePerMonth, trialDays, dailyMessageLimit,
+   liveClassesPerMonth, skills`. Those are exactly the fields `PackageCompare` renders. The page
+   maps to `offer` before the client component, so neither the internal config (`teacherId`,
+   `moduleIds`, `helpCeiling`, `finalAnswers`, `lockedReply`) nor `packageVersionId` reaches the
+   RSC payload. The start route still finds the live `packageVersionId` server-side, by `offer.packageId`.
+   Tests: the int test asserts the exact key sets; `page.test.tsx` asserts the client props' exact
+   keys and that none of the internal keys appear in the serialised props.
+2. **Agent status join**: `liveForAgent` inner-joins `agents` on `status = 'live'`. In the int
+   test, the draft and suspended fixture agents now each own a package with a live version, so the
+   refusal comes from the agent's status. Mutation check: with the status predicate replaced by
+   `true`, the int test fails on `agt_live_pkg_draft`.
+
+Evidence:
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/web...` →
+  `Tasks: 34 successful, 34 total`; db `793 passed | 4 skipped` (Postgres up on 55432, int tests
+  ran); web `804 passed | 4 skipped`.
+- `python3 .githooks/secret-scan.py --all` → clean (exit 0).
+
+### Decisions (fix round 1)
+- **`trialDays` is always present in the offer (0 = no trial)**, not optional: the key set is
+  exact and fixed, and the component and route check `> 0`. `risk: low`.
+- **`packageVersionId` stays in the repo result beside `offer`** (the start route needs it), and
+  the page strips it, so the client gets `offer` only. `risk: low`.

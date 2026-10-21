@@ -2,7 +2,7 @@
 // Reachable by typed URL (no discovery link yet -- the same shape `/learn/[agentId]` had before
 // 9.2). A student who already has a live subscription with this teacher skips the compare UI --
 // upgrading/downgrading is 9.6, out of scope here.
-import type { LivePackage } from '@edmate/db';
+import type { PackageOffer } from '@edmate/db';
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
@@ -53,7 +53,11 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
     );
   }
 
-  const packages: LivePackage[] = await repos.packageVersions.liveForAgent({ agentId });
+  // Only the public offer crosses to the client component: never the teacher's internal config,
+  // and not even the packageVersionId (the start route resolves it server-side).
+  const packages: PackageOffer[] = (await repos.packageVersions.liveForAgent({ agentId })).map(
+    (p) => p.offer,
+  );
   return (
     <AppShell
       brand={shell('brand')}

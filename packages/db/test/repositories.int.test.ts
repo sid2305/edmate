@@ -487,13 +487,48 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       for (const t of TEACHERS) {
         const got = await r.packageVersions.liveForAgent({ agentId: ids.agent(t) });
         expect(got.map((p) => p.packageVersionId)).toEqual([ids.packageVersion(t)]);
-        expect(got[0]?.config.id).toBe(ids.pkg(t));
-        expect(got[0]?.config.teacherId).toBe(teacherId(t));
+        expect(got[0]?.offer.packageId).toBe(ids.pkg(t));
+        expect(got[0]?.offer.name).toBe(`[${t}] package`);
+        // Public projection only: never the teacher's internal config (9.3 fix round 1).
+        expect(Object.keys(got[0] ?? {}).sort()).toEqual(['offer', 'packageVersionId']);
+        expect(Object.keys(got[0]?.offer ?? {}).sort()).toEqual([
+          'dailyMessageLimit',
+          'liveClassesPerMonth',
+          'name',
+          'packageId',
+          'pricePerMonth',
+          'skills',
+          'trialDays',
+        ]);
         n += 1;
       }
+      // A draft and a suspended agent, each with a package that has a live version: the agent's
+      // own status must refuse them, not a missing package.
       await raw.query(
         `insert into agents (id, teacher_id, status) values
            ('agt_live_pkg_draft', 'tch_a', 'draft'), ('agt_live_pkg_susp', 'tch_b', 'suspended')`,
+      );
+      await raw.query(
+        `insert into packages (id, teacher_id, agent_id, name, live_version) values
+           ('pkg_live_draft', 'tch_a', 'agt_live_pkg_draft', 'draft pkg', 1),
+           ('pkg_live_susp', 'tch_b', 'agt_live_pkg_susp', 'susp pkg', 1)`,
+      );
+      await raw.query(
+        `insert into package_versions (id, teacher_id, package_id, version, config) values
+           ('pv_live_draft', 'tch_a', 'pkg_live_draft', 1, $1),
+           ('pv_live_susp', 'tch_b', 'pkg_live_susp', 1, $2)`,
+        [
+          JSON.stringify({
+            ...packageConfig('A', 1, []),
+            id: 'pkg_live_draft',
+            agentId: 'agt_live_pkg_draft',
+          }),
+          JSON.stringify({
+            ...packageConfig('B', 1, []),
+            id: 'pkg_live_susp',
+            agentId: 'agt_live_pkg_susp',
+          }),
+        ],
       );
       for (const agentId of ['agt_live_pkg_draft', 'agt_live_pkg_susp']) {
         expect(await r.packageVersions.liveForAgent({ agentId }), agentId).toEqual([]);
