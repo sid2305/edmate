@@ -406,9 +406,31 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: review
+  status: done
   branch: m0/0.19-digest-lessons
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus x2 fix:opus review:sonnet x2
+  metrics:
+    tool_calls: 563
+    tokens_in: 1826
+    tokens_out: 192481
+    cache_read_tokens: 49467911
+    wall_time_seconds: 3890
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations

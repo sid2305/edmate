@@ -10,6 +10,78 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.19 merge: decision digest, standing rules and lessons · decided by lead · risk: high
+- Decided: merge 0.19. `board.py digest` writes `docs/decisions/digest.md` from the log (human decisions at any risk, plus lead risk: high decisions that are not `<id> merge:` entries, one line each, newest first, superseded entries tagged). `docs/decisions/standing-rules.md` and `docs/lessons.md` are new, and planner and tdd-guide read both. At 169 lines the digest is over the plan's ~110 target; every line is in scope, so it stays.
+- Why: code-reviewer and security-reviewer (sonnet) found no CRITICAL or HIGH; the fix round closed both MEDIUMs (the who-parsing gap and the stale help text) and the LOW; 323 tests pass; log.md is unchanged.
+- risk: high (changes under `.claude/**`: the board, closeout and agent files).
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: "malformed log" means an entry the digest could silently drop · decided by builder · risk: medium
+- Decided: `parse_log_entries` raises (so `board.py digest` writes nothing) on four things. (1) A `### ` heading before the first `---` line: an entry with no closing `---`, as in the plan's fixture. (2) A `###Heading` with no space that carries `risk: high`. (3) A risk: high entry with an empty body. (4) A `Supersedes:` line naming a heading that isn't in the log. A risk: high heading followed by another heading with no `---` between them is not malformed. An entry's body ends at the next `### ` heading or the next `---` line.
+- Why: the plan's literal reading ("every risk-high heading needs a closing `---`") would fail the real log. The log has 7 blocks where two or more entries sit with no `---` between them, including risk: high ones such as "US is the first region; India parked". The last entry closeout writes also never has a trailing `---`. The log can't be edited (append-only), so the rule targets what actually drops an entry. A dry run shows the real log passes.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: standing rules live in docs/decisions/standing-rules.md · decided by builder · risk: low
+- Decided: the hand-picked "Standing rules" list is a data file, `docs/decisions/standing-rules.md`, with one `- <rule> (cites: <exact risk: high heading>)` bullet per rule. `board.py digest` reads it if it exists and renders the bullets verbatim. A bullet with no citation, or with a citation that isn't a risk: high heading, fails the run. With no file, the section says "None yet."
+- Why: lead answer 3 wants the lead to change the list without touching `digest.py`. A separate file keeps the generated `digest.md` hand-edit-free.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: risk and supersedes parsing edges · decided by builder · risk: low
+- Decided:
+  - Risk comes from the last `risk: <level>` in the heading, else from the first body line that starts with `risk:` or `- risk:`. A mid-sentence `· risk: high` in prose does not count.
+  - `Supersedes:` and `cites:` match headings after whitespace normalisation, with an optional leading `###`.
+  - A heading logged twice appears once in the digest.
+  - When two entries supersede the same heading, the newest one is named.
+  - The splitter duplicates closeout.py's (`decision_entries`/`split_log`), with a comment naming the twin (lead answer 1).
+- Why: these match the variations in the real log and keep the output deterministic.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: closeout's lessons reminder is case-insensitive and fires only on newly appended entries · decided by builder · risk: low
+- Decided: the `## Fix round` check is case-sensitive and anchored to a line start. The "decided by you" check is case-insensitive, and only looks at headings closeout appended on this run, so a re-run doesn't remind again. The reminder also prints when `board.py set done` then refuses. It is advisory only, and the exit code is unchanged.
+- Why: the plan names "freshly-appended" headings. Case-insensitivity catches "Decided by you" at a heading start at no cost.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: digest machinery in .claude (risky path) · decided by builder (for the lead) · risk: high
+- Decided: Phase A changes `.claude/**` (board skill, team-lead `closeout.py`, tests), so the PR needs security-reviewer and a risk: high entry. It adds no permissions and no network or subprocess use in `digest.py`. closeout only gains a print.
+- Why: CLAUDE.md rule 6 and `risk-paths.txt`'s `.claude/**` group.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: digest scope and one-line format follow lead answer 6 · decided by lead (answer 6) and builder (format details) · risk: medium
+- Decided: the digest lists every human decision at any risk, plus risk: high lead decisions whose title isn't `<id> merge:` (so "4.7 merged:" and "1.7 Merge Phases A–C" stay in). One line each: `date · title`, who and risk, then the first sentence of `Decided:`. Lines are sorted newest date first, because the log isn't strictly date-ordered. Exact duplicate entries show once; two entries with the same heading but different text both show. No entry is marked superseded yet. Result: 121 decisions, 144 lines.
+- Why: lead answer 6 replaces Phase A's "every risk: high heading" scope (212 entries, mostly builder sub-entries). The test pins the filter, not the count.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: the digest drops who-clauses and redacts reviewer handles · decided by builder · risk: medium
+- Decided: digest lines show `date · title` without the `decided by ...` clause (some name a person in brackets), and summaries replace reviewer handles and `github.com/<owner>/...` links. A test checks the committed digest has neither.
+- Why: the repo is public and the brief says to copy no names. The full log keeps the original text.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: standing rules and lessons are hand-picked from real entries · decided by builder · risk: low
+- Decided: 12 standing rules (region, payments last, MVP first, English only, crisis replies in English, learner age 13+, game-talk exemption removed, distress alert channel, jailbreak strikes, guard chain fails closed, merge policy, push policy) and 6 lessons. Each one cites a real log heading or review file, and a test checks every citation resolves. Ambiguous repeated headings (`Setup`, `Product`) are not cited.
+- Why: lead answer 3 and 4: the script checks citations; the builder picks, and never invents a source.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: digest content and agent required reading (.claude, risky path) · decided by builder (for the lead) · risk: high
+- Decided: Phase B changes `.claude/**` (`digest.py`, `board.py`, tests, `planner.md`, `tdd-guide.md`), so the PR needs security-reviewer and a risk: high entry. No new permissions, network or subprocess use; the agent files gain one required-reading clause each.
+- Why: CLAUDE.md rule 6 and `risk-paths.txt`'s `.claude/**` group.
+
+---
+
+### 21 Oct 2026 · 0.19 fix round 1: who parsing takes the first role, "team lead" and Claude count as lead · decided by builder · risk: medium
+- Decided: in a heading, the first role after "decided by" is the decider. "team lead", "the team lead", "the lead" and "Claude" (who ran the team as lead on 16 and 17 Oct, before the agent roles existed) map to lead, and "you", "human" and "the human" map to human. So "planner, accepted by team lead" and "tdd-guide (...) and lead (...)" stay out of the digest. A plain "team" stays team. With this, 25 more lead entries appear (146 decisions in all). No Claude entry is risk: high, so the Claude mapping changes nothing today.
+- Why: the security-reviewer MEDIUM. Taking only the first word silently dropped about 24 risk: high "team lead" entries. A RealRepo test now fails on any new who-form instead of dropping it.
+
+---
+
 ### 21 Oct 2026 · 7.1a: two LOW review notes left as they are · decided by lead · risk: low
 - Decided: keep `packages/evals/src/loader.test.ts`'s `chmod 0o000` read-failure test (CI is non-root) and `packages/evals/src/displayPath.ts`'s cross-drive handling (already falls back to the basename).
 - Why: neither changes behaviour on the CI or dev machines.
