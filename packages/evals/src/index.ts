@@ -7,6 +7,15 @@ export {
   type EvalTurnInput,
   type PriorTurn,
 } from './agent.js';
+export {
+  computeAgreement,
+  DoubleCheckLoadError,
+  HumanVerdictSchema,
+  loadDoubleCheck,
+  sampleForDoubleCheck,
+  type CalibrationSummary,
+  type HumanVerdict,
+} from './calibration.js';
 export { buildJudgeRequest, judge, JudgeVerdictSchema, type JudgeVerdict } from './checks/judge.js';
 export type { CheckResult } from './checks/result.js';
 export { checkMatches, checkMustContain, checkMustNotContain } from './checks/string.js';
@@ -43,6 +52,7 @@ export {
   type RecordMode,
 } from './recorder.js';
 export { toJsonReport, toSummary, type JsonReport } from './report.js';
+export { toHtmlReport } from './htmlReport.js';
 export {
   RecordedJudgeSchema,
   runCase,

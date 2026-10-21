@@ -118,6 +118,14 @@ describe('toJsonReport', () => {
     expect(r).toMatchObject({ suite: 'locked', generatedAt: '2026-10-18T00:00:00.000Z' });
   });
 
+  it('includes judgeModel and calibration only when passed', () => {
+    const calibration = { sampled: 1, reviewed: 1, agreed: 1, rate: 1, disagreements: [] };
+    const r = toJsonReport(results, { judgeModel: 'anthropic:judge-test-model', calibration });
+    expect(r).toMatchObject({ judgeModel: 'anthropic:judge-test-model', calibration });
+    expect(toJsonReport(results)).not.toHaveProperty('judgeModel');
+    expect(toJsonReport(results)).not.toHaveProperty('calibration');
+  });
+
   it('copies the results, so later mutation does not change the report', () => {
     const local = structuredClone(results);
     const r = toJsonReport(local);

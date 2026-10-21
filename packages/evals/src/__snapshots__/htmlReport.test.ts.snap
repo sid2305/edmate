@@ -1,0 +1,105 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`toHtmlReport > renders a calibration block when the report carries one 1`] = `
+"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Eval report: test</title>
+  <style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #111; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  .pass { color: #0a7a0a; }
+  .fail { color: #b00020; }
+</style>
+</head>
+<body>
+  <h1>Eval report: test</h1>
+  <p>1/3 passed</p>
+  <table>
+    <thead>
+      <tr><th>id</th><th>suite</th><th>status</th><th>first failing check</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>test-explain-001</td>
+        <td>test</td>
+        <td class="pass">pass</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>test-locked-002</td>
+        <td>test</td>
+        <td class="fail">fail</td>
+        <td>must_not_contain: found: &quot;lesson 9&quot;</td>
+      </tr>
+      <tr>
+        <td>test-errored-003</td>
+        <td>test</td>
+        <td class="fail">fail</td>
+        <td>error: boom</td>
+      </tr>
+    </tbody>
+  </table>
+    <h2>Human double-check</h2>
+    <ul>
+      <li>sampled: 1</li>
+      <li>reviewed: 1</li>
+      <li>agreed: 1</li>
+      <li>rate: 100.0%</li>
+      
+    </ul>
+</body>
+</html>
+"
+`;
+
+exports[`toHtmlReport > renders a static page with no script and no external URL 1`] = `
+"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Eval report: test</title>
+  <style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #111; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  .pass { color: #0a7a0a; }
+  .fail { color: #b00020; }
+</style>
+</head>
+<body>
+  <h1>Eval report: test</h1>
+  <p>1/3 passed</p>
+  <table>
+    <thead>
+      <tr><th>id</th><th>suite</th><th>status</th><th>first failing check</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>test-explain-001</td>
+        <td>test</td>
+        <td class="pass">pass</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>test-locked-002</td>
+        <td>test</td>
+        <td class="fail">fail</td>
+        <td>must_not_contain: found: &quot;lesson 9&quot;</td>
+      </tr>
+      <tr>
+        <td>test-errored-003</td>
+        <td>test</td>
+        <td class="fail">fail</td>
+        <td>error: boom</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
+"
+`;

@@ -1,0 +1,9 @@
+# Synthetic human double-check verdicts for the eval runner's own tests (task 7.1). Not a real
+# review; the "test" suite is only used by packages/evals tests.
+- caseId: test-all-checks-003
+  humanPass: true
+  reviewedBy: lead
+  note: 'agrees: cites the source and explains area correctly'
+- caseId: test-explain-001
+  humanPass: true
+  reviewedBy: lead
