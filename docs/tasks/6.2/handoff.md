@@ -108,6 +108,14 @@ exercises the "no newly-applied events, skip the fold/update" branch.
 Tool calls used: 26
 
 ## Decisions
+
+### 21 Oct 2026 · 6.2 merge: rebuildMastery and atomic applyEvidence in packages/db/src/repositories · decided by lead · risk: high
+- Decided: merge 6.2. rebuildMastery replays a scope's evidence in one locked transaction. applyEvidence now appends and folds in one transaction (appendAndFold), so a rebuild can't double-count an event. The lock order stays topics then learner_profiles.
+- Why: four reviewers approved. The one HIGH (the two-transaction race) is fixed and verified by typescript-reviewer, with a concurrent race test. The lock-held-over-long-replay MEDIUM is deferred to 6.2a: no operational rebuild trigger exists at pilot scale.
+- risk: high (a risky path: packages/db/src/repositories/**, security-reviewer group).
+
+Details (builder):
+
 ### Rebuild is a `packages/db`-internal method, not a `ProfileStore` port method
 Matches the plan's design and 3.17's own precedent (`applyMastery`/`applyEvidenceMastery` are not
 on the port either). No ADR.
