@@ -1,6 +1,6 @@
 # 5.7 handoff: feedback skill
 
-## Status
+**Status:** DONE
 DONE: Phase A (as amended by ADR 0012), the Phase A review follow-ups and Phase B (the feedback eval suite and its mechanism test).
 Live evidence: not yet run, needs a key. The 70% agreement number comes from a live `edmate eval evals/suites/feedback --record` run, which the lead raises to the human after merge (plan, Lead answer 2).
 

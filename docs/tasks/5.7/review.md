@@ -1,6 +1,6 @@
 # 5.7 review — APPROVE
 
-Reviewers: architect (opus, ADR 0012), security-reviewer (sonnet, ADR 0012), typescript-reviewer (opus, Phase A; sonnet, Phase B), code-reviewer (sonnet, Phase B)
+Reviewers: architect (opus), security-reviewer (sonnet), typescript-reviewer (opus for Phase A; sonnet for Phase B), code-reviewer (sonnet)
 
 ## Summary
 - **ADR 0012 (feedback pack 1.1.0, frame move-feedback):** approved by the architect, the security-reviewer and the opus typescript-reviewer. The lead accepted it and logs it `risk: high`.
