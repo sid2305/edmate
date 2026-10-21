@@ -1333,10 +1333,10 @@ tasks:
   - '5.3'
   - '5.4'
   - M3
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '5.11'
   milestone: M5
   title: Outline drafter and style-card drafter (`packages/ingest`)
