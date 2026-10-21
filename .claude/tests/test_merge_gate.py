@@ -651,6 +651,41 @@ class BudgetCheck(GateCase):
         self.assertEqual(code, 1, out)
         self.assertIn("could be parsed", out)
 
+    def test_heading_form_budget_line_parses(self):
+        plan = "# plan\n## Budget: 30 tool calls\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_after_real_statement_uses_first_line(self):
+        plan = "# plan\n## Budget\nAbout 40 tool calls.\n\n6.2 took 55 calls, but this one differs.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(50))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 40", out)
+
+    def test_decoy_before_real_budget_line_wins(self):
+        plan = "# plan\n## Budget\nLike 6.2 (55 calls) this is similar.\nBudget: 30 tool calls\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_before_no_budget_line_uses_first_line(self):
+        plan = "# plan\n## Budget\nLike 6.2 (55 calls) this is similar.\nSome other text without more numbers.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(70))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 55", out)
+
+    def test_first_line_no_number_later_prose_number_unparseable(self):
+        plan = "# plan\n## Budget\nSmall task, well within limits.\nSee 6.2 which took 55 calls for comparison.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could be parsed", out)
+
 
 class Wontfix(GateCase):
     REVIEW = review() + "- [LOW] [wontfix] apps/cli.ts:12 — long function, see decision log.\n"

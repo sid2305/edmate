@@ -62,8 +62,12 @@ MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
-# "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE).
-BUDGET_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls", re.I | re.M)
+# "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE), or
+# the heading form "## Budget: 24 tool calls" / "### Budget: 24 tool calls".
+BUDGET_LINE = re.compile(
+    r"^[ \t]*(?:#{2,3}[ \t]+)?[ \t]*[-*\d.]*[ \t]*\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls",
+    re.I | re.M,
+)
 # The first "<N> ... calls" number inside a `## Budget` section's prose, e.g. "~70 tool calls",
 # "About 40 builder calls", "~60 tool calls". The leading `~`/`About` is optional and not captured.
 BUDGET_SECTION_NUM = re.compile(r"(?:~\s*|\babout\b\s+)?(\d+)\s*(?:[a-zA-Z][a-zA-Z-]*\s+)?calls?\b", re.I)
@@ -168,10 +172,12 @@ def status_is_done(value):
 
 
 def budget_cap(plan):
-    """The plan's tool-call cap: a `Budget: <N> tool calls` line, or (failing that) the first
-    `<N> ... calls` number inside a `## Budget` section. Returns None if neither is present at all
-    (old-style plan, silent skip) or UNPARSEABLE if a `## Budget` section exists but no number
-    could be found in it (must surface as a visible FAIL, not a silent skip)."""
+    """The plan's tool-call cap: a `Budget: <N> tool calls` line (on its own, or as a `## Budget:
+    <N> tool calls` heading), or (failing that) the `<N> ... calls` number on the first non-blank
+    line of a `## Budget` section — never a number from later in the section's prose, so a decoy
+    count (another task's total, an old estimate) can't set the cap. Returns None if neither is
+    present at all (old-style plan, silent skip) or UNPARSEABLE if a `## Budget` section exists but
+    its first line has no such number (must surface as a visible FAIL, not a silent skip)."""
     text = plan or ""
     m = BUDGET_LINE.search(text)
     if m:
@@ -179,7 +185,8 @@ def budget_cap(plan):
     sect = section(text, "Budget")
     if sect is None:
         return None
-    m2 = BUDGET_SECTION_NUM.search(sect)
+    first_line = next((ln for ln in sect.splitlines() if ln.strip()), "")
+    m2 = BUDGET_SECTION_NUM.search(first_line)
     return int(m2.group(1)) if m2 else UNPARSEABLE
 
 
