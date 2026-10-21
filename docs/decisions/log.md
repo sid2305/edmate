@@ -10,6 +10,25 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 9.4b chat markdown with react-markdown + remark-gfm · decided by lead · risk: low
+
+- Decided: merge 9.4b. Chat replies render through react-markdown 10.1.0 + remark-gfm 4.0.1 (exact pins), with an element allowlist and no raw HTML or images. Links render only for http/https/mailto. `singleTilde: false` matches the locked-content guard, and `protectMath` keeps TeX literal until KaTeX. No ADR: the human chose the libraries in B-32, and the stack doesn't change. The review's MEDIUM (`safeHref` returns the original href) and two LOWs go to 9.4c.
+- Why: the human's answer B-32. Both reviewers approved with no CRITICAL/HIGH, and the blockers-only rule defers MEDIUM/LOW.
+- risk: low
+
+Details (builder and planner):
+
+- **No ADR for adding react-markdown + remark-gfm.** The planner judged this a library choice inside the fixed Next.js/React stack (ADR 0001 fixes frameworks and infrastructure, not each UI utility), and the human already picked these exact libraries in B-32. Planner recommendation · risk: low.
+- **remark-gfm `singleTilde: false`.** Only `~~x~~` is strikethrough. A single `~` stays literal, so `l~o~op` reads the same to the student and to the locked-content guard (4.6c lists in-word single `~` as a known miss). A test covers it. This overrides the plan's `singleTilde: true` recommendation. Decided by lead · risk: low.
+- **Allowlist, not a denylist.** `allowedElements` = p, br, strong, em, del, code, pre, blockquote, hr, ul, ol, li, input, table, thead, tbody, tr, th, td, a, with `unwrapDisallowed`. Headings, footnote `section`/`sup` and anything else become their plain text. Headings weren't asked for, so they're left out. Builder · risk: low.
+- **Images render not at all.** `img` isn't in the allowlist and has no children, so it disappears along with its alt text. The acceptance text allows "render as text or not at all". Builder · risk: low.
+- **Links.** A real `<a>` only for absolute `http:`/`https:`/`mailto:` URLs, opened with `target="_blank" rel="noopener noreferrer"`. Control, format and whitespace characters are removed before the protocol check. Relative, fragment and protocol-relative links render as text. This sits on top of react-markdown's own `defaultUrlTransform`. Builder · risk: low.
+- **Task-list checkboxes become the text `[x]` / `[ ]`**, not a read-only `<input>`. That keeps the old "no `input` element anywhere" invariant. Builder · risk: low.
+- **Paragraphs keep `white-space: pre-wrap`** so single newlines in a reply stay visible, as in 9.4. Builder · risk: low.
+- **TeX kept literal with `protectMath`** (see Deviations). Builder · risk: low.
+
+---
+
 ### 21 Oct 2026 · 4.6c lockedLeak follow-ups (markdown in-word padding, post-guard fail-closed) · decided by lead · risk: high
 
 - Decided: merge 4.6c. The rendered reading now pads markdown emphasis inside words (looking past invisible characters on both sides). Any post-guard failure (timeout, error or invalid result) counts as a locked trip and stops the session. The three B-19 cases join evals/suites/locked as sid2305, and the lead signs locked-loops-md-inword-bold-en (`reviewed_by: lead`, MVP-first). The suite now has 38 cases, and both mutations fail all of them.

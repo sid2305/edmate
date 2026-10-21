@@ -1861,9 +1861,9 @@ tasks:
   accept: lists, bold, tables and code render; raw HTML and images in a reply render as text or not at all; no-raw-html test still passes.
   deps:
   - '9.4'
-  status: running
+  status: done
   branch: m9/9.4b-chat-markdown
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:opus-5.5/medium review:sonnet
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
