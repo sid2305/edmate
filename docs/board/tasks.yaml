@@ -1931,12 +1931,16 @@ tasks:
   branch: null
 - id: 0.16a
   milestone: M0
-  title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch == task branch misses builders (they run on work-<id>[a-z] branches) and reviewers (they run from the main checkout, whose branch is whatever the lead is on). Read subagent files too and attribute a whole subagent file to a task when its first prompt names the task id (boundary-aware) or its gitBranch is the task branch or work-<id>[a-z]; then re-run metrics for 0.16 by hand'
-  accept: a fixture with a session dir and subagents/ files counts the right agents per task; 0.1 vs 0.16 still separate; closeout on a real merged task records non-zero tool calls; no transcript text on the board
+  title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
+    == task branch misses builders (they run on work-<id>[a-z] branches) and reviewers (they run from the main checkout, whose branch is whatever the lead is on). Read subagent files too and attribute a
+    whole subagent file to a task when its first prompt names the task id (boundary-aware) or its gitBranch is the task branch or work-<id>[a-z]; then re-run metrics for 0.16 by hand'
+  accept: a fixture with a session dir and subagents/ files counts the right agents per task; 0.1 vs 0.16 still separate; closeout on a real merged task records non-zero tool calls; no transcript text on
+    the board
   deps:
   - '0.16'
-  status: todo
-  branch: null
+  status: running
+  branch: m0/0.16a-subagent-transcripts
+  model: plan:lead build:opus
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
