@@ -92,8 +92,16 @@ export const jobId = {
   alertEscalate: (alertId: string, round: number) => `${alertId}.escalate.${round}`,
   /** ADR-0006's dedupe key `${turnId}:${guard}`, with `.` (BullMQ refuses `:`). */
   safetyEvent: (turnId: string, guard: SafetyEventGuard) => `${turnId}.${guard}.safety`,
-  /** One ingest job per document at a time; a retry (same id) replaces the queued attempt. */
-  ingest: (documentId: string) => `${documentId}.ingest`,
+  /**
+   * One ingest job per *stored file* at a time: the id is the document id plus a short hash of
+   * `storageKey`, so a retry (same document, same file) replaces the still-queued attempt, but a
+   * replace (same document, a new `storageKey`) gets its own id instead of colliding with a job
+   * that may still be active for the old file. `Queue.add()` only dedupes against a job still
+   * `waiting`/`delayed`; reusing one id across a replace would block indefinitely against a job
+   * already running (see the Phase 2 int test's decision).
+   */
+  ingest: (documentId: string, storageKey: string) =>
+    `${documentId}.ingest.${createHash('sha256').update(storageKey).digest('hex').slice(0, 12)}`,
 };
 
 // ---- safety alerts (task 4.3) -----------------------------------------------------------------

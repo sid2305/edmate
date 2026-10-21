@@ -17,7 +17,6 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIngestWorker } from '../src/ingest/workers.js';
 import type { IngestGateway } from '../src/ingest/gateway.js';
-import { ingestProcessor } from '../src/ingest/processor.js';
 import type { StorageClient } from '../src/storage/client.js';
 import type { LogLine } from '../src/log.js';
 
@@ -214,11 +213,11 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
       autorun: true,
     });
     try {
-      await enqueueIngest(queue, {
-        teacherId: scope.teacherId,
-        documentId: id,
-        fileKind: 'markdown',
-      } satisfies IngestJob);
+      await enqueueIngest(
+        queue,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+        storageKey,
+      );
 
       const row = await until(
         () => db.repos.documents.get(scope, id),
@@ -261,11 +260,11 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
       autorun: true,
     });
     try {
-      await enqueueIngest(queue, {
-        teacherId: scope.teacherId,
-        documentId: id,
-        fileKind: 'markdown',
-      } satisfies IngestJob);
+      await enqueueIngest(
+        queue,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+        storageKey,
+      );
 
       const row = await until(
         () => db.repos.documents.get(scope, id),
@@ -280,56 +279,78 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
     }
   });
 
-  it('a replace while the old job is still in flight: its chunks are never written, final chunks are the new file', async () => {
-    const storage = fakeStorage();
-    const oldKey = `ingest/${randomBytes(4).toString('hex')}-old.md`;
-    const newKey = `ingest/${randomBytes(4).toString('hex')}-new.md`;
-    const { id } = await createDocument(db.repos, oldKey);
-    storage.put(oldKey, md('# Old\n\nINGEST-INT-CANARY-old content, never stored.'));
-    storage.put(newKey, md('# New\n\nINGEST-INT-CANARY-new content.'));
-    await db.repos.documents.updateStatus(scope, id, 'processing');
+  it(
+    'a replace while the old job is still in flight, through the real queue: the old job is ' +
+      'skipped as stale, the new job reaches ready, and enqueuing the replacement never hangs',
+    async () => {
+      const storage = fakeStorage();
+      const oldKey = `ingest/${randomBytes(4).toString('hex')}-old.md`;
+      const newKey = `ingest/${randomBytes(4).toString('hex')}-new.md`;
+      const { id } = await createDocument(db.repos, oldKey);
+      storage.put(oldKey, md('# Old\n\nINGEST-INT-CANARY-old content, never stored.'));
+      storage.put(newKey, md('# New\n\nINGEST-INT-CANARY-new content.'));
+      await db.repos.documents.updateStatus(scope, id, 'processing');
 
-    const lines: LogLine[] = [];
-    const deps = { repos: db.repos, storage, gateway: fakeGateway() };
-    const processor = ingestProcessor(deps, (l) => lines.push(l));
+      const lines: LogLine[] = [];
+      const queue = createIngestQueue(connection, { prefix });
+      const worker = createIngestWorker({
+        connection,
+        deps: { repos: db.repos, storage, gateway: fakeGateway() },
+        deadLetter,
+        log: (l) => lines.push(l),
+        prefix,
+        autorun: true,
+      });
+      try {
+        // The old job's storage read is gated: it starts, we replace the document mid-flight
+        // (giving the new job its own queue job id, see jobId.ingest), then release it so it
+        // resumes against a storageKey that is no longer the row's current one.
+        const { release, started } = storage.gate(oldKey);
+        await enqueueIngest(
+          queue,
+          { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+          oldKey,
+        );
+        await started;
 
-    // The "old" job's storage read is gated: it starts, we replace the document mid-flight, then
-    // release it so it resumes against a storageKey that is no longer the row's current one.
-    const { release, started } = storage.gate(oldKey);
-    const oldJob = processor({
-      id: 'old',
-      name: 'ingest.process',
-      data: { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' },
-    });
-    await started;
-    const { previousStorageKey } = await db.repos.documents.startReplace(scope, id, {
-      storageKey: newKey,
-    });
-    expect(previousStorageKey).toBe(oldKey);
-    release();
+        const { previousStorageKey } = await db.repos.documents.startReplace(scope, id, {
+          storageKey: newKey,
+        });
+        expect(previousStorageKey).toBe(oldKey);
 
-    expect(await oldJob).toBe('stale_skipped');
-    expect(await chunkCount(id)).toBe(0);
-    expect((await db.repos.documents.get(scope, id))?.status).toBe('uploading');
+        // The key fix under test: enqueuing the replacement job (a distinct id, derived from
+        // newKey) does not hang even while the old job for oldKey is still active on the queue.
+        await db.repos.documents.updateStatus(scope, id, 'processing');
+        await enqueueIngest(
+          queue,
+          { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+          newKey,
+        );
 
-    // The new job (for the file the replace pointed at) runs to ready normally.
-    await db.repos.documents.updateStatus(scope, id, 'processing');
-    const newOutcome = await processor({
-      id: 'new',
-      name: 'ingest.process',
-      data: { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' },
-    });
-    expect(newOutcome).toBe('ready');
-    const row = await db.repos.documents.get(scope, id);
-    expect(row?.status).toBe('ready');
-    expect(await chunkCount(id)).toBeGreaterThan(0);
+        release();
 
-    const rows = await raw.query<{ text: string }>(`select text from chunks where document_id = $1`, [
-      id,
-    ]);
-    expect(rows.rows.some((r) => r.text.includes('INGEST-INT-CANARY-new'))).toBe(true);
-    expect(rows.rows.some((r) => r.text.includes('INGEST-INT-CANARY-old'))).toBe(false);
-  });
+        // The old job finishes (stale_skipped, nothing written) and the new job runs it to ready.
+        const row = await until(
+          () => db.repos.documents.get(scope, id),
+          (r) => r?.status === 'ready',
+        );
+        expect(row?.status).toBe('ready');
+        expect(row?.storageKey).toBe(newKey);
+
+        const rows = await raw.query<{ text: string }>(
+          `select text from chunks where document_id = $1`,
+          [id],
+        );
+        expect(rows.rows.length).toBeGreaterThan(0);
+        expect(rows.rows.some((r) => r.text.includes('INGEST-INT-CANARY-new'))).toBe(true);
+        expect(rows.rows.some((r) => r.text.includes('INGEST-INT-CANARY-old'))).toBe(false);
+      } finally {
+        await worker.close();
+        await queue.close();
+      }
+    },
+    20_000,
+  );
 
   it('a job for a deleted document is a no-op', async () => {
     const storage = fakeStorage();
@@ -349,11 +370,11 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
       autorun: true,
     });
     try {
-      await enqueueIngest(queue, {
-        teacherId: scope.teacherId,
-        documentId: id,
-        fileKind: 'markdown',
-      } satisfies IngestJob);
+      await enqueueIngest(
+        queue,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+        storageKey,
+      );
 
       const dead = await until(
         async () =>

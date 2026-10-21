@@ -129,11 +129,21 @@ export function createIngestQueue(
 }
 
 /**
- * Enqueues one document for the ingest worker, keyed so a second call for the same document
- * (a retry after `complete`, a replace that re-enqueues) replaces the still-queued attempt rather
- * than piling up a duplicate.
+ * Enqueues one document for the ingest worker, keyed by `storageKey` (the file this call is
+ * enqueuing, named by the caller — the job payload itself carries no `storageKey`; see
+ * `IngestJobSchema`'s doc comment) so a retry of the *same* file replaces the still-queued
+ * attempt, while a replace (a new `storageKey` for the same document) gets its own job id rather
+ * than reusing one a still-active old job might hold.
  */
-export async function enqueueIngest(queue: JobQueue, job: IngestJob): Promise<void> {
+export async function enqueueIngest(
+  queue: JobQueue,
+  job: IngestJob,
+  storageKey: string,
+): Promise<void> {
   const data = IngestJobSchema.parse(job);
-  await queue.add(JOB.ingestProcess, data, jobOptions(jobId.ingest(data.documentId), JOB.ingestProcess));
+  await queue.add(
+    JOB.ingestProcess,
+    data,
+    jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
+  );
 }

@@ -167,35 +167,64 @@ scripted embedder double (no real model/S3/network calls, rule 4). Four cases, a
 - a job for a document deleted before the worker runs it → the processor's own `documents.get`
   returns null, so it throws a permanent error and the job lands in the dead-letter queue after one
   attempt; nothing is written, `documents.get` still returns null afterwards.
-- the stale-replace race: calling `ingestProcessor` directly (not through the queue) lets the test
-  gate the "old" job's `storage.getObjectBytes` open, call `documents.startReplace` while it's
-  still in flight, then release it — the old job returns `stale_skipped` and writes no chunks; a
-  second, ungated call for the new `storageKey` reaches `ready` with only the new file's chunks.
-  **Deviation from a literal reading of the task:** this one case does not go through BullMQ's
-  `Queue`/`Worker` — a quick spike (`node -e ...` against the compose Redis) showed `Queue.add()`
-  with the *same* `jobId` as a still-active job blocks indefinitely rather than erroring or
-  queueing a second attempt, because `jobId.ingest(documentId)` is the same for both the original
-  and the replacement job. Driving the race through the real queue would have hung the test (and,
-  more importantly, flags a latent issue in Phase 2's enqueue design for a real replace-while-
-  processing flow — see Decisions below). Calling the processor function directly against the same
-  real Postgres rows exercises the identical lock/stale-check logic without that block; the other
-  three cases in this file do go through the full queue → worker path, so Redis is still exercised
-  end to end by the suite.
-- `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker...` → `Tasks: 34 successful,
-  34 total`; `python3 .githooks/secret-scan.py --all` → clean (no output).
+- the stale-replace race, now through the real `Queue`/`Worker` (fixed in this pass, see below):
+  gate the "old" job's `storage.getObjectBytes` open, enqueue it (`oldKey`), let it start, call
+  `documents.startReplace` while it's still in flight, enqueue the replacement (`newKey`) — this
+  enqueue call returns immediately, proving the fix — then release the gate; the old job finishes
+  `stale_skipped` and writes nothing, the new job reaches `ready` with only the new file's chunks,
+  and nothing hangs (`it(..., 20_000)` timeout; the suite runs in under 1 s).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/queue... --filter=@edmate/worker...`
+  → `Tasks: 34 successful, 34 total`; `@edmate/worker` `test/ingest.int.test.ts` 4 tests, 842ms.
+  `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Phase 2 int test bug fix (8.2d, 20 Oct 2026)
+The Phase 2 int test's replace-race case (above) originally called `ingestProcessor` directly
+because driving it through the real `Queue`/`Worker` hung: `enqueueIngest`'s
+`jobId.ingest(documentId)` was the same id for the original upload and its replacement, and
+BullMQ's `Queue.add()` with an id that is still `active` (not `waiting`/`delayed`) blocks
+indefinitely rather than erroring or queueing a second attempt. Fixed by keying the ingest job id
+on the document id **plus a short hash of `storageKey`**
+(`packages/queue/src/queues.ts`'s `jobId.ingest(documentId, storageKey)`): a retry of the same
+file still dedupes to the same id (idempotent), but a replace's new `storageKey` gets its own id
+and no longer collides with a still-active old job. `enqueueIngest` (`packages/queue/src/index.ts`)
+now takes `storageKey` as a third argument to compute that id; the processor is unchanged — it
+never trusted the job payload's `storageKey` (there isn't one; see the Phase 2 Deviations above)
+and still re-reads the row itself, so the existing stale-replace guard (the `ChunkWriter`'s
+re-check right before `chunks.insertMany`) is still the backstop that drops the stale write. The
+int test's replace-race case now goes through the real `Queue`/`Worker`, enqueuing both the old
+and new jobs while the old one is gated in flight, and asserts the second `enqueueIngest` call
+resolves without hanging.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/queue... --filter=@edmate/worker...`
+  → `Tasks: 34 successful, 34 total`.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Changes (8.2d)
+- `packages/queue/src/queues.ts`: `jobId.ingest(documentId, storageKey)` (was `(documentId)`) —
+  `${documentId}.ingest.${sha256(storageKey).slice(0,12)}`.
+- `packages/queue/src/index.ts`: `enqueueIngest(queue, job, storageKey)` (new third argument),
+  passed through to `jobId.ingest`.
+- `packages/queue/test/queues.test.ts`: updated `jobId.ingest`/`enqueueIngest` cases (stable per
+  document+key, differs on a new key, no `:`, not a plain integer, replace gets a distinct id).
+- `apps/worker/test/ingest.int.test.ts`: the three unaffected cases now pass `storageKey` as
+  `enqueueIngest`'s third argument; the replace-race case rewritten to run through the real
+  `Queue`/`Worker` instead of calling `ingestProcessor` directly.
 
 ### Decisions (Phase 2 int test)
 
-#### 20 Oct 2026 · 8.2c ingest's replace-enqueue reuses the in-flight job's id · decided by tdd-guide
-Decided: not fixed in this pass; flagged for a follow-up. `enqueueIngest`'s `jobId.ingest(documentId)` is the same id Phase 3's replace flow would reuse to re-enqueue the new file. A spike against the real Redis showed BullMQ's `Queue.add()` with that id while the original job is still *active* (not yet completed/failed) blocks the call indefinitely rather than erroring or superseding it, because BullMQ's job-id dedupe only replaces a job still in `waiting`/`delayed`, not one already running.
-Why: Phase 1/2 only exercised this race at the repository layer (`ChunkWriter`'s stale check) and in `processor.test.ts` by calling the processor directly, never through a real queue two-enqueue sequence, so the hang wasn't visible until this int test's spike. Phase 3's complete/replace routes (not yet built) should not call `enqueueIngest` synchronously inside the request that triggers a replace while an old job could still be active; worth either a distinct per-attempt job id (not just per-document) or confirming BullMQ's behaviour differs once the old job's attempt has failed/completed. Left to Phase 3 or a follow-up task, not fixed here (out of this task's scope and budget).
+#### 20 Oct 2026 · 8.2d ingest job id is now keyed by storageKey, fixing the replace-enqueue hang · decided by tdd-guide
+Decided (fixed, 8.2d): `jobId.ingest` now takes `(documentId, storageKey)` and hashes `storageKey` into the id (`packages/queue/src/queues.ts`), and `enqueueIngest` takes `storageKey` as a third argument (`packages/queue/src/index.ts`). A retry of the *same* file still dedupes to the same job id (idempotent); a replace's new `storageKey` gets a distinct id, so it no longer collides with (and block behind) a still-active old job. The processor's existing re-read-before-write guard (the `ChunkWriter`'s `storageKey` check right before `chunks.insertMany`) is unchanged and still drops the stale old job's write; `apps/worker/test/ingest.int.test.ts`'s replace-race case now drives this end to end through the real `Queue`/`Worker` and asserts the second enqueue resolves without hanging.
+Why: the previous pass found that BullMQ's job-id dedupe only replaces a job still `waiting`/`delayed`, not one already `active`, so reusing `jobId.ingest(documentId)` across a replace while the old job was still processing blocked `Queue.add()` indefinitely. Keying on `storageKey` (the file actually being enqueued) rather than just the document avoids the collision without changing the processor or the job schema.
 risk: medium
 
 ## Left to do
 - **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line, and the
   `updateStatus('processing')` → `enqueueIngest` sequencing on the complete route (see API above).
-  `apps/worker/test/ingest.int.test.ts` is now done (§ Phase 2 int test); Phase 3's replace route
-  should account for the job-id-blocks-on-active-job decision logged there.
+  `apps/worker/test/ingest.int.test.ts` is now done (§ Phase 2 int test). The replace-enqueue
+  job-id hang found there is fixed (8.2d, see Decisions): Phase 3's complete and replace routes
+  must call `enqueueIngest(queue, job, storageKey)` with the *current* `storageKey` (the one just
+  confirmed by `HeadObjectCommand` on complete, or the fresh one `startReplace` returns on
+  replace) — no further Phase 3 work needed to avoid the hang, since the fix lives entirely in
+  `packages/queue`.
 - **Phase 4** (apps/web): upload-centre page with polling, nav link, strings, manual dev-stack run.
 
 ## Decisions

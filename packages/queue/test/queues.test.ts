@@ -92,9 +92,18 @@ describe('IngestJobSchema', () => {
 });
 
 describe('jobId.ingest', () => {
-  it('is stable per document id', () => {
-    expect(jobId.ingest('doc_1')).toBe('doc_1.ingest');
-    expect(jobId.ingest('doc_1')).toBe(jobId.ingest('doc_1'));
+  it('is stable per document id and storage key', () => {
+    expect(jobId.ingest('doc_1', 'ingest/a.pdf')).toBe(jobId.ingest('doc_1', 'ingest/a.pdf'));
+  });
+
+  it('differs when the storage key differs (a replace must not collide with the old job)', () => {
+    expect(jobId.ingest('doc_1', 'ingest/a.pdf')).not.toBe(jobId.ingest('doc_1', 'ingest/b.pdf'));
+  });
+
+  it('contains no colon and is not a plain integer', () => {
+    const id = jobId.ingest('doc_1', 'ingest/a.pdf');
+    expect(id).not.toContain(':');
+    expect(Number.isInteger(Number(id))).toBe(false);
   });
 });
 
@@ -113,9 +122,13 @@ describe('createIngestQueue / enqueueIngest', () => {
     await queue.close();
   });
 
-  it('adds a job named ingest.process, keyed by document id, so a replay replaces it', async () => {
+  it('adds a job named ingest.process, keyed by document id and storage key, so a replay of the same file replaces it', async () => {
     const add = vi.fn(async () => undefined);
-    await enqueueIngest({ add }, { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' });
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },
+      'ingest/a.pdf',
+    );
     expect(add).toHaveBeenCalledTimes(1);
     const [name, data, opts] = add.mock.calls[0] as unknown as [
       string,
@@ -124,13 +137,33 @@ describe('createIngestQueue / enqueueIngest', () => {
     ];
     expect(name).toBe('ingest.process');
     expect(data).toEqual({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' });
-    expect(opts.jobId).toBe('doc_1.ingest');
+    expect(opts.jobId).toBe(jobId.ingest('doc_1', 'ingest/a.pdf'));
+  });
+
+  it('gives a replace (a new storage key) a different job id than the original', async () => {
+    const add = vi.fn(async (_name: string, _data: unknown, _opts: { jobId?: string }) => undefined);
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },
+      'ingest/old.pdf',
+    );
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },
+      'ingest/new.pdf',
+    );
+    const ids = add.mock.calls.map((c) => (c[2] as { jobId?: string }).jobId);
+    expect(ids[0]).not.toBe(ids[1]);
   });
 
   it('refuses a malformed job before calling add', async () => {
     const add = vi.fn(async () => undefined);
     await expect(
-      enqueueIngest({ add }, { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video' } as never),
+      enqueueIngest(
+        { add },
+        { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video' } as never,
+        'ingest/a.pdf',
+      ),
     ).rejects.toThrow();
     expect(add).not.toHaveBeenCalled();
   });
