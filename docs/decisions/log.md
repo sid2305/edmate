@@ -10,6 +10,24 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 4.6c lockedLeak follow-ups (markdown in-word padding, post-guard fail-closed) · decided by lead · risk: high
+
+- Decided: merge 4.6c. The rendered reading now pads markdown emphasis inside words (looking past invisible characters on both sides). Any post-guard failure (timeout, error or invalid result) counts as a locked trip and stops the session. The three B-19 cases join evals/suites/locked as sid2305, and the lead signs locked-loops-md-inword-bold-en (`reviewed_by: lead`, MVP-first). The suite now has 38 cases, and both mutations fail all of them.
+- Why: it closes the 4.6b re-review gaps on a guardrail path. code-reviewer (opus) found an invisible-character bypass, which fix round 1 closed and the same reviewer confirmed. Two older MEDIUM gaps (combining marks inside words, missing invisible named entities) are deferred to 4.6d under MVP-first.
+- risk: high
+
+- Fix round 1: the in-word emphasis check looks past every `\p{Cf}` character on both sides of the run (not only the zero-width padding Edmate itself adds), because none of them stops CommonMark rendering the run as emphasis. risk: medium
+- Fix round 1: a single `~` stays a known miss and is not padded. Padding it would also join ordinary `~` uses such as `a~b`. risk: low
+- Fix round 1: `locked-loops-md-inword-bold-en` is signed `reviewed_by: lead` under the MVP-first rule (20 Oct 2026). This replaces the earlier decision to keep it pending. risk: low
+- Markdown in-word padding applies to the `rendered` reading only, and only to runs with a letter directly on both sides (`*`/`` ` `` of any length, `_`/`~` only doubled). Kept from the WIP. risk: medium
+- Any post-guard failure (timeout, error or invalid result) sets the session stop flag, failing closed. risk: high
+- `HelpStateUnreadable` is a new harness error, pushed to `background` once per turn when the stored help state can't be read. risk: low
+- The new md-inword case waits in `docs/tasks/4.6/pending-cases/` with `reviewed_by: pending` until a human signs it off. The fixture gate runs it from there. risk: low
+- Spans for the three B-19 cases come from `loops/notes.md`: 3.1 "A `for` loop runs its indented body…", 3.4 "A `while` loop repeats as long as its condition is True:", 3.3 "To add things up, keep a running total in a variable:". risk: low
+- The known-miss tests lock in today's behaviour, so any fix to one of these misses must change its test on purpose. risk: low
+
+---
+
 ### 21 Oct 2026 · 3.9b review LOWs left as they are · decided by lead · risk: low
 
 - Decided: the two review LOWs are wontfix: the 10x slack in apps/cli/src/commands/chat.test.ts (and the

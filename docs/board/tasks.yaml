@@ -296,9 +296,9 @@ tasks:
   model: null
 - id: '0.16'
   milestone: M7
-  title: 'Agent factory, measure (human decision 21 Oct 2026): closeout.py records per-task metrics on the board from the session transcripts, as 0.15 did once by hand: tool calls, input/output tokens, wall time,
-    builder phases, fix rounds, findings by severity (found / fixed / deferred), human questions raised (blockers), models used. A `board.py metrics` summary groups them by model and task kind so the
-    "every 10 tasks, compare model vs review outcome" rule in the team-lead skill becomes a script, not memory'
+  title: 'Agent factory, measure (human decision 21 Oct 2026): closeout.py records per-task metrics on the board from the session transcripts, as 0.15 did once by hand: tool calls, input/output tokens,
+    wall time, builder phases, fix rounds, findings by severity (found / fixed / deferred), human questions raised (blockers), models used. A `board.py metrics` summary groups them by model and task kind
+    so the "every 10 tasks, compare model vs review outcome" rule in the team-lead skill becomes a script, not memory'
   accept: closeout writes a `metrics` map on the task; `board.py metrics` prints a table for the last N done tasks; tests with a fixture transcript; no transcript text or secrets land on the board.
   deps:
   - '0.15'
@@ -308,9 +308,10 @@ tasks:
   model: null
 - id: '0.17'
   milestone: M7
-  title: 'Agent factory, limits (human decision 21 Oct 2026): the per-task budget becomes a line in plan.md (tool calls, phases, packages touched) and is enforced, not only requested: a hook or the
-    harness turn limit stops a builder at the cap and the gate reads the handoff against the plan budget; the plan template also names allowed tools and exit conditions (task contract)'
-  accept: a builder past its call cap is stopped with a clear message and a PARTIAL handoff path; planner.md and the plan template carry budget, tools and exit conditions; merge_gate.py checks a handoff that exceeds the plan budget and reports it; tests.
+  title: 'Agent factory, limits (human decision 21 Oct 2026): the per-task budget becomes a line in plan.md (tool calls, phases, packages touched) and is enforced, not only requested: a hook or the harness
+    turn limit stops a builder at the cap and the gate reads the handoff against the plan budget; the plan template also names allowed tools and exit conditions (task contract)'
+  accept: a builder past its call cap is stopped with a clear message and a PARTIAL handoff path; planner.md and the plan template carry budget, tools and exit conditions; merge_gate.py checks a handoff
+    that exceeds the plan budget and reports it; tests.
   deps:
   - '0.15'
   risk: risky
@@ -330,10 +331,11 @@ tasks:
   model: null
 - id: '0.19'
   milestone: M7
-  title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked) and
-    a `docs/lessons.md` of failed attempts and human corrections (e.g. the practice-answer leak, the IN.yaml regex timeout, red tests pushed to main); planner and tdd-guide are told to read both before
+  title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
+    and a `docs/lessons.md` of failed attempts and human corrections (e.g. the practice-answer leak, the IN.yaml regex timeout, red tests pushed to main); planner and tdd-guide are told to read both before
     planning or building; closeout prompts the lead to add a lesson when a fix round or human correction happened'
-  accept: digest and lessons exist and are generated or checked by a script (a risk-high log entry missing from the digest fails the harness tests); planner.md and tdd-guide.md name both files as required reading; the full log stays as is.
+  accept: digest and lessons exist and are generated or checked by a script (a risk-high log entry missing from the digest fails the harness tests); planner.md and tdd-guide.md name both files as required
+    reading; the full log stays as is.
   deps:
   - '0.16'
   risk: risky
@@ -1199,9 +1201,9 @@ tasks:
     with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
-  status: review
+  status: done
   branch: m4/4.6c-lockedleak-followups
-  model: build:opus-5.5/medium review:opus+sonnet
+  model: build:opus-5.5/medium fix:opus review:opus+sonnet
 - id: 4.6d
   milestone: M13
   title: 'lockedLeak follow-ups (4.6c review MEDIUMs, older gaps): drop default-ignorable combining marks (variation selectors U+FE00-FE0F, U+034F) when folding text and count \\p{M} as part of the letter
