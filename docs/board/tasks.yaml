@@ -1522,9 +1522,9 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '6.3'
   milestone: M6
   title: Mistake tagging from the teacher's list, plus proposed tags the teacher approves
@@ -1567,9 +1567,9 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '7.2'
   milestone: M7
   title: Grow platform suites to target sizes, each case human-reviewed
@@ -2069,7 +2069,7 @@ tasks:
     and log the choice as a decision'
   accept: the SLO test passes 20 CI-like runs in a row; the 50/100 ms SLO is still enforced somewhere named in the handoff; no weakening of ADR-0007 without a logged decision
   deps: []
-  status: running
+  status: review
   branch: m5/5.11c-slo-flake
   model: plan:lead build:sonnet
 - id: 0.17a
@@ -2082,10 +2082,11 @@ tasks:
   status: todo
 - id: 0.16b
   milestone: M13
-  title: 'metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already passes an absolute path), and test that "." and the absolute root give the same numbers'
+  title: metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already
+    passes an absolute path), and test that "." and the absolute root give the same numbers
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
-  - '0.16a'
+  - 0.16a
   status: todo
 - id: 9.4c
   milestone: M13
