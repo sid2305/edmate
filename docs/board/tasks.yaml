@@ -1392,9 +1392,9 @@ tasks:
   - '1.8'
   - '5.5'
   - M3
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m5/5.7-feedback-skill
+  model: plan:sonnet author:pedagogy-opus
 - id: '5.8'
   milestone: M5
   title: 'Role-play engine for mock interview and viva: persona templates, `/pause`, end conditions, debrief'
@@ -1426,10 +1426,10 @@ tasks:
   - '5.3'
   - '5.4'
   - M3
-  status: running
+  status: review
   risk: risky
   branch: m5/5.10-ask-the-teacher
-  model: plan:opus build:opus-5.5/medium(A) build:sonnet(B)
+  model: plan:opus build:opus-5.5/medium(A) build:sonnet(B,C,D)
 - id: '5.11'
   milestone: M5
   title: Outline drafter and style-card drafter (`packages/ingest`)
@@ -1808,9 +1808,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m9/9.3-package-start
+  model: plan:sonnet build:sonnet(A)
 - id: '9.4'
   milestone: M9
   title: 'Chat: SSE, markdown, maths and code, sources, hint button with rung, locked notice, teacher answers in the thread'
@@ -2384,7 +2384,7 @@ tasks:
   accept: the worker tests run full turns on a slack clock; a forced 10x-slow runner (e.g. a slow-clock test) stays green; production budgets unchanged
   deps:
   - 3.9b
-  status: running
+  status: review
   branch: m3/3.9d-worker-clock-flake
   model: plan:lead build:opus-5.5/medium
 - id: 3.9c
