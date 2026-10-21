@@ -406,7 +406,7 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: running
+  status: review
   branch: m0/0.19-digest-lessons
   model: plan:sonnet build:opus
 - id: '1.1'
@@ -2134,8 +2134,9 @@ tasks:
     answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged
   deps:
   - '5.8'
-  status: todo
+  status: planning
   branch: null
+  model: plan:opus
 - id: 7.7a
   milestone: M13
   title: '7.7 follow-ups: a health report surface (CLI or staff console) over listForTeacherSince + computeHealthMetrics; a (session_id, created_at) composite index on turn_traces once real traffic is known;
