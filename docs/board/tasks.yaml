@@ -1635,9 +1635,9 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m6/6.4-session-summary
+  model: plan:sonnet build:sonnet
 - id: '6.5'
   milestone: M6
   title: Student view, reset and export of memory
@@ -2213,7 +2213,7 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: running
+  status: review
   branch: m0/0.17a-budget-parse
   model: plan:lead build:sonnet
 - id: 0.16b
