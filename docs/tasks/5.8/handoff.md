@@ -1,9 +1,9 @@
 # 5.8 handoff: role-play engine
 
-**Status:** PARTIAL (Phases A and B done; Phases C and D remain)
+**Status:** PARTIAL (Phases A, B and C done; Phase D remains)
 
-- Branch: `m5/5.8-roleplay` (Phase A from local `work-5.8a`; Phase B from local `work-5.8b`, pushed as `work-5.8b:m5/5.8-roleplay`)
-- Worktrees: Phase A `.claude/worktrees/agent-af0a80a7590251a3b`; Phase B `.claude/worktrees/agent-acb4f174cc4cf8459` (under the repo root)
+- Branch: `m5/5.8-roleplay` (Phase A from local `work-5.8a`; Phase B from local `work-5.8b`, pushed as `work-5.8b:m5/5.8-roleplay`; Phase C from local `work-5.8c`, pushed as `work-5.8c:m5/5.8-roleplay`)
+- Worktrees: Phase A `.claude/worktrees/agent-af0a80a7590251a3b`; Phase B `.claude/worktrees/agent-acb4f174cc4cf8459`; Phase C `.claude/worktrees/agent-a656d291bb8dca0a8` (under the repo root)
 - Plan: `docs/tasks/5.8/plan.md` (Phase A plus "Lead answers (21 Oct 2026)")
 
 ## Phase A: ADR-0013 and the role-play state machine
@@ -98,10 +98,42 @@ What the tests pin:
 - The legacy persona count slots became optional in `FRAME_SECTIONS`; `checkPersonaForm` requires both on the legacy form, so old frames are checked as strictly as before.
 - The `roleplay-question` prose (Phase C) must say that with no material section the model asks which topic to practise.
 
+## Phase C: content (frame 1.2.0, set 1.3.0, persona library, snapshots)
+
+### Files
+- `content/prompt-packs/frame@1.2.0.md` and `content/prompt-packs/set@1.3.0.yaml`: the pedagogy-author drafts copied verbatim (both `reviewed_by: pending`). Diff against `frame@1.1.0.md`: line 3 (version), line 56 replaced by 56-57 (persona step-out text and `{{roleplay_state}}`), and the seven role-play sections appended, each starting with a `[[TAG]]`. The set differs from 1.2.0 only in `version` and `frame: 1.2.0`. Both load with no parser issue.
+- `packages/content/src/personaTemplates.ts`: `PersonaTemplate` now keeps `version`; `readPersonaTemplateDir` rejects a file whose slug differs from its `id` (lead answer); new `comparePersonaVersions` (semver precedence, build metadata ignored), `selectPersonaLibrary` (highest signed version per id; a duplicate id+version, signed or not, is an issue) and `readPersonaLibrary(dir): PersonaLibrary` (throws listing every issue; built with the harness's `createPersonaLibrary`, so it is exactly what `PipelineDeps.personas` takes). "Signed" means `reviewed_by` is not `pending` (trimmed, any case).
+- `packages/content/src/index.ts`: exports the three new functions.
+- `packages/content/test/fixtures/skills/mock_interview/valid/{job-interview,viva}@1.0.0.yaml`: fixture ids changed from `per_test_job_interview`/`per_test_viva` to `job-interview`/`viva` to match the file slug (needed by the slug rule; nothing else used the old ids).
+- `packages/content/src/personaTemplates.test.ts`: slug-mismatch issue; version kept; library from the signed fixtures (frozen, Persona-shaped only, no `reviewedBy`/`version`); a newer signed version wins; a newer unsigned version never goes live; an id with only unsigned versions is left out; " Pending " counts as unsigned; 1.10.0 > 1.9.0; empty dir; throws listing issues; missing dir; duplicates (a build tag counts as a duplicate); input-order independence; the result typed as `Pick<PipelineDeps, 'personas'>` and fed to `resolvePersona`; 16 `comparePersonaVersions` cases.
+- `packages/content/src/promptPacks.snapshot.test.ts` and `.snap`: `SET_VERSION` 1.3.0 (`PREV_SET_VERSION` 1.2.0 keeps its old suite title, so its entries are unchanged); role-play cases for both personas from `readPersonaLibrary` (start, question 2, `/pause`, resume, last-answer debrief, stop at question 3, stop at question 1 with nothing answered, ended); a check that every real set with frame >= 1.2.0 has the new form (all seven sections, `{{roleplay_state}}`, no count slots) and every older one the legacy form; each role-play case asserts its phase, `[[MOVE-ROLEPLAY]]`, no `[[MOVE-ASK]]`, no unfilled `{{`, and only its own state tag; the acceptance debrief line is pinned.
+
+### Tests (acceptance evidence)
+```
+corepack pnpm vitest run src/personaTemplates.test.ts     → 42 passed (red first: 30 failed, exports missing)
+  coverage personaTemplates.ts → 100 / 100 / 100 / 100
+corepack pnpm vitest run src/promptPacks.snapshot.test.ts → 122 passed; 78 snapshots written
+  .snap diff --stat → 2953 insertions(+), 0 deletions (sets 1.1.0 and 1.2.0 byte-identical)
+  rendered: "This is question 1 of 6" / "of 5", "question 2 of 6/5", "during question 2", "ask question 2 of N again",
+            "All 6 questions" / "All 5 questions", "Answered questions: 2" and "Answered questions: 0"
+packages/evals (fixtures, no model calls):
+  src/leakFixtures.test.ts   → 91 passed
+  src/lockedFixtures.test.ts → 48 passed
+  src/suites.test.ts         → 26 passed (loads and validates every real suite, pedagogy included)
+corepack pnpm turbo run typecheck lint test --filter=@edmate/content... --filter=@edmate/harness...
+  → content 502 passed (23 files); harness 5209 passed (116 files); contracts 348; config 42
+  → Tasks: 14 successful, 14 total
+python3 .githooks/secret-scan.py --all → exit 0, no output
+```
+
+### Deviations
+- "Run the pedagogy suite on fixtures": `evals/fixtures` has no recorded agent replies, so `edmate eval` replay cannot run; the fixture-backed tests above are what exists. Pedagogy cases are only schema- and rule-checked (`suites.test.ts`).
+- Persona test fixture ids renamed (above). The real templates already had matching slugs.
+- No full `runTurn` test in `packages/content`: the wiring is shown by the type (`readPersonaLibrary` returns `PersonaLibrary`) plus `resolvePersona`; CLI and web wiring is 5.8a.
+
 ## Left to do
-- **Phase C** (content): `frame@1.2.0` with the seven sections and `{{roleplay_state}}` (the `roleplay-question` line says to ask which topic when there is no material; the debrief lines keep feedback to the material, see the question below), `set@1.3.0` (`reviewed_by: pending`), `readPersonaLibrary`, content snapshots.
-- **Phase D** (evals): about 10 `persona-roleplay-*` cases and `rolePlayFixtures.test.ts`, after 5.9 leaves `packages/evals`.
-- Reviews: Phase B needs code-reviewer and typescript-reviewer on `pedagogy/**` and `pipeline/**`; ADR-0013 needs architect, security-reviewer and typescript-reviewer sign-off on the applied points; code-reviewer for `pedagogy/**`.
+- **Phase D** (evals): about 10 `persona-roleplay-*` cases and `packages/evals/src/rolePlayFixtures.test.ts`, after 5.9 leaves `packages/evals` (plan, Phase D).
+- Reviews: code-reviewer on `content/prompt-packs/**` and `personaTemplates.ts`; Phase B's and ADR-0013's reviews as listed before. One human re-sign of `frame@1.2.0` and `set@1.3.0` after review (the lead adds the blockers entry).
 
 ## Decisions
 - **Role-play phases and `personaPhase`** — risk: high. The ADR-0013 §1 table: a stored `personaPhase?: 'paused' | 'ended'` plus the existing count and id; a start or persona switch opens question 1; `/pause` holds the question; `stop` goes straight to the debrief (lead default, pending B-37) and ends; the answer to question M' debriefs and ends; every later turn is `ended` until a new start; a follow-up question from the interviewer counts toward M. The move stays `ask` in every phase.
@@ -118,7 +150,14 @@ What the tests pin:
 - **Legacy count slots optional in the slot table, required by the form check** — risk: low.
 - **`FrozenMap` shared by the prompt-pack and persona libraries** — risk: low. Neutral error text.
 
+- **`frame@1.2.0` and `set@1.3.0` (Phase C)** — risk: high. Prompt-pack behaviour change under ADR-0013: the new persona form and the seven role-play sections, `reviewed_by: pending`; sets 1.0.0 to 1.2.0 compose byte-identically (the snapshot file only grew).
+- **`readPersonaLibrary`: signed-only, highest version per id** — risk: high. "Signed" is `reviewed_by` not `pending` after trim and lower-case; an id with no signed version is left out; any directory issue or duplicate throws.
+- **Persona version order is semver precedence** — risk: low. Numeric parts, a release above its prereleases, build metadata ignored, so `1.0.0` and `1.0.0+b` count as a duplicate.
+- **A template whose file slug differs from its `id` is an issue** — risk: low. Lead answer; the persona test fixtures' ids were renamed to match their files.
+- **Role-play snapshots only for new-form sets** — risk: low. Sets 1.1.0 and 1.2.0 keep their suites and entries; 1.3.0 adds 16 role-play cases (8 per persona).
+
 ## Questions for the human
 - **Debrief grounding (ADR-0013 point 6).** No judge change or exemption was needed: a debrief that keeps to the teacher's material passes the grounding judge. But a debrief that comments on delivery ("you spoke clearly") or a stop on an uncovered topic is replaced by the ask-teacher reply, because those claims are not in the material. Is that acceptable for the pilot (Phase C prose keeps debrief feedback to the material), or should delivery feedback get its own rule? Changing it would be a judge-prompt change under an ADR.
 
 Tool calls used: about 80 (Phase B).
+Tool calls used: 48 (Phase C).
