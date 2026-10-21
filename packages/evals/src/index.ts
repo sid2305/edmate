@@ -51,6 +51,17 @@ export {
   type Recorder,
   type RecordMode,
 } from './recorder.js';
+export {
+  generatePerAgentSuite,
+  LOCKED_TEMPLATES,
+  PerAgentSuiteError,
+  type AgentPackage,
+  type AnswerableItem,
+  type ItemProvenance,
+  type LockedTemplate,
+  type OutOfCourseItem,
+  type PerAgentSuiteInput,
+} from './perAgentSuite.js';
 export { toJsonReport, toSummary, type JsonReport } from './report.js';
 export { toHtmlReport } from './htmlReport.js';
 export {
