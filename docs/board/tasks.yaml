@@ -1153,9 +1153,9 @@ tasks:
     with reviewed_by sid2305 and pass the gate; no regression on the 34 locked cases.
   deps:
   - 4.6b
-  status: running
+  status: review
   branch: m4/4.6c-lockedleak-followups
-  model: build:opus-5.5/medium
+  model: build:opus-5.5/medium review:opus+sonnet
 - id: '4.7'
   milestone: M4
   title: '`grounding`: claims must be supported by retrieved material or teacher notes; numbers recomputed; otherwise `ask_teacher`'
@@ -1773,9 +1773,10 @@ tasks:
   accept: practice@1.1.0 has reviewed_by sid2305 and no "may be shown as given" sentence; content and harness tests pass. The human already signed; no further sign-off is asked.
   deps:
   - '5.6'
-  status: todo
-  branch: null
+  status: running
+  branch: m5/5.6e-sign-practice-pack
   risk: risky
+  model: build:opus-5.5/medium
 - id: 8.1b
   milestone: M8
   title: 'Subject change resets verification (human answer B-30, 21 Oct 2026): teacherProfiles.update sets verificationStatus back to pending when subject changes, in the same statement; bio and languages
@@ -2295,6 +2296,18 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 3.9b
+  milestone: M3
+  title: 'CI flake: apps/cli chat tests intermittently end a turn in an error event on CI runners, then pass on re-run (sameTopic.test.ts "three same-topic allowed turns", PR #78 and main c8b295b; deps.test.ts
+    "runs one teacher_preview turn over the real demo-teacher content to done", PR #86 run 39615331260, 21 Oct 2026). Find which step errors (log the error event code in the assertion message), fix the
+    cause (likely a per-step timeout sized for a laptop), keep the tests deterministic'
+  accept: the failing assertions print the error event; the root cause is named in the handoff and fixed; apps/cli tests pass 20 runs in a row locally under CPU load (e.g. --sequence.concurrent or a busy
+    loop) and on CI
+  deps:
+  - '3.9'
+  status: running
+  branch: m3/3.9b-cli-chat-flake
+  model: build:opus-5.5/medium
 - id: 3.9a
   milestone: M13
   title: 'CLI chat follow-ups (3.9 review MEDIUM/LOW): SIGINT closes readline and prints bye; never-exhaustive TurnEvent switch in renderEvent; recordUnmetered logs through the injected CliIo; rename or
