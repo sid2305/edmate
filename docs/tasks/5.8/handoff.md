@@ -1,6 +1,6 @@
 # 5.8 handoff: role-play engine
 
-**Status:** PARTIAL (Phases A, B and C done; Phase D remains)
+**Status:** DONE (Phases A, B, C and D done; reviews and the human re-sign remain, see "Left to do")
 
 - Branch: `m5/5.8-roleplay` (Phase A from local `work-5.8a`; Phase B from local `work-5.8b`, pushed as `work-5.8b:m5/5.8-roleplay`; Phase C from local `work-5.8c`, pushed as `work-5.8c:m5/5.8-roleplay`)
 - Worktrees: Phase A `.claude/worktrees/agent-af0a80a7590251a3b`; Phase B `.claude/worktrees/agent-acb4f174cc4cf8459`; Phase C `.claude/worktrees/agent-a656d291bb8dca0a8` (under the repo root)
@@ -132,7 +132,7 @@ python3 .githooks/secret-scan.py --all → exit 0, no output
 - No full `runTurn` test in `packages/content`: the wiring is shown by the type (`readPersonaLibrary` returns `PersonaLibrary`) plus `resolvePersona`; CLI and web wiring is 5.8a.
 
 ## Left to do
-- **Phase D, part 2** (evals): `packages/evals/src/rolePlayFixtures.test.ts`, modelled on `feedbackFixtures.test.ts` (plan, Phase D). It should read the ten `persona-roleplay-*` cases below, turn 0 of each as the start, replay each case through `decidePolicy` and `composeSystemPrompt` with the real set 1.3.0 and the real templates, and assert the state line for each turn.
+- ~~Phase D, part 2~~: done (see "Phase D (fixtures test)").
 - Reviews: code-reviewer on `content/prompt-packs/**` and `personaTemplates.ts`; Phase B's and ADR-0013's reviews as listed before. One human re-sign of `frame@1.2.0` and `set@1.3.0` after review (the lead adds the blockers entry).
 
 ## Phase D (cases)
@@ -170,6 +170,50 @@ packages/evals: EDMATE_ALLOW_PENDING=1 corepack pnpm vitest run src/suites.test.
 - **`package: paid` on all ten** — risk: low. Neither demo package (`free.yaml`, `paid.yaml`) lists `mock_interview` in its skills yet (5.8a wiring is separate); `paid` was picked for consistency with the `feedback` suite's cases, which are also gated on a skill not yet read back by `suites.test.ts`'s package check (it only checks the name is a known demo package, not skill membership).
 - **No `packages/evals/src/rolePlayFixtures.test.ts` in this part** — risk: low. The prompt scoped this hand-off to the eval cases only ("Phase D, part 1"); the fixtures test (plan, Phase D) is left to a follow-up pass. `runner.ts`, `schema.ts` and `suites.ts` were not touched; the schema already supports everything the cases need (`skill`, `persona`, `expect.judge`/`must_not_contain`).
 
+## Phase D (fixtures test)
+
+- Branch: local `work-5.8e`, pushed as `work-5.8e:m5/5.8-roleplay`. Worktree `.claude/worktrees/agent-a9068fdc776ab9844`.
+
+### Files
+- `packages/evals/src/rolePlayFixtures.test.ts` (new, 17 tests). It reads set 1.3.0 from `content/prompt-packs` (the `feedbackFixtures.test.ts` reader) and the persona templates from `content/skills/mock_interview` (parsed into `PersonaSchema`), and replays each of the ten `persona-roleplay-*` cases through `decidePolicy` and `composeSystemPrompt`. Each turn loads the help state and rung the previous turn's policy saved. It asserts:
+  - the ten cases are signed (`lead`), `paid`, `persona` suite, English, with `skill: mock_interview` on every turn;
+  - each `persona:` ref names an existing template file whose `id`, `version` and signed `reviewed_by` match; both personas are used (job-interview M = 6, viva M = 5);
+  - turn 0 is the only start;
+  - per turn, the policy's `rolePlay` against a hand-written table (from the ADR-0013 §1 table, not derived from the code): `move: ask`, `reason: mock_interview`; the composed prompt holds that phase's tag and rendered line ("This is question N of M.", "/pause during question N of M", "ask question N of M again", "All M questions are asked and answered ...", "Answered questions: N.", "The role-play is over."), no other state tag, `[[MOVE-ROLEPLAY]]`, no `[[MOVE-ASK]]` and no unfilled `{{`;
+  - count-claim: the claim turn is question 3 of 6, and no turn shows the debrief, stopped or ended state or the debrief line;
+  - all-asked: the last turn has the explicit debrief line and no "This is question";
+  - a stub good reply passes and a stub bad reply fails `must_not_contain` on each of the 11 turns that have static checks;
+  - the local control helper matches the documented `rolePlayControl` rule.
+- No change to `runner.ts`, `schema.ts`, `suites.ts`, any case, harness or content.
+
+Replayed states:
+- after-debrief: `1/5 … 5/5, debrief, ended`
+- all-asked: `1/5 … 5/5, debrief`
+- are-you-human, count-claim, grade-or-pass: `1/6, 2/6, 3/6`
+- model-answer: `1/5, 2/5`
+- pause-resume: `1/6, 2/6, pause 2/6, resume 2/6`
+- personal-data: `1/6, 2/6`
+- restart: `1/6, stopped (0 answered), ended`
+- stop-debrief: `1/5, 2/5, 3/5, stopped (2 answered)`
+
+All ten cases agree with the state machine; no case problem was found.
+
+### Tests (acceptance evidence)
+```
+corepack pnpm vitest run src/rolePlayFixtures.test.ts   → 17 passed
+mutation check (scratch copy, deleted): count-claim expected 'debrief/6', and a good stub saying
+  "A new question" → 2 failed | 15 passed (both caught)
+corepack pnpm turbo run typecheck lint test --filter=@edmate/evals --filter=@edmate/harness
+  → evals: Test Files 20 passed, Tests 1005 passed; harness: 116 files, 5209 passed
+  → Tasks: 8 successful, 8 total
+python3 .githooks/secret-scan.py --all → exit 0, no output
+```
+
+### Decisions
+- **In persona eval cases, turn 0 is the start** (risk: low). The case schema has no turn `kind`, and the turn-level `skill: mock_interview` on every turn only selects the skill (`selectSkill`). It never marks a start: in the harness a start is a `skill_action` turn (`rolePlayControl`), and answers are `message` turns. The runner passes `turnIndex` to the agent, so an eval agent (CLI eval wiring, 5.8a) sends turn 0 as `skill_action` and every later turn as `message`. The fixtures test does the same. No schema or runner change was needed.
+- **The test mirrors `rolePlayControl` locally** (risk: low). `@edmate/harness` does not export it, and exporting it would be an edit under the `pedagogy/**` risk group. The mirror is ten lines and is pinned by its own test. Follow-up: export `rolePlayControl` from the harness index and drop the mirror.
+- **`mock_interview` is added to the paid entitlement in the test** (risk: low). `content/demo-teacher/packages/paid.yaml` does not list `mock_interview` yet (Phase D part 1 decision; 5.8a wiring). A live `edmate eval` run of these cases on the paid package would therefore not reach the role-play until the package lists the skill.
+
 ## Decisions
 - **Role-play phases and `personaPhase`** — risk: high. The ADR-0013 §1 table: a stored `personaPhase?: 'paused' | 'ended'` plus the existing count and id; a start or persona switch opens question 1; `/pause` holds the question; `stop` goes straight to the debrief (lead default, pending B-37) and ends; the answer to question M' debriefs and ends; every later turn is `ended` until a new start; a follow-up question from the interviewer counts toward M. The move stays `ask` in every phase.
 - **Resume fix (intended change, every set)** — risk: medium. The turn after `/pause` no longer adds one: a legacy-frame session shows "question N of M" again on that turn where it used to show N + 1. A pre-5.8 trace of a resume turn re-decides to N.
@@ -196,3 +240,4 @@ packages/evals: EDMATE_ALLOW_PENDING=1 corepack pnpm vitest run src/suites.test.
 
 Tool calls used: about 80 (Phase B).
 Tool calls used: 48 (Phase C).
+Tool calls used: 36 (Phase D, fixtures test).
