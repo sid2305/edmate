@@ -175,5 +175,199 @@ class CwdBoundary(unittest.TestCase):
         self.assertEqual(len(self.entries("0.1", "m0/0.1-x", lines)), 1)
 
 
+BOARD_IDS = frozenset({"0.1", "0.2", "0.16", "0.16a", "5.7", "5.7b", "7.7"})
+SUBAGENT_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "transcripts-subagents"
+
+
+class SubagentTranscripts(unittest.TestCase):
+    """Subagent transcripts live in `<dir>/<session>/subagents/*.jsonl`; a whole file counts for
+    a task when its prompt names the task or any entry is on the task's (or work-) branch."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="edmate-metrics-")
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name) / "transcripts"
+        shutil.copytree(SUBAGENT_FIXTURE, self.dir)
+        self.root = Path(self.tmp.name) / "repo"
+        self.root.mkdir()
+
+    def tools(self, task_id, branch):
+        n = 0
+        for e in metrics.iter_entries(self.dir, branch, task_id, board_ids=BOARD_IDS):
+            content = (e.get("message") or {}).get("content")
+            if isinstance(content, list):
+                n += sum(1 for b in content if isinstance(b, dict) and b.get("type") == "tool_use")
+        return n
+
+    def test_builder_on_work_branch_counts_whole_file_for_016(self):
+        # lead 1 (m0/0.16 entry) + builder 2 (on main before checkout) + 1 (on work-0.16f)
+        self.assertEqual(self.tools("0.16", "m0/0.16-agent-metrics"), 4)
+
+    def test_reviewer_prompt_counts_for_01_only(self):
+        # lead 1 (m0/0.1 entry) + reviewer 2 (prompt says "task 0.1")
+        self.assertEqual(self.tools("0.1", "m0/0.1-repo-setup"), 3)
+
+    def test_unrelated_task_gets_nothing(self):
+        self.assertEqual(self.tools("0.2", "m0/0.2-x"), 0)
+
+    def test_collect_counts_subagents_without_leaking_text(self):
+        import os
+
+        os.environ["EDMATE_TRANSCRIPTS_DIR"] = str(self.dir)
+        try:
+            result = metrics.collect(self.root, "0.16", "m0/0.16-agent-metrics", board_ids=BOARD_IDS)
+        finally:
+            os.environ.pop("EDMATE_TRANSCRIPTS_DIR", None)
+        self.assertEqual(result["tool_calls"], 4)
+        self.assertEqual(result["models"], ["claude-opus-5-5", "claude-sonnet-5"])
+        dumped = json.dumps(result)
+        self.assertNotIn(MARKER, dumped)
+        self.assertNotIn("Build the metrics", dumped)
+
+    def test_skips_symlinked_subagent_file_and_session_dir(self):
+        outside = Path(self.tmp.name) / "outside"
+        shutil.copytree(SUBAGENT_FIXTURE / "session-0001", outside)
+        (self.dir / "session-0001" / "subagents" / "agent-link.jsonl").symlink_to(
+            outside / "subagents" / "agent-b0001.jsonl"
+        )
+        (self.dir / "session-link").symlink_to(outside, target_is_directory=True)
+        self.assertEqual(self.tools("0.16", "m0/0.16-agent-metrics"), 4)
+
+    def test_skips_symlinked_subagents_dir(self):
+        outside = Path(self.tmp.name) / "outside-sub"
+        shutil.copytree(SUBAGENT_FIXTURE / "session-0001" / "subagents", outside)
+        (self.dir / "session-0002").mkdir()
+        (self.dir / "session-0002" / "subagents").symlink_to(outside, target_is_directory=True)
+        self.assertEqual(self.tools("0.16", "m0/0.16-agent-metrics"), 4)
+
+
+class SubagentMatching(unittest.TestCase):
+    """Prompt and branch boundaries for whole-file attribution."""
+
+    def write(self, lines):
+        self.tmp = tempfile.TemporaryDirectory(prefix="edmate-metrics-")
+        self.addCleanup(self.tmp.cleanup)
+        sub = Path(self.tmp.name) / "s1" / "subagents"
+        sub.mkdir(parents=True)
+        (sub / "agent-x.jsonl").write_text("\n".join(json.dumps(x) for x in lines))
+        return self.tmp.name
+
+    def prompt(self, text, branch="main"):
+        return [
+            {"type": "user", "gitBranch": branch, "message": {"role": "user", "content": text}},
+            {"type": "assistant", "gitBranch": branch, "message": {"role": "assistant", "content": []}},
+        ]
+
+    def count(self, task_id, lines, branch=None, board_ids=BOARD_IDS):
+        d = self.write(lines)
+        return len(list(metrics.iter_entries(d, branch or f"m0/{task_id}-x", task_id, board_ids=board_ids)))
+
+    def test_prompt_task_id_matches(self):
+        self.assertEqual(self.count("0.16", self.prompt("Build Edmate task 0.16 (metrics).")), 2)
+        self.assertEqual(self.count("0.16", self.prompt("Review Task 0.16, please")), 2)
+        self.assertEqual(self.count("0.16", self.prompt("for task 0.16")), 2)
+
+    def test_prompt_short_id_does_not_match_longer(self):
+        self.assertEqual(self.count("0.1", self.prompt("Build Edmate task 0.16.")), 0)
+        self.assertEqual(self.count("0.1", self.prompt("Build task 0.1.2 now")), 0)
+        self.assertEqual(self.count("0.1", self.prompt("Build task 10.1 now")), 0)
+
+    def test_prompt_long_id_does_not_match_shorter(self):
+        self.assertEqual(self.count("0.16", self.prompt("Build Edmate task 0.1.")), 0)
+
+    def test_prompt_id_without_task_word_does_not_match(self):
+        self.assertEqual(self.count("0.16", self.prompt("see 0.16 notes")), 0)
+
+    def test_only_first_user_message_is_the_prompt(self):
+        lines = self.prompt("Build something.") + [
+            {"type": "user", "gitBranch": "main", "message": {"role": "user", "content": "task 0.16"}}
+        ]
+        self.assertEqual(self.count("0.16", lines), 0)
+
+    def test_prompt_as_text_blocks(self):
+        lines = self.prompt([{"type": "text", "text": "Build Edmate task 0.16."}])
+        self.assertEqual(self.count("0.16", lines), 2)
+
+    def test_work_branch_with_and_without_letter(self):
+        for b in ("work-5.7", "work-5.7c"):
+            self.assertEqual(self.count("5.7", self.prompt("x", branch=b)), 2, b)
+
+    def test_prompt_parent_id_does_not_match_lettered_sibling(self):
+        self.assertEqual(self.count("0.16", self.prompt("Review Edmate task 0.16a now")), 0)
+        self.assertEqual(self.count("0.16", self.prompt("Review Edmate task 0.16A now")), 0)
+        self.assertEqual(self.count("0.16a", self.prompt("Review Edmate task 0.16a now")), 2)
+        self.assertEqual(self.count("0.16", self.prompt("Review Edmate task 0.16. Thanks")), 2)
+
+    def test_work_branch_of_lettered_board_task_not_counted_for_parent(self):
+        self.assertEqual(self.count("0.16", self.prompt("x", branch="work-0.16a")), 0)
+        self.assertEqual(self.count("5.7", self.prompt("x", branch="work-5.7b")), 0)
+        self.assertEqual(self.count("5.7b", self.prompt("x", branch="work-5.7b")), 2)
+
+    def test_work_branch_phase_letter_counts_when_not_a_board_id(self):
+        self.assertEqual(self.count("7.7", self.prompt("x", branch="work-7.7a")), 2)
+        self.assertEqual(self.count("7.7", self.prompt("x", branch="work-7.7b")), 2)
+
+    def test_no_board_falls_back_to_exact_work_branch(self):
+        for ids in (None, frozenset()):
+            self.assertEqual(self.count("7.7", self.prompt("x", branch="work-7.7a"), board_ids=ids), 0)
+            self.assertEqual(self.count("7.7", self.prompt("x", branch="work-7.7"), board_ids=ids), 2)
+
+    def test_work_branch_boundaries(self):
+        for b in ("work-5.7bc", "work-5.71", "work-5.7.1", "work-5.7B", "xwork-5.7"):
+            self.assertEqual(self.count("5.7", self.prompt("x", branch=b)), 0, b)
+        self.assertEqual(self.count("0.1", self.prompt("x", branch="work-0.16f")), 0)
+
+    def test_task_branch_matches_whole_file(self):
+        lines = self.prompt("x") + [{"type": "assistant", "gitBranch": "m0/5.7-x"}]
+        self.assertEqual(self.count("5.7", lines), 3)
+
+    def test_no_task_id_only_branch(self):
+        d = self.write(self.prompt("Build task 5.7", branch="main"))
+        self.assertEqual(list(metrics.iter_entries(d, "m0/5.7-x")), [])
+
+    def test_bad_lines_and_non_dict_content_are_safe(self):
+        d = self.write([{"type": "user", "message": "not a dict"}, {"gitBranch": "work-5.7"}])
+        with open(Path(d) / "s1" / "subagents" / "agent-x.jsonl", "a") as fh:
+            fh.write("\nnot json\n")
+        self.assertEqual(len(list(metrics.iter_entries(d, "m0/5.7-x", "5.7"))), 2)
+
+
+class BoardIds(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="edmate-metrics-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_reads_ids_from_board(self):
+        (self.root / "docs" / "board").mkdir(parents=True)
+        (self.root / "docs" / "board" / "tasks.yaml").write_text(
+            "decisions:\n  x:\n    id: nope\ntasks:\n- id: '0.16'\n  title: a\n- id: \"0.16a\"\n- id: 7.7\n"
+        )
+        self.assertEqual(metrics.read_board_ids(self.root), frozenset({"0.16", "0.16a", "7.7"}))
+
+    def test_missing_board_is_none(self):
+        self.assertIsNone(metrics.read_board_ids(self.root))
+
+    def test_unreadable_board_is_none(self):
+        (self.root / "docs" / "board" / "tasks.yaml").mkdir(parents=True)  # a dir, not a file
+        self.assertIsNone(metrics.read_board_ids(self.root))
+
+    def test_collect_reads_board_when_ids_not_given(self):
+        import os
+
+        (self.root / "docs" / "board").mkdir(parents=True)
+        (self.root / "docs" / "board" / "tasks.yaml").write_text("- id: '0.16'\n- id: '0.16a'\n")
+        sub = self.root / "t" / "s1" / "subagents"
+        sub.mkdir(parents=True)
+        line = {"gitBranch": "work-0.16a", "message": {"role": "assistant", "content": [{"type": "tool_use"}]}}
+        (sub / "a.jsonl").write_text(json.dumps(line))
+        os.environ["EDMATE_TRANSCRIPTS_DIR"] = str(self.root / "t")
+        try:
+            self.assertEqual(metrics.collect(self.root, "0.16", "m0/0.16-x")["tool_calls"], 0)
+            self.assertEqual(metrics.collect(self.root, "0.16a", "m0/0.16a-x")["tool_calls"], 1)
+        finally:
+            os.environ.pop("EDMATE_TRANSCRIPTS_DIR", None)
+
+
 if __name__ == "__main__":
     unittest.main()
