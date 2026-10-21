@@ -679,6 +679,44 @@ class BudgetCheck(GateCase):
         self.assertEqual(code, 1, out)
         self.assertIn("cap 55", out)
 
+    def test_decoy_heading_before_real_section_in_fence_ignored(self):
+        plan = (
+            "# plan\n"
+            "Example from the merge gate's docstring:\n"
+            "```\n"
+            "## Budget: 999 tool calls\n"
+            "```\n"
+            "## Budget\nBudget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_inside_fence_within_section_ignored(self):
+        plan = (
+            "# plan\n## Budget\n"
+            "```\n"
+            "Budget: 999 tool calls\n"
+            "```\n"
+            "Budget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_plain_budget_line_before_section_ignored(self):
+        plan = (
+            "# plan\n"
+            "Budget: 999 tool calls (9.8, for comparison)\n"
+            "## Budget\nBudget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
     def test_first_line_no_number_later_prose_number_unparseable(self):
         plan = "# plan\n## Budget\nSmall task, well within limits.\nSee 6.2 which took 55 calls for comparison.\n"
         self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))

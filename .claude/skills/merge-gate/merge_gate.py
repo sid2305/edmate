@@ -138,14 +138,38 @@ def board_branch(task_id):
     return board_field(task_id, "branch")
 
 
+def unfenced(text):
+    """Text with the contents of ``` / ~~~ fenced code blocks blanked out (line positions kept),
+    the same fence-tracking convention as reviewer_names(), so a decoy inside a quoted code
+    example never matches as if it were real document structure."""
+    out, fenced = [], False
+    for line in (text or "").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+            out.append("")
+            continue
+        out.append("" if fenced else line)
+    return "\n".join(out)
+
+
 def section(text, heading):
-    """Body of a `## heading` section, up to the next `## ` heading (or None)."""
-    m = re.search(rf"^##\s+{heading}\b.*$", text or "", re.M)
+    """Body of a `## heading` section (its first unfenced occurrence), up to the next `## `
+    heading (or None). Fenced code is blanked out first, so a quoted `## heading` inside an
+    example never counts as the section."""
+    clean = unfenced(text)
+    m = re.search(rf"^##\s+{heading}\b.*$", clean, re.M)
     if not m:
         return None
-    rest = text[m.end():]
+    rest = clean[m.end():]
     nxt = re.search(r"^##\s", rest, re.M)
     return rest[: nxt.start()] if nxt else rest
+
+
+def section_heading_line(text, heading):
+    """The exact text of the section's own `## heading ...` line (its first unfenced occurrence),
+    or None if there is no such section."""
+    m = re.search(rf"^##\s+{heading}\b.*$", unfenced(text), re.M)
+    return m.group(0) if m else None
 
 
 def entries(text):
@@ -172,22 +196,35 @@ def status_is_done(value):
 
 
 def budget_cap(plan):
-    """The plan's tool-call cap: a `Budget: <N> tool calls` line (on its own, or as a `## Budget:
-    <N> tool calls` heading), or (failing that) the `<N> ... calls` number on the first non-blank
-    line of a `## Budget` section — never a number from later in the section's prose, so a decoy
-    count (another task's total, an old estimate) can't set the cap. Returns None if neither is
-    present at all (old-style plan, silent skip) or UNPARSEABLE if a `## Budget` section exists but
-    its first line has no such number (must surface as a visible FAIL, not a silent skip)."""
+    """The plan's tool-call cap. When the plan has a `## Budget` section (its first unfenced
+    occurrence — a decoy heading quoted in prose or inside a fenced code block is ignored, the
+    same convention as reviewer_names()), the cap comes from that section only, in order: its own
+    heading line if that is itself a `## Budget: <N> tool calls` heading; else an explicit
+    `Budget: <N> tool calls` line anywhere in its (unfenced) body; else the `<N> ... calls` number
+    on the section body's first non-blank unfenced line — never a number from later in the
+    section's prose, so a decoy count (another task's total, an old estimate) can't set the cap.
+    If that first line has no such number the result is UNPARSEABLE (a visible FAIL, not a silent
+    skip). Only when there is no `## Budget` section at all does a whole-document `Budget: <N>
+    tool calls` line (outside fences) set the cap; a decoy such a line elsewhere in the document
+    can't win once a real `## Budget` section exists, since that section is then checked first.
+    Returns None if nothing at all is present (old-style plan, silent skip)."""
     text = plan or ""
-    m = BUDGET_LINE.search(text)
-    if m:
-        return int(m.group(1))
+    heading_line = section_heading_line(text, "Budget")
     sect = section(text, "Budget")
-    if sect is None:
-        return None
-    first_line = next((ln for ln in sect.splitlines() if ln.strip()), "")
-    m2 = BUDGET_SECTION_NUM.search(first_line)
-    return int(m2.group(1)) if m2 else UNPARSEABLE
+    if sect is not None:
+        if heading_line:
+            hm = BUDGET_LINE.match(heading_line.strip())
+            if hm:
+                return int(hm.group(1))
+        body = unfenced(sect)
+        m = BUDGET_LINE.search(body)
+        if m:
+            return int(m.group(1))
+        first_line = next((ln for ln in body.splitlines() if ln.strip()), "")
+        m2 = BUDGET_SECTION_NUM.search(first_line)
+        return int(m2.group(1)) if m2 else UNPARSEABLE
+    m = BUDGET_LINE.search(unfenced(text))
+    return int(m.group(1)) if m else None
 
 
 def tool_calls_used(handoff):
