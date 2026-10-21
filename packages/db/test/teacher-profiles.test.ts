@@ -1,0 +1,114 @@
+// Task 8.1: teacherProfiles input checks that run before any SQL. The database handle here throws
+// on any use, so a call that reaches it fails the test with "touched the database" instead of the
+// expected RepositoryError. teacher-profiles.int.test.ts covers the SQL paths on Postgres.
+import { describe, expect, it } from 'vitest';
+import type { Db } from '../src/client.js';
+import { RepositoryError } from '../src/index.js';
+import { teacherProfilesRepo } from '../src/repositories/teacher-profiles.js';
+
+const noDb = new Proxy(
+  {},
+  {
+    get() {
+      throw new Error('touched the database');
+    },
+  },
+) as Db;
+const repo = teacherProfilesRepo(noDb);
+const scope = { teacherId: 'tch_a' };
+
+async function failure(p: Promise<unknown>): Promise<{ kind: string; method: string }> {
+  const e = await p.then(
+    () => new Error('resolved'),
+    (x: unknown) => x,
+  );
+  expect(e).toBeInstanceOf(RepositoryError);
+  const { kind, method } = e as RepositoryError;
+  return { kind, method };
+}
+
+describe('teacherProfiles.update: a teacher can never set their own verification', () => {
+  it.each([
+    ['verificationStatus', { verificationStatus: 'verified' }],
+    [
+      'verificationStatus next to a real field',
+      { subject: 'Maths', verificationStatus: 'verified' },
+    ],
+    ['payoutAccountRef (M10)', { payoutAccountRef: 'acct_1' }],
+    ['photo (no photo input in this slice)', { photo: 'https://example.test/p.png' }],
+    ['slug (set once, at create)', { slug: 'new-slug' }],
+    ['userId', { userId: 'tch_b' }],
+    ['an empty patch', {}],
+    ['an empty subject', { subject: '' }],
+    ['a non-object', 'verified'],
+  ])('rejects %s as invalid before any SQL', async (_label, patch) => {
+    expect(await failure(repo.update(scope, patch as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.update',
+    });
+  });
+});
+
+describe('teacherProfiles input checks', () => {
+  it.each([
+    ['a missing teacherId', {}],
+    ['an extra key', { teacherId: 'tch_a', studentId: 'stu_1' }],
+    ['a malformed id', { teacherId: "x' or 1=1" }],
+    ['null', null],
+  ])('every method rejects %s as scope', async (_label, bad) => {
+    const s = bad as never;
+    for (const [m, p] of [
+      ['create', repo.create(s, { slug: 'abc', subject: 'Maths' })],
+      ['get', repo.get(s)],
+      ['update', repo.update(s, { subject: 'Maths' })],
+      ['setVerification', repo.setVerification(s, { status: 'verified', by: 'stf_1' })],
+      ['assertVerifiedForPublish', repo.assertVerifiedForPublish(s)],
+    ] as const) {
+      expect(await failure(p)).toEqual({ kind: 'scope', method: `teacherProfiles.${m}` });
+    }
+  });
+
+  it.each([
+    ['verificationStatus', { slug: 'abc', subject: 'Maths', verificationStatus: 'verified' }],
+    ['photo', { slug: 'abc', subject: 'Maths', photo: 'https://example.test/p.png' }],
+    ['payoutAccountRef', { slug: 'abc', subject: 'Maths', payoutAccountRef: 'acct_1' }],
+    ['no slug', { subject: 'Maths' }],
+    ['an upper-case slug', { slug: 'Abc', subject: 'Maths' }],
+    ['a slug with a space', { slug: 'a bc', subject: 'Maths' }],
+    ['a two-letter slug', { slug: 'ab', subject: 'Maths' }],
+    ['a 61-letter slug', { slug: 'a'.repeat(61), subject: 'Maths' }],
+    ['a leading hyphen', { slug: '-abc', subject: 'Maths' }],
+    ['no subject', { slug: 'abc' }],
+    ['an over-long bio', { slug: 'abc', subject: 'Maths', bio: 'x'.repeat(2001) }],
+    ['a bad language tag', { slug: 'abc', subject: 'Maths', languages: ['english!'] }],
+    ['too many languages', { slug: 'abc', subject: 'Maths', languages: Array(11).fill('en') }],
+  ])('create rejects %s as invalid before any SQL', async (_label, input) => {
+    expect(await failure(repo.create(scope, input as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.create',
+    });
+  });
+
+  it.each([
+    [
+      'pending (staff verify or reject; pending is only the start)',
+      { status: 'pending', by: 'stf_1' },
+    ],
+    ['an unknown status', { status: 'approved', by: 'stf_1' }],
+    ['no by', { status: 'verified' }],
+    ['a malformed by', { status: 'verified', by: 'a b' }],
+    ['an empty reason', { status: 'verified', by: 'stf_1', reason: '' }],
+    ['an extra key naming a teacher', { status: 'verified', by: 'stf_1', teacherId: 'tch_b' }],
+  ])('setVerification rejects %s as invalid before any SQL', async (_label, input) => {
+    expect(await failure(repo.setVerification(scope, input as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.setVerification',
+    });
+  });
+
+  it('setVerification refuses a teacher verifying themself before any SQL', async () => {
+    expect(
+      await failure(repo.setVerification(scope, { status: 'verified', by: scope.teacherId })),
+    ).toEqual({ kind: 'scope', method: 'teacherProfiles.setVerification' });
+  });
+});
