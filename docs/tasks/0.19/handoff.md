@@ -85,6 +85,11 @@ Tool calls used: 12 (fix round only; budget 35).
 
 ## Decisions
 
+### 21 Oct 2026 · 0.19 merge: decision digest, standing rules and lessons · decided by lead · risk: high
+- Decided: merge 0.19. `board.py digest` writes `docs/decisions/digest.md` from the log (human decisions at any risk, plus lead risk: high decisions that are not `<id> merge:` entries, one line each, newest first, superseded entries tagged). `docs/decisions/standing-rules.md` and `docs/lessons.md` are new, and planner and tdd-guide read both. At 169 lines the digest is over the plan's ~110 target; every line is in scope, so it stays.
+- Why: code-reviewer and security-reviewer (sonnet) found no CRITICAL or HIGH; the fix round closed both MEDIUMs (the who-parsing gap and the stale help text) and the LOW; 323 tests pass; log.md is unchanged.
+- risk: high (changes under `.claude/**`: the board, closeout and agent files).
+
 ### 21 Oct 2026 · 0.19 Phase A: "malformed log" means an entry the digest could silently drop · decided by builder · risk: medium
 - Decided: `parse_log_entries` raises (so `board.py digest` writes nothing) on four things. (1) A `### ` heading before the first `---` line: an entry with no closing `---`, as in the plan's fixture. (2) A `###Heading` with no space that carries `risk: high`. (3) A risk: high entry with an empty body. (4) A `Supersedes:` line naming a heading that isn't in the log. A risk: high heading followed by another heading with no `---` between them is not malformed. An entry's body ends at the next `### ` heading or the next `---` line.
 - Why: the plan's literal reading ("every risk-high heading needs a closing `---`") would fail the real log. The log has 7 blocks where two or more entries sit with no `---` between them, including risk: high ones such as "US is the first region; India parked". The last entry closeout writes also never has a trailing `---`. The log can't be edited (append-only), so the rule targets what actually drops an entry. A dry run shows the real log passes.
