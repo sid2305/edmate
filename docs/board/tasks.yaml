@@ -2364,9 +2364,29 @@ tasks:
   deps:
   - '5.8'
   risk: risky
-  status: running
+  status: done
   branch: m5/5.8c-sign-packs
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 350
+    tokens_in: 1134
+    tokens_out: 117817
+    cache_read_tokens: 27243420
+    wall_time_seconds: 5053
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.8d
   milestone: M13
   title: 'Pipeline-backed `edmate eval` agent (5.8a plan Q3): `edmate eval` runs cases through the real pipeline with personas and the newest signed set, not only `chat --source eval`'

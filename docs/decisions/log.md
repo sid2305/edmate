@@ -10,6 +10,23 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.8c merge: prompt packs signed (B-36, B-38) and the seed on set@1.3.0 · decided by lead · risk: high
+- Decided: merge 5.8c. feedback@1.1.0, frame@1.1.0, frame@1.2.0, set@1.2.0 and set@1.3.0 carry `reviewed_by: sid2305`, per the human's B-36 and B-38 answers (21 Oct 2026). The seed serves set@1.3.0. Every pack set@1.3.0 pins is signed. set@1.1.0 stays pending because no answer covers it. The CLI's run-time pick of the newest signed set is 5.8a Phase B.
+- Why: code-reviewer (sonnet) approves with no findings. Only the sign line changed in each pack. Content, db and evals tests pass (db integration 877 passed).
+- risk: high (prompt-pack behaviour now served).
+
+---
+
+### Sign the five packs as sid2305 per the human's answers
+The human approved B-36 (feedback@1.1.0, frame@1.1.0, set@1.2.0) and B-38 (frame@1.2.0,
+set@1.3.0) in `.claude/blockers.md` on 21 Oct 2026. This change makes those packs — and the
+`set@1.3.0` combination the seed now serves — live content, so it is logged `risk: high` per
+non-negotiable #2/#6 (prompt-pack behaviour change, risky path `content/prompt-packs/**`).
+
+Tool calls used: 32 (the harness count; the builder counted 19)
+
+---
+
 ### 21 Oct 2026 · 6.4 merge: session summary (summarizeSession, sessions.end) · decided by lead · risk: high
 - Decided: merge 6.4. `summarizeSession` writes a summary of at most 60 words through the scripted-gateway-tested `generateObject` path. `sessions.end(scope, sessionId, summary)` in `packages/db/src/repositories/sessions.ts` closes the session and stores `lastSummary` in one transaction, scoped to the student and teacher, and never overwrites the summary of a session that is already ended. The topic-scored evidence producer and a real end trigger are in 6.4a.
 - Why: security-reviewer, database-reviewer, code-reviewer and typescript-reviewer (all sonnet) approve the code with no CRITICAL, HIGH or MEDIUM; no contracts change and no migration.
