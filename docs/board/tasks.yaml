@@ -372,9 +372,9 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
