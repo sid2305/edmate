@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.16a metrics read subagent transcripts (.claude, risky path) · decided by lead · risk: high
+- Decided: merge 0.16a. Closeout metrics now read `<session>/subagents/*.jsonl` and attribute a whole subagent file to a task when its first prompt names "task <id>" exactly or its branch is the task branch or `work-<id>` (a letter suffix counts only when it is not itself a board task). Top-level lead files keep per-entry branch matching. No prompt text reaches the output.
+- Why: 0.16's first closeout recorded 0 tool calls because subagent transcripts were never read. Both reviewers' shared HIGH (sibling-id over-match, from the lead's own plan) was fixed and re-checked by security-reviewer.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 0.16a lettered work branches count for the parent only when they are not board tasks · decided by lead (fix round) · risk: low
+- Decided: replaces the earlier `work-<id>[a-z]?` rule. `work-<id>` always counts; `work-<id><letter>` counts toward `<id>` only when `<id><letter>` is not a task id on `docs/board/tasks.yaml`. With no readable board, only the exact `work-<id>` counts. The prompt match `task <id>` also rejects a trailing letter.
+- Why: lettered ids like 0.16a, 5.8a and 6.1a are real board tasks, so the old rule double-counted one subagent file for both parent and sibling. Falling back to exact-only means a missing board under-counts rather than over-counts.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16a prompt match is case-insensitive and needs the word "task" · decided by tdd-guide · risk: low
+- Decided: the prompt matches `task <id>` in any case ("Task 0.16" counts); a bare id without the word "task" does not count.
+- Why: lead prompts write both "task" and "Task"; requiring the word stops stray version numbers or ids mentioned in passing from pulling in unrelated files.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16a only the first user message is treated as the prompt · decided by tdd-guide · risk: low
+- Decided: the first entry with `message.role == "user"` is the prompt (a string or its text blocks joined). Later user messages, such as tool results or lead course-corrections, are ignored.
+- Why: the plan says "first user message"; later messages can quote other task ids and would attribute the file wrongly.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16a subagent files get no cwd fallback · decided by tdd-guide · risk: low
+- Decided: the per-entry `cwd` fallback (for entries with no gitBranch) applies only to top-level lead files. Subagent files match only by prompt or branch.
+- Why: builder worktree dirs are named `agent-<hash>`, not by task id, so the fallback would never match there. Applying it per entry would also count part of a file.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.16a a whole file can count for more than one task · decided by tdd-guide · risk: low
+- Decided: attribution is checked per task, so if one subagent file's prompt names task A and it also runs on task B's branch, it counts for both.
+- Why: rare in practice, and dropping it from one task silently would hide real work. Counts are per-task totals, not a partition.
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 5.11b deterministic draftOutline order test · decided by lead · risk: low
 
 - Decided: merge 5.11b. The test's setTimeout race is replaced by per-module deferreds resolved in a set order (module 1 first); production `draftOutline` is unchanged because `Promise.all` already keeps input order.

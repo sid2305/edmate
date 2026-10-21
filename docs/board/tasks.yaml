@@ -1977,9 +1977,31 @@ tasks:
     the board
   deps:
   - '0.16'
-  status: review
+  status: done
   branch: m0/0.16a-subagent-transcripts
-  model: plan:lead build:opus
+  model: plan:lead build:opus fix:opus review:sonnet x2
+  metrics:
+    tool_calls: 137
+    tokens_in: 458
+    tokens_out: 15879
+    cache_read_tokens: 8454502
+    wall_time_seconds: 786
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 6.1a
   milestone: M13
   title: '6.1 follow-ups: topic map zod objects use .strict() so unknown keys are rejected, not dropped; a sorted insert or heap instead of re-sorting the ready queue each round; wire practiceItems/demoPracticeBank
@@ -2046,7 +2068,8 @@ tasks:
   model: plan:lead build:sonnet
 - id: 0.17a
   milestone: M13
-  title: 'Merge-gate budget parse (0.17 security MEDIUM): budget_cap''s `## Budget` fallback takes the first "N ... calls" number in the prose, so a decoy number (another task''s count, an old estimate) sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions'
+  title: 'Merge-gate budget parse (0.17 security MEDIUM): budget_cap''s `## Budget` fallback takes the first "N ... calls" number in the prose, so a decoy number (another task''s count, an old estimate)
+    sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions'
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
