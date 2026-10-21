@@ -46,7 +46,7 @@ export const ROUTE_POLICY: readonly PolicyRow[] = [
   { pattern: '/api/sessions/**', methods: ['POST'], access: ['student'], clearance: 'agent' },
   { pattern: '/api/me', methods: ['DELETE'], access: ['student'] },
   { pattern: '/api/me/**', methods: ['GET'], access: ['student'] },
-  { pattern: '/api/studio/**', methods: ['GET', 'POST', 'PUT'], access: ['teacher'] },
+  { pattern: '/api/studio/**', methods: ['GET', 'POST', 'PUT', 'DELETE'], access: ['teacher'] },
   { pattern: '/api/staff/**', methods: ['GET', 'POST'], access: ['staff'] },
 ];
 

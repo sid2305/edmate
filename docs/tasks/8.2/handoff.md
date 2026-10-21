@@ -1,6 +1,6 @@
 # 8.2 handoff: Upload centre (thin slice)
 
-Status: PARTIAL (Phase 2 of 4 done)
+Status: PARTIAL (Phase 3 of 4 done)
 Branch: `m8/8.2-upload-centre` (built on `work-8.2a`)
 Worktree: `.claude/worktrees/agent-a898e7ac11d68d181`
 
@@ -234,18 +234,137 @@ Evidence:
 - `TEST_DATABASE_URL=... TEST_REDIS_URL=redis://127.0.0.1:56379 corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/worker...` gives `Tasks: 34 successful, 34 total`: db 45 files passed (repositories at 100% coverage) and worker 20 files passed, including the int tests.
 - `python3 .githooks/secret-scan.py --all` is clean.
 
+## Phase 3
+
+apps/web: the studio document API (list, create + presigned upload, complete, replace, delete).
+Branch `m8/8.2-upload-centre` (pushed from `work-8.2f`), worktree
+`.claude/worktrees/agent-ad42dcb5907a138ef`. `origin/main` (9.1) was merged in first with a
+normal merge commit; no conflicts.
+
+### Acceptance evidence
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55432/edmate corepack pnpm turbo run
+  typecheck lint test build --filter=@edmate/web...` → `Tasks: 35 successful, 35 total`.
+- `@edmate/web`: `Tests 430 passed | 4 skipped`; coverage all files 99.18 / 98.84 / 98.32 / 99.51;
+  `src/storage/presign.ts`, `src/studio/files.ts`, `src/studio/runtime.ts` 100%;
+  `src/studio/routes.ts` 98.77 / 98.79 / 95.83 / 100; the `src/auth/**` thresholds still pass.
+- `src/studio/routes.test.ts` (46 tests, memory backend, no S3/Redis/DB): every route has a
+  cross-teacher case (Ben on Asha's document → 404 `not_found`; nothing written, deleted, signed or
+  enqueued); complete calls `updateStatus('processing')` **before** `enqueue` (asserted by call
+  order) and passes the row's `storageKey`; a missing object is 409; an oversized or length-less
+  object is 413, `failed/input_too_large`, object deleted; a type mismatch is 400,
+  `failed/unsupported_type`; an enqueue failure is 503, `failed/enqueue_failed`, and a retry then
+  succeeds; replace deletes `previousStorageKey`; the body cap is 413 on both a declared and a read
+  oversize body; client-sent `teacherId`/`storageKey`/`kind` are refused (strict schema); a
+  `teacherId` in the list query is ignored. Through the **real** `createGuard` + `ROUTE_POLICY`:
+  anonymous 401, student/staff 403, cross-origin DELETE 403, Ben's DELETE of Asha's doc 404.
+- `src/storage/presign.test.ts`: a real `S3Client` with placeholder credentials signs locally
+  (no network): `X-Amz-SignedHeaders` contains `content-length`, `content-type`, `host`; expiry
+  ≤ 15 min; a length outside 1..n is refused before signing; HEAD/DELETE over a fake `send`.
+- `src/auth/route-coverage.test.ts` picks up the four new route files (all
+  `withRole(['teacher'])`, agreeing with policy); the guard's role×route matrix now prints
+  `DELETE /api/studio/x/y anonymous=401 student=403 teacher=200 staff=403`.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Changes
+- `apps/web/src/auth/policy.ts`: `'DELETE'` added to the `/api/studio/**` row (one line).
+- `apps/web/src/auth/guard.test.ts`: the old `DELETE /api/studio/packages → null` assertion is now
+  `DELETE /api/studio/documents/doc_1 → ['teacher']`, plus `DELETE /api/studio` and
+  `/api/staff/reports` still null. (The plan named `policy.test.ts`, which doesn't exist; the
+  policy assertions live in `guard.test.ts`.)
+- `apps/web/src/storage/presign.ts` (+ test): `storageConfigFromEnv` (duplicated from apps/worker;
+  its errors no longer echo the value) and `s3StudioStorage(client, bucket)` with
+  `createUploadUrl({ key, contentType, contentLength })`, `head(key)`, `deleteObject(key)`.
+- `apps/web/src/studio/files.ts` (+ test): the upload-type allowlist (content type → file kind,
+  chunk kind, cap, extension), `newStorageKey`, `uploadTypeOfKey`.
+- `apps/web/src/studio/routes.ts` (+ test): `createStudioHandlers(backend, log)` → `list`,
+  `create`, `complete`, `replace`, `remove`; a capped JSON body reader (same shape as 9.4's).
+- `apps/web/src/studio/runtime.ts` (+ test): the lazy backend (its own `openDatabase` pool, an
+  `S3Client`, the ingest queue on `REDIS_URL`); a failed build is not cached.
+- `apps/web/src/studio/index.ts`: `studioHandlers` over the real hooks.
+- `apps/web/app/api/studio/documents/route.ts` (GET, POST), `[id]/route.ts` (DELETE),
+  `[id]/complete/route.ts` (POST), `[id]/replace/route.ts` (POST).
+- `apps/web/package.json` (+ lockfile): `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`
+  `3.1152.0` (the versions apps/worker already uses).
+
+### API for Phase 4
+```
+GET    /api/studio/documents[?moduleId=]  → 200 { documents: [{ id, moduleId, kind, sourceTitle,
+                                             status, failureReason?, createdAt, updatedAt }] }
+POST   /api/studio/documents  { moduleId, sourceTitle, contentType, byteSize }
+                              → 201 { documentId, uploadUrl, uploadHeaders: { 'content-type' } }
+PUT    <uploadUrl>  (browser → bucket) with exactly uploadHeaders and exactly byteSize bytes
+POST   /api/studio/documents/:id/complete → 202 { documentId, status: 'processing' }
+                              | 200 (already ready) | 409 (not uploaded yet) | 413 | 400 | 503
+POST   /api/studio/documents/:id/replace  { contentType, byteSize } → 200 (same body as create);
+                              then PUT and complete again
+DELETE /api/studio/documents/:id → 204
+```
+Allowed `contentType`s: `application/pdf`, the docx and pptx OOXML types, `text/markdown`,
+`audio/mpeg`, `audio/wav`, `audio/mp4`, `video/mp4`, `video/webm`. Caps: 20 MB documents,
+500 MB audio/video. Errors are the usual `{ error: { code, message, retryable } }`.
+
+### Deviations
+- **The create body is `{ moduleId, sourceTitle, contentType, byteSize }`, not `{ moduleId, kind,
+  sourceTitle }`.** The document's retrieval `kind` is derived on the server from the content
+  type (audio/video → `transcript`, everything else → `material`); the presign needs the type
+  and exact size anyway. See Decisions.
+- **No `apps/web/src/auth/index.ts` change.** The studio backend opens its own `openDatabase`
+  pool instead of reusing the auth runtime's (9.4's open branch adds a `serverDatabase()` export
+  there; touching the same file now would conflict and widen the risky-path diff). Once 9.4
+  merges, a follow-up can switch `realHooks.repos` to `serverDatabase().repos`.
+- **A narrow complete/replace race is left open.** Complete reads the row's `storageKey`, HEADs
+  it, then writes `processing`. A replace landing between that read and the write leaves the row
+  `processing` with the *new* key and a job enqueued for the old key's file kind; the worker reads
+  the new key (not uploaded yet), retries, then dead-letters. The teacher's own `complete` for the
+  new upload then moves it on (`processing → processing` is allowed and the new key gets its own
+  job id), so it heals itself. A key-conditional `updateStatus` would close it, but that is a
+  packages/db change, outside this phase.
+
 ## Left to do
-- **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line, and the
-  `updateStatus('processing')` → `enqueueIngest` sequencing on the complete route (see API above).
-  `apps/worker/test/ingest.int.test.ts` is now done (§ Phase 2 int test). The replace-enqueue
-  job-id hang found there is fixed (8.2d, see Decisions): Phase 3's complete and replace routes
-  must call `enqueueIngest(queue, job, storageKey)` with the *current* `storageKey` (the one just
-  confirmed by `HeadObjectCommand` on complete, or the fresh one `startReplace` returns on
-  replace) — no further Phase 3 work needed to avoid the hang, since the fix lives entirely in
-  `packages/queue`.
-- **Phase 4** (apps/web): upload-centre page with polling, nav link, strings, manual dev-stack run.
+- **Phase 4** (apps/web): the upload-centre page (`app/teacher/uploads/page.tsx`,
+  `UploadsView.tsx` polling every ~4 s while any row is `uploading`/`processing`), the "Uploads"
+  nav link, `messages/en.json` strings, and the manual dev-stack run (a PDF and a short audio clip
+  through MinIO and the worker, then delete and confirm retrieval misses). Notes for that builder:
+  - the browser PUT must send exactly `uploadHeaders` and the file's exact size (both signed).
+    MinIO needs a **bucket CORS rule** allowing `PUT` from the web origin before a browser upload
+    works in the dev stack; none is configured yet (docker/ or a setup script);
+  - call `complete` after the PUT resolves; a 409 means the PUT hasn't landed;
+  - `failureReason` codes the UI should put into words: `input_too_large`, `unsupported_type`,
+    `enqueue_failed`, `validation`, `provider_error` (and any other `IngestErrorCode`).
+- Optional follow-ups: switch the studio pool to 9.4's `serverDatabase()` once it merges; a
+  key-conditional `updateStatus('processing')` in packages/db to close the complete/replace race.
 
 ## Decisions
+
+### 20 Oct 2026 · 8.2 Phase 3: DELETE on /api/studio/** in ROUTE_POLICY · decided by tdd-guide · risk: high
+Decided: the `/api/studio/**` row in `apps/web/src/auth/policy.ts` gains `'DELETE'` (one line, as the plan said), so teachers can call `DELETE /api/studio/documents/:id`. Students, staff and anonymous callers are still refused; the guard test's role×route matrix and policy assertions cover it.
+Why: the upload centre must be able to delete a file. The row stays teacher-only, and every handler scopes to the session's teacher, so no one gains reach beyond their own documents. Risky path (`apps/web/src/auth/**`): needs security-reviewer; the lead finalises.
+risk: high
+
+### 20 Oct 2026 · 8.2 Phase 3: browser uploads by presigned PUT with signed type and exact length · decided by tdd-guide
+Decided: the plan's storage design, as built. The browser PUTs straight to the bucket with a 15-minute presigned URL. `content-type` and `content-length` are signed headers, so the bucket refuses any other type or size, and the length must be within the type's cap (20 MB documents, 500 MB audio/video). The key is `teachers/<teacherId>/documents/<documentId>/<uuid>.<ext>`, built only on the server. Complete learns the file type from that key's extension and checks size and type again with HEAD before it enqueues. The S3 code is lightly duplicated from apps/worker: no shared package, no contracts port.
+Why: a presigned PUT can't carry a POST policy's `content-length-range`, so the exact declared size is signed instead, and HEAD on complete is the second check. Taking nothing about the key or type from the client means one teacher's upload can't land anywhere else.
+risk: medium
+
+### 20 Oct 2026 · 8.2 Phase 3: create takes contentType and byteSize; the retrieval kind is derived · decided by tdd-guide
+Decided: `POST /api/studio/documents` takes `{ moduleId, sourceTitle, contentType, byteSize }` (strict). The document's `kind` is `transcript` for audio/video and `material` otherwise; clients can't choose it (`teacher_note` isn't an upload).
+Why: the plan listed `{ moduleId, kind, sourceTitle }`, but the presign needs the type and size, and letting the client pick `kind` would let any upload pose as a teacher note.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 3: how complete handles failures · decided by tdd-guide
+Decided: complete returns 409 while the object isn't there yet, and writes nothing. An object over its cap or with no length becomes `failed/input_too_large`, the object is deleted, and the answer is 413; a type mismatch becomes `failed/unsupported_type` (400). An enqueue failure marks the document `failed/enqueue_failed` and answers 503 (retryable); calling complete again works (`failed → processing`). A document already `ready` answers 200 and enqueues nothing.
+Why: the row must never sit in `processing` with no job behind it, and a teacher must be able to retry without uploading again.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 3: studio backend opens its own database pool · decided by tdd-guide
+Decided: `src/studio/runtime.ts` lazily opens its own `openDatabase` pool, an S3 client and an ingest queue on `REDIS_URL`, rather than adding a `serverDatabase()` export to `src/auth/index.ts`. A failed build is not cached: the routes answer 503 and the next request tries again.
+Why: 9.4 adds that export on its open branch; adding it here too would conflict and widen this PR's risky-path diff beyond the one policy line. One extra small pool per web process is fine for the pilot; switch once 9.4 merges.
+risk: low
+
+### 20 Oct 2026 · 8.2 Phase 3: studio body cap 16 KB · decided by tdd-guide
+Decided: studio routes read at most 16 KB of JSON (`MAX_BODY_BYTES`). A declared content-length over it, or bytes read past it, is refused with 413. The reader is the same as 9.4's turn routes (copied, since 9.4 isn't merged).
+Why: the bodies hold a title, a module id, a type and a size; files never pass through the web server.
+risk: low
 
 ### 20 Oct 2026 · 8.2 stale-replace guard lives in the worker's ChunkWriter, signalled by a flag · decided by tdd-guide
 Decided: the ingest processor re-reads the document's `storageKey` right before `chunks.insertMany` writes (inside a `ChunkWriter` wrapper it builds), comparing it to the key read at the start of the job. On a mismatch it writes nothing and signals staleness through a mutable flag the wrapper closes over, not a thrown error — `@edmate/ingest`'s `indexDocument` replaces every error its `ChunkWriter` throws with one fixed, non-retryable `IngestError` (by design, so a cause can't carry teacher material into a log), which would erase a dedicated error's identity. The job payload does not carry the `storageKey` it was enqueued for.
