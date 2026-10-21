@@ -5,7 +5,14 @@
 import type { StudentScope } from '@edmate/db';
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '../auth/guard';
-import { chatAgentCandidates, homeChatLinks, liveChatAgents, type LiveChatDeps } from './liveChats';
+import {
+  chatAgentCandidates,
+  homeChatLinks,
+  homeStartLinks,
+  liveChatAgents,
+  startableAgents,
+  type LiveChatDeps,
+} from './liveChats';
 
 const STUDENT: Principal = { userId: 'stu_1', role: 'student' };
 
@@ -84,5 +91,48 @@ describe('homeChatLinks', () => {
   it('returns the live ones', async () => {
     const d = deps({ 'stu_1:tch_a': 'active' });
     expect(await homeChatLinks(() => d, STUDENT, ['agt_a', 'agt_b'], { error: vi.fn() })).toEqual(['agt_a']);
+  });
+});
+
+describe('startableAgents', () => {
+  it('offers a start link for a live agent never subscribed to, or whose subscription ended', async () => {
+    const d = deps({ 'stu_1:tch_b': 'ended' });
+    expect(await startableAgents(d, STUDENT, ['agt_a', 'agt_b', 'agt_draft'])).toEqual(['agt_a', 'agt_b']);
+  });
+
+  it.each(['trial', 'active', 'past_due', 'paused'])(
+    'a %s subscription has no start link (paused is neither chat nor start -- 9.6)',
+    async (status) => {
+      const d = deps({ 'stu_1:tch_a': status });
+      expect(await startableAgents(d, STUDENT, ['agt_a'])).toEqual([]);
+    },
+  );
+});
+
+describe('homeStartLinks', () => {
+  it('a database failure gives no links and logs the error name only', async () => {
+    const log = { error: vi.fn() };
+    const links = await homeStartLinks(
+      () => {
+        throw new RangeError('connection details that must not be logged');
+      },
+      STUDENT,
+      ['agt_a'],
+      log,
+    );
+    expect(links).toEqual([]);
+    expect(log.error).toHaveBeenCalledWith('home.start_links_failed', { error: 'RangeError' });
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain('connection details');
+  });
+
+  it('no candidates opens nothing', async () => {
+    const open = vi.fn();
+    expect(await homeStartLinks(open, STUDENT, [], { error: vi.fn() })).toEqual([]);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('returns the startable ones', async () => {
+    const d = deps({ 'stu_1:tch_a': 'active' });
+    expect(await homeStartLinks(() => d, STUDENT, ['agt_a', 'agt_b'], { error: vi.fn() })).toEqual(['agt_b']);
   });
 });

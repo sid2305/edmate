@@ -13,7 +13,9 @@
     "nav": "Home",
     "title": "Home",
     "placeholder": "Your teacher's agent will be here soon.",
-    "chatLink": "Chat with your teacher's agent"
+    "chatLink": "Chat with your teacher's agent",
+    "startableTitle": "Packages you can start",
+    "startLink": "Start a package"
   },
   "teacher": {
     "title": "Teacher studio",
@@ -138,6 +140,29 @@
       "validation": "The file couldn't be read.",
       "provider_error": "Processing failed. Try again, or replace the file.",
       "other": "Processing failed. Replace the file to try again."
+    }
+  },
+  "packages": {
+    "title": "Choose a package",
+    "alreadySubscribed": "You already have a package with this teacher.",
+    "continueToChat": "Continue to chat",
+    "empty": "No packages are available yet.",
+    "trialDays": "{days} day free trial",
+    "dailyMessageLimit": "{count} messages a day",
+    "liveClassesPerMonth": "{count} live classes a month",
+    "startButton": "Start",
+    "starting": "Starting…",
+    "skills": {
+      "explain": "Explain",
+      "coach": "Coach",
+      "practice": "Practice",
+      "feedback": "Feedback",
+      "mock_interview": "Mock interview",
+      "revision": "Revision",
+      "study_plan": "Study plan"
+    },
+    "errors": {
+      "generic": "Something went wrong. Please try again."
     }
   }
 }

@@ -524,6 +524,72 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  'packageVersions.liveForAgent': {
+    scope: 'public',
+    op: 'read',
+    // Public by design (task 9.3: a student compares packages before starting one): the live
+    // packages of a live agent, and nothing for a draft, suspended or unknown agent — never
+    // another teacher's packages (the join is entirely by agent_id).
+    check: async (r) => {
+      let n = 0;
+      for (const t of TEACHERS) {
+        const got = await r.packageVersions.liveForAgent({ agentId: ids.agent(t) });
+        expect(got.map((p) => p.packageVersionId)).toEqual([ids.packageVersion(t)]);
+        expect(got[0]?.offer.packageId).toBe(ids.pkg(t));
+        expect(got[0]?.offer.name).toBe(`[${t}] package`);
+        // Public projection only: never the teacher's internal config (9.3 fix round 1).
+        expect(Object.keys(got[0] ?? {}).sort()).toEqual(['offer', 'packageVersionId']);
+        expect(Object.keys(got[0]?.offer ?? {}).sort()).toEqual([
+          'dailyMessageLimit',
+          'liveClassesPerMonth',
+          'name',
+          'packageId',
+          'pricePerMonth',
+          'skills',
+          'trialDays',
+        ]);
+        n += 1;
+      }
+      // A draft and a suspended agent, each with a package that has a live version: the agent's
+      // own status must refuse them, not a missing package.
+      await raw.query(
+        `insert into agents (id, teacher_id, status) values
+           ('agt_live_pkg_draft', 'tch_a', 'draft'), ('agt_live_pkg_susp', 'tch_b', 'suspended')`,
+      );
+      await raw.query(
+        `insert into packages (id, teacher_id, agent_id, name, live_version) values
+           ('pkg_live_draft', 'tch_a', 'agt_live_pkg_draft', 'draft pkg', 1),
+           ('pkg_live_susp', 'tch_b', 'agt_live_pkg_susp', 'susp pkg', 1)`,
+      );
+      await raw.query(
+        `insert into package_versions (id, teacher_id, package_id, version, config) values
+           ('pv_live_draft', 'tch_a', 'pkg_live_draft', 1, $1),
+           ('pv_live_susp', 'tch_b', 'pkg_live_susp', 1, $2)`,
+        [
+          JSON.stringify({
+            ...packageConfig('A', 1, []),
+            id: 'pkg_live_draft',
+            agentId: 'agt_live_pkg_draft',
+          }),
+          JSON.stringify({
+            ...packageConfig('B', 1, []),
+            id: 'pkg_live_susp',
+            agentId: 'agt_live_pkg_susp',
+          }),
+        ],
+      );
+      for (const agentId of ['agt_live_pkg_draft', 'agt_live_pkg_susp']) {
+        expect(await r.packageVersions.liveForAgent({ agentId }), agentId).toEqual([]);
+        n += 1;
+      }
+      const rand = prng(5353);
+      for (let i = 0; i < 20; i += 1) {
+        expect(await r.packageVersions.liveForAgent({ agentId: randomId(rand) })).toEqual([]);
+        n += 1;
+      }
+      return n;
+    },
+  },
   'modules.ids': {
     scope: 'teacher',
     op: 'read',
@@ -1163,6 +1229,94 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
             reason: 'x',
             teacherId: teacherId(otherTeacher(a)),
           } as never),
+        'invalid',
+      ],
+    ],
+  },
+  // Task 9.3: a no-payment subscription start. Every seeded pair already has a live subscription
+  // (isolation-seed.ts), so the positive control ends that pair's own seed row first (restored
+  // after verify), while the mismatches below rely on it still being live.
+  'subscriptions.start': {
+    scope: 'student',
+    op: 'write',
+    // Same-teacher pairs (for example 1A, 2A) both resolve a valid packageVersionId for the
+    // scope's own teacher, so only a cross-teacher target is a genuine ownership failure.
+    owns: (a, t) => teacherOf(a) === teacherOf(t),
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) {
+        await raw.query(`update subscriptions set status = 'ended' where id = $1`, [
+          ids.subscription(actor),
+        ]);
+      }
+      return r.subscriptions.start(scope, {
+        packageVersionId: ids.packageVersion(teacherOf(target)),
+        status: 'active',
+        periodEnd: '2027-01-01T00:00:00Z',
+      });
+    },
+    verify: async (r, actor, res) => {
+      const row = res as { id: string; packageVersionId: string };
+      expect(row.packageVersionId).toBe(ids.packageVersion(teacherOf(actor)));
+      await onlyPairSees(
+        (sc) => r.subscriptions.findLive(sc),
+        actor,
+        (x) => (x as { id: string } | null)?.id === row.id,
+      );
+      // Put the seed back for the rest of the suite.
+      await raw.query(`delete from subscriptions where id = $1`, [row.id]);
+      await raw.query(`update subscriptions set status = 'active' where id = $1`, [
+        ids.subscription(actor),
+      ]);
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's packageVersionId",
+        (r) =>
+          r.subscriptions.start(sScope(a), {
+            packageVersionId: ids.packageVersion(otherTeacher(teacherOf(a))),
+            status: 'active',
+            periodEnd: '2027-01-01T00:00:00Z',
+          }),
+        'not_found',
+      ],
+      [
+        'a pair that already has a live subscription',
+        (r) =>
+          r.subscriptions.start(sScope(a), {
+            packageVersionId: ids.packageVersion(teacherOf(a)),
+            status: 'active',
+            periodEnd: '2027-01-01T00:00:00Z',
+          }),
+        'invalid',
+      ],
+      [
+        'a malformed packageVersionId',
+        (r) =>
+          r.subscriptions.start(sScope(a), {
+            packageVersionId: '',
+            status: 'active',
+            periodEnd: '2027-01-01T00:00:00Z',
+          }),
+        'invalid',
+      ],
+      [
+        'a bad status',
+        (r) =>
+          r.subscriptions.start(sScope(a), {
+            packageVersionId: ids.packageVersion(teacherOf(a)),
+            status: 'past_due',
+            periodEnd: '2027-01-01T00:00:00Z',
+          } as never),
+        'invalid',
+      ],
+      [
+        'a bad periodEnd',
+        (r) =>
+          r.subscriptions.start(sScope(a), {
+            packageVersionId: ids.packageVersion(teacherOf(a)),
+            status: 'active',
+            periodEnd: 'next year',
+          }),
         'invalid',
       ],
     ],

@@ -1,12 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import type { Entitlement } from '@edmate/contracts';
 import { and, asc, eq, gte, inArray, ne, notExists, notInArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { auditLog, packageVersions, subscriptions } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
-import { translateWrite } from './errors.js';
+import { RepositoryError, translateWrite } from './errors.js';
+import { insertSelect, written } from './insert.js';
 import { iso } from './map.js';
 import {
+  IdSchema,
   parseArg,
   studentScope,
   teacherScope,
@@ -46,6 +49,19 @@ const PauseOptions = z.strictObject({
   reason: z.string().min(1).max(500),
 });
 
+/** `subscriptions.start`'s input: the caller (9.3's no-payment start) picks status and period. */
+export interface StartInput {
+  packageVersionId: string;
+  status: 'trial' | 'active';
+  periodEnd: string;
+}
+
+const StartOptions = z.strictObject({
+  packageVersionId: IdSchema,
+  status: z.enum(['trial', 'active']),
+  periodEnd: z.iso.datetime({ offset: true }),
+});
+
 /** Statuses a pause leaves alone: already paused (staff or alarm), or ended for good. */
 const NOT_LIVE = ['paused', 'ended'] as const;
 
@@ -72,6 +88,44 @@ export function subscriptionsRepo(db: Db) {
         )
         .limit(1);
       return row ? { ...row, periodEnd: iso(row.periodEnd) } : null;
+    },
+
+    /**
+     * Starts a subscription with no payment (task 9.3; checkout is 10.8): the scope's student
+     * subscribes to one of the scope's teacher's package versions. The write only lands when
+     * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a
+     * stray or another teacher's id never writes). The one-live-row-per-pair unique index already
+     * refuses a second live subscription for the same student x teacher (`invalid`, via
+     * `translateWrite`). The caller picks `status` and `periodEnd`; this method only enforces
+     * scope and shape (same split as `entitlementStoreFor.build`).
+     */
+    async start(scope: StudentScope, input: StartInput): Promise<LiveSubscription> {
+      const method = 'subscriptions.start';
+      const { studentId, teacherId } = studentScope(scope, method);
+      const i = parseArg(StartOptions, input, method);
+      const id = randomUUID();
+
+      return translateWrite(method, async () => {
+        const result = await db.execute(
+          insertSelect(
+            subscriptions,
+            [
+              [subscriptions.id, sql`${id}::text`],
+              [subscriptions.studentId, sql`${studentId}::text`],
+              [subscriptions.teacherId, sql`${packageVersions.teacherId}`],
+              [subscriptions.packageVersionId, sql`${packageVersions.id}`],
+              [subscriptions.status, sql`${i.status}::subscription_status`],
+              [subscriptions.periodEnd, sql`${new Date(i.periodEnd)}::timestamptz`],
+            ],
+            sql`from ${packageVersions} where ${and(
+              eq(packageVersions.id, i.packageVersionId),
+              eq(packageVersions.teacherId, teacherId),
+            )}`,
+          ),
+        );
+        if (written(result) !== 1) throw new RepositoryError('not_found', method);
+        return { id, packageVersionId: i.packageVersionId, status: i.status, periodEnd: i.periodEnd };
+      });
     },
 
     /**

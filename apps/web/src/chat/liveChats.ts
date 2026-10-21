@@ -60,3 +60,43 @@ export async function homeChatLinks(
     return [];
   }
 }
+
+/**
+ * Task 9.3 Phase C: which agents /home offers a "start a package" link for -- the same candidate
+ * list as the chat links, but the complement: a live agent the student has never subscribed to,
+ * or whose subscription has ended. A *paused* subscription is neither a chat link nor a start
+ * link here (resuming it is 9.6, out of scope). `subscriptions.findLive` excludes only `ended`
+ * rows in production, so `null` is the normal "never subscribed" signal; the explicit `ended`
+ * check below is for callers/tests whose stub still returns the row.
+ */
+export async function startableAgents(
+  deps: LiveChatDeps,
+  principal: Principal,
+  candidates: readonly string[],
+): Promise<string[]> {
+  const out: string[] = [];
+  for (const agentId of candidates) {
+    const owner = await deps.agents.owner({ agentId });
+    if (owner === null) continue;
+    const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
+    const sub = await deps.subscriptions.findLive(scope);
+    if (sub === null || sub.status === 'ended') out.push(agentId);
+  }
+  return out;
+}
+
+/** The /home "start a package" links; a failure shows none and logs the error name only. */
+export async function homeStartLinks(
+  open: () => LiveChatDeps,
+  principal: Principal,
+  candidates: readonly string[],
+  log: ServerLog,
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+  try {
+    return await startableAgents(open(), principal, candidates);
+  } catch (error) {
+    log.error('home.start_links_failed', { error: errorName(error) });
+    return [];
+  }
+}

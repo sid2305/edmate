@@ -1,15 +1,52 @@
 import { randomUUID } from 'node:crypto';
 import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { modules, packages, packageVersions } from '../schema/index.js';
+import { agents, modules, packages, packageVersions } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { toPackageConfig } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 const Ref = z.strictObject({ packageId: IdSchema, version: z.int().min(0) });
+const PublicAgentPackages = z.strictObject({ agentId: IdSchema });
+
+/**
+ * What a student sees of one live package when comparing (task 9.3): the public fields only.
+ * Never the teacher's internal config (`teacherId`, `moduleIds`, `helpCeiling`, `finalAnswers`,
+ * `lockedReply`) -- this object goes to a client component.
+ */
+export interface PackageOffer {
+  packageId: string;
+  name: string;
+  pricePerMonth: PackageConfig['pricePerMonth'];
+  /** 0 = no trial. */
+  trialDays: number;
+  dailyMessageLimit: number;
+  liveClassesPerMonth: number;
+  skills: PackageConfig['skills'];
+}
+
+/** One of a live agent's live packages (task 9.3). Only `offer` may leave the server. */
+export interface LivePackage {
+  /** The `package_versions` row's own id (what a subscription points at) -- not the package id. */
+  packageVersionId: string;
+  offer: PackageOffer;
+}
+
+/** The public projection of a stored package config. */
+function toOffer(c: PackageConfig): PackageOffer {
+  return {
+    packageId: c.id,
+    name: c.name,
+    pricePerMonth: { ...c.pricePerMonth },
+    trialDays: c.trialDays ?? 0,
+    dailyMessageLimit: c.dailyMessageLimit,
+    liveClassesPerMonth: c.liveClassesPerMonth,
+    skills: [...c.skills],
+  };
+}
 
 export function packageVersionsRepo(db: Db) {
   return {
@@ -78,6 +115,41 @@ export function packageVersionsRepo(db: Db) {
         .orderBy(desc(packageVersions.version))
         .limit(1);
       return row ? toPackageConfig(row, method) : null;
+    },
+
+    /**
+     * The live packages of a live agent, for a student comparing packages (task 9.3). The one
+     * public scope (mirror `agents.owner`): parsed like a scope, before any SQL. Nothing for a
+     * draft, suspended or unknown agent (inner join on `agents.status = 'live'`). The join is by
+     * `agent_id` only, never a client-given `teacherId`, so it is never another teacher's packages
+     * either. Returns the public `offer` projection only (9.3 fix round 1).
+     */
+    async liveForAgent(scope: { agentId: string }): Promise<LivePackage[]> {
+      const method = 'packageVersions.liveForAgent';
+      const r = PublicAgentPackages.safeParse(scope);
+      if (!r.success) throw new RepositoryError('scope', method);
+      const rows = await db
+        .select({
+          teacherId: packageVersions.teacherId,
+          packageId: packageVersions.packageId,
+          id: packageVersions.id,
+          version: packageVersions.version,
+          config: packageVersions.config,
+        })
+        .from(packages)
+        .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
+        .innerJoin(
+          packageVersions,
+          and(
+            eq(packageVersions.packageId, packages.id),
+            eq(packageVersions.version, packages.liveVersion),
+          ),
+        )
+        .where(and(eq(packages.agentId, r.data.agentId), isNotNull(packages.liveVersion)));
+      return rows.map((row) => ({
+        packageVersionId: row.id,
+        offer: toOffer(toPackageConfig(row, method)),
+      }));
     },
 
     /**

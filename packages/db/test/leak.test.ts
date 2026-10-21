@@ -42,6 +42,16 @@ describe('driver errors are scrubbed', () => {
       ],
       ['learnerProfiles.get', () => repos.learnerProfiles.get(scope)],
       ['subscriptions.findLive', () => repos.subscriptions.findLive(scope)],
+      [
+        'subscriptions.start',
+        () =>
+          repos.subscriptions.start(scope, {
+            packageVersionId: 'pv_leak_1',
+            status: 'active',
+            periodEnd: '2027-01-01T00:00:00Z',
+          }),
+      ],
+      ['packageVersions.liveForAgent', () => repos.packageVersions.liveForAgent({ agentId: 'agt_x' })],
       ['sessions.get', () => repos.sessions.get(scope, 'ses_leak_3')],
       [
         'teacherQuestions.open',
