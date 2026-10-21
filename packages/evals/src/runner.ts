@@ -109,6 +109,10 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
           turnIndex,
           student: turn.student,
           priorTurns: history,
+          // Added only when present, so an old case's agent input (and fixtures) stay the same.
+          ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
+          ...(turn.skill === undefined ? {} : { skill: turn.skill }),
+          ...(evalCase.persona === undefined ? {} : { persona: evalCase.persona }),
         }),
         'agent reply',
         agentKey,
@@ -140,7 +144,11 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
       checks,
       pass: checks.every((c) => c.pass),
     });
-    priorTurns.push({ student: turn.student, reply: reply.text });
+    priorTurns.push({
+      ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
+      student: turn.student,
+      reply: reply.text,
+    });
   }
 }
 

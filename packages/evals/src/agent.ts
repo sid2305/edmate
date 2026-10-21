@@ -2,8 +2,11 @@
 // harness pipeline's contracts: a later task adapts the real pipeline (or a guard wrapper) to
 // this interface without changing packages/evals.
 import { z } from 'zod';
+import type { EvalSkill } from './schema.js';
 
 export interface PriorTurn {
+  /** The teacher message that came just before this turn's student message, if any. */
+  teacher?: string;
   student: string;
   reply: string;
 }
@@ -11,9 +14,15 @@ export interface PriorTurn {
 export interface EvalTurnInput {
   caseId: string;
   turnIndex: number;
+  /** A teacher message placed just before `student` in the transcript (task 3.11e). */
+  teacher?: string;
   student: string;
   /** Every earlier turn of this case, in order. */
   priorTurns: PriorTurn[];
+  /** The skill for this turn (task 3.11e). Absent: the agent's default. */
+  skill?: EvalSkill;
+  /** The case's persona template ref (task 3.11e). Absent: no persona. */
+  persona?: string;
 }
 
 export const EvalAgentReplySchema = z.strictObject({
