@@ -22,10 +22,12 @@
                                      board's metrics; fails (writes nothing) if any block is
                                      missing or malformed
   board.py digest                    regenerate docs/decisions/digest.md from
-                                     docs/decisions/log.md (every risk: high entry, superseded
-                                     ones marked) and docs/decisions/standing-rules.md; fails
-                                     (writes nothing) on a malformed log or a rule that doesn't
-                                     cite a risk: high heading
+                                     docs/decisions/log.md (every human decision at any risk,
+                                     and every risk: high lead decision that isn't a routine
+                                     `<id> merge:` entry; superseded ones marked) and
+                                     docs/decisions/standing-rules.md; fails (writes nothing) on
+                                     a malformed log or a rule that doesn't cite an in-digest
+                                     heading
 """
 import json
 import re

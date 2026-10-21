@@ -122,7 +122,17 @@ def parse_standing_rules(text):
 
 
 SUMMARY_MAX = 220
-_WHO = re.compile(r"\bdecided by[ \t]+([a-z-]+)", re.I)
+# The first role named after "decided by" is the decider ("planner, accepted by team lead" is
+# the planner's). "team lead", "the team lead" and "the lead" are the lead; "the human" is the
+# human. Fix round 1: this used to take one word, so "team lead" parsed as "team" and dropped.
+_WHO = re.compile(r"\bdecided by[ \t]+(?:the[ \t]+)?((?:team[ \t]+)?lead\b|[a-z-]+)", re.I)
+_WHO_ALIASES = {"you": "human", "human": "human", "lead": "lead", "team lead": "lead",
+                # Claude ran the team as lead before the agent roles existed (16-17 Oct 2026).
+                "claude": "lead"}
+# Every who the real log uses; RealRepo pins that no "decided by" heading falls outside this.
+KNOWN_WHO = frozenset({"human", "lead", "tdd-guide", "builder", "planner", "plan",
+                       "build-error-resolver", "pedagogy-author", "eval-author", "safety-reviewer",
+                       "security-reviewer", "silent-failure-hunter", "reviewers"})
 _DECIDED = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\**Decided\**:\**[ \t]*(.*)$", re.I)
 _BULLET = re.compile(r"^[ \t]*[-*][ \t]+(.*)$")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9`\"'(\[])")
@@ -133,12 +143,13 @@ _MONTHS = {m: i for i, m in enumerate(
 
 
 def decided_by(entry):
-    """'human' (heading says decided by you/human), 'lead', the other role named, or None."""
+    """'human' (decided by you/human), 'lead' (lead, team lead, Claude), the first other role
+    named, or None when the heading has no `decided by`."""
     m = _WHO.search(entry["heading"])
     if not m:
         return None
-    who = m.group(1).lower()
-    return "human" if who in ("you", "human") else who
+    who = " ".join(m.group(1).lower().split())
+    return _WHO_ALIASES.get(who, who)
 
 
 def digest_key(heading):
@@ -200,7 +211,12 @@ def summary(entry):
         m = _DECIDED.match(line)
         if m:
             if m.group(1).strip():
-                return _first_sentence(m.group(1))
+                text = [m.group(1)]
+                for nxt in lines[i + 1:]:  # join the line's indented wrapped continuation
+                    if not nxt.strip() or not nxt[:1].isspace() or _BULLET.match(nxt):
+                        break
+                    text.append(nxt)
+                return _first_sentence(" ".join(text))
             for nxt in lines[i + 1:]:  # `- Decided:` with its text on the following lines
                 if nxt.strip():
                     b = _BULLET.match(nxt)

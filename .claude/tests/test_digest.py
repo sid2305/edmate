@@ -178,6 +178,39 @@ class DigestScope(unittest.TestCase):
         human = [e for e in self.by.values() if "1.7f" in e["heading"]][0]
         self.assertEqual(digest.decided_by(human), "human")
 
+    def test_team_lead_forms_are_lead(self):
+        # Fix round 1 (security-reviewer MEDIUM): "team lead" used to parse as "team".
+        for who in ("team lead", "the team lead", "the lead", "Team Lead (plan Q2)",
+                    "team lead on security-reviewer's fix round 1", "Claude (lead), at your request"):
+            e = digest.parse_log_entries(log(f"### 1 Jan 2026 · X · decided by {who} · risk: high\n- Decided: y.\n"))[0]
+            self.assertEqual(digest.decided_by(e), "lead", who)
+            self.assertTrue(digest.in_digest(e), who)
+        e = digest.parse_log_entries(log("### 1 Jan 2026 · X · decided by the human (B-1) · risk: low\n- Decided: y.\n"))[0]
+        self.assertEqual(digest.decided_by(e), "human")
+
+    def test_first_named_role_decides(self):
+        for heading, who in (("decided by planner, accepted by team lead", "planner"),
+                             ("decided by tdd-guide (lead's 4.2 note) and lead (fix round)", "tdd-guide"),
+                             ("decided by builder (tdd-guide)", "builder"),
+                             ("decided by team", "team"),
+                             ("decided by plan (lead-approved), built by tdd-guide", "plan")):
+            e = {"heading": f"1 Jan 2026 · X · {heading} · risk: high", "risk": "high", "body": ""}
+            self.assertEqual(digest.decided_by(e), who, heading)
+
+    def test_team_lead_high_entry_is_rendered(self):
+        entries = digest.parse_log_entries(log(
+            "### 2 Jan 2026 · 8.2 document delete · decided by team lead · risk: high\n- Decided: delete it. More.\n",
+            "### 1 Jan 2026 · 3.11e lead signs · decided by the team lead (plan Q2) · risk: high\n- Decided: signed.\n"))
+        text = digest.render_digest(entries)
+        self.assertIn("- 2 Jan 2026 · 8.2 document delete (lead, risk: high): delete it.", text)
+        self.assertIn("- 1 Jan 2026 · 3.11e lead signs (lead, risk: high): signed.", text)
+
+    def test_summary_joins_wrapped_decided_line(self):
+        e = {"body": "- Decided: signed (`reviewedOn:\n  2026-10-21`); it applies. Later.\n- Why: x.\n"}
+        self.assertEqual(digest.summary(e), "signed (`reviewedOn: 2026-10-21`); it applies.")
+        e = {"body": "- Decided: one\n- Two.\n"}
+        self.assertEqual(digest.summary(e), "one")
+
     def test_human_case_insensitive(self):
         e = digest.parse_log_entries(log("### 1 Jan 2026 · X · Decided by You · risk: low\nDecided: y.\n"))[0]
         self.assertTrue(digest.in_digest(e))
@@ -365,6 +398,23 @@ class RealRepo(unittest.TestCase):
     def test_every_in_scope_log_entry_is_in_the_digest(self):
         # Lead answer 6: every human decision and every non-merge risk: high lead decision.
         self.assertEqual(digest.is_missing(self.entries, self.digest_text), [])
+
+    def test_every_decided_by_heading_has_a_known_who(self):
+        # Independent of in_digest: no "decided by ..." heading may parse to an unknown who
+        # (that is how "team lead" entries were silently dropped before fix round 1).
+        unknown = sorted({(digest.decided_by(e), e["heading"]) for e in self.entries
+                          if "decided by" in e["heading"].lower()
+                          and digest.decided_by(e) not in digest.KNOWN_WHO})
+        self.assertEqual(unknown, [])
+
+    def test_team_lead_high_entries_are_in_the_digest(self):
+        kept = {digest.digest_key(e["heading"]) for e in digest.digest_entries(self.entries)}
+        for e in self.entries:
+            h = e["heading"].lower()
+            if e["risk"] == "high" and re.search(r"decided by (the )?team lead", h) \
+                    and " merge:" not in h:
+                self.assertIn(digest.digest_key(e["heading"]), kept)
+        self.assertIn("20 Oct 2026 · 8.2 document delete and replace in packages/db/src/repositories", kept)
 
     def test_scope_is_not_empty_and_pins_known_entries(self):
         kept = {digest.digest_key(e["heading"]) for e in digest.digest_entries(self.entries)}

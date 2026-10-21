@@ -2,7 +2,7 @@
 
 Status: DONE (Phase A and Phase B)
 Branch: m0/0.19-digest-lessons (Phase A from local `work-0.19a`, Phase B from local `work-0.19b`, both pushed to it)
-Tool calls used: 52 (24 Phase A + 28 Phase B; plan budget 115)
+Tool calls used: 64 (24 Phase A + 28 Phase B + 12 fix round 1; plan budget 115)
 Worktree: an auto agent worktree under `.claude/worktrees/` (removed when the agent ends)
 
 ## Phase A
@@ -66,6 +66,23 @@ Tool calls used: 28 (Phase B only).
 - "Pilot market" (18 Oct, US and India) is effectively replaced by "US is the first region; India parked", but neither entry has a `Supersedes:` line, so the digest doesn't mark it (lead answer 2). A future log entry can add one.
 - Headings that repeat (`Setup`, `Product`) are cited only where the rule is unambiguous; the two `18 Oct 2026 · Merge policy` entries both support the one merge-policy rule.
 
+## Fix round 1
+
+Tool calls used: 12 (fix round only; budget 35).
+
+### Changes
+- `digest.py` `_WHO` (security-reviewer MEDIUM): "team lead", "the team lead", "the lead" and "Claude" now parse as lead, "the human" as human. The first role named is the decider ("planner, accepted by team lead" stays planner). New `KNOWN_WHO` lists every who in the real log.
+- Tests: fixtures for each lead form, the first-role rule and a rendered "decided by team lead · risk: high" line. Two RealRepo checks that don't use `in_digest`: every "decided by" heading parses to a `KNOWN_WHO` value, and every non-merge risk: high "team lead" entry is in the digest (pins "8.2 document delete and replace ...").
+- `summary`: a `Decided:` line's indented wrapped continuation is joined before the first sentence is taken (1.7f now shows `reviewedOn: 2026-10-21`).
+- `board.py` `digest` help (code-reviewer MEDIUM) now states lead answer 6's scope.
+- Regenerated `docs/decisions/digest.md`: 146 decisions, 169 lines (was 121 and 144).
+
+### Acceptance evidence
+- `python3 -m unittest discover .claude/tests` → `Ran 323 tests ... OK`.
+- `python3 .claude/skills/board/board.py digest` → `wrote docs/decisions/digest.md (146 decisions, 12 standing rules)`.
+- `python3 .githooks/secret-scan.py --all` → exit 0.
+- Who-forms in log.md: none left unrecognised (the RealRepo test pins this).
+
 ## Decisions
 
 ### 21 Oct 2026 · 0.19 Phase A: "malformed log" means an entry the digest could silently drop · decided by builder · risk: medium
@@ -108,3 +125,7 @@ Tool calls used: 28 (Phase B only).
 ### 21 Oct 2026 · 0.19 Phase B: digest content and agent required reading (.claude, risky path) · decided by builder (for the lead) · risk: high
 - Decided: Phase B changes `.claude/**` (`digest.py`, `board.py`, tests, `planner.md`, `tdd-guide.md`), so the PR needs security-reviewer and a risk: high entry. No new permissions, network or subprocess use; the agent files gain one required-reading clause each.
 - Why: CLAUDE.md rule 6 and `risk-paths.txt`'s `.claude/**` group.
+
+### 21 Oct 2026 · 0.19 fix round 1: who parsing takes the first role, "team lead" and Claude count as lead · decided by builder · risk: medium
+- Decided: in a heading, the first role after "decided by" is the decider. "team lead", "the team lead", "the lead" and "Claude" (who ran the team as lead on 16 and 17 Oct, before the agent roles existed) map to lead, and "you", "human" and "the human" map to human. So "planner, accepted by team lead" and "tdd-guide (...) and lead (...)" stay out of the digest. A plain "team" stays team. With this, 25 more lead entries appear (146 decisions in all). No Claude entry is risk: high, so the Claude mapping changes nothing today.
+- Why: the security-reviewer MEDIUM. Taking only the first word silently dropped about 24 risk: high "team lead" entries. A RealRepo test now fails on any new who-form instead of dropping it.
