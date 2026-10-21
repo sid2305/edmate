@@ -10,6 +10,7 @@ import {
   PERSONA_ID_MAX,
   PERSONA_QUESTIONS_MAX,
   parseSessionHelp,
+  personaFields,
   withPersonaCount,
   personaQuestionsAsked,
   serializeSessionHelp,
@@ -285,6 +286,86 @@ describe('personaId and withPersonaCount (3.11e)', () => {
   });
 });
 
+describe('personaPhase (5.8, ADR-0013 §1)', () => {
+  const ROLEPLAY = { ...VALID, personaQuestionsAsked: 3, personaId: 'per_test_01' };
+
+  it.each(['paused', 'ended'] as const)('parse keeps a stored %s phase', (phase) => {
+    expect(parseSessionHelp({ ...ROLEPLAY, personaPhase: phase }).help.personaPhase).toBe(phase);
+  });
+
+  it('saves and loads: a paused and an ended role-play survive the round trip', () => {
+    for (const phase of ['paused', 'ended'] as const) {
+      const s = parseSessionHelp({ ...ROLEPLAY, personaPhase: phase });
+      const saved = serializeSessionHelp(s);
+      expect(saved.personaPhase).toBe(phase);
+      const loaded = loadSessionHelp(JSON.parse(JSON.stringify(saved)));
+      expect(loaded.unreadable).toBe(false);
+      expect(loaded.help).toEqual(s.help);
+      expect(loaded.help).toMatchObject({ personaQuestionsAsked: 3, personaPhase: phase });
+    }
+  });
+
+  it('an old blob without personaPhase (before 5.8) parses with no phase and keeps its rung', () => {
+    const s = parseSessionHelp(ROLEPLAY);
+    expect(s.rung).toBe(3);
+    expect(s.help).not.toHaveProperty('personaPhase');
+    expect(serializeSessionHelp(s)).not.toHaveProperty('personaPhase');
+  });
+
+  it.each(['question', 'debrief', 'stopped', '', 'PAUSED', 1, null, true])(
+    'an unknown phase %j is unreadable: rung 0 and the initial state',
+    (bad) => {
+      expect(parseSessionHelp({ ...ROLEPLAY, personaPhase: bad })).toEqual(DEFAULT);
+      expect(loadSessionHelp({ ...ROLEPLAY, personaPhase: bad }).unreadable).toBe(true);
+    },
+  );
+
+  it('serialise rejects an unknown phase, so it is never written', () => {
+    const help = { ...INITIAL_HELP_STATE, answerKey: [], personaPhase: 'debrief' };
+    expect(() => serializeSessionHelp({ rung: 0, help } as never)).toThrow();
+  });
+
+  it('copyHelp keeps it', () => {
+    const h = { ...INITIAL_HELP_STATE, answerKey: [], personaPhase: 'ended' as const };
+    expect(copyHelp(h).personaPhase).toBe('ended');
+  });
+
+  it('personaFields carries the phase with the count and the id', () => {
+    const h = {
+      ...INITIAL_HELP_STATE,
+      answerKey: ['k'],
+      personaQuestionsAsked: 2,
+      personaId: 'a',
+      personaPhase: 'paused' as const,
+    };
+    expect(personaFields(h)).toEqual({
+      personaQuestionsAsked: 2,
+      personaId: 'a',
+      personaPhase: 'paused',
+    });
+    expect(personaFields(INITIAL_HELP_STATE)).toEqual({});
+  });
+
+  it('withPersonaCount takes the phase from `from`, or removes it', () => {
+    const next = {
+      rung: 0 as const,
+      help: {
+        ...INITIAL_HELP_STATE,
+        answerKey: [],
+        personaQuestionsAsked: 4,
+        personaId: 'a',
+        personaPhase: 'ended' as const,
+      },
+    };
+    const paused = { ...INITIAL_HELP_STATE, answerKey: [], personaPhase: 'paused' as const };
+    expect(withPersonaCount(next, paused).help.personaPhase).toBe('paused');
+    // A failed debrief or stop turn: the loaded state had no phase, so no `ended` is kept.
+    const none = withPersonaCount(next, { ...INITIAL_HELP_STATE, personaQuestionsAsked: 4 });
+    expect(none.help).not.toHaveProperty('personaPhase');
+    expect(next.help.personaPhase).toBe('ended');
+  });
+});
+
 describe('practice fields (5.6, ADR-0010)', () => {
   const PRACTICE = {
     ...VALID,
@@ -418,6 +499,7 @@ describe('practice limits fit the stored blob (5.6 review)', () => {
         groundingAsks: 1_000,
         personaQuestionsAsked: PERSONA_QUESTIONS_MAX,
         personaId: 'p'.repeat(PERSONA_ID_MAX),
+        personaPhase: 'paused',
         practiceItemId: id,
         practiceModuleId: id,
         practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),

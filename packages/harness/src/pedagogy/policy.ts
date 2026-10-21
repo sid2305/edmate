@@ -11,6 +11,7 @@ import { maxOutputTokensFor, type Move } from './budgets.js';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
 import { copyHelp, type HelpState, holdsPracticeKey, INITIAL_HELP_STATE } from './helpState.js';
 import { effectiveCeiling, type Rung } from './ladder.js';
+import type { RolePlay } from './roleplay.js';
 import { type RolePlayControl, selectSkill, type SkillStep, skillStep } from './skills.js';
 
 export interface PolicyTool {
@@ -63,6 +64,11 @@ export interface PolicyResult {
   /** For commit (3.8) to persist. */
   next: { helpRung: Rung; help: HelpState };
   reason: PolicyReason;
+  /**
+   * This turn's role-play (5.8, ADR-0013 §1), from `skillStep`; absent on every other turn,
+   * closed moves and the fallback. Harness-internal: never in `DecideResultSchema`.
+   */
+  rolePlay?: RolePlay;
 }
 
 const DEFAULT_OPTIONS: PolicyOptions = Object.freeze({
@@ -156,6 +162,7 @@ function finish(
     maxOutputTokens: maxOutputTokensFor(s.move, s.skill),
     next: s.next,
     reason: s.reason,
+    ...(s.rolePlay === undefined ? {} : { rolePlay: s.rolePlay }),
   };
 }
 

@@ -29,6 +29,8 @@ export {
   type SessionHelp,
   SessionHelpSchema,
   serializeSessionHelp,
+  type StoredPersonaPhase,
+  StoredPersonaPhaseSchema,
   type StoredSessionHelp,
 } from './helpState.js';
 export {
@@ -53,6 +55,18 @@ export {
   type PolicyResult,
   type PolicyTool,
 } from './policy.js';
+export {
+  ROLEPLAY_PHASE_SECTION,
+  ROLEPLAY_PHASES,
+  type RolePlay,
+  type RolePlayControl,
+  type RolePlayPhase,
+  type RolePlaySection,
+  type RolePlayStateSection,
+  type RolePlayStep,
+  type RolePlayStepInput,
+  rolePlayStep,
+} from './roleplay.js';
 export { selectSkill, type SkillReason, type SkillStep } from './skills.js';
 export { buildModelRequest, type ModelRequestInput, promptCacheKey } from './modelRequest.js';
 export {

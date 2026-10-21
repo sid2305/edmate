@@ -1,4 +1,5 @@
 import { PedagogyDecisionSchema } from '@edmate/contracts';
+import { demoPersona } from '@edmate/contracts/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HelpStateSchema, INITIAL_HELP_STATE } from './helpState.js';
 import { decidePolicy, fallbackPolicy, type PolicyInput, type PolicyResult } from './policy.js';
@@ -365,5 +366,38 @@ describe('help state', () => {
     ['a missing key', { stuckTurns: 0, attemptLogged: false, pendingCheck: false }],
   ])('rejects %s', (_n, v) => {
     expect(HelpStateSchema.safeParse(v).success).toBe(false);
+  });
+});
+
+describe('rolePlay passes through decidePolicy (5.8, ADR-0013 §1)', () => {
+  const skills = ['coach' as const, 'mock_interview' as const];
+  const M = demoPersona.endAfterQuestions;
+
+  it('a mock_interview turn with a persona carries this turn’s rolePlay', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ entitlement: { skills }, persona: demoPersona }),
+        turn: turnOf('message', 'mock_interview'),
+        help: helpWith({ personaQuestionsAsked: M, personaId: demoPersona.id }),
+      }),
+    );
+    expect(r.rolePlay).toEqual({ phase: 'debrief', total: M });
+    expect(r.next.help.personaPhase).toBe('ended');
+    expect(r.move).toBe('ask');
+    expect(r.maxOutputTokens).toBe(350);
+  });
+
+  it('a non-persona turn, a closed move and the fallback carry none', () => {
+    const results = [
+      decidePolicy(base()),
+      decidePolicy(
+        base({
+          ctx: ctxWith({ entitlement: { skills }, persona: demoPersona, intent: 'off_topic' }),
+          turn: turnOf('message', 'mock_interview'),
+        }),
+      ),
+      fallbackPolicy(ctxWith({ entitlement: { skills }, persona: demoPersona })),
+    ];
+    for (const r of results) expect(r).not.toHaveProperty('rolePlay');
   });
 });

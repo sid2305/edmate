@@ -1,14 +1,7 @@
 // Skill rules (build plan § Teaching engine › Skills): which skill a turn uses, and its default move.
 import type { Entitlement, Skill, TurnContext, TurnInput } from '@edmate/contracts';
 import type { Move } from './budgets.js';
-import {
-  copyHelp,
-  type HelpState,
-  INITIAL_HELP_STATE,
-  PERSONA_QUESTIONS_MAX,
-  personaQuestionsAsked,
-  withPersonaCount,
-} from './helpState.js';
+import { copyHelp, type HelpState, INITIAL_HELP_STATE, withPersonaCount } from './helpState.js';
 import {
   attemptLoggedAfter,
   effectiveCeiling,
@@ -16,6 +9,9 @@ import {
   nextRung,
   type Rung,
 } from './ladder.js';
+import { type RolePlay, type RolePlayControl, rolePlayStep } from './roleplay.js';
+
+export type { RolePlayControl } from './roleplay.js';
 
 export type SkillReason =
   | 'explain'
@@ -34,6 +30,11 @@ export interface SkillStep {
   skill: Skill | null;
   reason: SkillReason | LadderReason;
   next: { helpRung: Rung; help: HelpState };
+  /**
+   * This turn's role-play (5.8, ADR-0013 §1): set only on a `mock_interview` turn with a persona.
+   * Optional because the ladder and every other skill build a step without it.
+   */
+  rolePlay?: RolePlay;
 }
 
 /**
@@ -52,9 +53,6 @@ export function selectSkill(
   if (entitled.includes('explain')) return 'explain';
   return entitled[0] ?? null;
 }
-
-/** A role-play control a turn carries (3.11e): the start button, `/pause` or `stop`. */
-export type RolePlayControl = 'start' | 'pause' | 'stop';
 
 /**
  * The turn's role-play control (3.11e). Read by decide, so the policy itself never sees the
@@ -82,12 +80,13 @@ export interface SkillInput {
 }
 
 /**
- * The skill's move and next state. The persona question count (3.11d, ADR-0009) is the server's.
- * On a `mock_interview` turn with a persona (3.11e): a start (`control` 'start', or a persona
- * other than the stored `personaId`) opens at question 1; `pause` and `stop` leave it as it was;
- * any other turn counts one more, capped at the persona's M (at least 1) and at
- * PERSONA_QUESTIONS_MAX. Every other path carries the earlier count and id over, including the
- * ladder and a solved practice item, which rebuild the help state from scratch.
+ * The skill's move and next state. The persona question count (3.11d, ADR-0009) and the role-play
+ * phase (5.8, ADR-0013) are the server's: on a `mock_interview` turn with a persona,
+ * `rolePlayStep` gives this turn's `rolePlay` and the count and phase to save (a start or a
+ * persona switch opens question 1; `/pause` holds the question and the next turn resumes it; the
+ * answer to question M, or `stop`, gives the debrief and ends the role-play). Every other path
+ * carries the earlier count, id and phase over, including the ladder and a solved practice item,
+ * which rebuild the help state from scratch.
  */
 export function skillStep(i: SkillInput): SkillStep {
   const s = stepFor(i);
@@ -95,21 +94,19 @@ export function skillStep(i: SkillInput): SkillStep {
   if (s.reason !== 'mock_interview' || persona === undefined) {
     return { ...s, next: withPersonaCount(s.next, i.help) };
   }
-  const before = personaQuestionsAsked(i.help);
-  const cap = Math.min(Math.max(1, persona.endAfterQuestions), PERSONA_QUESTIONS_MAX);
-  const asked =
-    i.control === 'start' || i.help.personaId !== persona.id
-      ? 1
-      : i.control === 'pause' || i.control === 'stop'
-        ? before
-        : Math.min(before + 1, cap);
-  return {
-    ...s,
-    next: {
-      ...s.next,
-      help: { ...s.next.help, personaQuestionsAsked: asked, personaId: persona.id },
-    },
+  const r = rolePlayStep({
+    persona,
+    help: i.help,
+    ...(i.control === undefined ? {} : { control: i.control }),
+  });
+  const help: HelpState = {
+    ...s.next.help,
+    personaQuestionsAsked: r.asked,
+    personaId: persona.id,
   };
+  if (r.stored === null) delete help.personaPhase;
+  else help.personaPhase = r.stored;
+  return { ...s, next: { ...s.next, help }, rolePlay: r.rolePlay };
 }
 
 function stepFor(i: SkillInput): SkillStep {
@@ -155,8 +152,9 @@ function stepFor(i: SkillInput): SkillStep {
       // Point to the rubric line and the fix; never rewrite the work.
       return fixed('hint', 'feedback', 'feedback');
     case 'mock_interview':
-      // 5.8 owns /pause, the end conditions and the debrief; skillStep counts the question
-      // (3.11d). No persona: coach instead, but
+      // The role-play phase (/pause, the end conditions, the debrief) and the count come from
+      // rolePlayStep in skillStep (5.8, 3.11d); the move stays `ask` in every phase, so the
+      // debrief never releases a key (ADR-0013 §4). No persona: coach instead, but
       // only when the package includes coach (coach can reach a solution); otherwise locked.
       if (ctx.persona !== undefined) return fixed('ask', 'mock_interview', 'mock_interview');
       return ctx.entitlement.skills.includes('coach')

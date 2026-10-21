@@ -20,6 +20,14 @@ export const PRACTICE_ID_MAX = 200;
  */
 export const PRACTICE_KEYS_MAX_JSON = 2_048;
 
+/**
+ * The role-play phase that lasts into the next turn (5.8, ADR-0013 §1): `paused` after `/pause`,
+ * `ended` after a debrief or a `stop`. Every other phase depends only on the turn and the count,
+ * so it is never stored. Not the same type as `RolePlayPhase` (`roleplay.ts`), this turn's phase.
+ */
+export const StoredPersonaPhaseSchema = z.enum(['paused', 'ended']);
+export type StoredPersonaPhase = z.infer<typeof StoredPersonaPhaseSchema>;
+
 export const HelpStateSchema = z.strictObject({
   /** Consecutive turns with attempt none or wrong; the second one climbs the ladder. */
   stuckTurns: z.literal([0, 1]),
@@ -60,6 +68,13 @@ export const HelpStateSchema = z.strictObject({
    * saved before 3.11e, which has none) starts the role-play again at question 1 (`skillStep`).
    */
   personaId: z.string().min(1).max(PERSONA_ID_MAX).exactOptional(),
+  /**
+   * The stored role-play phase (5.8, ADR-0013 §1). Set and cleared only by `rolePlayStep`, through
+   * `skillStep`; carried with the count by `personaFields` and `withPersonaCount`, so a turn the
+   * student never saw never pauses, resumes or ends a role-play. Optional, so a blob saved before
+   * 5.8 still parses (absent = neither paused nor ended).
+   */
+  personaPhase: StoredPersonaPhaseSchema.exactOptional(),
   /**
    * The practice item whose key `answerKey` holds (5.6, ADR-0010). While it is set and
    * `answerKey` is not empty, the ladder uses the practice cap whatever skill the turn chose
@@ -171,6 +186,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     groundingAsks,
     personaQuestionsAsked: asked,
     personaId,
+    personaPhase,
   } = r.data;
   return {
     rung,
@@ -183,6 +199,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
       ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
       ...(personaId === undefined ? {} : { personaId }),
+      ...(personaPhase === undefined ? {} : { personaPhase }),
       ...practiceFields(r.data),
       ...(r.data.practiceCarriedKey === undefined
         ? {}
@@ -200,21 +217,25 @@ export function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp 
   return { ...next, help: { ...next.help, groundingAsks: asks } };
 }
 
-/** The persona count fields of `h` (3.11e): the count and the persona it belongs to. */
+/**
+ * The role-play fields of `h`: the count and the persona it belongs to (3.11e), and the stored
+ * role-play phase (5.8, ADR-0013).
+ */
 export function personaFields(
   h: Readonly<HelpState>,
-): Pick<HelpState, 'personaQuestionsAsked' | 'personaId'> {
+): Pick<HelpState, 'personaQuestionsAsked' | 'personaId' | 'personaPhase'> {
   return {
     ...(h.personaQuestionsAsked === undefined
       ? {}
       : { personaQuestionsAsked: h.personaQuestionsAsked }),
     ...(h.personaId === undefined ? {} : { personaId: h.personaId }),
+    ...(h.personaPhase === undefined ? {} : { personaPhase: h.personaPhase }),
   };
 }
 
 /**
- * `next` with the persona count and persona id taken from `from` (3.11e), or removed when `from`
- * has none. The runner uses it to keep the loaded count on a turn whose reply the student never
+ * `next` with the persona count, persona id and role-play phase taken from `from` (3.11e, 5.8),
+ * each removed when `from` has none. The runner uses it to keep the loaded count on a turn whose reply the student never
  * saw; `skillStep` uses it to carry the count over a rebuilt state.
  */
 export function withPersonaCount<T extends { help: HelpState }>(
@@ -224,6 +245,7 @@ export function withPersonaCount<T extends { help: HelpState }>(
   const help: HelpState = { ...next.help, ...personaFields(from) };
   if (from.personaQuestionsAsked === undefined) delete help.personaQuestionsAsked;
   if (from.personaId === undefined) delete help.personaId;
+  if (from.personaPhase === undefined) delete help.personaPhase;
   return { ...next, help };
 }
 
