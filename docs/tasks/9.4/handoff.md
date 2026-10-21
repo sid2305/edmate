@@ -1,8 +1,8 @@
-# 9.4 handoff: student chat, thin slice (Phases A and B)
+# 9.4 handoff: student chat, thin slice (Phases A-D)
 
-- **Status:** PARTIAL (Phases A, B and C done, plus the Phase A security fix round; Phase D left, as planned)
-- **Branch:** `m9/9.4-student-chat` (Phase A on local `work-9.4a`, Phase B on `work-9.4b`, fix round and Phase C on `work-9.4c`)
-- **Worktree:** Phase A `.claude/worktrees/agent-a6a4f425d4b399de3`; Phase B `.claude/worktrees/agent-ab5debadc399c0ca9`; fix round and Phase C `.claude/worktrees/agent-adf8336e683b6cfaf`
+- **Status:** DONE (Phases A, B, C and D done, plus the Phase A security fix round)
+- **Branch:** `m9/9.4-student-chat` (Phase A on local `work-9.4a`, Phase B on `work-9.4b`, fix round and Phase C on `work-9.4c`, Phase D on `work-9.4d`)
+- **Worktree:** Phase A `.claude/worktrees/agent-a6a4f425d4b399de3`; Phase B `.claude/worktrees/agent-ab5debadc399c0ca9`; fix round and Phase C `.claude/worktrees/agent-adf8336e683b6cfaf`; Phase D `.claude/worktrees/agent-ab7d987c76e052f9d`
 
 ## Phase A
 
@@ -195,22 +195,66 @@ Two MEDIUM findings from the security review, tests first (both seen red, then g
 - `ChatView` records the new session with `window.history.replaceState`, not
   `router.replace`. That avoids a server re-render mid-turn, and Next's app router supports it.
 
+## Phase D
+
+### What was built
+- `apps/web/e2e/global-setup.ts`: migrates and seeds `TEST_DATABASE_URL` once, by spawning the
+  built `@edmate/db` CLI (`dist/bin/migrate.js`/`seed.js`) as a child process — apps never import
+  `@edmate/db/internal`, so this runs it the same way a human would. Idempotent.
+- `apps/web/e2e/fixtures.ts`: `signInAsStudent`/`signInAsParentNeeded` set a real database-backed
+  session cookie (`identity.createSession`, the `build-smoke.test.ts` pattern — no OAuth, no test
+  hook in production code). `sseBody(events)` builds SSE fixture bytes from `TurnEvent[]`, each one
+  checked against `TurnEventSchema` by `formatSseEvent` as it is built, so a bad fixture fails
+  loudly. `mockTurns(page, bodies)` routes `**/api/sessions/*/turns` to the next fixture in order
+  (`page.route`); the real route is never reached, so no real model call.
+- `apps/web/e2e/chat.spec.ts`: the plan's ten cases (normal, retry-after-replace,
+  replace-with-text, error-mid-stream, cut-stream, locked, teacher-question, hint-rung,
+  html-in-tokens, parent-needed), each against a real `next dev` and a real Postgres;
+  `POST /api/sessions` is the real route, the turns route is always the `page.route` fixture.
+- `apps/web/playwright.config.ts`: Chromium only, serial (`workers: 1`), `globalSetup`, a
+  `webServer` that starts `next dev` on a fixed port with a throwaway `AUTH_SECRET` and a
+  deliberately unreachable `REDIS_URL` (session start never touches queues or turn limits; only a
+  real turn does, and the turn route is always intercepted here).
+- `apps/web/package.json`: `@playwright/test` (devDependency) and the `e2e` script
+  (`playwright test`).
+
+### Test results
+- `corepack pnpm --filter @edmate/web e2e` (local, against
+  `docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml up -d postgres
+  redis`): `10 passed`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...`:
+  `Tasks: 34 successful, 34 total`; web coverage unchanged from Phase C (98.32 / 98.43 / 95.94 /
+  99.08 — `e2e/**` is not part of the vitest coverage run).
+- `python3 .githooks/secret-scan.py --all` is clean.
+- Not wired into CI (9.7 adds that job); `.github/workflows/**` untouched.
+
+### Deviations
+- **`next dev` runs without `--webpack`.** `next build` keeps `--webpack` (`next.config.ts`,
+  task 1.7b), but `@edmate/gateway`'s `loadBundledPrices()` reads its bundled `prices.yaml` with
+  `readFileSync(new URL('./prices.yaml', import.meta.url), 'utf8')`; under `next dev --webpack`'s
+  bundling of the session route, `import.meta.url` is rewritten into something `readFileSync`
+  rejects (`TypeError: ... Received an instance of URL`), so `POST /api/sessions` always 503s on
+  the very first call. The default `next dev` (Turbopack) does not hit this — `playwright.config.ts`
+  uses it. This is a latent bug in `@edmate/gateway`, out of this task's file scope
+  (`apps/web/e2e/**`, `playwright.config.ts`, `package.json`); it only surfaces when a real
+  `next build --webpack` or `next dev --webpack` server actually calls `loadBundledPrices()`
+  (nothing did, before 9.4). Flagged in `.claude/blockers.md` and below; not fixed here.
+- **`getByRole('alert')` needs scoping.** Next.js's own route announcer
+  (`#__next-route-announcer__`) is also `role="alert"` and always present (empty), so
+  `error-mid-stream` and `cut-stream` assert on `.chat-error` instead of the role alone.
+
 ## Left to do
-- **Phase D:** Playwright and `e2e/chat.spec.ts`, run locally only. Notes:
-  - Selectors: the thread is `ol[aria-live="polite"]` and the provisional reply is
-    `.chat-provisional .bubble[aria-busy="true"]` with "Still checking…". The marker reads
-    "Updated", errors are `role="alert"`, and the retry is the "Try again" button.
-  - The composer is the "Your message" textbox; Enter sends. The hint is the "Get a hint" button,
-    and its rung reads "Last help: …".
-  - The first send with no `?s=` POSTs `/api/sessions` and then rewrites the URL to `?s=<id>`. A
-    `page.route` fixture for `/api/sessions/*/turns` is enough once a session exists.
-  - The /home link shows only for `EDMATE_CHAT_AGENTS` candidates (default `demo-agent` outside
-    production).
+none
+
+## Follow-ups (not Phase D's job)
+- **`@edmate/gateway`'s `loadBundledPrices()` 503s `next build --webpack`/`next dev --webpack`**
+  (see Deviations above). This affects production, not just e2e — worth a board task to swap the
+  `new URL(..., import.meta.url)` read for the `fileURLToPath` + `path.join` pattern
+  `safeRegexGuard.ts` already uses (task 1.7b), so both bundlers can read it.
 - **A repo method that lists a student's live subscriptions** (`packages/db/src/repositories/**`,
   risky). With it, `/home` can drop `EDMATE_CHAT_AGENTS`. Board follow-up.
 - **Markdown library (Q1):** still open with the human; swap it in behind `renderReply` and keep
   `renderReply.test.tsx` green.
-- **Phase D:** Playwright and `e2e/chat.spec.ts`, run locally only.
 - **Parked, as in the plan:**
   - KaTeX maths and code highlighting.
   - Teacher answers in the thread (8.9).
@@ -220,6 +264,17 @@ Two MEDIUM findings from the security review, tests first (both seen red, then g
   - Embeddings for retrieval.
 
 ## Decisions
+
+### 20 Oct 2026 · Phase D e2e: Turbopack dev server, `.chat-error` over bare `role=alert` · decided by tdd-guide
+Decided: `playwright.config.ts`'s `webServer` runs plain `next dev` (Turbopack), not
+`next dev --webpack`, and `chat.spec.ts` asserts the chat error banner by `.chat-error`, not
+`getByRole('alert')` alone.
+Why: `next dev --webpack` makes `@edmate/gateway`'s `loadBundledPrices()` throw (`import.meta.url`
+rewritten in a way `readFileSync` rejects), 503-ing every `POST /api/sessions`; Turbopack does not
+hit this. Separately, Next's own `#__next-route-announcer__` is also `role="alert"` and always
+present, so two tests needed a more specific locator. Neither is a fix to the underlying
+`@edmate/gateway` bug (out of this task's file scope) — see handoff "Follow-ups".
+risk: medium (a real, if latent, production bug under `--webpack`; flagged, not fixed, here).
 
 ### 20 Oct 2026 · `apps/web/src/auth/**` touched: `serverDatabase()` export · decided by tdd-guide · risk: high
 Decided: `src/auth/index.ts`'s runtime now keeps the `repos` that `openDatabase` already returned.
