@@ -2185,6 +2185,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 5.8b
+  milestone: M13
+  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona; selectPersonaLibrary skips prerelease versions (or the ADR accepts them); typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
+  accept: each item fixed or recorded in ADR-0013; the coverage-gate rule matches the human's B-37 answers with tests.
+  deps:
+  - '5.8'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
