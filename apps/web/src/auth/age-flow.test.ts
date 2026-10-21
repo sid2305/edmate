@@ -264,11 +264,9 @@ describe('the age gate, end to end (1.7)', () => {
     ]);
   });
 
-  it('the US pack is unsigned, so US 13-17 also wait for a parent', async () => {
+  it('the US pack is signed, so US 13-17 may use the site without a parent', async () => {
     await t.signIn();
-    expect(await t.answer({ market: 'US', birthYear: '2010' })).toEqual({
-      status: 'parent_needed',
-    });
+    expect(await t.answer({ market: 'US', birthYear: '2010' })).toEqual({ status: 'clear' });
   });
 
   it('an adult is clear on every student route', async () => {

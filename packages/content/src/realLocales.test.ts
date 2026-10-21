@@ -127,20 +127,27 @@ describe('content/locales', () => {
   });
 });
 
-// Task 1.7 Phase B: the US pack is a draft. It says US learners 13-17 need no parental consent,
-// but until a named person signs its compliance block that waiver is ignored (fail closed).
+// Task 1.7f: the human signed the US pack's compliance block (answer B-27, 21 Oct 2026), so its
+// waiver now applies. privacyLaw, dataRegion and grievance stay pending for counsel (task 3.10c).
 describe('content/locales: the age rule per market (task 1.7)', () => {
   const all = readLocalePacksDir(LOCALES);
   const US = all.packs.get('US') as LocalePack;
 
-  it('the US pack is an unsigned draft: no helplines, nothing filled in for a person to check', () => {
+  it('the US pack is signed, with privacyLaw/dataRegion/grievance still pending for counsel', () => {
     expect(US.compliance.minAge).toBe(13);
     expect(US.compliance.parentalConsentRequired).toBe(false);
-    expect(US.reviewedBy).toBe('pending');
+    expect(US.reviewedBy).toBe('sid2305');
     expect(US.helplines).toEqual([]);
     expect(US.compliance.dataRegion).toBe('pending');
     expect(US.compliance.grievance).toBe('pending');
     expect(checkLocalePacks(new Map([['US', US]]))).toEqual(
+      expect.arrayContaining([
+        'US.yaml: compliance.privacyLaw is "pending"',
+        'US.yaml: compliance.dataRegion is "pending"',
+        'US.yaml: compliance.grievance is "pending"',
+      ]),
+    );
+    expect(checkLocalePacks(new Map([['US', US]]))).not.toEqual(
       expect.arrayContaining(['US.yaml: reviewedBy is "pending"']),
     );
   });
@@ -149,17 +156,18 @@ describe('content/locales: the age rule per market (task 1.7)', () => {
     for (const pack of all.packs.values()) expect(agePolicyFor(pack).minAge).toBeGreaterThanOrEqual(13);
   });
 
-  it('while unsigned, the US waiver does not apply: every market needs consent', () => {
+  it('the signed US waiver applies: US needs no consent, IN and global still need it', () => {
     const policy = agePolicyResolver(loadLocalePacks(LOCALES).packs);
-    for (const market of ['IN', 'US', DEFAULT_LOCALE_MARKET, 'ZZ']) {
+    expect(policy('US')).toEqual({ minAge: 13, consentRequired: false });
+    for (const market of ['IN', DEFAULT_LOCALE_MARKET, 'ZZ']) {
       expect(policy(market)).toEqual({ minAge: 13, consentRequired: true });
     }
   });
 
-  it('once a person signs the US pack, its waiver applies (shown on a signed copy)', () => {
-    expect(agePolicyFor({ ...US, reviewedBy: 'A Reviewer' })).toEqual({
+  it('an unsigned copy of the US pack still fails closed (consent required)', () => {
+    expect(agePolicyFor({ ...US, reviewedBy: 'pending' })).toEqual({
       minAge: 13,
-      consentRequired: false,
+      consentRequired: true,
     });
   });
 });

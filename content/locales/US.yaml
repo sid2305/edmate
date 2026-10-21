@@ -17,8 +17,8 @@ compliance:
   dataRegion: pending
   grievance: pending
   parentalConsentRequired: false # applies only once reviewedBy is signed (see the header)
-reviewedBy: pending
-reviewedOn: "2026-10-20" # the date this pack was drafted; set to the review date on sign-off
+reviewedBy: sid2305
+reviewedOn: "2026-10-21"
 regulatedDisclaimers:
   investing: "Educational only; not investment advice."
 piiPatterns: [] # the guard's built-in phone, email, card, OTP and name checks still run
