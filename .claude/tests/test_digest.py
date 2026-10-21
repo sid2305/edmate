@@ -4,6 +4,7 @@ Part 1 (Phase A): fixture-driven unit tests of the parser and renderer, and of `
 idempotent regeneration. Part 2 (Phase B) adds static checks on the real
 `docs/decisions/log.md`, `docs/decisions/digest.md` and `docs/lessons.md`.
 """
+import re
 import sys
 import unittest
 
@@ -122,21 +123,138 @@ class StandingRules(unittest.TestCase):
         self.assertEqual(digest.parse_standing_rules(None), [])
 
 
+K_NEW = "21 Oct 2026 · New rule replaces old"
+K_OLD = "19 Oct 2026 · Old rule"
+L_NEW = f"- {K_NEW} (human, risk: high): the new rule."
+L_OLD = f"- {K_OLD} (lead, risk: high; superseded by {K_NEW}): the old rule."
+
+# Lead answer 6 scope fixtures: who decided, risk, and the routine "<id> merge:" exclusion.
+E_MERGE = ("### 21 Oct 2026 · 6.2 merge: a risky change · decided by lead · risk: high\n"
+           "- Decided: merge 6.2.\n")
+E_YOU_LOW = ("### 18 Oct 2026 · Product name · decided by you · risk: low\n"
+             "Decided: Edmate. It stays. More text.\n")
+E_HUMAN = ("### 20 Oct 2026 · 1.7f pack signed by the human (B-27) · decided by human (someone) · risk: high\n"
+           "- **Decided:** signed as is, e.g. no edits. Next sentence.\n")
+E_TDD_HIGH = ("### 20 Oct 2026 · A guard pattern · decided by tdd-guide · risk: high\n"
+              "- Decided: a pattern.\n")
+E_TEAM_HIGH = ("### 20 Oct 2026 · Team note · decided by team · risk: high\n- Decided: t.\n")
+E_PLANNER_HIGH = ("### 20 Oct 2026 · Plan note · decided by planner · risk: high\n- Decided: p.\n")
+E_LEAD_FIX = ("### 19 Oct 2026 · 4.4 a fix-round rule · decided by lead (fix round 2, safety HIGH 1) · risk: high\n"
+              "- First bullet with no label. Then more.\n")
+E_LEAD_MERGED = ("### 19 Oct 2026 · 4.8 merged: guard wired · decided by lead (plan revisions) · risk: high\n"
+                 "Some prose first.\n- Decided: wired the guard.\n")
+E_LEAD_HIGH_IN_PAREN = ("### 20 Oct 2026 · 3.3 hard phrase only · decided by lead (risk: high)\n"
+                        "- Decided: only hard phrases.\n")
+SCOPE_LOG = log(E_MERGE, E_HUMAN, E_TDD_HIGH, E_TEAM_HIGH, E_PLANNER_HIGH, E_LEAD_HIGH_IN_PAREN,
+                E_LEAD_FIX, E_LEAD_MERGED, E_YOU_LOW)
+
+
+class DigestScope(unittest.TestCase):
+    """Lead answer 6: (a) every human decision at any risk, (b) risk: high lead decisions that
+    are not a routine `<id> merge:` entry. Builder, tdd-guide, planner and team entries are out."""
+
+    def setUp(self):
+        self.by = {e["heading"]: e for e in digest.parse_log_entries(SCOPE_LOG + "")}
+        self.fixture = {e["heading"]: e for e in digest.parse_log_entries(FIXTURE_LOG)}
+
+    def kept(self, by):
+        return sorted(digest.digest_key(h) for h, e in by.items() if digest.in_digest(e))
+
+    def test_scope_filter(self):
+        self.assertEqual(self.kept(self.by), sorted([
+            "20 Oct 2026 · 1.7f pack signed by the human (B-27)",
+            "20 Oct 2026 · 3.3 hard phrase only",
+            "19 Oct 2026 · 4.4 a fix-round rule",
+            "19 Oct 2026 · 4.8 merged: guard wired",
+            "18 Oct 2026 · Product name"]))
+
+    def test_fixture_log_scope(self):
+        # medium lead, builder, and an entry with no `decided by` at all are out.
+        self.assertEqual(self.kept(self.fixture), sorted([K_NEW, K_OLD]))
+
+    def test_who(self):
+        self.assertEqual(digest.decided_by(self.fixture[H_NEW]), "human")
+        self.assertEqual(digest.decided_by(self.fixture[H_OLD]), "lead")
+        human = [e for e in self.by.values() if "1.7f" in e["heading"]][0]
+        self.assertEqual(digest.decided_by(human), "human")
+
+    def test_human_case_insensitive(self):
+        e = digest.parse_log_entries(log("### 1 Jan 2026 · X · Decided by You · risk: low\nDecided: y.\n"))[0]
+        self.assertTrue(digest.in_digest(e))
+
+    def test_digest_key_drops_who_and_risk(self):
+        self.assertEqual(digest.digest_key(H_NEW), K_NEW)
+        self.assertEqual(digest.digest_key("20 Oct 2026 · 3.3 hard phrase only · decided by lead (risk: high)"),
+                         "20 Oct 2026 · 3.3 hard phrase only")
+        self.assertEqual(digest.digest_key("No date · decided by you"), "No date")
+
+    def test_summary_is_first_sentence_of_decided_line(self):
+        human = [e for e in self.by.values() if "1.7f" in e["heading"]][0]
+        self.assertEqual(digest.summary(human), "signed as is, e.g. no edits.")
+        merged = [e for e in self.by.values() if "4.8" in e["heading"]][0]
+        self.assertEqual(digest.summary(merged), "wired the guard.")
+
+    def test_summary_falls_back_to_first_bullet_then_empty(self):
+        fix = [e for e in self.by.values() if "4.4" in e["heading"]][0]
+        self.assertEqual(digest.summary(fix), "First bullet with no label.")
+        self.assertEqual(digest.summary({"body": "just prose"}), "")
+
+    def test_summary_empty_decided_line_takes_next_line(self):
+        e = {"body": "- Decided:\n\n  - Feedback turns get a frame. More.\n  - Second.\n"}
+        self.assertEqual(digest.summary(e), "Feedback turns get a frame.")
+
+    def test_summary_does_not_split_on_abbreviations(self):
+        e = {"body": "Decided: a merchant of record (e.g. Paddle) in the US. Then more."}
+        self.assertEqual(digest.summary(e), "a merchant of record (e.g. Paddle) in the US.")
+        e = {"body": "Decided: one region, i.e. Ohio, for now. Later."}
+        self.assertEqual(digest.summary(e), "one region, i.e. Ohio, for now.")
+
+    def test_summary_redacts_reviewer_handles_and_repo_owner(self):
+        e = {"body": "Decided: signed (`reviewed_by: someone1`, `reviewedBy: someone1`) as is."}
+        self.assertEqual(digest.summary(e), "signed (`reviewed_by: <human>`, `reviewedBy: <human>`) as is.")
+        e = {"body": "Decided: The code is on github.com/someone1/edmate (public)."}
+        self.assertEqual(digest.summary(e), "The code is on GitHub (public).")
+        e = {"body": "Decided: signed (a). reviewed_by is set to someone1 for now."}
+        self.assertEqual(digest.summary(e), "signed (a). reviewed_by is set to <human> for now.")
+        e = {"body": "Decided: approved; reviewed_by: someone1."}
+        self.assertEqual(digest.summary(e), "approved; reviewed_by: <human>.")
+
+    def test_summary_capped(self):
+        e = {"body": "Decided: " + "word " * 100}
+        s = digest.summary(e)
+        self.assertLessEqual(len(s), digest.SUMMARY_MAX)
+        self.assertTrue(s.endswith("…"))
+
+
 class RenderDigest(unittest.TestCase):
     def setUp(self):
         self.entries = digest.parse_log_entries(FIXTURE_LOG)
 
-    def test_only_risk_high_newest_first(self):
+    def items(self, text):
+        return [l for l in text.split("## Decisions", 1)[1].splitlines() if l.startswith("- ")]
+
+    def test_one_line_per_entry_newest_first_with_superseded_tag(self):
         text = digest.render_digest(self.entries)
-        lines = [l for l in text.splitlines() if l.startswith("- ")]
-        self.assertEqual(lines, [f"- {H_NEW}", f"- {H_BODY}", f"- {H_OLD} (superseded by {H_NEW})"])
-        self.assertNotIn("middling", text)
-        self.assertNotIn("small thing", text)
+        self.assertEqual(self.items(text), [L_NEW, L_OLD])
+        for gone in ("middling", "small thing", "body-marked"):
+            self.assertNotIn(gone, text)
+
+    def test_sorted_by_date_not_file_order(self):
+        entries = digest.parse_log_entries(log(E_YOU_LOW, E_HUMAN, E_LEAD_FIX))
+        keys = [l.split(" (", 1)[0] for l in self.items(digest.render_digest(entries))]
+        self.assertEqual(keys, ["- 20 Oct 2026 · 1.7f pack signed by the human",
+                                "- 19 Oct 2026 · 4.4 a fix-round rule",
+                                "- 18 Oct 2026 · Product name"])
+
+    def test_no_handle_or_who_clause_copied(self):
+        text = digest.render_digest(digest.parse_log_entries(SCOPE_LOG))
+        self.assertNotIn("someone", text)
+        self.assertNotIn("decided by", self.items(text)[0])
 
     def test_sections_and_no_rules_placeholder(self):
         text = digest.render_digest(self.entries)
         self.assertIn("## Standing rules\n", text)
-        self.assertIn("## Risk-high decisions\n", text)
+        self.assertIn("## Decisions\n", text)
         self.assertIn("None yet.", text)
         self.assertTrue(text.endswith("\n"))
 
@@ -146,16 +264,17 @@ class RenderDigest(unittest.TestCase):
         self.assertNotIn("None yet.", text)
 
     def test_rule_citing_unknown_heading_refused(self):
-        with self.assertRaisesRegex(ValueError, "not a risk: high heading"):
+        with self.assertRaisesRegex(ValueError, "not a digest heading"):
             digest.render_digest(self.entries, [("Invented.", "21 Oct 2026 · Nothing like this")])
 
-    def test_rule_citing_non_high_heading_refused(self):
-        with self.assertRaisesRegex(ValueError, "not a risk: high heading"):
+    def test_rule_citing_out_of_scope_heading_refused(self):
+        with self.assertRaisesRegex(ValueError, "not a digest heading"):
             digest.render_digest(self.entries, [("Mid.", "20 Oct 2026 · A middling choice · decided by lead · risk: medium")])
 
-    def test_duplicate_heading_listed_once(self):
-        entries = digest.parse_log_entries(log(E_OLD, E_OLD))
-        self.assertEqual(digest.render_digest(entries).count(f"- {H_OLD}"), 1)
+    def test_exact_duplicate_listed_once_but_same_heading_new_body_kept(self):
+        self.assertEqual(digest.render_digest(digest.parse_log_entries(log(E_OLD, E_OLD))).count(f"- {K_OLD} ("), 1)
+        other = E_OLD.replace("the old rule", "a second rule")
+        self.assertEqual(digest.render_digest(digest.parse_log_entries(log(E_OLD, other))).count(f"- {K_OLD} ("), 2)
 
     def test_deterministic(self):
         self.assertEqual(digest.render_digest(self.entries), digest.render_digest(self.entries))
@@ -167,18 +286,19 @@ class IsMissing(unittest.TestCase):
 
     def test_rendered_digest_has_nothing_missing(self):
         self.assertEqual(digest.is_missing(self.entries, digest.render_digest(self.entries)), [])
+        scope = digest.parse_log_entries(SCOPE_LOG)
+        self.assertEqual(digest.is_missing(scope, digest.render_digest(scope)), [])
 
     def test_dropped_line_is_reported(self):
-        text = digest.render_digest(self.entries).replace(f"- {H_BODY}\n", "")
-        self.assertEqual(digest.is_missing(self.entries, text), [H_BODY])
+        text = digest.render_digest(self.entries).replace(L_OLD + "\n", "")
+        self.assertEqual(digest.is_missing(self.entries, text), [H_OLD])
 
     def test_substring_match_does_not_count(self):
-        text = digest.render_digest(self.entries).replace(f"- {H_BODY}\n", f"- {H_BODY} extra words\n")
-        self.assertEqual(digest.is_missing(self.entries, text), [H_BODY])
+        text = digest.render_digest(self.entries).replace(L_NEW, f"- {K_NEW} extra (human")
+        self.assertEqual(digest.is_missing(self.entries, text), [H_NEW])
 
-    def test_superseded_marking_counts_as_present(self):
-        text = f"- {H_NEW}\n- {H_BODY}\n- {H_OLD} (superseded by {H_NEW})\n"
-        self.assertEqual(digest.is_missing(self.entries, text), [])
+    def test_out_of_scope_entries_never_missing(self):
+        self.assertEqual(digest.is_missing(self.entries, ""), [H_NEW, H_OLD])
 
 
 class BoardDigest(RepoCase):
@@ -190,7 +310,7 @@ class BoardDigest(RepoCase):
         r = self.repo.script("board", "digest")
         self.assertEqual(r.returncode, 0, r.stderr)
         first = self.out().read_bytes()
-        self.assertIn(f"- {H_OLD} (superseded by {H_NEW})".encode(), first)
+        self.assertIn(L_OLD.encode(), first)
         r = self.repo.script("board", "digest")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.out().read_bytes(), first)
@@ -223,6 +343,66 @@ class BoardDigest(RepoCase):
         self.repo.write("docs/decisions/log.md", FIXTURE_LOG)
         self.assertEqual(self.repo.script("board", "digest").returncode, 0)
         self.assertEqual(list(self.repo.root.rglob("__pycache__")), [])
+
+
+# Part 2 (Phase B): static checks on the real repo, like test_registry.py's.
+REPO = HARNESS.parent
+REAL_LOG = REPO / "docs" / "decisions" / "log.md"
+REAL_DIGEST = REPO / "docs" / "decisions" / "digest.md"
+REAL_RULES = REPO / "docs" / "decisions" / "standing-rules.md"
+LESSONS = REPO / "docs" / "lessons.md"
+_LOG_CITE = re.compile(r'log "([^"]+)"')
+_REVIEW_CITE = re.compile(r"\bdocs/tasks/[\w.-]+/review\.md\b")
+
+
+class RealRepo(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.log_text = REAL_LOG.read_text()
+        cls.entries = digest.parse_log_entries(cls.log_text)
+        cls.digest_text = REAL_DIGEST.read_text()
+
+    def test_every_in_scope_log_entry_is_in_the_digest(self):
+        # Lead answer 6: every human decision and every non-merge risk: high lead decision.
+        self.assertEqual(digest.is_missing(self.entries, self.digest_text), [])
+
+    def test_scope_is_not_empty_and_pins_known_entries(self):
+        kept = {digest.digest_key(e["heading"]) for e in digest.digest_entries(self.entries)}
+        self.assertIn("21 Oct 2026 · US is the first region; India parked", kept)
+        self.assertIn("18 Oct 2026 · 4.1 The guard chain fails closed on every failure", kept)
+        self.assertFalse(any(" merge: " in k for k in kept))
+
+    def test_digest_is_up_to_date(self):
+        rules = digest.parse_standing_rules(REAL_RULES.read_text())
+        self.assertGreater(len(rules), 0)
+        self.assertEqual(digest.render_digest(self.entries, rules), self.digest_text,
+                         "run: python3 .claude/skills/board/board.py digest")
+
+    def test_digest_copies_no_handle_or_home_path(self):
+        self.assertNotIn("/Users/", self.digest_text)
+        self.assertNotIn("github.com/", self.digest_text)
+        self.assertNotRegex(self.digest_text, r"reviewed_?by: (?!<human>|pending)")
+
+    def lessons(self):
+        text = LESSONS.read_text()
+        return re.findall(r"^## (.+?)\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+
+    def test_lessons_has_3_to_8_entries_each_with_a_source(self):
+        entries = self.lessons()
+        self.assertTrue(3 <= len(entries) <= 8, len(entries))
+        for title, body in entries:
+            src = [l for l in body.splitlines() if l.startswith("Sources: ")]
+            self.assertEqual(len(src), 1, title)
+            self.assertTrue(_LOG_CITE.search(src[0]) or _REVIEW_CITE.search(src[0]), title)
+
+    def test_every_lessons_citation_resolves(self):
+        headings = [l[4:] for l in self.log_text.splitlines() if l.startswith("### ")]
+        for title, body in self.lessons():
+            src = next(l for l in body.splitlines() if l.startswith("Sources: "))
+            for cite in _LOG_CITE.findall(src):
+                self.assertTrue(any(cite in h for h in headings), f"{title}: no log heading {cite!r}")
+            for path in _REVIEW_CITE.findall(src):
+                self.assertTrue((REPO / path).is_file(), f"{title}: no file {path}")
 
 
 if __name__ == "__main__":

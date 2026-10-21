@@ -226,8 +226,8 @@ def cmd_digest():
         sys.exit(1)
     DIGEST_OUT.parent.mkdir(parents=True, exist_ok=True)
     DIGEST_OUT.write_text(text)
-    high = sum(e["risk"] == "high" for e in entries)
-    print(f"wrote {DIGEST_OUT.relative_to(ROOT)} ({high} risk: high entries, {len(rules)} standing rules)")
+    kept = len(digest.digest_entries(entries))
+    print(f"wrote {DIGEST_OUT.relative_to(ROOT)} ({kept} decisions, {len(rules)} standing rules)")
 
 
 def cmd_metrics(board, args):
