@@ -33,6 +33,11 @@ None.
 
 ## Decisions
 
+### 21 Oct 2026 · 0.16a metrics read subagent transcripts (.claude, risky path) · decided by lead · risk: high
+- Decided: merge 0.16a. Closeout metrics now read `<session>/subagents/*.jsonl` and attribute a whole subagent file to a task when its first prompt names "task <id>" exactly or its branch is the task branch or `work-<id>` (a letter suffix counts only when it is not itself a board task). Top-level lead files keep per-entry branch matching. No prompt text reaches the output.
+- Why: 0.16's first closeout recorded 0 tool calls because subagent transcripts were never read. Both reviewers' shared HIGH (sibling-id over-match, from the lead's own plan) was fixed and re-checked by security-reviewer.
+- risk: high
+
 ### 21 Oct 2026 · 0.16a lettered work branches count for the parent only when they are not board tasks · decided by lead (fix round) · risk: low
 - Decided: replaces the earlier `work-<id>[a-z]?` rule. `work-<id>` always counts; `work-<id><letter>` counts toward `<id>` only when `<id><letter>` is not a task id on `docs/board/tasks.yaml`. With no readable board, only the exact `work-<id>` counts. The prompt match `task <id>` also rejects a trailing letter.
 - Why: lettered ids like 0.16a, 5.8a and 6.1a are real board tasks, so the old rule double-counted one subagent file for both parent and sibling. Falling back to exact-only means a missing board under-counts rather than over-counts.
