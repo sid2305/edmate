@@ -92,8 +92,10 @@ export {
   type LiveSubscription,
   type PausedSubscription,
   type PauseFreeOptions,
+  type StartInput,
 } from './subscriptions.js';
 export type { AgentRow, PublicAgentScope } from './agents.js';
+export type { LivePackage } from './package-versions.js';
 export type {
   UnmeteredEntry,
   UnmeteredReason,

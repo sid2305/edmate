@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { modules, packages, packageVersions } from '../schema/index.js';
@@ -10,6 +10,14 @@ import { toPackageConfig } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 const Ref = z.strictObject({ packageId: IdSchema, version: z.int().min(0) });
+const PublicAgentPackages = z.strictObject({ agentId: IdSchema });
+
+/** One of a live agent's live packages, as shown to a student comparing packages (task 9.3). */
+export interface LivePackage {
+  /** The `package_versions` row's own id (what a subscription points at) — not the package id. */
+  packageVersionId: string;
+  config: PackageConfig;
+}
 
 export function packageVersionsRepo(db: Db) {
   return {
@@ -78,6 +86,39 @@ export function packageVersionsRepo(db: Db) {
         .orderBy(desc(packageVersions.version))
         .limit(1);
       return row ? toPackageConfig(row, method) : null;
+    },
+
+    /**
+     * The live packages of a live agent, for a student comparing packages (task 9.3). The one
+     * public scope (mirror `agents.owner`): parsed like a scope, before any SQL. Nothing for a
+     * draft, suspended or unknown agent — the join is entirely by `agent_id`, never a client-given
+     * `teacherId`, so it is never another teacher's packages either.
+     */
+    async liveForAgent(scope: { agentId: string }): Promise<LivePackage[]> {
+      const method = 'packageVersions.liveForAgent';
+      const r = PublicAgentPackages.safeParse(scope);
+      if (!r.success) throw new RepositoryError('scope', method);
+      const rows = await db
+        .select({
+          teacherId: packageVersions.teacherId,
+          packageId: packageVersions.packageId,
+          id: packageVersions.id,
+          version: packageVersions.version,
+          config: packageVersions.config,
+        })
+        .from(packages)
+        .innerJoin(
+          packageVersions,
+          and(
+            eq(packageVersions.packageId, packages.id),
+            eq(packageVersions.version, packages.liveVersion),
+          ),
+        )
+        .where(and(eq(packages.agentId, r.data.agentId), isNotNull(packages.liveVersion)));
+      return rows.map((row) => ({
+        packageVersionId: row.id,
+        config: toPackageConfig(row, method),
+      }));
     },
 
     /**
