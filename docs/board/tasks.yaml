@@ -1545,9 +1545,9 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m6/6.2-mastery-rebuild
+  model: plan:sonnet build:sonnet
 - id: '6.3'
   milestone: M6
   title: Mistake tagging from the teacher's list, plus proposed tags the teacher approves
@@ -1590,7 +1590,7 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: running
+  status: review
   branch: m7/7.1-eval-reports
   model: plan:sonnet build:sonnet
 - id: '7.2'
