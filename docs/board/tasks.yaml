@@ -406,9 +406,9 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m0/0.19-digest-lessons
+  model: plan:sonnet build:opus
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
