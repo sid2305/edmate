@@ -192,6 +192,12 @@ python3 .githooks/secret-scan.py --all  → clean
 - Why: the plan's planned decision. code-reviewer (opus), typescript-reviewer, database-reviewer and security-reviewer found no isolation problem; the one HIGH (real clock) is fixed and re-checked.
 - risk: high
 
+### 21 Oct 2026 · 5.10 wontfix: one non-null assertion in teacher-questions.ts · decided by lead · risk: low
+
+- Decided: keep the single `existing!` in packages/db/src/repositories/teacher-questions.ts:235 (typescript-reviewer, LOW).
+- Why: the comment above it shows the insert-or-collide WHERE always matches one row; an explicit throw would be unreachable code.
+- risk: low
+
 Details (builder):
 ### 21 Oct 2026 · Teacher-note validation lives in the shared harness helper · decided by tdd-guide
 Decided: `teacherNote.ts` also exports `teacherNoteParts` and `TEACHER_NOTE_PART_MAX` (the turn text limit, counted in characters), and `teacherNoteText` / `teacherNoteSource` throw a fixed-text `HarnessError` on bad input. The db adapter and the memory double validate through it.
