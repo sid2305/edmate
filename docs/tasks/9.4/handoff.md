@@ -1,8 +1,8 @@
-# 9.4 handoff: student chat, thin slice (Phase A)
+# 9.4 handoff: student chat, thin slice (Phases A and B)
 
-- **Status:** PARTIAL (Phase A done; Phases B–D left, as planned)
-- **Branch:** `m9/9.4-student-chat` (built on local `work-9.4a`)
-- **Worktree:** `.claude/worktrees/agent-a6a4f425d4b399de3`
+- **Status:** PARTIAL (Phases A and B done; Phases C–D left, as planned)
+- **Branch:** `m9/9.4-student-chat` (Phase A on local `work-9.4a`, Phase B on `work-9.4b`)
+- **Worktree:** Phase A `.claude/worktrees/agent-a6a4f425d4b399de3`; Phase B `.claude/worktrees/agent-ab5debadc399c0ca9`
 
 ## Phase A
 
@@ -60,14 +60,65 @@
   are `REDIS_URL`, `EDMATE_ANTHROPIC_API_KEY`, and optionally `EDMATE_MARKET` and
   `EDMATE_CONTENT_DIR`.
 
+## Phase B
+
+### What was built (all pure, nothing mounted)
+- `src/chat/turnState.ts`: `initialTurn()` and `reduceTurn(state, item)` over `StreamItem`
+  (`{kind:'event', event}` | `{kind:'ended'}`). Rules 1-8 of the plan: tokens and skill cards stay
+  `streaming` (provisional) until `done`; `replace` sets the text and marks `replaced` only if text
+  or a skill card was already shown; `replace ''` also clears skills and sources; `error` and
+  `ended` without `done` drop text, skills and sources (status `failed`, fixed English text);
+  anything after `done` or `error` returns the same state object.
+- `src/chat/errorText.ts`: exhaustive switch over the contracts `ErrorCode` enum, fixed English
+  text; `guard_blocked` reads as a student message (closes 4.2b's deferred MEDIUM).
+- `src/chat/sse.ts`: `readTurnStream(response)`. Streaming `TextDecoder`, LF/CRLF, comments,
+  multi-line `data:`; every event is JSON-parsed and checked with `TurnEventSchema`. An invalid
+  event is never yielded: one `error provider_error retryable` is yielded and reading stops. A
+  half-received event at the end is dropped, then `ended`. A read failure gives `ended`. One event
+  over `MAX_EVENT_CHARS` (1,000,000) is refused as an error. A non-2xx gives one `error`: the JSON
+  body's code if it is a known code, otherwise from the status (400/401/403/404/429/else); the
+  server's `message` is never used.
+- `src/chat/sendTurn.ts`: `sendTurn({sessionId, body, onItem, fetch?})` returns
+  `{ abort(), done }`; a network failure or abort gives `ended`. `startSession(agentId, fetch?)`
+  returns `{ok:true, sessionId}` or `{ok:false, code, retryable}`.
+- `src/chat/renderReply.tsx`: no-dependency renderer. Paragraphs (`white-space: pre-wrap`), fenced
+  code as `<pre><code>` (an unclosed fence while streaming shows as code), inline `` `code` ``.
+  Only React text nodes: no links, no images, no raw HTML; TeX stays literal.
+- Tests: `turnState.test.ts` (19), `sse.test.ts` (25, incl. a split at every byte offset of a
+  fixture with emoji and Devanagari, one byte at a time), `sendTurn.test.ts` (10),
+  `errorText.test.ts` (15), `renderReply.test.tsx` (19: script, img onerror, javascript: link,
+  iframe, HTML comment, svg onload, style, markdown image, a tag split across tokens, HTML in a
+  fence), `no-raw-html.test.ts` (3: scans `src/chat/**` and `app/learn/**`, and proves the scan
+  catches each pattern).
+
+### Test results
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` gives
+  `Tasks: 34 successful, 34 total` and `@edmate/web: Tests 515 passed | 4 skipped (519)`.
+- Coverage: web All files 98.53 / 98.7 / 96.2 / 99.01; `src/chat` 99.34 / 98.87 / 100 / 100
+  (`turnState.ts`, `errorText.ts`, `sendTurn.ts` 100%; `sse.ts` 98.86% statements).
+- `python3 .githooks/secret-scan.py --all` is clean.
+- No Phase A server code changed; no new dependency; no contracts change.
+
+### Notes for Phase C
+- Drive a turn with `useReducer(reduceTurn, undefined, initialTurn)` and pass `dispatch` as
+  `onItem`. Show the turn in the finalised thread only when `status === 'final'`; while
+  `streaming`, show it provisional (outside the live region); on `failed`, show `error.text` and
+  a retry button when `error.retryable`.
+- `replaced` drives the "Updated" marker. It is sticky within a turn (a retry after a shown
+  `replace ''` stays marked).
+- `renderReply(text)` returns block elements (`<p>`, `<pre>`): wrap it in a `<div>`, not a `<p>`.
+- `errorText.ts` holds the English strings; Phase C can move them to `messages/en.json` under
+  `chat.*` and keep the switch as the key map.
+- Abort the handle on unmount; the reducer then drops the turn.
+
 ## Left to do
-- **Phase B:** the client core (`src/chat/turnState.ts`, `sse.ts`, `errorText.ts`,
-  `renderReply.tsx`, `sendTurn.ts` and their tests), as in the plan.
-  - Tokens arrive in bursts after the check, not word by word.
-  - A `replace ''` can still come (after the check, or before an error), so the reducer rules stand.
-  - Start a session with `POST /api/sessions {agentId}`, which answers 201 `{sessionId}`.
-  - Send turns to `/api/sessions/:id/turns` with `{agentId, kind, text?, lang:'en', clientTs}`.
-- **Phase C:** the components and the `/learn/[agentId]` page, plus the `/home` link.
+- **Phase C:** the components and the `/learn/[agentId]` page, plus the `/home` link (see
+  "Notes for Phase C" above). Server facts from Phase A still hold: tokens arrive in bursts after
+  the check; a `replace ''` can still come; start a session with `POST /api/sessions {agentId}`
+  (201 `{sessionId}`), send turns to `/api/sessions/:id/turns` with
+  `{agentId, kind, text?, lang:'en', clientTs}`.
+- **Markdown library (Q1):** still open with the human; swap it in behind `renderReply` and keep
+  `renderReply.test.tsx` green.
 - **Phase D:** Playwright and `e2e/chat.spec.ts`, run locally only.
 - **Parked, as in the plan:**
   - KaTeX maths and code highlighting.
@@ -113,5 +164,20 @@ Decided:
 - `TurnUnavailableError` carries a fixed `reason` code, which is the only part logged.
 - The route-test backend uses the repo's real `content/prompt-packs`, because the world's agents
   pin set 1.0.0.
+
+risk: low.
+
+### 20 Oct 2026 · Phase B client choices · decided by tdd-guide
+Decided:
+- An invalid SSE event (bad JSON or failing `TurnEventSchema`) ends the turn as a retryable
+  `provider_error` and the reader stops; nothing after it is read.
+- A non-2xx without a known JSON code maps by status: 400 `validation`, 401 `unauthorized`,
+  403 `forbidden`, 404 `not_found`, 429 `rate_limited` (retryable), else `provider_error`
+  (retryable).
+- One SSE event is capped at 1,000,000 characters; bigger ends the turn as an error.
+- A network failure or an abort of `sendTurn` yields `ended`, which drops the turn.
+- `replaced` is sticky within a turn, and an `error` resets it (the turn is dropped).
+- The renderer supports paragraphs, fenced and inline code only; no links or images, TeX literal.
+- The error strings live in `src/chat/errorText.ts` for now (Phase C may move them to en.json).
 
 risk: low.
