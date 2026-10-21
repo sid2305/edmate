@@ -120,6 +120,38 @@ describe('OnboardingForm', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled();
   });
 
+  it('a rejected fetch (network failure) shows the generic error and re-enables submit', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.'),
+    );
+    expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled();
+  });
+
+  it('a success response with invalid JSON shows the generic error and re-enables submit', async () => {
+    const fetchMock = vi.fn(async () => {
+      const res = new Response('not json', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      return res;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.'),
+    );
+    expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled();
+  });
+
   it('the submit button is disabled while the request is in flight', async () => {
     let resolve!: (r: Response) => void;
     const fetchMock = vi.fn(

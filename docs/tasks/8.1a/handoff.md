@@ -129,6 +129,17 @@ only forward props with no logic of its own, unlike `uploads/UploadsView.tsx` wh
 also has to pass computed data into alongside other page concerns.
 risk: low
 
+## Fix round (review)
+
+- [HIGH] Unhandled rejection on fetch failure / invalid success JSON: `onSubmit` now has a `catch`
+  that sets `t('errors.generic')` in the `role="alert"` box, so a rejected `fetch` or a success
+  response whose `res.json()` throws no longer becomes an unhandled rejection with no visible
+  error. Added tests for both: a rejected fetch, and a 200 response with invalid JSON.
+- [MEDIUM] Added `onboarding.errors.generic` ("Something went wrong. Please try again.") to
+  `apps/web/messages/en.json`; the no-message fallback on a non-ok response and the new `catch`
+  both use this key instead of the misleading `t('saving')` fallback.
+- [LOW] The unguarded success-path `res.json()` is now covered by the new `catch` above.
+
 ### 21 Oct 2026 · Server error text shown directly, no client errors map · decided by tdd-guide
 Decided: `OnboardingForm` shows the API response's `error.message` text directly in the
 `role="alert"` box, with no `onboarding.errors.*` translation map in `en.json`.

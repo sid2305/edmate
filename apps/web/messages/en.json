@@ -35,7 +35,10 @@
     "saving": "Saving…",
     "statusPending": "Your profile is pending review. Publishing waits on staff verification.",
     "statusRejected": "Your profile was not approved. Publishing waits on staff verification.",
-    "statusVerified": "Your profile is verified."
+    "statusVerified": "Your profile is verified.",
+    "errors": {
+      "generic": "Something went wrong. Please try again."
+    }
   },
   "chat": {
     "title": "Chat with your teacher's agent",

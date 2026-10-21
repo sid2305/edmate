@@ -51,11 +51,13 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
       });
       if (!res.ok) {
         const parsed = (await res.json().catch(() => ({}))) as ErrorBody;
-        setError(parsed.error?.message ?? t('saving'));
+        setError(parsed.error?.message ?? t('errors.generic'));
         return;
       }
       const { profile: saved } = (await res.json()) as { profile: TeacherProfileRow };
       setProfile(saved);
+    } catch {
+      setError(t('errors.generic'));
     } finally {
       setSubmitting(false);
     }
