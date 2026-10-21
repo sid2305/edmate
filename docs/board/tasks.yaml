@@ -303,7 +303,7 @@ tasks:
   deps:
   - '0.15'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '0.17'
@@ -315,7 +315,7 @@ tasks:
   deps:
   - '0.15'
   risk: risky
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '0.18'
@@ -1887,6 +1887,14 @@ tasks:
   status: todo
   branch: null
   risk: risky
+- id: 9.4c
+  milestone: M13
+  title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating "$5-$10" as maths (or documents it as a known limit); drop the unreachable single-character alternative in the MATH regex'
+  accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
+  deps:
+  - 9.4b
+  status: todo
+  branch: null
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
