@@ -1469,9 +1469,9 @@ tasks:
   deps:
   - '5.6'
   - M3
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m6/6.1-topic-map
+  model: plan:sonnet build:sonnet
 - id: '6.2'
   milestone: M6
   title: Evidence events, BKT mastery per (student, teacher, topic), rebuild
