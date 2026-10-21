@@ -3,13 +3,17 @@ import { guarded } from './errors.js';
 import { agentVersionsRepo } from './agent-versions.js';
 import { agentsRepo } from './agents.js';
 import { auditRepo } from './audit.js';
+import { chunksRepo, documentsRepo } from './chunks.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { packageVersionsRepo } from './package-versions.js';
+import { retrievalRepo } from './retrieval.js';
+import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
+import { teacherProfilesRepo } from './teacher-profiles.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
 import { usageLedgerRepo } from './usage-ledger.js';
@@ -47,6 +51,11 @@ export function createRepositories(db: Db) {
     subscriptions: guardAll('subscriptions', subscriptionsRepo(db)),
     audit: guardAll('audit', auditRepo(db)),
     usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
+    documents: guardAll('documents', documentsRepo(db)),
+    chunks: guardAll('chunks', chunksRepo(db)),
+    retrieval: guardAll('retrieval', retrievalRepo(db)),
+    safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
+    teacherProfiles: guardAll('teacherProfiles', teacherProfilesRepo(db)),
   };
 }
 
@@ -62,7 +71,12 @@ export type RepositoryMethod = {
 
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
-export type { AuditRow, TeacherQuestionForTeacher } from './map.js';
+export type { AuditRow, TeacherProfileRow, TeacherQuestionForTeacher } from './map.js';
+export type {
+  TeacherProfileCreate,
+  TeacherProfileUpdate,
+  TeacherVerificationInput,
+} from './teacher-profiles.js';
 export {
   AUDIT_JSON_MAX_LENGTH,
   AUDIT_MAX_LIMIT,
@@ -70,6 +84,7 @@ export {
   SYSTEM_ACTOR_PREFIX,
 } from './audit.js';
 export type { SessionRow } from './sessions.js';
+export { type SafetyEventInput, type SafetyEventRow, safetyEventRowId } from './safety-events.js';
 export type { TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,
@@ -94,6 +109,7 @@ export {
   type EntitlementStoreOptions,
   entitlementStoreFor,
   profileStoreFor,
+  retrievalIndexFor,
   sessionStateStoreFor,
   teacherQuestionStoreFor,
   traceSinkFor,
@@ -106,4 +122,27 @@ export {
   type UsageMeterContext,
 } from './ports.js';
 export type { EvidenceEventEntry } from './learner.js';
+export {
+  CHUNK_TEXT_MAX_LENGTH,
+  CHUNK_WRITE_MAX,
+  chunkId,
+  type ChunkDraft,
+  DOCUMENT_LIST_MAX,
+  type DocumentInput,
+  type DocumentListOptions,
+} from './chunks.js';
+export { DOCUMENT_STATUSES, type DocumentRow, type DocumentStatus } from './map.js';
+export {
+  type EmbedFallback,
+  LEAK_CANDIDATE_MAX_LENGTH,
+  LEAK_CANDIDATES_MAX,
+  type LeakFallback,
+  NOTE_MATCH_FLOOR,
+  PROBE_FLOOR,
+  RETRIEVAL_MAX_MODULES,
+  type RetrievalIndexOptions,
+  SEARCH_MAX_K,
+  type ProbeInput,
+  type SearchInput,
+} from './retrieval.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';

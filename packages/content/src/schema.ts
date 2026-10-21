@@ -84,13 +84,30 @@ export type RubricAnswer = z.infer<typeof RubricAnswerSchema>;
 export const CommonMistakeSchema = z.strictObject({ tag: text(), description: text() });
 export type CommonMistake = z.infer<typeof CommonMistakeSchema>;
 
-export const QaRecallItemSchema = z.strictObject({
+// Task 5.3 (Q1): gold is heading-level. An in-course item names the module and the notes
+// heading(s) that answer it; a hit is a top-5 chunk located under one of those headings. An
+// out-of-course item has no gold: the course does not answer it, and the recall test uses it to
+// calibrate the coverage threshold. `reviewed_by` is `pending` until the lead signs the item.
+const qaRecallBase = {
   id: id(),
+  /** The module the student is studying when they ask. */
   moduleId: id(),
   question: text(),
+  reviewed_by: reviewer(),
+};
+export const QaRecallInCourseSchema = z.strictObject({
+  ...qaRecallBase,
   expectedModuleId: id(),
+  /** Headings of `modules/<expectedModuleId>/notes.md` (as written, without inline markup). */
+  expectedHeadings: z.array(text()).min(1),
 });
+export const QaRecallOutOfCourseSchema = z.strictObject({
+  ...qaRecallBase,
+  outOfCourse: z.literal(true),
+});
+export const QaRecallItemSchema = z.union([QaRecallInCourseSchema, QaRecallOutOfCourseSchema]);
 export type QaRecallItem = z.infer<typeof QaRecallItemSchema>;
+export type QaRecallInCourseItem = z.infer<typeof QaRecallInCourseSchema>;
 
 export const StyleCardDraftSchema = StyleCardSchema.omit({
   id: true,

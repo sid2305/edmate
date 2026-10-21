@@ -6,13 +6,20 @@
 // fails `tsc`; a runtime check also compares the methods on createRepositories(db) with CASES.
 // Every case runs over the whole grid: every actor scope x every target in the seed.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type EvidenceEvent, type LearnerProfile, LIMITS, type Message } from '@edmate/contracts';
+import {
+  type Chunk,
+  type EvidenceEvent,
+  type LearnerProfile,
+  LIMITS,
+  type Message,
+} from '@edmate/contracts';
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import {
   type AuditEntryInput,
   type AuditRow,
+  chunkId,
   createRepositories,
   openDatabase,
   REDACTED,
@@ -22,6 +29,7 @@ import {
   type TeacherScope,
   transcriptStoreFor,
 } from '../src/index.js';
+import { EMBEDDING_DIMENSIONS } from '../src/schema/index.js';
 import { DATA_MODEL_TABLES } from './helpers.js';
 import { expectScrubbed } from './scrub.js';
 import {
@@ -170,7 +178,267 @@ const endable = (p: Pair) => `${ids.session(p)}_end`;
 const BIG = { blob: 'x'.repeat(10_001) };
 const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 
+/** Task 5.3: each teacher's isolation document (one chunk, ord 0), written in beforeAll. */
+const isoDoc = (t: Teacher) => `doc_iso_${t.toLowerCase()}`;
+/** A document with a stored file, for `chunks.insertManyIfStorageKey`. */
+const keyDoc = (t: Teacher) => `doc_key_${t.toLowerCase()}`;
+const keyOf = (t: Teacher) => `uploads/iso-${t.toLowerCase()}.pdf`;
+/** Unit vector on axis 0: every isolation chunk and query embeds to it (no model is called). */
+const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 ? 1 : 0));
+/** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
+const profileSlug = (t: Teacher) => `teacher-${t.toLowerCase()}`;
+const ISO_STAFF = 'stf_iso';
+const chunkOwners = (cs: Chunk[]) =>
+  cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
+/** Task 8.2: a document of `target`'s that `actor` tries to delete (each pair used once). */
+const delDoc = (actor: Teacher, target: Teacher) =>
+  `doc_del_${actor.toLowerCase()}${target.toLowerCase()}`;
+/** Task 8.2: each teacher's document that startReplace rewrites (one chunk, ord 0). */
+const repDoc = (t: Teacher) => `doc_rep_${t.toLowerCase()}`;
+type DocRow = { id: string; teacherId: string; sourceTitle: string };
+const docOwners = (d: DocRow) => [teacherOfId(d.teacherId), ...markers(d.sourceTitle)];
+const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
+  (await raw.query<{ t: string }>(`select teacher_id as t from ${table} where id = $1`, [id]))
+    .rows[0]?.t;
+
 const CASES: Record<RepositoryMethod, IsolationCase> = {
+  // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
+  // and bump the material revision in the same transaction (the snapshot covers that table).
+  'documents.create': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.documents.create(scope, {
+        id: uid('doc_new'),
+        moduleId: ids.module(target, 1),
+        kind: 'material',
+        sourceTitle: `[${actor}] doc`,
+      }),
+    verify: async (_r, actor, res) => {
+      expect(await ownerOfRow('documents', (res as { id: string }).id)).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's document id",
+        (r) =>
+          r.documents.create(tScope(a), {
+            id: isoDoc(otherTeacher(a)),
+            moduleId: ids.module(a, 1),
+            kind: 'material',
+            sourceTitle: 'x',
+          }),
+        'not_found',
+      ],
+    ],
+  },
+  // Task 8.2: the document lifecycle. Reads are scoped selects; writes are scoped updates or a
+  // locked delete, each with teacher_id in the same statement.
+  'documents.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.documents.get(scope, isoDoc(t)),
+    random: (r, scope, rid) => r.documents.get(scope, rid),
+    owners: (d: DocRow | null) => (d ? docOwners(d) : []),
+  },
+  'documents.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.documents.listForTeacher(scope, { moduleId: ids.module(t, 1) }),
+    random: (r, scope, rid) => r.documents.listForTeacher(scope, { moduleId: rid }),
+    owners: (ds: DocRow[]) => ds.flatMap(docOwners),
+  },
+  'documents.updateStatus': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) => r.documents.updateStatus(scope, repDoc(target), 'processing'),
+    verify: async (r, actor) => {
+      for (const t of TEACHERS) {
+        const row = await r.documents.get(tScope(t), repDoc(actor));
+        expect(row?.status === 'processing', `${t} sees ${actor}'s status`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a failure reason on a non-failed status',
+        (r) => r.documents.updateStatus(tScope(a), repDoc(a), 'ready', 'x_failed'),
+        'invalid',
+      ],
+    ],
+  },
+  'documents.delete': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) => r.documents.delete(scope, delDoc(actor, target)),
+    verify: async (r, actor, res) => {
+      expect((res as { storageKey: string | null }).storageKey).toBe(`[${actor}] del`);
+      expect(await ownerOfRow('documents', delDoc(actor, actor))).toBeUndefined();
+      const left = await raw.query(`select 1 from chunks where document_id = $1`, [
+        delDoc(actor, actor),
+      ]);
+      expect(left.rowCount).toBe(0);
+      // The actor's failed attempt on the other teacher's document left it in place.
+      const other = otherTeacher(actor);
+      expect(await r.documents.get(tScope(other), delDoc(actor, other))).not.toBeNull();
+    },
+  },
+  'documents.startReplace': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.documents.startReplace(scope, repDoc(target), { storageKey: `[${actor}] key ${++counter}` }),
+    verify: async (r, actor) => {
+      const row = await r.documents.get(tScope(actor), repDoc(actor));
+      expect(row?.status).toBe('uploading');
+      expect(markers(row?.storageKey ?? '')).toEqual([actor]);
+      const other = await r.documents.get(tScope(otherTeacher(actor)), repDoc(actor));
+      expect(other).toBeNull();
+    },
+    mismatches: (a) => [
+      [
+        'a teacherId key in the input',
+        (r) =>
+          r.documents.startReplace(tScope(a), repDoc(a), {
+            storageKey: 'k',
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.insertMany': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.insertMany(scope, isoDoc(target), [
+        { ord: ++counter, text: `[${actor}] chunk`, locator: 'p2' },
+      ]),
+    verify: async (r, actor, res) => {
+      const [id] = (res as { ids: string[] }).ids;
+      expect(await ownerOfRow('chunks', id!)).toBe(teacherId(actor));
+      const found = await r.retrieval.search(tScope(actor), {
+        q: 'chunk',
+        allowedModuleIds: [ids.module(actor, 1)],
+        k: 50,
+      });
+      expect(found.map((c) => c.id)).toContain(id);
+    },
+    mismatches: (a) => [
+      [
+        'an ord already written',
+        (r) => r.chunks.insertMany(tScope(a), isoDoc(a), [{ ord: 0, text: 'x', locator: 'p' }]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.insertManyIfStorageKey': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.insertManyIfStorageKey(scope, keyDoc(target), keyOf(target), [
+        { ord: ++counter, text: `[${actor}] keyed chunk`, locator: 'p2' },
+      ]),
+    verify: async (_r, actor, res) => {
+      expect(res).toMatchObject({ stale: false });
+      const [id] = (res as { ids: string[] }).ids;
+      expect(await ownerOfRow('chunks', id!)).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        'an ord already written',
+        (r) =>
+          r.chunks.insertManyIfStorageKey(tScope(a), keyDoc(a), keyOf(a), [
+            { ord: 0, text: 'x', locator: 'p' },
+          ]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.setEmbeddings': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.chunks.setEmbeddings(scope, [{ id: chunkId(isoDoc(target), 0), embedding: ISO_VEC }]),
+    verify: async (_r, actor) => {
+      const res = await raw.query<{ t: string }>(
+        `select teacher_id as t from chunks where id = $1 and embedding is not null`,
+        [chunkId(isoDoc(actor), 0)],
+      );
+      expect(res.rows[0]?.t).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        'a vector of the wrong dimension',
+        (r) =>
+          r.chunks.setEmbeddings(tScope(a), [{ id: chunkId(isoDoc(a), 0), embedding: [1, 0] }]),
+        'invalid',
+      ],
+    ],
+  },
+  'retrieval.search': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) =>
+      r.retrieval.search(scope, {
+        q: 'isolation marker',
+        allowedModuleIds: [ids.module(t, 1), ids.module(t, 2)],
+        k: 50,
+        embedding: ISO_VEC,
+      }),
+    random: (r, scope, rid) =>
+      r.retrieval.search(scope, {
+        q: 'isolation marker',
+        allowedModuleIds: [rid],
+        k: 50,
+        embedding: ISO_VEC,
+      }),
+    owners: chunkOwners,
+  },
+  'retrieval.probe': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    // Only `{ hit, score }` comes back, so the owner is the target the probe named when it hits.
+    call: async (r, scope, t) => ({
+      ...(await r.retrieval.probe(scope, {
+        q: 'isolation marker',
+        moduleIds: [ids.module(t, 1)],
+        embedding: ISO_VEC,
+      })),
+      t,
+    }),
+    random: async (r, scope, rid) => ({
+      ...(await r.retrieval.probe(scope, {
+        q: 'isolation marker',
+        moduleIds: [rid],
+        embedding: ISO_VEC,
+      })),
+      t: rid,
+    }),
+    owners: (x: { hit: boolean; t: string }) => (x.hit ? [x.t] : []),
+  },
+  'retrieval.material': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    // leakCheck's source: every chunk text of the scope teacher, never another teacher's.
+    call: (r, scope) => r.retrieval.material(scope),
+    random: (r, _scope, rid) => r.retrieval.material({ teacherId: rid }),
+    owners: (rows: { text: string }[]) => rows.flatMap((x) => markers(x.text)),
+  },
+  'retrieval.revision': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope) => ({ n: await r.retrieval.revision(scope), t: scope.teacherId }),
+    random: async (r, _scope, rid) => ({
+      n: await r.retrieval.revision({ teacherId: rid }),
+      t: rid,
+    }),
+    owners: (x: { n: number; t: string }) => (x.n > 0 ? [teacherOfId(x.t)] : []),
+  },
   'agents.get': {
     scope: 'teacher',
     op: 'read',
@@ -1029,6 +1297,195 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ];
     },
   },
+  // Task 8.1: each teacher's own profile (created in beforeAll). Writes name no target: they always
+  // land on the scope's own row, so the grid checks only the payload mismatches and that nobody
+  // else reads the write back.
+  'teacherProfiles.create': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    // One profile per teacher: the positive control removes the actor's own row first.
+    attempt: async (r, scope, actor) => {
+      await raw.query('delete from teacher_profiles where user_id = $1', [teacherId(actor)]);
+      return r.teacherProfiles.create(scope, {
+        slug: profileSlug(actor),
+        subject: `[${actor}] subject ${++counter}`,
+      });
+    },
+    verify: async (r, actor, res) => {
+      const subject = (res as { subject: string }).subject;
+      for (const t of TEACHERS) {
+        const row = await r.teacherProfiles.get(tScope(t));
+        expect(row?.subject === subject, `${t} sees ${actor}'s profile`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a second profile for the same teacher',
+        (r) => r.teacherProfiles.create(tScope(a), { slug: `${profileSlug(a)}-2`, subject: 'x' }),
+        'invalid',
+      ],
+      [
+        "another teacher's slug",
+        (r) =>
+          r.teacherProfiles.create(tScope(a), { slug: profileSlug(otherTeacher(a)), subject: 'x' }),
+        'invalid',
+      ],
+      [
+        'a verificationStatus key',
+        (r) =>
+          r.teacherProfiles.create(tScope(a), {
+            slug: 'self-verified',
+            subject: 'x',
+            verificationStatus: 'verified',
+          } as never),
+        'invalid',
+      ],
+      [
+        'a student scope id',
+        (r) =>
+          r.teacherProfiles.create({ teacherId: studentId('1') }, { slug: 'stu', subject: 'x' }),
+        'scope',
+      ],
+    ],
+  },
+  'teacherProfiles.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.teacherProfiles.get(scope),
+    random: (r, _scope, rid) => r.teacherProfiles.get({ teacherId: rid }),
+    owners: (x: { teacherId: string; subject: string } | null) =>
+      x ? [teacherOfId(x.teacherId), ...markers(x.subject)] : [],
+  },
+  'teacherProfiles.update': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.teacherProfiles.update(scope, { subject: `[${actor}] edited ${++counter}` }),
+    verify: async (r, actor, res) => {
+      const subject = (res as { subject: string }).subject;
+      for (const t of TEACHERS) {
+        const row = await r.teacherProfiles.get(tScope(t));
+        expect(row?.subject === subject, `${t} sees ${actor}'s edit`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a verificationStatus key (no self-verification)',
+        (r) => r.teacherProfiles.update(tScope(a), { verificationStatus: 'verified' } as never),
+        'invalid',
+      ],
+      [
+        'a userId key naming another teacher',
+        (r) =>
+          r.teacherProfiles.update(tScope(a), {
+            subject: 'x',
+            userId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+      ['an empty patch', (r) => r.teacherProfiles.update(tScope(a), {}), 'invalid'],
+      [
+        'a scope with no profile',
+        (r) => r.teacherProfiles.update({ teacherId: studentId('1') }, { subject: 'x' }),
+        'not_found',
+      ],
+    ],
+  },
+  // Staff verify one named teacher (the audit.appendForTeacher precedent): the staff role is
+  // checked in the same transaction, and the audit row lands in that teacher only.
+  'teacherProfiles.setVerification': {
+    scope: 'teacher',
+    op: 'write',
+    owns: () => true,
+    attempt: async (r, scope, actor) => {
+      const reason = `[${actor}] verified ${++counter}`;
+      await r.teacherProfiles.setVerification(scope, { status: 'verified', by: ISO_STAFF, reason });
+      return reason;
+    },
+    verify: async (r, actor, reason) => {
+      expect((await r.teacherProfiles.get(tScope(actor)))?.verificationStatus).toBe('verified');
+      for (const t of TEACHERS) {
+        const rows = await r.audit.listForTeacher(tScope(t), { limit: 200 });
+        expect(
+          rows.some((x) => x.reason === reason && x.action === 'teacher.verify'),
+          `${t} sees ${actor}'s verification`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'the teacher verifying themself',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), { status: 'verified', by: teacherId(a) }),
+        'scope',
+      ],
+      [
+        'another teacher as the verifier',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), {
+            status: 'verified',
+            by: teacherId(otherTeacher(a)),
+          }),
+        'scope',
+      ],
+      [
+        'a student as the verifier',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), { status: 'verified', by: studentId('1') }),
+        'scope',
+      ],
+      [
+        'an extra key naming another teacher',
+        (r) =>
+          r.teacherProfiles.setVerification(tScope(a), {
+            status: 'verified',
+            by: ISO_STAFF,
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+      [
+        'a scope with no profile',
+        (r) =>
+          r.teacherProfiles.setVerification(
+            { teacherId: studentId('1') },
+            { status: 'verified', by: ISO_STAFF },
+          ),
+        'not_found',
+      ],
+    ],
+  },
+  // The publish guard: with only the actor verified, only the actor passes it.
+  'teacherProfiles.assertVerifiedForPublish': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope) => {
+      await raw.query(
+        `update teacher_profiles set verification_status =
+           case when user_id = $1 then 'verified' else 'pending' end::teacher_verification_status`,
+        [scope.teacherId],
+      );
+      const passed: string[] = [];
+      for (const t of TEACHERS) {
+        const ok = await r.teacherProfiles.assertVerifiedForPublish(tScope(t)).then(
+          () => true,
+          () => false,
+        );
+        if (ok) passed.push(t);
+      }
+      return passed;
+    },
+    random: async (r, _scope, rid) =>
+      r.teacherProfiles.assertVerifiedForPublish({ teacherId: rid }).then(
+        () => [rid],
+        () => [],
+      ),
+    owners: (passed: string[]) => passed,
+  },
   'audit.appendForStudent': {
     scope: 'student',
     op: 'write',
@@ -1269,6 +1726,52 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 2 + bad.length;
     },
   },
+  // Task 4.4 (ADR-0006): safety events are scoped through their session row.
+  'safetyEvents.record': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.safetyEvents.record(scope, {
+        sessionId: ids.session(target),
+        turnId: uid('trn_se'),
+        guard: 'jailbreak',
+        code: 'jailbreak_override',
+        source: 'rule',
+      }),
+    verify: async (r, actor, result) => {
+      const { id } = result as { id: string };
+      for (const p of PAIRS) {
+        const rows = await r.safetyEvents.listForSession(sScope(p), ids.session(actor));
+        expect(
+          rows.some((x) => x.id === id),
+          `${p} sees ${actor}'s safety event`,
+        ).toBe(p === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'free text instead of a code',
+        (r) =>
+          r.safetyEvents.record(sScope(a), {
+            sessionId: ids.session(a),
+            turnId: uid('trn_se_bad'),
+            guard: 'jailbreak',
+            code: 'he asked for the prompt' as never,
+            source: 'rule',
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'safetyEvents.listForSession': {
+    scope: 'student',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, p) => r.safetyEvents.listForSession(scope, ids.session(p)),
+    random: (r, scope, rid) => r.safetyEvents.listForSession(scope, rid),
+    owners: (rows: { studentId: string; teacherId: string }[]) =>
+      rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
+  },
 };
 
 /** After a usage write by `actor` on turn `turnId`: only the actor's scope sees that turn. */
@@ -1342,6 +1845,58 @@ describe.skipIf(!up)(
       repos = createRepositories(handle.db);
       raw = new pg.Client({ connectionString: TEST_URL });
       await raw.connect();
+      for (const t of TEACHERS) {
+        await repos.documents.create(tScope(t), {
+          id: isoDoc(t),
+          moduleId: ids.module(t, 1),
+          kind: 'material',
+          sourceTitle: `[${t}] doc`,
+        });
+        await repos.chunks.insertMany(tScope(t), isoDoc(t), [
+          { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
+        ]);
+        await repos.documents.create(tScope(t), {
+          id: keyDoc(t),
+          moduleId: ids.module(t, 1),
+          kind: 'material',
+          sourceTitle: `[${t}] keyed doc`,
+          storageKey: keyOf(t),
+        });
+        await repos.chunks.insertMany(tScope(t), keyDoc(t), [
+          { ord: 0, text: `[${t}] keyed marker`, locator: 'p1' },
+        ]);
+      }
+      for (const target of TEACHERS) {
+        for (const actor of TEACHERS) {
+          await repos.documents.create(tScope(target), {
+            id: delDoc(actor, target),
+            moduleId: ids.module(target, 1),
+            kind: 'material',
+            sourceTitle: `[${target}] deletable`,
+            storageKey: `[${target}] del`,
+          });
+          await repos.chunks.insertMany(tScope(target), delDoc(actor, target), [
+            { ord: 0, text: `[${target}] deletable chunk`, locator: 'p1' },
+          ]);
+        }
+        await repos.documents.create(tScope(target), {
+          id: repDoc(target),
+          moduleId: ids.module(target, 1),
+          kind: 'material',
+          sourceTitle: `[${target}] replaceable`,
+          storageKey: `[${target}] rep`,
+        });
+      }
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'Iso Staff', 'en', 'test', 'staff')`,
+        [ISO_STAFF],
+      );
+      for (const t of TEACHERS) {
+        await repos.teacherProfiles.create(tScope(t), {
+          slug: profileSlug(t),
+          subject: `[${t}] subject`,
+        });
+      }
       for (const p of PAIRS) {
         const t = teacherOf(p);
         await raw.query(

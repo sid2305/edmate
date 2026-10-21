@@ -1,0 +1,124 @@
+{
+  "shell": {
+    "skipToContent": "Skip to content",
+    "brand": "Edmate",
+    "signOut": "Sign out"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "googleButton": "Continue with Google",
+    "emailLink": "Sign in with email instead"
+  },
+  "home": {
+    "nav": "Home",
+    "title": "Home",
+    "placeholder": "Your teacher's agent will be here soon.",
+    "chatLink": "Chat with your teacher's agent"
+  },
+  "teacher": {
+    "title": "Teacher studio",
+    "placeholder": "Teacher studio — coming soon.",
+    "nav": "Studio",
+    "uploadsLink": "Uploads"
+  },
+  "chat": {
+    "title": "Chat with your teacher's agent",
+    "threadLabel": "Conversation",
+    "empty": "Ask your first question below.",
+    "you": "You",
+    "agent": "Tutor",
+    "teacher": "Your teacher",
+    "stillChecking": "Still checking…",
+    "updated": "Updated",
+    "updatedHint": "This reply was corrected",
+    "composerLabel": "Your message",
+    "send": "Send",
+    "sending": "The tutor is replying…",
+    "hint": "Get a hint",
+    "hintAsked": "Can I have a hint?",
+    "lastHelp": "Last help: {level}",
+    "rung1": "Hint",
+    "rung2": "Hint",
+    "rung3": "Worked example",
+    "rung4": "Full solution",
+    "sources": "Sources",
+    "locked": "This is part of {packageName}.",
+    "lockedGeneric": "This is not part of your package.",
+    "teacherQuestion": "Sent to your teacher. They'll answer in a live class or here.",
+    "skillComingSoon": "Coming soon",
+    "retry": "Try again",
+    "skills": {
+      "explain": "Explain",
+      "coach": "Coach",
+      "practice": "Practice",
+      "feedback": "Feedback",
+      "mock_interview": "Mock interview",
+      "revision": "Revision",
+      "study_plan": "Study plan"
+    },
+    "errors": {
+      "unauthorized": "Please sign in again to keep chatting.",
+      "forbidden": "You can't use this chat yet.",
+      "not_found": "This chat is not available any more. Start a new one.",
+      "validation": "That message couldn't be sent. Please check it and try again.",
+      "no_access": "You need a live package with this teacher to chat.",
+      "limit_reached": "You've used today's messages in your package. Come back tomorrow.",
+      "rate_limited": "You're sending messages quickly. Wait a moment, then try again.",
+      "input_too_large": "That message is too long. Please make it shorter.",
+      "turn_cost_exceeded": "That question needs too much work for one reply. Try asking a smaller part.",
+      "provider_error": "Something went wrong. Please try again.",
+      "guard_blocked": "I can't help with that here. Let's get back to your learning.",
+      "payment_required": "Your package needs a payment before you can keep chatting."
+    }
+  },
+  "uploads": {
+    "title": "Your teaching files",
+    "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
+    "chooseFile": "Upload a file",
+    "acceptHint": "PDF, Word, PowerPoint or Markdown up to 20 MB; audio or video up to 500 MB.",
+    "module": "Module",
+    "moduleOption": "Module {n}",
+    "noModules": "Set up a module for your course before you upload files.",
+    "listLabel": "Your files",
+    "empty": "No files yet. Upload your first one above.",
+    "loading": "Loading your files…",
+    "progress": "Uploading: {percent}%",
+    "status": {
+      "uploading": "Waiting for the upload",
+      "processing": "Processing",
+      "ready": "Ready",
+      "failed": "Failed"
+    },
+    "replace": "Replace",
+    "replaceLabel": "Replace {title}",
+    "delete": "Delete",
+    "deleteLabel": "Delete {title}",
+    "confirmDelete": "Delete {title}? Your agent stops using it straight away.",
+    "confirm": "Yes, delete",
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "retryLabel": "Try again: {title}",
+    "errors": {
+      "unsupported_type": "That file type can't be uploaded. Use PDF, Word, PowerPoint, Markdown, audio or video.",
+      "input_too_large": "That file is too big. Documents can be up to 20 MB, audio and video up to 500 MB.",
+      "not_uploaded": "The file hasn't arrived yet. Wait a moment, then try again.",
+      "upload_failed": "The upload didn't finish. Check your connection, then replace the file.",
+      "enqueue_failed": "We couldn't start processing this file. Try again.",
+      "validation": "That file couldn't be added. Check it and try again.",
+      "not_found": "This file is gone. It may have been deleted.",
+      "unauthorized": "Please sign in again.",
+      "forbidden": "You can't manage files here.",
+      "rate_limited": "Too many requests. Wait a moment, then try again.",
+      "provider_error": "Something went wrong. Please try again."
+    },
+    "reasons": {
+      "input_too_large": "The file is too big.",
+      "unsupported_type": "The file isn't the type it said it was.",
+      "unsupported": "This file can't be read. Try saving it again, or as a PDF.",
+      "enqueue_failed": "Processing couldn't start.",
+      "validation": "The file couldn't be read.",
+      "provider_error": "Processing failed. Try again, or replace the file.",
+      "other": "Processing failed. Replace the file to try again."
+    }
+  }
+}

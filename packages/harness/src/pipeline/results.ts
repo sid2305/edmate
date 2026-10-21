@@ -15,6 +15,7 @@ import {
   PedagogyDecisionSchema,
   PersonaSchema,
   SafetyAlertSchema,
+  SafetyEventCodeSchema,
   SourceRefSchema,
   StyleCardSchema,
   TurnContextSchema,
@@ -55,7 +56,15 @@ export const ScrubbedSchema: z.ZodType<Scrubbed> = z.strictObject({
 });
 
 export const PreGuardResultSchema: z.ZodType<PreGuardResult> = z.discriminatedUnion('result', [
-  z.strictObject({ result: z.literal(['ok', 'block']), guards, usage }),
+  z.strictObject({ result: z.literal('ok'), guards, usage }),
+  z.strictObject({
+    result: z.literal('block'),
+    guards,
+    usage,
+    reply: z.string().min(1).exactOptional(),
+    alert: SafetyAlertSchema.exactOptional(),
+    code: SafetyEventCodeSchema.exclude(['self_harm']).exactOptional(),
+  }),
   z.strictObject({ result: z.literal('escalate'), alert: SafetyAlertSchema, guards, usage }),
 ]);
 
@@ -76,6 +85,7 @@ export const BuiltContextSchema: z.ZodType<BuiltContext> = z.strictObject({
   helpRung: TurnContextSchema.shape.helpRung,
   helpState: HelpStateSchema,
   helpStateUnreadable: z.literal(true).exactOptional(),
+  answerKeyDropped: z.int().min(1).exactOptional(),
 });
 
 export const EscalateResultSchema: z.ZodType<EscalateResult> = z.strictObject({
@@ -89,6 +99,7 @@ export const GenerateResultSchema: z.ZodType<GenerateResult> = z.strictObject({
   withheld: z.boolean().exactOptional(),
   locked: z.enum(['hit', 'failed']).exactOptional(),
   held: z.boolean().exactOptional(),
+  practiceAnswerKey: z.array(z.string()).readonly().exactOptional(),
 });
 
 export const PostGuardResultSchema: z.ZodType<PostGuardResult> = z.discriminatedUnion('result', [

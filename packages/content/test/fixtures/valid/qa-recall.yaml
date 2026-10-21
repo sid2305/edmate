@@ -2,7 +2,18 @@
   moduleId: variables
   question: What is a variable?
   expectedModuleId: variables
+  expectedHeadings:
+    - Variables
+  reviewed_by: lead
 - id: recall-2
   moduleId: loops
   question: How does a for loop work?
   expectedModuleId: loops
+  expectedHeadings:
+    - Loops
+  reviewed_by: lead
+- id: recall-3
+  moduleId: loops
+  question: How do I draw a chart?
+  outOfCourse: true
+  reviewed_by: lead

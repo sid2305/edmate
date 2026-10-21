@@ -1,5 +1,5 @@
 # Edmate local stack (task 0.2): Postgres 16 + pgvector, Redis, MinIO (S3-compatible), Caddy,
-# the Next.js web app and the BullMQ worker.
+# the Next.js web app, the BullMQ worker and (task 1.4) Mailpit, the sandbox mail catcher.
 #
 #   docker compose -f docker/compose.yaml up -d --build
 #   curl -i localhost:8080/api/health
@@ -7,7 +7,7 @@
 #
 # Runs with no env file: every setting is `${VAR:-dev-default}`, and docker/env.example documents
 # each one. The defaults are dev-only placeholders, not secrets; override them for anything shared.
-# Only Caddy (and MinIO, for local tools) publish ports, on 127.0.0.1. Data lives in docker/data/
+# Only Caddy (and MinIO and Mailpit's UI, for local tools) publish ports, on 127.0.0.1. Data lives in docker/data/
 # (gitignored).
 
 name: edmate
@@ -62,6 +62,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-edmate-dev}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+      # Upload centre (task 8.2): browsers PUT straight to MinIO with a presigned URL. CORS allows
+      # only the web app's origins (Caddy, and `next dev` on the host), never '*'. Presigned URLs
+      # carry no cookies, so no credentials are allowed either. Local development only.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${AUTH_URL:-http://localhost:8080},http://localhost:3000
     ports:
       - '127.0.0.1:${EDMATE_S3_PORT:-9000}:9000'
       - '127.0.0.1:${EDMATE_S3_CONSOLE_PORT:-9001}:9001'
@@ -72,6 +76,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  mailpit:
+    # Sandbox mail catcher for sign-in links (task 1.4). It has no outbound relay, so the sandbox
+    # can never email a real person. SMTP (1025) stays on the compose network; the UI and API
+    # are published on 127.0.0.1 only. No data volume: caught mail is gone on restart.
+    # Pinned by digest (v1.31.6) so a re-pushed tag can't change what runs.
+    image: axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${EDMATE_MAIL_UI_PORT:-8025}:8025'
+    # The image ships its own healthcheck (`/mailpit readyz`).
 
   web:
     build:
@@ -87,10 +102,19 @@ services:
       AUTH_TRUST_HOST: ${AUTH_TRUST_HOST:-true}
       AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
+      # Email magic link (task 1.4): Mailpit by default. Production sets any provider's SMTP URL.
+      EMAIL_SERVER: ${EMAIL_SERVER:-smtp://mailpit:1025}
+      EMAIL_FROM: ${EMAIL_FROM:-Edmate <sign-in@edmate.test>}
+      # Upload centre (task 8.2): upload URLs are signed for MinIO's published port (the browser
+      # can't reach minio:9000), and this local MinIO speaks plain http, which NODE_ENV=production
+      # otherwise refuses. A real deployment sets an https S3_ENDPOINT and neither of these.
+      S3_PUBLIC_ENDPOINT: http://localhost:${EDMATE_S3_PORT:-9000}
+      S3_ALLOW_HTTP: 'true'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio: { condition: service_healthy }
+      mailpit: { condition: service_healthy }
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
       interval: 5s

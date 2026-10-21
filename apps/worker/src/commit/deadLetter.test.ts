@@ -61,6 +61,26 @@ describe('isFinal', () => {
 });
 
 describe('deadLetterRefs', () => {
+  it('keeps a safety alert job\'s ids, never its excerpt (task 4.3)', () => {
+    const refs = deadLetterRefs({
+      alert: {
+        id: 'alert_1',
+        studentId: 'stu_1',
+        teacherId: 'tch_a',
+        sessionId: 'ses_1',
+        excerptRedacted: CANARY,
+      },
+      round: 2,
+    });
+    expect(refs).toEqual({
+      alertId: 'alert_1',
+      studentId: 'stu_1',
+      teacherId: 'tch_a',
+      sessionId: 'ses_1',
+    });
+    expect(JSON.stringify(refs)).not.toContain(CANARY);
+  });
+
   it('keeps the ids of every job kind and nothing else', () => {
     const scope = { studentId: 'stu_1', teacherId: 'tch_a' };
     expect(deadLetterRefs(job().data)).toEqual({
@@ -85,6 +105,12 @@ describe('deadLetterRefs', () => {
     ).toEqual({ ...scope, turnId: 'turn_1', sessionId: 'ses_1' });
     const help = deadLetterRefs({ scope, sessionId: 'ses_1', helpState: { answerKey: [CANARY] } });
     expect(help).toEqual({ ...scope, sessionId: 'ses_1' });
+  });
+
+  it('keeps an ingest job\'s teacherId and documentId (task 8.2, no scope wrapper)', () => {
+    expect(
+      deadLetterRefs({ teacherId: 'tch_a', documentId: 'doc_1', fileKind: 'pdf' }),
+    ).toEqual({ teacherId: 'tch_a', documentId: 'doc_1' });
   });
 
   it('reads a malformed payload defensively', () => {

@@ -1,6 +1,8 @@
 // Every web test runs offline (build plan rule 4): the global fetch rejects, so a provider call
 // that is not injected fails the test instead of reaching Google. Sign-in env from the shell is
 // cleared so Auth.js never infers settings from it.
+import { cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 const AUTH_VARS = [
@@ -11,6 +13,10 @@ const AUTH_VARS = [
   'AUTH_GOOGLE_SECRET',
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
+  // Email magic link (task 1.4): an SMTP URL or Redis from the shell must never be used.
+  'EMAIL_SERVER',
+  'EMAIL_FROM',
+  'REDIS_URL',
 ];
 
 beforeEach(() => {
@@ -26,4 +32,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  // Only the jsdom `.test.tsx` suites render anything; a node suite has no `document` to clean up.
+  if (typeof document !== 'undefined') cleanup();
 });

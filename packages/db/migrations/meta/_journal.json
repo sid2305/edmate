@@ -85,6 +85,48 @@
       "when": 1792424231133,
       "tag": "0011_teacher_question_open_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792507921567,
+      "tag": "0012_material_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792514098261,
+      "tag": "0013_auth_verification_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792519842597,
+      "tag": "0014_age_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792522575535,
+      "tag": "0015_age_blocked",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792551865838,
+      "tag": "0016_teacher_verification_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792554016460,
+      "tag": "0017_document_status",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,14 @@
 // - `edmate-turn-commit`: everything else persisted after a turn: messages, the help state and
 //   the trace.
 // - `edmate-dead-letter`: jobs that failed for good (attempts used up, or a permanent error).
+// - `edmate-safety-alert`: SafetyAlerts (task 4.3): tell the trust team, then page on-call every
+//   15 minutes until someone acknowledges the alert.
+// - `edmate-safety-event`: moderationIn and jailbreak blocks (task 4.4, ADR-0006): one
+//   safety_events row each, ids and a fixed code only.
+// - `edmate-ingest`: a document to parse, chunk and store (task 8.2 Phase 2). The job carries the
+//   file's kind (and, for video/audio, its mime type) because `documents.kind` in the database is
+//   the chunk's retrieval category (material/transcript/teacher_note), not the uploaded file's
+//   format — there is nowhere else for the processor to learn it.
 //
 // BullMQ refuses `:` in a custom job id, so the parts are joined with `.` (contracts ids never
 // contain one).
@@ -13,6 +21,8 @@ import {
   EntitlementSchema,
   EvidenceEventSchema,
   MessageSchema,
+  SafetyAlertSchema,
+  SafetyEventCodeSchema,
   TurnTraceSchema,
   UsageSchema,
 } from '@edmate/contracts';
@@ -22,6 +32,9 @@ import { z } from 'zod';
 export const METER_QUEUE = 'edmate-turn-meter';
 export const COMMIT_QUEUE = 'edmate-turn-commit';
 export const DEAD_LETTER_QUEUE = 'edmate-dead-letter';
+export const ALERT_QUEUE = 'edmate-safety-alert';
+export const SAFETY_EVENT_QUEUE = 'edmate-safety-event';
+export const INGEST_QUEUE = 'edmate-ingest';
 
 export const JOB = {
   usage: 'usage.record',
@@ -30,6 +43,10 @@ export const JOB = {
   helpState: 'session.help_state',
   trace: 'trace.record',
   evidence: 'evidence.apply',
+  alertRaise: 'alert.raise',
+  alertEscalateCheck: 'alert.escalate_check',
+  safetyEventRecord: 'safety_event.record',
+  ingestProcess: 'ingest.process',
 } as const;
 export type JobName = (typeof JOB)[keyof typeof JOB];
 
@@ -70,7 +87,68 @@ export const jobId = {
   helpState: (sessionId: string, writeId: string) => `${sessionId}.help.${writeId}`,
   trace: (turnId: string) => `${turnId}.trace`,
   evidence: (eventId: string) => `${eventId}.evidence`,
+  alertRaise: (alertId: string) => `${alertId}.alert`,
+  /** One id per round, so each 15-minute check can schedule the next one. */
+  alertEscalate: (alertId: string, round: number) => `${alertId}.escalate.${round}`,
+  /** ADR-0006's dedupe key `${turnId}:${guard}`, with `.` (BullMQ refuses `:`). */
+  safetyEvent: (turnId: string, guard: SafetyEventGuard) => `${turnId}.${guard}.safety`,
+  /**
+   * One ingest job per *stored file* at a time: the id is the document id plus a short hash of
+   * `storageKey`, so a retry (same document, same file) replaces the still-queued attempt, but a
+   * replace (same document, a new `storageKey`) gets its own id instead of colliding with a job
+   * that may still be active for the old file. `Queue.add()` only dedupes against a job still
+   * `waiting`/`delayed`; reusing one id across a replace would block indefinitely against a job
+   * already running (see the Phase 2 int test's decision).
+   */
+  ingest: (documentId: string, storageKey: string) =>
+    `${documentId}.ingest.${createHash('sha256').update(storageKey).digest('hex').slice(0, 12)}`,
 };
+
+// ---- safety alerts (task 4.3) -----------------------------------------------------------------
+
+/** How long after the raise on-call is paged if nobody acknowledged the alert, and how often again. */
+export const ALERT_ESCALATION_MS = 15 * 60_000;
+/** "Retried until delivered": a million attempts at the 30 s cap is about a year. */
+export const ALERT_ATTEMPTS = 1_000_000;
+/** The worker's custom backoff (BullMQ's exponential one has no cap). */
+export const ALERT_BACKOFF_TYPE = 'alert-capped';
+export const ALERT_BACKOFF_START_MS = 1_000;
+export const ALERT_BACKOFF_MAX_MS = 30_000;
+/**
+ * Completed alert jobs are kept a day so their ids still dedupe a raise retried after the first
+ * one finished. They hold the alert's redacted excerpt, so not longer.
+ */
+export const ALERT_COMPLETED_TTL_SECONDS = 24 * 60 * 60;
+
+/** The delay before attempt `attemptsMade + 1`: doubling from `startMs`, never above `maxMs`. */
+export function alertBackoffMs(
+  attemptsMade: number,
+  startMs = ALERT_BACKOFF_START_MS,
+  maxMs = ALERT_BACKOFF_MAX_MS,
+): number {
+  return Math.min(startMs * 2 ** Math.max(0, attemptsMade - 1), maxMs);
+}
+
+export function alertJobOptions(jobId: string, delayMs?: number): JobsOptions {
+  return {
+    jobId,
+    attempts: ALERT_ATTEMPTS,
+    backoff: { type: ALERT_BACKOFF_TYPE, delay: ALERT_BACKOFF_START_MS },
+    removeOnComplete: { age: ALERT_COMPLETED_TTL_SECONDS },
+    removeOnFail: { age: FAILED_JOB_TTL_SECONDS },
+    ...(delayMs === undefined ? {} : { delay: delayMs }),
+  };
+}
+
+export const AlertRaiseJobSchema = z.strictObject({ alert: SafetyAlertSchema });
+export type AlertRaiseJob = z.infer<typeof AlertRaiseJobSchema>;
+
+/** `round` 0 is the first check (15 minutes after the raise); each unacknowledged check adds one. */
+export const AlertEscalateJobSchema = z.strictObject({
+  alert: SafetyAlertSchema,
+  round: z.int().min(0),
+});
+export type AlertEscalateJob = z.infer<typeof AlertEscalateJobSchema>;
 
 /**
  * The usage_ledger row id for the `index`-th usage write of a turn: the same on every retry of
@@ -171,3 +249,58 @@ export function bindScope(scope: JobScope, adapter: string): JobScope {
   if (!r.success) throw new TypeError(`${adapter}: invalid scope`);
   return r.data;
 }
+
+// ---- safety events (task 4.4, ADR-0006) -------------------------------------------------------
+
+const SafetyEventGuardSchema = z.enum(['moderationIn', 'jailbreak']);
+export type SafetyEventGuard = z.infer<typeof SafetyEventGuardSchema>;
+const SafetyEventSourceSchema = z.enum(['rule', 'classifier']);
+
+/** `SafetyEventSink.record`'s argument, strict: ids, the guard, a fixed code and the source. */
+export const SafetyEventSchema = z.strictObject({
+  studentId: Id,
+  teacherId: Id,
+  sessionId: Id,
+  turnId: Id,
+  guard: SafetyEventGuardSchema,
+  code: SafetyEventCodeSchema,
+  source: SafetyEventSourceSchema,
+});
+export type SafetyEvent = z.infer<typeof SafetyEventSchema>;
+
+/** The job: the event with its student x teacher as the scope the worker writes under. */
+export const SafetyEventJobSchema = z.strictObject({
+  scope: Scope,
+  sessionId: Id,
+  turnId: Id,
+  guard: SafetyEventGuardSchema,
+  code: SafetyEventCodeSchema,
+  source: SafetyEventSourceSchema,
+});
+export type SafetyEventJob = z.infer<typeof SafetyEventJobSchema>;
+
+// ---- ingest (task 8.2 Phase 2) ----------------------------------------------------------------
+
+/** `@edmate/ingest`'s `DocumentKind` plus the two media kinds its `VideoSource` covers. */
+export const IngestFileKindSchema = z.enum(['pdf', 'docx', 'pptx', 'markdown', 'video', 'audio']);
+export type IngestFileKind = z.infer<typeof IngestFileKindSchema>;
+
+const MEDIA_MIME = /^(?:audio|video)\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
+
+/**
+ * One document to ingest. `fileKind` picks the parser (bytes for pdf/docx/pptx/markdown, a
+ * transcriber for video/audio); `mimeType` is required exactly for video/audio, where the
+ * `Transcriber` port needs it. The processor re-reads the document row for its current
+ * `storageKey`: this job names only what to parse it as, not where its bytes live now.
+ */
+export const IngestJobSchema = z
+  .strictObject({
+    teacherId: Id,
+    documentId: Id,
+    fileKind: IngestFileKindSchema,
+    mimeType: z.string().regex(MEDIA_MIME).optional(),
+  })
+  .refine((j) => (j.fileKind === 'video' || j.fileKind === 'audio') === (j.mimeType !== undefined), {
+    message: 'mimeType is required for video/audio and refused otherwise',
+  });
+export type IngestJob = z.infer<typeof IngestJobSchema>;

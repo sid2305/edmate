@@ -66,6 +66,8 @@ export interface GuardSliceRequest {
   name: string;
   pass: 1 | 2;
   index: number;
+  /** The text this guard is about to check (4.8 fix round 1: a later guard's weight can follow it). */
+  text?: string;
 }
 
 export interface GuardChainOptions {
@@ -243,7 +245,7 @@ export async function runGuardChain<Ctx>(
       const { name } = e;
       if (stepCancelled()) return fail(pass, { name, cause: 'cancelled' });
 
-      const timed = await runOne(e, text, sliceOf({ name, pass, index }));
+      const timed = await runOne(e, text, sliceOf({ name, pass, index, text }));
       if (timed.status === 'timeout') return fail(pass, { name, cause: 'timeout' });
       if (timed.status === 'error') {
         if (timed.error === STEP_CANCELLED) return fail(pass, { name, cause: 'cancelled' });

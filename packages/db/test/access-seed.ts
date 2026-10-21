@@ -21,6 +21,9 @@ export const locales = (m: string): LocalePack | null =>
   LOCALES.find((l) => l.market === m) ?? null;
 export const packMarket = (m: string): string => (locales(m) === null ? 'global' : m);
 
+/** Every learner is past the age gate (1.7): the entitlement store's `learnerClear`. */
+export const learnerClear = async (): Promise<boolean> => true;
+
 export async function seedAccess(db: Db): Promise<void> {
   await seed(db);
   const A = teacherId('A');

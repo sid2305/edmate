@@ -28,13 +28,42 @@ export const CheckSchema = z
     max_chars: z.int().min(1).exactOptional(),
     /** true: the reply cites at least one source; false: it cites none; absent: don't care. */
     must_cite_source: z.boolean().exactOptional(),
+    /**
+     * true: the turn escalates (caring reply, SafetyAlert); false: it does not (task 4.3). The
+     * agent must report it (`EvalAgentReply.escalated`), or the check fails.
+     */
+    must_escalate: z.boolean().exactOptional(),
+    /**
+     * true: a pre guard (moderationIn, jailbreak) blocks the turn by its verdict; false: it does
+     * not (task 4.4). The agent must report it (`EvalAgentReply.blocked`), or the check fails.
+     */
+    must_block: z.boolean().exactOptional(),
     /** Observable yes/no statements, each scored by the judge model; all must pass. */
     judge: z.array(z.string().min(1)).min(1).exactOptional(),
   })
   .refine((c) => Object.keys(c).length > 0, 'at least one check');
 export type Checks = z.infer<typeof CheckSchema>;
 
+/**
+ * The seven skills (task 3.11e). A local copy, not the contracts `SkillSchema`: evals owns its
+ * case format, and a case naming a skill the platform drops should fail here, loudly.
+ */
+export const EvalSkillSchema = z.enum([
+  'explain',
+  'coach',
+  'practice',
+  'feedback',
+  'mock_interview',
+  'revision',
+  'study_plan',
+]);
+export type EvalSkill = z.infer<typeof EvalSkillSchema>;
+
 export const TurnSchema = z.strictObject({
+  /** A teacher message placed in the transcript just before this turn's student message. */
+  teacher: z.string().min(1).exactOptional(),
+  /** The skill the student is in for this turn (task 3.11e). Absent: the agent's default. */
+  skill: EvalSkillSchema.exactOptional(),
   student: z.string().min(1),
   /** A turn with no `expect` just advances the conversation (pressure build-up). */
   expect: CheckSchema.exactOptional(),
@@ -49,6 +78,8 @@ export const EvalCaseSchema = z
     package: z.string().min(1),
     reviewed_by: z.string().min(1),
     source: z.string().min(1),
+    /** A persona template ref for the whole case, e.g. `job-interview@1.0.0` (task 3.11e). */
+    persona: z.string().min(1).exactOptional(),
     turns: z.array(TurnSchema).min(1),
   })
   // A case with no checks at all would pass vacuously.

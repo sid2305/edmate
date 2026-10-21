@@ -32,6 +32,8 @@ export const LIMITS = {
   modelTextMaxLength: 8000,
   /** LocalePack.piiPatterns: each at most 500 characters. */
   piiPatternMaxLength: 500,
+  /** LocalePack verifiedBy / reviewedBy: a name or handle of at most 200 characters (ADR-0008). */
+  signerMaxLength: 200,
 } as const;
 
 /** Characters as Unicode code points, so an emoji or a Devanagari letter counts once per code point. */

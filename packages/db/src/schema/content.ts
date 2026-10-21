@@ -1,8 +1,9 @@
 // Data model rows: courses / modules / topics, documents / chunks, style_cards, corrections.
 import { sql } from 'drizzle-orm';
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import {
   chunkKind,
+  documentStatus,
   EMBEDDING_DIMENSIONS,
   id,
   timestamps,
@@ -76,11 +77,19 @@ export const documents = pgTable(
     /** Object-store key of the original file; null for notes typed in the studio. */
     storageKey: text('storage_key'),
     rightsDeclaredAt: tstz('rights_declared_at'),
+    /** Ingestion state (task 8.2). Rows from before migration 0017 were backfilled `ready`. */
+    status: documentStatus('status').notNull().default('uploading'),
+    /** A fixed failure code (an IngestErrorCode-like word), never raw error text; only when failed. */
+    failureReason: text('failure_reason'),
     ...timestamps(),
   },
   (t) => [
     index('documents_teacher_id_idx').on(t.teacherId),
     index('documents_module_id_idx').on(t.moduleId),
+    check(
+      'documents_failure_reason_only_when_failed',
+      sql`${t.failureReason} is null or ${t.status} = 'failed'`,
+    ),
   ],
 );
 
@@ -117,6 +126,22 @@ export const chunks = pgTable(
     // Cosine distance (`<=>`), the metric OpenAI embeddings are meant for (task 2.7; 5.3 ranks).
     index('chunks_embedding_hnsw_idx').using('hnsw', t.embedding.op('vector_cosine_ops')),
   ],
+);
+
+/**
+ * Task 5.3: one counter per teacher, bumped in the same transaction as every write to that
+ * teacher's documents or chunks. leakCheck's cache key includes it (ADR-0007), so a material
+ * change invalidates the cache across processes. Any future delete path (8.x, 13.4) must bump it.
+ */
+export const teacherMaterialRevisions = pgTable(
+  'teacher_material_revisions',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    revision: bigint('revision', { mode: 'number' }).notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex('teacher_material_revisions_teacher_id_key').on(t.teacherId)],
 );
 
 /** The teacher's voice. Versions are immutable. */

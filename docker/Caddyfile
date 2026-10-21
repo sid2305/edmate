@@ -5,6 +5,10 @@
 	auto_https off
 }
 
+# No access log today. If one is added, it must not log the query string of
+# /api/auth/callback/*: the email sign-in link's single-use token is in the query (task 1.4).
+# X-Forwarded-For: reverse_proxy sets it itself; the app reads only its rightmost entry (the
+# peer Caddy saw), so this holds whether Caddy replaces or appends a client-sent value.
 :80 {
 	encode gzip
 	reverse_proxy web:3000

@@ -16,6 +16,7 @@ import {
   turnContextFull,
   turnInputSkillAction,
 } from '../fixtures/index.js';
+import { omit } from '../fixtures/omit.js';
 import { teacherModuleIds } from '../fixtures/valid/teacher.js';
 import {
   AttachmentSchema,
@@ -47,6 +48,10 @@ describe('LIMITS for fix round 1', () => {
 
   it('caps a saved help state at 8 KB of JSON (ADR-0005)', () => {
     expect(LIMITS.helpStateMaxJsonLength).toBe(8 * 1024);
+  });
+
+  it('caps a locale pack signer name at 200 characters (ADR-0008)', () => {
+    expect(LIMITS.signerMaxLength).toBe(200);
   });
 });
 
@@ -186,6 +191,71 @@ describe('LocalePack.piiPatterns', () => {
     expect(
       paths(LocalePackSchema.safeParse({ ...demoLocalePack, piiPatterns: ['\\d+', '[z-a]'] })),
     ).toEqual([['piiPatterns', 1]]);
+  });
+});
+
+describe('LocalePack verification fields (ADR-0008)', () => {
+  const line = demoLocalePack.helplines[0]!;
+  const withLine = (h: Record<string, unknown>) =>
+    LocalePackSchema.safeParse({ ...demoLocalePack, helplines: [h] });
+
+  it('a helpline needs verifiedBy and verifiedOn', () => {
+    expect(ok(withLine(line))).toBe(true);
+    const noBy = omit(line, 'verifiedBy');
+    const noOn = omit(line, 'verifiedOn');
+    expect(paths(withLine(noBy))).toEqual([['helplines', 0, 'verifiedBy']]);
+    expect(paths(withLine(noOn))).toEqual([['helplines', 0, 'verifiedOn']]);
+  });
+
+  it('verifiedBy is a name or handle: non-blank, at most 200 characters, never an email', () => {
+    expect(ok(withLine({ ...line, verifiedBy: 'pending' }))).toBe(true);
+    expect(ok(withLine({ ...line, verifiedBy: 'x'.repeat(LIMITS.signerMaxLength) }))).toBe(true);
+    for (const bad of ['', '   ', 'x'.repeat(LIMITS.signerMaxLength + 1), 'someone@example.org']) {
+      expect(paths(withLine({ ...line, verifiedBy: bad }))).toEqual([
+        ['helplines', 0, 'verifiedBy'],
+      ]);
+    }
+  });
+
+  it('verifiedOn is a calendar date (YYYY-MM-DD)', () => {
+    for (const bad of ['2026-13-01', '2026-02-30', '19 Oct 2026', '2026-10-19T00:00:00Z']) {
+      expect(paths(withLine({ ...line, verifiedOn: bad }))).toEqual([
+        ['helplines', 0, 'verifiedOn'],
+      ]);
+    }
+  });
+
+  it('compliance.parentalConsentRequired is a required boolean', () => {
+    const rest = omit(demoLocalePack.compliance, 'parentalConsentRequired');
+    expect(paths(LocalePackSchema.safeParse({ ...demoLocalePack, compliance: rest }))).toEqual([
+      ['compliance', 'parentalConsentRequired'],
+    ]);
+    expect(
+      paths(
+        LocalePackSchema.safeParse({
+          ...demoLocalePack,
+          compliance: { ...demoLocalePack.compliance, parentalConsentRequired: 'yes' },
+        }),
+      ),
+    ).toEqual([['compliance', 'parentalConsentRequired']]);
+  });
+
+  it('reviewedBy and reviewedOn are optional, but come as a pair', () => {
+    const unsigned = omit(omit(demoLocalePack, 'reviewedBy'), 'reviewedOn');
+    expect(ok(LocalePackSchema.safeParse(unsigned))).toBe(true);
+    expect(ok(LocalePackSchema.safeParse(demoLocalePack))).toBe(true);
+    expect(paths(LocalePackSchema.safeParse({ ...unsigned, reviewedBy: 'Reviewer A' }))).toEqual([
+      ['reviewedOn'],
+    ]);
+    expect(paths(LocalePackSchema.safeParse({ ...unsigned, reviewedOn: '2026-10-19' }))).toEqual([
+      ['reviewedBy'],
+    ]);
+    expect(
+      paths(LocalePackSchema.safeParse({ ...demoLocalePack, reviewedBy: 'a@b.example' })),
+    ).toEqual([['reviewedBy']]);
+    expect(
+      paths(LocalePackSchema.safeParse({ ...demoLocalePack, reviewedOn: '2026-10-32' })),
+    ).toEqual([['reviewedOn']]);
   });
 });
 

@@ -14,6 +14,8 @@ export {
   checkMaxChars,
   checkMaxWords,
   checkMustCiteSource,
+  checkMustBlock,
+  checkMustEscalate,
   countChars,
   countWords,
 } from './checks/structure.js';
@@ -53,8 +55,10 @@ export {
 export {
   CheckSchema,
   EvalCaseSchema,
+  EvalSkillSchema,
   TurnSchema,
   type Checks,
   type EvalCase,
+  type EvalSkill,
   type EvalTurn,
 } from './schema.js';

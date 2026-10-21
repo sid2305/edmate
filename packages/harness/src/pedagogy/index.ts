@@ -19,6 +19,7 @@ export {
   PromptPackMismatchError,
   replyLanguage,
 } from './compose.js';
+export { disclaimerGap, type RegulatedSubject, resolveDisclaimer } from './disclaimer.js';
 export { coverageGate, DEFAULT_COVERAGE_THRESHOLD, isCovered } from './coverage.js';
 export {
   type HelpState,

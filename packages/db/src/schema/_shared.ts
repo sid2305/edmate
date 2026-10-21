@@ -38,6 +38,22 @@ export const subscriptionStatus = pgEnum('subscription_status', [
   'ended',
 ]);
 export const agentStatus = pgEnum('agent_status', ['draft', 'live', 'suspended']);
+/** A teacher's identity check, set only by staff (task 8.1). Only `verified` may publish. */
+export const teacherVerificationStatus = pgEnum('teacher_verification_status', [
+  'pending',
+  'verified',
+  'rejected',
+]);
+/**
+ * Where an uploaded document is in ingestion (task 8.2): a studio display field, never a retrieval
+ * gate. `uploading` until the browser's PUT lands, `processing` while the worker ingests it.
+ */
+export const documentStatus = pgEnum('document_status', [
+  'uploading',
+  'processing',
+  'ready',
+  'failed',
+]);
 export const chunkKind = pgEnum('chunk_kind', ['material', 'transcript', 'teacher_note']);
 export const messageRole = pgEnum('message_role', ['student', 'agent', 'teacher']);
 export const teacherQuestionStatus = pgEnum('teacher_question_status', [

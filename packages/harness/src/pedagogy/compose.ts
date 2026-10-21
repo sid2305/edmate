@@ -1,6 +1,7 @@
 // The system-prompt composer (build plan § Teaching engine › Prompt packs). Order:
 //   safety preamble → skill or mode pack (→ persona) → style card → locale pack → decision block
-//   (move, rung, "do not say" list) → retrieved material with sources → learner summary.
+//   (move, rung, "do not say" list) → retrieved material with sources → learner summary (teaching
+//   turns only).
 // Optional sections are left out when they have nothing to show. Pure and deterministic.
 //
 // All prose comes from the pinned prompt-pack set; this file renders only data (ids, numbers,
@@ -9,6 +10,9 @@
 // Locked material (ADR-0003): every retrieved chunk is checked against the entitlement before
 // anything is rendered; one outside it throws LockedMaterialError, whose message names no text.
 import type { AgentConfig, Chunk, Lang, SourceRef, TurnContext } from '@edmate/contracts';
+import { personaQuestionsAsked } from './helpState.js';
+import { fenced, inline } from './dataText.js';
+import { resolveDisclaimer } from './disclaimer.js';
 import type { PolicyResult } from './policy.js';
 import {
   type FrameSection,
@@ -102,23 +106,7 @@ export function replyLanguage(lang: Lang, agent: Pick<AgentConfig, 'languages'>)
   return isPilotLanguages(agent.languages) && agent.languages.includes(lang) ? lang : 'en';
 }
 
-/** The fixed delimiters around data blocks (material, style card, learner summary). */
-export const DATA_OPEN = '<<<';
-export const DATA_CLOSE = '>>>';
-
-/** Breaks any run of 3+ `<` or `>` in data, so data can never close its own delimiter. */
-function neutralise(text: string): string {
-  return text.replace(/<{3,}|>{3,}/g, (m) => m.split('').join(' '));
-}
-
-function fenced(text: string): string {
-  return `${DATA_OPEN}\n${neutralise(text)}\n${DATA_CLOSE}`;
-}
-
-/** One line of data: whitespace collapsed (no line breaks to fake a new section). */
-function inline(text: string): string {
-  return neutralise(text).replace(/\s+/g, ' ').trim();
-}
+export { DATA_CLOSE, DATA_OPEN } from './dataText.js';
 
 function checkScope(ctx: TurnContext): void {
   const e = ctx.entitlement;
@@ -178,6 +166,14 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
         persona_style: fenced(p.style),
         persona_must_not: fenced(p.mustNot.join('; ')),
         persona_end_after: String(p.endAfterQuestions),
+        // The server's count, already including this turn (3.11d): never the model's own. Shown
+        // within [1, M] (3.11e), so "question 0 of M" and "question M+1 of M" never appear.
+        questions_asked: String(
+          Math.min(
+            Math.max(1, personaQuestionsAsked(policy.next.help)),
+            Math.max(1, p.endAfterQuestions),
+          ),
+        ),
       }),
     );
   }
@@ -209,10 +205,9 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
 
   const subject = ctx.agent.regulatedSubject;
   if (!distress && subject !== undefined) {
-    const own = ctx.locale.regulatedDisclaimers[subject];
     parts.push(
       renderTemplate(f.disclaimer, {
-        disclaimer: own === undefined ? f['generic-disclaimer'] : inline(own),
+        disclaimer: resolveDisclaimer(subject, ctx.locale, f['generic-disclaimer']),
       }),
     );
   }
@@ -230,12 +225,13 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   );
   // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and
   // only on teaching turns: a closed mode (locked, ask_teacher, redirect, distress, fallback)
-  // never discusses the problem, so it gets no answer key at all. postGuard still receives
-  // `mustNotReveal` on the decision.
-  if (teaching && policy.mustNotReveal.length > 0) {
+  // never discusses the problem, so it gets no answer key at all. Only `promptKeys` is rendered,
+  // never `mustNotReveal`: a practice key or a carried key never enters the prompt (5.6c,
+  // ADR-0011), and the guards get the full `mustNotReveal` on the decision.
+  if (teaching && policy.promptKeys.length > 0) {
     parts.push(
       renderTemplate(f['do-not-say'], {
-        do_not_say: policy.mustNotReveal.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
+        do_not_say: policy.promptKeys.map((s) => `- ${JSON.stringify(s)}`).join('\n'),
       }),
     );
   }
@@ -245,8 +241,11 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   if (chunks.length > 0) {
     parts.push(renderTemplate(f.material, { sources: materialBlock(chunks) }));
   }
+  // Only on teaching turns, like the answer key (3.11d, ADR-0009): a closed mode (locked,
+  // ask_teacher, redirect, distress, fallback) never gets the learner summary, which may name
+  // content from before a downgrade or a module lock.
   const summary = ctx.profile.lastSummary;
-  if (!distress && summary !== undefined && summary.trim() !== '') {
+  if (teaching && summary !== undefined && summary.trim() !== '') {
     parts.push(renderTemplate(f.learner, { last_summary: fenced(summary) }));
   }
 

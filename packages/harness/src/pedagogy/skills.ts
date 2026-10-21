@@ -1,7 +1,14 @@
 // Skill rules (build plan § Teaching engine › Skills): which skill a turn uses, and its default move.
 import type { Entitlement, Skill, TurnContext, TurnInput } from '@edmate/contracts';
 import type { Move } from './budgets.js';
-import { copyHelp, type HelpState, INITIAL_HELP_STATE } from './helpState.js';
+import {
+  copyHelp,
+  type HelpState,
+  INITIAL_HELP_STATE,
+  PERSONA_QUESTIONS_MAX,
+  personaQuestionsAsked,
+  withPersonaCount,
+} from './helpState.js';
 import {
   attemptLoggedAfter,
   effectiveCeiling,
@@ -46,14 +53,66 @@ export function selectSkill(
   return entitled[0] ?? null;
 }
 
+/** A role-play control a turn carries (3.11e): the start button, `/pause` or `stop`. */
+export type RolePlayControl = 'start' | 'pause' | 'stop';
+
+/**
+ * The turn's role-play control (3.11e). Read by decide, so the policy itself never sees the
+ * text. `start`: any `skill_action` turn (the client's start button; ordinary answers are
+ * `message` turns). `pause`: the text starts with `/pause`. `stop`: the whole text is `stop` or
+ * `/stop`, give or take case, spaces and a trailing `.` or `!`.
+ */
+export function rolePlayControl(
+  input: Pick<TurnInput, 'kind' | 'text'>,
+): RolePlayControl | undefined {
+  if (input.kind === 'skill_action') return 'start';
+  const text = (input.text ?? '').trim().toLowerCase();
+  if (text.startsWith('/pause')) return 'pause';
+  const bare = text.replace(/[.!\s]+$/u, '');
+  return bare === 'stop' || bare === '/stop' ? 'stop' : undefined;
+}
+
 export interface SkillInput {
   ctx: TurnContext;
   turn: Pick<TurnInput, 'kind' | 'skill'>;
   help: Readonly<HelpState>;
   skill: Skill;
+  /** The turn's role-play control (`rolePlayControl`), if any. */
+  control?: RolePlayControl;
 }
 
+/**
+ * The skill's move and next state. The persona question count (3.11d, ADR-0009) is the server's.
+ * On a `mock_interview` turn with a persona (3.11e): a start (`control` 'start', or a persona
+ * other than the stored `personaId`) opens at question 1; `pause` and `stop` leave it as it was;
+ * any other turn counts one more, capped at the persona's M (at least 1) and at
+ * PERSONA_QUESTIONS_MAX. Every other path carries the earlier count and id over, including the
+ * ladder and a solved practice item, which rebuild the help state from scratch.
+ */
 export function skillStep(i: SkillInput): SkillStep {
+  const s = stepFor(i);
+  const persona = i.ctx.persona;
+  if (s.reason !== 'mock_interview' || persona === undefined) {
+    return { ...s, next: withPersonaCount(s.next, i.help) };
+  }
+  const before = personaQuestionsAsked(i.help);
+  const cap = Math.min(Math.max(1, persona.endAfterQuestions), PERSONA_QUESTIONS_MAX);
+  const asked =
+    i.control === 'start' || i.help.personaId !== persona.id
+      ? 1
+      : i.control === 'pause' || i.control === 'stop'
+        ? before
+        : Math.min(before + 1, cap);
+  return {
+    ...s,
+    next: {
+      ...s.next,
+      help: { ...s.next.help, personaQuestionsAsked: asked, personaId: persona.id },
+    },
+  };
+}
+
+function stepFor(i: SkillInput): SkillStep {
   const { ctx, help } = i;
   const unchanged = { helpRung: ctx.helpRung, help: copyHelp(help) };
   const fixed = (move: Move, skill: Skill | null, reason: SkillReason): SkillStep => ({
@@ -96,7 +155,8 @@ export function skillStep(i: SkillInput): SkillStep {
       // Point to the rubric line and the fix; never rewrite the work.
       return fixed('hint', 'feedback', 'feedback');
     case 'mock_interview':
-      // 5.8 owns /pause, the end conditions and the debrief. No persona: coach instead, but
+      // 5.8 owns /pause, the end conditions and the debrief; skillStep counts the question
+      // (3.11d). No persona: coach instead, but
       // only when the package includes coach (coach can reach a solution); otherwise locked.
       if (ctx.persona !== undefined) return fixed('ask', 'mock_interview', 'mock_interview');
       return ctx.entitlement.skills.includes('coach')

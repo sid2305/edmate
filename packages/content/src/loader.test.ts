@@ -17,7 +17,7 @@ describe('loadDemoTeacherContent', () => {
     expect(c.rubricAnswers.flatMap((f) => f.items)).toHaveLength(30);
     expect(c.styleCard.mistakeTags).toEqual(['off-by-one']);
     expect(c.commonMistakes.map((m) => m.tag)).toEqual(['off-by-one', 'string-number-mixup']);
-    expect(c.qaRecall).toHaveLength(2);
+    expect(c.qaRecall).toHaveLength(3);
     expect(c.packages.free.name).toBe('Free');
     expect(c.packages.paid.moduleIds).toEqual(['variables', 'loops']);
     expect(c.licences.reviewed_by).toBe('fixture-reviewer');

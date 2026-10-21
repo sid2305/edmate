@@ -228,10 +228,77 @@ describe('runCase scoring', () => {
     ]);
   });
 
+  it('must_escalate fails when the agent does not report escalation (never passes silently)', async () => {
+    const c = oneTurnCase({ must_escalate: true });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok' } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.pass).toBe(false);
+    expect(result.turns[0]?.checks).toEqual([
+      {
+        name: 'must_escalate',
+        pass: false,
+        detail: 'the agent did not report whether the turn escalated',
+      },
+    ]);
+  });
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, false, true],
+    [false, true, false],
+  ] as const)('must_escalate %s, agent escalated %s → pass %s', async (want, got, pass) => {
+    const c = oneTurnCase({ must_escalate: want });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok', escalated: got } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.turns[0]?.checks.map((ch) => [ch.name, ch.pass])).toEqual([
+      ['must_escalate', pass],
+    ]);
+  });
+
+  it('must_block fails when the agent does not report a block (never passes silently)', async () => {
+    const c = oneTurnCase({ must_block: true });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok' } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.turns[0]?.checks).toEqual([
+      {
+        name: 'must_block',
+        pass: false,
+        detail: 'the agent did not report whether the turn was blocked',
+      },
+    ]);
+  });
+
+  it.each([
+    [true, true, true],
+    [true, false, false],
+    [false, false, true],
+    [false, true, false],
+  ] as const)('must_block %s, agent blocked %s → pass %s', async (want, got, pass) => {
+    const c = oneTurnCase({ must_block: want });
+    const result = await runCase(c, {
+      agent: scriptedAgent({ 'Hello?': { text: 'ok', blocked: got } }),
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(result.turns[0]?.checks.map((ch) => [ch.name, ch.pass])).toEqual([['must_block', pass]]);
+  });
+
   it('runs checks in a fixed order whatever the YAML key order', async () => {
     const c = oneTurnCase({
       judge: ['The reply is short.'],
       must_cite_source: false,
+      must_escalate: false,
+      must_block: false,
       max_chars: 100,
       max_words: 10,
       matches: ['ok'],
@@ -239,7 +306,7 @@ describe('runCase scoring', () => {
       must_contain: ['ok'],
     });
     const result = await runCase(c, {
-      agent: scriptedAgent({ 'Hello?': { text: 'ok' } }),
+      agent: scriptedAgent({ 'Hello?': { text: 'ok', escalated: false, blocked: false } }),
       judgeGateway: scriptedJudge([{ rubric: 'The reply is short.', pass: true }]),
       judgeModel: JUDGE_MODEL,
       recorder: memoryRecorder('record'),
@@ -251,6 +318,8 @@ describe('runCase scoring', () => {
       'max_words',
       'max_chars',
       'must_cite_source',
+      'must_escalate',
+      'must_block',
       'judge[0]',
     ]);
     expect(result.pass).toBe(true);
@@ -414,3 +483,107 @@ function oneTurnCase(expect: NonNullable<EvalCase['turns'][number]['expect']>): 
     turns: [{ student: 'Hello?', expect }],
   };
 }
+
+describe('teacher turns, skills and personas (task 3.11e)', () => {
+  const caseWithAll: EvalCase = {
+    id: 'test-teacher-001',
+    suite: 'test',
+    package: 'paid',
+    reviewed_by: 'pending',
+    source: 'synthetic',
+    persona: 'job-interview@1.0.0',
+    turns: [
+      { student: 'Hello?' },
+      {
+        teacher: 'Check the order of your two conditions.',
+        skill: 'mock_interview',
+        student: 'Again?',
+        expect: { judge: ['The reply is short.'] },
+      },
+      { student: 'Third?', expect: { max_words: 5 } },
+    ],
+  };
+  const replies = { 'Hello?': { text: 'r1' }, 'Again?': { text: 'r2' }, 'Third?': { text: 'r3' } };
+
+  it('passes the teacher line, skill and persona to the agent; history keeps the teacher line', async () => {
+    const agent = scriptedAgent(replies);
+    await runCase(caseWithAll, {
+      agent,
+      judgeGateway: scriptedJudge([{ rubric: 'The reply is short.', pass: true }]),
+      judgeModel: JUDGE_MODEL,
+      recorder: memoryRecorder('record'),
+    });
+    const persona = 'job-interview@1.0.0';
+    const caseId = 'test-teacher-001';
+    expect(agent.calls).toStrictEqual([
+      { caseId, turnIndex: 0, student: 'Hello?', priorTurns: [], persona },
+      {
+        caseId,
+        turnIndex: 1,
+        student: 'Again?',
+        priorTurns: [{ student: 'Hello?', reply: 'r1' }],
+        teacher: 'Check the order of your two conditions.',
+        skill: 'mock_interview',
+        persona,
+      },
+      {
+        caseId,
+        turnIndex: 2,
+        student: 'Third?',
+        priorTurns: [
+          { student: 'Hello?', reply: 'r1' },
+          { teacher: 'Check the order of your two conditions.', student: 'Again?', reply: 'r2' },
+        ],
+        persona,
+      },
+    ]);
+  });
+
+  it('a case without them gives exactly the old agent input, with no extra keys', async () => {
+    const agent = scriptedAgent(replies);
+    const plain: EvalCase = {
+      id: 'test-plain-001',
+      suite: 'test',
+      package: 'free',
+      reviewed_by: 'pending',
+      source: 'synthetic',
+      turns: [{ student: 'Hello?' }, { student: 'Again?', expect: { max_words: 5 } }],
+    };
+    await runCase(plain, {
+      agent,
+      judgeGateway: throwingGateway,
+      recorder: memoryRecorder('record'),
+    });
+    expect(agent.calls).toStrictEqual([
+      { caseId: 'test-plain-001', turnIndex: 0, student: 'Hello?', priorTurns: [] },
+      {
+        caseId: 'test-plain-001',
+        turnIndex: 1,
+        student: 'Again?',
+        priorTurns: [{ student: 'Hello?', reply: 'r1' }],
+      },
+    ]);
+  });
+
+  it("the judge sees a prior teacher line before that turn's student line", async () => {
+    const c: EvalCase = {
+      ...caseWithAll,
+      turns: [
+        { teacher: 'Check the order of your two conditions.', student: 'Hello?' },
+        { student: 'Again?', expect: { judge: ['The reply is short.'] } },
+      ],
+    };
+    const judgeGateway = scriptedJudge([{ rubric: 'The reply is short.', pass: true }]);
+    const spy = vi.spyOn(judgeGateway, 'generateObject');
+    await runCase(c, {
+      agent: scriptedAgent(replies),
+      judgeGateway,
+      judgeModel: JUDGE_MODEL,
+      recorder: memoryRecorder('record'),
+    });
+    const req = spy.mock.calls[0]?.[0];
+    expect(req && judgeOf(req)).toContain(
+      'Teacher: Check the order of your two conditions.\nStudent: Hello?\nAgent: r1',
+    );
+  });
+});

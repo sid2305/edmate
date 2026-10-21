@@ -46,7 +46,7 @@ Helplines:
 [[LEARNER]] Last session: {{last_summary}}
 
 ## persona
-[[PERSONA]] Play {{persona_name}}. Style: {{persona_style}} Never: {{persona_must_not}}. End after {{persona_end_after}} questions.
+[[PERSONA]] Play {{persona_name}}. Style: {{persona_style}} Never: {{persona_must_not}}. This is question {{questions_asked}} of {{persona_end_after}}, counted by the platform.
 
 ## teacher-label
 [[TEACHER-LABEL]] The teacher wrote:

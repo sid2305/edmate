@@ -146,7 +146,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
   it('profileStoreFor and teacherQuestionStoreFor reject a bad scope at construction', () => {
     for (const [, bad] of BAD_SCOPES) {
       expectScopeError(() => profileStoreFor(repos, bad as never), 'profileStoreFor');
-      expectScopeError(() => teacherQuestionStoreFor(repos, bad as never), 'teacherQuestionStoreFor');
+      expectScopeError(
+        () => teacherQuestionStoreFor(repos, bad as never),
+        'teacherQuestionStoreFor',
+      );
     }
   });
 });
@@ -168,14 +171,25 @@ describe('package surface', () => {
 describe('repositories source', () => {
   const dir = fileURLToPath(new URL('../src/repositories', import.meta.url));
 
-  it('has no raw SQL strings and no deletes', () => {
+  it('has no raw SQL strings and no deletes outside chunks.ts (8.2)', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.ts'));
     expect(files.length).toBeGreaterThan(5);
     for (const f of files) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(src.includes('sql.raw('), `${f} uses sql.raw(`).toBe(false);
-      expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
-      expect(/\bdelete\s+from\b/i.test(src), `${f} deletes`).toBe(false);
+      expect(/\bdelete\s+from\b/i.test(src), `${f} deletes in SQL text`).toBe(false);
+      if (f !== 'chunks.ts') expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
+    }
+  });
+
+  it("deletes only a teacher's own chunks and documents, scoped in the same statement (8.2)", () => {
+    const src = readFileSync(join(dir, 'chunks.ts'), 'utf8');
+    const deletes = [...src.matchAll(/\.delete\((\w+)\)([\s\S]*?);/g)];
+    expect(deletes.map((m) => m[1]).sort()).toEqual(['chunks', 'documents']);
+    for (const [, table, rest] of deletes) {
+      expect(rest, `${table} delete`).toMatch(
+        new RegExp(`^\\s*\\.where\\(\\s*and\\([\\s\\S]*eq\\(${table}\\.teacherId, teacherId\\)`),
+      );
     }
   });
 
@@ -184,5 +198,12 @@ describe('repositories source', () => {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(/\busers\b/.test(src), `${f} mentions users`).toBe(false);
     }
+  });
+
+  it('reads a user only through role-lock.ts, which selects the role column alone (8.1)', () => {
+    const src = readFileSync(join(dir, '..', 'role-lock.ts'), 'utf8');
+    const selects = [...src.matchAll(/\.select\(([^)]*)\)/g)].map((m) => m[1]);
+    expect(selects).toEqual(['{ role: users.role }']);
+    expect(/\busers\.(email|phone|name)\b/.test(src)).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ import type {
   ProfileStore,
   RetrievalIndex,
   SafetyAlert,
+  SafetyEventCode,
+  SafetyEventSink,
   SessionStateStore,
   SourceRef,
   StyleCard,
@@ -42,7 +44,7 @@ import type { CancelToken, Clock, IdSource } from './clock.js';
 import type { PriceUsage } from './generate/costCeiling.js';
 import type { StreamGateFactory } from './generate/streamGate.js';
 import type { TurnLimits } from './limits.js';
-import type { ToolRegistry } from './tools.js';
+import type { IssuedItem, ToolRegistry, ToolSessionState } from './tools.js';
 
 /** Who a turn's model calls are billed to: always from the entitlement, never the input. */
 export type TurnBilling = Parameters<UsageMeter['record']>[1];
@@ -117,6 +119,11 @@ export interface FallbackReplies {
    * absent, empty or failing, the built-in English `askTeacherReplyText` is used.
    */
   askTeacher?(lang: Lang): string;
+  /**
+   * The reply that replaces a redirect reply adviceGuard found giving personal advice (task 4.8).
+   * Optional: when absent, empty or failing, the built-in English `adviceRedirectReplyText`.
+   */
+  redirect?(lang: Lang): string;
 }
 
 /** Contracts ports plus the harness-internal clock, ids and fallback texts. */
@@ -161,6 +168,17 @@ export interface PipelineDeps {
   usage: UsageMeter;
   traces: TraceSink;
   alerts: AlertSink;
+  /**
+   * Where moderationIn and jailbreak record a block (ADR-0006): ids and a fixed code, never text.
+   * Bound to the turn's student x teacher by the composition root (`queuedTurnPorts`).
+   */
+  safetyEvents: SafetyEventSink;
+  /**
+   * The names of all of the teacher's packages (4.4 fix round), for package claims ("I'm on
+   * <another package>"). Server-side, keyed by the entitlement's teacher. Optional: without it
+   * only the student's own package name is known.
+   */
+  teacherPackageNames?: (teacherId: string) => Promise<readonly string[]>;
   fallbackReplies: FallbackReplies;
   /**
    * The validated prompt-pack sets, by version, loaded once at start-up by the composition root
@@ -226,7 +244,21 @@ export interface Scrubbed {
 }
 
 export type PreGuardResult =
-  | { result: 'ok' | 'block'; guards: GuardTrace[]; usage: Usage[] }
+  | { result: 'ok'; guards: GuardTrace[]; usage: Usage[] }
+  | {
+      result: 'block';
+      guards: GuardTrace[];
+      usage: Usage[];
+      /**
+       * The reply the student sees, picked by the blocking guard's code (4.4). Absent: the turn
+       * ends with the generic `guard_blocked` error instead.
+       */
+      reply?: string;
+      /** A misuse alert to raise with the block (4.4: harm to others). */
+      alert?: SafetyAlert;
+      /** The blocking guard's code (4.4), for the withheld placeholder. Never text. */
+      code?: Exclude<SafetyEventCode, 'self_harm'>;
+    }
   | { result: 'escalate'; alert: SafetyAlert; guards: GuardTrace[]; usage: Usage[] };
 
 export interface RouteResult {
@@ -253,6 +285,12 @@ export interface BuiltContext {
    * (never false over a stored true). Absent: read fine, or nothing stored yet.
    */
   helpStateUnreadable?: true;
+  /**
+   * How many retrieved chunks were dropped because they reveal the held answer key, or all of
+   * them when the help state is unreadable (5.6a). A count only: never ids, text or keys. Absent
+   * when nothing was dropped.
+   */
+  answerKeyDropped?: number;
 }
 
 /** What decide works from: the context plus the parsed help state (kept out of TurnContext). */
@@ -298,6 +336,11 @@ export interface GenerateResult {
    * threshold): the runner sends it after postGuard passes it.
    */
   held?: boolean;
+  /**
+   * The answer keys of every practice item this attempt issued (5.6, ADR-0010 §4): the union,
+   * looked up on the server by item id. Server-side only; absent when no item was issued.
+   */
+  practiceAnswerKey?: readonly string[];
 }
 
 export type PostGuardResult = { guards: GuardTrace[]; usage: Usage[] } & (
@@ -349,6 +392,13 @@ export interface CommitRecord {
   promptPack?: PromptPackRef;
   /** The text the student was shown (after postGuard), when the turn replied or escalated. */
   replyText?: string;
+  /**
+   * A pre guard (moderationIn, jailbreak) blocked the input (4.4 fix round): commit saves
+   * WITHHELD_MESSAGE in its place, so the blocked text never reaches a later turn's history.
+   */
+  inputWithheld?: true;
+  /** The blocking guard's code, when a code came with the block (for the placeholder). */
+  withheldCode?: string;
   /**
    * When a post guard escalated (4.5): the post chain's text, saved for review and never shown
    * (the student got the caring template). Server-side only; commit decides where it is kept.
@@ -418,6 +468,21 @@ export interface Steps {
       onLockedTrip?: () => void;
       /** decide.fallback chose the decision (4.7 fix round 1): generate holds the reply. */
       fromFallback?: true;
+      /**
+       * The session's practice state (5.6): bound to each item tool for this attempt (served ids
+       * for the exclude list, the active item's module). Absent: none.
+       */
+      practice?: ToolSessionState;
+      /**
+       * Keys of practice items an earlier attempt of this turn issued (5.6): guarded from the
+       * start, like the decision's own, but never put in the model's prompt.
+       */
+      issuedKeys?: readonly string[];
+      /**
+       * Called at once when a practice item is issued, before its `skill` event goes out, so the
+       * runner saves its key on every outcome, even when the attempt then fails (5.6).
+       */
+      onPracticeItem?: (item: IssuedItem) => void;
     },
     emit: Emit,
   ): Promise<GenerateResult>;

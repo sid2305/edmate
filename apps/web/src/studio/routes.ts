@@ -1,0 +1,341 @@
+// Task 8.2 Phase 3: the studio document API. The route files wrap these handlers in
+// `withRole(['teacher'], …)` (ROUTE_POLICY: `/api/studio/**`). The teacher is always the session's
+// principal: no handler reads a teacher id from the body, query or URL, and the repository
+// re-checks ownership, so another teacher's document id is `not_found` (never "forbidden", which
+// would say it exists).
+//
+//   GET    /api/studio/documents[?moduleId=]   list the teacher's documents
+//   POST   /api/studio/documents               create a row; returns a presigned upload URL
+//   POST   /api/studio/documents/:id/complete  confirm the upload, mark processing, enqueue ingest
+//   POST   /api/studio/documents/:id/replace   start a replace; returns a new upload URL
+//   DELETE /api/studio/documents/:id           delete the row and chunks, then the stored file
+import type { DocumentRow, Repositories, TeacherScope } from '@edmate/db';
+import { RepositoryError } from '@edmate/db';
+import type { IngestJob } from '@edmate/queue';
+import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { apiError } from '../auth/errors';
+import type { RoleContext } from '../auth/guard';
+import type { StudioStorage } from '../storage/presign';
+import { newStorageKey, uploadTypeFor, uploadTypeOfKey, type UploadType } from './files';
+
+/** The server log: an event name and fixed codes or error names, never ids or message text. */
+export interface ServerLog {
+  error(event: string, fields?: Readonly<Record<string, string>>): void;
+}
+
+/** Everything the routes need, built once per process (runtime.ts) or per test. */
+export interface StudioBackend {
+  documents: Pick<
+    Repositories['documents'],
+    'get' | 'listForTeacher' | 'create' | 'updateStatus' | 'delete' | 'startReplace'
+  >;
+  storage: StudioStorage;
+  /** `enqueueIngest` on the ingest queue, keyed by the storage key being processed. */
+  enqueue(job: IngestJob, storageKey: string): Promise<void>;
+  newDocumentId(): string;
+  log: ServerLog;
+}
+
+/** Thrown by the backend factory when it can't serve (no Redis); `reason` is safe to log. */
+export class StudioUnavailableError extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(`studio backend unavailable: ${reason}`);
+    this.reason = reason;
+    this.name = 'StudioUnavailableError';
+  }
+}
+
+/** The largest request body any studio route reads (bytes); the JSON bodies are tiny. */
+export const MAX_BODY_BYTES = 16 * 1024;
+
+const TOO_LARGE = Symbol('too large');
+
+/** The body's bytes, or TOO_LARGE as soon as more than the cap has been read. */
+async function readCapped(
+  body: ReadableStream<Uint8Array>,
+): Promise<Uint8Array | typeof TOO_LARGE> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      void reader.cancel().catch(() => undefined);
+      return TOO_LARGE;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    bytes.set(c, at);
+    at += c.byteLength;
+  }
+  return bytes;
+}
+
+/**
+ * The body as JSON, `undefined` when it is not JSON, or TOO_LARGE. A declared content-length over
+ * the cap is refused before reading; the bytes read are capped too (same as task 9.4's routes).
+ */
+async function readJson(req: Request): Promise<unknown> {
+  if (Number(req.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return TOO_LARGE;
+  if (req.body === null) return undefined;
+  try {
+    const bytes = await readCapped(req.body);
+    if (bytes === TOO_LARGE) return TOO_LARGE;
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Document and module ids: the repository's id format, short enough for chunk ids. */
+const Id = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .max(122);
+const ParamsSchema = z.object({ id: Id });
+const ListQuerySchema = z.strictObject({ moduleId: Id.optional() });
+const NewFileSchema = z.strictObject({
+  contentType: z.string().max(200),
+  byteSize: z.int().min(1),
+});
+const CreateSchema = NewFileSchema.extend({
+  moduleId: Id,
+  sourceTitle: z.string().trim().min(1).max(500),
+});
+
+const MSG = {
+  validation: 'Check the request and try again.',
+  type: 'That file type is not supported.',
+  tooLarge: 'The file is too large.',
+  bodyTooLarge: 'The request is too large.',
+  notFound: 'That document was not found.',
+  notUploaded: 'The file has not finished uploading.',
+  unavailable: 'Uploads are not available right now. Try again soon.',
+  failed: 'Something went wrong. Try again.',
+} as const;
+
+const validation = (message: string = MSG.validation) => apiError('validation', message, 400);
+const notFound = () => apiError('not_found', MSG.notFound, 404);
+const tooLarge = (message: string) => apiError('input_too_large', message, 413);
+const ok = (body: unknown, status = 200) =>
+  Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
+
+/** An error's name only (never its message, which may quote keys, hosts or ids). */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+/** What the upload centre shows: no teacher id and no storage key. */
+function view(row: DocumentRow) {
+  return {
+    id: row.id,
+    moduleId: row.moduleId,
+    kind: row.kind,
+    sourceTitle: row.sourceTitle,
+    status: row.status,
+    ...(row.failureReason === undefined ? {} : { failureReason: row.failureReason }),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+type Handler = (req: NextRequest, ctx: RoleContext) => Promise<Response>;
+type Work = (
+  b: StudioBackend,
+  scope: TeacherScope,
+  req: NextRequest,
+  ctx: RoleContext,
+) => Promise<Response>;
+
+/** A validated new file (type on the list, size within its cap), or the error response. */
+function newFile(input: z.infer<typeof NewFileSchema>): UploadType | Response {
+  const type = uploadTypeFor(input.contentType);
+  if (!type) return validation(MSG.type);
+  if (input.byteSize > type.maxBytes) return tooLarge(MSG.tooLarge);
+  return type;
+}
+
+async function parseBody<S extends z.ZodType>(
+  req: Request,
+  schema: S,
+): Promise<z.infer<S> | Response> {
+  const raw = await readJson(req);
+  if (raw === TOO_LARGE) return tooLarge(MSG.bodyTooLarge);
+  const parsed = schema.safeParse(raw);
+  return parsed.success ? parsed.data : validation();
+}
+
+async function docId(ctx: RoleContext): Promise<string | null> {
+  const parsed = ParamsSchema.safeParse(await ctx.params);
+  return parsed.success ? parsed.data.id : null;
+}
+
+/** Best effort: a stored file left behind is logged, never fails the request. */
+async function dropObject(b: StudioBackend, key: string | null | undefined): Promise<void> {
+  if (!key) return;
+  try {
+    await b.storage.deleteObject(key);
+  } catch (error) {
+    b.log.error('studio.object_delete_failed', { error: errorName(error) });
+  }
+}
+
+/** Marks the document failed with a fixed code; a lost race (not_found) is fine. */
+async function markFailed(b: StudioBackend, scope: TeacherScope, id: string, code: string) {
+  try {
+    await b.documents.updateStatus(scope, id, 'failed', code);
+  } catch (error) {
+    if (!(error instanceof RepositoryError && error.kind === 'not_found')) throw error;
+  }
+}
+
+const list: Work = async (b, scope, req) => {
+  const query = ListQuerySchema.safeParse(
+    Object.fromEntries([...new URL(req.url).searchParams].filter(([k]) => k === 'moduleId')),
+  );
+  if (!query.success) return validation();
+  const rows = await b.documents.listForTeacher(scope, query.data);
+  return ok({ documents: rows.map(view) });
+};
+
+const create: Work = async (b, scope, req) => {
+  const body = await parseBody(req, CreateSchema);
+  if (body instanceof Response) return body;
+  const type = newFile(body);
+  if (type instanceof Response) return type;
+  const id = b.newDocumentId();
+  const key = newStorageKey(scope.teacherId, id, type);
+  await b.documents.create(scope, {
+    id,
+    moduleId: body.moduleId,
+    kind: type.chunkKind,
+    sourceTitle: body.sourceTitle,
+    storageKey: key,
+  });
+  const uploadUrl = await b.storage.createUploadUrl({
+    key,
+    contentType: type.contentType,
+    contentLength: body.byteSize,
+  });
+  return ok(
+    { documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } },
+    201,
+  );
+};
+
+const complete: Work = async (b, scope, _req, ctx) => {
+  const id = await docId(ctx);
+  if (!id) return validation();
+  const row = await b.documents.get(scope, id);
+  if (!row) return notFound();
+  if (row.status === 'ready') return ok({ documentId: id, status: 'ready' });
+  const key = row.storageKey;
+  const type = key === undefined ? null : uploadTypeOfKey(key);
+  if (key === undefined || !type) return validation();
+  const stored = await b.storage.head(key);
+  if (!stored) return apiError('validation', MSG.notUploaded, 409);
+  const size = stored.contentLength;
+  if (size === undefined || size < 1 || size > type.maxBytes) {
+    await markFailed(b, scope, id, 'input_too_large');
+    await dropObject(b, key);
+    return tooLarge(MSG.tooLarge);
+  }
+  if (stored.contentType !== type.contentType) {
+    await markFailed(b, scope, id, 'unsupported_type');
+    await dropObject(b, key);
+    return validation(MSG.type);
+  }
+  // `processing` first: the worker's own `ready` write is refused from `uploading`.
+  await b.documents.updateStatus(scope, id, 'processing');
+  const media = type.fileKind === 'video' || type.fileKind === 'audio';
+  try {
+    await b.enqueue(
+      {
+        teacherId: scope.teacherId,
+        documentId: id,
+        fileKind: type.fileKind,
+        ...(media ? { mimeType: type.contentType } : {}),
+      },
+      key,
+    );
+  } catch (error) {
+    b.log.error('studio.enqueue_failed', { error: errorName(error) });
+    await markFailed(b, scope, id, 'enqueue_failed');
+    return apiError('provider_error', MSG.unavailable, 503);
+  }
+  return ok({ documentId: id, status: 'processing' }, 202);
+};
+
+const replace: Work = async (b, scope, req, ctx) => {
+  const id = await docId(ctx);
+  if (!id) return validation();
+  const body = await parseBody(req, NewFileSchema);
+  if (body instanceof Response) return body;
+  const type = newFile(body);
+  if (type instanceof Response) return type;
+  // Ownership first, then sign, then commit: a signing failure leaves the row and its file as
+  // they were, and another teacher's id gets nothing signed.
+  if (!(await b.documents.get(scope, id))) return notFound();
+  const key = newStorageKey(scope.teacherId, id, type);
+  const uploadUrl = await b.storage.createUploadUrl({
+    key,
+    contentType: type.contentType,
+    contentLength: body.byteSize,
+  });
+  const { previousStorageKey } = await b.documents.startReplace(scope, id, { storageKey: key });
+  await dropObject(b, previousStorageKey);
+  return ok({ documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } });
+};
+
+const remove: Work = async (b, scope, _req, ctx) => {
+  const id = await docId(ctx);
+  if (!id) return validation();
+  const { storageKey } = await b.documents.delete(scope, id);
+  await dropObject(b, storageKey);
+  return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+};
+
+/**
+ * The five handlers over a lazily built backend. A backend that can't be built is 503; a
+ * repository `not_found` is 404 and `invalid` is 400; anything else is a logged 500.
+ */
+export function createStudioHandlers(
+  backend: () => Promise<StudioBackend>,
+  fallbackLog: ServerLog,
+) {
+  const run =
+    (work: Work): Handler =>
+    async (req, ctx) => {
+      let b: StudioBackend;
+      try {
+        b = await backend();
+      } catch (error) {
+        const reason = error instanceof StudioUnavailableError ? error.reason : errorName(error);
+        fallbackLog.error('studio.unavailable', { reason });
+        return apiError('provider_error', MSG.unavailable, 503);
+      }
+      const scope: TeacherScope = { teacherId: ctx.principal.userId };
+      try {
+        return await work(b, scope, req, ctx);
+      } catch (error) {
+        if (error instanceof RepositoryError && error.kind === 'not_found') return notFound();
+        if (error instanceof RepositoryError && error.kind === 'invalid') return validation();
+        b.log.error('studio.failed', { error: errorName(error) });
+        return apiError('provider_error', MSG.failed, 500);
+      }
+    };
+  return {
+    list: run(list),
+    create: run(create),
+    complete: run(complete),
+    replace: run(replace),
+    remove: run(remove),
+  };
+}

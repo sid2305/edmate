@@ -60,7 +60,14 @@ export const FRAME_SECTIONS = Object.freeze({
   tools: slots(['tools']),
   material: slots(['sources']),
   learner: slots(['last_summary']),
-  persona: slots(['persona_name', 'persona_style', 'persona_must_not', 'persona_end_after']),
+  /** `questions_asked` is the server's count (3.11d, ADR-0009), never the model's. */
+  persona: slots([
+    'persona_name',
+    'persona_style',
+    'persona_must_not',
+    'persona_end_after',
+    'questions_asked',
+  ]),
   'teacher-label': NONE,
   'empty-turn': slots([], ['kind']),
   'locked-name-package': slots(['package_name']),

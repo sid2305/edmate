@@ -59,6 +59,7 @@ export const schemas = {
   TurnEvent: C.TurnEventSchema,
   SafetyAlert: C.SafetyAlertSchema,
   GuardResult: C.GuardResultSchema,
+  SafetyEventCode: C.SafetyEventCodeSchema,
   TurnTrace: C.TurnTraceSchema,
   TranscribeInput: C.TranscribeInputSchema,
   TranscriptSegment: C.TranscriptSegmentSchema,

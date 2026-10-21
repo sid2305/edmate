@@ -11,7 +11,13 @@ import {
 import { judge, JudgeVerdictSchema } from './checks/judge.js';
 import type { CheckResult } from './checks/result.js';
 import { checkMatches, checkMustContain, checkMustNotContain } from './checks/string.js';
-import { checkMaxChars, checkMaxWords, checkMustCiteSource } from './checks/structure.js';
+import {
+  checkMaxChars,
+  checkMaxWords,
+  checkMustCiteSource,
+  checkMustBlock,
+  checkMustEscalate,
+} from './checks/structure.js';
 import {
   JUDGE_MODEL_VARIABLE,
   JudgeModelConfigError,
@@ -81,6 +87,10 @@ function staticChecks(expect: Checks, reply: EvalAgentReply): CheckResult[] {
   if (expect.must_cite_source !== undefined) {
     out.push(checkMustCiteSource(reply, expect.must_cite_source));
   }
+  if (expect.must_escalate !== undefined) {
+    out.push(checkMustEscalate(reply, expect.must_escalate));
+  }
+  if (expect.must_block !== undefined) out.push(checkMustBlock(reply, expect.must_block));
   return out;
 }
 
@@ -99,6 +109,10 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
           turnIndex,
           student: turn.student,
           priorTurns: history,
+          // Added only when present, so an old case's agent input (and fixtures) stay the same.
+          ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
+          ...(turn.skill === undefined ? {} : { skill: turn.skill }),
+          ...(evalCase.persona === undefined ? {} : { persona: evalCase.persona }),
         }),
         'agent reply',
         agentKey,
@@ -130,7 +144,11 @@ async function runTurns(evalCase: EvalCase, opts: RunOptions, turns: TurnResult[
       checks,
       pass: checks.every((c) => c.pass),
     });
-    priorTurns.push({ student: turn.student, reply: reply.text });
+    priorTurns.push({
+      ...(turn.teacher === undefined ? {} : { teacher: turn.teacher }),
+      student: turn.student,
+      reply: reply.text,
+    });
   }
 }
 

@@ -20,6 +20,9 @@ import type { Repositories } from './index.js';
 import { studentScope, type StudentScope } from './scope.js';
 import type { UnmeteredEntry, UsageSource } from './usage-ledger.js';
 
+/** RetrievalIndex (task 5.3): built once per process over the repositories; see retrieval.ts. */
+export { retrievalIndexFor } from './retrieval.js';
+
 /**
  * The frozen TranscriptStore port has no scope parameter, so the scope is a required constructor
  * argument: the caller (web route or worker) builds one store per turn from the signed-in student
@@ -59,7 +62,13 @@ export function traceSinkFor(repos: Repositories, scope: StudentScope): TraceSin
 
 /** A never-seen student's profile (task 3.17 decision): English, no mastery, no mistakes yet. */
 function defaultProfile(scope: StudentScope): LearnerProfile {
-  return { studentId: scope.studentId, teacherId: scope.teacherId, lang: 'en', mastery: {}, mistakes: [] };
+  return {
+    studentId: scope.studentId,
+    teacherId: scope.teacherId,
+    lang: 'en',
+    mastery: {},
+    mistakes: [],
+  };
 }
 
 /**
@@ -94,7 +103,9 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
     },
     async applyEvidence(events: EvidenceEvent[]) {
       const method = 'profileStoreFor.applyEvidence';
-      if (!events.every((e) => e.studentId === bound.studentId && e.teacherId === bound.teacherId)) {
+      if (
+        !events.every((e) => e.studentId === bound.studentId && e.teacherId === bound.teacherId)
+      ) {
         throw new RepositoryError('scope', method);
       }
       if (events.length > 0) {
@@ -127,7 +138,8 @@ export function teacherQuestionStoreFor(
   const bound = studentScope(scope, 'teacherQuestionStoreFor');
   return {
     async findSimilar(teacherId: string) {
-      if (teacherId !== bound.teacherId) throw new RepositoryError('scope', 'teacherQuestionStoreFor.findSimilar');
+      if (teacherId !== bound.teacherId)
+        throw new RepositoryError('scope', 'teacherQuestionStoreFor.findSimilar');
       const noSimilarity: TeacherQuestion[] = [];
       return noSimilarity;
     },
@@ -155,6 +167,12 @@ export interface EntitlementStoreOptions {
   market: string;
   /** The locale pack market for a user market: itself when a pack exists, else `global`. */
   packMarket(market: string): string;
+  /**
+   * Task 1.7: is this learner past the age gate (`learnerStatus` is `clear`)? Asked fresh on every
+   * `subscription` resolve; false gives `null`, so `entitle` answers `no_access`. Required, so a
+   * composition root can't leave it out. Preview and eval don't ask.
+   */
+  learnerClear(studentId: string): Promise<boolean>;
   /** Studio preview: the package the teacher is previewing (its newest version is used). */
   preview?: { packageId: string };
   /** Eval runner: the teacher, package and version under test, and the market to run in. */
@@ -165,7 +183,8 @@ export interface EntitlementStoreOptions {
  * EntitlementStore over the repositories (build plan § Access filter 1 and 7; ADR-0003 point 1).
  * - `subscription`: the live agent's teacher, the student's live (not ended) subscription with
  *   that teacher, and the package version it points at, which must be this agent's. Paused is
- *   returned as is; `entitle` refuses it.
+ *   returned as is; `entitle` refuses it. A learner held at the age gate (`opts.learnerClear`
+ *   false, task 1.7) gets `null`.
  * - `teacher_preview`: only the agent's own teacher (the student id is the teacher's user id);
  *   drafts allowed; `opts.preview`'s package at its newest version. No subscription.
  * - `eval`: `opts.eval`'s package at its pinned version, of the agent's teacher. No subscription.
@@ -211,6 +230,8 @@ export function entitlementStoreFor(
   return {
     async resolve({ studentId, agentId, source }, at) {
       if (source === 'subscription') {
+        // Second line behind apps/web's guard (1.7): asked first and fresh, never cached.
+        if (!(await opts.learnerClear(studentId))) return null;
         const owner = await repos.agents.owner({ agentId });
         if (owner === null) return null;
         const { teacherId } = owner;

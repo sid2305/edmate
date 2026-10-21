@@ -11,6 +11,7 @@ model: sonnet
 - Check **every** planned path (including new folders and placeholders) against `.claude/skills/merge-gate/risk-paths.txt` and the safety prefixes. Under "Risky paths touched", list each match with the reviewers its group needs (the `# reviewers:` line), or write "None (checked against risk-paths.txt)". A risky task also plans a `risk: high` decision entry for the handoff.
 - A contracts change is not BLOCKED on that alone: the plan includes the ADR (text from `architect`, file written by the builder) and the reviewers `architect`, `security-reviewer` and `typescript-reviewer`.
 - The team lead commits your `plan.md` on `main` before the build starts; the builder never re-adds it.
+- **Size the build** (task 0.15, token budget). One builder should finish in about 150 tool calls; long builds cost far more than their length suggests, because every call re-sends the whole context. If the plan creates or changes more than about 8 source files, spans 2+ packages, or has 2+ guards or adapters, split it into phases (`## Phase A`, `## Phase B`), each with its own tests, a green commit and a short "state after this phase" note. Each phase gets a fresh builder that reads the plan and the previous phase's handoff.
 
 
 ## Prompt Defense Baseline

@@ -143,9 +143,46 @@ describe('item schemas', () => {
       true,
     );
     expect(CommonMistakeSchema.safeParse({ tag: 'off-by-one' }).success).toBe(false);
-    const r = { id: 'r1', moduleId: 'a', question: 'q?', expectedModuleId: 'a' };
+    const r = {
+      id: 'r1',
+      moduleId: 'a',
+      question: 'q?',
+      expectedModuleId: 'a',
+      expectedHeadings: ['1.1 Intro'],
+      reviewed_by: 'pending',
+    };
     expect(QaRecallItemSchema.safeParse(r).success).toBe(true);
     expect(QaRecallItemSchema.safeParse({ ...r, expectedModuleId: undefined }).success).toBe(false);
+  });
+
+  describe('QaRecallItemSchema (task 5.3: heading-level gold, out-of-course items)', () => {
+    const inCourse = {
+      id: 'r1',
+      moduleId: 'a',
+      question: 'q?',
+      expectedModuleId: 'a',
+      expectedHeadings: ['1.1 Intro', '1.2 More'],
+      reviewed_by: 'lead',
+    };
+    const outOfCourse = { id: 'r2', moduleId: 'a', question: 'q?', outOfCourse: true, reviewed_by: 'pending' };
+
+    it('accepts an in-course item with headings and an out-of-course item', () => {
+      expect(QaRecallItemSchema.safeParse(inCourse).success).toBe(true);
+      expect(QaRecallItemSchema.safeParse(outOfCourse).success).toBe(true);
+    });
+
+    it.each([
+      ['no headings', { ...inCourse, expectedHeadings: undefined }],
+      ['an empty heading list', { ...inCourse, expectedHeadings: [] }],
+      ['a blank heading', { ...inCourse, expectedHeadings: [' '] }],
+      ['no reviewed_by', { ...inCourse, reviewed_by: undefined }],
+      ['an email as reviewer', { ...inCourse, reviewed_by: 'someone@example.org' }],
+      ['an out-of-course item with gold', { ...outOfCourse, expectedModuleId: 'a' }],
+      ['an out-of-course item with headings', { ...outOfCourse, expectedHeadings: ['x'] }],
+      ['outOfCourse: false', { ...outOfCourse, outOfCourse: false }],
+    ])('rejects %s', (_label, item) => {
+      expect(QaRecallItemSchema.safeParse(item).success).toBe(false);
+    });
   });
 });
 

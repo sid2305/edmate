@@ -77,6 +77,19 @@ export interface PostGuardCtx {
    * Absent: ANSWER_LEAK_SAFE_HINT.
    */
   readonly safeReply?: string;
+  /**
+   * adviceGuard's judge (4.8): one bounded small-tier call, built by the postGuard step. Absent:
+   * a reply the judge would see fails closed to adviceGuard's fixed fallback.
+   */
+  readonly adviceJudge?: GroundingJudge;
+  /** adviceGuard's one bounded small-tier rewrite (4.8); never throws. Absent: the fallback. */
+  readonly adviceRewrite?: (req: JudgeRequest, cancel: CancelToken) => Promise<LeakRewrite>;
+  /** The prompt-pack frame's generic disclaimer (4.8). Absent: adviceGuard's built-in copy. */
+  readonly genericDisclaimer?: string;
+  /** The locale's redirect reply (4.8): adviceGuard's fallback on a redirect turn. */
+  readonly redirectReply?: string;
+  /** True while the chain runs its verification pass (4.8: adviceGuard makes no judge call then). */
+  readonly verifying?: () => boolean;
 }
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };
@@ -86,6 +99,8 @@ export function createAnswerLeakGuard(): Guard<PostGuardCtx> {
     name: 'answerLeak',
     phase: 'post',
     async run(text, x, cancel): Promise<GuardRun> {
+      // The platform's fixed texts (4.8: e.g. adviceGuard's fallback) pass as they are.
+      if (x.fixedTexts?.includes(text) === true) return OK;
       const keys = compileAnswerKeys(
         x.decision.mustNotReveal,
         x.studentText === undefined ? {} : { studentText: x.studentText },
