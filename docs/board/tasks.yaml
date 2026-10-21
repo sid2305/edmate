@@ -1564,9 +1564,9 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2-upload-centre
+  model: plan:sonnet build:opus
 - id: '8.3'
   milestone: M8
   title: Outline editor with source links; reorder, rename, merge, split
