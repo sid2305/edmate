@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.11b deterministic draftOutline order test · decided by lead · risk: low
+
+- Decided: merge 5.11b. The test's setTimeout race is replaced by per-module deferreds resolved in a set order (module 1 first); production `draftOutline` is unchanged because `Promise.all` already keeps input order.
+- Why: a test-only race caused the CI failures on PR #98; the fix passed 50 runs in a row and code-reviewer approved with no findings.
+- risk: low
+
+Details (builder):
+
+- Deterministic deferreds instead of longer/staggered timers · risk: low. Keeps the test's intent
+  (prove output order is independent of settle order) without any dependency on wall-clock timing,
+  so it cannot flake under CI load.
+- No production change: `Promise.all` already guarantees output order follows input order; the bug
+  was entirely in the test's own ordering mechanism, confirmed by reading `draftOutline`'s use of
+  `Promise.all(modules.map(...))` and by `git log origin/main -- packages/ingest` showing no
+  ingest-only change since PR #97 (5.11a) that could explain a drafter regression · risk: low.
+
+Tool calls used: 11
+
+---
+
 ### 21 Oct 2026 · 7.7 turn traces and health metrics (repositories, risky path) · decided by lead · risk: high
 - Decided: merge 7.7. Traces record first-token time (TraceBuilder.markElapsed, first token only); computeHealthMetrics gives p50/p95 latency per step and for first token, plus error and guard rates; turnTracesRepo.listForTeacherSince reads one teacher's traces over a window (join on sessions.teacher_id, limit 1–200). No new index and no report surface yet (7.7a). trace.ts:24 single literal key for markElapsed is wontfix until a second derived metric exists.
 - Why: the plan's acceptance is met; security-reviewer and database-reviewer approved the new risky repository read with an isolation CASE proving another teacher's traces never appear; code and TS reviewers approved.

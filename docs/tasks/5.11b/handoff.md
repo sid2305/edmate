@@ -54,6 +54,15 @@ python3 .githooks/secret-scan.py --all
 ```
 
 ## Decisions
+
+### 21 Oct 2026 · 5.11b deterministic draftOutline order test · decided by lead · risk: low
+
+- Decided: merge 5.11b. The test's setTimeout race is replaced by per-module deferreds resolved in a set order (module 1 first); production `draftOutline` is unchanged because `Promise.all` already keeps input order.
+- Why: a test-only race caused the CI failures on PR #98; the fix passed 50 runs in a row and code-reviewer approved with no findings.
+- risk: low
+
+Details (builder):
+
 - Deterministic deferreds instead of longer/staggered timers · risk: low. Keeps the test's intent
   (prove output order is independent of settle order) without any dependency on wall-clock timing,
   so it cannot flake under CI load.

@@ -2013,9 +2013,27 @@ tasks:
     gateway maps replies by a 10 ms vs 0 ms setTimeout race. Make it deterministic (resolve by module id or a controlled deferred, not timers) and check the drafter really keeps input order'
   accept: the test passes 50 runs in a row under load (e.g. --repeat or a loop); no timer race decides which reply a module gets; production drafter order is proven, not assumed
   deps: []
-  status: running
+  status: done
   branch: m5/5.11b-outline-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.11c
   milestone: M7
   title: 'Flaky db test (CI on PR #98, rerun 2): retrieval-leak.int.test.ts SLO case asserts p95 <= 50 ms on the shared CI runner and got 52.9 ms. A hard wall-clock limit on a noisy runner fails unrelated
