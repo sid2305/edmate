@@ -1993,8 +1993,9 @@ tasks:
     gateway maps replies by a 10 ms vs 0 ms setTimeout race. Make it deterministic (resolve by module id or a controlled deferred, not timers) and check the drafter really keeps input order'
   accept: the test passes 50 runs in a row under load (e.g. --repeat or a loop); no timer race decides which reply a module gets; production drafter order is proven, not assumed
   deps: []
-  status: todo
-  branch: null
+  status: running
+  branch: m5/5.11b-outline-flake
+  model: plan:lead build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
