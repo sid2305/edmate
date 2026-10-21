@@ -2118,7 +2118,7 @@ tasks:
 - id: 0.17a
   milestone: M13
   title: 'Merge-gate budget parse (0.17 security MEDIUM): budget_cap''s `## Budget` fallback takes the first "N ... calls" number in the prose, so a decoy number (another task''s count, an old estimate)
-    sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions'
+    sets the cap. Anchor it to the budget statement (e.g. the section''s first line or a `Budget: N` line the planner is told to write) and test both decoy directions. Also accept the budget in the heading itself (`## Budget: 30 tool calls`, as the 7.1 and 6.2 plans wrote it; today that fails as unparseable)'
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
