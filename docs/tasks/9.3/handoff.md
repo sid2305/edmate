@@ -139,6 +139,12 @@ the plan's "depends on Phase B merged" sequencing between phases does not apply 
 - `python3 .githooks/secret-scan.py --all` → clean (both phases).
 
 ## Decisions
+
+### 21 Oct 2026 · 9.3 package compare and start (repositories, risky path) · decided by lead · risk: high
+
+- Decided: merge 9.3. A student compares a live agent's packages and starts one with no payment (payments come in M10). The change touches `packages/db/src/repositories/**` (subscriptions, package-versions), so security-reviewer, code-reviewer (opus) and typescript-reviewer ran. Fix round 1 closed both MEDIUMs: the browser gets a public offer projection only, and `liveForAgent` excludes agents that aren't live. The security reviewer re-checked both. The remaining MEDIUM and LOWs go to 9.3b.
+- Why: no CRITICAL/HIGH findings, and the data-exposure MEDIUMs were fixed in the same round under the blockers-only rule. The other findings were deferred.
+- risk: high
 - **Isolation-grid shape for `subscriptions.start`**: every seeded pair already has a live
   subscription (isolation-seed.ts), so a positive-control write for `actor === target` would always
   hit the unique-index conflict. The write case's `attempt` ends that pair's own seeded row via raw
