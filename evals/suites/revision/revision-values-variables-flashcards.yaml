@@ -1,0 +1,14 @@
+id: revision-values-variables-flashcards
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/values-variables/notes.md (sections 1.4, 1.6)
+turns:
+  - student: Make me flashcards to revise strings and input() from values and variables.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+      must_not_contain:
+        - input() returns an int automatically

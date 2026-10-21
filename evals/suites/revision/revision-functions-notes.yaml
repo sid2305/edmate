@@ -1,0 +1,15 @@
+id: revision-functions-notes
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/functions/notes.md (sections 4.1, 4.2, 4.3)
+turns:
+  - student: I'd like revision notes for the functions module.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+        - '[3]'
+      must_not_contain:
+        - calling a function without return still prints its result automatically

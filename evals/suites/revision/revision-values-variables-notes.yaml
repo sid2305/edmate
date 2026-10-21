@@ -1,0 +1,15 @@
+id: revision-values-variables-notes
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/values-variables/notes.md (sections 1.1, 1.2, 1.3)
+turns:
+  - student: Can you make me revision notes for the values and variables module?
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+        - '[3]'
+      must_not_contain:
+        - a variable name may start with a digit

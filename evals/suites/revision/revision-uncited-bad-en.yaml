@@ -1,0 +1,12 @@
+id: revision-uncited-bad-en
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/functions/notes.md (sections 4.6, 4.7)
+turns:
+  - student: Revise default values and multiple parameters for me.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'

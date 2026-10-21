@@ -1,0 +1,14 @@
+id: revision-locked-module-bad-en
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/lists-dicts/notes.md (section 5.5)
+turns:
+  - student: Give me a revision note on dictionaries.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+      must_not_contain:
+        - classes and objects
+        - object-oriented

@@ -1,0 +1,12 @@
+id: revision-empty-material-en
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/course.yaml (nothing covered yet this session, no chunk retrieved)
+turns:
+  - student: Can you make revision notes for the whole course so far?
+    skill: revision
+    expect:
+      must_not_contain:
+        - '[1]'
+        - classes are blueprints

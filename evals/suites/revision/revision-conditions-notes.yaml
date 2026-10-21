@@ -1,0 +1,15 @@
+id: revision-conditions-notes
+suite: revision
+package: paid
+reviewed_by: lead
+source: content/demo-teacher/modules/conditions/notes.md (sections 2.1, 2.2, 2.3)
+turns:
+  - student: Please give me revision notes for the conditions module.
+    skill: revision
+    expect:
+      must_contain:
+        - '[1]'
+        - '[2]'
+        - '[3]'
+      must_not_contain:
+        - python also has a === operator
