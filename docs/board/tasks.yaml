@@ -1601,7 +1601,7 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: running
+  status: review
   branch: m6/6.3-mistake-tags
   model: plan:sonnet build:sonnet
 - id: '6.4'
@@ -2233,8 +2233,8 @@ tasks:
   milestone: M13
   title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped
     role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona;
-    selectPersonaLibrary skips prerelease versions (or the ADR accepts them); typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and
-    status Accepted'
+    policy.ts:103 /pause with extra text should not skip the off_topic/meta redirect (only a bare /pause, or per the q8 answer); selectPersonaLibrary skips prerelease versions (or the ADR accepts them);
+    typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
   accept: each item fixed or recorded in ADR-0013; the coverage-gate rule matches the human's B-37 answers with tests.
   deps:
   - '5.8'
