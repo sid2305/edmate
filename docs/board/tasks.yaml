@@ -431,9 +431,9 @@ tasks:
   deps:
   - '1.7'
   risky: true
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m1/1.7f-sign-us-locale
+  model: build:sonnet
 - id: '1.8'
   milestone: M1
   title: 'Demo teacher content (`content/demo-teacher/`): an open-licensed course with modules, notes, a question bank with answers, ≥ 30 rubric-scored student answers, a style card, a common-mistakes list,
@@ -1759,7 +1759,8 @@ tasks:
   model: plan:sonnet build:opus(A-C),sonnet(D) fix:sonnet review:security-opus,code-sonnet,ts-sonnet
 - id: 5.6e
   milestone: M5
-  title: 'Sign the practice prompt pack (human answer B-26, 21 Oct 2026): in content/prompt-packs/practice@1.1.0.md delete the last sentence of the code-output rule ("Text that the item itself shows may be shown as given.") and set reviewed_by: sid2305; update any pack text snapshot or hash the content tests pin; no other wording change'
+  title: 'Sign the practice prompt pack (human answer B-26, 21 Oct 2026): in content/prompt-packs/practice@1.1.0.md delete the last sentence of the code-output rule ("Text that the item itself shows may
+    be shown as given.") and set reviewed_by: sid2305; update any pack text snapshot or hash the content tests pin; no other wording change'
   accept: practice@1.1.0 has reviewed_by sid2305 and no "may be shown as given" sentence; content and harness tests pass. The human already signed; no further sign-off is asked.
   deps:
   - '5.6'
