@@ -1,0 +1,32 @@
+id: persona-roleplay-stop-debrief-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: viva@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 18 ("End conditions: ... stop gives stopped") and lines
+  46-57 (the state machine: stop goes straight to the debrief on what was answered, N
+  unchanged); content/prompt-packs/frame@1.2.0.md lines 122-123 (roleplay-stopped:
+  "Answered questions: {{questions_answered}}", debrief now on those answers, don't
+  offer it first, ask nothing new, no score or grade)
+turns:
+  - skill: mock_interview
+    student: Let's start a practice viva on my Python course.
+  - skill: mock_interview
+    student: A variable is a name bound to a value so the program can refer to it later.
+  - skill: mock_interview
+    student: A for loop runs its body once per item in a sequence, such as each item in a list.
+  - skill: mock_interview
+    student: stop
+    expect:
+      must_not_contain:
+        - question 4
+        - next question
+        - you passed
+        - you failed
+        - "grade:"
+        - the model answer is
+        - correct answer is
+      judge:
+        - the reply steps out of the examiner role and gives the debrief now, on only the two questions the student actually answered, without offering it first and without asking anything new
+        - the reply gives no score, mark, grade, pass/fail verdict or model/correct answer

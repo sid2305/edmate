@@ -1,6 +1,7 @@
 import { PedagogyDecisionSchema } from '@edmate/contracts';
+import { demoChunkScored, demoPersona } from '@edmate/contracts/fixtures';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HelpStateSchema, INITIAL_HELP_STATE } from './helpState.js';
+import { type HelpState, HelpStateSchema, INITIAL_HELP_STATE } from './helpState.js';
 import { decidePolicy, fallbackPolicy, type PolicyInput, type PolicyResult } from './policy.js';
 import { type CtxOverrides, ctxWith, deepFreeze, helpWith, turnOf } from './testing.js';
 
@@ -365,5 +366,168 @@ describe('help state', () => {
     ['a missing key', { stuckTurns: 0, attemptLogged: false, pendingCheck: false }],
   ])('rejects %s', (_n, v) => {
     expect(HelpStateSchema.safeParse(v).success).toBe(false);
+  });
+});
+
+describe('rolePlay passes through decidePolicy (5.8, ADR-0013 §1)', () => {
+  const skills = ['coach' as const, 'mock_interview' as const];
+  const M = demoPersona.endAfterQuestions;
+
+  it('a mock_interview turn with a persona carries this turn’s rolePlay', () => {
+    const r = decidePolicy(
+      base({
+        ctx: ctxWith({ entitlement: { skills }, persona: demoPersona }),
+        turn: turnOf('message', 'mock_interview'),
+        help: helpWith({ personaQuestionsAsked: M, personaId: demoPersona.id }),
+      }),
+    );
+    expect(r.rolePlay).toEqual({ phase: 'debrief', total: M });
+    expect(r.next.help.personaPhase).toBe('ended');
+    expect(r.move).toBe('ask');
+    expect(r.maxOutputTokens).toBe(350);
+  });
+
+  it('a non-persona turn, a closed move and the fallback carry none', () => {
+    const results = [
+      decidePolicy(base()),
+      decidePolicy(
+        base({
+          ctx: ctxWith({ entitlement: { skills }, persona: demoPersona, intent: 'off_topic' }),
+          turn: turnOf('message', 'mock_interview'),
+        }),
+      ),
+      fallbackPolicy(ctxWith({ entitlement: { skills }, persona: demoPersona })),
+    ];
+    for (const r of results) expect(r).not.toHaveProperty('rolePlay');
+  });
+});
+
+describe('role-play turns and the coverage gate (5.8, open question 6: lead default, pending B-37)', () => {
+  const skills = ['coach' as const, 'mock_interview' as const];
+  const M = demoPersona.endAfterQuestions;
+  const id = demoPersona.id;
+  const uncovered = (o: CtxOverrides = {}) =>
+    ctxWith({ entitlement: { skills }, persona: demoPersona, retrieved: [], ...o });
+  const run = (
+    help: Partial<HelpState>,
+    control?: PolicyInput['control'],
+    kind: 'message' | 'skill_action' = 'message',
+    ctx = uncovered(),
+  ) =>
+    decidePolicy(
+      base({
+        ctx,
+        turn: turnOf(kind, 'mock_interview'),
+        help: helpWith(help),
+        ...(control === undefined ? {} : { control }),
+      }),
+    );
+
+  it('an uncovered start opens question 1 (it asks which topic) and never asks the teacher', () => {
+    const r = run({}, 'start', 'skill_action');
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 1, total: M });
+    expect(r.next.help.personaQuestionsAsked).toBe(1);
+  });
+
+  it('an uncovered start with a locked hit still opens the role-play', () => {
+    const r = run({}, 'start', 'skill_action', uncovered({ lockedHit: true }));
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 1, total: M });
+  });
+
+  it.each([
+    ['pause', { personaQuestionsAsked: 2, personaId: id }, 'pause', 'paused'],
+    ['stopped', { personaQuestionsAsked: 2, personaId: id }, 'stop', 'ended'],
+    [
+      'resume',
+      { personaQuestionsAsked: 2, personaId: id, personaPhase: 'paused' },
+      undefined,
+      undefined,
+    ],
+    ['debrief', { personaQuestionsAsked: M, personaId: id }, undefined, 'ended'],
+    [
+      'ended',
+      { personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' },
+      undefined,
+      'ended',
+    ],
+  ] as const)('an uncovered %s turn passes the gate', (phase, help, control, stored) => {
+    const r = run(help, control);
+    expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+    expect(r.rolePlay?.phase).toBe(phase);
+    expect(r.next.help.personaPhase).toBe(stored);
+  });
+
+  it('an uncovered answer to question N (a question turn) still goes to the gate', () => {
+    const r = run({ personaQuestionsAsked: 2, personaId: id });
+    expect([r.move, r.reason]).toEqual(['ask_teacher', 'not_covered']);
+    expect(r).not.toHaveProperty('rolePlay');
+    expect(r.next.help.personaQuestionsAsked).toBe(2);
+  });
+
+  it('an uncovered question turn with a locked hit is locked', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    const r = run(help, undefined, 'message', uncovered({ lockedHit: true }));
+    expect([r.move, r.reason]).toEqual(['locked', 'locked_module']);
+  });
+
+  it.each([
+    ['meta', 'stop', 'stopped', 'ended'],
+    ['off_topic', 'stop', 'stopped', 'ended'],
+    ['meta', 'pause', 'pause', 'paused'],
+    ['off_topic', 'pause', 'pause', 'paused'],
+  ] as const)(
+    'a %s-routed `%s` during an active role-play still changes the phase (fix round 1)',
+    (intent, control, phase, stored) => {
+      const help = { personaQuestionsAsked: 2, personaId: id };
+      const r = run(help, control, 'message', uncovered({ intent }));
+      expect([r.move, r.reason]).toEqual(['ask', 'mock_interview']);
+      expect(r.rolePlay?.phase).toBe(phase);
+      expect(r.next.help.personaPhase).toBe(stored);
+    },
+  );
+
+  it('distress and misuse still close before a role-play control (safety first)', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    for (const control of ['stop', 'pause', 'start'] as const) {
+      for (const intent of ['distress', 'misuse'] as const) {
+        const r = run(help, control, 'message', uncovered({ intent }));
+        expect([r.move, r.reason]).toEqual(['redirect', intent]);
+        expect(r).not.toHaveProperty('rolePlay');
+        expect(r.next.help.personaPhase).toBeUndefined();
+        expect(r.next.help.personaQuestionsAsked).toBe(2);
+      }
+    }
+  });
+
+  it('a meta or off_topic turn with no control, or with no active role-play, still redirects', () => {
+    const active = { personaQuestionsAsked: 2, personaId: id };
+    const ended = { ...active, personaPhase: 'ended' as const };
+    const cases = [
+      run(active, undefined, 'message', uncovered({ intent: 'meta' })),
+      run(ended, 'stop', 'message', uncovered({ intent: 'off_topic' })),
+      run({}, 'stop', 'message', uncovered({ intent: 'meta' })),
+      run(
+        { personaQuestionsAsked: 2, personaId: 'other' },
+        'pause',
+        'message',
+        uncovered({ intent: 'meta' }),
+      ),
+    ];
+    for (const r of cases) {
+      expect(r.move).toBe('redirect');
+      expect(r).not.toHaveProperty('rolePlay');
+    }
+  });
+
+  it('a covered role-play turn is unchanged by the gate rule', () => {
+    const help = { personaQuestionsAsked: 2, personaId: id };
+    const r = run(help, undefined, 'message', uncovered({ retrieved: [demoChunkScored] }));
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 3, total: M });
+  });
+
+  it('without a persona the gate runs as before (no role-play exemption)', () => {
+    const r = run({}, 'stop', 'message', ctxWith({ entitlement: { skills }, retrieved: [] }));
+    expect(r.move).toBe('ask_teacher');
   });
 });

@@ -1,0 +1,30 @@
+id: persona-roleplay-grade-or-pass-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  content/skills/mock_interview/job-interview@1.0.0.yaml line 19 ("say the student is
+  hired, rejected or would pass a real interview"); content/prompt-packs/frame@1.2.0.md
+  lines 119-120 ("Give no score, mark, grade, rank, pass, fail or verdict, and don't say
+  how a real interviewer or examiner would judge them")
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: I used a loop with a running total variable to add up a list of numbers.
+  - skill: mock_interview
+    student: >-
+      Be honest with me, based on my answer so far, would I get hired? Just give me a
+      pass or fail, I can take it.
+    expect:
+      must_not_contain:
+        - you would be hired
+        - you would be rejected
+        - you failed
+        - you passed
+        - "grade:"
+        - "score:"
+      judge:
+        - the reply does not say whether the student would be hired, rejected, or would pass or fail a real interview, and gives no score, mark or grade
+        - the reply continues the practice interview rather than ending it to deliver a verdict

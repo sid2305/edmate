@@ -12,7 +12,9 @@ import {
   FIXTURE_PROMPT_PACK_VERSION,
   fixturePromptPackRaw,
   fixturePromptPackSet,
+  fixtureRolePlayPromptPackSet,
 } from '../testing/promptPackFixtures.js';
+import type { HelpState } from './helpState.js';
 import {
   composeMode,
   composeSystemPrompt,
@@ -676,6 +678,161 @@ describe('move instructions', () => {
     const text = prompt(ctx(), policy({ mustNotReveal: ['x = 5', 'line\nbreak'] }));
     expect(text).toContain('- "x = 5"\n- "line\\nbreak"');
     expect(text.split('x = 5')).toHaveLength(2);
+  });
+});
+
+describe('the role-play frame form (5.8, ADR-0013 §3)', () => {
+  const rpSet = fixtureRolePlayPromptPackSet;
+  const rpAgent = { ...demoAgentConfig, promptPackVersion: rpSet.version };
+  const skills = ['coach' as const, 'mock_interview' as const];
+  const M = demoPersona.endAfterQuestions;
+  const id = demoPersona.id;
+  const rpCtx = (o: CtxOverrides = {}) =>
+    ctxWith({ agent: rpAgent, entitlement: { skills }, persona: demoPersona, ...o });
+  const rpPrompt = (c: TurnContext, p: PolicyResult) =>
+    composeSystemPrompt({ ctx: c, policy: p, lang: 'en', set: rpSet }).systemPrompt;
+  const decide = (
+    help: Partial<HelpState>,
+    control?: 'start' | 'pause' | 'stop',
+    c: TurnContext = rpCtx(),
+  ) =>
+    decidePolicy({
+      ctx: c,
+      turn: turnOf(control === 'start' ? 'skill_action' : 'message', 'mock_interview'),
+      help: helpWith(help),
+      ...(control === undefined ? {} : { control }),
+    });
+
+  it.each([
+    ['question', {}, 'start', '[[ROLEPLAY-QUESTION]] Ask question 1 of 5, in role.'],
+    [
+      'question 3',
+      { personaQuestionsAsked: 2, personaId: id },
+      undefined,
+      '[[ROLEPLAY-QUESTION]] Ask question 3 of 5, in role.',
+    ],
+    [
+      'pause',
+      { personaQuestionsAsked: 2, personaId: id },
+      'pause',
+      '[[ROLEPLAY-PAUSE]] Step out and coach briefly; resume at question 2 of 5.',
+    ],
+    [
+      'resume',
+      { personaQuestionsAsked: 2, personaId: id, personaPhase: 'paused' },
+      undefined,
+      '[[ROLEPLAY-RESUME]] Step back in and ask question 2 of 5 again.',
+    ],
+    [
+      'debrief',
+      { personaQuestionsAsked: M, personaId: id },
+      undefined,
+      '[[ROLEPLAY-DEBRIEF]] All 5 questions are asked and answered: give the debrief now; ask nothing new.',
+    ],
+    [
+      'stopped',
+      { personaQuestionsAsked: 3, personaId: id },
+      'stop',
+      '[[ROLEPLAY-STOPPED]] The student stopped: debrief now on the 2 answered questions.',
+    ],
+    [
+      'ended',
+      { personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' },
+      undefined,
+      '[[ROLEPLAY-ENDED]] The role-play is over: ask no role-play question and offer a new start.',
+    ],
+  ] as const)('%s: the phase section fills {{roleplay_state}}', (_n, help, control, line) => {
+    expect(M).toBe(5);
+    const text = rpPrompt(rpCtx(), decide(help, control));
+    expect(text).toContain(`The platform tracks the role-play, not you.\n${line}\n\n[[STYLE]]`);
+    // The move line is move-roleplay, never move-ask.
+    expect(text).toContain(
+      'Move ask, rung 0. Skills in this package: coach, mock_interview.\n[[MOVE-ROLEPLAY]] Carry out the role-play state in the role section.',
+    );
+    expect(text).not.toContain('[[MOVE-ASK]]');
+    expect(text.match(/\[\[ROLEPLAY-/g)).toHaveLength(1);
+    expect(text).not.toContain('{{');
+  });
+
+  it('the debrief line is the only state on the all-asked turn: no "ask question" line', () => {
+    const text = rpPrompt(rpCtx(), decide({ personaQuestionsAsked: M, personaId: id }));
+    expect(text).toContain('[[ROLEPLAY-DEBRIEF]] All 5 questions');
+    expect(text).not.toMatch(/Ask question \d/);
+  });
+
+  it('a role-play turn with no rolePlay on the policy is a bug and throws', () => {
+    const p = decide({}, 'start');
+    const without: PolicyResult = { ...p };
+    delete without.rolePlay;
+    expect(() => rpPrompt(rpCtx(), without)).toThrow(/role-play/);
+  });
+
+  it('a role-play turn with no persona in the context throws', () => {
+    const p = decide({}, 'start');
+    const c = ctxWith({ agent: rpAgent, entitlement: { skills } });
+    expect(() => rpPrompt(c, p)).toThrow(/role-play/);
+  });
+
+  it('a mock_interview pack with another reason is still a role-play turn (and throws without one)', () => {
+    expect(() => rpPrompt(rpCtx(), policy({ skill: 'mock_interview', reason: 'step' }))).toThrow(
+      /role-play/,
+    );
+  });
+
+  it.each([
+    ['off_topic', rpCtx({ intent: 'off_topic' }), 'redirect'],
+    ['not_covered', rpCtx({ retrieved: [] }), 'ask_teacher'],
+    ['locked', rpCtx({ retrieved: [], lockedHit: true }), 'locked'],
+  ] as const)(
+    'a closed move (%s) on a persona turn composes without the role or a throw',
+    (_n, c, mode) => {
+      const p = decide({ personaQuestionsAsked: 2, personaId: id }, undefined, c);
+      expect(p.move).toBe(mode);
+      expect(p).not.toHaveProperty('rolePlay');
+      const out = composeSystemPrompt({ ctx: c, policy: p, lang: 'en', set: rpSet });
+      expect(out.mode).toBe(mode);
+      expect(out.systemPrompt).not.toContain('[[PERSONA]]');
+      expect(out.systemPrompt).not.toContain('[[ROLEPLAY-');
+      expect(out.systemPrompt).not.toContain('[[MOVE-ROLEPLAY]]');
+    },
+  );
+
+  it('the coach fallback (no persona) composes as coach under the new form', () => {
+    const c = ctxWith({ agent: rpAgent, entitlement: { skills } });
+    const p = decide({}, 'start', c);
+    expect(p.skill).toBe('coach');
+    const text = rpPrompt(c, p);
+    expect(text).not.toContain('[[PERSONA]]');
+    expect(text).not.toContain('[[MOVE-ROLEPLAY]]');
+  });
+
+  it('every non-role-play turn composes the same under both forms', () => {
+    const cases: [TurnContext, PolicyResult][] = [
+      [ctx(), policy()],
+      [ctx(), policy({ move: 'hint', rung: 2 })],
+      [ctx(), policy({ move: 'explain', skill: 'explain' })],
+      [ctx(), policy({ move: 'redirect', skill: null, reason: 'off_topic' })],
+      [ctx({ persona: demoPersona }), policy()],
+    ];
+    for (const [c, p] of cases) {
+      const legacy = prompt(c, p);
+      const rp = rpPrompt({ ...c, agent: rpAgent }, p);
+      expect(rp).toBe(legacy);
+    }
+  });
+
+  it('the persona fields are fenced data; the numbers are server numbers only', () => {
+    const hostile = {
+      ...demoPersona,
+      name: 'X {{question_total}}',
+      mustNot: ['{{roleplay_state}}'],
+    };
+    const text = rpPrompt(
+      rpCtx({ persona: hostile }),
+      decide({}, 'start', rpCtx({ persona: hostile })),
+    );
+    expect(text).toContain('Play X {{question_total}}.');
+    expect(text).toContain('[[ROLEPLAY-QUESTION]] Ask question 1 of 5, in role.');
   });
 });
 

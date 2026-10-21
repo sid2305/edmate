@@ -14,13 +14,15 @@ import {
   demoLearnerProfile,
   demoLocalePack,
   demoPackagePaid,
+  demoPersona,
   demoStyleCard,
   demoTurnInput,
   learnerProfileNew,
 } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from '../../pedagogy/coverage.js';
-import { INITIAL_HELP_STATE } from '../../pedagogy/helpState.js';
+import { INITIAL_HELP_STATE, serializeSessionHelp } from '../../pedagogy/helpState.js';
+import { createPersonaLibrary, type PersonaLibrary } from '../../pedagogy/personas.js';
 import {
   memoryRetrieval,
   OUT_OF_SCOPE_TEXT,
@@ -71,6 +73,7 @@ function world(
     profile?: LearnerProfile;
     history?: Message[];
     retrieval?: RetrievalIndex;
+    personas?: PersonaLibrary;
   } = {},
 ): World {
   const profileCalls: [string, string][] = [];
@@ -90,7 +93,10 @@ function world(
     append: () => Promise.reject(new Error('not in buildContext')),
   };
   const retrieval = o.retrieval ?? memoryRetrieval({ chunks: retrievalWorld() });
-  const t = testDeps({ overrides: { profiles, transcripts, retrieval } });
+  const t = testDeps({
+    overrides: { profiles, transcripts, retrieval },
+    ...(o.personas === undefined ? {} : { personas: o.personas }),
+  });
   return { profileCalls, historyCalls, retrieval, deps: t.deps };
 }
 
@@ -391,6 +397,67 @@ describe('buildContext: style card and persona', () => {
       kind: 'skill_action',
       skill: 'mock_interview',
     });
+    expect(b.persona).toBeUndefined();
+  });
+});
+
+describe('buildContext: persona resolution (5.8, ADR-0013 §2)', () => {
+  const personas = createPersonaLibrary([[demoPersona.id, demoPersona]]);
+  const startInput = (skillPayload?: unknown): TurnInput => ({
+    ...demoTurnInput,
+    kind: 'skill_action',
+    skill: 'mock_interview',
+    ...(skillPayload === undefined ? {} : { skillPayload }),
+  });
+  const answer: TurnInput = { ...demoTurnInput, kind: 'message', skill: 'mock_interview' };
+  const storedId = (personaId: string): Entitled => ({
+    ...ENTITLED,
+    helpState: serializeSessionHelp({
+      rung: 0,
+      help: { ...INITIAL_HELP_STATE, answerKey: [], personaId, personaQuestionsAsked: 2 },
+    }),
+  });
+
+  it('a start takes the persona from its payload, as a mutable copy that passes the schema', async () => {
+    const b = await run(world({ personas }), ENTITLED, startInput({ persona: demoPersona.id }));
+    expect(b.persona).toEqual(demoPersona);
+    expect(b.persona).not.toBe(personas.get(demoPersona.id));
+    expect(Object.isFrozen(b.persona?.mustNot)).toBe(false);
+    expect(BuiltContextSchema.parse(b).persona).toEqual(demoPersona);
+  });
+
+  it('a later mock_interview turn uses the stored persona id', async () => {
+    const b = await run(world({ personas }), storedId(demoPersona.id), answer);
+    expect(b.persona?.id).toBe(demoPersona.id);
+  });
+
+  it.each([
+    ['an unknown id', startInput({ persona: 'recruiter' }), ENTITLED],
+    ['a payload of the wrong shape', startInput({ persona: demoPersona.id, extra: 1 }), ENTITLED],
+    ['no payload', startInput(), ENTITLED],
+    ['no stored id', answer, ENTITLED],
+    ['a stored id no longer in the library', answer, storedId('retired')],
+    ['a non-mock_interview turn', { ...answer, skill: 'coach' as const }, storedId(demoPersona.id)],
+    [
+      'a turn naming no skill',
+      { ...demoTurnInput, kind: 'message' as const },
+      storedId(demoPersona.id),
+    ],
+  ])('%s gives no persona', async (_n, input, s) => {
+    const b = await run(world({ personas }), s, input);
+    expect(b.persona).toBeUndefined();
+    expect('persona' in b).toBe(false);
+  });
+
+  it('an unreadable help state gives no persona', async () => {
+    const s = { ...ENTITLED, helpState: { v: 1, rung: 0, junk: true } };
+    const b = await run(world({ personas }), s, answer);
+    expect(b.helpStateUnreadable).toBe(true);
+    expect(b.persona).toBeUndefined();
+  });
+
+  it('without deps.personas there is never a persona', async () => {
+    const b = await run(world(), storedId(demoPersona.id), answer);
     expect(b.persona).toBeUndefined();
   });
 });

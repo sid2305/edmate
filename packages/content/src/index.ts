@@ -11,9 +11,12 @@ export {
   type FileItems,
 } from './loader.js';
 export {
+  comparePersonaVersions,
   type PersonaTemplate,
   PersonaTemplateSchema,
+  readPersonaLibrary,
   readPersonaTemplateDir,
+  selectPersonaLibrary,
   validatePersonaTemplateDir,
 } from './personaTemplates.js';
 export { checkPilotLanguages, PILOT_LANGUAGES } from './pilotLanguages.js';

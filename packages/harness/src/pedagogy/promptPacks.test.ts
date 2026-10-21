@@ -3,6 +3,8 @@ import {
   fixturePromptPackRaw,
   fixturePromptPackSet,
   FIXTURE_PROMPT_PACK_VERSION,
+  fixtureRolePlayPromptPackRaw,
+  fixtureRolePlayPromptPackSet,
 } from '../testing/promptPackFixtures.js';
 import {
   createPromptPackLibrary,
@@ -17,6 +19,8 @@ import {
   renderTemplate,
   REQUIRED_PACKS,
   resolvePromptPackSet,
+  ROLEPLAY_SECTIONS,
+  rolePlaySections,
   SKILL_PACKS,
   UnknownPromptPackVersionError,
 } from './promptPacks.js';
@@ -197,8 +201,8 @@ describe('parsePromptPackSet', () => {
 describe('optional frame section move-feedback (ADR-0012)', () => {
   const SECTION = '\n## move-feedback\n[[MOVE-FEEDBACK]] Give rubric feedback.\n';
 
-  it('is the only optional section', () => {
-    expect(OPTIONAL_FRAME_SECTIONS).toEqual(['move-feedback']);
+  it('is optional on its own (the role-play sections are a separate group)', () => {
+    expect(OPTIONAL_FRAME_SECTIONS[0]).toBe('move-feedback');
     expect(Object.keys(FRAME_SECTIONS)).toContain('move-feedback');
   });
 
@@ -211,7 +215,12 @@ describe('optional frame section move-feedback (ADR-0012)', () => {
   it('a frame with it loads, trimmed', () => {
     const set = parsePromptPackSet(withFrame((b) => `${b}${SECTION}`));
     expect(set.frame['move-feedback']).toBe('[[MOVE-FEEDBACK]] Give rubric feedback.');
-    expect(Object.keys(set.frame).sort()).toEqual(Object.keys(FRAME_SECTIONS).sort());
+    const roleplay: readonly string[] = ROLEPLAY_SECTIONS;
+    expect(Object.keys(set.frame).sort()).toEqual(
+      Object.keys(FRAME_SECTIONS)
+        .filter((k) => !roleplay.includes(k))
+        .sort(),
+    );
   });
 
   it('when present it may not be empty', () => {
@@ -234,6 +243,144 @@ describe('optional frame section move-feedback (ADR-0012)', () => {
   it('every other section stays required', () => {
     const missing = withFrame((b) => b.replace(/## move-hint-1\n[^#]*/, ''));
     expect(issuesOf(missing)).toEqual(['packs.frame.move-hint-1: missing section']);
+  });
+});
+
+describe('the persona forms and the role-play sections (5.8, ADR-0013 §3)', () => {
+  const rp = (): RawPromptPackSet => clone(fixtureRolePlayPromptPackRaw);
+  const editRp = (edit: (body: string) => string): RawPromptPackSet => {
+    const r = rp();
+    const frame = r.packs.frame;
+    if (frame === undefined) throw new Error('fixture has no frame');
+    frame.body = edit(frame.body);
+    return r;
+  };
+  const drop = (name: string) => (b: string) =>
+    b.replace(new RegExp(`\\n## ${name}\\n[^#]*`), '\n');
+
+  it('the seven role-play sections are optional, after move-feedback', () => {
+    expect(ROLEPLAY_SECTIONS).toEqual([
+      'move-roleplay',
+      'roleplay-question',
+      'roleplay-pause',
+      'roleplay-resume',
+      'roleplay-debrief',
+      'roleplay-stopped',
+      'roleplay-ended',
+    ]);
+    expect(OPTIONAL_FRAME_SECTIONS).toEqual(['move-feedback', ...ROLEPLAY_SECTIONS]);
+    for (const s of ROLEPLAY_SECTIONS) expect(Object.keys(FRAME_SECTIONS)).toContain(s);
+  });
+
+  it('the legacy form loads and has no role-play sections', () => {
+    const set = parsePromptPackSet(raw());
+    expect(rolePlaySections(set.frame)).toBeUndefined();
+    for (const s of ROLEPLAY_SECTIONS) expect(Object.hasOwn(set.frame, s)).toBe(false);
+  });
+
+  it('the new form loads, and rolePlaySections gives all seven, trimmed', () => {
+    const set = parsePromptPackSet(rp());
+    expect(set).toEqual(fixtureRolePlayPromptPackSet);
+    const s = rolePlaySections(set.frame);
+    expect(s).toBeDefined();
+    expect(Object.keys(s ?? {})).toEqual([...ROLEPLAY_SECTIONS]);
+    expect(s?.['roleplay-debrief']).toBe(
+      '[[ROLEPLAY-DEBRIEF]] All {{question_total}} questions are asked and answered: give the debrief now; ask nothing new.',
+    );
+    expect(Object.isFrozen(s)).toBe(true);
+    expect(set.frame.persona).toContain('{{roleplay_state}}');
+  });
+
+  it('rolePlaySections is undefined when any one section is missing', () => {
+    const partial = { ...fixtureRolePlayPromptPackSet.frame } as Record<string, string>;
+    delete partial['roleplay-ended'];
+    expect(rolePlaySections(partial as typeof fixtureRolePlayPromptPackSet.frame)).toBeUndefined();
+  });
+
+  it('a new-form frame missing a role-play section names it', () => {
+    expect(issuesOf(editRp(drop('roleplay-stopped')))).toEqual([
+      'packs.frame.roleplay-stopped: missing section (the persona section uses {{roleplay_state}})',
+    ]);
+  });
+
+  it('a frame with no persona section reports only the missing section, not a form', () => {
+    const issues = issuesOf(editRp(drop('persona')));
+    expect(issues.filter((i) => i.startsWith('packs.frame.persona'))).toHaveLength(1);
+    expect(issues.join('\n')).not.toMatch(/roleplay_state|count slots|not allowed/u);
+  });
+
+  it('a new-form persona section may not keep a count slot', () => {
+    const r = editRp((b) =>
+      b.replace(
+        '{{roleplay_state}}',
+        '{{roleplay_state}} {{questions_asked}} {{persona_end_after}}',
+      ),
+    );
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.persona: {{persona_end_after}} is not allowed with {{roleplay_state}}',
+      'packs.frame.persona: {{questions_asked}} is not allowed with {{roleplay_state}}',
+    ]);
+  });
+
+  it('a legacy frame with any role-play section names each one', () => {
+    const r = withFrame(
+      (b) => `${b}\n## roleplay-ended\n[[E]] Over.\n\n## move-roleplay\n[[M]] Carry it out.\n`,
+    );
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.move-roleplay: not allowed without {{roleplay_state}} in the persona section',
+      'packs.frame.roleplay-ended: not allowed without {{roleplay_state}} in the persona section',
+    ]);
+  });
+
+  it('a legacy persona section must have both count slots', () => {
+    const r = withFrame((b) => b.replace(' of {{persona_end_after}}', ''));
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.persona: missing {{persona_end_after}} (the legacy form needs both count slots)',
+    ]);
+    const r2 = withFrame((b) => b.replace('question {{questions_asked}} of', 'question of'));
+    expect(issuesOf(r2)).toEqual([
+      'packs.frame.persona: missing {{questions_asked}} (the legacy form needs both count slots)',
+    ]);
+  });
+
+  it('a mixed frame reports every missing and extra item at once', () => {
+    const r = editRp((b) =>
+      drop('roleplay-pause')(b).replace(
+        '{{roleplay_state}}',
+        '{{roleplay_state}} {{questions_asked}}',
+      ),
+    );
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.persona: {{questions_asked}} is not allowed with {{roleplay_state}}',
+      'packs.frame.roleplay-pause: missing section (the persona section uses {{roleplay_state}})',
+    ]);
+  });
+
+  it('each role-play section takes only its own numbers', () => {
+    const r = editRp((b) =>
+      b
+        .replace('{{questions_answered}}', '{{question_number}}')
+        .replace('[[ROLEPLAY-ENDED]]', '[[ROLEPLAY-ENDED]] {{question_total}}')
+        .replace('[[MOVE-ROLEPLAY]]', '[[MOVE-ROLEPLAY]] {{move}}'),
+    );
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.move-roleplay: unknown placeholder {{move}}',
+      'packs.frame.roleplay-ended: unknown placeholder {{question_total}}',
+      'packs.frame.roleplay-stopped: unknown placeholder {{question_number}}',
+      'packs.frame.roleplay-stopped: missing required placeholder {{questions_answered}}',
+    ]);
+  });
+
+  it('a role-play section may not be empty', () => {
+    const r = editRp((b) => b.replace(/(## roleplay-resume\n)[^\n]*\n/, '$1\n'));
+    expect(issuesOf(r)).toEqual(['packs.frame.roleplay-resume: empty']);
+  });
+
+  it('the persona section with no persona placeholders at all is still checked by its slots', () => {
+    const r = editRp((b) => b.replace('{{persona_name}}', 'someone'));
+    expect(issuesOf(r)).toEqual([
+      'packs.frame.persona: missing required placeholder {{persona_name}}',
+    ]);
   });
 });
 

@@ -20,9 +20,11 @@ import {
   type PromptPackSet,
   renderTemplate,
   type RequiredFrameSection,
+  rolePlaySections,
   SKILL_PACKS,
   type SkillPackName,
 } from './promptPacks.js';
+import { ROLEPLAY_PHASE_SECTION, type RolePlay, type RolePlaySection } from './roleplay.js';
 
 /** A retrieved chunk outside the entitlement reached the composer. Never carries chunk text. */
 export class LockedMaterialError extends Error {
@@ -137,6 +139,26 @@ function moveSection(p: PolicyResult): RequiredFrameSection {
   return `move-${p.move}` as const;
 }
 
+/** The phase's section, filled with the server's numbers only (ADR-0013 §3). */
+function rolePlayState(r: RolePlay, s: Readonly<Record<RolePlaySection, string>>): string {
+  const text = s[ROLEPLAY_PHASE_SECTION[r.phase]];
+  switch (r.phase) {
+    case 'question':
+    case 'pause':
+    case 'resume':
+      return renderTemplate(text, {
+        question_number: String(r.question),
+        question_total: String(r.total),
+      });
+    case 'debrief':
+      return renderTemplate(text, { question_total: String(r.total) });
+    case 'stopped':
+      return renderTemplate(text, { questions_answered: String(r.answered) });
+    case 'ended':
+      return text;
+  }
+}
+
 function materialBlock(chunks: readonly Chunk[]): string {
   return chunks
     .map((c, i) => {
@@ -172,7 +194,33 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
   }
   parts.push(modeText);
 
-  if (mode === 'mock_interview' && ctx.persona !== undefined) {
+  // The role-play form (5.8, ADR-0013 §3): a role-play turn is told apart by the policy's reason
+  // (or the mock_interview pack), never by `ctx.persona` or the turn's skill, so a closed move on a
+  // persona turn (off_topic, not covered, locked) composes its own mode with no role. With the
+  // legacy form, nothing below changes.
+  const rpSections = rolePlaySections(f);
+  const rolePlayTurn =
+    rpSections !== undefined && (policy.reason === 'mock_interview' || mode === 'mock_interview');
+  let moveLine: string | undefined;
+  if (rolePlayTurn) {
+    const p = ctx.persona;
+    const r = policy.rolePlay;
+    // A bug, never a content error: the runner falls back (no persona) when compose throws.
+    if (p === undefined || r === undefined) {
+      throw new Error("compose: a role-play turn needs a persona and the policy's rolePlay");
+    }
+    parts.push(
+      renderTemplate(f.persona, {
+        persona_name: inline(p.name),
+        persona_style: fenced(p.style),
+        persona_must_not: fenced(p.mustNot.join('; ')),
+        roleplay_state: rolePlayState(r, rpSections),
+      }),
+    );
+    moveLine = rpSections['move-roleplay'];
+  } else if (mode === 'mock_interview' && ctx.persona !== undefined) {
+    // The legacy form (sets 1.0.0 to 1.2.0), byte-identical to before 5.8. It clamps only to
+    // [1, max(1, M)], not to PERSONA_QUESTIONS_MAX (ADR-0013 §5): left as it was on purpose.
     const p = ctx.persona;
     parts.push(
       renderTemplate(f.persona, {
@@ -234,7 +282,7 @@ export function composeSystemPrompt(i: ComposeInput): Composed {
           move: policy.move,
           rung: String(policy.rung),
           skills: ctx.entitlement.skills.join(', '),
-          move_instruction: moveInstruction(policy, f),
+          move_instruction: moveLine ?? moveInstruction(policy, f),
         }),
   );
   // The answer key goes here and nowhere else in the prompt (task 3.6, lead answer Q4), and

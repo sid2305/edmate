@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FIXTURE_PROMPT_PACK_VERSION,
   fixturePromptPackSet,
+  fixtureRolePlayPromptPackSet,
 } from '../testing/promptPackFixtures.js';
 import { type ComposeMode, composeSystemPrompt } from './compose.js';
 import { decidePolicy, fallbackPolicy, type PolicyResult } from './policy.js';
@@ -122,6 +123,41 @@ describe('composed prompt snapshots', () => {
       mode: r.mode,
       sources: r.sources,
     }).toMatchSnapshot('meta');
+    expect(r.systemPrompt).toMatchSnapshot('systemPrompt');
+  });
+});
+
+// The role-play frame form (5.8, ADR-0013 §3), on the test-only fixture frame: one snapshot per
+// phase. The cases above stay on the legacy fixture frame, byte-identical.
+describe('composed prompt snapshots, role-play frame', () => {
+  const rpAgent = { ...demoAgentConfig, promptPackVersion: fixtureRolePlayPromptPackSet.version };
+  const c = ctx({ agent: rpAgent, persona: demoPersona });
+  const id = demoPersona.id;
+  const M = demoPersona.endAfterQuestions;
+  const phases: [string, ReturnType<typeof helpWith>, ('start' | 'pause' | 'stop')?][] = [
+    ['question', helpWith(), 'start'],
+    ['pause', helpWith({ personaQuestionsAsked: 2, personaId: id }), 'pause'],
+    ['resume', helpWith({ personaQuestionsAsked: 2, personaId: id, personaPhase: 'paused' })],
+    ['debrief', helpWith({ personaQuestionsAsked: M, personaId: id })],
+    ['stopped', helpWith({ personaQuestionsAsked: 3, personaId: id }), 'stop'],
+    ['ended', helpWith({ personaQuestionsAsked: M, personaId: id, personaPhase: 'ended' })],
+  ];
+
+  it.each(phases)('%s', (phase, help, control) => {
+    const policy = decidePolicy({
+      ctx: c,
+      turn: turnOf(control === 'start' ? 'skill_action' : 'message', 'mock_interview'),
+      help,
+      ...(control === undefined ? {} : { control }),
+    });
+    expect(policy.rolePlay?.phase).toBe(phase);
+    const r = composeSystemPrompt({
+      ctx: c,
+      policy,
+      lang: 'en',
+      set: fixtureRolePlayPromptPackSet,
+    });
+    expect(r.mode).toBe('mock_interview');
     expect(r.systemPrompt).toMatchSnapshot('systemPrompt');
   });
 });

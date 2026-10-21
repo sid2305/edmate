@@ -7,6 +7,8 @@
 // packs; code renders only data into the fixed `{{placeholder}}` slots each template allows.
 import { AgentConfigSchema } from '@edmate/contracts';
 import { z } from 'zod';
+import { FrozenMap } from './frozenMap.js';
+import type { RolePlaySection } from './roleplay.js';
 
 /** One pack per MVP skill. `study_plan` (P1) has none: the policy sends it to `redirect`. */
 export const SKILL_PACKS = [
@@ -61,14 +63,15 @@ export const FRAME_SECTIONS = Object.freeze({
   tools: slots(['tools']),
   material: slots(['sources']),
   learner: slots(['last_summary']),
-  /** `questions_asked` is the server's count (3.11d, ADR-0009), never the model's. */
-  persona: slots([
-    'persona_name',
-    'persona_style',
-    'persona_must_not',
-    'persona_end_after',
-    'questions_asked',
-  ]),
+  /**
+   * Two forms (5.8, ADR-0013 §3), checked across the frame by `checkPersonaForm`: the legacy form
+   * takes the server's count (`questions_asked` of `persona_end_after`, 3.11d, ADR-0009); the
+   * role-play form takes `roleplay_state` (the phase's section, filled by the server).
+   */
+  persona: slots(
+    ['persona_name', 'persona_style', 'persona_must_not'],
+    ['persona_end_after', 'questions_asked', 'roleplay_state'],
+  ),
   'teacher-label': NONE,
   'empty-turn': slots([], ['kind']),
   'locked-name-package': slots(['package_name']),
@@ -86,14 +89,43 @@ export const FRAME_SECTIONS = Object.freeze({
   'move-distress': NONE,
   /** Feedback turns' move line (ADR-0012). Optional: frames before 1.1.0 leave it out. */
   'move-feedback': NONE,
+  // The role-play sections (5.8, ADR-0013 §3): optional, all or none, and only with the
+  // persona section's role-play form. Every slot is a number the server works out.
+  'move-roleplay': NONE,
+  'roleplay-question': slots(['question_number', 'question_total']),
+  'roleplay-pause': slots(['question_number', 'question_total']),
+  'roleplay-resume': slots(['question_number', 'question_total']),
+  'roleplay-debrief': slots(['question_total']),
+  'roleplay-stopped': slots(['questions_answered']),
+  'roleplay-ended': NONE,
 } satisfies Record<string, Slots>);
 export type FrameSection = keyof typeof FRAME_SECTIONS;
 
+/** The seven role-play sections (5.8, ADR-0013 §3), in frame order. All or none. */
+export const ROLEPLAY_SECTIONS = Object.freeze([
+  'move-roleplay',
+  'roleplay-question',
+  'roleplay-pause',
+  'roleplay-resume',
+  'roleplay-debrief',
+  'roleplay-stopped',
+  'roleplay-ended',
+] as const satisfies readonly RolePlaySection[]);
+
+// Compile-time guard: ROLEPLAY_SECTIONS lists every RolePlaySection.
+type MissingRolePlaySection = Exclude<RolePlaySection, (typeof ROLEPLAY_SECTIONS)[number]>;
+const _allRolePlaySections: [MissingRolePlaySection] extends [never] ? true : never = true;
+void _allRolePlaySections;
+
 /**
- * The only frame sections a frame may leave out (ADR-0012). When present, each is checked like
- * every other section: not empty, and only its allowed placeholders (none for `move-feedback`).
+ * The only frame sections a frame may leave out: `move-feedback` on its own (ADR-0012) and the
+ * role-play group (ADR-0013). When present, each is checked like every other section: not empty,
+ * and only its allowed placeholders.
  */
-export const OPTIONAL_FRAME_SECTIONS = Object.freeze(['move-feedback'] as const);
+export const OPTIONAL_FRAME_SECTIONS = Object.freeze([
+  'move-feedback',
+  ...ROLEPLAY_SECTIONS,
+] as const);
 export type OptionalFrameSection = (typeof OPTIONAL_FRAME_SECTIONS)[number];
 /** Every frame section a set must have (all but `OPTIONAL_FRAME_SECTIONS`). */
 export type RequiredFrameSection = Exclude<FrameSection, OptionalFrameSection>;
@@ -207,6 +239,71 @@ function checkSlots(template: string, allowed: Slots, path: string, out: PromptP
   }
 }
 
+/** The legacy persona form's count slots (3.11d); the role-play form has neither. */
+const COUNT_SLOTS = ['persona_end_after', 'questions_asked'] as const;
+
+/**
+ * The frame uses exactly one persona form (ADR-0013 §3). Legacy: both count slots, no
+ * `roleplay_state` and none of the role-play sections. Role-play: `roleplay_state`, neither count
+ * slot and all seven sections. Every missing or extra item is reported.
+ */
+function checkPersonaForm(sections: Readonly<Record<string, string>>, out: PromptPackIssue[]) {
+  const persona = sections.persona;
+  if (persona === undefined) return; // reported as a missing section
+  const found = new Set(placeholdersOf(persona));
+  if (found.has('roleplay_state')) {
+    for (const slot of COUNT_SLOTS) {
+      if (found.has(slot)) {
+        out.push({
+          path: 'packs.frame.persona',
+          message: `{{${slot}}} is not allowed with {{roleplay_state}}`,
+        });
+      }
+    }
+    for (const name of ROLEPLAY_SECTIONS) {
+      if (!Object.hasOwn(sections, name)) {
+        out.push({
+          path: `packs.frame.${name}`,
+          message: 'missing section (the persona section uses {{roleplay_state}})',
+        });
+      }
+    }
+    return;
+  }
+  for (const slot of COUNT_SLOTS) {
+    if (!found.has(slot)) {
+      out.push({
+        path: 'packs.frame.persona',
+        message: `missing {{${slot}}} (the legacy form needs both count slots)`,
+      });
+    }
+  }
+  for (const name of ROLEPLAY_SECTIONS) {
+    if (Object.hasOwn(sections, name)) {
+      out.push({
+        path: `packs.frame.${name}`,
+        message: 'not allowed without {{roleplay_state}} in the persona section',
+      });
+    }
+  }
+}
+
+/**
+ * The role-play sections as a group: all seven, or `undefined` (a legacy frame). `parsePromptPackSet`
+ * guarantees a loaded frame has all or none, so a caller never handles one missing on its own.
+ */
+export function rolePlaySections(
+  frame: PromptPackSet['frame'],
+): Readonly<Record<RolePlaySection, string>> | undefined {
+  const out: Partial<Record<RolePlaySection, string>> = {};
+  for (const name of ROLEPLAY_SECTIONS) {
+    const text = frame[name];
+    if (text === undefined) return undefined;
+    out[name] = text;
+  }
+  return Object.freeze(out as Record<RolePlaySection, string>);
+}
+
 function parseFrame(body: string, out: PromptPackIssue[]): Record<string, string> {
   const sections: Record<string, string> = {};
   let current: string | null = null;
@@ -246,6 +343,7 @@ function parseFrame(body: string, out: PromptPackIssue[]): Record<string, string
       out.push({ path: `packs.frame.${name}`, message: 'missing section' });
     }
   }
+  checkPersonaForm(sections, out);
   return sections;
 }
 
@@ -319,30 +417,6 @@ export function parsePromptPackSet(raw: unknown): PromptPackSet {
   });
 }
 
-/** A read-only Map whose mutators throw, so a shared library can't be changed after start-up. */
-class FrozenMap<K, V> extends Map<K, V> {
-  private sealed = false;
-
-  constructor(entries: readonly (readonly [K, V])[]) {
-    super(entries);
-    this.sealed = true;
-    Object.freeze(this);
-  }
-
-  override set(key: K, value: V): this {
-    if (this.sealed) throw new TypeError('the prompt-pack library is read-only');
-    return super.set(key, value);
-  }
-
-  override delete(): boolean {
-    throw new TypeError('the prompt-pack library is read-only');
-  }
-
-  override clear(): void {
-    throw new TypeError('the prompt-pack library is read-only');
-  }
-}
-
 /**
  * Indexes sets by version. Two sets whose versions differ only in build metadata (`+...`) count
  * as the same version (semver precedence ignores build metadata), so they are a duplicate too.
@@ -354,7 +428,10 @@ export function createPromptPackLibrary(sets: readonly PromptPackSet[]): PromptP
     if (seen.has(key)) throw new Error(`duplicate prompt-pack set version ${s.version}`);
     seen.add(key);
   }
-  return new FrozenMap(sets.map((s) => [s.version, s] as const));
+  return new FrozenMap(
+    sets.map((s) => [s.version, s] as const),
+    'the prompt-pack library',
+  );
 }
 
 /** The set an agent pins, exactly; an unknown version throws (the turn never reaches a model). */

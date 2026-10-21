@@ -17,10 +17,14 @@ export const MAX_OUTPUT_TOKENS: Readonly<Record<Move, number>> = Object.freeze({
   solution: 700,
 });
 
-/** Skills whose output is longer than their move's default (summaries, rubric feedback). */
+/**
+ * Skills whose output is longer than their move's default (summaries, rubric feedback, the
+ * role-play debrief: two strengths and two improvements, each cited; 5.8, ADR-0013 §4).
+ */
 export const SKILL_OUTPUT_TOKENS: Readonly<Partial<Record<Skill, number>>> = Object.freeze({
   revision: 700,
   feedback: 500,
+  mock_interview: 350,
 });
 
 export function maxOutputTokensFor(move: Move, skill: Skill | null): number {

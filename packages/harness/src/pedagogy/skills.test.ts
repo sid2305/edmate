@@ -385,3 +385,103 @@ describe('rolePlayControl', () => {
     expect(rolePlayControl(input)).toBe(expected);
   });
 });
+
+describe('role-play phases through skillStep (5.8, ADR-0013 §1)', () => {
+  const M = demoPersona.endAfterQuestions;
+  const at = (n: number, o: Parameters<typeof helpWith>[0] = {}) =>
+    helpWith({ personaQuestionsAsked: n, personaId: demoPersona.id, ...o });
+  const step = (
+    help: ReturnType<typeof helpWith>,
+    control?: 'start' | 'pause' | 'stop',
+    o: Parameters<typeof ctxWith>[0] = {},
+  ) =>
+    skillStep({
+      ctx: ctxWith({ entitlement: { skills: ALL }, persona: demoPersona, ...o }),
+      turn: turnOf(control === 'start' ? 'skill_action' : 'message', 'mock_interview'),
+      help,
+      skill: 'mock_interview',
+      ...(control === undefined ? {} : { control }),
+    });
+
+  it('a question turn returns rolePlay and saves no phase', () => {
+    const r = step(at(2));
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 3, total: M });
+    expect(r.next.help.personaQuestionsAsked).toBe(3);
+    expect(r.next.help).not.toHaveProperty('personaPhase');
+    expect([r.move, r.skill, r.reason]).toEqual(['ask', 'mock_interview', 'mock_interview']);
+  });
+
+  it('/pause saves paused; the next turn resumes the same question and clears it', () => {
+    const paused = step(at(2), 'pause');
+    expect(paused.rolePlay).toEqual({ phase: 'pause', question: 2, total: M });
+    expect(paused.next.help).toMatchObject({ personaQuestionsAsked: 2, personaPhase: 'paused' });
+    const resumed = step(paused.next.help);
+    expect(resumed.rolePlay).toEqual({ phase: 'resume', question: 2, total: M });
+    expect(resumed.next.help.personaQuestionsAsked).toBe(2);
+    expect(resumed.next.help).not.toHaveProperty('personaPhase');
+  });
+
+  it('the answer to question M debriefs and saves ended; later turns stay ended', () => {
+    const debrief = step(at(M));
+    expect(debrief.rolePlay).toEqual({ phase: 'debrief', total: M });
+    expect(debrief.next.help).toMatchObject({ personaQuestionsAsked: M, personaPhase: 'ended' });
+    const after = step(debrief.next.help);
+    expect(after.rolePlay).toEqual({ phase: 'ended' });
+    expect(after.next.help).toMatchObject({ personaQuestionsAsked: M, personaPhase: 'ended' });
+    expect(after.move).toBe('ask');
+  });
+
+  it('stop saves ended with the count unchanged', () => {
+    const r = step(at(3), 'stop');
+    expect(r.rolePlay).toEqual({ phase: 'stopped', answered: 2 });
+    expect(r.next.help).toMatchObject({ personaQuestionsAsked: 3, personaPhase: 'ended' });
+  });
+
+  it('a start after the end opens question 1 and clears ended', () => {
+    const r = step(at(M, { personaPhase: 'ended' }), 'start');
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 1, total: M });
+    expect(r.next.help.personaQuestionsAsked).toBe(1);
+    expect(r.next.help).not.toHaveProperty('personaPhase');
+  });
+
+  it('a persona switch while ended opens the new persona at question 1', () => {
+    const other = { ...demoPersona, id: 'per_test_02' };
+    const r = step(at(M, { personaPhase: 'ended' }), undefined, { persona: other });
+    expect(r.rolePlay).toEqual({ phase: 'question', question: 1, total: M });
+    expect(r.next.help).toMatchObject({ personaQuestionsAsked: 1, personaId: 'per_test_02' });
+    expect(r.next.help).not.toHaveProperty('personaPhase');
+  });
+
+  it('other skills and the coach fallback carry the phase over and return no rolePlay', () => {
+    const help = at(3, { personaPhase: 'paused' });
+    for (const skill of ALL.filter((s) => s !== 'mock_interview')) {
+      const r = skillStep({
+        ctx: ctxWith({ entitlement: { skills: ALL } }),
+        turn: turnOf('message', skill),
+        help,
+        skill,
+      });
+      expect(r.rolePlay).toBeUndefined();
+      expect(r.next.help.personaPhase).toBe('paused');
+    }
+    const fallback = skillStep({
+      ctx: ctxWith({ entitlement: { skills: ALL } }),
+      turn: turnOf('message', 'mock_interview'),
+      help,
+      skill: 'mock_interview',
+    });
+    expect(fallback.skill).toBe('coach');
+    expect(fallback.rolePlay).toBeUndefined();
+    expect(fallback.next.help.personaPhase).toBe('paused');
+  });
+
+  it('a solved practice item (rebuilt state) keeps the phase', () => {
+    const r = skillStep({
+      ctx: ctxWith({ entitlement: { skills: ALL }, attempt: 'correct' }),
+      turn: turnOf('check_answer', 'practice'),
+      help: at(3, { personaPhase: 'ended' }),
+      skill: 'practice',
+    });
+    expect(r.next.help).toMatchObject({ personaQuestionsAsked: 3, personaPhase: 'ended' });
+  });
+});

@@ -3,8 +3,9 @@
 // 3.4c: the locked probe and locked precedence run on the student's own words only; a second
 // search widened by the agent's last reply can only add coverage, never dilute or inflate a
 // locked verdict (retrievalQuery.ts's retrievalQueries, mergeByScore below).
-// The style card and locale pack are already on Entitled (ADR-0004); persona has no source
-// before 3.11/5.8, so it is left out (3.5's skill rules fall back to coach).
+// The style card and locale pack are already on Entitled (ADR-0004). The persona (5.8, ADR-0013
+// §2) comes only from `deps.personas` via `resolvePersona`: the start payload's bare id, else the
+// stored id; none (no library, an unknown id, an unreadable help state) falls back to coach.
 // 5.6a: a chunk whose text, title or locator reveals the held answer key is dropped before the
 // merge, so it never reaches the model (dropAnswerKeyChunks below); an unreadable help state
 // drops every chunk (fail closed). Short numeric keys are not used for this (contextAnswerKeys).
@@ -15,6 +16,7 @@ import { scopedRetrieval } from '../../access/scopedRetrieval.js';
 import { type AnswerKeyMatcher, compileAnswerKeys } from '../generate/answerKey.js';
 import { chunkLeaks, contextAnswerKeys } from '../generate/answerKeyContext.js';
 import { loadSessionHelp } from '../../pedagogy/helpState.js';
+import { resolvePersona } from '../../pedagogy/personas.js';
 import type { Steps } from '../types.js';
 import { isWithheld } from '../policies.js';
 import { historyChars, historyTrim } from './historyTrim.js';
@@ -139,11 +141,14 @@ export const buildContext: Steps['buildContext'] = async ({ input, deps, cancel 
     dropped = new Set([...o.dropped, ...x.dropped]).size;
   }
   const retrieved = fit(found, MAX_CONTEXT_CHARS - historyChars(history));
+  const persona = resolvePersona(input, help, deps.personas);
   return {
     profile,
     history,
     retrieved,
     lockedHit: probe.hit,
+    // A copy: the library's personas are frozen, and the context is the step's own value.
+    ...(persona === undefined ? {} : { persona: { ...persona, mustNot: [...persona.mustNot] } }),
     helpRung: help.rung,
     helpState: help.help,
     // 4.6b fix round 1: a stored blob that could not be read may hold lockedStopped true.

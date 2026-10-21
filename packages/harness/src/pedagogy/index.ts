@@ -29,6 +29,8 @@ export {
   type SessionHelp,
   SessionHelpSchema,
   serializeSessionHelp,
+  type StoredPersonaPhase,
+  StoredPersonaPhaseSchema,
   type StoredSessionHelp,
 } from './helpState.js';
 export {
@@ -53,7 +55,27 @@ export {
   type PolicyResult,
   type PolicyTool,
 } from './policy.js';
-export { selectSkill, type SkillReason, type SkillStep } from './skills.js';
+export {
+  ROLEPLAY_PHASE_SECTION,
+  ROLEPLAY_PHASES,
+  type RolePlay,
+  type RolePlayControl,
+  type RolePlayPhase,
+  type RolePlaySection,
+  type RolePlayStateSection,
+  type RolePlayStep,
+  type RolePlayStepInput,
+  rolePlaySkipsCoverageGate,
+  rolePlayStep,
+} from './roleplay.js';
+export {
+  createPersonaLibrary,
+  type LoadedPersonaHelp,
+  type PersonaLibrary,
+  PersonaStartPayloadSchema,
+  resolvePersona,
+} from './personas.js';
+export { rolePlayControl, selectSkill, type SkillReason, type SkillStep } from './skills.js';
 export { buildModelRequest, type ModelRequestInput, promptCacheKey } from './modelRequest.js';
 export {
   createPromptPackLibrary,
@@ -80,6 +102,8 @@ export {
   renderTemplate,
   REQUIRED_PACKS,
   resolvePromptPackSet,
+  ROLEPLAY_SECTIONS,
+  rolePlaySections,
   SKILL_PACKS,
   type SkillPackName,
   type Slots,

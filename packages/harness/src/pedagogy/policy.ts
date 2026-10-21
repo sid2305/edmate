@@ -3,14 +3,17 @@
 // clock, no ports. The 3.6 composer adds the system prompt to make a PedagogyDecision.
 //
 // Order of rules, first match wins:
-//   1 distress → redirect   2 skill outside the entitlement → locked   3 off_topic/misuse/meta →
-//   redirect   4 not covered → locked | ask_teacher   5 the skill's default move (the ladder for
-//   coach and practice hints)   then mustNotReveal, tools and the output budget.
+//   1 distress → redirect   2 skill outside the entitlement → locked   3 misuse → redirect
+//   3b off_topic/meta → redirect, except a role-play control (start, `/pause`, `stop`) in an
+//   active role-play (5.8 fix round 1)   4 not covered → locked | ask_teacher, except a role-play turn that skips the gate
+//   (5.8, `rolePlaySkipsCoverageGate`)   5 the skill's default move (the ladder for coach and
+//   practice hints)   then mustNotReveal, tools and the output budget.
 import type { Skill, ToolName, TurnContext, TurnInput } from '@edmate/contracts';
 import { maxOutputTokensFor, type Move } from './budgets.js';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
 import { copyHelp, type HelpState, holdsPracticeKey, INITIAL_HELP_STATE } from './helpState.js';
 import { effectiveCeiling, type Rung } from './ladder.js';
+import { type RolePlay, rolePlaySkipsCoverageGate, rolePlayStep } from './roleplay.js';
 import { type RolePlayControl, selectSkill, type SkillStep, skillStep } from './skills.js';
 
 export interface PolicyTool {
@@ -63,6 +66,11 @@ export interface PolicyResult {
   /** For commit (3.8) to persist. */
   next: { helpRung: Rung; help: HelpState };
   reason: PolicyReason;
+  /**
+   * This turn's role-play (5.8, ADR-0013 §1), from `skillStep`; absent on every other turn,
+   * closed moves and the fallback. Harness-internal: never in `DecideResultSchema`.
+   */
+  rolePlay?: RolePlay;
 }
 
 const DEFAULT_OPTIONS: PolicyOptions = Object.freeze({
@@ -86,11 +94,33 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
   if (ctx.intent === 'distress') return closed('redirect', 'distress');
   const skill = selectSkill(turn, ctx.entitlement);
   if (skill === null) return closed('locked', 'skill_not_entitled');
-  if (ctx.intent === 'off_topic' || ctx.intent === 'misuse' || ctx.intent === 'meta') {
+  // Misuse stays ahead of a role-play control: `/pause` may be followed by any text, so a
+  // control word must never carry a misuse turn past its redirect.
+  if (ctx.intent === 'misuse') return closed('redirect', 'misuse');
+  const persona = ctx.persona;
+  // A control (start, `/pause`, `stop`) in an active role-play beats the meta and off_topic
+  // redirect (5.8 fix round 1): a bare "stop" the router labels meta must still stop it.
+  const steersRolePlay =
+    i.control !== undefined &&
+    skill === 'mock_interview' &&
+    persona !== undefined &&
+    help.personaId === persona.id &&
+    help.personaPhase !== 'ended';
+  if ((ctx.intent === 'off_topic' || ctx.intent === 'meta') && !steersRolePlay) {
     return closed('redirect', ctx.intent);
   }
-  const gate = coverageGate(ctx, opts.coverageThreshold);
-  if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
+  const control = i.control === undefined ? {} : { control: i.control };
+  // The role-play phase is worked out before the gate (pure, no state saved yet), so a control,
+  // resume, debrief, ended or opening turn skips it (5.8, open question 6: lead default, pending
+  // B-37). A closed turn below still leaves the role-play state as it was.
+  const rp =
+    skill === 'mock_interview' && persona !== undefined
+      ? rolePlayStep({ persona, help, ...control })
+      : undefined;
+  if (rp === undefined || !rolePlaySkipsCoverageGate(rp.rolePlay)) {
+    const gate = coverageGate(ctx, opts.coverageThreshold);
+    if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
+  }
   return finish(
     i,
     skillStep({
@@ -98,7 +128,8 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
       turn,
       help,
       skill,
-      ...(i.control === undefined ? {} : { control: i.control }),
+      ...control,
+      ...(rp === undefined ? {} : { rolePlayStep: rp }),
     }),
   );
 }
@@ -156,6 +187,7 @@ function finish(
     maxOutputTokens: maxOutputTokensFor(s.move, s.skill),
     next: s.next,
     reason: s.reason,
+    ...(s.rolePlay === undefined ? {} : { rolePlay: s.rolePlay }),
   };
 }
 

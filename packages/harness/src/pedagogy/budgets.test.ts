@@ -32,6 +32,7 @@ describe('maxOutputTokens per move', () => {
     expect(SKILL_OUTPUT_TOKENS).toMatchInlineSnapshot(`
       {
         "feedback": 500,
+        "mock_interview": 350,
         "revision": 700,
       }
     `);
@@ -46,6 +47,8 @@ describe('maxOutputTokens per move', () => {
     ['explain', 'revision', 700],
     ['hint', 'feedback', 500],
     ['hint', 'coach', 250],
+    // Room for the role-play debrief: two strengths and two improvements, each cited (5.8).
+    ['ask', 'mock_interview', 350],
     ['explain', 'explain', 400],
     ['locked', null, 150],
     ['ask_teacher', null, 250],

@@ -30,22 +30,32 @@ import {
   type HelpState,
   MODE_PACKS,
   type PolicyResult,
+  type RolePlayControl,
+  type RolePlayPhase,
   resolvePromptPackSet,
+  rolePlaySections,
 } from '@edmate/harness';
 import { describe, expect, it } from 'vitest';
-import { readPersonaTemplateDir } from './personaTemplates.js';
+import { readPersonaLibrary, readPersonaTemplateDir } from './personaTemplates.js';
 import { readPromptPackLibrary } from './promptPacks.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, '../../..');
 const DIR = resolve(REPO_ROOT, 'content/prompt-packs');
 const PERSONA_DIR = resolve(REPO_ROOT, 'content/skills/mock_interview');
-/** The newest set (ADR-0012) and the one the demo seed pins; both keep composed snapshots. */
-const SET_VERSION = '1.2.0';
+/**
+ * The newest set (ADR-0013, role-play frame 1.2.0), the previous newest (ADR-0012) and the one the
+ * demo seed pins; all three keep composed snapshots.
+ */
+const SET_VERSION = '1.3.0';
+const PREV_SET_VERSION = '1.2.0';
 const SEED_SET_VERSION = '1.1.0';
 
 const library = readPromptPackLibrary(DIR);
 const set = resolvePromptPackSet(library, SET_VERSION);
+
+/** What a composition root hands the harness as `deps.personas` (5.8): signed, newest per id. */
+const personaLibrary = readPersonaLibrary(PERSONA_DIR);
 
 const { templates: personaTemplates, issues: personaIssues } = readPersonaTemplateDir(PERSONA_DIR);
 if (personaIssues.length > 0)
@@ -277,6 +287,106 @@ function casesFor(version: string) {
   return { CASES, skillCase };
 }
 
+/** One role-play turn: the control and the stored help state that select its phase (ADR-0013 §1). */
+const ROLEPLAY_TURNS: readonly {
+  phase: RolePlayPhase;
+  label: string;
+  kind: TurnInput['kind'];
+  control?: RolePlayControl;
+  help: (p: Persona) => Partial<HelpState>;
+}[] = [
+  {
+    phase: 'question',
+    label: 'start (question 1)',
+    kind: 'skill_action',
+    control: 'start',
+    help: () => ({}),
+  },
+  {
+    phase: 'question',
+    label: 'answer to question 1 (question 2)',
+    kind: 'message',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: 1 }),
+  },
+  {
+    phase: 'pause',
+    label: '/pause during question 2',
+    kind: 'message',
+    control: 'pause',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: 2 }),
+  },
+  {
+    phase: 'resume',
+    label: 'resume question 2',
+    kind: 'message',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: 2, personaPhase: 'paused' }),
+  },
+  {
+    phase: 'debrief',
+    label: 'last answer (debrief)',
+    kind: 'message',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: p.endAfterQuestions }),
+  },
+  {
+    phase: 'stopped',
+    label: 'stop during question 3',
+    kind: 'message',
+    control: 'stop',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: 3 }),
+  },
+  {
+    phase: 'stopped',
+    label: 'stop during question 1 (nothing answered)',
+    kind: 'message',
+    control: 'stop',
+    help: (p) => ({ personaId: p.id, personaQuestionsAsked: 1 }),
+  },
+  {
+    phase: 'ended',
+    label: 'after the debrief (ended)',
+    kind: 'message',
+    help: (p) => ({
+      personaId: p.id,
+      personaQuestionsAsked: p.endAfterQuestions,
+      personaPhase: 'ended',
+    }),
+  },
+];
+
+/** A role-play case for every phase and every signed persona, on one set (new form only). */
+function rolePlayCasesFor(version: string): (Case & { phase: RolePlayPhase })[] {
+  const base: TurnContext = {
+    ...turnContextFull,
+    agent: { ...turnContextFull.agent, promptPackVersion: version },
+    history: [],
+    retrieved: [demoChunkScored],
+    lockedHit: false,
+    helpRung: 0,
+    intent: 'on_task',
+    attempt: 'none',
+    entitlement: { ...turnContextFull.entitlement, skills: [...ALL_SKILLS] },
+  };
+  return [...personaLibrary.values()].flatMap((p) =>
+    ROLEPLAY_TURNS.map((t) => {
+      const c: TurnContext = { ...base, persona: { ...p, mustNot: [...p.mustNot] } };
+      const h: HelpState = { ...help, ...t.help(p) };
+      return {
+        name: `role-play ${p.id}: ${t.label}`,
+        covers: 'mock_interview',
+        mode: 'mock_interview',
+        phase: t.phase,
+        ctx: c,
+        policy: decidePolicy({
+          ctx: c,
+          turn: turnOf(t.kind, 'mock_interview'),
+          help: h,
+          ...(t.control === undefined ? {} : { control: t.control }),
+        }),
+      };
+    }),
+  );
+}
+
 /** Compares two `x.y.z` versions numerically; prerelease tags are not used in real sets. */
 function versionAbove(v: string, floor: string): boolean {
   const a = v.split('.').map(Number);
@@ -330,10 +440,70 @@ describe('feedback move line in real sets (ADR-0012)', () => {
   });
 });
 
-// Set 1.1.0 (the seed's) keeps the suite name it had before set 1.2.0 existed, so its snapshot
-// entries stay byte for byte what they were; set 1.2.0 gets its own suite name.
+const ROLEPLAY_TAG: Record<RolePlayPhase, string> = {
+  question: '[[ROLEPLAY-QUESTION]]',
+  pause: '[[ROLEPLAY-PAUSE]]',
+  resume: '[[ROLEPLAY-RESUME]]',
+  debrief: '[[ROLEPLAY-DEBRIEF]]',
+  stopped: '[[ROLEPLAY-STOPPED]]',
+  ended: '[[ROLEPLAY-ENDED]]',
+};
+
+describe('role-play frame form in real sets (ADR-0013)', () => {
+  it('every set whose frame is 1.2.0 or later has the new form; older frames keep the legacy one', () => {
+    const sets = [...library.values()];
+    const newer = sets.filter((s) => !versionAbove('1.2.0', s.packs.frame.version));
+    expect(newer.map((s) => s.version)).toContain(SET_VERSION);
+    for (const s of sets) {
+      const isNew = newer.includes(s);
+      expect(rolePlaySections(s.frame) !== undefined, `set ${s.version}`).toBe(isNew);
+      expect(s.frame.persona.includes('{{roleplay_state}}'), `set ${s.version}`).toBe(isNew);
+      expect(s.frame.persona.includes('{{questions_asked}}'), `set ${s.version}`).toBe(!isNew);
+      expect(s.frame.persona.includes('{{persona_end_after}}'), `set ${s.version}`).toBe(!isNew);
+    }
+  });
+
+  it('the persona library holds exactly the signed real templates, keyed by id', () => {
+    expect([...personaLibrary.keys()].sort()).toEqual(['job-interview', 'viva']);
+  });
+
+  it('the debrief carries the acceptance line', () => {
+    expect(set.frame['roleplay-debrief']).toContain(
+      'All {{question_total}} questions are asked and answered: step out of the role and give the debrief now; ask nothing new.',
+    );
+  });
+
+  const cases = rolePlayCasesFor(SET_VERSION);
+
+  it('covers every phase for both personas', () => {
+    for (const id of ['job-interview', 'viva']) {
+      const phases = new Set(cases.filter((c) => c.name.includes(` ${id}:`)).map((c) => c.phase));
+      expect([...phases].sort(), id).toEqual(Object.keys(ROLEPLAY_TAG).sort());
+    }
+  });
+
+  it.each(cases.map((c) => [c.name, c] as const))('%s: state line and move', (_n, c) => {
+    expect(c.policy.rolePlay?.phase).toBe(c.phase);
+    const r = composeSystemPrompt({ ctx: c.ctx, policy: c.policy, lang: 'en', set });
+    expect(r.mode).toBe('mock_interview');
+    expect(r.systemPrompt).toContain('[[MOVE-ROLEPLAY]]');
+    expect(r.systemPrompt).not.toContain('[[MOVE-ASK]]');
+    expect(r.systemPrompt).not.toContain('{{');
+    for (const [phase, tag] of Object.entries(ROLEPLAY_TAG)) {
+      expect(r.systemPrompt.includes(tag), `${phase} tag`).toBe(phase === c.phase);
+    }
+  });
+});
+
+// Set 1.1.0 (the seed's) keeps the suite name it had before set 1.2.0 existed, and set 1.2.0
+// keeps the one it had before set 1.3.0 existed, so their snapshot entries stay byte for byte what
+// they were; set 1.3.0 gets its own suite name and adds the role-play cases.
 const SNAPSHOT_SUITES = [
   { version: SEED_SET_VERSION, title: 'on-disk prompt-pack set: composed-prompt snapshots' },
+  {
+    version: PREV_SET_VERSION,
+    title: `on-disk prompt-pack set ${PREV_SET_VERSION}: composed-prompt snapshots`,
+  },
   {
     version: SET_VERSION,
     title: `on-disk prompt-pack set ${SET_VERSION}: composed-prompt snapshots`,
@@ -343,7 +513,10 @@ const SNAPSHOT_SUITES = [
 for (const { version, title } of SNAPSHOT_SUITES) {
   describe(title, () => {
     const pinned = resolvePromptPackSet(library, version);
-    const { CASES } = casesFor(version);
+    const CASES: Case[] = [
+      ...casesFor(version).CASES,
+      ...(rolePlaySections(pinned.frame) === undefined ? [] : rolePlayCasesFor(version)),
+    ];
 
     it(`loads with no issues and exposes set ${version}`, () => {
       expect(pinned.version).toBe(version);

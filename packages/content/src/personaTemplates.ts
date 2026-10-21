@@ -12,7 +12,8 @@
 // sorted, never fail-fast (`promptPacks.ts` precedent).
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { AgentConfigSchema, PersonaSchema } from '@edmate/contracts';
+import { AgentConfigSchema, type Persona, PersonaSchema } from '@edmate/contracts';
+import { createPersonaLibrary, type PersonaLibrary } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
 import type { ValidationResult } from './validate.js';
@@ -20,8 +21,9 @@ import type { ValidationResult } from './validate.js';
 const TEMPLATE_FILE = /^([a-z][a-z0-9_-]*)@(.+)\.yaml$/;
 const Semver = AgentConfigSchema.shape.promptPackVersion;
 
-/** `Persona` (contracts) plus the same sign-off every prompt pack carries. */
+/** `Persona` (contracts) plus its file version and the same sign-off every prompt pack carries. */
 export const PersonaTemplateSchema = PersonaSchema.extend({
+  version: Semver,
   reviewedBy: z.string().min(1),
 });
 export type PersonaTemplate = z.infer<typeof PersonaTemplateSchema>;
@@ -39,7 +41,7 @@ const RawPersonaTemplateSchema = z.strictObject({
   end_after_questions: z.coerce.number().pipe(PersonaSchema.shape.endAfterQuestions),
   version: Semver,
   kind: z.literal('persona'),
-  reviewed_by: z.string().min(1),
+  reviewed_by: z.string().trim().min(1),
 });
 
 function listFiles(dir: string): string[] {
@@ -96,12 +98,19 @@ export function readPersonaTemplateDir(dir: string): {
       );
       continue;
     }
+    if (raw.data.id !== m[1]) {
+      issues.push(
+        `${file}: the file name says id ${m[1] as string} but the template says ${raw.data.id}`,
+      );
+      continue;
+    }
     templates.push({
       id: raw.data.id,
       name: raw.data.name,
       style: raw.data.style,
       mustNot: raw.data.must_not,
       endAfterQuestions: raw.data.end_after_questions,
+      version: raw.data.version,
       reviewedBy: raw.data.reviewed_by,
     });
   }
@@ -112,4 +121,106 @@ export function readPersonaTemplateDir(dir: string): {
 export function validatePersonaTemplateDir(dir: string): ValidationResult {
   const { issues } = readPersonaTemplateDir(dir);
   return { ok: issues.length === 0, issues };
+}
+
+/** A template is live only once someone signed it: `reviewed_by` is not "pending" (5.8, ADR-0013). */
+function isSigned(t: Readonly<PersonaTemplate>): boolean {
+  return t.reviewedBy.trim().toLowerCase() !== 'pending';
+}
+
+/** Compares one prerelease identifier per semver 2.0.0 §11: numeric < alphanumeric. */
+function compareIdentifier(a: string, b: string): number {
+  const an = /^\d+$/.test(a);
+  const bn = /^\d+$/.test(b);
+  if (an && bn) return Number(a) - Number(b);
+  if (an !== bn) return an ? -1 : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Semver precedence of two template versions (already checked by `Semver`): numeric
+ * major.minor.patch, a release above its prereleases, and build metadata ignored.
+ */
+export function comparePersonaVersions(a: string, b: string): number {
+  const split = (v: string) => {
+    const core = v.split('+')[0] as string;
+    const dash = core.indexOf('-');
+    const main = (dash < 0 ? core : core.slice(0, dash)).split('.').map(Number);
+    const pre = dash < 0 ? [] : core.slice(dash + 1).split('.');
+    return { main, pre };
+  };
+  const x = split(a);
+  const y = split(b);
+  for (let i = 0; i < 3; i += 1) {
+    const d = (x.main[i] as number) - (y.main[i] as number);
+    if (d !== 0) return d;
+  }
+  if (x.pre.length === 0 || y.pre.length === 0) return y.pre.length - x.pre.length;
+  for (let i = 0; i < Math.min(x.pre.length, y.pre.length); i += 1) {
+    const d = compareIdentifier(x.pre[i] as string, y.pre[i] as string);
+    if (d !== 0) return d;
+  }
+  return x.pre.length - y.pre.length;
+}
+
+/** Drops the review metadata: the harness gets `Persona`-shaped values only. */
+function asPersona(t: Readonly<PersonaTemplate>): Persona {
+  return {
+    id: t.id,
+    name: t.name,
+    style: t.style,
+    mustNot: [...t.mustNot],
+    endAfterQuestions: t.endAfterQuestions,
+  };
+}
+
+/**
+ * Picks, for each id, the highest signed version (5.8, ADR-0013): an unsigned template never goes
+ * live, and a later version replaces the older one only once it is signed. Two templates with the
+ * same id and version precedence (signed or not) are an issue. `chosen` maps id to the version
+ * picked; `personas` is sorted by id.
+ */
+export function selectPersonaLibrary(templates: readonly Readonly<PersonaTemplate>[]): {
+  personas: Persona[];
+  chosen: ReadonlyMap<string, string>;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  const seen = new Map<string, string[]>();
+  const best = new Map<string, Readonly<PersonaTemplate>>();
+  for (const t of templates) {
+    const versions = seen.get(t.id) ?? [];
+    if (versions.some((v) => comparePersonaVersions(v, t.version) === 0)) {
+      issues.push(`${t.id}@${t.version}: duplicate persona template`);
+      continue;
+    }
+    versions.push(t.version);
+    seen.set(t.id, versions);
+    if (!isSigned(t)) continue;
+    const current = best.get(t.id);
+    if (current === undefined || comparePersonaVersions(t.version, current.version) > 0) {
+      best.set(t.id, t);
+    }
+  }
+  const ids = [...best.keys()].sort();
+  return {
+    personas: ids.map((id) => asPersona(best.get(id) as PersonaTemplate)),
+    chosen: new Map(ids.map((id) => [id, (best.get(id) as PersonaTemplate).version])),
+    issues: issues.sort(),
+  };
+}
+
+/**
+ * The library for the harness's `deps.personas` (5.8): reads `dir`, keeps the highest signed
+ * version of each id, and builds it with `createPersonaLibrary` (frozen, keyed by id). Throws
+ * listing every issue if the directory or the selection has any, like `readPromptPackLibrary`.
+ */
+export function readPersonaLibrary(dir: string): PersonaLibrary {
+  const read = readPersonaTemplateDir(dir);
+  const selected = selectPersonaLibrary(read.templates);
+  const issues = [...read.issues, ...selected.issues].sort();
+  if (issues.length > 0) {
+    throw new Error(`invalid persona templates in ${dir}:\n${issues.join('\n')}`);
+  }
+  return createPersonaLibrary(selected.personas.map((p) => [p.id, p] as const));
 }
