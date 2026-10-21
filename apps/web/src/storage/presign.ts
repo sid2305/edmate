@@ -34,13 +34,41 @@ const DEV_DEFAULTS = {
 
 type Env = Readonly<Record<string, string | undefined>>;
 
+/** A storage setting that is unusable here; `code` names the setting, never its value. */
+export class StorageConfigError extends Error {
+  readonly code: string;
+  constructor(code: string) {
+    super(`storage config refused: ${code}`);
+    this.code = code;
+    this.name = 'StorageConfigError';
+  }
+}
+
+/** Settings production must name itself: the dev placeholders are never used there. */
+const REQUIRED_IN_PRODUCTION = [
+  'S3_ENDPOINT',
+  'S3_ACCESS_KEY_ID',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_BUCKET',
+] as const;
+
 function read(env: Env, name: keyof typeof DEV_DEFAULTS): string {
   const value = env[name];
   return value === undefined || value === '' ? DEV_DEFAULTS[name] : value;
 }
 
-/** Reads the S3 settings, falling back to the local MinIO defaults. Throws on malformed values. */
+/**
+ * Reads the S3 settings. Outside production it falls back to the local MinIO defaults; under
+ * NODE_ENV=production the endpoint, credentials and bucket must be set and the endpoint must be
+ * https. Throws StorageConfigError (a code only) on a missing or malformed value.
+ */
 export function storageConfigFromEnv(env: Env): StorageConfig {
+  const production = env.NODE_ENV === 'production';
+  if (production) {
+    for (const name of REQUIRED_IN_PRODUCTION) {
+      if ((env[name] ?? '').trim() === '') throw new StorageConfigError(`${name}_missing`);
+    }
+  }
   const endpoint = read(env, 'S3_ENDPOINT');
   let protocol = '';
   try {
@@ -49,11 +77,12 @@ export function storageConfigFromEnv(env: Env): StorageConfig {
     // not a URL: refused below
   }
   if (protocol !== 'http:' && protocol !== 'https:') {
-    throw new Error('S3_ENDPOINT must be an http(s) URL');
+    throw new StorageConfigError('S3_ENDPOINT_invalid');
   }
+  if (production && protocol !== 'https:') throw new StorageConfigError('S3_ENDPOINT_not_https');
   const pathStyle = read(env, 'S3_FORCE_PATH_STYLE');
   if (pathStyle !== 'true' && pathStyle !== 'false') {
-    throw new Error('S3_FORCE_PATH_STYLE must be "true" or "false"');
+    throw new StorageConfigError('S3_FORCE_PATH_STYLE_invalid');
   }
   return {
     endpoint,

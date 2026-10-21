@@ -1,7 +1,10 @@
 import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { StudioUnavailableError } from './routes';
-import { consoleLog, createStudioRuntime, type StudioHooks } from './runtime';
+import { consoleLog, createStudioRuntime, realHooks, type StudioHooks } from './runtime';
+
+const shared = vi.hoisted(() => ({ repos: { documents: { tag: 'shared-pool' } } }));
+vi.mock('../auth', () => ({ serverDatabase: vi.fn(() => ({ repos: shared.repos })) }));
 
 function hooks() {
   const add = vi.fn(async () => undefined);
@@ -30,6 +33,31 @@ describe('createStudioRuntime', () => {
     expect(h.queue).toHaveBeenCalledWith('redis://127.0.0.1:1', h.log);
   });
 
+  it('a production S3 config gap is unavailable, by code only', async () => {
+    const { h } = hooks();
+    const get = createStudioRuntime(
+      () => ({ REDIS_URL: 'redis://x', NODE_ENV: 'production', S3_ENDPOINT: 'http://h.test' }),
+      h,
+    );
+    await expect(get()).rejects.toMatchObject({ reason: 'S3_ACCESS_KEY_ID_missing' });
+    const full = createStudioRuntime(
+      () => ({
+        REDIS_URL: 'redis://x',
+        NODE_ENV: 'production',
+        S3_ENDPOINT: 'http://h.test',
+        S3_ACCESS_KEY_ID: 'synthetic-id',
+        S3_SECRET_ACCESS_KEY: 'synthetic-secret',
+        S3_BUCKET: 'b',
+      }),
+      h,
+    );
+    await expect(full()).rejects.toMatchObject({
+      name: 'StudioUnavailableError',
+      reason: 'S3_ENDPOINT_not_https',
+    });
+    expect(h.repos).not.toHaveBeenCalled();
+  });
+
   it('builds once, over the injected clients', async () => {
     const { h, add, send } = hooks();
     const get = createStudioRuntime(() => ({ REDIS_URL: 'redis://x', S3_BUCKET: 'b1' }), h);
@@ -52,6 +80,12 @@ describe('createStudioRuntime', () => {
       contentType: 'application/pdf',
     });
     expect(send.mock.calls[0]![0]).toMatchObject({ input: { Bucket: 'b1', Key: 'k' } });
+  });
+});
+
+describe('realHooks.repos', () => {
+  it("reuses the auth runtime's database (serverDatabase), never a second pool", () => {
+    expect(realHooks.repos()).toBe(shared.repos);
   });
 });
 

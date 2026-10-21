@@ -4,17 +4,23 @@
 // tries again.
 import { randomUUID } from 'node:crypto';
 import { S3Client } from '@aws-sdk/client-s3';
-import { openDatabase, type Repositories } from '@edmate/db';
+import type { Repositories } from '@edmate/db';
 import { createIngestQueue, enqueueIngest, type JobQueue } from '@edmate/queue';
 import { Redis } from 'ioredis';
-import { s3StudioStorage, storageConfigFromEnv, type S3Like } from '../storage/presign';
+import { serverDatabase } from '../auth';
+import {
+  StorageConfigError,
+  s3StudioStorage,
+  storageConfigFromEnv,
+  type S3Like,
+} from '../storage/presign';
 import { StudioUnavailableError, type ServerLog, type StudioBackend } from './routes';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
 /** The outside world the backend opens; injected so tests open nothing real. */
 export interface StudioHooks {
-  repos(env: Env): Pick<Repositories, 'documents'>;
+  repos(): Pick<Repositories, 'documents'>;
   s3(config: ReturnType<typeof storageConfigFromEnv>): S3Like;
   queue(redisUrl: string, log: ServerLog): JobQueue;
   log: ServerLog;
@@ -35,10 +41,16 @@ export function consoleLog(prefix: string): ServerLog {
 function build(env: Env, hooks: StudioHooks): StudioBackend {
   const redisUrl = env.REDIS_URL?.trim();
   if (!redisUrl) throw new StudioUnavailableError('REDIS_URL');
-  const config = storageConfigFromEnv(env);
+  let config: ReturnType<typeof storageConfigFromEnv>;
+  try {
+    config = storageConfigFromEnv(env);
+  } catch (error) {
+    // the code names the setting only; the value (a host, a key) never reaches a log
+    throw new StudioUnavailableError(error instanceof StorageConfigError ? error.code : 'S3_config');
+  }
   const queue = hooks.queue(redisUrl, hooks.log);
   return {
-    documents: hooks.repos(env).documents,
+    documents: hooks.repos().documents,
     storage: s3StudioStorage(hooks.s3(config), config.bucket),
     enqueue: (job, storageKey) => enqueueIngest(queue, job, storageKey),
     newDocumentId: () => `doc_${randomUUID()}`,
@@ -58,9 +70,12 @@ export function createStudioRuntime(
   };
 }
 
+/** The auth runtime's database: one pool per web process, shared with the guard (9.4). */
+const sharedRepos = (): Pick<Repositories, 'documents'> => serverDatabase().repos;
+
 /* v8 ignore start -- the real clients; every test injects hooks instead (rule 4). */
 export const realHooks: StudioHooks = {
-  repos: (env) => openDatabase(env).repos,
+  repos: sharedRepos,
   s3: (config) =>
     new S3Client({
       endpoint: config.endpoint,

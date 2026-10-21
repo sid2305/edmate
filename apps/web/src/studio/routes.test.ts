@@ -606,6 +606,21 @@ describe('POST /api/studio/documents/:id/replace', () => {
     ).toBe(400);
   });
 
+  it('a signing failure commits nothing: the row and the old file stay as they were', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    row.status = 'ready';
+    const before = { ...row };
+    vi.mocked(s.backend.storage.createUploadUrl).mockRejectedValueOnce(new TypeError('boom'));
+    const res = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 10 }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(res.status).toBe(500);
+    expect(row).toEqual(before);
+    expect(s.deleted).toEqual([]);
+  });
+
   it('a replace with no previous file deletes nothing', async () => {
     const s = setup();
     const { documentId, row } = await uploaded(s);

@@ -1,6 +1,11 @@
 import { DeleteObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'vitest';
-import { s3StudioStorage, storageConfigFromEnv, type S3Like } from './presign';
+import {
+  StorageConfigError,
+  s3StudioStorage,
+  storageConfigFromEnv,
+  type S3Like,
+} from './presign';
 
 const CONFIG = storageConfigFromEnv({});
 
@@ -27,6 +32,53 @@ describe('storageConfigFromEnv', () => {
     expect(() => storageConfigFromEnv({ S3_ENDPOINT: 'ftp://x' })).toThrow(/S3_ENDPOINT/);
     expect(() => storageConfigFromEnv({ S3_ENDPOINT: 'not a url' })).toThrow(/S3_ENDPOINT/);
     expect(() => storageConfigFromEnv({ S3_FORCE_PATH_STYLE: 'yes' })).toThrow(/PATH_STYLE/);
+  });
+});
+
+describe('storageConfigFromEnv in production', () => {
+  const PROD = {
+    NODE_ENV: 'production',
+    S3_ENDPOINT: 'https://s3.example.test',
+    S3_ACCESS_KEY_ID: 'synthetic-id',
+    S3_SECRET_ACCESS_KEY: 'synthetic-secret',
+    S3_BUCKET: 'synthetic-bucket',
+  };
+
+  it('reads a complete https config', () => {
+    expect(storageConfigFromEnv(PROD)).toMatchObject({
+      endpoint: 'https://s3.example.test',
+      accessKeyId: 'synthetic-id',
+      bucket: 'synthetic-bucket',
+    });
+  });
+
+  it.each(['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'] as const)(
+    'never falls back to the dev placeholders when %s is missing or blank',
+    (name) => {
+      const missing = { ...PROD, [name]: undefined };
+      expect(() => storageConfigFromEnv(missing)).toThrow(StorageConfigError);
+      expect(() => storageConfigFromEnv(missing)).toThrow(
+        expect.objectContaining({ code: `${name}_missing` }),
+      );
+      expect(() => storageConfigFromEnv({ ...PROD, [name]: ' ' })).toThrow(StorageConfigError);
+    },
+  );
+
+  it('refuses a plain-http endpoint, and the error never quotes it', () => {
+    let caught: unknown;
+    try {
+      storageConfigFromEnv({ ...PROD, S3_ENDPOINT: 'http://internal-host.test:9000' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(StorageConfigError);
+    expect(caught).toMatchObject({ code: 'S3_ENDPOINT_not_https' });
+    expect(String((caught as Error).message)).not.toContain('internal-host');
+  });
+
+  it('keeps the dev and test defaults outside production', () => {
+    expect(storageConfigFromEnv({ NODE_ENV: 'development' }).endpoint).toBe('http://localhost:9000');
+    expect(storageConfigFromEnv({ NODE_ENV: 'test' }).bucket).toBe('edmate-dev');
   });
 });
 

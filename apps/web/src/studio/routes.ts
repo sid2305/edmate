@@ -280,13 +280,16 @@ const replace: Work = async (b, scope, req, ctx) => {
   if (body instanceof Response) return body;
   const type = newFile(body);
   if (type instanceof Response) return type;
+  // Ownership first, then sign, then commit: a signing failure leaves the row and its file as
+  // they were, and another teacher's id gets nothing signed.
+  if (!(await b.documents.get(scope, id))) return notFound();
   const key = newStorageKey(scope.teacherId, id, type);
-  const { previousStorageKey } = await b.documents.startReplace(scope, id, { storageKey: key });
   const uploadUrl = await b.storage.createUploadUrl({
     key,
     contentType: type.contentType,
     contentLength: body.byteSize,
   });
+  const { previousStorageKey } = await b.documents.startReplace(scope, id, { storageKey: key });
   await dropObject(b, previousStorageKey);
   return ok({ documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } });
 };
