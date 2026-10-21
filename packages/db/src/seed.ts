@@ -91,8 +91,10 @@ const MODEL_POLICY: ModelPolicy = {
     main: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   },
 };
-// PROVISIONAL: the prompt-pack set; 3.11 published 1.0.0, 5.6 moves the seed to 1.1.0 (ADR-0010).
-const PROMPT_PACK_VERSION = '1.1.0';
+// PROVISIONAL: the prompt-pack set; 3.11 published 1.0.0, 5.6 moved the seed to 1.1.0 (ADR-0010).
+// 5.8c moves it to 1.3.0 now that B-36 and B-38 sign feedback@1.1.0, frame@1.1.0, frame@1.2.0,
+// set@1.2.0 and set@1.3.0 as sid2305.
+const PROMPT_PACK_VERSION = '1.3.0';
 
 type SubscriptionKind = { package: 'free' | 'paid'; status: 'active' | 'paused' | 'ended' };
 
