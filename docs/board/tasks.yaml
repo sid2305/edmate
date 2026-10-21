@@ -411,13 +411,14 @@ tasks:
   branch: m1/1.7b-web-regex-worker
   model: plan:sonnet build:sonnet-5/medium fix:sonnet-5/medium review:security-opus,ts-sonnet,code-sonnet
 - id: 1.7c
-  milestone: M1
-  title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key)'
+  milestone: M13
+  title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key). Parked 21 Oct 2026: US is the first region; India (and its consent flow) waits until India is picked up'
   accept: as in docs/tasks/1.7/plan.md Phase D
   deps:
   - '1.7'
+  - GATE
   risky: true
-  status: blocked
+  status: todo
   branch: null
   model: null
 - id: '1.8'

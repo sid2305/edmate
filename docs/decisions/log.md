@@ -10,6 +10,13 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · US is the first region; India parked · decided by you · risk: high
+Decided: The pilot targets the US only. India support, the India parental-consent flow (1.7c, now in M13 behind the gate) and the open India questions (B-27 Q1, the IN.yaml verification from B-20) wait until India is picked up. The India locale pack and notice placeholders stay in the repo; nothing is deleted.
+Why: One market first gets a working product sooner. India adds DPDP parental consent for 13–17 and counsel work the pilot does not need.
+Alternatives: India first; both at once.
+Reversible: Yes. The locale packs, age rule and notices already fail closed per market; picking India up later is a sign-off plus 1.7c.
+
+
 ### 20 Oct 2026 · 8.2 merged without the manual dev-stack run; it moves to the thin-slice end-to-end check · decided by team lead
 Decided: the plan's Evidence 3 (a browser upload and delete on the full compose stack) was not run before merge. The routes, worker and repository paths are covered by unit tests and real Postgres/Redis integration tests (apps/worker ingest.int.test.ts runs queue → worker → ready; packages/db documents.int.test.ts shows a delete makes the next search miss the file), and the final code, TypeScript and security reviews approved. The manual run is listed in 8.2a and runs with 8.1a's browser check, when a teacher can sign up, upload and a student can chat.
 Why: MVP first (human, 20 Oct 2026); one browser run over the whole thin slice finds more than one per task. Risk: a dev-stack-only wiring problem (CORS, public endpoint) surfaces later rather than now.
