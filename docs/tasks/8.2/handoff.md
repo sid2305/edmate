@@ -153,10 +153,49 @@ Phase 3's upload-complete route should call `documents.updateStatus(scope, id, '
   `onJobFailed`) and mirrors the untested-by-design pattern of the existing turn-queue workers in
   `src/commit/workers.ts`. The integration test above would cover it if added.
 
+## Phase 2 int test
+
+`apps/worker/test/ingest.int.test.ts` (deferred above) is now written: real Postgres and Redis
+(`docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml -f
+apps/worker/test/compose.port.yaml up -d postgres redis`), a fake in-memory `StorageClient` and a
+scripted embedder double (no real model/S3/network calls, rule 4). Four cases, all through real
+`documentsRepo`/`chunksRepo`/`retrievalRepo`:
+- enqueue (`createIngestQueue`/`enqueueIngest`) → the real `createIngestWorker` processes it → the
+  document reaches `ready` with chunk rows, and `retrievalRepo.search` finds them.
+- an empty-bytes markdown file (a stand-in "corrupt" file; `parseDocument`'s own validation
+  rejects it before any parser runs) → `failed` with `failureReason: 'validation'`, zero chunks.
+- a job for a document deleted before the worker runs it → the processor's own `documents.get`
+  returns null, so it throws a permanent error and the job lands in the dead-letter queue after one
+  attempt; nothing is written, `documents.get` still returns null afterwards.
+- the stale-replace race: calling `ingestProcessor` directly (not through the queue) lets the test
+  gate the "old" job's `storage.getObjectBytes` open, call `documents.startReplace` while it's
+  still in flight, then release it — the old job returns `stale_skipped` and writes no chunks; a
+  second, ungated call for the new `storageKey` reaches `ready` with only the new file's chunks.
+  **Deviation from a literal reading of the task:** this one case does not go through BullMQ's
+  `Queue`/`Worker` — a quick spike (`node -e ...` against the compose Redis) showed `Queue.add()`
+  with the *same* `jobId` as a still-active job blocks indefinitely rather than erroring or
+  queueing a second attempt, because `jobId.ingest(documentId)` is the same for both the original
+  and the replacement job. Driving the race through the real queue would have hung the test (and,
+  more importantly, flags a latent issue in Phase 2's enqueue design for a real replace-while-
+  processing flow — see Decisions below). Calling the processor function directly against the same
+  real Postgres rows exercises the identical lock/stale-check logic without that block; the other
+  three cases in this file do go through the full queue → worker path, so Redis is still exercised
+  end to end by the suite.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker...` → `Tasks: 34 successful,
+  34 total`; `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Decisions (Phase 2 int test)
+
+#### 20 Oct 2026 · 8.2c ingest's replace-enqueue reuses the in-flight job's id · decided by tdd-guide
+Decided: not fixed in this pass; flagged for a follow-up. `enqueueIngest`'s `jobId.ingest(documentId)` is the same id Phase 3's replace flow would reuse to re-enqueue the new file. A spike against the real Redis showed BullMQ's `Queue.add()` with that id while the original job is still *active* (not yet completed/failed) blocks the call indefinitely rather than erroring or superseding it, because BullMQ's job-id dedupe only replaces a job still in `waiting`/`delayed`, not one already running.
+Why: Phase 1/2 only exercised this race at the repository layer (`ChunkWriter`'s stale check) and in `processor.test.ts` by calling the processor directly, never through a real queue two-enqueue sequence, so the hang wasn't visible until this int test's spike. Phase 3's complete/replace routes (not yet built) should not call `enqueueIngest` synchronously inside the request that triggers a replace while an old job could still be active; worth either a distinct per-attempt job id (not just per-document) or confirming BullMQ's behaviour differs once the old job's attempt has failed/completed. Left to Phase 3 or a follow-up task, not fixed here (out of this task's scope and budget).
+risk: medium
+
 ## Left to do
 - **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line, and the
   `updateStatus('processing')` → `enqueueIngest` sequencing on the complete route (see API above).
-  Consider adding the `ingest.int.test.ts` deferred from Phase 2 here if there's budget.
+  `apps/worker/test/ingest.int.test.ts` is now done (§ Phase 2 int test); Phase 3's replace route
+  should account for the job-id-blocks-on-active-job decision logged there.
 - **Phase 4** (apps/web): upload-centre page with polling, nav link, strings, manual dev-stack run.
 
 ## Decisions
