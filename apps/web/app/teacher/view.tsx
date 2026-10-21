@@ -12,6 +12,10 @@ export async function TeacherView() {
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
+      nav={[
+        { href: '/teacher', label: t('nav') },
+        { href: '/teacher/uploads', label: t('uploadsLink') },
+      ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

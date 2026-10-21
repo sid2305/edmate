@@ -23,9 +23,11 @@ Isolation between teachers and between students is enforced here, not by Postgre
 6. **Rows leave as contract shapes, parsed** (`map.ts`). A stored row that fails its contract, or
    whose jsonb `teacherId` / `id` / `version` disagrees with its columns, throws `integrity`.
 7. **Ownership columns are immutable.** No method updates `teacher_id`, `student_id` or
-   `session_id`. There are no delete methods (retention is 13.4, memory reset 6.5).
-8. **No raw SQL strings.** No `sql.raw(` and no deletes in this folder (`test/scope.test.ts`
-   checks).
+   `session_id`. The only delete methods are `documents.delete` and `documents.startReplace`
+   (task 8.2, § Documents below); retention is 13.4, memory reset 6.5.
+8. **No raw SQL strings.** No `sql.raw(` and no `delete from` text in this folder; Drizzle
+   `.delete(` appears only in `chunks.ts`, on `chunks` and `documents` alone, each with
+   `eq(<table>.teacherId, teacherId)` in the same statement (`test/scope.test.ts` checks).
 9. **No personal details.** No method selects from the user table, so display names, emails and
    phone numbers never leave through a repository. `teacherQuestions.listForTeacher` never selects
    `student_id`.
@@ -174,6 +176,26 @@ source and fails when: the `chunks` table is named outside the schema, `internal
 or has one whose statement lacks the scope; anything but `retrieval.ts` calls `.material(`; a file
 off the allowlist implements `RetrievalIndex`; or harness code outside `access/scopedRetrieval.ts`
 searches or probes the index (`.leakCheck(` only in `guardrails/lockedLeak.ts`).
+
+## Documents (task 8.2)
+
+A document's `status` (`uploading` -> `processing` -> `ready` / `failed`) is a studio display
+field, never a retrieval gate: chunks are searchable as soon as they are written.
+`documents.get(scope, id)` and `documents.listForTeacher(scope, { moduleId? })` (newest first, at
+most `DOCUMENT_LIST_MAX`) read the scope's rows only. `documents.updateStatus(scope, id, status,
+failureReason?)` is one scoped UPDATE that also requires an allowed previous state (`processing`
+from uploading / processing / failed, `ready` from processing, `failed` from uploading /
+processing; `uploading` only through create and replace), so a stale worker can't mark a replaced
+document ready; anything else is `not_found`. `failed` needs a fixed code (`[a-z][a-z0-9_]*`, at
+most 64 characters, never raw error text; a CHECK keeps it null otherwise). It does not bump the
+material revision.
+
+`documents.delete(scope, id)` and `documents.startReplace(scope, id, { storageKey })` lock the
+scope's row `FOR UPDATE` (a concurrent `chunks.insertMany` then waits and finds nothing), delete
+its chunks, then delete the row (or point it at the new key, reset it to `uploading` and clear the
+failure), and bump the material revision, all in one transaction: the next search and leakCheck
+miss the old material at once. They return the old storage key for the caller to delete the file.
+Another teacher's or a missing document is `not_found` and nothing is written.
 
 ## Package surface
 

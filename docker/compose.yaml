@@ -62,6 +62,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-edmate-dev}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-edmate-dev-storage}
+      # Upload centre (task 8.2): browsers PUT straight to MinIO with a presigned URL. CORS allows
+      # only the web app's origins (Caddy, and `next dev` on the host), never '*'. Presigned URLs
+      # carry no cookies, so no credentials are allowed either. Local development only.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${AUTH_URL:-http://localhost:8080},http://localhost:3000
     ports:
       - '127.0.0.1:${EDMATE_S3_PORT:-9000}:9000'
       - '127.0.0.1:${EDMATE_S3_CONSOLE_PORT:-9001}:9001'
@@ -101,6 +105,11 @@ services:
       # Email magic link (task 1.4): Mailpit by default. Production sets any provider's SMTP URL.
       EMAIL_SERVER: ${EMAIL_SERVER:-smtp://mailpit:1025}
       EMAIL_FROM: ${EMAIL_FROM:-Edmate <sign-in@edmate.test>}
+      # Upload centre (task 8.2): upload URLs are signed for MinIO's published port (the browser
+      # can't reach minio:9000), and this local MinIO speaks plain http, which NODE_ENV=production
+      # otherwise refuses. A real deployment sets an https S3_ENDPOINT and neither of these.
+      S3_PUBLIC_ENDPOINT: http://localhost:${EDMATE_S3_PORT:-9000}
+      S3_ALLOW_HTTP: 'true'
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

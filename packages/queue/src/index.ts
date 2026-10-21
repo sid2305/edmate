@@ -17,8 +17,14 @@ import { type ProfileReader, queuedProfileStore } from './profileStore.js';
 import {
   ALERT_QUEUE,
   COMMIT_QUEUE,
+  INGEST_QUEUE,
+  type IngestJob,
+  IngestJobSchema,
+  JOB,
   type JobQueue,
   type JobScope,
+  jobId,
+  jobOptions,
   METER_QUEUE,
   SAFETY_EVENT_QUEUE,
 } from './queues.js';
@@ -107,4 +113,37 @@ export function queuedTurnPorts(
     safetyEvents: queuedSafetyEventSink(queues.safetyEvent, scope),
     profiles: queuedProfileStore(queues.commit, scope, profileReader),
   };
+}
+
+// ---- ingest (task 8.2 Phase 2) ----------------------------------------------------------------
+
+/** The ingest queue on a connection the caller owns (`prefix`: BullMQ's key prefix, for tests). */
+export function createIngestQueue(
+  connection: ConnectionOptions,
+  opts: { prefix?: string } = {},
+): JobQueue & { close(): Promise<void> } {
+  return new Queue(INGEST_QUEUE, {
+    connection,
+    ...(opts.prefix === undefined ? {} : { prefix: opts.prefix }),
+  });
+}
+
+/**
+ * Enqueues one document for the ingest worker, keyed by `storageKey` (the file this call is
+ * enqueuing, named by the caller — the job payload itself carries no `storageKey`; see
+ * `IngestJobSchema`'s doc comment) so a retry of the *same* file replaces the still-queued
+ * attempt, while a replace (a new `storageKey` for the same document) gets its own job id rather
+ * than reusing one a still-active old job might hold.
+ */
+export async function enqueueIngest(
+  queue: JobQueue,
+  job: IngestJob,
+  storageKey: string,
+): Promise<void> {
+  const data = IngestJobSchema.parse(job);
+  await queue.add(
+    JOB.ingestProcess,
+    data,
+    jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
+  );
 }

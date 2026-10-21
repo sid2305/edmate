@@ -180,6 +180,9 @@ const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 
 /** Task 5.3: each teacher's isolation document (one chunk, ord 0), written in beforeAll. */
 const isoDoc = (t: Teacher) => `doc_iso_${t.toLowerCase()}`;
+/** A document with a stored file, for `chunks.insertManyIfStorageKey`. */
+const keyDoc = (t: Teacher) => `doc_key_${t.toLowerCase()}`;
+const keyOf = (t: Teacher) => `uploads/iso-${t.toLowerCase()}.pdf`;
 /** Unit vector on axis 0: every isolation chunk and query embeds to it (no model is called). */
 const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 ? 1 : 0));
 /** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
@@ -187,6 +190,13 @@ const profileSlug = (t: Teacher) => `teacher-${t.toLowerCase()}`;
 const ISO_STAFF = 'stf_iso';
 const chunkOwners = (cs: Chunk[]) =>
   cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
+/** Task 8.2: a document of `target`'s that `actor` tries to delete (each pair used once). */
+const delDoc = (actor: Teacher, target: Teacher) =>
+  `doc_del_${actor.toLowerCase()}${target.toLowerCase()}`;
+/** Task 8.2: each teacher's document that startReplace rewrites (one chunk, ord 0). */
+const repDoc = (t: Teacher) => `doc_rep_${t.toLowerCase()}`;
+type DocRow = { id: string; teacherId: string; sourceTitle: string };
+const docOwners = (d: DocRow) => [teacherOfId(d.teacherId), ...markers(d.sourceTitle)];
 const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
   (await raw.query<{ t: string }>(`select teacher_id as t from ${table} where id = $1`, [id]))
     .rows[0]?.t;
@@ -221,6 +231,82 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 8.2: the document lifecycle. Reads are scoped selects; writes are scoped updates or a
+  // locked delete, each with teacher_id in the same statement.
+  'documents.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.documents.get(scope, isoDoc(t)),
+    random: (r, scope, rid) => r.documents.get(scope, rid),
+    owners: (d: DocRow | null) => (d ? docOwners(d) : []),
+  },
+  'documents.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.documents.listForTeacher(scope, { moduleId: ids.module(t, 1) }),
+    random: (r, scope, rid) => r.documents.listForTeacher(scope, { moduleId: rid }),
+    owners: (ds: DocRow[]) => ds.flatMap(docOwners),
+  },
+  'documents.updateStatus': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) => r.documents.updateStatus(scope, repDoc(target), 'processing'),
+    verify: async (r, actor) => {
+      for (const t of TEACHERS) {
+        const row = await r.documents.get(tScope(t), repDoc(actor));
+        expect(row?.status === 'processing', `${t} sees ${actor}'s status`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a failure reason on a non-failed status',
+        (r) => r.documents.updateStatus(tScope(a), repDoc(a), 'ready', 'x_failed'),
+        'invalid',
+      ],
+    ],
+  },
+  'documents.delete': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) => r.documents.delete(scope, delDoc(actor, target)),
+    verify: async (r, actor, res) => {
+      expect((res as { storageKey: string | null }).storageKey).toBe(`[${actor}] del`);
+      expect(await ownerOfRow('documents', delDoc(actor, actor))).toBeUndefined();
+      const left = await raw.query(`select 1 from chunks where document_id = $1`, [
+        delDoc(actor, actor),
+      ]);
+      expect(left.rowCount).toBe(0);
+      // The actor's failed attempt on the other teacher's document left it in place.
+      const other = otherTeacher(actor);
+      expect(await r.documents.get(tScope(other), delDoc(actor, other))).not.toBeNull();
+    },
+  },
+  'documents.startReplace': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.documents.startReplace(scope, repDoc(target), { storageKey: `[${actor}] key ${++counter}` }),
+    verify: async (r, actor) => {
+      const row = await r.documents.get(tScope(actor), repDoc(actor));
+      expect(row?.status).toBe('uploading');
+      expect(markers(row?.storageKey ?? '')).toEqual([actor]);
+      const other = await r.documents.get(tScope(otherTeacher(actor)), repDoc(actor));
+      expect(other).toBeNull();
+    },
+    mismatches: (a) => [
+      [
+        'a teacherId key in the input',
+        (r) =>
+          r.documents.startReplace(tScope(a), repDoc(a), {
+            storageKey: 'k',
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+    ],
+  },
   'chunks.insertMany': {
     scope: 'teacher',
     op: 'write',
@@ -242,6 +328,29 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       [
         'an ord already written',
         (r) => r.chunks.insertMany(tScope(a), isoDoc(a), [{ ord: 0, text: 'x', locator: 'p' }]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.insertManyIfStorageKey': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.insertManyIfStorageKey(scope, keyDoc(target), keyOf(target), [
+        { ord: ++counter, text: `[${actor}] keyed chunk`, locator: 'p2' },
+      ]),
+    verify: async (_r, actor, res) => {
+      expect(res).toMatchObject({ stale: false });
+      const [id] = (res as { ids: string[] }).ids;
+      expect(await ownerOfRow('chunks', id!)).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        'an ord already written',
+        (r) =>
+          r.chunks.insertManyIfStorageKey(tScope(a), keyDoc(a), keyOf(a), [
+            { ord: 0, text: 'x', locator: 'p' },
+          ]),
         'invalid',
       ],
     ],
@@ -1746,6 +1855,37 @@ describe.skipIf(!up)(
         await repos.chunks.insertMany(tScope(t), isoDoc(t), [
           { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
         ]);
+        await repos.documents.create(tScope(t), {
+          id: keyDoc(t),
+          moduleId: ids.module(t, 1),
+          kind: 'material',
+          sourceTitle: `[${t}] keyed doc`,
+          storageKey: keyOf(t),
+        });
+        await repos.chunks.insertMany(tScope(t), keyDoc(t), [
+          { ord: 0, text: `[${t}] keyed marker`, locator: 'p1' },
+        ]);
+      }
+      for (const target of TEACHERS) {
+        for (const actor of TEACHERS) {
+          await repos.documents.create(tScope(target), {
+            id: delDoc(actor, target),
+            moduleId: ids.module(target, 1),
+            kind: 'material',
+            sourceTitle: `[${target}] deletable`,
+            storageKey: `[${target}] del`,
+          });
+          await repos.chunks.insertMany(tScope(target), delDoc(actor, target), [
+            { ord: 0, text: `[${target}] deletable chunk`, locator: 'p1' },
+          ]);
+        }
+        await repos.documents.create(tScope(target), {
+          id: repDoc(target),
+          moduleId: ids.module(target, 1),
+          kind: 'material',
+          sourceTitle: `[${target}] replaceable`,
+          storageKey: `[${target}] rep`,
+        });
       }
       await raw.query(
         `insert into users (id, name, locale, market, role) values ($1, 'Iso Staff', 'en', 'test', 'staff')`,

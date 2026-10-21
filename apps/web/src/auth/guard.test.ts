@@ -385,7 +385,10 @@ describe('policy table', () => {
     expect(policyFor('POST', '/api/sessions/s_1/turns')).toEqual(['student']);
     expect(policyFor('GET', '/api/me')).toBeNull();
     expect(policyFor('DELETE', '/api/me')).toEqual(['student']);
-    expect(policyFor('DELETE', '/api/studio/packages')).toBeNull();
+    // 8.2: teachers delete their uploads (`DELETE /api/studio/documents/:id`); nobody else may.
+    expect(policyFor('DELETE', '/api/studio/documents/doc_1')).toEqual(['teacher']);
+    expect(policyFor('DELETE', '/api/studio')).toBeNull();
+    expect(policyFor('DELETE', '/api/staff/reports')).toBeNull();
     expect(policyFor('POST', '/api/webhooks/payments')).toBe('provider');
     expect(policyFor('GET', '/api/webhooks/payments')).toBeNull();
     expect(policyFor('post', '/api/staff/reports')).toEqual(['staff']);

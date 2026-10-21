@@ -32,6 +32,8 @@ export interface DeadLetterRefs {
   index?: number;
   /** A safety alert's id (task 4.3); never its excerpt. */
   alertId?: string;
+  /** An ingest job's document id (task 8.2); that job has no `scope` wrapper. */
+  documentId?: string;
 }
 
 export interface DeadLetterEntry {
@@ -64,13 +66,14 @@ export function deadLetterRefs(data: unknown): DeadLetterRefs {
     if (typeof value === 'string') refs[key] = value.slice(0, 128);
   };
   str('studentId', scope.studentId ?? alert.studentId);
-  str('teacherId', scope.teacherId ?? alert.teacherId);
+  str('teacherId', scope.teacherId ?? alert.teacherId ?? d.teacherId);
   str('sessionId', d.sessionId ?? trace.sessionId ?? alert.sessionId);
   str('turnId', d.turnId ?? trace.turnId);
   str('messageId', message.id);
   str('role', message.role);
   str('packageId', d.packageId);
   str('alertId', alert.id);
+  str('documentId', d.documentId);
   if (Number.isSafeInteger(d.index)) refs.index = d.index as number;
   return refs;
 }

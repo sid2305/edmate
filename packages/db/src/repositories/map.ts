@@ -3,6 +3,7 @@
 // Absent optional fields are omitted, never `undefined` (exactOptionalPropertyTypes).
 import {
   AgentConfigSchema,
+  ChunkKindSchema,
   LearnerProfileSchema,
   MessageSchema,
   PackageConfigSchema,
@@ -186,6 +187,62 @@ export function toAuditRow(
       ...(row.before === null ? {} : { before: row.before }),
       ...(row.after === null ? {} : { after: row.after }),
       ts: iso(row.ts),
+    },
+    method,
+  );
+}
+
+/** Where a document is in ingestion (task 8.2); equals the `document_status` enum. */
+export const DOCUMENT_STATUSES = ['uploading', 'processing', 'ready', 'failed'] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+
+const DocumentRowSchema = z.strictObject({
+  id: z.string().min(1),
+  teacherId: z.string().min(1),
+  moduleId: z.string().min(1),
+  kind: ChunkKindSchema,
+  sourceTitle: z.string().min(1),
+  storageKey: z.string().min(1).optional(),
+  status: z.enum(DOCUMENT_STATUSES),
+  failureReason: z.string().min(1).optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+/**
+ * A documents row as its teacher sees it in the upload centre (task 8.2). No contract type exists
+ * for it (same precedent as AuditRow). `rightsDeclaredAt` is not returned yet.
+ */
+export type DocumentRow = z.infer<typeof DocumentRowSchema>;
+
+export function toDocumentRow(
+  row: {
+    id: string;
+    teacherId: string;
+    moduleId: string;
+    kind: string;
+    sourceTitle: string;
+    storageKey: string | null;
+    status: string;
+    failureReason: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  method: string,
+): DocumentRow {
+  return checked(
+    DocumentRowSchema,
+    {
+      id: row.id,
+      teacherId: row.teacherId,
+      moduleId: row.moduleId,
+      kind: row.kind,
+      sourceTitle: row.sourceTitle,
+      ...(row.storageKey === null ? {} : { storageKey: row.storageKey }),
+      status: row.status,
+      ...(row.failureReason === null ? {} : { failureReason: row.failureReason }),
+      createdAt: iso(row.createdAt),
+      updatedAt: iso(row.updatedAt),
     },
     method,
   );
