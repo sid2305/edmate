@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.11c leak-check SLO test is best of 3 rounds · decided by lead · risk: low
+
+- Decided: merge 5.11c. The ADR-0007 point 6 SLO test keeps p95 <= 50 ms and p99 <= 100 ms, discards 30 more warm-up calls, and passes when one of up to 3 rounds of 300 calls meets both in that same round. No CI margin and no CI skip; the SLO stays enforced in this test.
+- Why: one sample of a wall-clock percentile on the shared runner (p95 52.9 ms on PR #98) failed an unrelated PR. A real regression misses every round. Code-reviewer approved with no findings; 20 of 20 local runs passed.
+- risk: low
+
+Details (builder):
+
+- Best-of-3 rounds instead of a margin or a CI skip; thresholds unchanged · risk: low.
+
+Tool calls used: 19
+
+---
+
 ### 21 Oct 2026 · 0.17 agent limits and merge-gate budget check (.claude, risky path) · decided by lead · risk: high
 
 - Decided: merge 0.17. Planner, tdd-guide and build-error-resolver now carry Budget, Allowed tools and Exit conditions; builders report `Tool calls used: N`. merge_gate.py check 6 reads the plan's cap (a `Budget: N` line or the first number in the `## Budget` section, tolerating ~, About, bold and bullets) and the handoff's count. Over 1.2x the cap fails unless the handoff's `## Decisions` has a heading naming the task, "budget" and "decided by lead"; a present but unparseable budget or count fails visibly; plans and handoffs with neither line skip silently. The hard automatic stop hook is not shipped (B-35, pending the human). The security MEDIUM (a decoy number earlier in the `## Budget` prose sets the cap) goes to 0.17a.

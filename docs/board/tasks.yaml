@@ -2092,9 +2092,29 @@ tasks:
     and log the choice as a decision'
   accept: the SLO test passes 20 CI-like runs in a row; the 50/100 ms SLO is still enforced somewhere named in the handoff; no weakening of ADR-0007 without a logged decision
   deps: []
-  status: review
+  status: done
   branch: m5/5.11c-slo-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 164
+    tokens_in: 550
+    tokens_out: 24368
+    cache_read_tokens: 18735690
+    wall_time_seconds: 863
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 0.17a
   milestone: M13
   title: 'Merge-gate budget parse (0.17 security MEDIUM): budget_cap''s `## Budget` fallback takes the first "N ... calls" number in the prose, so a decoy number (another task''s count, an old estimate)
