@@ -1,6 +1,7 @@
 // In-memory port doubles for pipeline tests. Synthetic data only.
 import type {
   AlertSink,
+  CorrectionStore,
   EvidenceEvent,
   LearnerProfile,
   Message,
@@ -15,7 +16,9 @@ import type {
   TurnTrace,
   UsageMeter,
 } from '@edmate/contracts';
+import { teacherNoteSource, teacherNoteText } from '../pipeline/teacherNote.js';
 import type { BackgroundFailureLog, TurnLog } from '../pipeline/types.js';
+import type { MemoryRetrieval } from './memoryRetrieval.js';
 
 export interface MemoryTraceSink extends TraceSink {
   readonly records: TurnTrace[];
@@ -177,6 +180,88 @@ export function memoryTeacherQuestionStore(
         status: 'open',
         createdAt: opts.createdAt ?? '2026-10-17T10:00:00.000Z',
       });
+    },
+  };
+}
+
+type TeacherNoteInput = Parameters<CorrectionStore['addTeacherNote']>[0];
+
+/** One eval case a teacher note became (the db adapter writes a `teacher_eval_cases` row). */
+export interface MemoryEvalCase {
+  id: string;
+  teacherId: string;
+  moduleId: string;
+  origin: TeacherNoteInput['origin'];
+  question: string;
+  answer: string;
+  chunkId: string;
+}
+
+export interface MemoryCorrectionStore extends CorrectionStore {
+  /** Each accepted note, as given, with the chunk it became. */
+  readonly notes: (TeacherNoteInput & { chunkId: string })[];
+  readonly cases: MemoryEvalCase[];
+}
+
+/** 21 Oct 2026, 00:00 UTC: the answer date when no clock is given. */
+const CORRECTION_EPOCH_MS = Date.UTC(2026, 9, 21);
+
+/**
+ * Task 5.10: a CorrectionStore that writes each teacher note into `retrieval` as one
+ * `teacher_note` chunk (text and citation from pipeline/teacherNote.ts, like the db adapter), so a
+ * later turn finds it under a scope allowing its module. `moduleOwners` (module id → teacher id),
+ * when given, makes an unknown or another teacher's module reject with `not_found`, as the db does.
+ * Invalid text rejects with teacherNote's fixed HarnessError. Nothing is written on any rejection.
+ */
+export function memoryCorrectionStore(opts: {
+  retrieval: Pick<MemoryRetrieval, 'add'>;
+  clock?: { now(): number };
+  moduleOwners?: Readonly<Record<string, string>>;
+  fail?: boolean;
+}): MemoryCorrectionStore {
+  const notes: MemoryCorrectionStore['notes'] = [];
+  const cases: MemoryEvalCase[] = [];
+  return {
+    notes,
+    cases,
+    addTeacherNote(n) {
+      if (opts.fail === true) return Promise.reject(new Error('correction store down'));
+      const owners = opts.moduleOwners;
+      if (owners !== undefined && owners[n.moduleId] !== n.teacherId) {
+        return Promise.reject(new Error('memoryCorrectionStore.addTeacherNote: not_found'));
+      }
+      let text: string;
+      let source: ReturnType<typeof teacherNoteSource>;
+      try {
+        text = teacherNoteText(n);
+        source = teacherNoteSource(n.origin, opts.clock?.now() ?? CORRECTION_EPOCH_MS);
+      } catch (e) {
+        return Promise.reject(e as Error);
+      }
+      const k = notes.length + 1;
+      const chunkId = `chk_note_${k}`;
+      opts.retrieval.add({
+        id: chunkId,
+        teacherId: n.teacherId,
+        documentId: `doc_note_${k}`,
+        moduleId: n.moduleId,
+        kind: 'teacher_note',
+        text,
+        source,
+      });
+      const evalCaseId = `evc_mem_${k}`;
+      notes.push({ ...n, chunkId });
+      cases.push({
+        id: evalCaseId,
+        teacherId: n.teacherId,
+        moduleId: n.moduleId,
+        origin: n.origin,
+        // teacherNoteText accepted them, so the trimmed parts are the note's parts.
+        question: n.question.trim(),
+        answer: n.answer.trim(),
+        chunkId,
+      });
+      return Promise.resolve({ chunkId, evalCaseId });
     },
   };
 }

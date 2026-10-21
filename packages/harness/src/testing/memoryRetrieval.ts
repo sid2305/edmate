@@ -7,7 +7,7 @@
 // scope teacher's chunks outside `allowedModuleIds` (the complement: locked, draft and unpackaged
 // modules), each module's chunks joined in order, ignoring spans also in an allowed chunk. It
 // returns only `{ hit }` and records only the candidate count, never a candidate.
-import type { Chunk, RetrievalIndex } from '@edmate/contracts';
+import { type Chunk, ChunkSchema, type RetrievalIndex } from '@edmate/contracts';
 import { demoChunk } from '@edmate/contracts/fixtures';
 import { lockedIndex } from '../guardrails/lockedMatch.js';
 
@@ -20,6 +20,11 @@ export interface MemoryRetrieval extends RetrievalIndex {
   readonly probes: { q: string; scope: ProbeScope }[];
   /** One entry per leakCheck call: how many candidates and the scope; never the text. */
   readonly leakChecks: { candidates: number; scope: LeakScope }[];
+  /**
+   * Adds a chunk (a copy, validated against ChunkSchema) after construction, as a CorrectionStore
+   * writing a teacher note does (5.10). It is found only under a scope allowing its module.
+   */
+  add(chunk: Chunk): void;
 }
 
 /** Marks text that must never reach a TurnContext (locked or another teacher's). */
@@ -83,6 +88,13 @@ export function memoryRetrieval(opts: {
     searches,
     probes,
     leakChecks,
+    add(chunk) {
+      const c = ChunkSchema.parse(chunk);
+      if (chunks.some((x) => x.id === c.id)) {
+        throw new Error('memoryRetrieval.add: duplicate chunk id');
+      }
+      chunks.push(copy(c));
+    },
     search(q, scope, k) {
       const s = scope as Partial<SearchScope> | undefined;
       if (typeof s?.teacherId !== 'string' || !isIds(s.allowedModuleIds)) {

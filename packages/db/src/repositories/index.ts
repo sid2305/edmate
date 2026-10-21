@@ -7,6 +7,7 @@ import { chunksRepo, documentsRepo } from './chunks.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
+import { notificationsRepo } from './notifications.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyEventsRepo } from './safety-events.js';
@@ -56,6 +57,7 @@ export function createRepositories(db: Db) {
     retrieval: guardAll('retrieval', retrievalRepo(db)),
     safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
     teacherProfiles: guardAll('teacherProfiles', teacherProfilesRepo(db)),
+    notifications: guardAll('notifications', notificationsRepo(db)),
   };
 }
 
@@ -72,6 +74,17 @@ export type RepositoryMethod = {
 export { RepositoryError, ScrubbedDbError, type RepositoryErrorKind } from './errors.js';
 export { studentScope, teacherScope, type StudentScope, type TeacherScope } from './scope.js';
 export type { AuditRow, TeacherProfileRow, TeacherQuestionForTeacher } from './map.js';
+export {
+  GROUPS_MAX_LIMIT,
+  GROUP_QUESTIONS_MAX,
+  QUESTIONS_MAX_LIMIT,
+  type AnswerResult,
+  type TeacherQuestionGroup,
+} from './teacher-questions.js';
+export {
+  NOTIFICATIONS_MAX_LIMIT,
+  type NotificationRow,
+} from './notifications.js';
 export type {
   TeacherProfileCreate,
   TeacherProfileUpdate,
@@ -106,6 +119,7 @@ export type {
   TeacherUsageTotals,
 } from './usage-ledger.js';
 export {
+  correctionStoreFor,
   type EntitlementStoreOptions,
   entitlementStoreFor,
   profileStoreFor,
@@ -130,6 +144,8 @@ export {
   DOCUMENT_LIST_MAX,
   type DocumentInput,
   type DocumentListOptions,
+  insertTeacherNote,
+  type TeacherNoteWriteInput,
 } from './chunks.js';
 export { DOCUMENT_STATUSES, type DocumentRow, type DocumentStatus } from './map.js';
 export {

@@ -55,6 +55,9 @@ export { type Prng, prng } from './prng.js';
 export {
   type MemoryAlertSink,
   memoryAlertSink,
+  type MemoryCorrectionStore,
+  memoryCorrectionStore,
+  type MemoryEvalCase,
   type MemorySafetyEventSink,
   memorySafetyEventSink,
   type SafetyEvent,

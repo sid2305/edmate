@@ -132,4 +132,13 @@ export type {
   TurnRun,
   TurnRunResult,
 } from './types.js';
+export {
+  TEACHER_NOTE_PART_MAX,
+  TEACHER_NOTE_TITLES,
+  type TeacherNoteOrigin,
+  type TeacherNoteParts,
+  teacherNoteParts,
+  teacherNoteSource,
+  teacherNoteText,
+} from './teacherNote.js';
 export { blockedTurnNote, isWithheld, WITHHELD_MESSAGE, withheldMessage } from './policies.js';

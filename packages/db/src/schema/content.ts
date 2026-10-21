@@ -6,6 +6,7 @@ import {
   documentStatus,
   EMBEDDING_DIMENSIONS,
   id,
+  noteOrigin,
   timestamps,
   tsvector,
   tstz,
@@ -177,4 +178,30 @@ export const corrections = pgTable(
     index('corrections_teacher_id_idx').on(t.teacherId),
     index('corrections_module_id_idx').on(t.moduleId),
   ],
+);
+
+/**
+ * Task 5.10: a teacher answer or correction, turned into a per-agent accuracy row (7.3 converts
+ * these into eval suite cases; teacher content never enters the public repo as YAML). Permanent:
+ * `chunkId` and `teacherQuestionId` are plain text, not foreign keys, so a case survives a deleted
+ * note or a cleaned-up question (its own retention is task 13.4).
+ */
+export const teacherEvalCases = pgTable(
+  'teacher_eval_cases',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    moduleId: text('module_id')
+      .notNull()
+      .references(() => modules.id),
+    origin: noteOrigin('origin').notNull(),
+    question: text('question').notNull(),
+    answer: text('answer').notNull(),
+    /** The teacher_note chunk this case came from; no FK (see doc comment). */
+    chunkId: text('chunk_id').notNull(),
+    /** The teacher_questions row this answer closed, when there was one; no FK. */
+    teacherQuestionId: text('teacher_question_id'),
+    ...timestamps(),
+  },
+  (t) => [index('teacher_eval_cases_teacher_id_idx').on(t.teacherId)],
 );

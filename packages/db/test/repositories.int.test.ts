@@ -201,6 +201,20 @@ const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
   (await raw.query<{ t: string }>(`select teacher_id as t from ${table} where id = $1`, [id]))
     .rows[0]?.t;
 
+/** Task 5.10: fixed open questions for `teacherQuestions.answer`'s isolation grid, one per
+ * teacher per scenario, created once in `beforeAll` — a cross-scope `attempt`/`mismatches`
+ * closure only calls `answer`, never also opens or mutates a question, so it writes nothing
+ * when it fails closed (the whole-database snapshot check covers the entire closure). */
+const answerTarget: Partial<Record<Teacher, string>> = {};
+const answerEmpty: Partial<Record<Teacher, string>> = {};
+const answerDismissed: Partial<Record<Teacher, string>> = {};
+const answerWrongModule: Partial<Record<Teacher, string>> = {};
+const answerReplay: Partial<Record<Teacher, string>> = {};
+/** Task 5.10: one persisted notification per pair, created once in `beforeAll` — guarantees every
+ * pair has at least one of its own readable notifications, and gives `notifications.markRead`'s
+ * cross-scope attempt a fixed id to call against without writing anything new first. */
+const notifTarget: Partial<Record<Pair, string>> = {};
+
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
   // and bump the material revision in the same transaction (the snapshot covers that table).
@@ -372,6 +386,40 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'a vector of the wrong dimension',
         (r) =>
           r.chunks.setEmbeddings(tScope(a), [{ id: chunkId(isoDoc(a), 0), embedding: [1, 0] }]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.addTeacherNote': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.addTeacherNote(scope, {
+        moduleId: ids.module(target, 1),
+        question: `[${actor}] isolation question ${++counter}`,
+        answer: `[${actor}] isolation answer`,
+        origin: 'teacher_answer',
+      }),
+    verify: async (r, actor, res) => {
+      const { chunkId: noteChunkId } = res as { chunkId: string; evalCaseId: string };
+      expect(await ownerOfRow('chunks', noteChunkId)).toBe(teacherId(actor));
+      const found = await r.retrieval.search(tScope(actor), {
+        q: 'isolation question',
+        allowedModuleIds: [ids.module(actor, 1)],
+        k: 50,
+      });
+      expect(found.map((c) => c.id)).toContain(noteChunkId);
+    },
+    mismatches: (a) => [
+      [
+        'an empty question after trimming',
+        (r) =>
+          r.chunks.addTeacherNote(tScope(a), {
+            moduleId: ids.module(a, 1),
+            question: '   ',
+            answer: 'x',
+            origin: 'teacher_answer',
+          }),
         'invalid',
       ],
     ],
@@ -1772,7 +1820,171 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (rows: { studentId: string; teacherId: string }[]) =>
       rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
   },
+  // Task 5.10: grouping, answering, and the student's own notifications.
+  'teacherQuestions.listGroupsForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.teacherQuestions.listGroupsForTeacher(scope, { limit: 100 }),
+    random: (r, _scope, rid) =>
+      r.teacherQuestions.listGroupsForTeacher({ teacherId: rid }, { limit: 100 }),
+    owners: (groups: { questions: { text: string }[] }[]) =>
+      groups.flatMap((g) => g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair)))),
+  },
+  'teacherQuestions.answer': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const qid =
+        actor === target ? await openedQuestion(r, `1${actor}` as Pair, 'primary') : answerTarget[target]!;
+      return r.teacherQuestions.answer(scope, {
+        questionId: qid,
+        moduleId: ids.module(target, 1),
+        answer: `[${actor}] answered`,
+        // Teacher-level marker only: the note text lands in a teacher-owned document, which
+        // retrieval.material's leak check expects to carry only that teacher's own marker, never
+        // a pair marker (the default noteQuestion would copy the pair-marked question text in).
+        noteQuestion: `[${target}] note`,
+      });
+    },
+    verify: async (r, actor, res) => {
+      const result = res as {
+        answered: number;
+        students: number;
+        threadMessages: number;
+        noteChunkId: string;
+        evalCaseId: string;
+      };
+      expect(result.answered).toBeGreaterThanOrEqual(1);
+      expect(Object.keys(result).sort()).toEqual(
+        ['answered', 'evalCaseId', 'noteChunkId', 'students', 'threadMessages'].sort(),
+      );
+      expect(JSON.stringify(result)).not.toMatch(/stu_/);
+      for (const p of PAIRS) {
+        const notes = await r.notifications.listForStudent(sScope(p), {
+          unreadOnly: false,
+          limit: 50,
+        });
+        const mine = teacherOf(p) === actor && studentOf(p) === '1';
+        expect(
+          notes.some((n) => n.answer === `[${actor}] answered`),
+          `${p} sees ${actor}'s answer`,
+        ).toBe(mine);
+      }
+    },
+    mismatches: (a) => {
+      const other = otherTeacher(a);
+      return [
+        [
+          'an empty answer after trimming',
+          (r) =>
+            r.teacherQuestions.answer(tScope(a), {
+              questionId: answerEmpty[a]!,
+              moduleId: ids.module(a, 1),
+              answer: '   ',
+            }),
+          'invalid',
+        ],
+        [
+          'a replay of an already-answered question',
+          (r) =>
+            r.teacherQuestions.answer(tScope(a), {
+              questionId: answerReplay[a]!,
+              moduleId: ids.module(a, 1),
+              answer: 'second',
+            }),
+          'not_found',
+        ],
+        [
+          'a dismissed question',
+          (r) =>
+            r.teacherQuestions.answer(tScope(a), {
+              questionId: answerDismissed[a]!,
+              moduleId: ids.module(a, 1),
+              answer: 'x',
+            }),
+          'not_found',
+        ],
+        [
+          "another teacher's module",
+          (r) =>
+            r.teacherQuestions.answer(tScope(a), {
+              questionId: answerWrongModule[a]!,
+              moduleId: ids.module(other, 1),
+              answer: 'x',
+            }),
+          'not_found',
+        ],
+      ];
+    },
+  },
+  'notifications.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.notifications.listForStudent(scope, { unreadOnly: false, limit: 50 }),
+    random: (r, _scope, rid) =>
+      r.notifications.listForStudent({ studentId: rid, teacherId: rid }, {
+        unreadOnly: false,
+        limit: 50,
+      }),
+    owners: (rows: { questionText: string }[]) => rows.flatMap((x) => markers(x.questionText)),
+  },
+  'notifications.markRead': {
+    scope: 'student',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const id = actor === target ? await makeNotification(r, target) : notifTarget[target]!;
+      await r.notifications.markRead(scope, id);
+      return { id };
+    },
+    verify: async (r, actor, res) => {
+      const { id } = res as { id: string };
+      for (const p of PAIRS) {
+        const notes = await r.notifications.listForStudent(sScope(p), {
+          unreadOnly: false,
+          limit: 50,
+        });
+        const found = notes.find((n) => n.id === id);
+        if (p === actor) {
+          expect(found?.readAt, `${p} marks its own read`).not.toBeNull();
+        } else {
+          expect(found, `${p} sees ${actor}'s notification`).toBeUndefined();
+        }
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a missing notification id',
+        (r) => r.notifications.markRead(sScope(a), uid('ntf_missing')),
+        'not_found',
+      ],
+    ],
+  },
 };
+
+/** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */
+async function openedQuestion(r: Repos, pair: Pair, label: string): Promise<string> {
+  const q = await r.teacherQuestions.open(sScope(pair), {
+    agentId: ids.agent(teacherOf(pair)),
+    text: `[${pair}] ANSWER-TEST-${label}-${uid('q')}`,
+    similarIds: [],
+  });
+  return q.id;
+}
+
+/** A fresh open question for `pair`, with a `notifications` row pointing at it (raw insert: the
+ * only writer of `notifications` is `teacherQuestions.answer`, not a student-scoped call). */
+async function makeNotification(r: Repos, pair: Pair): Promise<string> {
+  const qid = await openedQuestion(r, pair, 'notif');
+  const notifId = uid('ntf');
+  await raw.query(
+    `insert into notifications (id, student_id, teacher_id, kind, teacher_question_id)
+     values ($1, $2, $3, 'teacher_answer', $4)`,
+    [notifId, studentId(studentOf(pair)), teacherId(teacherOf(pair)), qid],
+  );
+  return notifId;
+}
 
 /** After a usage write by `actor` on turn `turnId`: only the actor's scope sees that turn. */
 async function onlyPairSeesTurn(r: Repos, actor: Pair, turnId: string) {
@@ -1905,6 +2117,29 @@ describe.skipIf(!up)(
           [endable(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
         );
       }
+      // Task 5.10: fixed fixtures for teacherQuestions.answer / notifications' isolation cases.
+      for (const t of TEACHERS) {
+        const p = `1${t}` as Pair;
+        answerTarget[t] = await openedQuestion(repos, p, 'cross');
+        answerEmpty[t] = await openedQuestion(repos, p, 'empty');
+        answerWrongModule[t] = await openedQuestion(repos, p, 'wrong-module');
+        const dismissId = await openedQuestion(repos, p, 'dismissed');
+        await raw.query(`update teacher_questions set status = 'dismissed' where id = $1`, [
+          dismissId,
+        ]);
+        answerDismissed[t] = dismissId;
+        const replayId = await openedQuestion(repos, p, 'replay');
+        await repos.teacherQuestions.answer(tScope(t), {
+          questionId: replayId,
+          moduleId: ids.module(t, 1),
+          answer: 'first answer',
+          noteQuestion: `[${t}] replay note`,
+        });
+        answerReplay[t] = replayId;
+      }
+      for (const p of PAIRS) {
+        notifTarget[p] = await makeNotification(repos, p);
+      }
     });
 
     afterAll(async () => {
@@ -2012,9 +2247,17 @@ describe.skipIf(!up)(
       expect(rows.length).toBeGreaterThanOrEqual(2);
       for (const q of rows) expect(Object.keys(q)).not.toContain('studentId');
       expect(JSON.stringify(rows)).not.toMatch(/stu_/);
-      expect(
-        await repos.teacherQuestions.listForTeacher(tScope('A'), { status: 'answered', limit: 5 }),
-      ).toEqual([]);
+      // Task 5.10: `answer` may have already answered some of teacher A's questions elsewhere in
+      // this suite, so this only checks the status filter actually filters (no overlap with
+      // `open`), not that the list is empty.
+      const answered = await repos.teacherQuestions.listForTeacher(tScope('A'), {
+        status: 'answered',
+        limit: 200,
+      });
+      for (const q of answered) {
+        expect(Object.keys(q)).not.toContain('studentId');
+        expect(rows.some((o) => o.id === q.id)).toBe(false);
+      }
       const one = await repos.teacherQuestions.listForTeacher(tScope('A'), {
         status: 'open',
         limit: 1,
@@ -2229,9 +2472,15 @@ describe.skipIf(!up)(
         status: 'answered',
         answeredAt: '2026-10-18T09:00:00.000Z',
       });
-      expect(
-        await repos.teacherQuestions.listForTeacher(tScope('B'), { status: 'answered', limit: 10 }),
-      ).toEqual([expect.not.objectContaining({ studentId: expect.anything() })]);
+      // Task 5.10: `answer` may already have answered other questions of teacher B's elsewhere in
+      // this suite, so this checks `tq_2b` is among them (and none leak studentId) rather than
+      // that it is the only one.
+      const answeredForB = await repos.teacherQuestions.listForTeacher(tScope('B'), {
+        status: 'answered',
+        limit: 200,
+      });
+      expect(answeredForB.some((r) => r.id === 'tq_2b')).toBe(true);
+      for (const r of answeredForB) expect(r).not.toHaveProperty('studentId');
 
       const empty = packageConfig('B', 500, []);
       await repos.packageVersions.create(tScope('B'), empty);

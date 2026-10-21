@@ -62,6 +62,10 @@ export const teacherQuestionStatus = pgEnum('teacher_question_status', [
   'dismissed',
 ]);
 export const evidenceSource = pgEnum('evidence_source', ['check', 'practice', 'rubric']);
+/** Task 5.10: why a teacher note exists — the teacher's answer to a question, or a correction. */
+export const noteOrigin = pgEnum('note_origin', ['teacher_answer', 'correction']);
+/** Task 5.10: what a notification is about. Only one kind exists today. */
+export const notificationKind = pgEnum('notification_kind', ['teacher_answer']);
 export const modelTier = pgEnum('model_tier', ['small', 'main']);
 export const ledgerDirection = pgEnum('ledger_direction', ['debit', 'credit']);
 /** Who a call is billed to: Entitlement.source (a teacher preview to the teacher, evals to Edmate). */

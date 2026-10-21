@@ -207,3 +207,40 @@ describe('memoryRetrieval: the shared RetrievalIndex contract (task 5.3)', () =>
     it(c.name, () => c.run((chunks) => Promise.resolve(memoryRetrieval({ chunks }))), 5_000);
   }
 });
+
+describe('memoryRetrieval.add (task 5.10)', () => {
+  const note: Chunk = {
+    id: 'chk_note_x',
+    teacherId: 'tch_test_01',
+    documentId: 'doc_note_x',
+    moduleId: 'mod_test_02',
+    kind: 'teacher_note',
+    text: 'Question: why is the sky blue\nAnswer: scattering',
+    source: { title: "Teacher's answer", locator: '2026-10-21', kind: 'teacher_note' },
+  };
+  const scope02 = { teacherId: 'tch_test_01', allowedModuleIds: ['mod_test_02'] };
+
+  it('makes a chunk searchable, still only under a scope that allows its module', async () => {
+    const r = memoryRetrieval({ chunks: retrievalWorld() });
+    r.add(note);
+    const hits = await r.search('why is the sky blue', scope02, 5);
+    expect(hits[0]?.id).toBe('chk_note_x');
+    expect(hits.every((c) => c.moduleId === 'mod_test_02')).toBe(true);
+    expect(await r.search('why is the sky blue', SCOPE, 5)).toEqual([]);
+    const other = { teacherId: 'tch_test_02', allowedModuleIds: ['mod_test_02'] };
+    expect(await r.search('why is the sky blue', other, 5)).toEqual([]);
+  });
+
+  it('stores a copy, and rejects an invalid chunk or a duplicate id', async () => {
+    const r = memoryRetrieval({ chunks: [] });
+    const mine = { ...note, source: { ...note.source } };
+    r.add(mine);
+    mine.text = 'changed';
+    mine.source.title = 'changed';
+    const [hit] = await r.search('sky', scope02, 1);
+    expect(hit?.text).toBe(note.text);
+    expect(hit?.source.title).toBe("Teacher's answer");
+    expect(() => r.add(note)).toThrow(/duplicate/);
+    expect(() => r.add({ ...note, id: 'bad id' })).toThrow();
+  });
+});

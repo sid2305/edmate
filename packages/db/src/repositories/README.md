@@ -197,6 +197,71 @@ failure), and bump the material revision, all in one transaction: the next searc
 miss the old material at once. They return the old storage key for the caller to delete the file.
 Another teacher's or a missing document is `not_found` and nothing is written.
 
+## Ask the teacher (task 5.10)
+
+**`insertTeacherNote(tx, teacherId, input, method)`** (`chunks.ts`, the only file allowed to name
+`chunks`) is the one transaction that turns a teacher's answer or correction into a teacher note:
+a `documents` row (`kind 'teacher_note'`, `status 'ready'`, no storage key, source title from
+`@edmate/harness`'s `teacherNoteSource`) via `INSERT … SELECT FROM modules WHERE id = $m AND
+teacher_id = $t` (another teacher's module or a missing one is `not_found`), its one chunk (text
+from `teacherNoteText`, locator the answer's UTC date), one `teacher_eval_cases` row and a
+material-revision bump. `question` / `answer` are validated by `teacherNoteParts` (the same helper
+the harness's memory `CorrectionStore` double uses, so the two formats can't drift): empty after
+trimming or over `TEACHER_NOTE_PART_MAX` is `invalid`, before any SQL. `chunks.addTeacherNote(scope,
+input)` wraps it in its own transaction; `correctionStoreFor(repos, scope)` (`ports.ts`) is the
+bound `CorrectionStore` adapter — a payload `teacherId` other than the bound one is `scope`, before
+any write. Phase C's `teacherQuestions.answer` calls `insertTeacherNote` directly (not the port),
+so the note, the question's status and the student delivery commit together.
+
+`teacher_eval_cases` (7.3 converts rows into eval suite cases) and `notifications` (Phase C) are
+additive tables from migration 0018; `teacher_questions.group_id` (unused since 0001) is backfilled
+to each row's own id so every question starts as its own group once Phase C's grouping lands.
+
+**Grouping (Phase C, § Ask the teacher 2, Q1).** `teacherQuestions.open` lexically groups a new
+question with that teacher's and that agent's own other **open** questions, inside its own
+transaction: `question-similarity.ts`'s `questionSimilarity` (Jaccard over `retrieval.ts`'s
+`queryTerms`, ≥ 0.5 and ≥ 2 shared terms) and `bestGroup` (best score, ties to the oldest candidate,
+then the lowest id) over at most `GROUPING_CANDIDATE_MAX` of that teacher+agent's newest open
+questions. `group_id` becomes the chosen match's group (or its own id when none matches), and
+`similar_ids` becomes the caller's ids plus the group's other members (at most `SIMILAR_IDS_MAX`).
+This is never a real similarity search (`teacherQuestionStoreFor.findSimilar` stays `[]`, see
+`ports.ts`) and never crosses a teacher or an agent. The agent row lock moved from `key share` to
+`no key update`, so two concurrent opens for one agent serialise through this grouping read instead
+of racing it. `teacherQuestions.listGroupsForTeacher(scope, { limit })` groups the teacher's own
+open questions the same way, in memory, over at most `GROUPING_SCAN_MAX` rows (biggest group first,
+then oldest, at most `GROUPS_MAX_LIMIT` groups of at most `GROUP_QUESTIONS_MAX` questions); it never
+selects `student_id`.
+
+**`teacherQuestions.answer(scope, { questionId, moduleId, answer, noteQuestion? })`** answers the
+scope's own open question and every open question sharing its group, in one transaction: locks the
+target `FOR UPDATE`, then every open member of its group `FOR UPDATE` (another teacher's, a missing,
+an already-answered or a dismissed question is `not_found`); calls `insertTeacherNote` once, so the
+note, the members' status and the student delivery commit together; sets every member
+`status 'answered'` with `answer` and `answered_at`; then, for each **distinct student** among the
+members (the earliest, then lowest-id member stands for them), writes one `teacher` message into
+that student's open session with this teacher and agent (`insertSelect`, `order by created_at desc,
+id desc limit 1` in case more than one is somehow open at once — the statement would otherwise try
+to insert one row's id twice and fail its primary key) and one `notifications` row
+(`onConflictDoNothing`, so a retry is harmless). Returns counts only (`answered`, `students`,
+`threadMessages`, `noteChunkId`, `evalCaseId`) — no student id ever leaves.
+
+**`notifications`** (`notifications.ts`) is the student's own read of a teacher's answer: in-app
+only (email and push wait, decision B-25). `listForStudent(scope, { unreadOnly, limit })` joins to
+the scope's own `teacher_questions` row (another scope's notification can't be read through a
+borrowed id), newest first. `markRead(scope, id)` is a scoped UPDATE; another student's or a
+missing id is `not_found`.
+
+**`db:questions` (Phase D).** The teacher's own command-line view onto the two reads/writes above,
+after `pnpm --filter @edmate/db build`: `pnpm --filter @edmate/db db:questions -- list --teacher
+<id>` prints each open group (id, count, oldest) and its member questions (id, text); `pnpm
+--filter @edmate/db db:questions -- answer --teacher <id> --question <id> --module <id>
+--answer-file <path> [--note-question <text>]` reads the answer from a file (never the shell's
+argv or history) and calls `teacherQuestions.answer`, printing counts only (never a student id).
+A bad usage or a missing `--answer-file` never opens the database; a `RepositoryError('not_found',
+...)` (another teacher's or an already-answered question, a missing module) prints a fixed
+message; any other failure is `redact()`ed before it reaches the terminal. See
+`runTeacherQuestionsCli` (`src/cli.ts`) and `src/bin/teacher-questions.ts`.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and
