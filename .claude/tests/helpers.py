@@ -21,6 +21,7 @@ SCRIPTS = [
     "skills/merge-gate/risk-paths.txt",
     "skills/board/board.py",
     "skills/team-lead/closeout.py",
+    "skills/team-lead/metrics.py",
 ]
 
 # Isolate git from the developer's own config (signing, hooks, default branch, identity).

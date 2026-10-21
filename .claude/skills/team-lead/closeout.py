@@ -17,11 +17,16 @@ tree). It:
 Exit codes: 0 = closed out (or safely partial, e.g. branch left because it isn't merged yet),
 1 = couldn't even log decisions / mark the board done (board.py's own refusal reasons print as-is).
 """
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import metrics  # noqa: E402
 
 DECISIONS_HEADING = re.compile(r"^##\s+Decisions\b.*$", re.M)
 ENTRY_HEADING = re.compile(r"^###\s", re.M)
@@ -146,14 +151,32 @@ def main(argv):
     log = root / "docs" / "decisions" / "log.md"
     added = append_decisions(log, handoff)
 
-    code, out = sh(root, "python3", str(root / ".claude" / "skills" / "board" / "board.py"), "set", task_id, "done")
+    board_py = str(root / ".claude" / "skills" / "board" / "board.py")
+    code, show_out = sh(root, "python3", board_py, "show", task_id)
+    m = re.search(r"^branch:\s*(\S+)", show_out, re.M) if code == 0 else None
+    branch_name = m.group(1).strip("'\"") if m and m.group(1) != "null" else None
+
+    # Metrics are best-effort: a missing transcript dir, unparseable JSONL or any other read
+    # error must never block marking the task done -- just skip the --metrics flag.
+    metrics_args, tmp_metrics_path = [], None
+    if branch_name:
+        try:
+            data = metrics.collect(root, task_id, branch_name)
+            fd, tmp_name = tempfile.mkstemp(suffix=".json")
+            os.close(fd)
+            tmp_metrics_path = Path(tmp_name)
+            tmp_metrics_path.write_text(json.dumps(data))
+            metrics_args = ["--metrics", str(tmp_metrics_path)]
+        except Exception as e:
+            # type name only: str(e) can hold a home-directory path
+            print(f"could not collect metrics for {task_id}: {type(e).__name__}")
+
+    code, out = sh(root, "python3", board_py, "set", task_id, "done", *metrics_args)
     print(out)
+    if tmp_metrics_path:
+        tmp_metrics_path.unlink(missing_ok=True)
     if code:
         return code
-
-    code, branch = sh(root, "python3", str(root / ".claude" / "skills" / "board" / "board.py"), "show", task_id)
-    m = re.search(r"^branch:\s*(\S+)", branch, re.M) if code == 0 else None
-    branch_name = m.group(1).strip("'\"") if m and m.group(1) != "null" else None
 
     if branch_name:
         wt = worktree_for_branch(root, branch_name)

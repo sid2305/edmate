@@ -1,9 +1,16 @@
 """closeout.py: one command to log a merged task's decisions, mark it done, and clean up its
 git worktree/branch. Fixture simulates a PR already merged into main (handoff/review committed
 there), same style as test_board.py and test_merge_gate.py's RepoCase."""
+import json
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 
-from helpers import RepoCase, git, require_tools, task
+from helpers import ENV, RepoCase, git, require_tools, task
+
+FIXTURE_TRANSCRIPT = Path(__file__).resolve().parent / "fixtures" / "transcript-sample.jsonl"
+MARKER = "EDMATE_TEST_MARKER_DO_NOT_LEAK_7f3a9c"
 
 HANDOFF = """# 9.9 handoff
 Status: DONE
@@ -102,6 +109,52 @@ class Basics(CloseoutCase):
         self.assertEqual(code, 1, out)
         self.assertIn("## Decisions", out)
         self.assertNotIn("status: done", self.board_text())
+
+
+class Metrics(CloseoutCase):
+    """closeout.py collects metrics from a fixture transcript (synthetic, no real data) and
+    writes only a `metrics:` map of numbers/short strings onto the board -- no transcript text,
+    real paths or session ids."""
+
+    def setUp(self):
+        super().setUp()
+        self.tdir = tempfile.TemporaryDirectory(prefix="edmate-metrics-")
+        self.addCleanup(self.tdir.cleanup)
+        shutil.copy(FIXTURE_TRANSCRIPT, Path(self.tdir.name) / "session.jsonl")
+
+    def closeout(self, *args):
+        env = dict(ENV, EDMATE_TRANSCRIPTS_DIR=self.tdir.name)
+        r = self.repo.script("closeout", *args, env=env)
+        return r.returncode, r.stdout + r.stderr
+
+    def test_writes_metrics_map_with_no_leaked_data(self):
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        text = self.board_text()
+        self.assertIn("metrics:", text)
+        self.assertIn("tool_calls:", text)
+        self.assertNotIn("/Users/", text)
+        self.assertNotIn("/home/", text)
+        self.assertNotIn(MARKER, text)
+        self.assertNotIn("sessionId", text)
+
+    def test_metrics_error_prints_only_exception_type(self):
+        # review.md as a directory makes metrics.collect() raise an OSError whose str() holds a path
+        review = self.repo.root / "docs/tasks/9.9/review.md"
+        review.unlink(missing_ok=True)
+        review.mkdir(parents=True)
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertIn("could not collect metrics for 9.9: IsADirectoryError", out)
+        self.assertNotIn("review.md", out)
+        self.assertNotIn(str(self.repo.root), out)
+
+    def test_idempotent_rerun_overwrites_same_map(self):
+        self.assertEqual(self.closeout("9.9")[0], 0)
+        first = self.board_text()
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.board_text(), first)
 
 
 if __name__ == "__main__":
