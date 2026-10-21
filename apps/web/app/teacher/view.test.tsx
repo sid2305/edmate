@@ -36,6 +36,15 @@ describe('TeacherView', () => {
     );
   });
 
+  it('links to the onboarding form from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Your profile' })).toHaveAttribute(
+      'href',
+      '/teacher/onboarding',
+    );
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await TeacherView());
     const results = await axe(container);
