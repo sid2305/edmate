@@ -1728,9 +1728,19 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: running
+  status: done
   branch: m9/9.4-student-chat
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus(A-C),sonnet(D) fix:sonnet review:security-opus,code-sonnet,ts-sonnet
+- id: 9.4a
+  milestone: M13
+  title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically'
+  accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
+  deps:
+  - '9.4'
+  status: todo
+  branch: null
+  risk: risky
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
