@@ -3,5 +3,10 @@
     "skipToContent": "Skip to content",
     "brand": "Edmate",
     "signOut": "Sign out"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "googleButton": "Continue with Google",
+    "emailLink": "Sign in with email instead"
   }
 }

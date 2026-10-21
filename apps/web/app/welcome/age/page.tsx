@@ -3,7 +3,7 @@
 // the field, and nothing that names an age or a cut-off. The notice and its version come from the
 // server's content; the version is shown, never sent back by the form.
 import { notFound, redirect } from 'next/navigation';
-import { ageGateView, ageNotice } from '../../../src/auth';
+import { ageGateView, ageNotice, SIGN_IN_PATH } from '../../../src/auth';
 import { answerAge } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ type Search = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function AgeGatePage({ searchParams }: { searchParams: Search }) {
   const view = await ageGateView();
-  if (view.state === 'sign_in') redirect('/api/auth/signin');
+  if (view.state === 'sign_in') redirect(SIGN_IN_PATH);
   if (view.state === 'not_student') notFound();
   if (view.state === 'clear') redirect('/');
   if (view.state === 'closed') {

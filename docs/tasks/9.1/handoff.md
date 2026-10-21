@@ -1,6 +1,6 @@
-# 9.1 handoff: app shell, mobile-first layouts (Phase A)
+# 9.1 handoff: app shell, mobile-first layouts (Phase A, B)
 
-Status: PARTIAL (Phase A done; Phases B and C not started)
+Status: PARTIAL (Phases A and B done; Phase C not started)
 
 ## Phase A
 
@@ -66,10 +66,62 @@ the plan's "State after this phase".
 
 `python3 .githooks/secret-scan.py --all` — clean, no output.
 
+## Phase B
+
+Built the one real sign-in path, `/sign-in`, per the plan's Phase B file list. Touches
+`apps/web/src/auth/**` (risky path, reviewers: security-reviewer) — no guard, age gate or
+cookie/session setting was weakened; the one behaviour change is the redirect target string
+itself.
+
+### What was built
+- `apps/web/src/auth/guard.ts` (edit) — the private `SIGN_IN` constant is now the exported
+  `SIGN_IN_PATH = '/sign-in'` (was `'/api/auth/signin'`); `requireRole`'s anonymous redirect uses
+  it unchanged otherwise. Auth.js's own API route (`/api/auth/signin/*`) is untouched — only the
+  *page* a human lands on moved.
+- `apps/web/src/auth/guard.test.ts` (edit) — the redirect-target assertions now expect
+  `SIGN_IN_PATH`; one new case asserts the exported constant's value directly.
+- `apps/web/src/auth/index.ts` (edit) — re-exports `SIGN_IN_PATH` from `./guard`; adds
+  `currentPrincipal(): Promise<Principal | null>`, a soft, non-throwing read (any failure —
+  `getRuntime()` throwing, or the session lookup throwing — reads as `null`, the same
+  fail-safe-to-signed-out direction as `resolvePrincipal`'s existing `not_found` handling). Not
+  security-enforcing by itself: `/home` and `/teacher` (Phase C) still call `requireRole`.
+- `apps/web/src/auth/index.test.ts` (edit) — three new `currentPrincipal` cases: signed out (no
+  cookie), signed in (a real session via the memory identity store), and a lookup failure (the
+  identity store's `getSessionAndUser` made to throw) reading as `null`, not propagating.
+- `apps/web/app/welcome/age/page.tsx`, `apps/web/app/welcome/age/actions.ts` (edit) — the literal
+  `'/api/auth/signin'` redirect replaced with the imported `SIGN_IN_PATH`; both now land on the
+  new page too. No other behaviour in either file changed.
+- `apps/web/app/sign-in/page.tsx` (new) — a server component wrapped in `AppShell` (no `nav`): one
+  "Continue with Google" button (a server action) and one plain link to `/api/auth/signin` for
+  email (1.4's own CSRF/rate-limited form, not rebuilt). Strings come from `next-intl`'s server
+  `getTranslations` (confirmed working in a server component with no provider, per the plan's
+  Design notes), reading `shell.*` and the new `signIn.*` keys.
+- `apps/web/app/sign-in/actions.ts` (new) — `signInWithGoogle()`, calling the `signIn` already
+  exported from `src/auth`, `redirectTo: '/'` (the Phase C dispatcher sorts the rest out).
+- `apps/web/app/sign-in/page.test.tsx` (new) — RTL + jest-axe; written and red before the page
+  existed. `next-intl/server`'s `getTranslations` is mocked to read the same `messages/en.json`
+  the real `src/i18n/request.ts` loads (jsdom has no server/client runtime split, so next-intl's
+  real server API resolves to its client-only build and throws under jsdom — see Decisions).
+- `apps/web/messages/en.json` (edit) — added `signIn.title`, `signIn.googleButton`,
+  `signIn.emailLink`.
+
+### Test results
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` — all 34 tasks green
+(trimmed): `Tasks: 34 successful, 34 total`. `apps/web`'s own coverage report:
+```
+All files          |   99.79 |      100 |   99.24 |   99.76
+ src/auth          |     100 |      100 |     100 |     100
+ src/i18n/request.ts (0% — unchanged from Phase A: config glue, no direct test, no branches)
+```
+`src/auth/**` holds its 100% lines/functions/statements, 100% branches (exceeds the 90% floor).
+
+`corepack pnpm run build` (`next build --webpack`) in `apps/web`: succeeds. New route: `/sign-in`
+(static, ○). Same pre-existing, unrelated warning as Phase A (`bullmq`'s optional
+`@valkey/valkey-glide` import).
+
+`python3 .githooks/secret-scan.py --all` — clean, no output.
+
 ## Left to do
-- **Phase B** (risky: `apps/web/src/auth/**`, reviewers: security-reviewer) — `SIGN_IN_PATH`
-  export, `currentPrincipal()`, the real `/sign-in` page and its Google sign-in server action, the
-  `/welcome/age` literal-path replacements.
 - **Phase C** — the `/` dispatcher, `/home` and `/teacher` gated routes and their views, the
   manual Lighthouse ≥95 run at 360px for `/sign-in`, `/home`, `/teacher` (the plan's Acceptance
   evidence), and `apps/web/messages/en.json`'s home/teacher/dispatcher strings.
@@ -77,6 +129,30 @@ the plan's "State after this phase".
   for Phase B to merge, or build without `AppShell` first and refactor — a lead sequencing call.
 
 ## Decisions
+
+### 20 Oct 2026 · `apps/web/src/auth/**` touched in Phase B · decided by tdd-guide
+Decided: `src/auth/guard.ts` and `src/auth/index.ts` are both edited in this phase (the
+`SIGN_IN_PATH` rename and the new `currentPrincipal()` soft read), matching the plan's own call-out
+and `.claude/skills/merge-gate/risk-paths.txt`'s existing `apps/web/src/auth/**` entry.
+Why: both are named in the plan's Phase B file list; no guard, age-gate or cookie/session setting
+was weakened — `requireRole`'s only behaviour change is the string it redirects to, and
+`currentPrincipal()` is explicitly not security-enforcing (`requireRole` still gates `/home` and
+`/teacher` in Phase C). `src/auth/**`'s 100%-lines/functions/statements, 90%-branches coverage
+floor holds (100% branches, measured).
+risk: high (this group's reviewers: security-reviewer; the lead finalises).
+
+### 20 Oct 2026 · next-intl's server `getTranslations` is mocked in jsdom component tests · decided by tdd-guide
+Decided: `app/sign-in/page.test.tsx` mocks `next-intl/server`'s `getTranslations` to read
+`messages/en.json` directly, instead of calling the library's real implementation under jsdom.
+Why: Vitest's jsdom environment has no server/client runtime split the way Next's build does;
+next-intl's package exports resolve to its client-only bundle whenever `document` is defined
+(true for every `.tsx` test in this suite), and that bundle throws
+`` `getTranslations` is not supported in Client Components `` outright — there is no way to make
+the real server API callable under jsdom. The mock still exercises the page's real namespace keys
+(`shell.*`, `signIn.*`) against the real `en.json` the production `src/i18n/request.ts` loads, so
+a typo'd or missing key still fails the test; only next-intl's own request-context plumbing (which
+only exists inside a real Next request) is replaced.
+risk: low.
 
 ### 20 Oct 2026 · next-intl pinned to 4.4.0, not the registry's latest 4.14.9 · decided by tdd-guide
 Decided: `next-intl@4.4.0`, the newest 4.x release that both (a) lists `next@^16.0.0` and

@@ -28,7 +28,7 @@ import {
 import { describeError } from './describe-error';
 import { EMAIL_PROVIDER_ID } from './email';
 import { readAuthEnv, type AuthEnv } from './env';
-import { createGuard, resolvePrincipal, type GuardDeps } from './guard';
+import { createGuard, resolvePrincipal, type GuardDeps, type Principal } from './guard';
 import { smtpMailSender } from './mail';
 import { createSignInLimiter, redisSignInCounters } from './rate-limit';
 import { readyCounters } from './redis-ready';
@@ -136,6 +136,24 @@ export const { withRole, publicRoute, providerRoute, requireRole } = createGuard
   () => getRuntime().guard,
   () => ({ cookies, redirect, notFound }),
 );
+
+export { SIGN_IN_PATH } from './guard';
+
+/**
+ * A soft, non-throwing read of who (if anyone) is signed in: the `/` dispatcher's (Phase C) "who,
+ * if anyone" check. Any lookup failure -- a thrown error from `getRuntime()` or the session
+ * lookup, not just the `not_found` case `resolvePrincipal` already handles -- reads as signed
+ * out, the same fail-safe-to-signed-out direction as `resolvePrincipal`. Not security-enforcing
+ * by itself: `/home` and `/teacher` still call `requireRole`.
+ */
+export async function currentPrincipal(): Promise<Principal | null> {
+  try {
+    const resolved = await resolvePrincipal(getRuntime().guard, await cookies());
+    return resolved?.principal ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** The age gate's dependencies over the request's cookies (server action or component). */
 async function ageGateDeps(): Promise<AgeGateDeps> {

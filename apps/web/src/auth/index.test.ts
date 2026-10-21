@@ -187,7 +187,7 @@ describe('src/auth wiring', () => {
   it('requireRole redirects an anonymous page visitor to sign-in', async () => {
     setAuthEnv();
     const auth = await load();
-    await expect(auth.requireRole(['student'])).rejects.toThrow('REDIRECT /api/auth/signin');
+    await expect(auth.requireRole(['student'])).rejects.toThrow('REDIRECT /sign-in');
     expect(pageCookies).toHaveBeenCalled();
   });
 
@@ -323,6 +323,56 @@ describe('src/auth wiring', () => {
     vi.stubEnv('EDMATE_CONTENT_DIR', '/nonexistent/edmate-content');
     const auth = await load();
     expect(() => auth.ageNotice('IN')).toThrow();
+  });
+
+  it('currentPrincipal: signed out reads as null', async () => {
+    setAuthEnv();
+    const auth = await load();
+    expect(await auth.currentPrincipal()).toBeNull();
+  });
+
+  it('currentPrincipal: signed in reads the principal', async () => {
+    setAuthEnv();
+    fakes.db.length = 0;
+    const auth = await load();
+    expect(await auth.currentPrincipal()).toBeNull();
+    const { identity } = fakes.db[0]!;
+    const u = await identity.createStudent({
+      email: 'cp@example.test',
+      emailVerifiedAt: null,
+      name: 'CP',
+    });
+    const sid = 'cpd'.padEnd(32, '1');
+    await identity.createSession(sid, u.id, new Date(Date.now() + 60_000));
+    pageCookies.mockImplementation(async () => ({
+      get: (name: string) => (name === 'authjs.session-token' ? { value: sid } : undefined),
+      set: vi.fn(),
+    }));
+    expect(await auth.currentPrincipal()).toEqual({ userId: u.id, role: 'student' });
+    pageCookies.mockImplementation(async () => ({
+      get: (_name: string) => undefined,
+      set: vi.fn(),
+    }));
+  });
+
+  it('currentPrincipal: a lookup failure reads as null, not thrown', async () => {
+    setAuthEnv();
+    fakes.db.length = 0;
+    const auth = await load();
+    expect(await auth.currentPrincipal()).toBeNull();
+    const { identity } = fakes.db[0]!;
+    identity.getSessionAndUser = vi.fn(async () => {
+      throw new Error('db unreachable');
+    });
+    pageCookies.mockImplementation(async () => ({
+      get: (name: string) => (name === 'authjs.session-token' ? { value: 'x'.repeat(32) } : undefined),
+      set: vi.fn(),
+    }));
+    await expect(auth.currentPrincipal()).resolves.toBeNull();
+    pageCookies.mockImplementation(async () => ({
+      get: (_name: string) => undefined,
+      set: vi.fn(),
+    }));
   });
 
   it('signIn and signOut delegate to Auth.js', async () => {
