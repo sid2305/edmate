@@ -1,10 +1,15 @@
 // Reports (task 3.12). The JSON report carries no wall-clock time unless the caller passes one,
 // so the same results always give the same report.
+import type { CalibrationSummary } from './calibration.js';
 import type { CaseResult } from './runner.js';
 
 export interface JsonReport {
   suite?: string;
   generatedAt?: string;
+  /** The `provider:model` label of the judge used for this run's judge fixtures, if any. */
+  judgeModel?: string;
+  /** Present only when a human double-check pass has been run against this report. */
+  calibration?: CalibrationSummary;
   total: number;
   passed: number;
   failed: number;
@@ -13,12 +18,19 @@ export interface JsonReport {
 
 export function toJsonReport(
   results: readonly CaseResult[],
-  meta: { suite?: string; generatedAt?: string } = {},
+  meta: {
+    suite?: string;
+    generatedAt?: string;
+    judgeModel?: string;
+    calibration?: CalibrationSummary;
+  } = {},
 ): JsonReport {
   const passed = results.filter((r) => r.pass).length;
   return {
     ...(meta.suite === undefined ? {} : { suite: meta.suite }),
     ...(meta.generatedAt === undefined ? {} : { generatedAt: meta.generatedAt }),
+    ...(meta.judgeModel === undefined ? {} : { judgeModel: meta.judgeModel }),
+    ...(meta.calibration === undefined ? {} : { calibration: meta.calibration }),
     total: results.length,
     passed,
     failed: results.length - passed,

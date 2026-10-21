@@ -136,7 +136,8 @@ Checked every planned path against `.claude/skills/merge-gate/risk-paths.txt`:
    agent-under-test model label is added later, once an agent pipeline exists (7.3+), as a new
    optional `meta` field — no change needed to today's shape.
 
-## Budget: 30 tool calls
+## Budget
+Budget: 30 tool calls
 
 ## Allowed tools
 Read, Grep, Glob, Write, Edit, Bash (for `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals...`, `git`, `python3 .claude/skills/merge-gate/merge_gate.py`, `python3 .githooks/secret-scan.py --all`).
