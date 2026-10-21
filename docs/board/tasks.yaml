@@ -1567,9 +1567,9 @@ tasks:
   - '5.4'
   - M3
   - M4
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/7.1-eval-reports
+  model: plan:sonnet build:sonnet
 - id: '7.2'
   milestone: M7
   title: Grow platform suites to target sizes, each case human-reviewed
