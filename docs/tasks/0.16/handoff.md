@@ -86,6 +86,12 @@ Why: there is no first-party transcript-to-task link; this mirrors 0.15's by-han
 best-effort signal, not an audit trail.
 - risk: low
 
+### 21 Oct 2026 · 0.16 agent metrics at closeout (.claude, risky path) · decided by lead · risk: high
+
+- Decided: merge 0.16. Closeout records counted agent metrics on the board, and `board.py metrics` reports them. security-reviewer and code-reviewer reviewed it. Fix round 1 fixed 2 HIGH, 2 MEDIUM and 2 LOW findings, and both reviewers re-checked their own.
+- Why: the human asked for agent-factory metrics (0.16). Only allow-listed numbers reach the public board.
+- risk: high
+
 ### 21 Oct 2026 · 0.16 risky paths: security-reviewer · decided by tdd-guide · risk: high
 Decided: all touched/created files are under `.claude/**` (the agent harness itself per
 risk-paths.txt), so this PR needs security-reviewer sign-off before merge.
