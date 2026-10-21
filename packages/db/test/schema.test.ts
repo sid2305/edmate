@@ -313,6 +313,21 @@ describe('enums match the contracts', () => {
     expect(col?.type).toBe('teacher_verification_status');
     expect(col?.notNull).toBe(true);
   });
+  it('document_status is uploading, processing, ready or failed (task 8.2)', () => {
+    expect(values('document_status')).toEqual(['uploading', 'processing', 'ready', 'failed']);
+    const docs = table('documents') as SnapshotTable & {
+      columns: Record<string, { default?: string }>;
+      checkConstraints: Record<string, { name: string; value: string }>;
+    };
+    const cols = docs.columns;
+    expect(cols['status']?.type).toBe('document_status');
+    expect(cols['status']?.notNull).toBe(true);
+    expect(cols['status']?.default).toBe("'uploading'");
+    expect(cols['failure_reason']?.type).toBe('text');
+    expect(cols['failure_reason']?.notNull).toBe(false);
+    const check = docs.checkConstraints['documents_failure_reason_only_when_failed'];
+    expect(check?.value).toMatch(/failure_reason" is null or .*status" = 'failed'/s);
+  });
   it('user_role and agent_status follow the Data model', () => {
     expect(values('user_role')).toEqual(['student', 'teacher', 'staff']);
     expect(values('agent_status')).toEqual(['draft', 'live', 'suspended']);

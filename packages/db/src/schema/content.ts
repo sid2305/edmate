@@ -1,8 +1,9 @@
 // Data model rows: courses / modules / topics, documents / chunks, style_cards, corrections.
 import { sql } from 'drizzle-orm';
-import { bigint, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, check, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import {
   chunkKind,
+  documentStatus,
   EMBEDDING_DIMENSIONS,
   id,
   timestamps,
@@ -76,11 +77,19 @@ export const documents = pgTable(
     /** Object-store key of the original file; null for notes typed in the studio. */
     storageKey: text('storage_key'),
     rightsDeclaredAt: tstz('rights_declared_at'),
+    /** Ingestion state (task 8.2). Rows from before migration 0017 were backfilled `ready`. */
+    status: documentStatus('status').notNull().default('uploading'),
+    /** A fixed failure code (an IngestErrorCode-like word), never raw error text; only when failed. */
+    failureReason: text('failure_reason'),
     ...timestamps(),
   },
   (t) => [
     index('documents_teacher_id_idx').on(t.teacherId),
     index('documents_module_id_idx').on(t.moduleId),
+    check(
+      'documents_failure_reason_only_when_failed',
+      sql`${t.failureReason} is null or ${t.status} = 'failed'`,
+    ),
   ],
 );
 

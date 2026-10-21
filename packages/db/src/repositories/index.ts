@@ -127,8 +127,11 @@ export {
   CHUNK_WRITE_MAX,
   chunkId,
   type ChunkDraft,
+  DOCUMENT_LIST_MAX,
   type DocumentInput,
+  type DocumentListOptions,
 } from './chunks.js';
+export { DOCUMENT_STATUSES, type DocumentRow, type DocumentStatus } from './map.js';
 export {
   type EmbedFallback,
   LEAK_CANDIDATE_MAX_LENGTH,

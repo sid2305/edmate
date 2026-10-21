@@ -3,7 +3,7 @@
 // never be filed under another teacher's module. Every write bumps the teacher's material
 // revision in the same transaction (leakCheck's cache key, ADR-0007).
 import { ChunkKindSchema } from '@edmate/contracts';
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -16,6 +16,7 @@ import {
 import { vectorToDriver } from '../schema/_shared.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
+import { type DocumentRow, type DocumentStatus, toDocumentRow } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 /** Most chunks or embeddings one call writes (ingest batches below this). */
@@ -35,6 +36,45 @@ const DocumentInputSchema = z.strictObject({
   storageKey: z.string().min(1).max(1024).optional(),
 });
 export type DocumentInput = z.infer<typeof DocumentInputSchema>;
+
+/** Most documents one `documents.listForTeacher` call returns. */
+export const DOCUMENT_LIST_MAX = 500;
+
+const ListOptionsSchema = z.strictObject({ moduleId: IdSchema.optional() });
+export type DocumentListOptions = z.infer<typeof ListOptionsSchema>;
+
+/** A fixed failure code such as an IngestErrorCode (`provider_error`), never raw error text. */
+const FailureReasonSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
+
+/**
+ * The states a document may move to `status` from. `uploading` is set only by `create` and
+ * `startReplace`; `ready` is final until a replace; `failed` may be processed again (a retry).
+ */
+const STATUS_FROM = {
+  processing: ['uploading', 'processing', 'failed'],
+  ready: ['processing'],
+  failed: ['uploading', 'processing'],
+} as const satisfies Record<Exclude<DocumentStatus, 'uploading'>, readonly DocumentStatus[]>;
+
+const StatusUpdateSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('failed'), failureReason: FailureReasonSchema }),
+  z.strictObject({ status: z.enum(['processing', 'ready']), failureReason: z.undefined() }),
+]);
+
+const ReplaceInputSchema = z.strictObject({ storageKey: z.string().min(1).max(1024) });
+
+const documentColumns = {
+  id: documents.id,
+  teacherId: documents.teacherId,
+  moduleId: documents.moduleId,
+  kind: documents.kind,
+  sourceTitle: documents.sourceTitle,
+  storageKey: documents.storageKey,
+  status: documents.status,
+  failureReason: documents.failureReason,
+  createdAt: documents.createdAt,
+  updatedAt: documents.updatedAt,
+};
 
 const ChunkDraftSchema = z.strictObject({
   ord: z.int().min(0).max(9999),
@@ -113,7 +153,160 @@ export function documentsRepo(db: Db) {
       );
       return { id: d.id };
     },
+
+    /** The scope's document `id`, or null (another teacher's and a missing one look the same). */
+    async get(scope: TeacherScope, id: string): Promise<DocumentRow | null> {
+      const method = 'documents.get';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      const [row] = await db
+        .select(documentColumns)
+        .from(documents)
+        .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)));
+      return row ? toDocumentRow(row, method) : null;
+    },
+
+    /**
+     * The scope's documents, newest first (at most `DOCUMENT_LIST_MAX`), optionally only those in
+     * `moduleId`. Another teacher's module id simply matches nothing.
+     */
+    async listForTeacher(
+      scope: TeacherScope,
+      options: DocumentListOptions = {},
+    ): Promise<DocumentRow[]> {
+      const method = 'documents.listForTeacher';
+      const { teacherId } = teacherScope(scope, method);
+      const o = parseArg(ListOptionsSchema, options, method);
+      const rows = await db
+        .select(documentColumns)
+        .from(documents)
+        .where(
+          and(
+            eq(documents.teacherId, teacherId),
+            o.moduleId === undefined ? undefined : eq(documents.moduleId, o.moduleId),
+          ),
+        )
+        .orderBy(desc(documents.createdAt), desc(documents.id))
+        .limit(DOCUMENT_LIST_MAX);
+      return rows.map((r) => toDocumentRow(r, method));
+    },
+
+    /**
+     * Moves the scope's document to `status` in one scoped UPDATE. Only lifecycle steps are
+     * allowed (`STATUS_FROM`): a row in any other state, another teacher's and a missing one are
+     * all `not_found`, so a stale worker can't mark a replaced document ready. `failed` needs a
+     * fixed failure code (never raw error text); any other status clears it. Not a material
+     * change: status is a display field, never a retrieval gate, so the revision is not bumped.
+     */
+    async updateStatus(
+      scope: TeacherScope,
+      id: string,
+      status: Exclude<DocumentStatus, 'uploading'>,
+      failureReason?: string,
+    ): Promise<void> {
+      const method = 'documents.updateStatus';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      const u = parseArg(StatusUpdateSchema, { status, failureReason }, method);
+      const [row] = await db
+        .update(documents)
+        .set({ status: u.status, failureReason: u.failureReason ?? null, updatedAt: sql`now()` })
+        .where(
+          and(
+            eq(documents.id, docId),
+            eq(documents.teacherId, teacherId),
+            inArray(documents.status, [...STATUS_FROM[u.status]]),
+          ),
+        )
+        .returning({ id: documents.id });
+      if (!row) throw new RepositoryError('not_found', method);
+    },
+
+    /**
+     * Deletes the scope's document and its chunks and bumps the material revision, in one
+     * transaction: the next retrieval search (and leakCheck) no longer sees it. The row is locked
+     * first, so a concurrent chunk insert waits and then finds no document. Returns the storage
+     * key for the caller to delete the stored file. Another teacher's or a missing one is
+     * `not_found` and nothing is written.
+     */
+    async delete(scope: TeacherScope, id: string): Promise<{ storageKey: string | null }> {
+      const method = 'documents.delete';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const storageKey = await lockDocument(tx, teacherId, docId, method);
+          await removeChunks(tx, teacherId, docId);
+          await tx
+            .delete(documents)
+            .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)));
+          await bumpRevision(tx, teacherId);
+          return { storageKey };
+        }),
+      );
+    },
+
+    /**
+     * Starts replacing the scope's document with a new file: in one transaction, deletes its
+     * chunks, points it at `storageKey`, resets it to `uploading` (clearing any failure) and bumps
+     * the revision. Returns the previous storage key for the caller to delete. Another teacher's
+     * or a missing one is `not_found` and nothing is written.
+     */
+    async startReplace(
+      scope: TeacherScope,
+      id: string,
+      input: { storageKey: string },
+    ): Promise<{ previousStorageKey: string | null }> {
+      const method = 'documents.startReplace';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema, id, method);
+      const r = parseArg(ReplaceInputSchema, input, method);
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const previousStorageKey = await lockDocument(tx, teacherId, docId, method);
+          await removeChunks(tx, teacherId, docId);
+          await tx
+            .update(documents)
+            .set({
+              storageKey: r.storageKey,
+              status: 'uploading',
+              failureReason: null,
+              updatedAt: sql`now()`,
+            })
+            .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)));
+          await bumpRevision(tx, teacherId);
+          return { previousStorageKey };
+        }),
+      );
+    },
   };
+}
+
+/**
+ * Locks the scope's document `FOR UPDATE` and returns its storage key, or throws `not_found`.
+ * The lock makes a concurrent `chunks.insertMany` (whose foreign key needs a share lock on this
+ * row) wait for the caller's transaction.
+ */
+async function lockDocument(
+  tx: Tx,
+  teacherId: string,
+  docId: string,
+  method: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ storageKey: documents.storageKey })
+    .from(documents)
+    .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)))
+    .for('update');
+  if (!row) throw new RepositoryError('not_found', method);
+  return row.storageKey;
+}
+
+/** Deletes every chunk of the scope's document `docId` (task 8.2, the only chunk delete). */
+async function removeChunks(tx: Tx, teacherId: string, docId: string): Promise<void> {
+  await tx
+    .delete(chunks)
+    .where(and(eq(chunks.documentId, docId), eq(chunks.teacherId, teacherId)));
 }
 
 export function chunksRepo(db: Db) {
