@@ -55,16 +55,36 @@ def _load_jsonl(path):
         return
 
 
+_BOARD_ID = re.compile(r"""^-\s+id:\s*['"]?([^'"\s#]+)""", re.M)
+
+
+def read_board_ids(repo_root):
+    """Task ids from `docs/board/tasks.yaml` (top-level `- id:` lines), or None when the board is
+    missing or unreadable -- callers then match `work-<id>` exactly, never with a letter."""
+    try:
+        text = (Path(repo_root) / "docs" / "board" / "tasks.yaml").read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+    return frozenset(_BOARD_ID.findall(text))
+
+
 def _prompt_names_task(task_id, text):
-    """`task <id>` (so also `Edmate task <id>`), the id not followed by a digit or '.digit', so
-    "task 0.16" never matches 0.1 and "task 10.1" never matches 0.1."""
-    pattern = r"\btask\s+" + re.escape(task_id) + r"(?!\d|\.\d)"
+    """`task <id>` (so also `Edmate task <id>`), the id not followed by a digit, a letter or
+    '.digit', so "task 0.16" never matches 0.1, "task 10.1" never matches 0.1 and "task 0.16a"
+    never matches 0.16."""
+    pattern = r"\btask\s+" + re.escape(task_id) + r"(?![0-9a-z]|\.\d)"
     return re.search(pattern, text or "", re.I) is not None
 
 
-def _work_branch(task_id, gb):
-    """Builder branches: `work-<id>` with an optional single trailing lowercase letter."""
-    return re.fullmatch(r"work-" + re.escape(task_id) + r"[a-z]?", gb or "") is not None
+def _work_branch(task_id, gb, ids):
+    """Builder branches: `work-<id>` always; `work-<id><letter>` (builder phase branches such as
+    work-7.7a) only when `<id><letter>` is not itself a board task. With no board ids (None or
+    empty) only the exact branch counts."""
+    if gb == "work-" + task_id:
+        return True
+    if not ids or re.fullmatch(r"work-" + re.escape(task_id) + r"[a-z]", gb or "") is None:
+        return False
+    return gb[len("work-"):] not in ids
 
 
 def _first_prompt(entries):
@@ -99,7 +119,7 @@ def _subagent_files(dir):
             yield path
 
 
-def _subagent_entries(dir, branch, task_id):
+def _subagent_entries(dir, branch, task_id, ids):
     """A whole subagent file counts for the task when its prompt names the task, or any entry's
     gitBranch is the task branch or the task's `work-` branch. Builders start on `main` before
     their checkout and reviewers run from the main checkout, so per-entry matching misses them."""
@@ -108,23 +128,24 @@ def _subagent_entries(dir, branch, task_id):
         branches = {e.get("gitBranch") for e in entries}
         hit = branch in branches
         if task_id and not hit:
-            hit = any(_work_branch(task_id, gb) for gb in branches if isinstance(gb, str))
+            hit = any(_work_branch(task_id, gb, ids) for gb in branches if isinstance(gb, str))
             hit = hit or _prompt_names_task(task_id, _first_prompt(entries))
         if hit:
             yield from entries
 
 
-def iter_entries(dir, branch, task_id=None):
+def iter_entries(dir, branch, task_id=None, board_ids=None):
     """Lead (top-level) files: every entry whose `gitBranch` equals `branch`; for entries with no
     `gitBranch` at all, fall back to entries whose `cwd` contains `task_id` as a whole part
     bounded by '/', '-', '_' or the string ends (older transcripts, or sessions that never set up
     a worktree). Subagent files (`<session>/subagents/*.jsonl`) count whole; see
-    `_subagent_entries`. Symlinks are skipped so nothing outside `dir` is read."""
+    `_subagent_entries` (`board_ids`: the board's task ids, see `_work_branch`). Symlinks are
+    skipped so nothing outside `dir` is read."""
     dir = Path(dir)
     if not dir.is_dir():
         return
     yield from _lead_entries(dir, branch, task_id)
-    yield from _subagent_entries(dir, branch, task_id)
+    yield from _subagent_entries(dir, branch, task_id, board_ids)
 
 
 def _lead_entries(dir, branch, task_id):
@@ -178,11 +199,14 @@ def _human_questions(root, task_id):
     return sum(1 for line in blockers.read_text().splitlines() if task_id in line)
 
 
-def collect(repo_root, task_id, branch):
+def collect(repo_root, task_id, branch, board_ids=None):
     """Board-safe metrics for `task_id` on `branch`: counts and short model-name strings only,
-    no paths, session ids or raw transcript text."""
+    no paths, session ids or raw transcript text. `board_ids` defaults to the ids read from the
+    repo's board (tests pass an explicit set)."""
     repo_root = Path(repo_root)
-    entries = list(iter_entries(transcripts_dir(repo_root), branch, task_id))
+    if board_ids is None:
+        board_ids = read_board_ids(repo_root)
+    entries = list(iter_entries(transcripts_dir(repo_root), branch, task_id, board_ids))
 
     tool_calls = 0
     tokens_in = tokens_out = cache_read_tokens = 0
