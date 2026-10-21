@@ -107,6 +107,12 @@ describe('deadLetterRefs', () => {
     expect(help).toEqual({ ...scope, sessionId: 'ses_1' });
   });
 
+  it('keeps an ingest job\'s teacherId and documentId (task 8.2, no scope wrapper)', () => {
+    expect(
+      deadLetterRefs({ teacherId: 'tch_a', documentId: 'doc_1', fileKind: 'pdf' }),
+    ).toEqual({ teacherId: 'tch_a', documentId: 'doc_1' });
+  });
+
   it('reads a malformed payload defensively', () => {
     expect(deadLetterRefs(null)).toEqual({});
     expect(deadLetterRefs('student text')).toEqual({});

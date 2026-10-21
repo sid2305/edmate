@@ -3,6 +3,7 @@
 // the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged) and
 // the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows).
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
+import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
 import { ALERT_QUEUE, DEAD_LETTER_QUEUE } from '@edmate/queue';
 import { Queue } from 'bullmq';
@@ -16,7 +17,10 @@ import {
 } from './alerts/index.js';
 import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
+import { createIngestGateway, createIngestWorker } from './ingest/index.js';
 import { describeError, jsonLog } from './log.js';
+import { storageConfigFromEnv } from './storage/roundtrip.js';
+import { createStorageClient } from './storage/client.js';
 import { createNoopWorker } from './worker.js';
 
 const log = jsonLog();
@@ -61,7 +65,35 @@ const safetyEvent = createSafetyEventWorker({
   log,
   autorun: true,
 });
-const workers = [noop, turn.meter, turn.commit, costAlarm, alert, safetyEvent];
+
+// The ingest worker (task 8.2 Phase 2) needs the OpenAI key; without one it is skipped, same as a
+// dev box with no provider keys configured for the turn-side adapters.
+let ingest: ReturnType<typeof createIngestWorker> | undefined;
+try {
+  const gateway = await createIngestGateway(process.env);
+  const storageConfig = storageConfigFromEnv(process.env);
+  const s3Client = new S3Client({
+    endpoint: storageConfig.endpoint,
+    region: storageConfig.region,
+    credentials: {
+      accessKeyId: storageConfig.accessKeyId,
+      secretAccessKey: storageConfig.secretAccessKey,
+    },
+    forcePathStyle: storageConfig.forcePathStyle,
+  });
+  const storage = createStorageClient(s3Client, storageConfig.bucket);
+  ingest = createIngestWorker({
+    connection,
+    deps: { repos: db.repos, storage, gateway },
+    deadLetter,
+    log,
+    autorun: true,
+  });
+} catch (error) {
+  log({ level: 'error', event: 'ingest.worker_disabled', error: describeError(error) });
+}
+
+const workers = [noop, turn.meter, turn.commit, costAlarm, alert, safetyEvent, ...(ingest ? [ingest] : [])];
 
 noop.on('error', (error) => {
   log({ level: 'error', event: 'worker.error', queue: noop.name, error: describeError(error) });

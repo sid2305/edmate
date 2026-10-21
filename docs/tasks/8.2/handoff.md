@@ -1,6 +1,6 @@
 # 8.2 handoff: Upload centre (thin slice)
 
-Status: PARTIAL (Phase 1 of 4 done)
+Status: PARTIAL (Phase 2 of 4 done)
 Branch: `m8/8.2-upload-centre` (built on `work-8.2a`)
 Worktree: `.claude/worktrees/agent-a898e7ac11d68d181`
 
@@ -58,23 +58,123 @@ documents.startReplace(scope, id, { storageKey }): Promise<{ previousStorageKey:
   can delete the old object.
 - `updateStatus` checks the previous state (see Decisions); the plan only named the signature.
 
+## Phase 2
+
+packages/queue + apps/worker: ingest queue, job schema, storage client, ingest processor and
+worker.
+
+### Acceptance evidence
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/queue... --filter=@edmate/worker...`
+  → `Tasks: 34 successful, 34 total`.
+- `@edmate/queue` tests: 13 new (`IngestJobSchema`, `jobId.ingest`, `createIngestQueue` /
+  `enqueueIngest`) alongside the existing suite, all passing; coverage 100/100/100/100 (its global
+  threshold).
+- `@edmate/worker` tests: 159 passed (19 files), including the new
+  `src/ingest/{gateway,processor}.test.ts`, `src/storage/client.test.ts` and a `deadLetter.test.ts`
+  addition; `src/ingest` coverage 79.74/70/66.66/78.37 (pulled down by the untested
+  `src/ingest/workers.ts` wiring, see Deviations) but the package's overall thresholds (80%,
+  excluding `src/index.ts`/`src/scripts/**`) still passed.
+- `apps/worker/src/ingest/processor.test.ts` (12 cases, fakes only — rule 4): indexes a markdown
+  document to `ready`; transcribes a video through a signed URL; a malformed payload, a missing
+  document, a document with no `storageKey`, a non-retryable `IngestError` (→ `failed` +
+  `PermanentJobError`) and a retryable one (→ rethrown, document stays `processing`); **the stale-
+  replace race from Phase 1's notes, both when the replace lands before the chunk write and when
+  it lands after indexing but before the `ready` write** — both drop the work with outcome
+  `stale_skipped` and write nothing; an unexpected storage failure retries; a `RepositoryError`
+  on the initial read is classified `failed` (retry) vs `scope` (permanent).
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+### Changes
+- `packages/queue/src/queues.ts`: `INGEST_QUEUE`, `JOB.ingestProcess`, `jobId.ingest`,
+  `IngestFileKindSchema`, `IngestJobSchema` (teacherId, documentId, fileKind, and `mimeType`
+  required exactly for `video`/`audio`).
+- `packages/queue/src/index.ts`: `createIngestQueue`, `enqueueIngest`.
+- `apps/worker/src/storage/client.ts`: `StorageClient` (`getObjectBytes`, `getSignedDownloadUrl`,
+  `deleteObject`) over `@aws-sdk/client-s3`; signing is local (no network call) via an injected
+  `getSignedUrl`.
+- `apps/worker/src/ingest/gateway.ts`: `createIngestGateway(env)` — loads the OpenAI key via
+  `@edmate/gateway`'s `loadProviderKeys`/`envKeySource`, builds the embedder
+  (`createEmbeddingAdapter`) and the Whisper transcriber (`createWhisperTranscriber`), allowlisting
+  only the configured S3 host (ADR-0005).
+- `apps/worker/src/ingest/processor.ts`: `ingestProcessor(deps, log)` — loads the document, builds
+  a `DocumentInput`/`VideoSource` from storage, runs `@edmate/ingest`'s `indexDocument`, and moves
+  the row to `ready` or `failed`. The stale-replace guard (see Deviations) lives in a `ChunkWriter`
+  wrapper this file builds, not in `packages/db` or `packages/ingest`.
+- `apps/worker/src/ingest/workers.ts`: `createIngestWorker` — a BullMQ `Worker` on `edmate-ingest`,
+  concurrency 1, wired through the existing `permanentToUnrecoverable` / `onJobFailed` dead-letter
+  path from task 3.8.
+- `apps/worker/src/ingest/index.ts`: barrel export.
+- `apps/worker/src/index.ts`: builds the gateway, an `S3Client` from `storageConfigFromEnv`, and
+  starts `createIngestWorker`; if the OpenAI key isn't configured (a dev box with no provider keys)
+  it logs `ingest.worker_disabled` and skips the worker rather than crashing the process.
+- `apps/worker/src/commit/deadLetter.ts`: `deadLetterRefs` now also keeps `documentId` (alongside
+  the existing `teacherId`) so a dead-lettered ingest job keeps both.
+- `apps/worker/package.json`: added `@aws-sdk/s3-request-presigner`, `@edmate/gateway`,
+  `@edmate/ingest`.
+
+### API for later phases
+```ts
+enqueueIngest(queue, { teacherId, documentId, fileKind, mimeType? }): Promise<void>
+// fileKind: 'pdf' | 'docx' | 'pptx' | 'markdown' | 'video' | 'audio'
+// mimeType required exactly when fileKind is 'video' or 'audio'
+```
+Phase 3's upload-complete route should call `documents.updateStatus(scope, id, 'processing')`
+*then* `enqueueIngest`, in that order — the worker's own `updateStatus('ready')` refuses
+`uploading → ready`, so the row must already be `processing` before the job can succeed.
+
+### Deviations
+- The plan's `IngestJobSchema` didn't name a file-kind field, but `documents` has no file-format
+  column (its `kind` is the chunk-retrieval category, not pdf/docx/etc.), so the job itself carries
+  `fileKind` (and `mimeType` for video/audio) — there's nowhere else for the worker to learn it.
+- **The Phase 1 stale-replace race is fixed, but not the way its note suggested.** The job does
+  *not* carry the `storageKey` it was enqueued for; instead the processor re-reads the row once at
+  the start and compares that `storageKey` against a fresh read right before `chunks.insertMany`
+  writes, inside a `ChunkWriter` wrapper. That wrapper can't signal staleness by throwing, though:
+  `@edmate/ingest`'s `indexDocument` catches every error its `ChunkWriter` throws and replaces it
+  with one fixed, non-retryable `IngestError('provider_error', ...)` (deliberately, so a cause that
+  might carry teacher material never reaches a log line) — out of this phase's scope to change. So
+  the wrapper instead closes over a mutable `stale` flag: on a stale read it writes nothing and
+  returns empty placeholder ids (and `setEmbeddings` becomes a no-op), and the processor checks
+  that flag itself, both in `indexDocument`'s catch block and right after a "successful" call,
+  before ever writing a status. `updateStatus('ready')`'s own `not_found` (the row's `storageKey`
+  moved and its status is back at `uploading`) is still the backstop for a replace landing *after*
+  indexing finishes — that path was already correct in Phase 1's design, just not yet exercised by
+  a test; it has one now.
+- `apps/worker/test/ingest.int.test.ts` (real Postgres/Redis, a fixture through the whole
+  queue → worker → `ready` path plus a scripted-gateway failure path) named in the plan's Phase 2
+  "Tests first" section was **not written in this phase** — the unit tests above exercise the same
+  logic (processor + storage + gateway, all faked per rule 4) and the full
+  `typecheck lint test --filter=@edmate/queue... --filter=@edmate/worker...` run is green, but
+  nothing yet runs the real BullMQ `Worker` against a real queue end to end. Left for Phase 3 or a
+  follow-up, whichever builder has budget: wire `createIngestWorker` + `enqueueIngest` against the
+  `TEST_DATABASE_URL`/`TEST_REDIS_URL` compose stack and assert a document reaches `ready`.
+- `src/ingest/workers.ts` (the BullMQ `Worker` construction itself) has no direct unit test — it's
+  a thin wire-up of already-tested pieces (`ingestProcessor`, `permanentToUnrecoverable`,
+  `onJobFailed`) and mirrors the untested-by-design pattern of the existing turn-queue workers in
+  `src/commit/workers.ts`. The integration test above would cover it if added.
+
 ## Left to do
-- **Phase 2** (packages/queue + apps/worker): ingest queue, job schema, storage client, ingest
-  processor and worker. Notes for that builder:
-  - `updateStatus` refuses `uploading → ready`; the worker should go through `processing`
-    (Phase 3's `complete` route sets it before enqueueing). `processing → processing` is allowed so
-    a BullMQ retry can re-run.
-  - A stale worker that finishes after `startReplace` gets `not_found` from `updateStatus('ready')`
-    (row is back at `uploading`), but its `chunks.insertMany` would still land under the same
-    document id. The processor should re-check the row's `storageKey` before writing chunks, or the
-    job should carry the key it was enqueued for. Not solved in Phase 1.
-  - Rows from `documents.create` now start `uploading`; the seed and scripts that create documents
-    and ingest them straight away (if any) leave them `uploading` unless they call
-    `updateStatus('processing')` then `('ready')`. Display only, never a retrieval gate.
-- **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line.
+- **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line, and the
+  `updateStatus('processing')` → `enqueueIngest` sequencing on the complete route (see API above).
+  Consider adding the `ingest.int.test.ts` deferred from Phase 2 here if there's budget.
 - **Phase 4** (apps/web): upload-centre page with polling, nav link, strings, manual dev-stack run.
 
 ## Decisions
+
+### 20 Oct 2026 · 8.2 stale-replace guard lives in the worker's ChunkWriter, signalled by a flag · decided by tdd-guide
+Decided: the ingest processor re-reads the document's `storageKey` right before `chunks.insertMany` writes (inside a `ChunkWriter` wrapper it builds), comparing it to the key read at the start of the job. On a mismatch it writes nothing and signals staleness through a mutable flag the wrapper closes over, not a thrown error — `@edmate/ingest`'s `indexDocument` replaces every error its `ChunkWriter` throws with one fixed, non-retryable `IngestError` (by design, so a cause can't carry teacher material into a log), which would erase a dedicated error's identity. The job payload does not carry the `storageKey` it was enqueued for.
+Why: Phase 1's note suggested the job carry its `storageKey`, but the processor's own initial `documents.get` already establishes it, and a thrown error can't survive the trip through `indexDocument` unchanged. A closure flag the processor checks itself (in `indexDocument`'s catch block, and again after a "successful" call) works without touching `packages/ingest`, which is out of this phase's scope.
+risk: medium
+
+### 20 Oct 2026 · 8.2 ingest job payload carries fileKind and mimeType · decided by tdd-guide
+Decided: `IngestJobSchema` (packages/queue) carries `teacherId`, `documentId`, `fileKind` (pdf/docx/pptx/markdown/video/audio) and `mimeType` (required exactly for video/audio).
+Why: `documents.kind` is the chunk-retrieval category, not the uploaded file's format — there is no other place for the worker to learn how to parse the stored object. Not named explicitly in the plan's schema sketch.
+risk: low
+
+### 20 Oct 2026 · 8.2 ingest.int.test.ts deferred to Phase 3 · decided by tdd-guide
+Decided: the plan's Phase 2 "Tests first" named a real-Postgres/Redis integration test running the whole queue → worker → `ready` path; it was not written in this phase. Unit tests (fakes per rule 4) cover the processor, storage client and gateway, and the full typecheck/lint/test run for both packages is green.
+Why: token-budget discipline (stay-within-subscription); the remaining work was diagnosing and fixing the stale-replace race itself, which the unit tests exercise directly. Left as an explicit line in Left to do for Phase 3 or a follow-up task.
+risk: low
 
 ### 20 Oct 2026 · 8.2 document delete and replace in packages/db/src/repositories · decided by team lead · risk: high
 Decided: `documentsRepo` gains `get`, `listForTeacher`, `updateStatus`, `delete` and `startReplace`. `delete` and `startReplace` are the first deletes in `repositories/`: in one transaction they lock the scope's document `FOR UPDATE`, delete its chunks, delete (or reset) the row and bump `teacher_material_revisions`. README rules 7 and 8 and `test/scope.test.ts` now allow Drizzle `.delete(` in `chunks.ts` only, on `chunks` and `documents` only, each with `eq(<table>.teacherId, teacherId)` in the same statement; `delete from` text is still banned everywhere.
