@@ -207,7 +207,7 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
     // Review fix round (3.17): applyEvidence used to read the profile, fold BKT in app code and
     // merge the result back — two concurrent calls for the same pair and topic could both read the
     // same prior mastery and the second would clobber the first's update (a lost update). It now
-    // locks the row and folds inside one transaction (learnerProfiles.applyEvidenceMastery), so
+    // locks the row and folds inside one transaction (evidenceEvents.appendAndFold), so
     // running the same 10 events concurrently gives exactly the result of applying them one by one.
     'applyEvidence under concurrency: 10 identical events on one topic give the deterministic sequential result',
     async () => {
@@ -240,6 +240,32 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
   );
 
   it(
+    'evidenceEvents.appendAndFold with no events is a no-op that writes nothing',
+    async () => {
+      const before = await repos.learnerProfiles.get(own);
+      expect(await repos.evidenceEvents.appendAndFold(own, [])).toEqual([]);
+      expect(await repos.learnerProfiles.get(own)).toEqual(before);
+    },
+    15_000,
+  );
+
+  it(
+    'evidenceEvents.appendAndFold replaying the same id a second time inserts nothing and folds nothing',
+    async () => {
+      const e = event({ topicId, ts: '2026-10-20T15:00:00.000Z' });
+      const withId = { ...e, id: 'ev_fixed_appendandfold_01' };
+      const first = await repos.evidenceEvents.appendAndFold(own, [withId]);
+      expect(first).toHaveLength(1);
+      const afterFirst = await repos.learnerProfiles.get(own);
+
+      const second = await repos.evidenceEvents.appendAndFold(own, [withId]);
+      expect(second).toEqual([]);
+      expect(await repos.learnerProfiles.get(own)).toEqual(afterFirst);
+    },
+    15_000,
+  );
+
+  it(
     'learnerProfiles.applyEvidenceMastery with no events is a no-op that writes nothing',
     async () => {
       const before = await repos.learnerProfiles.get(own);
@@ -255,6 +281,161 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
       const before = await repos.learnerProfiles.get(own);
       await repos.learnerProfiles.applyMastery(own, {});
       expect(await repos.learnerProfiles.get(own)).toEqual(before);
+    },
+    15_000,
+  );
+
+  it(
+    // Task 6.2: rebuildMastery discards stored mastery and replays the complete evidence_events
+    // history, ordered ts ASC (not insertion order), reproducing the hand-computed plan values to
+    // 3 decimals, and matches the pure foldMastery({}, events) fold for the same event history.
+    'rebuildMastery replays the complete evidence_events history in ts order (not insertion order) and matches the pure fold',
+    async () => {
+      const scope = { studentId: 'stu_rebuild', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${scope.studentId}, 'Rebuild', 'en', 'test', 'student')`,
+      );
+      // A second topic for own.teacherId (the seed gives each teacher only one topic): the plan's
+      // "Topic B" needs its own id under the *same* teacher as "Topic A" (topicId).
+      const topicB = 'top_rebuild_b';
+      await handle.db.execute(
+        sql`insert into topics (id, teacher_id, module_id, title, "order")
+            values (${topicB}, ${own.teacherId}, ${ids.module('A', 1)}, 'rebuild topic B', 1)`,
+      );
+      // Stale/corrupted mastery, and a target row to prove the rebuild discards (not merges) it.
+      await repos.learnerProfiles.save(scope, {
+        ...scope,
+        lang: 'en',
+        mastery: { [topicB]: { p: 0.999, n: 999, updatedAt: '2000-01-01T00:00:00.000Z' } },
+        mistakes: [],
+        lastSummary: 'stale summary, must survive untouched',
+      });
+
+      // Topic A: 3 events (correct, correct, incorrect). Topic B: 1 event (incorrect).
+      // Inserted out of chronological order to prove the rebuild sorts by ts, not insertion order.
+      const rawEvents: { topicId: string; correct: boolean; ts: string }[] = [
+        { topicId: topicId, correct: false, ts: '2026-10-19T10:10:00.000Z' },
+        { topicId: topicB, correct: false, ts: '2026-10-19T09:00:00.000Z' },
+        { topicId: topicId, correct: true, ts: '2026-10-19T10:00:00.000Z' },
+        { topicId: topicId, correct: true, ts: '2026-10-19T10:05:00.000Z' },
+      ];
+      await repos.evidenceEvents.append(
+        scope,
+        rawEvents.map((e) => ({
+          ...scope,
+          topicId: e.topicId,
+          correct: e.correct,
+          source: 'practice',
+          weight: 1,
+          ts: e.ts,
+        })),
+      );
+
+      const rebuilt = await repos.learnerProfiles.rebuildMastery(scope);
+
+      const expected = foldMastery(
+        {},
+        [...rawEvents].sort((a, b) => a.ts.localeCompare(b.ts)),
+      );
+      expect(rebuilt.mastery[topicId]!.n).toBe(3);
+      expect(rebuilt.mastery[topicId]!.p).toBeCloseTo(0.5781021897810219, 3);
+      expect(rebuilt.mastery[topicId]!.p).toBeCloseTo(expected[topicId]!.p, 10);
+      expect(rebuilt.mastery[topicB]!.n).toBe(1);
+      expect(rebuilt.mastery[topicB]!.p).toBeCloseTo(0.17575757575757575, 3);
+      expect(rebuilt.mastery[topicB]!.p).toBeCloseTo(expected[topicB]!.p, 10);
+
+      // Stale value discarded, not merged: n is 1 (not 999), and mistakes/lastSummary untouched.
+      expect(rebuilt.mastery[topicB]!.n).toBe(1);
+      expect(rebuilt.mistakes).toEqual([]);
+      expect(rebuilt.lastSummary).toBe('stale summary, must survive untouched');
+
+      // Stored row matches the returned value.
+      const stored = await repos.learnerProfiles.get(scope);
+      expect(stored!.mastery).toEqual(rebuilt.mastery);
+
+      // Fix round 1 (6.2, finding 2): the rebuild-vs-incremental agreement the plan promised was
+      // never actually tested (the test above only compares rebuildMastery against the same
+      // foldMastery helper it calls internally). On a second scope, replay the same ordered events
+      // one by one through the incremental path (profileStoreFor.applyEvidence), and assert its
+      // stored mastery equals this scope's rebuildMastery result.
+      const agree = { studentId: 'stu_rebuild_agree', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${agree.studentId}, 'Agree', 'en', 'test', 'student')`,
+      );
+      const agreeStore = profileStoreFor(repos, agree);
+      const ordered = [...rawEvents].sort((a, b) => a.ts.localeCompare(b.ts));
+      for (const e of ordered) {
+        await agreeStore.applyEvidence([
+          { ...agree, topicId: e.topicId, correct: e.correct, source: 'practice', weight: 1, ts: e.ts },
+        ]);
+      }
+      const agreed = await repos.learnerProfiles.get(agree);
+      expect(agreed!.mastery[topicId]!.p).toBeCloseTo(rebuilt.mastery[topicId]!.p, 3);
+      expect(agreed!.mastery[topicB]!.p).toBeCloseTo(rebuilt.mastery[topicB]!.p, 3);
+      expect(agreed!.mastery[topicId]!.n).toBe(rebuilt.mastery[topicId]!.n);
+      expect(agreed!.mastery[topicB]!.n).toBe(rebuilt.mastery[topicB]!.n);
+    },
+    15_000,
+  );
+
+  it(
+    // Fix round 1 (6.2, finding 1): applyEvidence's append and fold used to run as two separate
+    // transactions; a rebuildMastery racing in the gap between them could read the just-committed
+    // event and fold it into a full replay, while the incremental fold then folded the same event
+    // again onto the old stored value — a double count. Now both run inside one transaction
+    // (evidenceEventsRepo.appendAndFold), with the learner_profiles row locked before the event is
+    // inserted, so a concurrent rebuildMastery (which locks the same row first) fully serialises
+    // against it. Racing the two, many times, for the same scope must never double-count: the
+    // stored mastery must always equal a fresh rebuildMastery over the complete history.
+    'applyEvidence racing a concurrent rebuildMastery never double-counts an event',
+    async () => {
+      const scope = { studentId: 'stu_race_evidence', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${scope.studentId}, 'Race', 'en', 'test', 'student')`,
+      );
+      const store = profileStoreFor(repos, scope);
+      const correctness: boolean[] = [true, true, false, true, false];
+      for (let i = 0; i < correctness.length; i++) {
+        const e = event({
+          ...scope,
+          correct: correctness[i]!,
+          ts: new Date(Date.UTC(2026, 9, 20, 10, 0, i)).toISOString(),
+        });
+        await Promise.all([
+          store.applyEvidence([e]),
+          repos.learnerProfiles.rebuildMastery(scope),
+          repos.learnerProfiles.rebuildMastery(scope),
+        ]);
+      }
+      const fresh = await repos.learnerProfiles.rebuildMastery(scope);
+      const stored = await repos.learnerProfiles.get(scope);
+      expect(stored!.mastery[topicId]!.n).toBe(correctness.length);
+      expect(fresh.mastery[topicId]!.n).toBe(correctness.length);
+      expect(stored!.mastery[topicId]!.p).toBeCloseTo(fresh.mastery[topicId]!.p, 10);
+      // Hand-computed reference (plan.md's Topic A table, first 3 events: correct, correct,
+      // incorrect, from pInit).
+      const first3 = foldMastery({}, correctness.slice(0, 3).map((correct, i) => ({
+        topicId,
+        correct,
+        ts: new Date(Date.UTC(2026, 9, 20, 10, 0, i)).toISOString(),
+      })));
+      expect(first3[topicId]!.p).toBeCloseTo(0.5781021897810219, 3);
+    },
+    30_000,
+  );
+
+  it(
+    'rebuildMastery rejects a malformed scope before any SQL',
+    async () => {
+      expect(await kind(repos.learnerProfiles.rebuildMastery({ studentId: 'a b', teacherId: own.teacherId }))).toBe(
+        'scope',
+      );
+      expect(await kind(repos.learnerProfiles.rebuildMastery({ studentId: own.studentId, teacherId: '' }))).toBe(
+        'scope',
+      );
     },
     15_000,
   );

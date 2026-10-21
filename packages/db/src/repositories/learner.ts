@@ -4,7 +4,7 @@ import {
   type EvidenceEvent,
   type LearnerProfile,
 } from '@edmate/contracts';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { foldMastery } from '../mastery.js';
@@ -181,6 +181,93 @@ export function learnerProfilesRepo(db: Db) {
         }),
       );
     },
+
+    /**
+     * Task 6.2: discards whatever `mastery` is currently stored and recomputes it from scratch by
+     * replaying the scope's *complete* `evidence_events` history, ordered `ts ASC, id ASC` (the
+     * id tie-break makes same-timestamp events deterministic, same convention as 6.1's
+     * `topicOrder`). Unlike `applyEvidenceMastery` (which folds only newly-appended events onto
+     * whatever is already stored), this folds every event the scope has ever produced onto an
+     * *empty* mastery map — so it also recovers from a corrupted/stale stored value, and a rebuild
+     * can never be confused with an incremental apply. Same row-lock pattern as
+     * `applyEvidenceMastery`: a concurrent `applyEvidence` and a rebuild for the same scope can
+     * never interleave a partial read. Always uses `BKT_DEFAULTS` (no `BktParams` override — see
+     * docs/tasks/6.2/plan.md Q3). Returns the rebuilt profile, same shape `get()` returns.
+     */
+    async rebuildMastery(scope: StudentScope): Promise<LearnerProfile> {
+      const method = 'learnerProfiles.rebuildMastery';
+      const sc = studentScope(scope, method);
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({
+              studentId: learnerProfiles.studentId,
+              teacherId: learnerProfiles.teacherId,
+              lang: learnerProfiles.lang,
+              mastery: learnerProfiles.mastery,
+              mistakes: learnerProfiles.mistakes,
+              lastSummary: learnerProfiles.lastSummary,
+            })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+
+          const rows = await tx
+            .select({
+              topicId: evidenceEvents.topicId,
+              correct: evidenceEvents.correct,
+              ts: evidenceEvents.ts,
+            })
+            .from(evidenceEvents)
+            .where(
+              and(
+                eq(evidenceEvents.teacherId, sc.teacherId),
+                eq(evidenceEvents.studentId, sc.studentId),
+              ),
+            )
+            .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id));
+
+          const next = foldMastery(
+            {},
+            rows.map((r) => ({ topicId: r.topicId, correct: r.correct, ts: r.ts.toISOString() })),
+          );
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mastery: next, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
+
+          return toLearnerProfile({ ...locked, mastery: next }, method);
+        }),
+      );
+    },
   };
 }
 
@@ -261,6 +348,118 @@ export function evidenceEventsRepo(db: Db) {
               ts: evidenceEvents.ts,
             });
           return rows.map((r) => toEvidenceEvent(r, method));
+        }),
+      );
+    },
+
+    /**
+     * Fix round 1 (6.2): `append` and `applyEvidenceMastery`, combined into **one** transaction —
+     * the gap between those two calls (each its own transaction, in the old shape of
+     * `profileStoreFor.applyEvidence`) let a concurrent `rebuildMastery` read the newly-committed
+     * event (from `append`) before `applyEvidenceMastery` had folded it, so the rebuild's full
+     * replay already counted it and the incremental fold then counted it again — a double-count,
+     * not prevented by the row lock the two calls didn't share.
+     *
+     * Lock order matches every existing method in this file (topics, `key share`, before
+     * `learner_profiles`, `for update`) so this can never deadlock (40P01) against
+     * `applyMastery`/`applyEvidenceMastery`/`rebuildMastery`: this locks the `learner_profiles` row
+     * *before* inserting the events, so a concurrent `rebuildMastery` — which also locks that row
+     * first, then reads `evidence_events` — fully serialises against this transaction: either it
+     * runs entirely before this one's event insert is visible (rebuild sees the old history only),
+     * or entirely after this one commits (rebuild sees the new events *and* the fold already
+     * applied them — rebuild recomputes from scratch, so it is correct either way as long as it
+     * can never observe the event inserted but not yet folded).
+     *
+     * Returns only the events actually inserted (idempotency, as `append` alone did), and only
+     * those are folded — a replayed job changes mastery once, not twice.
+     */
+    async appendAndFold(scope: StudentScope, events: EvidenceEventEntry[]): Promise<EvidenceEvent[]> {
+      const method = 'evidenceEvents.appendAndFold';
+      const sc = studentScope(scope, method);
+      const list = parseArg(EventsWithId, events, method);
+      if (!list.every((e) => sameScope(e, sc))) throw new RepositoryError('scope', method);
+      if (list.length === 0) return [];
+      const topicIds = [...new Set(list.map((e) => e.topicId))];
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const owned = await tx
+            .select({ id: topics.id })
+            .from(topics)
+            .where(and(eq(topics.teacherId, sc.teacherId), inArray(topics.id, topicIds)))
+            .for('key share');
+          if (owned.length !== topicIds.length) throw new RepositoryError('scope', method);
+
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // Locked *before* the events are inserted — see the doc comment above.
+          const [locked] = await tx
+            .select({ mastery: learnerProfiles.mastery })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+
+          const rows = await tx
+            .insert(evidenceEvents)
+            .values(
+              list.map((e) => ({
+                ...(e.id === undefined ? {} : { id: e.id }),
+                studentId: sc.studentId,
+                teacherId: sc.teacherId,
+                topicId: e.topicId,
+                correct: e.correct,
+                source: e.source,
+                weight: e.weight,
+                ts: new Date(e.ts),
+              })),
+            )
+            .onConflictDoNothing({ target: evidenceEvents.id })
+            .returning({
+              studentId: evidenceEvents.studentId,
+              teacherId: evidenceEvents.teacherId,
+              topicId: evidenceEvents.topicId,
+              correct: evidenceEvents.correct,
+              source: evidenceEvents.source,
+              weight: evidenceEvents.weight,
+              ts: evidenceEvents.ts,
+            });
+          const applied = rows.map((r) => toEvidenceEvent(r, method));
+
+          if (applied.length > 0) {
+            const next = foldMastery(
+              locked.mastery,
+              applied.map((e) => ({ topicId: e.topicId, correct: e.correct, ts: e.ts })),
+            );
+            await tx
+              .update(learnerProfiles)
+              .set({ mastery: next, updatedAt: sql`now()` })
+              .where(
+                and(
+                  eq(learnerProfiles.teacherId, sc.teacherId),
+                  eq(learnerProfiles.studentId, sc.studentId),
+                ),
+              );
+          }
+
+          return applied;
         }),
       );
     },

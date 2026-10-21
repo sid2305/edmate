@@ -80,14 +80,15 @@ function defaultProfile(scope: StudentScope): LearnerProfile {
  *
  * `applyEvidence` never calls `learnerProfiles.save()` (so `last_summary` is never touched here;
  * see `learnerProfilesRepo.applyMastery`'s doc comment): it appends the evidence (idempotent by
- * content-hash id — `evidenceEventsRepo.append`) and folds BKT only over the events that append
- * actually wrote (a replay then changes mastery zero times, not once more).
+ * content-hash id) and folds BKT only over the events actually written (a replay then changes
+ * mastery zero times, not once more).
  *
- * The fold itself runs inside `learnerProfiles.applyEvidenceMastery`, under a row lock (review fix
- * round, 3.17): two concurrent calls here for the same pair each read the same `applied` list (if
- * their events truly are concurrent and distinct), but the lock means only one of them folds BKT
- * from a given prior mastery value at a time, so neither clobbers the other's update (no lost
- * update — see that method's doc comment).
+ * Fix round 1 (6.2): the append and the fold run inside **one** transaction
+ * (`evidenceEventsRepo.appendAndFold`), not two — the previous shape (`evidenceEvents.append` then
+ * a separate `learnerProfiles.applyEvidenceMastery` call, each its own transaction) left a gap
+ * where a concurrent `rebuildMastery` could read the newly-committed event before the fold had run,
+ * double-counting it between the rebuild's full replay and the incremental fold. See
+ * `appendAndFold`'s doc comment (`learner.ts`) for the lock order that makes this safe.
  */
 export function profileStoreFor(repos: Repositories, scope: StudentScope): ProfileStore {
   const bound = studentScope(scope, 'profileStoreFor');
@@ -110,10 +111,7 @@ export function profileStoreFor(repos: Repositories, scope: StudentScope): Profi
         throw new RepositoryError('scope', method);
       }
       if (events.length > 0) {
-        const applied = await repos.evidenceEvents.append(bound, events);
-        if (applied.length > 0) {
-          await repos.learnerProfiles.applyEvidenceMastery(bound, applied);
-        }
+        await repos.evidenceEvents.appendAndFold(bound, events);
       }
       const profile = await repos.learnerProfiles.get(bound);
       return profile ?? defaultProfile(bound);
