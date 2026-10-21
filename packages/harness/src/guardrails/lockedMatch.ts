@@ -46,11 +46,12 @@
 // attribute names and attribute values of several tags (each reading sees only one of the two);
 // and (4.6c, these matter only if raw model HTML is ever rendered to a student, which task 9.4
 // forbids) `<a<b>` (a `<` right before a real tag is read as plain text, not as a tag of its
-// own); a `<` inside a quoted attribute value (it ends the tag-parse attempt there, same as a bare
-// `<` would, so anything after it in that attribute is read as new markup, not as more of the
-// value); a comment closed by `--!>` instead of `-->` (not recognised, so the comment is never
-// found closed and is read to the end of the text, or as `open`); and a tag name in a non-ASCII
-// script (only an ASCII letter starts a tag name, so e.g. `<Ω>` is never a tag in any reading).
+// own, so `lo<a<b>op` reads as `lo`, `aop`); a `<` inside a quoted attribute value (it ends the
+// tag-parse attempt there, so the whole tag, `<x a="b<c">`, stays as text in every reading); a
+// comment closed by `--!>` instead of `-->` (not recognised, so the comment is never found
+// closed: it stays as text, and `unfinishedMarkupStart` reports it as open, so the stream holds
+// back from its `<`); and a tag name in a non-ASCII script (only an ASCII letter starts a tag
+// name, so e.g. `<Ω>` is never a tag in any reading). Each is pinned by a unit test.
 //
 // 4.6c: markdown emphasis inside a word is now padded, but only in the `rendered` reading (the
 // `text` and `values` readings still read `*`, `_`, `~` and `` ` `` as plain punctuation, so
