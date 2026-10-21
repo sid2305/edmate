@@ -11,7 +11,7 @@ import { maxOutputTokensFor, type Move } from './budgets.js';
 import { coverageGate, DEFAULT_COVERAGE_THRESHOLD } from './coverage.js';
 import { copyHelp, type HelpState, holdsPracticeKey, INITIAL_HELP_STATE } from './helpState.js';
 import { effectiveCeiling, type Rung } from './ladder.js';
-import { selectSkill, type SkillStep, skillStep } from './skills.js';
+import { type RolePlayControl, selectSkill, type SkillStep, skillStep } from './skills.js';
 
 export interface PolicyTool {
   name: ToolName;
@@ -23,6 +23,8 @@ export interface PolicyInput {
   ctx: TurnContext;
   /** Never the text: route already classified it. */
   turn: Pick<TurnInput, 'kind' | 'skill'>;
+  /** The turn's role-play control (3.11e): decide reads it from the text with `rolePlayControl`. */
+  control?: RolePlayControl;
   help: Readonly<HelpState>;
   /** The tool registry's list (5.4/5.5). Default none. */
   tools?: readonly PolicyTool[];
@@ -89,7 +91,16 @@ export function decidePolicy(i: PolicyInput, opts: PolicyOptions = DEFAULT_OPTIO
   }
   const gate = coverageGate(ctx, opts.coverageThreshold);
   if (gate !== null) return closed(gate, gate === 'locked' ? 'locked_module' : 'not_covered');
-  return finish(i, skillStep({ ctx, turn, help, skill }));
+  return finish(
+    i,
+    skillStep({
+      ctx,
+      turn,
+      help,
+      skill,
+      ...(i.control === undefined ? {} : { control: i.control }),
+    }),
+  );
 }
 
 /** The `ask` fallback (`redirect` for distress): rung clamped to the package ceiling, no tools, state unchanged. */

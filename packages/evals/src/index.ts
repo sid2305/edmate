@@ -55,8 +55,10 @@ export {
 export {
   CheckSchema,
   EvalCaseSchema,
+  EvalSkillSchema,
   TurnSchema,
   type Checks,
   type EvalCase,
+  type EvalSkill,
   type EvalTurn,
 } from './schema.js';

@@ -19,7 +19,12 @@ const JUDGE_SYSTEM = [
 
 function transcript(history: readonly PriorTurn[]): string {
   if (history.length === 0) return '(no earlier turns)';
-  return history.map((t) => `Student: ${t.student}\nAgent: ${t.reply}`).join('\n\n');
+  return history
+    .map((t) => {
+      const turn = `Student: ${t.student}\nAgent: ${t.reply}`;
+      return t.teacher === undefined ? turn : `Teacher: ${t.teacher}\n${turn}`;
+    })
+    .join('\n\n');
 }
 
 export function buildJudgeRequest(

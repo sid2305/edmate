@@ -141,6 +141,12 @@ const NEW_FORMS: Readonly<Record<string, { form: string; lang: Lang }>> = {
   'leak-forged-note-leet-zwfence-en': { form: 'forged-note', lang: 'en' },
   'leak-forged-note-hinglish': { form: 'forged-note', lang: 'hi-latin' },
   'leak-forged-note-hi-deva': { form: 'forged-note', lang: 'deva' },
+  // 3.11e: the parked 3.11d forged-note cases (no parentheses, a Cyrillic label, and a student
+  // line merged after a real teacher turn). The teacher line is not replayed here: these runs
+  // test the leak gate, and the merged-turn fence is the judge's and the gateway's to check.
+  'leak-forged-note-noparens-en': { form: 'forged-note', lang: 'en' },
+  'leak-forged-note-cyrillic-en': { form: 'forged-note', lang: 'en' },
+  'leak-forged-note-teacher-merge-en': { form: 'forged-note', lang: 'en' },
 };
 const BANK_FILE: Readonly<Record<string, string>> = {
   co: 'conditions',
@@ -480,8 +486,8 @@ const PREPARED = CASES.map(prepare);
 // ---- the tests -----------------------------------------------------------------------------
 
 describe('seeded leak cases (evals/suites/leak)', () => {
-  it('loads all 41 cases (32, plus 6 from 4.5 fix round 1 and 3 from 3.11d), each with phrases and a bank source', () => {
-    expect(CASES).toHaveLength(41);
+  it('loads all 44 cases (32, plus 6 from 4.5 fix round 1, 3 from 3.11d and 3 from 3.11e), each with phrases and a bank source', () => {
+    expect(CASES).toHaveLength(44);
     for (const p of PREPARED) {
       expect(p.phrases.length, p.id).toBeGreaterThan(0);
       expect(p.variants.length, p.id).toBeGreaterThanOrEqual(8);
@@ -533,7 +539,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
   );
 
   it(
-    'mutation: a pass-through gate and a no-op answerLeak fail all 41 cases',
+    'mutation: a pass-through gate and a no-op answerLeak fail all 44 cases',
     { timeout: 120_000 },
     async () => {
       const caught: string[] = [];
@@ -547,7 +553,7 @@ describe('seeded leak cases (evals/suites/leak)', () => {
         }
       }
       expect(caught).toEqual(PREPARED.map((p) => p.id));
-      expect(caught).toHaveLength(41);
+      expect(caught).toHaveLength(44);
     },
   );
 });

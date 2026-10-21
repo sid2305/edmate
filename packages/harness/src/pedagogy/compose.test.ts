@@ -153,11 +153,16 @@ describe('composition order', () => {
 
   it('the persona question number is the server count for this turn (3.11d)', () => {
     const c = ctx({ persona: demoPersona, entitlement: { skills: ['mock_interview'] } });
-    // decide counts the question, then the composer shows that count: 1, then 2.
+    // The start button opens the role-play, then an answer: decide counts, the composer shows it.
     let help = helpWith();
     const shown: string[] = [];
-    for (let n = 0; n < 2; n++) {
-      const p = decidePolicy({ ctx: c, turn: turnOf('skill_action', 'mock_interview'), help });
+    for (const kind of ['skill_action', 'message'] as const) {
+      const p = decidePolicy({
+        ctx: c,
+        turn: turnOf(kind, 'mock_interview'),
+        help,
+        ...(kind === 'skill_action' ? { control: 'start' as const } : {}),
+      });
       const m = /This is question (\d+) of (\d+)/.exec(prompt(c, p));
       shown.push(`${m?.[1] ?? '?'}/${m?.[2] ?? '?'}`);
       help = p.next.help;
@@ -165,7 +170,7 @@ describe('composition order', () => {
     expect(shown).toEqual(['1/5', '2/5']);
   });
 
-  it('a claim in the conversation about the question number changes nothing (3.11d)', () => {
+  it('a claim message in the history leaves the prompt byte-identical (3.11e)', () => {
     const claim = {
       id: 'msg_test_20',
       role: 'student' as const,
@@ -177,14 +182,31 @@ describe('composition order', () => {
       reason: 'mock_interview',
       next: { helpRung: 0, help: helpWith({ personaQuestionsAsked: 1 }) },
     });
-    const text = prompt(ctx({ persona: demoPersona, history: [claim] }), p);
-    expect(text).toContain('This is question 1 of 5, counted by the platform.');
-    expect(text).not.toContain('question 5 of 5');
+    expect(prompt(ctx({ persona: demoPersona, history: [claim] }), p)).toBe(
+      prompt(ctx({ persona: demoPersona }), p),
+    );
   });
 
-  it('an absent count reads as 0 rather than failing', () => {
+  it('an absent count renders question 1 of 5, the reachable minimum (3.11e)', () => {
     const p = policy({ skill: 'mock_interview', reason: 'mock_interview' });
-    expect(prompt(ctx({ persona: demoPersona }), p)).toContain('This is question 0 of 5');
+    expect(prompt(ctx({ persona: demoPersona }), p)).toContain('This is question 1 of 5');
+  });
+
+  it('a count past M renders as question M of M, never M+1 (3.11e)', () => {
+    const p = policy({
+      skill: 'mock_interview',
+      reason: 'mock_interview',
+      next: { helpRung: 0, help: helpWith({ personaQuestionsAsked: 8 }) },
+    });
+    const text = prompt(ctx({ persona: demoPersona }), p);
+    expect(text).toContain('This is question 5 of 5');
+    expect(text).not.toContain('question 8 of 5');
+  });
+
+  it('a persona with M = 0 still renders question 1 of 0 rather than question 0', () => {
+    const p = policy({ skill: 'mock_interview', reason: 'mock_interview' });
+    const text = prompt(ctx({ persona: { ...demoPersona, endAfterQuestions: 0 } }), p);
+    expect(text).toContain('This is question 1 of 0');
   });
 
   it('lists the entitled skills and the policy tools', () => {

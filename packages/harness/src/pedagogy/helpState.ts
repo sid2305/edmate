@@ -7,6 +7,8 @@ import { z } from 'zod';
 
 /** The highest persona question count stored; the count stops there (3.11d). */
 export const PERSONA_QUESTIONS_MAX = 1_000;
+/** Longest stored persona id (3.11e); above LIMITS.idMaxLength, so a valid persona id always fits. */
+export const PERSONA_ID_MAX = 200;
 /** Most served practice item ids kept for the exclude list (oldest dropped first). */
 export const PRACTICE_SERVED_MAX = 20;
 /** Longest stored practice item or module id. */
@@ -53,6 +55,11 @@ export const HelpStateSchema = z.strictObject({
    * its rung. Capped at PERSONA_QUESTIONS_MAX so a long session never makes the state unsavable.
    */
   personaQuestionsAsked: z.int().min(0).max(PERSONA_QUESTIONS_MAX).exactOptional(),
+  /**
+   * The persona the count belongs to (3.11e). A persona turn whose persona differs (or a blob
+   * saved before 3.11e, which has none) starts the role-play again at question 1 (`skillStep`).
+   */
+  personaId: z.string().min(1).max(PERSONA_ID_MAX).exactOptional(),
   /**
    * The practice item whose key `answerKey` holds (5.6, ADR-0010). While it is set and
    * `answerKey` is not empty, the ladder uses the practice cap whatever skill the turn chose
@@ -163,6 +170,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
     lockedStopped,
     groundingAsks,
     personaQuestionsAsked: asked,
+    personaId,
   } = r.data;
   return {
     rung,
@@ -174,6 +182,7 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
       ...(lockedStopped === undefined ? {} : { lockedStopped }),
       ...(groundingAsks === undefined ? {} : { groundingAsks }),
       ...(asked === undefined ? {} : { personaQuestionsAsked: asked }),
+      ...(personaId === undefined ? {} : { personaId }),
       ...practiceFields(r.data),
       ...(r.data.practiceCarriedKey === undefined
         ? {}
@@ -189,6 +198,33 @@ export function parseSessionHelp(raw: unknown): SessionHelp {
 export function withGroundingAsks(next: SessionHelp, asks: number): SessionHelp {
   if (asks === 0) return next;
   return { ...next, help: { ...next.help, groundingAsks: asks } };
+}
+
+/** The persona count fields of `h` (3.11e): the count and the persona it belongs to. */
+export function personaFields(
+  h: Readonly<HelpState>,
+): Pick<HelpState, 'personaQuestionsAsked' | 'personaId'> {
+  return {
+    ...(h.personaQuestionsAsked === undefined
+      ? {}
+      : { personaQuestionsAsked: h.personaQuestionsAsked }),
+    ...(h.personaId === undefined ? {} : { personaId: h.personaId }),
+  };
+}
+
+/**
+ * `next` with the persona count and persona id taken from `from` (3.11e), or removed when `from`
+ * has none. The runner uses it to keep the loaded count on a turn whose reply the student never
+ * saw; `skillStep` uses it to carry the count over a rebuilt state.
+ */
+export function withPersonaCount<T extends { help: HelpState }>(
+  next: T,
+  from: Readonly<HelpState>,
+): T {
+  const help: HelpState = { ...next.help, ...personaFields(from) };
+  if (from.personaQuestionsAsked === undefined) delete help.personaQuestionsAsked;
+  if (from.personaId === undefined) delete help.personaId;
+  return { ...next, help };
 }
 
 /** Nothing stored yet: no value, or the column's default `{}`. */
