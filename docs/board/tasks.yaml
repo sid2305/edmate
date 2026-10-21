@@ -1545,7 +1545,7 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: running
+  status: review
   branch: m6/6.2-mastery-rebuild
   model: plan:sonnet build:sonnet
 - id: '6.3'
