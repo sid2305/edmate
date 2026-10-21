@@ -49,7 +49,7 @@ python3 .githooks/secret-scan.py --all
 
 ## Decisions
 
-### 20 Oct 2026 · 8.1 staff verification and publish guard in packages/db/src/repositories · decided by team lead
+### 20 Oct 2026 · 8.1 staff verification and publish guard in packages/db/src/repositories · decided by team lead · risk: high
 Decided: new `teacherProfiles` repository with `setVerification` (a staff actor writes one named teacher's verification status, staff role checked share-locked in the same transaction, `teacher.verify` audit row) and `assertVerifiedForPublish` (throws `scope` unless the scope's own profile is `verified`). Follows the `audit.appendForTeacher` precedent the lead approved for Q2.
 Why: this is access-control logic on a risky path (`packages/db/src/repositories/**`). security-reviewer (opus) approved after running the int suites on Postgres: no self-verification, the staff check is share-locked in the write transaction, and the audit row rolls back with the write. The publish-race MEDIUM goes to 8.1b with 8.7. The lead merges.
 risk: high

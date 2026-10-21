@@ -14,4 +14,4 @@ All four approved with no CRITICAL or HIGH findings. security-reviewer and datab
 - [LOW] [deferred 8.1b] packages/db/src/cli.ts:209 — the CLI writes to whatever DATABASE_URL is set without showing the redacted target (same as grant-role).
 - [LOW] [deferred 8.1b] packages/db/src/cli.ts:150 — the teacher's email goes on argv (shell history); accept --user-id.
 - [LOW] [deferred 8.1b] packages/db/src/repositories/teacher-profiles.ts:49 — free-text --reason is stored in audit_log; the usage text should say no personal details.
-- [LOW] [wontfix] packages/db/migrations/0016_teacher_verification_status.sql:3 — USING cast omits the intermediate ::text that 0005 used; functionally equivalent.
+- [LOW] [deferred 8.1b] packages/db/migrations/0016_teacher_verification_status.sql:3 — USING cast omits the intermediate ::text that 0005 used; functionally equivalent.
