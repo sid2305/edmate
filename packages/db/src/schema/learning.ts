@@ -21,6 +21,7 @@ import {
   id,
   messageRole,
   modelTier,
+  notificationKind,
   teacherQuestionStatus,
   timestamps,
   tstz,
@@ -285,5 +286,38 @@ export const teacherQuestions = pgTable(
     uniqueIndex('teacher_questions_open_dedup_key')
       .on(t.teacherId, t.studentId, t.agentId, sql`md5(${t.text})`)
       .where(sql`${t.status} = 'open'`),
+  ],
+);
+
+/**
+ * Task 5.10: in-app only (email and push wait). One row per distinct student the teacher's answer
+ * reaches; `unique (student_id, teacher_question_id)` makes writing it twice (a replayed answer)
+ * harmless. `student_id` is stored but hidden from the teacher by the read layer, like
+ * `teacher_questions` above.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: id(),
+    studentId: studentId(),
+    teacherId: teacherId(),
+    kind: notificationKind('kind').notNull(),
+    teacherQuestionId: text('teacher_question_id')
+      .notNull()
+      .references(() => teacherQuestions.id),
+    readAt: tstz('read_at'),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex('notifications_student_id_teacher_question_id_key').on(
+      t.studentId,
+      t.teacherQuestionId,
+    ),
+    index('notifications_student_id_teacher_id_created_at_idx').on(
+      t.studentId,
+      t.teacherId,
+      t.createdAt,
+    ),
+    index('notifications_teacher_id_idx').on(t.teacherId),
   ],
 );

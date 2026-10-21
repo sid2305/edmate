@@ -35,6 +35,8 @@ export const DATA_MODEL_TABLES = [
   'learner_profiles',
   'corrections',
   'teacher_questions',
+  'teacher_eval_cases',
+  'notifications',
   'eval_runs',
   'eval_results',
   'live_classes',
