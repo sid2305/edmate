@@ -10,6 +10,174 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 20 Oct 2026 · 8.2 merged without the manual dev-stack run; it moves to the thin-slice end-to-end check · decided by team lead
+Decided: the plan's Evidence 3 (a browser upload and delete on the full compose stack) was not run before merge. The routes, worker and repository paths are covered by unit tests and real Postgres/Redis integration tests (apps/worker ingest.int.test.ts runs queue → worker → ready; packages/db documents.int.test.ts shows a delete makes the next search miss the file), and the final code, TypeScript and security reviews approved. The manual run is listed in 8.2a and runs with 8.1a's browser check, when a teacher can sign up, upload and a student can chat.
+Why: MVP first (human, 20 Oct 2026); one browser run over the whole thin slice finds more than one per task. Risk: a dev-stack-only wiring problem (CORS, public endpoint) surfaces later rather than now.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2d ingest job id is now keyed by storageKey, fixing the replace-enqueue hang · decided by tdd-guide
+Decided (fixed, 8.2d): `jobId.ingest` now takes `(documentId, storageKey)` and hashes `storageKey` into the id (`packages/queue/src/queues.ts`), and `enqueueIngest` takes `storageKey` as a third argument (`packages/queue/src/index.ts`). A retry of the *same* file still dedupes to the same job id (idempotent); a replace's new `storageKey` gets a distinct id, so it no longer collides with (and block behind) a still-active old job. The processor's existing re-read-before-write guard (the `ChunkWriter`'s `storageKey` check right before `chunks.insertMany`) is unchanged and still drops the stale old job's write; `apps/worker/test/ingest.int.test.ts`'s replace-race case now drives this end to end through the real `Queue`/`Worker` and asserts the second enqueue resolves without hanging.
+Why: the previous pass found that BullMQ's job-id dedupe only replaces a job still `waiting`/`delayed`, not one already `active`, so reusing `jobId.ingest(documentId)` across a replace while the old job was still processing blocked `Queue.add()` indefinitely. Keying on `storageKey` (the file actually being enqueued) rather than just the document avoids the collision without changing the processor or the job schema.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2 fix round: production S3 config is refused, not defaulted; the dev stack opts out of https explicitly · decided by tdd-guide
+Decided: under `NODE_ENV=production` the web's storage config needs `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_BUCKET` set and an https endpoint; otherwise the studio routes answer 503 and log only a code such as `S3_ENDPOINT_not_https`. `S3_BUCKET` is required too (the review named credentials and endpoint; uploading production files into the dev bucket name is the same mistake). Because the local compose stack runs the web image with `NODE_ENV=production` against `http://minio:9000`, compose sets `S3_ALLOW_HTTP: 'true'`; only the exact string `true` opts out.
+Why: a silent fallback to the dev key pair or plain http in production is the review's finding; an explicit, greppable opt-in keeps the local stack working without weakening the default.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 4: upload URLs are signed for S3_PUBLIC_ENDPOINT when set · decided by tdd-guide
+Decided: a new optional `S3_PUBLIC_ENDPOINT` (same http/https rules) makes the studio sign upload URLs with a second S3 client on that host, while HEAD and DELETE keep the internal endpoint. Compose sets it to MinIO's published port.
+Why: the browser can't reach `minio:9000`; without this no browser upload works on the dev stack. A production deployment with one public S3 endpoint leaves it unset.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 4: MinIO CORS by server env, web origins only · decided by tdd-guide
+Decided: `MINIO_API_CORS_ALLOW_ORIGIN` on the dev MinIO lists `${AUTH_URL:-http://localhost:8080}` and `http://localhost:3000` (next dev). Checked by preflight: the web origin gets `Allow-Origin` for PUT; any other origin gets no CORS headers.
+Why: it is the dev image's CORS switch (env only, no setup script) and replaces MinIO's default `*`. MinIO always adds `Allow-Credentials: true` for an allowed origin, so the list must never be `*`; presigned PUTs send no cookies. Dev only; production bucket CORS belongs to deployment.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 4: the studio backend reuses serverDatabase() · decided by tdd-guide
+Decided: supersedes "studio backend opens its own database pool" below. With 9.4 merged, `realHooks.repos` is `serverDatabase().repos`; no `src/auth/**` change.
+Why: one pool per web process, as the Phase 3 review asked.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 4: upload centre behaviour · decided by tdd-guide
+Decided: the page lists all of the teacher's documents (no module filter); uploads go to the first module, with a "Module n" picker only when the teacher has several (the modules repo returns ids, not titles; MVP is one course per teacher). Polling is one list call 4 s after each list change while anything is `uploading`/`processing`, so an abandoned upload keeps polling while the page is open. On a 409 or 5xx from complete the row offers Try again (complete only, no re-upload); a failed PUT asks the teacher to replace the file. Delete needs an inline confirm. The client takes the browser's content type, else the extension's (Markdown often reports none).
+Why: the plan's thin slice plus the Phase 3 handoff notes (exact headers and size, complete after the PUT, 409 = not landed, words for each reason code), with no new dependency.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 4: web-link ingestion deferred · decided by team lead (per plan)
+Decided: web-link and YouTube ingestion stay out of 8.2; the upload centre takes files only.
+Why: plan § Scope; logged on Phase 4's merge as the plan asked. The open question to the human stands.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: DELETE on /api/studio/** in ROUTE_POLICY · decided by tdd-guide · risk: high
+Decided: the `/api/studio/**` row in `apps/web/src/auth/policy.ts` gains `'DELETE'` (one line, as the plan said), so teachers can call `DELETE /api/studio/documents/:id`. Students, staff and anonymous callers are still refused; the guard test's role×route matrix and policy assertions cover it.
+Why: the upload centre must be able to delete a file. The row stays teacher-only, and every handler scopes to the session's teacher, so no one gains reach beyond their own documents. Risky path (`apps/web/src/auth/**`): needs security-reviewer; the lead finalises.
+risk: high
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: browser uploads by presigned PUT with signed type and exact length · decided by tdd-guide
+Decided: the plan's storage design, as built. The browser PUTs straight to the bucket with a 15-minute presigned URL. `content-type` and `content-length` are signed headers, so the bucket refuses any other type or size, and the length must be within the type's cap (20 MB documents, 500 MB audio/video). The key is `teachers/<teacherId>/documents/<documentId>/<uuid>.<ext>`, built only on the server. Complete learns the file type from that key's extension and checks size and type again with HEAD before it enqueues. The S3 code is lightly duplicated from apps/worker: no shared package, no contracts port.
+Why: a presigned PUT can't carry a POST policy's `content-length-range`, so the exact declared size is signed instead, and HEAD on complete is the second check. Taking nothing about the key or type from the client means one teacher's upload can't land anywhere else.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: create takes contentType and byteSize; the retrieval kind is derived · decided by tdd-guide
+Decided: `POST /api/studio/documents` takes `{ moduleId, sourceTitle, contentType, byteSize }` (strict). The document's `kind` is `transcript` for audio/video and `material` otherwise; clients can't choose it (`teacher_note` isn't an upload).
+Why: the plan listed `{ moduleId, kind, sourceTitle }`, but the presign needs the type and size, and letting the client pick `kind` would let any upload pose as a teacher note.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: how complete handles failures · decided by tdd-guide
+Decided: complete returns 409 while the object isn't there yet, and writes nothing. An object over its cap or with no length becomes `failed/input_too_large`, the object is deleted, and the answer is 413; a type mismatch becomes `failed/unsupported_type` (400). An enqueue failure marks the document `failed/enqueue_failed` and answers 503 (retryable); calling complete again works (`failed → processing`). A document already `ready` answers 200 and enqueues nothing.
+Why: the row must never sit in `processing` with no job behind it, and a teacher must be able to retry without uploading again.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: studio backend opens its own database pool · decided by tdd-guide
+Decided: `src/studio/runtime.ts` lazily opens its own `openDatabase` pool, an S3 client and an ingest queue on `REDIS_URL`, rather than adding a `serverDatabase()` export to `src/auth/index.ts`. A failed build is not cached: the routes answer 503 and the next request tries again.
+Why: 9.4 adds that export on its open branch; adding it here too would conflict and widen this PR's risky-path diff beyond the one policy line. One extra small pool per web process is fine for the pilot; switch once 9.4 merges.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 Phase 3: studio body cap 16 KB · decided by tdd-guide
+Decided: studio routes read at most 16 KB of JSON (`MAX_BODY_BYTES`). A declared content-length over it, or bytes read past it, is refused with 413. The reader is the same as 9.4's turn routes (copied, since 9.4 isn't merged).
+Why: the bodies hold a title, a module id, a type and a size; files never pass through the web server.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 stale-replace guard lives in the worker's ChunkWriter, signalled by a flag · decided by tdd-guide
+Decided: the ingest processor re-reads the document's `storageKey` right before `chunks.insertMany` writes (inside a `ChunkWriter` wrapper it builds), comparing it to the key read at the start of the job. On a mismatch it writes nothing and signals staleness through a mutable flag the wrapper closes over, not a thrown error — `@edmate/ingest`'s `indexDocument` replaces every error its `ChunkWriter` throws with one fixed, non-retryable `IngestError` (by design, so a cause can't carry teacher material into a log), which would erase a dedicated error's identity. The job payload does not carry the `storageKey` it was enqueued for.
+Why: Phase 1's note suggested the job carry its `storageKey`, but the processor's own initial `documents.get` already establishes it, and a thrown error can't survive the trip through `indexDocument` unchanged. A closure flag the processor checks itself (in `indexDocument`'s catch block, and again after a "successful" call) works without touching `packages/ingest`, which is out of this phase's scope.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2 ingest job payload carries fileKind and mimeType · decided by tdd-guide
+Decided: `IngestJobSchema` (packages/queue) carries `teacherId`, `documentId`, `fileKind` (pdf/docx/pptx/markdown/video/audio) and `mimeType` (required exactly for video/audio).
+Why: `documents.kind` is the chunk-retrieval category, not the uploaded file's format — there is no other place for the worker to learn how to parse the stored object. Not named explicitly in the plan's schema sketch.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 ingest.int.test.ts deferred to Phase 3 · decided by tdd-guide
+Decided: the plan's Phase 2 "Tests first" named a real-Postgres/Redis integration test running the whole queue → worker → `ready` path; it was not written in this phase. Unit tests (fakes per rule 4) cover the processor, storage client and gateway, and the full typecheck/lint/test run for both packages is green.
+Why: token-budget discipline (stay-within-subscription); the remaining work was diagnosing and fixing the stale-replace race itself, which the unit tests exercise directly. Left as an explicit line in Left to do for Phase 3 or a follow-up task.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 document delete and replace in packages/db/src/repositories · decided by team lead · risk: high
+Decided: `documentsRepo` gains `get`, `listForTeacher`, `updateStatus`, `delete` and `startReplace`. `delete` and `startReplace` are the first deletes in `repositories/`: in one transaction they lock the scope's document `FOR UPDATE`, delete its chunks, delete (or reset) the row and bump `teacher_material_revisions`. README rules 7 and 8 and `test/scope.test.ts` now allow Drizzle `.delete(` in `chunks.ts` only, on `chunks` and `documents` only, each with `eq(<table>.teacherId, teacherId)` in the same statement; `delete from` text is still banned everywhere.
+Why: the accept line needs a deleted file to leave retrieval within a minute; deleting chunks and bumping the revision in the same transaction makes the next search and leakCheck miss it at once. The guard test is narrowed, not dropped, and pins exactly two scoped delete statements. Needs security-reviewer on this risky path; the lead finalises.
+risk: high
+
+---
+
+### 20 Oct 2026 · 8.2 status transitions checked in the UPDATE · decided by tdd-guide
+Decided: `updateStatus` only moves a document along its lifecycle (`processing` from uploading / processing / failed, `ready` from processing, `failed` from uploading / processing; `uploading` only via create and replace), checked in the same UPDATE's WHERE clause; any other state is `not_found`.
+Why: a worker still processing the old file after a replace must not mark the new upload `ready`. One atomic statement, no extra round trip. Allowing processing → processing and failed → processing keeps retries working.
+risk: medium
+
+---
+
+### 20 Oct 2026 · 8.2 failure reason is a fixed code, enforced twice · decided by tdd-guide
+Decided: `failureReason` must match `^[a-z][a-z0-9_]{0,63}$` and is required exactly when `status` is `failed`; a database CHECK (`documents_failure_reason_only_when_failed`) keeps it null otherwise.
+Why: the plan said "a short fixed IngestErrorCode-shaped string, never raw error text"; the pattern rejects anything that could carry a URL, host or message text.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 migration 0017 backfills existing documents as ready · decided by tdd-guide
+Decided: the generated migration was hand-edited to add `status` with `DEFAULT 'ready'` (backfilling every existing row) and then set the go-forward default to `'uploading'`. A migration int test checks both.
+Why: as the plan required, rows ingested before this change must not show as still uploading.
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 document list cap and order · decided by tdd-guide
+Decided: `listForTeacher` returns at most `DOCUMENT_LIST_MAX` (500) rows, newest first (`created_at desc, id desc`), with no paging yet. `DocumentRow` leaves out `rightsDeclaredAt`.
+Why: the plan named no limit; an unbounded list is a slow-query risk, and 500 is far above a pilot teacher's upload count. Paging can come with the full studio (M13).
+risk: low
+
+---
+
+### 20 Oct 2026 · 8.2 keyed chunk insert: stale vs not_found · decided by tdd-guide
+Decided: `chunks.insertManyIfStorageKey` returns `{ stale: true }` when the scope's document exists but its storage key moved on, and throws `not_found` when the document is missing or belongs to another teacher. The worker treats both as a stale drop. The guard is one `INSERT ... SELECT ... for share of d` statement; a read in the same transaction runs only after 0 rows, and only to pick between the two outcomes.
+Why: the isolation grid needs a write to another teacher's document to fail closed with `not_found`, and a share lock in the insert makes Postgres re-check the key after a concurrent replace commits.
+risk: high (packages/db/src/repositories is a risky path)
+
+---
+
+### 20 Oct 2026 · 8.2 worker download cap · decided by tdd-guide
+Decided: `getObjectBytes` takes a required `maxBytes` and streams with a running count. An oversized object becomes `input_too_large`, the code the parser already uses.
+Why: security review; an upload far over 20 MB must never be held in memory whole.
+risk: low
+
+---
+
 ### 20 Oct 2026 · Phase D e2e: Turbopack dev server, `.chat-error` over bare `role=alert` · decided by tdd-guide
 Decided: `playwright.config.ts`'s `webServer` runs plain `next dev` (Turbopack), not
 `next dev --webpack`, and `chat.spec.ts` asserts the chat error banner by `.chat-error`, not

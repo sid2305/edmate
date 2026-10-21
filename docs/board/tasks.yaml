@@ -1565,9 +1565,9 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: running
+  status: done
   branch: m8/8.2-upload-centre
-  model: plan:sonnet build:opus
+  model: plan:opus build:opus-5.5/medium+sonnet fixes review:sonnet+security opus
 - id: '8.3'
   milestone: M8
   title: Outline editor with source links; reorder, rename, merge, split
@@ -1739,6 +1739,19 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
+  status: todo
+  branch: null
+  risk: risky
+- id: 8.2a
+  milestone: M13
+  title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
+    create signs before writing the row; production refuses explicit dev placeholder credentials; deploy docs say production never sets S3_ALLOW_HTTP; replace-during-complete compare-and-set on the storage
+    key (409); retrying S3 delete; per-teacher quota or rate limit on create; UploadsView unmount guard; composite index (teacher_id, created_at desc, id desc); 0017 NOT VALID plus VALIDATE; module names
+    in the picker; manual dev-stack upload/delete run (with the thin-slice e2e check); web-link and YouTube ingestion pending B-31; packages/queue latency.test.ts flaked once in CI (541 ms vs the 500 ms
+    bound, PR #84, passed on re-run): find the cause or widen the bound'
+  accept: a production worker or web with missing or dev storage config refuses to start ingest or uploads and logs only a code; no orphan uploading row after a signing failure.
+  deps:
+  - '8.2'
   status: todo
   branch: null
   risk: risky
