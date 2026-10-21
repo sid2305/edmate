@@ -1542,8 +1542,9 @@ tasks:
   deps:
   - '8.1'
   - '9.1'
-  status: todo
+  status: planning
   branch: null
+  model: plan:sonnet
 - id: 8.1b
   milestone: M13
   title: 'Teacher-verification follow-ups (8.1 reviews): publish guard runs in the publish transaction with FOR SHARE and a reject suspends live agents (with 8.7); update/setVerification use translateWrite;
