@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 6.3 merge: mistake tags (classifier and applyMistakes) · decided by lead · risk: high
+- Decided: merge 6.3. `classifyMistakeTags` splits tags into known (on the style card's `mistakeTags`) and proposed; `applyMistakes` in `packages/db/src/repositories/learner.ts` merges known tags under the profile row lock. Proposed tags are returned, not stored (6.3a). The concurrency test and the tag and array caps go to 6.3b. Three cosmetic LOWs in `packages/harness/src/memory/mistakeTags.test.ts`, `packages/db/test/repositories.int.test.ts` and `packages/db/src/repositories/learner.ts` are left as they are (wontfix).
+- Why: code-reviewer, typescript-reviewer, security-reviewer and database-reviewer (all sonnet) approve with no CRITICAL or HIGH; the lock pattern matches 6.2's race-tested one; no contracts change.
+- risk: high (a new write path under `packages/db/src/repositories/**`).
+
+---
+
+### Runtime "teacher's list" is the style card's `mistakeTags`, not a new catalogue copy
+Decided: `classifyMistakeTags` takes `allowedTags: readonly string[]`, the caller's job to supply
+(expected to be `styleCard.mistakeTags` wherever this is eventually wired into a turn). No new
+contracts type, no new persisted catalogue.
+Why: the only existing runtime-queryable source; avoids a second, driftable copy of "the list".
+risk: low
+
+---
+
+### Proposed tags are returned, not persisted, this task
+Decided: `classifyMistakeTags`'s `proposed` output is pure data back to the caller; no new table,
+no approval endpoint, in this task. Persisting and approving proposed tags moves to board task
+6.3a (M13, MVP first), per the lead's 21 Oct answer.
+Why: no approval surface (table, repo or UI) exists yet to receive one; matches 6.2's precedent for
+not-yet-asked-for scope.
+risk: low
+
+---
+
+### `risk: high` — new write path in `packages/db/src/repositories/learner.ts` (risky path)
+Decided: ship `applyMistakes`, logged `risk: high` per the merge gate's rule for any
+`packages/db/src/repositories/**` change, reviewed by security-reviewer.
+Why: the risk-paths group requires it regardless of the change's actual size; matches 3.17's and
+6.2's own logged precedent for the same file.
+risk: high
+
+---
+
 ### 21 Oct 2026 · 5.8 merge: role-play engine (ADR-0013, frame@1.2.0, set@1.3.0, persona library) · decided by lead · risk: high
 - Decided: merge 5.8. ADR-0013 (role-play state: `personaPhase`, start, `/pause`, `stop`, debrief, ended) is accepted as built. `frame@1.2.0` and `set@1.3.0` ship with `reviewed_by: pending`, so they are not served until the human signs them (B-38). The persona library serves only signed templates. The ten `persona-roleplay-*` eval cases are signed by the lead (MVP first). A role-play control (start, `/pause`, `stop`) in an active role-play now goes ahead of the off_topic/meta redirect, after distress, entitlement and misuse.
 - Why: architect (opus), security-reviewer (sonnet), code-reviewer (sonnet) and typescript-reviewer (opus) all approve; the fix round's four findings are verified by the opus typescript-reviewer; no `packages/contracts` change; harness 5217, evals 1005 and content 503 tests pass. The open coverage-gate questions (B-37 q6 to q9, including `/pause` with extra text and `ended` turns) stay lead defaults until the human answers; follow-ups are in 5.8b.

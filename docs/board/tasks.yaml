@@ -1624,9 +1624,9 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: review
+  status: done
   branch: m6/6.3-mistake-tags
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet x4
 - id: '6.4'
   milestone: M6
   title: Session summary and end-of-topic check
@@ -2282,7 +2282,7 @@ tasks:
   model: null
 - id: 6.4a
   milestone: M13
-  title: "Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end"
+  title: 'Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end'
   accept: a graded check emits a topic-scored EvidenceEvent that reaches CommitRecord.evidence; a real trigger ends a session with a stored summary
   deps:
   - '6.4'
