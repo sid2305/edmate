@@ -309,6 +309,47 @@ async function removeChunks(tx: Tx, teacherId: string, docId: string): Promise<v
     .where(and(eq(chunks.documentId, docId), eq(chunks.teacherId, teacherId)));
 }
 
+const StorageKeyArgSchema = z.string().min(1).max(1024);
+
+/**
+ * Inserts `rows` under the scope's document in one statement and returns the rows written (0 or
+ * `rows.length`). With `storageKey`, the same statement also requires the document to still have
+ * that key and takes a share lock on the document row: a `startReplace`/`delete` holding the row
+ * `FOR UPDATE` makes it wait, and once that commits Postgres re-checks the key against the new
+ * row version, so an old file's chunks never land after a replace wiped them.
+ */
+async function insertChunkRows(
+  tx: Tx,
+  teacherId: string,
+  docId: string,
+  rows: { id: string; text: string; locator: string }[],
+  storageKey?: string,
+): Promise<number> {
+  const keyed =
+    storageKey === undefined ? sql`` : sql` and d.storage_key = ${storageKey} for share of d`;
+  const res = await tx.execute(
+    insertSelect(
+      chunks,
+      [
+        [chunks.id, sql`v.id`],
+        [chunks.teacherId, sql`d.teacher_id`],
+        [chunks.documentId, sql`d.id`],
+        [chunks.moduleId, sql`d.module_id`],
+        [chunks.kind, sql`d.kind`],
+        [chunks.text, sql`v.text`],
+        [chunks.sourceTitle, sql`d.source_title`],
+        [chunks.locator, sql`v.locator`],
+      ],
+      sql`from ${documents} d
+        join ${modules} m on m.id = d.module_id and m.teacher_id = d.teacher_id
+        cross join jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+          as v(id text, text text, locator text)
+        where d.id = ${docId} and d.teacher_id = ${teacherId}${keyed}`,
+    ),
+  );
+  return written(res);
+}
+
 export function chunksRepo(db: Db) {
   return {
     /**
@@ -328,31 +369,51 @@ export function chunksRepo(db: Db) {
       const rows = ds.map((x) => ({ id: chunkId(docId, x.ord), text: x.text, locator: x.locator }));
       await translateWrite(method, () =>
         db.transaction(async (tx) => {
-          const res = await tx.execute(
-            insertSelect(
-              chunks,
-              [
-                [chunks.id, sql`v.id`],
-                [chunks.teacherId, sql`d.teacher_id`],
-                [chunks.documentId, sql`d.id`],
-                [chunks.moduleId, sql`d.module_id`],
-                [chunks.kind, sql`d.kind`],
-                [chunks.text, sql`v.text`],
-                [chunks.sourceTitle, sql`d.source_title`],
-                [chunks.locator, sql`v.locator`],
-              ],
-              sql`from ${documents} d
-                join ${modules} m on m.id = d.module_id and m.teacher_id = d.teacher_id
-                cross join jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
-                  as v(id text, text text, locator text)
-                where d.id = ${docId} and d.teacher_id = ${teacherId}`,
-            ),
-          );
-          if (written(res) !== rows.length) throw new RepositoryError('not_found', method);
+          const n = await insertChunkRows(tx, teacherId, docId, rows);
+          if (n !== rows.length) throw new RepositoryError('not_found', method);
           await bumpRevision(tx, teacherId);
         }),
       );
       return { ids: rows.map((r) => r.id) };
+    },
+
+    /**
+     * `insertMany`, but only while the scope's document still points at `storageKey` (task 8.2:
+     * an ingest job for a replaced file must not write). The key check, teacher scoping and the
+     * write are one statement (see insertChunkRows). Nothing written because the key moved on is
+     * `{ stale: true }`, not an error; a missing (or deleted mid-flight) document, or another
+     * teacher's, is `not_found`. The revision is bumped only when chunks were written.
+     */
+    async insertManyIfStorageKey(
+      scope: TeacherScope,
+      documentId: string,
+      storageKey: string,
+      drafts: ChunkDraft[],
+    ): Promise<{ stale: false; ids: string[] } | { stale: true }> {
+      const method = 'chunks.insertManyIfStorageKey';
+      const { teacherId } = teacherScope(scope, method);
+      const docId = parseArg(IdSchema.max(DOCUMENT_ID_MAX_LENGTH), documentId, method);
+      const key = parseArg(StorageKeyArgSchema, storageKey, method);
+      const ds = parseArg(DraftsSchema, drafts, method);
+      const rows = ds.map((x) => ({ id: chunkId(docId, x.ord), text: x.text, locator: x.locator }));
+      const n = await translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const count = await insertChunkRows(tx, teacherId, docId, rows, key);
+          if (count === 0) {
+            // Nothing written: only classifies the outcome (the guard was the insert itself).
+            const [row] = await tx
+              .select({ id: documents.id })
+              .from(documents)
+              .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)));
+            if (!row) throw new RepositoryError('not_found', method);
+            return 0;
+          }
+          // One document row cross-joined with the (non-empty) drafts: 0 or rows.length.
+          await bumpRevision(tx, teacherId);
+          return count;
+        }),
+      );
+      return n === 0 ? { stale: true } : { stale: false, ids: rows.map((r) => r.id) };
     },
 
     /**

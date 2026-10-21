@@ -216,6 +216,24 @@ Decided (fixed, 8.2d): `jobId.ingest` now takes `(documentId, storageKey)` and h
 Why: the previous pass found that BullMQ's job-id dedupe only replaces a job still `waiting`/`delayed`, not one already `active`, so reusing `jobId.ingest(documentId)` across a replace while the old job was still processing blocked `Queue.add()` indefinitely. Keying on `storageKey` (the file actually being enqueued) rather than just the document avoids the collision without changing the processor or the job schema.
 risk: medium
 
+## Fix round (Phases 1–2 review)
+
+Branch `m8/8.2-upload-centre` (pushed from `work-8.2e`), worktree `.claude/worktrees/agent-a2c84ab794ea9831b`.
+
+1. **[MEDIUM, database-reviewer] storageKey check and chunk write were two round trips.**
+   - New `chunks.insertManyIfStorageKey(scope, documentId, storageKey, drafts)` in `packages/db/src/repositories/chunks.ts`. It runs the existing teacher-scoped `INSERT ... SELECT` with `and d.storage_key = $key for share of d` added, so the key check and teacher scoping sit in the write statement itself. A replace or delete holding the row `FOR UPDATE` makes the insert wait; once it commits, Postgres re-checks the key against the new row version, and nothing is written.
+   - 0 rows written: one read in the same transaction sorts the outcome. If the scope's document still exists the result is `{ stale: true }`; if it is missing, deleted, or another teacher's, the result is `not_found`. The revision is bumped only when rows were written. `insertMany` and the keyed method share one `insertChunkRows` helper.
+   - `apps/worker/src/ingest/processor.ts` `buildWriter` now calls only `insertManyIfStorageKey`. `{ stale: true }` and `not_found` both set the stale flag. The per-batch `documents.get` read is gone (the security-reviewer LOW).
+   - Tests: `documents.int.test.ts` covers a matching key (writes and bumps the revision), a key changed by `startReplace` (stale, 0 rows, no revision bump), another teacher's or a missing doc (`not_found`), **a replace committing while the insert waits on the row lock** (stale, 0 rows), a delete committing mid-wait (`not_found`), and a bad key (`invalid`). Removing `for share of d` makes the lock-wait race test fail, so it guards the fix. `repositories.int.test.ts` adds the method to the isolation grid with a new `keyDoc` per teacher, and `scope.test.ts` picks it up automatically. New worker unit tests: one `documents.get` per job, a delete mid-flight means `stale_skipped`, and a `failed` repo error is not taken for stale.
+2. **[MEDIUM, security-reviewer] whole S3 object buffered before the size cap.**
+   - `StorageClient.getObjectBytes(key, maxBytes)` now streams the body (an async-iterable Node Readable) with a running byte count. It refuses a `ContentLength` over the cap before reading, and stops at the first chunk past the cap when `ContentLength` is missing or wrong, destroying the stream in both cases. It throws `ObjectTooLargeError`, whose message names only the cap, never the key or bucket.
+   - The processor passes `MAX_DOCUMENT_BYTES` and maps `ObjectTooLargeError` to `IngestError('input_too_large', false)`: the same code `parseDocument` uses, so the document lands in `failed` / `input_too_large` and the job fails permanently.
+   - Unit tests use fake async-iterable bodies, with no S3. They cover a multi-part join at exactly the cap, `ContentLength` over the cap (0 parts pulled, stream destroyed), running past the cap with no or a lying `ContentLength` (stops after 2 parts), no key or bucket in the message, and a non-stream body.
+
+Evidence:
+- `TEST_DATABASE_URL=... TEST_REDIS_URL=redis://127.0.0.1:56379 corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/worker...` gives `Tasks: 34 successful, 34 total`: db 45 files passed (repositories at 100% coverage) and worker 20 files passed, including the int tests.
+- `python3 .githooks/secret-scan.py --all` is clean.
+
 ## Left to do
 - **Phase 3** (apps/web): studio document API routes, presign, `policy.ts` DELETE line, and the
   `updateStatus('processing')` → `enqueueIngest` sequencing on the complete route (see API above).
@@ -267,4 +285,14 @@ risk: low
 ### 20 Oct 2026 · 8.2 document list cap and order · decided by tdd-guide
 Decided: `listForTeacher` returns at most `DOCUMENT_LIST_MAX` (500) rows, newest first (`created_at desc, id desc`), with no paging yet. `DocumentRow` leaves out `rightsDeclaredAt`.
 Why: the plan named no limit; an unbounded list is a slow-query risk, and 500 is far above a pilot teacher's upload count. Paging can come with the full studio (M13).
+risk: low
+
+### 20 Oct 2026 · 8.2 keyed chunk insert: stale vs not_found · decided by tdd-guide
+Decided: `chunks.insertManyIfStorageKey` returns `{ stale: true }` when the scope's document exists but its storage key moved on, and throws `not_found` when the document is missing or belongs to another teacher. The worker treats both as a stale drop. The guard is one `INSERT ... SELECT ... for share of d` statement; a read in the same transaction runs only after 0 rows, and only to pick between the two outcomes.
+Why: the isolation grid needs a write to another teacher's document to fail closed with `not_found`, and a share lock in the insert makes Postgres re-check the key after a concurrent replace commits.
+risk: high (packages/db/src/repositories is a risky path)
+
+### 20 Oct 2026 · 8.2 worker download cap · decided by tdd-guide
+Decided: `getObjectBytes` takes a required `maxBytes` and streams with a running count. An oversized object becomes `input_too_large`, the code the parser already uses.
+Why: security review; an upload far over 20 MB must never be held in memory whole.
 risk: low

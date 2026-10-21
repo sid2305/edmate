@@ -72,6 +72,19 @@ const chunkCount = async (docId: string) =>
     ])).rows[0]?.n,
   );
 
+/** Waits until some session of this database is blocked on a row lock (the raced insert). */
+async function waitForLockWait(): Promise<void> {
+  for (let i = 0; i < 250; i++) {
+    const { rows } = await raw.query<{ n: string }>(
+      `select count(*) as n from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock'`,
+    );
+    if (Number(rows[0]?.n) > 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error('the insert never waited on the row lock');
+}
+
 describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
     await createDatabase(dbName);
@@ -343,6 +356,78 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         { storageKey: 'k', teacherId: RB },
       ]) {
         const err = await rejection(repos.documents.startReplace(A, id, input as never));
+        expect(err.kind).toBe('invalid');
+      }
+    });
+  });
+
+  describe('chunks.insertManyIfStorageKey (8.2 fix round: check and write in one statement)', () => {
+    const draft = [{ ord: 0, text: 'quokka keyed chunk', locator: 'p1' }];
+
+    it('writes when the document still has the expected key', async () => {
+      const id = await doc([], 'uploads/keep.pdf');
+      const before = await repos.retrieval.revision(A);
+      const res = await repos.chunks.insertManyIfStorageKey(A, id, 'uploads/keep.pdf', draft);
+      expect(res).toEqual({ stale: false, ids: [`${id}-c0000`] });
+      expect(await chunkCount(id)).toBe(1);
+      expect(await repos.retrieval.revision(A)).toBe(before + 1);
+    });
+
+    it('is stale and writes nothing once a replace changed the key', async () => {
+      const id = await doc([], 'uploads/before.pdf');
+      await repos.documents.startReplace(A, id, { storageKey: 'uploads/after.pdf' });
+      const before = await repos.retrieval.revision(A);
+      const res = await repos.chunks.insertManyIfStorageKey(A, id, 'uploads/before.pdf', draft);
+      expect(res).toEqual({ stale: true });
+      expect(await chunkCount(id)).toBe(0);
+      expect(await repos.retrieval.revision(A)).toBe(before);
+    });
+
+    it("another teacher's or a missing document is not_found, nothing written", async () => {
+      const id = await doc([], 'uploads/theirs.pdf');
+      for (const [scope, target] of [
+        [B, id],
+        [A, 'doc_gone'],
+      ] as const) {
+        const err = await rejection(
+          repos.chunks.insertManyIfStorageKey(scope, target, 'uploads/theirs.pdf', draft),
+        );
+        expect(err.kind).toBe('not_found');
+      }
+      expect(await chunkCount(id)).toBe(0);
+    });
+
+    it('a delete committing while the insert waits is not_found, nothing written', async () => {
+      const id = await doc([], 'uploads/del-race.pdf');
+      await raw.query('begin');
+      await raw.query(`delete from documents where id = $1`, [id]);
+      const pending = rejection(
+        repos.chunks.insertManyIfStorageKey(A, id, 'uploads/del-race.pdf', draft),
+      );
+      await waitForLockWait();
+      await raw.query('commit');
+      expect((await pending).kind).toBe('not_found');
+      expect(await chunkCount(id)).toBe(0);
+    });
+
+    it('a replace committing while the insert waits on the row lock wins: nothing written', async () => {
+      const id = await doc([], 'uploads/race-old.pdf');
+      await raw.query('begin');
+      await raw.query(`select 1 from documents where id = $1 for update`, [id]);
+      await raw.query(`update documents set storage_key = 'uploads/race-new.pdf' where id = $1`, [
+        id,
+      ]);
+      const pending = repos.chunks.insertManyIfStorageKey(A, id, 'uploads/race-old.pdf', draft);
+      await waitForLockWait();
+      await raw.query('commit');
+      expect(await pending).toEqual({ stale: true });
+      expect(await chunkCount(id)).toBe(0);
+    });
+
+    it('rejects a bad key before any SQL', async () => {
+      const id = await doc([]);
+      for (const key of ['', 'k'.repeat(1025), 7]) {
+        const err = await rejection(repos.chunks.insertManyIfStorageKey(A, id, key as never, draft));
         expect(err.kind).toBe('invalid');
       }
     });

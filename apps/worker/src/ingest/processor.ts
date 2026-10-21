@@ -6,8 +6,8 @@
 // the final write (its lifecycle check refuses `uploading -> ready`), but a worker that reaches
 // `indexDocument` before that check could still write the *old* file's chunks under the document's
 // id. So the `ChunkWriter` this processor builds re-checks the row's current `storageKey` against
-// the one read at the start of the job, right before writing chunks, and drops the write when a
-// replace has already moved it on. It signals this to the processor through a flag it closes
+// the one read at the start of the job in the same statement as the chunk write (8.2 fix round)
+// and drops the write when a replace has already moved it on. It signals this to the processor through a flag it closes
 // over, not a thrown error: `indexDocument`'s own `store()` helper catches every error its
 // `ChunkWriter` throws and rethrows a single fixed `IngestError` (so teacher material in a cause
 // never reaches a log line), which would erase a dedicated "stale" error's identity. Reporting
@@ -20,13 +20,14 @@ import {
   type DocumentInput,
   IngestError,
   indexDocument,
+  MAX_DOCUMENT_BYTES,
   type IndexDocumentDeps,
   type VideoSource,
 } from '@edmate/ingest';
 import { IngestJobSchema } from '@edmate/queue';
 import type { Log } from '../log.js';
 import { PermanentJobError } from '../commit/processors.js';
-import type { StorageClient } from '../storage/client.js';
+import { ObjectTooLargeError, type StorageClient } from '../storage/client.js';
 import type { IngestGateway } from './gateway.js';
 
 /** A job as the processor sees it (BullMQ's Job has more). */
@@ -65,7 +66,9 @@ function classifyRepoError(job: string, error: unknown): never {
 
 /**
  * Wraps `repos.chunks` so `insertMany` only ever writes under the `storageKey` the job started
- * with: a fresh read right before the write catches a replace that landed mid-flight.
+ * with. The check and the write are one statement (`chunks.insertManyIfStorageKey`, which also
+ * waits on a replace's row lock), so a replace committing between a read and the write can no
+ * longer slip the old file's chunks in. A deleted document (`not_found`) is stale too.
  *
  * Staleness is reported through the returned `stale()` getter, not a thrown error: a dedicated
  * error type thrown from here would not survive the round trip through `@edmate/ingest`'s
@@ -76,22 +79,31 @@ function classifyRepoError(job: string, error: unknown): never {
  * the processor checks `stale()` itself once `indexDocument` returns or throws.
  */
 function buildWriter(
-  repos: Pick<Repositories, 'documents' | 'chunks'>,
-  teacherId: string,
+  repos: Pick<Repositories, 'chunks'>,
   expectedStorageKey: string,
 ): { writer: ChunkWriter; stale: () => boolean } {
-  const scope = { teacherId };
   let stale = false;
+  const dropped = (drafts: readonly unknown[]) => {
+    stale = true;
+    return { ids: drafts.map(() => '') };
+  };
   return {
     stale: () => stale,
     writer: {
       async insertMany(writerScope, documentId, drafts) {
-        const current = await repos.documents.get(scope, documentId);
-        if (current === null || current.storageKey !== expectedStorageKey) {
-          stale = true;
-          return { ids: drafts.map(() => '') };
+        let res;
+        try {
+          res = await repos.chunks.insertManyIfStorageKey(
+            writerScope,
+            documentId,
+            expectedStorageKey,
+            drafts,
+          );
+        } catch (error) {
+          if (error instanceof RepositoryError && error.kind === 'not_found') return dropped(drafts);
+          throw error;
         }
-        return repos.chunks.insertMany(writerScope, documentId, drafts);
+        return res.stale ? dropped(drafts) : { ids: res.ids };
       },
       async setEmbeddings(writerScope, items) {
         if (stale) return { updated: 0 };
@@ -109,7 +121,16 @@ async function buildSource(
   mimeType: string | undefined,
 ): Promise<DocumentInput | VideoSource> {
   if (DOCUMENT_KINDS.has(fileKind)) {
-    const bytes = await storage.getObjectBytes(storageKey);
+    let bytes: Uint8Array;
+    try {
+      bytes = await storage.getObjectBytes(storageKey, MAX_DOCUMENT_BYTES);
+    } catch (error) {
+      // Same failure code parseDocument uses for an oversized document, so the teacher sees one.
+      if (error instanceof ObjectTooLargeError) {
+        throw new IngestError('input_too_large', false, error.message);
+      }
+      throw error;
+    }
     return { kind: fileKind as 'pdf' | 'docx' | 'pptx' | 'markdown', bytes, sourceTitle };
   }
   // fileKind is 'video' | 'audio'; the schema requires mimeType to be set exactly then.
@@ -140,7 +161,7 @@ export function ingestProcessor(
       throw new PermanentJobError(`${job.name}: document has no stored file`);
     }
 
-    const { writer, stale } = buildWriter(deps.repos, teacherId, storageKey);
+    const { writer, stale } = buildWriter(deps.repos, storageKey);
     const indexDeps: IndexDocumentDeps = {
       writer,
       embedder: deps.gateway.embedder,

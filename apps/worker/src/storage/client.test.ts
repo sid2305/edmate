@@ -2,14 +2,36 @@
 // is injectable so no crypto or real client config is required either.
 import { DeleteObjectCommand, GetObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { describe, expect, it, vi } from 'vitest';
-import { createStorageClient } from './client.js';
+import { createStorageClient, ObjectTooLargeError } from './client.js';
+
+/** A fake S3 body: an async iterable of `parts`, recording how many parts were pulled. */
+function fakeBody(parts: Uint8Array[]) {
+  const state = { pulled: 0, destroyed: false };
+  const body = {
+    async *[Symbol.asyncIterator]() {
+      for (const p of parts) {
+        state.pulled += 1;
+        yield p;
+      }
+    },
+    destroy() {
+      state.destroyed = true;
+    },
+    transformToByteArray: () => Promise.reject(new Error('must stream, not buffer')),
+  };
+  return { body, state };
+}
+
+function streamClient(res: { Body?: unknown; ContentLength?: number }) {
+  return { send: vi.fn(async () => res) } as unknown as S3Client;
+}
 
 function fakeClient(objects = new Map<string, Uint8Array>()) {
   const send = vi.fn(async (command: unknown) => {
     if (command instanceof GetObjectCommand) {
       const bytes = objects.get(command.input.Key ?? '');
       if (bytes === undefined) return {};
-      return { Body: { transformToByteArray: async () => bytes } };
+      return { Body: fakeBody([bytes]).body };
     }
     if (command instanceof DeleteObjectCommand) {
       objects.delete(command.input.Key ?? '');
@@ -25,13 +47,58 @@ describe('createStorageClient', () => {
     it('returns the stored bytes', async () => {
       const objects = new Map([['docs/a.pdf', new TextEncoder().encode('hello')]]);
       const storage = createStorageClient(fakeClient(objects), 'edmate-dev');
-      const bytes = await storage.getObjectBytes('docs/a.pdf');
+      const bytes = await storage.getObjectBytes('docs/a.pdf', 100);
       expect(new TextDecoder().decode(bytes)).toBe('hello');
     });
 
     it('throws when the response has no body', async () => {
       const storage = createStorageClient(fakeClient(), 'edmate-dev');
-      await expect(storage.getObjectBytes('docs/missing.pdf')).rejects.toThrow('no body');
+      await expect(storage.getObjectBytes('docs/missing.pdf', 100)).rejects.toThrow('no body');
+    });
+
+    it('joins a multi-part stream, accepting exactly the cap', async () => {
+      const { body } = fakeBody([new Uint8Array([1, 2]), new Uint8Array([]), new Uint8Array([3, 4])]);
+      const storage = createStorageClient(streamClient({ Body: body }), 'b');
+      expect([...(await storage.getObjectBytes('k', 4))]).toEqual([1, 2, 3, 4]);
+    });
+
+    it('refuses a ContentLength over the cap before reading any of the body', async () => {
+      const { body, state } = fakeBody([new Uint8Array(10)]);
+      const storage = createStorageClient(streamClient({ Body: body, ContentLength: 11 }), 'b');
+      const err = await storage.getObjectBytes('k', 10).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ObjectTooLargeError);
+      expect(state.pulled).toBe(0);
+      expect(state.destroyed).toBe(true);
+    });
+
+    it('stops streaming once the running count passes the cap (no or a lying ContentLength)', async () => {
+      for (const ContentLength of [undefined, 3]) {
+        const parts = [new Uint8Array(4), new Uint8Array(4), new Uint8Array(4), new Uint8Array(4)];
+        const { body, state } = fakeBody(parts);
+        const storage = createStorageClient(
+          streamClient({ Body: body, ...(ContentLength === undefined ? {} : { ContentLength }) }),
+          'b',
+        );
+        const err = await storage.getObjectBytes('k', 6).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ObjectTooLargeError);
+        expect((err as ObjectTooLargeError).maxBytes).toBe(6);
+        expect(state.pulled).toBe(2);
+        expect(state.destroyed).toBe(true);
+      }
+    });
+
+    it('never names the key or bucket in the too-large message', async () => {
+      const storage = createStorageClient(
+        streamClient({ Body: fakeBody([]).body, ContentLength: 99 }),
+        'bucket-x',
+      );
+      const err = (await storage.getObjectBytes('uploads/secret.pdf', 1).catch((e: unknown) => e)) as Error;
+      expect(err.message).not.toMatch(/secret|bucket-x/);
+    });
+
+    it('refuses a body that is not a stream', async () => {
+      const storage = createStorageClient(streamClient({ Body: { nope: true } }), 'b');
+      await expect(storage.getObjectBytes('k', 10)).rejects.toThrow('not a stream');
     });
   });
 

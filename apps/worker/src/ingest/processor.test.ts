@@ -2,11 +2,12 @@
 // package's deterministic `hashedEmbedder`, the transcriber and storage are in-memory fakes.
 import type { DocumentRow } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
+import { MAX_DOCUMENT_BYTES } from '@edmate/ingest';
 import { hashedEmbedder } from '@edmate/ingest/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
 import type { LogLine } from '../log.js';
-import type { StorageClient } from '../storage/client.js';
+import { ObjectTooLargeError, type StorageClient } from '../storage/client.js';
 import type { IngestGateway } from './gateway.js';
 import { ingestProcessor, type IngestJobLike, type IngestProcessorDeps } from './processor.js';
 
@@ -73,6 +74,27 @@ function memoryRepos(initial: DocumentRow) {
           calls.push('insertMany');
           drafts.forEach((d) => inserted.push({ documentId, ord: d.ord }));
           return Promise.resolve({ ids: drafts.map((d) => `${documentId}-c${d.ord}`) });
+        },
+        // Mirrors the db repo: the key check and the write are one call (8.2 fix round).
+        insertManyIfStorageKey: (
+          _scope: unknown,
+          documentId: string,
+          storageKey: string,
+          drafts: { ord: number }[],
+        ) => {
+          calls.push('insertManyIfStorageKey');
+          if (current === null || current.id !== documentId) {
+            return Promise.reject(
+              new RepositoryError('not_found', 'chunks.insertManyIfStorageKey'),
+            );
+          }
+          if (current.storageKey !== storageKey) return Promise.resolve({ stale: true });
+          calls.push('insertMany');
+          drafts.forEach((d) => inserted.push({ documentId, ord: d.ord }));
+          return Promise.resolve({
+            stale: false,
+            ids: drafts.map((d) => `${documentId}-c${d.ord}`),
+          });
         },
         setEmbeddings: (_scope: unknown, items: { id: string }[]) => {
           calls.push('setEmbeddings');
@@ -214,6 +236,29 @@ describe('ingestProcessor', () => {
     expect(mem.getRow()?.failureReason).toBe('validation');
   });
 
+  it('caps the download at MAX_DOCUMENT_BYTES and maps an oversized object to input_too_large', async () => {
+    const mem = memoryRepos(row());
+    const seen: number[] = [];
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: {
+        ...fakeStorage(),
+        getObjectBytes: (_key, maxBytes) => {
+          seen.push(maxBytes);
+          return Promise.reject(new ObjectTooLargeError(maxBytes));
+        },
+      },
+      gateway: gateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(seen).toEqual([MAX_DOCUMENT_BYTES]);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('input_too_large');
+    expect(mem.calls).not.toContain('insertMany');
+  });
+
   it('rethrows a retryable IngestError for BullMQ to retry, leaving the document processing', async () => {
     const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.mp4' }));
     const transcribe = vi.fn(() => Promise.reject(new Error('whisper is down')));
@@ -249,8 +294,62 @@ describe('ingestProcessor', () => {
       job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
     );
     expect(outcome).toBe('stale_skipped');
+    expect(mem.calls).toContain('insertManyIfStorageKey');
     expect(mem.calls).not.toContain('insertMany');
+    expect(mem.calls).not.toContain('setEmbeddings');
     expect(mem.getRow()?.status).toBe('uploading');
+  });
+
+  it('reads the document once: the chunk write carries the key check itself', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
+      gateway: gateway(),
+    };
+    await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
+    );
+    expect(mem.calls.filter((c) => c === 'get')).toHaveLength(1);
+    expect(mem.calls).toContain('insertMany');
+  });
+
+  it('drops stale work when the document is deleted before the chunk write', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: {
+        ...fakeStorage(),
+        getObjectBytes: () => {
+          mem.setRow(null);
+          return Promise.resolve(markdownBytes());
+        },
+      },
+      gateway: gateway(),
+    };
+    const outcome = await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
+    );
+    expect(outcome).toBe('stale_skipped');
+    expect(mem.calls).not.toContain('insertMany');
+    expect(mem.calls.some((c) => c.startsWith('updateStatus'))).toBe(false);
+  });
+
+  it('a chunk write failing for another reason is not mistaken for a stale drop', async () => {
+    const mem = memoryRepos(row());
+    (mem.repos.chunks as { insertManyIfStorageKey: unknown }).insertManyIfStorageKey = () =>
+      Promise.reject(new RepositoryError('failed', 'chunks.insertManyIfStorageKey'));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
+      gateway: gateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(
+        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
+      ),
+    ).rejects.toThrow();
+    expect(mem.getRow()?.status).not.toBe('ready');
   });
 
   it('drops stale work when a replace lands after indexing but before the ready write', async () => {

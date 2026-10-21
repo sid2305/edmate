@@ -180,6 +180,9 @@ const BIG_HELP = { blob: 'x'.repeat(LIMITS.helpStateMaxJsonLength) };
 
 /** Task 5.3: each teacher's isolation document (one chunk, ord 0), written in beforeAll. */
 const isoDoc = (t: Teacher) => `doc_iso_${t.toLowerCase()}`;
+/** A document with a stored file, for `chunks.insertManyIfStorageKey`. */
+const keyDoc = (t: Teacher) => `doc_key_${t.toLowerCase()}`;
+const keyOf = (t: Teacher) => `uploads/iso-${t.toLowerCase()}.pdf`;
 /** Unit vector on axis 0: every isolation chunk and query embeds to it (no model is called). */
 const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 ? 1 : 0));
 /** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
@@ -325,6 +328,29 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       [
         'an ord already written',
         (r) => r.chunks.insertMany(tScope(a), isoDoc(a), [{ ord: 0, text: 'x', locator: 'p' }]),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.insertManyIfStorageKey': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.chunks.insertManyIfStorageKey(scope, keyDoc(target), keyOf(target), [
+        { ord: ++counter, text: `[${actor}] keyed chunk`, locator: 'p2' },
+      ]),
+    verify: async (_r, actor, res) => {
+      expect(res).toMatchObject({ stale: false });
+      const [id] = (res as { ids: string[] }).ids;
+      expect(await ownerOfRow('chunks', id!)).toBe(teacherId(actor));
+    },
+    mismatches: (a) => [
+      [
+        'an ord already written',
+        (r) =>
+          r.chunks.insertManyIfStorageKey(tScope(a), keyDoc(a), keyOf(a), [
+            { ord: 0, text: 'x', locator: 'p' },
+          ]),
         'invalid',
       ],
     ],
@@ -1828,6 +1854,16 @@ describe.skipIf(!up)(
         });
         await repos.chunks.insertMany(tScope(t), isoDoc(t), [
           { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
+        ]);
+        await repos.documents.create(tScope(t), {
+          id: keyDoc(t),
+          moduleId: ids.module(t, 1),
+          kind: 'material',
+          sourceTitle: `[${t}] keyed doc`,
+          storageKey: keyOf(t),
+        });
+        await repos.chunks.insertMany(tScope(t), keyDoc(t), [
+          { ord: 0, text: `[${t}] keyed marker`, locator: 'p1' },
         ]);
       }
       for (const target of TEACHERS) {
