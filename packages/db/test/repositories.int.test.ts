@@ -1144,6 +1144,28 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       );
     },
   },
+  'learnerProfiles.applyMistakes': {
+    scope: 'student',
+    op: 'write',
+    // Same shape as applyMastery above: the payload names no target row, only a mistake tag as
+    // content, so there is no "actor writes toward target" to test (owns: () => true skips that
+    // grid).
+    owns: () => true,
+    attempt: async (r, scope) => {
+      const tag = `mistake_${++counter}`;
+      const lastSeen = new Date(Date.UTC(2026, 9, 19, 14, 0, counter)).toISOString();
+      await r.learnerProfiles.applyMistakes(scope, [{ tag, count: 1, lastSeen }]);
+      return { tag, lastSeen };
+    },
+    verify: async (r, actor, result) => {
+      const { tag, lastSeen } = result as { tag: string; lastSeen: string };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mistakes.some((m) => m.tag === tag && m.lastSeen === lastSeen) ?? false,
+      );
+    },
+  },
   'evidenceEvents.append': {
     scope: 'student',
     op: 'write',
