@@ -240,3 +240,17 @@ risk: low
 Decided (plan's own wording, logged now that the grouping and the answer transaction it describes are both built and tested): "5.10 Ask the teacher: questions grouped inside `open` (lexical, same teacher and agent, `findSimilar` stays `[]`); the teacher's answer writes the note, eval case, status, thread messages and notifications in one teacher-scoped transaction that writes into the asking students' open sessions; new tables `teacher_eval_cases` and `notifications`."
 Why: `packages/db/src/repositories/**` is a risk-paths group ("access filter / money / isolation") that needs the security-reviewer's sign-off at merge, per the plan's own Phase A/B/C "Risky paths touched" and "Decisions (draft)" sections; Phase D adds no new risky-path file, so this closes out the one whole-task decision the plan asked the lead to log at merge.
 risk: high
+
+## Fix round 1
+
+Test-only changes in `packages/db/test/ask-teacher-loop.int.test.ts`; production code and budgets unchanged.
+
+- **[HIGH] real-clock CI flake (3.9b/3.9d class):** `realClock()` is now `slackClock(10)`, copied from `apps/worker/test/clock.ts` (3.9d) and fitted to `VirtualClock`: `sleep(ms)` waits `ms * 10` real ms and `now()` advances at 1/10 speed, so the 50/50/300/500 ms budgets get headroom over real Postgres while a real hang still times out. `runFor` now returns a `why` (error events + trace step outcomes) that every turn assertion prints on failure.
+- **[MEDIUM] "next similar question" not really tested:** the shared `ASKTEACH-LOOP` prefix is gone (the database is a throwaway per run, so no marker is needed). Q2 is `What makes the sky blue on a clear day around noon?` (Jaccard 5/8 with Q1, 5 shared terms) and turn 3 is `Why is a clear sky blue at noon?`, both with term sets different from Q1's; the test asserts that up front through `queryTerms`/`questionSimilarity`/`bestGroup`. Turn 3 is still asserted to end `done`, not `ask_teacher`, open no question, and cite the teacher's note first.
+
+Evidence:
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` (twice, second with `--force`) → `Tasks: 26 successful, 26 total`; `@edmate/db:test: Tests 854 passed | 4 skipped (858)`.
+- `corepack pnpm vitest run test/ask-teacher-loop.int.test.ts` ×3 → `Tests 1 passed (1)` each time.
+- `python3 .githooks/secret-scan.py --all` → exit 0.
+
+Decisions: None (the slack clock follows 3.9d's merged pattern).
