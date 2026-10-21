@@ -412,7 +412,8 @@ tasks:
   model: plan:sonnet build:sonnet-5/medium fix:sonnet-5/medium review:security-opus,ts-sonnet,code-sonnet
 - id: 1.7c
   milestone: M13
-  title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key). Parked 21 Oct 2026: US is the first region; India (and its consent flow) waits until India is picked up'
+  title: 'Parental consent for 13-17 (1.7 Phase D, plan.md): parent proof flow per the answer to B-27 Q1; re-consent clears withdrawn_at (same-version unique key). Parked 21 Oct 2026: US is the first region;
+    India (and its consent flow) waits until India is picked up'
   accept: as in docs/tasks/1.7/plan.md Phase D
   deps:
   - '1.7'
@@ -1334,10 +1335,10 @@ tasks:
   - '5.3'
   - '5.4'
   - M3
-  status: planning
+  status: running
   risk: risky
-  branch: null
-  model: plan:opus
+  branch: m5/5.10-ask-the-teacher
+  model: plan:opus build:opus-5.5/medium
 - id: '5.11'
   milestone: M5
   title: Outline drafter and style-card drafter (`packages/ingest`)
