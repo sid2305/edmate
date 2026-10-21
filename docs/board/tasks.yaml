@@ -682,7 +682,7 @@ tasks:
   milestone: M3
   title: 'Teacher-label follow-ups (3.11d reviews): the persona count rises on /pause, stop and post-debrief turns, never resets on a new role-play or persona, and is saved when the turn errors, is cancelled
     or gets the safe reply (reset on role-play start; render "question N of M" or "all asked: debrief now"); compose.test.ts tautological history test and the unreachable "question 0 of 5" pin; closed modes
-    still send the whole session history; MessageSchema.text and ChunkSchema.text have no max length; eval schema fields for teacher turns, skills and personas, then the parked forged-note cases; the core-phrase
+    still send the whole session history; eval schema fields for teacher turns, skills and personas, then the parked forged-note cases; the core-phrase
     pass skips spans the exact-label pass already spaced out (a pasted label gets "[copied]" twice today)'
   accept: each item has a unit test; a restarted role-play opens at question 1; an errored persona turn leaves the count unchanged; the forged-note eval cases are written as reviewed_by pending.
   deps:
@@ -1953,6 +1953,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 3.11f
+  milestone: M13
+  title: 'Teacher-label LOWs parked from 3.11d/3.11e: MessageSchema.text and ChunkSchema.text have no max length (contracts, ADR); foldForMatch misses digit swaps (Pl4tform), small caps and a Devanagari label; no gateway test that a merged teacher-then-student turn keeps the >>> boundary'
+  accept: an ADR; MessageSchema.text and ChunkSchema.text bounded by LIMITS, with stored rows checked first; the fold covers digit swaps, small caps and Devanagari; a gateway test keeps the teacher fence across merged user turns.
+  deps:
+  - GATE
+  - 3.11e
+  status: todo
+  risk: risky
+  branch: null
 - id: '13.3'
   milestone: M13
   title: 'Security review: teacher and student isolation, entitlement bypass attempts, OWASP Top 10, dependency audit'
