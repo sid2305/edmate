@@ -209,12 +209,7 @@ resolves without hanging.
   `enqueueIngest`'s third argument; the replace-race case rewritten to run through the real
   `Queue`/`Worker` instead of calling `ingestProcessor` directly.
 
-### Decisions (Phase 2 int test)
-
-#### 20 Oct 2026 · 8.2d ingest job id is now keyed by storageKey, fixing the replace-enqueue hang · decided by tdd-guide
-Decided (fixed, 8.2d): `jobId.ingest` now takes `(documentId, storageKey)` and hashes `storageKey` into the id (`packages/queue/src/queues.ts`), and `enqueueIngest` takes `storageKey` as a third argument (`packages/queue/src/index.ts`). A retry of the *same* file still dedupes to the same job id (idempotent); a replace's new `storageKey` gets a distinct id, so it no longer collides with (and block behind) a still-active old job. The processor's existing re-read-before-write guard (the `ChunkWriter`'s `storageKey` check right before `chunks.insertMany`) is unchanged and still drops the stale old job's write; `apps/worker/test/ingest.int.test.ts`'s replace-race case now drives this end to end through the real `Queue`/`Worker` and asserts the second enqueue resolves without hanging.
-Why: the previous pass found that BullMQ's job-id dedupe only replaces a job still `waiting`/`delayed`, not one already `active`, so reusing `jobId.ingest(documentId)` across a replace while the old job was still processing blocked `Queue.add()` indefinitely. Keying on `storageKey` (the file actually being enqueued) rather than just the document avoids the collision without changing the processor or the job schema.
-risk: medium
+(Decision moved to ## Decisions: "8.2d ingest job id is now keyed by storageKey".)
 
 ## Fix round (Phases 1–2 review)
 
@@ -421,18 +416,20 @@ apps/web: the teacher upload centre at `/teacher/uploads`.
   they are unit-tested apart from React.
 
 ## Left to do
-- **Manual dev-stack run** (plan § Evidence 3): `docker compose up` (web, worker, MinIO), sign in
-  as a teacher with a module, upload a small synthetic PDF and a short synthetic audio clip, watch
-  them reach Ready, delete one and confirm a retrieval search misses it; paste timestamps here.
-  Check the MinIO bucket exists first.
-- Reviews: security-reviewer on the fix round (production config, compose `S3_ALLOW_HTTP`, CORS);
-  code-reviewer on the page.
-- Follow-ups (not blocking): apps/worker's `storageConfigFromEnv` has the same dev fallback under
-  production; a key-conditional `updateStatus('processing')` in packages/db to close the
-  complete/replace race; module names in the picker once a modules repo returns titles;
-  web-link/YouTube ingestion (deferred).
+Nothing for 8.2. Follow-ups are in board task 8.2a (review.md lists each deferred finding); the
+manual dev-stack run moves to the thin-slice end-to-end check (see Decisions).
 
 ## Decisions
+
+### 20 Oct 2026 · 8.2 merged without the manual dev-stack run; it moves to the thin-slice end-to-end check · decided by team lead
+Decided: the plan's Evidence 3 (a browser upload and delete on the full compose stack) was not run before merge. The routes, worker and repository paths are covered by unit tests and real Postgres/Redis integration tests (apps/worker ingest.int.test.ts runs queue → worker → ready; packages/db documents.int.test.ts shows a delete makes the next search miss the file), and the final code, TypeScript and security reviews approved. The manual run is listed in 8.2a and runs with 8.1a's browser check, when a teacher can sign up, upload and a student can chat.
+Why: MVP first (human, 20 Oct 2026); one browser run over the whole thin slice finds more than one per task. Risk: a dev-stack-only wiring problem (CORS, public endpoint) surfaces later rather than now.
+risk: medium
+
+### 20 Oct 2026 · 8.2d ingest job id is now keyed by storageKey, fixing the replace-enqueue hang · decided by tdd-guide
+Decided (fixed, 8.2d): `jobId.ingest` now takes `(documentId, storageKey)` and hashes `storageKey` into the id (`packages/queue/src/queues.ts`), and `enqueueIngest` takes `storageKey` as a third argument (`packages/queue/src/index.ts`). A retry of the *same* file still dedupes to the same job id (idempotent); a replace's new `storageKey` gets a distinct id, so it no longer collides with (and block behind) a still-active old job. The processor's existing re-read-before-write guard (the `ChunkWriter`'s `storageKey` check right before `chunks.insertMany`) is unchanged and still drops the stale old job's write; `apps/worker/test/ingest.int.test.ts`'s replace-race case now drives this end to end through the real `Queue`/`Worker` and asserts the second enqueue resolves without hanging.
+Why: the previous pass found that BullMQ's job-id dedupe only replaces a job still `waiting`/`delayed`, not one already `active`, so reusing `jobId.ingest(documentId)` across a replace while the old job was still processing blocked `Queue.add()` indefinitely. Keying on `storageKey` (the file actually being enqueued) rather than just the document avoids the collision without changing the processor or the job schema.
+risk: medium
 
 ### 20 Oct 2026 · 8.2 fix round: production S3 config is refused, not defaulted; the dev stack opts out of https explicitly · decided by tdd-guide
 Decided: under `NODE_ENV=production` the web's storage config needs `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_BUCKET` set and an https endpoint; otherwise the studio routes answer 503 and log only a code such as `S3_ENDPOINT_not_https`. `S3_BUCKET` is required too (the review named credentials and endpoint; uploading production files into the dev bucket name is the same mistake). Because the local compose stack runs the web image with `NODE_ENV=production` against `http://minio:9000`, compose sets `S3_ALLOW_HTTP: 'true'`; only the exact string `true` opts out.
