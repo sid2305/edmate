@@ -7,8 +7,10 @@ import {
   PRACTICE_SERVED_MAX,
   practiceFields,
   loadSessionHelp,
+  PERSONA_ID_MAX,
   PERSONA_QUESTIONS_MAX,
   parseSessionHelp,
+  withPersonaCount,
   personaQuestionsAsked,
   serializeSessionHelp,
   SessionHelpSchema,
@@ -254,6 +256,35 @@ describe('personaQuestionsAsked (3.11d: the server counts, absent = 0)', () => {
   });
 });
 
+describe('personaId and withPersonaCount (3.11e)', () => {
+  it('parses, copies and round-trips the persona id', () => {
+    const raw = { ...VALID, personaQuestionsAsked: 2, personaId: 'per_test_01' };
+    const parsed = parseSessionHelp(raw);
+    expect(parsed.help.personaId).toBe('per_test_01');
+    expect(copyHelp(parsed.help).personaId).toBe('per_test_01');
+    expect(parseSessionHelp(serializeSessionHelp(parsed))).toEqual(parsed);
+    for (const bad of ['', 'p'.repeat(PERSONA_ID_MAX + 1), 3, null]) {
+      expect(parseSessionHelp({ ...VALID, personaId: bad })).toEqual(DEFAULT);
+    }
+  });
+
+  it('copies the count and the id from `from`, or removes them', () => {
+    const next = {
+      rung: 1 as const,
+      help: { ...INITIAL_HELP_STATE, answerKey: [], personaQuestionsAsked: 3, personaId: 'a' },
+    };
+    const from = { ...INITIAL_HELP_STATE, answerKey: [], personaQuestionsAsked: 2, personaId: 'b' };
+    expect(withPersonaCount(next, from)).toEqual({
+      rung: 1,
+      help: { ...next.help, personaQuestionsAsked: 2, personaId: 'b' },
+    });
+    const bare = withPersonaCount(next, INITIAL_HELP_STATE);
+    expect(bare.help).not.toHaveProperty('personaQuestionsAsked');
+    expect(bare.help).not.toHaveProperty('personaId');
+    expect(next.help.personaQuestionsAsked).toBe(3);
+  });
+});
+
 describe('practice fields (5.6, ADR-0010)', () => {
   const PRACTICE = {
     ...VALID,
@@ -386,6 +417,7 @@ describe('practice limits fit the stored blob (5.6 review)', () => {
         lockedStopped: true,
         groundingAsks: 1_000,
         personaQuestionsAsked: PERSONA_QUESTIONS_MAX,
+        personaId: 'p'.repeat(PERSONA_ID_MAX),
         practiceItemId: id,
         practiceModuleId: id,
         practiceServed: Array.from({ length: PRACTICE_SERVED_MAX }, () => id),

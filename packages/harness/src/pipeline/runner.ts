@@ -37,6 +37,7 @@ import {
   practiceFields,
   type SessionHelp,
   withGroundingAsks,
+  withPersonaCount,
 } from '../pedagogy/helpState.js';
 import { assemble } from './assemble.js';
 import { logBackground } from './backgroundLog.js';
@@ -593,7 +594,13 @@ class Turn {
     if (gen === CANCELLED || 'code' in gen) {
       this.clearShown();
       this.endWithError(gen === CANCELLED ? PROVIDER_ERROR : gen);
-      return this.finish(e, { ...base, outcome: 'error' }, intent, decision.move);
+      // The student saw no reply, so the persona question count stays as loaded (3.11e).
+      return this.finish(
+        e,
+        { ...base, next: withPersonaCount(base.next, built.helpState), outcome: 'error' },
+        intent,
+        decision.move,
+      );
     }
 
     // The TeacherQuestion is opened before done, so its id reaches the student (lead answer Q3).
@@ -631,8 +638,10 @@ class Turn {
       e,
       {
         ...base,
+        // Only the model's own reply, passed by the post guard, counts a persona question
+        // (3.11e): the safe reply and a guard's replacement keep the loaded count.
         next: withGroundingAsks(
-          decided.next,
+          post.modelReply ? decided.next : withPersonaCount(decided.next, built.helpState),
           asked + (escalating && questionId !== undefined ? 1 : 0),
         ),
         outcome: 'replied',
@@ -973,7 +982,9 @@ class Turn {
     decision: PedagogyDecision,
     gen: GenerateResult,
     sources: SourceRef[],
-  ): Promise<{ replyText: string; escalateToTeacher: boolean } | { alert: SafetyAlert }> {
+  ): Promise<
+    { replyText: string; escalateToTeacher: boolean; modelReply: boolean } | { alert: SafetyAlert }
+  > {
     const { draft } = gen;
     // Every practice key issued this turn is checked too (5.6, ADR-0010 §4): the items collected
     // through onPracticeItem and the generate result's own `practiceAnswerKey` (5.6 review). Only
@@ -1005,7 +1016,7 @@ class Turn {
       if (p.value.result === 'ok') {
         // A held reply (4.7) reaches the student only now, checked.
         if (gen.held === true) this.send({ type: 'token', text: draft });
-        return { replyText: draft, escalateToTeacher: false };
+        return { replyText: draft, escalateToTeacher: false, modelReply: true };
       }
       // The guard's text is never shown on an escalate (4.1 safety review): the caring template is.
       if (p.value.result === 'escalate') {
@@ -1019,7 +1030,11 @@ class Turn {
       }
       this.clearAll();
       this.send({ type: 'replace', text: p.value.text });
-      return { replyText: p.value.text, escalateToTeacher: p.value.escalateToTeacher === true };
+      return {
+        replyText: p.value.text,
+        escalateToTeacher: p.value.escalateToTeacher === true,
+        modelReply: false,
+      };
     }
     this.trace.step('postGuard', p.ms, 'fallback');
     // Reported like every other step failure: kind and error name only, never a message.
@@ -1032,7 +1047,7 @@ class Turn {
     }
     this.clearAll();
     this.send({ type: 'replace', text: safe });
-    return { replyText: safe, escalateToTeacher: false };
+    return { replyText: safe, escalateToTeacher: false, modelReply: false };
   }
 
   // ---- 10, 11 and the trace: after the stream has ended ---------------------------------------

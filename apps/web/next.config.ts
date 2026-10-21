@@ -1,3 +1,4 @@
+import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from 'next';
 
 // `next build` runs with `--webpack` (package.json), not Turbopack. 1.7 fix round 1 traced
@@ -41,4 +42,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Non-routing mode (task 9.1): reads `./src/i18n/request.ts` (next-intl's default path), no
+// `[locale]` segment, no middleware. English-only pilot; see that file's own comment.
+const withNextIntl = createNextIntlPlugin();
+
+export default withNextIntl(nextConfig);

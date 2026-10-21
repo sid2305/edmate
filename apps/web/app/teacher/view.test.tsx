@@ -1,0 +1,35 @@
+// @vitest-environment jsdom
+// Task 9.1 Phase C: the teacher placeholder view -- pure, no `requireRole` to stub. 8.1 replaces
+// or extends this. Written and red before `view.tsx` exists (TDD).
+import { render, screen } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import messages from '../../messages/en.json';
+
+vi.mock('./actions', () => ({ signOutAndRedirect: vi.fn() }));
+vi.mock('next-intl/server', () => ({
+  getTranslations: async (namespace: keyof typeof messages) => {
+    const bundle = messages[namespace] as Record<string, string>;
+    return (key: string) => bundle[key];
+  },
+}));
+
+import { TeacherView } from './view';
+
+beforeAll(() => {
+  expect.extend(toHaveNoViolations);
+});
+
+describe('TeacherView', () => {
+  it('shows the coming-soon placeholder and a sign-out button', async () => {
+    render(await TeacherView());
+    expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = render(await TeacherView());
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+});

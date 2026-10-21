@@ -24,6 +24,14 @@ describe('buildJudgeRequest', () => {
     const content = buildJudgeRequest(rubric, 'r', []).messages[0]?.content ?? '';
     expect(content).toContain('(no earlier turns)');
   });
+
+  it('puts a teacher line before the student line of its turn', () => {
+    const history = [{ teacher: 'Check the order.', student: 'Why?', reply: 'Look at line 2.' }];
+    const content = buildJudgeRequest(rubric, 'r', history).messages[0]?.content ?? '';
+    expect(content).toContain('Teacher: Check the order.\nStudent: Why?\nAgent: Look at line 2.');
+    const plain = buildJudgeRequest(rubric, 'r', [{ student: 'Why?', reply: 'x' }]);
+    expect(plain.messages[0]?.content).not.toContain('Teacher:');
+  });
 });
 
 describe('judge', () => {

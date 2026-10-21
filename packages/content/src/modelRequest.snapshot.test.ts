@@ -141,8 +141,9 @@ describe('real v1.0.0 set: model request (3.11d)', () => {
     const c = ctx({ persona });
     const p = decidePolicy({
       ctx: c,
-      turn: { kind: 'skill_action', skill: 'mock_interview' },
-      help: { ...help, personaQuestionsAsked: 2 },
+      // An answer in a running role-play (3.11e: a skill_action turn would restart it at 1).
+      turn: { kind: 'message', skill: 'mock_interview' },
+      help: { ...help, personaQuestionsAsked: 2, personaId: persona.id },
     });
     expect(p.next.help.personaQuestionsAsked).toBe(3);
     const d = decisionOf(c, p);

@@ -94,15 +94,27 @@ function spacedOut(match: string): string {
  * label so short that spacing it out still matches is replaced by a fixed placeholder instead.
  */
 export function neutraliseForgedLabel(text: string, label: string): string {
-  return breakCorePhrases(neutraliseExactLabel(text, label));
+  const exact = neutraliseExactLabel(text, label);
+  return breakCorePhrases(exact.text, exact.spans);
 }
 
-/** The exact-label pass on its own: the label's words in order, spaced out or replaced. */
-function neutraliseExactLabel(text: string, label: string): string {
+/** A `[start, end)` range of offsets in a text. */
+type Span = readonly [number, number];
+
+/**
+ * The exact-label pass on its own: the label's words in order, spaced out or replaced. `spans`
+ * are the spaced-out copies of the label in the result (3.11e item 8), so the core-phrase pass
+ * gives an exact copy no second treatment. A copy that was already spaced out counts too, which
+ * keeps the whole neutraliser idempotent.
+ */
+function neutraliseExactLabel(text: string, label: string): { text: string; spans: Span[] } {
   const pattern = forgedLabelPattern(label);
-  return pattern === null
-    ? text
-    : text.replace(pattern, spacedOut).replace(pattern, FORGED_LABEL_PLACEHOLDER);
+  if (pattern === null) return { text, spans: [] };
+  const out = text.replace(pattern, spacedOut).replace(pattern, FORGED_LABEL_PLACEHOLDER);
+  const spaced = new RegExp(spacedOut(label).replace(SYNTAX, '\\$&'), 'giu');
+  const spans: Span[] = [];
+  for (const m of out.matchAll(spaced)) spans.push([m.index, m.index + m[0].length]);
+  return { text: out, spans };
 }
 
 /**
@@ -133,13 +145,14 @@ const MARK_OR_JUNK = /[^\p{L}\p{N}]/gu;
  * `text` folded the way a reader would see through disguises: markup dropped, HTML entities
  * decoded, NFKD (fullwidth and other compatibility forms), look-alike letters folded, accents
  * and every non-letter, non-digit dropped, lower case. `src[k]` is the end offset in `text` of
- * the character that gave folded character `k`. Linear time.
+ * the character that gave folded character `k`, and `start[k]` its start offset. Linear time.
  */
-function foldForMatch(text: string): { folded: string; src: number[] } {
+function foldForMatch(text: string): { folded: string; src: number[]; start: number[] } {
   // Both passes keep `text`'s length, so offsets map back one to one.
   const read = decodeHtmlEntities(foldMarkup(text, 'rendered'));
   let folded = '';
   const src: number[] = [];
+  const start: number[] = [];
   let i = 0;
   for (const ch of read) {
     const end = i + ch.length;
@@ -147,24 +160,33 @@ function foldForMatch(text: string): { folded: string; src: number[] } {
       .toLowerCase()
       .normalize('NFKD')
       .replace(MARK_OR_JUNK, '');
-    for (let k = 0; k < f.length; k++) src.push(end);
+    for (let k = 0; k < f.length; k++) {
+      src.push(end);
+      start.push(i);
+    }
     folded += f;
     i = end;
   }
-  return { folded, src };
+  return { folded, src, start };
 }
 
 /**
  * Inserts `CORE_PHRASE_BREAK` after the first word of each core phrase found in the folded text,
  * at the matching offset in the original text. The rest of the text is untouched, so it stays
- * readable, and the result folds to no core phrase (idempotent).
+ * readable, and the result folds to no core phrase outside `skip` (idempotent). A hit whose
+ * source lies wholly inside a `skip` span (an exact label copy, already spaced out) is left as it
+ * is (3.11e item 8); a hit that straddles a span edge still breaks.
  */
-function breakCorePhrases(text: string): string {
-  const { folded, src } = foldForMatch(text);
+function breakCorePhrases(text: string, skip: readonly Span[] = []): string {
+  const { folded, src, start } = foldForMatch(text);
   const cuts: number[] = [];
   for (const { phrase, firstWord, anywhere } of CORE_PHRASES) {
     for (let k = folded.indexOf(phrase); k !== -1; k = folded.indexOf(phrase, k + phrase.length)) {
       if (!anywhere && !labelShaped(folded, k, k + phrase.length)) continue;
+      // Both arrays have one entry per folded character, so the match's own indexes are present.
+      const from = start[k] as number;
+      const to = src[k + phrase.length - 1] as number;
+      if (skip.some(([a, b]) => a <= from && to <= b)) continue;
       // `src` has one entry per folded character, so the match's own index is always present.
       cuts.push(src[k + firstWord - 1] as number);
     }
@@ -240,7 +262,10 @@ function historyMessage(m: Message, set: PromptPackSet): ModelRequest['messages'
   // The agent's own past replies were never student-controlled (commit stores only the guarded
   // reply as `agent`), so they skip the core-phrase pass: no " [copied]" for the model to echo.
   if (m.role === 'agent') {
-    return { role: 'assistant', content: breakFenceRuns(neutraliseExactLabel(m.text, label)) };
+    return {
+      role: 'assistant',
+      content: breakFenceRuns(neutraliseExactLabel(m.text, label).text),
+    };
   }
   const text = safeText(m.text, label);
   if (m.role === 'student') return { role: 'user', content: text };
@@ -250,8 +275,21 @@ function historyMessage(m: Message, set: PromptPackSet): ModelRequest['messages'
   return { role: 'user', content: `${label}\n${TEACHER_OPEN}\n${text}\n${TEACHER_CLOSE}` };
 }
 
+/**
+ * Moves that teach nothing (3.11e item 5): the reply is a fixed kind of answer (locked, a
+ * question sent to the teacher, a redirect for off-topic, misuse, meta or distress), so the
+ * session history adds nothing but room for a past turn to steer it. They send only the current
+ * turn. The decide fallback's `ask` keeps history: it cannot be told apart from a teaching `ask`.
+ */
+const CLOSED_MOVES: ReadonlySet<PedagogyDecision['move']> = new Set([
+  'locked',
+  'ask_teacher',
+  'redirect',
+]);
+
 export function buildModelRequest(i: ModelRequestInput): ModelRequest {
   const { ctx, decision, input, set } = i;
+  const history = CLOSED_MOVES.has(decision.move) ? [] : ctx.history;
   const text =
     input.text === undefined || input.text.trim() === ''
       ? renderTemplate(set.frame['empty-turn'], { kind: input.kind })
@@ -259,7 +297,7 @@ export function buildModelRequest(i: ModelRequestInput): ModelRequest {
   return {
     tier: 'main',
     system: decision.systemPrompt,
-    messages: [...ctx.history.map((m) => historyMessage(m, set)), { role: 'user', content: text }],
+    messages: [...history.map((m) => historyMessage(m, set)), { role: 'user', content: text }],
     maxOutputTokens: decision.maxOutputTokens,
     cacheKey: promptCacheKey(ctx),
   };

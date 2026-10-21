@@ -687,9 +687,9 @@ tasks:
   accept: each item has a unit test; a restarted role-play opens at question 1; an errored persona turn leaves the count unchanged; the forged-note eval cases are written as reviewed_by pending.
   deps:
   - 3.11d
-  status: running
+  status: done
   branch: m3/3.11e-teacher-label-followups
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:code-sonnet,ts-sonnet
 - id: '3.12'
   milestone: M3
   title: 'Eval runner: YAML multi-turn cases, string and structure checks, judge scoring, `--record` / replay including recorded judge outputs'
@@ -1564,9 +1564,9 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2-upload-centre
+  model: plan:sonnet build:opus
 - id: '8.3'
   milestone: M8
   title: Outline editor with source links; reorder, rename, merge, split
@@ -1674,13 +1674,21 @@ tasks:
   - GATE
   - '1.3'
   - '1.7'
-  status: running
+  status: done
   branch: m9/9.1-app-shell
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:opus fix:sonnet review:security-opus,code-sonnet,ts-sonnet
 - id: 9.1a
   milestone: M13
   title: Lighthouse accessibility at 360 px on the signed-in pages (/home, /teacher) against a disposable stack, and a Lighthouse CI job (9.1 follow-up; /sign-in scored 100)
   accept: /home and /teacher score >= 95 at 360 px on a production build; the score runs in CI.
+  deps:
+  - '9.1'
+  status: todo
+  branch: null
+- id: 9.1b
+  milestone: M13
+  title: '9.1 review follow-ups: log the error that currentPrincipal swallows before returning null; export HOME_PATH and TEACHER_PATH next to SIGN_IN_PATH; drop the /home self-link'
+  accept: a failed principal lookup leaves a log line; route paths come from one constant each.
   deps:
   - '9.1'
   status: todo
@@ -1720,9 +1728,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: planning
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.4-student-chat
+  model: plan:sonnet build:opus
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
