@@ -115,6 +115,84 @@ export function learnerProfilesRepo(db: Db) {
     },
 
     /**
+     * Task 6.3: merges `patch` (the `known` output of `classifyMistakeTags`,
+     * `packages/harness/src/memory/mistakeTags.ts`) into the scope's `mistakes` jsonb array, under
+     * a row lock so two concurrent calls for the same pair can never both read the same prior
+     * mistakes and clobber each other (same lost-update concern `applyEvidenceMastery` already
+     * guards for `mastery`). By tag: a tag already present has its `count` summed and `lastSeen`
+     * replaced with whichever of the two is later; a tag not yet present is appended. There is no
+     * event log to replay here (unlike `applyEvidenceMastery`/`rebuildMastery`) — just a merge,
+     * same shape as `applyMastery`.
+     *
+     * The `SET` list only ever names `mistakes` and `updated_at` (never `mastery`/`last_summary`),
+     * same narrow-write discipline `applyMastery`'s own doc comment requires of itself. No topic-
+     * ownership check: a mistake tag is not a topic id, and `classifyMistakeTags` has already
+     * guaranteed every `patch` entry's tag is a member of the caller-supplied allowed list (the
+     * style card's `mistakeTags`) before this is ever called — this method only merges, it does not
+     * re-validate "on the teacher's list" (that invariant lives in the pure classifier, not here).
+     * An empty `patch` is a no-op.
+     */
+    async applyMistakes(scope: StudentScope, patch: LearnerProfile['mistakes']): Promise<void> {
+      const method = 'learnerProfiles.applyMistakes';
+      const sc = studentScope(scope, method);
+      const p = parseArg(LearnerProfileSchema.shape.mistakes, patch, method);
+      if (p.length === 0) return;
+      await translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({ mistakes: learnerProfiles.mistakes })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+
+          const byTag = new Map(locked.mistakes.map((m) => [m.tag, { ...m }]));
+          for (const entry of p) {
+            const existing = byTag.get(entry.tag);
+            if (existing) {
+              existing.count += entry.count;
+              if (entry.lastSeen > existing.lastSeen) existing.lastSeen = entry.lastSeen;
+            } else {
+              byTag.set(entry.tag, { ...entry });
+            }
+          }
+          const next = [...byTag.values()];
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mistakes: next, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
+        }),
+      );
+    },
+
+    /**
      * Review fix round (3.17): folds `events` (already deduplicated and topic-scoped by the only
      * caller, `profileStoreFor.applyEvidence`) into the scope's mastery under a row lock, so two
      * concurrent calls for the same pair can never both read the same prior mastery and clobber
