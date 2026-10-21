@@ -1,9 +1,9 @@
 # 5.8 handoff: role-play engine
 
-**Status:** PARTIAL (Phase A done; Phases B–D remain)
+**Status:** PARTIAL (Phases A and B done; Phases C and D remain)
 
-- Branch: `m5/5.8-roleplay` (built on local `work-5.8a`, pushed as `work-5.8a:m5/5.8-roleplay`)
-- Worktree: `.claude/worktrees/agent-af0a80a7590251a3b` (under the repo root)
+- Branch: `m5/5.8-roleplay` (Phase A from local `work-5.8a`; Phase B from local `work-5.8b`, pushed as `work-5.8b:m5/5.8-roleplay`)
+- Worktrees: Phase A `.claude/worktrees/agent-af0a80a7590251a3b`; Phase B `.claude/worktrees/agent-acb4f174cc4cf8459` (under the repo root)
 - Plan: `docs/tasks/5.8/plan.md` (Phase A plus "Lead answers (21 Oct 2026)")
 
 ## Phase A: ADR-0013 and the role-play state machine
@@ -61,11 +61,47 @@ What the tests pin:
 - `rolePlayStep` returns `stored: StoredPersonaPhase | null` (null removes the field) rather than an optional property, so the "clear" case is explicit under `exactOptionalPropertyTypes`.
 - The section-name types (`RolePlaySection`, `RolePlayStateSection`) are defined in `roleplay.ts` now, so `ROLEPLAY_PHASE_SECTION` is typed; Phase B adds the sections to `FRAME_SECTIONS` and `OPTIONAL_FRAME_SECTIONS` and should import these types.
 
+## Phase B: persona forms, role-play compose, persona library, gate rule
+
+### Files
+- `pedagogy/promptPacks.ts`: the seven role-play sections in `FRAME_SECTIONS` (numbers-only slots) and `OPTIONAL_FRAME_SECTIONS`; `ROLEPLAY_SECTIONS` (frozen, compile-time exhaustive); `roleplay_state` an optional persona slot, the count slots now optional; `checkPersonaForm` (exactly one form: legacy or role-play, every missing or extra item named); `rolePlaySections(frame)` (all seven, frozen, or undefined); the library uses `FrozenMap`.
+- `pedagogy/frozenMap.ts` (new): a read-only `Map` with a neutral `"<label> is read-only"` error (ADR point 7).
+- `pedagogy/compose.ts`: a role-play turn (new-form frame and `policy.reason === 'mock_interview'`) renders the persona with the phase's section in `{{roleplay_state}}` and the move line `move-roleplay`; throws if the persona or `policy.rolePlay` is missing. Closed moves and every legacy-form turn take the old path, byte-identical (legacy clamp comment added).
+- `pedagogy/personas.ts` (new): `PersonaLibrary`, `createPersonaLibrary` (schema-checked copies, key = id, no duplicates, deep-frozen), `PersonaStartPayloadSchema` (strict, `PersonaSchema.shape.id`), `resolvePersona`.
+- `pedagogy/roleplay.ts`: `Readonly` union members; `rolePlaySkipsCoverageGate`.
+- `pedagogy/policy.ts` / `skills.ts`: `rolePlayStep` runs before the coverage gate and is handed into `skillStep` (`SkillInput.rolePlayStep?`), so it runs once; the gate runs only for a question-N>1 turn.
+- `pedagogy/helpState.ts`: comment rewrap. `pedagogy/index.ts`: exports.
+- `pipeline/types.ts`: `PipelineDeps.personas?`. `pipeline/steps/buildContext.ts`: `resolvePersona`.
+- `testing/testSteps.ts`: `personas` option. `testing/promptPackFixtures.ts`: the role-play fixture set (`0.2.0-fixture-roleplay`), not in the default fixture library.
+- `docs/adr/0013-roleplay-state.md`: §1 rule order (gate exemption, lead default pending B-37); §5 legacy-clamp note; Consequences "Coverage gate" now decided, with the grounding finding.
+
+### Tests (acceptance evidence)
+```
+corepack pnpm vitest run src/pipeline/roleplay.integration.test.ts → 7 passed
+corepack pnpm vitest run src/pedagogy/promptPacks.test.ts          → 41 passed
+corepack pnpm turbo run typecheck lint test --filter=@edmate/harness...
+  → @edmate/harness: Tests 5209 passed (116 files); contracts 348; config 42
+  → Tasks: 10 successful, 10 total
+  → coverage: compose, frozenMap, personas, policy, roleplay, skills 100/100/100/100; promptPacks 100 lines
+python3 .githooks/secret-scan.py --all → exit 0, no output
+```
+What the tests pin:
+- `promptPacks.test.ts`: both forms load; each missing section, extra section, kept count slot and half-legacy persona is named; a frame with no persona section reports only that.
+- `compose.test.ts` / `compose.snapshot.test.ts`: each phase's line under the new form, `move-roleplay` never `move-ask`, no "Ask question" on a debrief, the throws, closed moves on a persona turn, the coach fallback, hostile persona text literal; 6 new-form snapshots; the snap file only grew (216 lines added, 0 removed), so legacy output is byte-identical.
+- `personas.test.ts` (22): library checks, strict payload, every resolution path.
+- `policy.test.ts`: uncovered start → question 1; start with a locked hit → question 1; pause, stopped, resume, debrief, ended pass the gate; uncovered question 3 → `ask_teacher`, locked → `locked`; off_topic and distress still close; covered and no-persona turns unchanged.
+- `buildContext.test.ts`: persona resolution through the step.
+- `pipeline/roleplay.integration.test.ts` (real admit, entitle, buildContext, decide, generate; help state saved and reloaded each turn): start, two answers, `/pause`, resume, stop, ended, restart → `1/5, 2/5, 3/5, pause 3/5, resume 3/5, stopped (2 answered), ended, 1/5`; the last answer debriefs then ends; uncovered: start opens question 1 with no material, the answer meets the gate (`ask_teacher`), pause/resume/stop still steer. Grounding (real postGuard, fake overlap judge): a last-answer debrief and a stop debrief that keep to the material pass and are shown; a debrief judging delivery beyond the material, and a stop debrief on an uncovered topic, are replaced by the ask-teacher reply.
+
+### Deviations
+- "Role-play turn" in compose is `policy.reason === 'mock_interview'` with a new-form frame (review fix), so closed moves on a persona turn use the ordinary move lines.
+- The legacy persona count slots became optional in `FRAME_SECTIONS`; `checkPersonaForm` requires both on the legacy form, so old frames are checked as strictly as before.
+- The `roleplay-question` prose (Phase C) must say that with no material section the model asks which topic to practise.
+
 ## Left to do
-- **Phase B** (harness): the persona forms and the all-or-none group in `promptPacks.ts` (`rolePlaySections`); `compose.ts` new-form path (`move-roleplay`, the phase section into `{{roleplay_state}}`, throw if `rolePlay` is missing); `personas.ts` (`PersonaLibrary`, `createPersonaLibrary`, `resolvePersona`, strict payload schema on `PersonaSchema.shape.id`); `PipelineDeps.personas?`; `buildContext`; `testSteps`; the pipeline integration test (start, two answers, `/pause`, resume, stop); the coverage-gate decision (open question 6, lead default) with an uncovered-fixture test; the debrief-with-grounding integration test (ADR point 6; ask the human if it needs a judge change).
-- **Phase C** (content): `frame@1.2.0`, `set@1.3.0` (`reviewed_by: pending`), `readPersonaLibrary`, content snapshots.
+- **Phase C** (content): `frame@1.2.0` with the seven sections and `{{roleplay_state}}` (the `roleplay-question` line says to ask which topic when there is no material; the debrief lines keep feedback to the material, see the question below), `set@1.3.0` (`reviewed_by: pending`), `readPersonaLibrary`, content snapshots.
 - **Phase D** (evals): about 10 `persona-roleplay-*` cases and `rolePlayFixtures.test.ts`, after 5.9 leaves `packages/evals`.
-- Reviews: ADR-0013 needs architect, security-reviewer and typescript-reviewer sign-off on the applied points; code-reviewer for `pedagogy/**`.
+- Reviews: Phase B needs code-reviewer and typescript-reviewer on `pedagogy/**` and `pipeline/**`; ADR-0013 needs architect, security-reviewer and typescript-reviewer sign-off on the applied points; code-reviewer for `pedagogy/**`.
 
 ## Decisions
 - **Role-play phases and `personaPhase`** — risk: high. The ADR-0013 §1 table: a stored `personaPhase?: 'paused' | 'ended'` plus the existing count and id; a start or persona switch opens question 1; `/pause` holds the question; `stop` goes straight to the debrief (lead default, pending B-37) and ends; the answer to question M' debriefs and ends; every later turn is `ended` until a new start; a follow-up question from the interviewer counts toward M. The move stays `ask` in every phase.
@@ -75,3 +111,14 @@ What the tests pin:
 - **`SKILL_OUTPUT_TOKENS.mock_interview = 350`** — risk: low. Applies to every persona turn (debrief room); the coach fallback and locked `no_persona` keep their budgets.
 - **`pedagogy/roleplay.ts`, not `src/roleplay/`** — risk: low. Keeps it under the `pedagogy/**` risk group; the empty `src/roleplay/.gitkeep` is left as it is.
 - **`RolePlayControl` lives in `roleplay.ts`**, re-exported by `skills.ts` — risk: low.
+- **Role-play turns skip the coverage gate except answers to question N > 1** — risk: medium. Lead default, pending B-37. `/pause`, `stop`, resume, debrief, ended and question-1 turns skip it, so `stop` always ends and a start never opens a teacher question; an answer turn still meets it. Recorded in ADR-0013 §1.
+- **An uncovered or locked-hit start still opens question 1** — risk: medium. Lead default, pending B-37. No material section is shown; the Phase C prose asks which topic to practise.
+- **`rolePlayStep` runs before the gate and is handed into `skillStep`** — risk: low. One computation per turn; `skillStep` still computes it when not given.
+- **A compose role-play turn is `policy.reason === 'mock_interview'` with a new-form frame** — risk: low. Closed moves keep their own move lines.
+- **Legacy count slots optional in the slot table, required by the form check** — risk: low.
+- **`FrozenMap` shared by the prompt-pack and persona libraries** — risk: low. Neutral error text.
+
+## Questions for the human
+- **Debrief grounding (ADR-0013 point 6).** No judge change or exemption was needed: a debrief that keeps to the teacher's material passes the grounding judge. But a debrief that comments on delivery ("you spoke clearly") or a stop on an uncovered topic is replaced by the ask-teacher reply, because those claims are not in the material. Is that acceptable for the pilot (Phase C prose keeps debrief feedback to the material), or should delivery feedback get its own rule? Changing it would be a judge-prompt change under an ADR.
+
+Tool calls used: about 80 (Phase B).

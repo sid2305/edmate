@@ -303,6 +303,12 @@ describe('the persona forms and the role-play sections (5.8, ADR-0013 §3)', () 
     ]);
   });
 
+  it('a frame with no persona section reports only the missing section, not a form', () => {
+    const issues = issuesOf(editRp(drop('persona')));
+    expect(issues.filter((i) => i.startsWith('packs.frame.persona'))).toHaveLength(1);
+    expect(issues.join('\n')).not.toMatch(/roleplay_state|count slots|not allowed/u);
+  });
+
   it('a new-form persona section may not keep a count slot', () => {
     const r = editRp((b) =>
       b.replace(
