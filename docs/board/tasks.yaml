@@ -2280,6 +2280,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 6.4a
+  milestone: M13
+  title: "Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end"
+  accept: a graded check emits a topic-scored EvidenceEvent that reaches CommitRecord.evidence; a real trigger ends a session with a stored summary
+  deps:
+  - '6.4'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
