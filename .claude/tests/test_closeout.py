@@ -157,5 +157,62 @@ class Metrics(CloseoutCase):
         self.assertEqual(self.board_text(), first)
 
 
+REMINDER = "9.9: handoff shows a fix round or human correction — consider a docs/lessons.md entry."
+
+
+class LessonsReminder(CloseoutCase):
+    """0.19: a non-blocking one-line nudge to add a docs/lessons.md entry. It never changes the
+    exit code, the log/board writes or the branch cleanup."""
+
+    def set_handoff(self, text):
+        # Working tree only (closeout reads the handoff from there): committing a different
+        # handoff on main would make the squash-merged branch look unmerged.
+        self.repo.write("docs/tasks/9.9/handoff.md", text)
+
+    def assert_normal_closeout(self, code, out):
+        self.assertEqual(code, 0, out)
+        self.assertIn("status: done", self.board_text())
+        self.assertEqual(git(self.repo.root, "branch", "--list", "m9/9.9-x"), "")
+        self.assertIn("9.9 closed out", out)
+
+    def test_fix_round_heading_prints_reminder(self):
+        self.set_handoff(HANDOFF + "\n## Fix round 1\nFixed the HIGH.\n")
+        code, out = self.closeout("9.9")
+        self.assert_normal_closeout(code, out)
+        self.assertEqual(out.count(REMINDER), 1)
+
+    def test_decided_by_you_entry_prints_reminder(self):
+        self.set_handoff(HANDOFF.replace("decided by lead", "decided by you"))
+        code, out = self.closeout("9.9")
+        self.assert_normal_closeout(code, out)
+        self.assertIn(REMINDER, out)
+        self.assertIn("decided by you", self.log_text())
+
+    def test_plain_handoff_prints_nothing(self):
+        code, out = self.closeout("9.9")
+        self.assert_normal_closeout(code, out)
+        self.assertNotIn("lessons.md", out)
+
+    def test_fix_round_in_prose_or_h3_is_not_a_heading(self):
+        self.set_handoff(HANDOFF + "\nNo ## Fix round happened.\n### Fix round notes\n")
+        code, out = self.closeout("9.9")
+        self.assert_normal_closeout(code, out)
+        self.assertNotIn("lessons.md", out)
+
+    def test_already_logged_human_entry_does_not_remind_again(self):
+        self.set_handoff(HANDOFF.replace("decided by lead", "decided by you"))
+        self.assertIn(REMINDER, self.closeout("9.9")[1])
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("lessons.md", out)
+
+    def test_refusal_exit_code_unchanged_with_fix_round(self):
+        self.set_handoff("# 9.9 handoff\nStatus: DONE\n\n## Fix round 1\nx\n")
+        code, out = self.closeout("9.9")
+        self.assertEqual(code, 1, out)
+        self.assertIn(REMINDER, out)
+        self.assertNotIn("status: done", self.board_text())
+
+
 if __name__ == "__main__":
     unittest.main()
