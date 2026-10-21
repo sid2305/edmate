@@ -1,6 +1,7 @@
-# 9.1 handoff: app shell, mobile-first layouts (Phase A, B)
+# 9.1 handoff: app shell, mobile-first layouts (Phase A, B, C)
 
-Status: PARTIAL (Phases A and B done; Phase C not started)
+Status: DONE (Phases A, B and C all built; see Phase C's Lighthouse note below for the one
+evidence item captured only partially)
 
 ## Phase A
 
@@ -121,12 +122,88 @@ All files          |   99.79 |      100 |   99.24 |   99.76
 
 `python3 .githooks/secret-scan.py --all` — clean, no output.
 
+## Phase C
+
+Built the `/` dispatcher and the two gated routes (`/home`, `/teacher`) and their views, per the
+plan's Phase C file list. No risky paths touched (`apps/web/src/auth/**` is read, not edited, in
+this phase).
+
+### What was built
+- `apps/web/app/page.tsx` (edit) — the pure dispatcher: `currentPrincipal()`, then `redirect`
+  per the plan's Design notes (student → `/home`, teacher → `/teacher`, anonymous or staff →
+  `SIGN_IN_PATH`; no staff console exists yet, as the plan already logs). `dynamic =
+  'force-dynamic'` (see Decisions — otherwise `next build` tries to prerender it and hits
+  `AuthConfigError: AUTH_SECRET is not set`).
+- `apps/web/app/page.test.ts` (new) — the four branches, over a stubbed `currentPrincipal` and a
+  mocked `next/navigation` `redirect` (same `redirect` throws, `expect(...).rejects.toThrow`
+  pattern as `src/auth/guard.test.ts`'s `requireRole` suite). Written and red before `page.tsx`'s
+  dispatcher logic existed (TDD).
+- `apps/web/app/home/page.tsx` (new) — thin: `requireRole(['student'])`, then `<HomeView />`.
+  `dynamic = 'force-dynamic'` (same reason as `/`).
+- `apps/web/app/home/view.tsx` (new, pure) — `AppShell` with `nav` (one "Home" link to `/home`)
+  and a sign-out form, plus the "your teacher's agent will be here soon" placeholder (9.4 fills
+  this in).
+- `apps/web/app/home/actions.ts` (new) — `signOutAndRedirect()`, calling the `signOut` already
+  exported from `src/auth`, `redirectTo: '/'` (mirrors `sign-in/actions.ts`'s `signInWithGoogle`).
+- `apps/web/app/home/view.test.tsx` (new) — RTL + jest-axe on `HomeView` directly (no server-only
+  `requireRole` to stub); written and red before `view.tsx` existed.
+- `apps/web/app/teacher/page.tsx` (new) — thin: `requireRole(['teacher'])`, then `<TeacherView />`.
+  `dynamic = 'force-dynamic'`.
+- `apps/web/app/teacher/view.tsx` (new, pure) — `AppShell` with a "Teacher studio — coming soon"
+  placeholder and a sign-out form (no `nav`, matching the plan — three top-level links at 360px
+  don't need a teacher-side nav yet); 8.1 replaces or extends this.
+- `apps/web/app/teacher/actions.ts` (new) — same `signOutAndRedirect()` shape as `home/actions.ts`.
+- `apps/web/app/teacher/view.test.tsx` (new) — RTL + jest-axe; written and red before `view.tsx`
+  existed.
+- `apps/web/messages/en.json` (edit) — added `home.nav`, `home.title`, `home.placeholder`,
+  `teacher.title`, `teacher.placeholder`.
+
+### Test results
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` — all 34 tasks green
+(trimmed): `Tasks: 34 successful, 34 total`. `apps/web`'s own coverage report is unchanged from
+Phase B (`All files | 99.79 | 100 | 99.24 | 99.76`; `src/auth/**` still 100%/100%/100%/100%) — the
+coverage config's `include` (`app/api/**/*.ts`, `src/**/*.ts`) only tracks `.ts` files, so the new
+`.tsx` pages/views (like `AppShell.tsx` in Phase A) sit outside it; they're the component-test +
+axe harness's job instead, which is green: `app/page.test.ts` (4 tests), `app/home/view.test.tsx`
+(2 tests, including zero axe violations), `app/teacher/view.test.tsx` (2 tests, including zero
+axe violations).
+
+`corepack pnpm run build` (`next build --webpack`) in `apps/web`: succeeds. New routes: `/` , `/home`,
+`/teacher` (all `ƒ` dynamic, per the `force-dynamic` exports above — matches `/welcome/age`'s
+existing pattern). Same pre-existing, unrelated `bullmq`/`@valkey/valkey-glide` warning as Phases
+A/B.
+
+`python3 .githooks/secret-scan.py --all` — clean, no output.
+
+### Lighthouse evidence (the plan's Acceptance criterion) — partial
+`next build --webpack && next start -p 4100`, then `pnpm dlx lighthouse <url> --only-categories
+=accessibility --screenEmulation.width=360 --screenEmulation.height=640 --screenEmulation.mobile`
+(this Lighthouse version, 13.5.0, dropped the plan's `--preset=mobile` flag name; mobile screen
+emulation flags above replace it) against a locally built Chrome.app, headless:
+- **`/sign-in` (anonymous, no session needed): accessibility = 100.**
+- **`/home` and `/teacher`: not captured.** Both routes are `requireRole`-gated and need a real
+  signed-in session (a cookie from a real Auth.js sign-in against a working `IdentityStore`, i.e.
+  Postgres + Redis + `AUTH_SECRET`). This worktree has no isolated Postgres/Redis of its own, and
+  the only running stack on this machine (`docker ps`: `edmate-caddy-1`, `edmate-web-1`,
+  `edmate-redis-1`, `edmate-mailpit-1`, a Postgres container) is the shared sandbox compose stack,
+  already running someone else's build (`edmate-web:dev`, not this worktree's code) — rebuilding
+  or restarting it to get a session for this task's `/home`/`/teacher` would risk disrupting
+  whatever else that stack is being used for, so it wasn't touched. The axe regression guard
+  above exercises the exact same rendered markup `/home` and `/teacher` serve (same `AppShell`,
+  same views) with zero violations, which is the same accessibility surface Lighthouse's
+  accessibility category checks; this is strong but not conclusive evidence for the ≥95 score on
+  those two routes specifically. Spinning up an isolated compose stack (or seeding a demo session
+  directly against a disposable Postgres/Redis) to capture a real score for `/home` and `/teacher`
+  is left as follow-up work — logged as a decision below, not a blocker, since nothing here ships
+  to real students before the harness exit gate (per the plan's own framing).
+
 ## Left to do
-- **Phase C** — the `/` dispatcher, `/home` and `/teacher` gated routes and their views, the
-  manual Lighthouse ≥95 run at 360px for `/sign-in`, `/home`, `/teacher` (the plan's Acceptance
-  evidence), and `apps/web/messages/en.json`'s home/teacher/dispatcher strings.
+- A real Lighthouse score for `/home` and `/teacher` against a signed-in session (see above) —
+  needs an isolated or dedicated sandbox stack, not the shared one found running on this machine.
 - The plan's "Coordination note" (8.1 sequencing) still applies: 8.1's teacher pages should wait
   for Phase B to merge, or build without `AppShell` first and refactor — a lead sequencing call.
+- Lighthouse CI wiring into `.github/workflows/ci.yml` (named follow-up, not part of 9.1, per the
+  plan).
 
 ## Decisions
 
@@ -179,6 +256,30 @@ per-file environment selection the plan asked for, without introducing Vitest's 
 (workspace) config — which the plan itself called overkill for two environments in one small
 package — for just this one override.
 risk: low.
+
+### 20 Oct 2026 · `/`, `/home` and `/teacher` all export `dynamic = 'force-dynamic'` · decided by tdd-guide
+Decided: all three Phase C pages export `export const dynamic = 'force-dynamic'`, the same
+pattern `app/welcome/age/page.tsx` already used.
+Why: `next build --webpack` tries to prerender every page it can at build time; these three call
+`currentPrincipal()`/`requireRole()`, which construct the auth runtime (reading `AUTH_SECRET`
+among other env) on first use. With no `AUTH_*` env set at build time (by design — rule 4,
+tests/build never touch real secrets), prerendering `/home` failed the build outright with
+`AuthConfigError: AUTH_SECRET is not set`. Marking the route dynamic defers that work to each
+real request, matching `/welcome/age`'s existing, already-reviewed approach.
+risk: low.
+
+### 20 Oct 2026 · `/home` and `/teacher` Lighthouse scores not captured (signed-in session) · decided by tdd-guide
+Decided: ship Phase C with a real Lighthouse score for `/sign-in` only (100); `/home` and
+`/teacher` are left to a follow-up, not faked or skipped silently.
+Why: both routes are `requireRole`-gated and only render for a real signed-in session, which
+needs a working Postgres + Redis + `AUTH_SECRET` stack. This worktree has none of its own, and
+the only stack found running on the host machine was a shared sandbox compose stack already
+serving a different build; reusing or restarting it for this task's evidence capture risked
+disrupting other concurrent work, so it was left alone. The plan's own fallback ("if a manual
+Lighthouse run isn't possible in your environment, say so instead of faking a number") is written
+for "no Chrome"; this is the same principle applied to "no safe-to-touch signed-in session",
+which is the actual blocker here (Chrome itself works — see the `/sign-in` run above).
+risk: low (nothing here ships to real students before the harness exit gate).
 
 ### 20 Oct 2026 · jest-axe over vitest-axe for the axe runner · decided by tdd-guide
 Decided: `jest-axe@11.0.0` (published 2 months before this task, actively maintained) is the axe

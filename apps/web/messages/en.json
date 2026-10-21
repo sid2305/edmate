@@ -8,5 +8,14 @@
     "title": "Sign in",
     "googleButton": "Continue with Google",
     "emailLink": "Sign in with email instead"
+  },
+  "home": {
+    "nav": "Home",
+    "title": "Home",
+    "placeholder": "Your teacher's agent will be here soon."
+  },
+  "teacher": {
+    "title": "Teacher studio",
+    "placeholder": "Teacher studio — coming soon."
   }
 }
