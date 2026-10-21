@@ -33,3 +33,6 @@ After fix round 2: code-reviewer (sonnet) approves the round-2 changes (fence br
 - [LOW] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts foldForMatch — digit swaps (`Pl4tform`), small caps and a Devanagari label are not folded (safety).
 - [LOW] [deferred 3.11e] gateway adapters — no boundary test that consecutive user messages keep the teacher fence intact when merged (architect).
 - [MEDIUM] [deferred 3.11e] packages/harness/src/pedagogy/modelRequest.ts:96-98 — the core-phrase pass re-detects a label the exact-label pass already spaced out, so a verbatim pasted label gets " [copied]" twice (visible in the content snapshot); skip spans the exact-label pass rewrote (code-reviewer).
+
+## Merge with main (20 Oct 2026)
+The merge of main (530ea59) conflicted in compose.ts, helpState.ts and helpState.test.ts. typescript-reviewer (sonnet) checked only the resolution: both the persona question count and the 5.6/5.6c practice fields survive in the strict HelpState schema, its parse round-trip and the combined size-limit test, and practice turns keep the persona count. APPROVE, no findings.
