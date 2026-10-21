@@ -1210,6 +1210,61 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ];
     },
   },
+  'evidenceEvents.appendAndFold': {
+    scope: 'student',
+    op: 'write',
+    attempt: async (r, scope, _actor, target) => {
+      const ts = new Date(Date.UTC(2026, 9, 18, 12, 0, ++counter)).toISOString();
+      const topicId = ids.topic(teacherOf(target));
+      const event: EvidenceEvent = {
+        ...sScope(target),
+        topicId,
+        correct: true,
+        source: 'practice',
+        weight: 1,
+        ts,
+      };
+      await r.evidenceEvents.appendAndFold(scope, [event]);
+      return { topicId, ts };
+    },
+    verify: async (r, actor, result) => {
+      const { topicId, ts } = result as { topicId: string; ts: string };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mastery[topicId]?.updatedAt === ts,
+      );
+    },
+    mismatches: (a) => {
+      const other: Teacher = teacherOf(a) === 'A' ? 'B' : 'A';
+      const good: EvidenceEvent = {
+        ...sScope(a),
+        topicId: ids.topic(teacherOf(a)),
+        correct: true,
+        source: 'check',
+        weight: 1,
+        ts: '2026-10-18T12:00:00Z',
+      };
+      return [
+        [
+          "another teacher's topic",
+          (r) => r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, topicId: ids.topic(other) }]),
+          'scope',
+        ],
+        [
+          'a topic that does not exist',
+          (r) =>
+            r.evidenceEvents.appendAndFold(sScope(a), [good, { ...good, topicId: 'top_nowhere' }]),
+          'scope',
+        ],
+        [
+          'an event that fails the contract',
+          (r) => r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, ts: 'now' }]),
+          'invalid',
+        ],
+      ];
+    },
+  },
   'subscriptions.findLive': {
     scope: 'student',
     op: 'read',
