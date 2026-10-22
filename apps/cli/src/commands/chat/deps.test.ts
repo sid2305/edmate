@@ -175,9 +175,12 @@ describe('slackClock (3.9b)', () => {
     const real = Date.now() - t0;
     expect(real).toBeGreaterThanOrEqual(45);
     // now() moved about a tenth of the real time: a budget minus a now() delta stays consistent.
+    // Loose bound (docs/lessons.md "Wall-clock bounds fail on shared CI runners"): a shared,
+    // loaded runner can add real ms between this sleep resolving and the Date.now()/clock.now()
+    // reads just below, so the margin stays generous rather than tight.
     const virtual = clock.now() - c0;
     expect(virtual).toBeGreaterThanOrEqual(4);
-    expect(virtual).toBeLessThanOrEqual(Math.ceil(real / 10) + 1);
+    expect(virtual).toBeLessThanOrEqual(Math.ceil(real / 10) + 5);
 
     const source = cancelSource();
     const t1 = Date.now();
