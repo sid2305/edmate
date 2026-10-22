@@ -4968,6 +4968,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 9.6i
+  milestone: M9
+  title: '9.6h security re-check follow-ups (before the pilot): changePackage applies the alarm-paused-free check like start (paid then change to free must not get round it), with a test; the web start route maps the alarm refusal to its own fixed words (check findLive on invalid) instead of ''you already have a package'', with a route test; the refusal re-read keeps the verified and live joins (not_found, not invalid); the alarm marker when nothing was paused; an actorRole-only forged-row test for resume; restore teacher verification in a finally in the 9.6h tests; note for 10.3: resume''s created_at tie-break adds no order. Until M10, a paid package starts with no payment and is never alarm-paused, so the free-tier block can be bypassed by starting a paid package; 10.x closes that'
+  accept: 'each MEDIUM has a failing-then-passing test; db and web typecheck, lint and test green; security-reviewer re-checks.'
+  deps:
+  - '9.6h'
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
