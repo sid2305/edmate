@@ -2196,7 +2196,7 @@ tasks:
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
     chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams
-    SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause'
+    SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause; on PR #118 it failed again, together with packages/harness src/pipeline/steps/route.accuracy.test.ts timing out at the 5 s default under CI load (raise its timeout or speed it up)'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2741,6 +2741,16 @@ tasks:
   deps:
   - '1.7'
   risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: '0.20'
+  milestone: M7
+  title: 'Harness tests time out under CI load (PR #118: route.accuracy at the 5 s default, runner.block at its own 3 s): a 20 s harness testTimeout and no explicit timeouts under 10 s, with no logic change'
+  accept: 'packages/harness passes; no explicit harness test timeout under 10 s except latency assertions, which are listed.'
+  deps:
+  - '0.1'
+  risk: normal
   status: todo
   branch: null
   model: null
