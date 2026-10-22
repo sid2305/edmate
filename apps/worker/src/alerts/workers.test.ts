@@ -20,7 +20,12 @@ class FakeRedis extends EventEmitter {
 
 const deps = (dead: unknown[] = []) => ({
   notifier: { notify: () => Promise.resolve() },
-  ackStore: { acknowledge: () => Promise.resolve(), isAcknowledged: () => Promise.resolve(false) },
+  store: {
+    record: () => Promise.resolve(),
+    markEscalated: () => Promise.resolve(),
+    acknowledge: () => Promise.resolve(),
+    isAcknowledged: () => Promise.resolve(false),
+  },
   queue: { add: () => Promise.resolve() },
   deadLetter: { add: (_n: string, d: unknown) => Promise.resolve(dead.push(d)) },
 });

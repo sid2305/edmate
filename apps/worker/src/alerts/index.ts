@@ -1,4 +1,5 @@
 export { ALERT_ACK_TTL_SECONDS, type AckRedis, redisAckStore } from './ackStore.js';
+export { dbAlertStore, type SafetyAlertsRepo } from './dbStore.js';
 export { logAlertNotifier } from './logSink.js';
 export {
   ALERT_NOTIFY_TIMEOUT_MS,
@@ -8,7 +9,7 @@ export {
   alertProcessor,
   type AlertProcessorDeps,
 } from './processors.js';
-export type { AckStore, AlertAudience, AlertNotifier } from './types.js';
+export type { AckStore, AlertAudience, AlertNotifier, AlertStore } from './types.js';
 export { ALERT_MAX_STALLED, createAlertWorker, type AlertWorkerOptions } from './workers.js';
 export {
   createSafetyEventWorker,
