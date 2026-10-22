@@ -10,6 +10,56 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7c a failed run lookup ends the run error · decided by builder · risk: low
+- Decided: `getRun` runs inside the processor's error handling. If it throws, the failure is logged (`gate.error`, code `repository_<kind>`) and the run is finished `error`. If that also fails, `gate.finish_failed` is logged and the job fails (dead-lettered); the run then stays open until the stale rule closes it.
+- Why: no silent failures; a run should not wait up to 2 h 15 min as stale when the database blipped once.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c error codes are fixed words · decided by builder · risk: low
+- Decided: a run that ends `error` stores one of these codes:
+  - `gate_unavailable`, with the reason in the log;
+  - `result_mismatch` (gate results don't line up with the case scope, so nothing is stored);
+  - a goLive refusal reason (`suspended`, ...);
+  - `not_verified` (scope error);
+  - `repository_<kind>`;
+  - `gate_error`.
+
+  The cost so far is kept when known. No message text or ids are stored in the code.
+- Why: Phase D maps codes to plain messages; free text could carry personal data.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c a run pinned to another judge fails closed · decided by builder · risk: low
+- Decided: if the run's stored judge model doesn't match this worker's `EDMATE_JUDGE_MODEL` (bare model or `provider:model`), the run ends `error` / `gate_unavailable` (`judge_model`).
+- Why: a scorecard must be measured by the judge the run was started for.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c gate worker always starts; content loaded per run · decided by builder · risk: low
+- Decided: the worker process always starts the gate worker. Models, content and suites are checked per run, so a deployment without keys still closes every run as `error` with a reason, and a fixed content dir is picked up without a restart. The image ships only `content/{locales,prompt-packs,skills}` (not demo-teacher or legal) plus `evals/suites/`.
+- Why: a gate run that is never picked up would look "running" to the teacher until it went stale.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c own test containers · decided by builder · risk: low
+- Decided: ran the int suites against my own `pgvector/pgvector:0.8.1-pg16` (127.0.0.1:55491) and `redis:7.4.6-alpine` (127.0.0.1:56391) containers, removed after the build.
+- Why: the running edmate-* containers belong to other sessions.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c uncovered gate worker lambdas are accepted · decided by lead · risk: low
+- Decided: the locale and pack-market lambdas and the error handler in apps/worker/src/gate/workers.ts stay without unit tests; the int test covers the real queue and worker.
+- Why: covering them needs a live model turn or a broken Redis; the paths are thin wiring.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.5b Mock interview carries onto a plain Composer message; feedback and practice never do · decided by builder · risk: low
 - Decided: `submit`'s carry-along rule tags a plain `message` turn with `skill: 'mock_interview'`
   while that skill is active (an interview answer is typed in the ordinary Composer, per the

@@ -3993,9 +3993,30 @@ tasks:
   - 8.7a
   - 8.7b
   risk: low
-  status: running
+  status: done
   branch: m8/8.7c-gate-queue
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 66
+    tokens_in: 212
+    tokens_out: 960
+    cache_read_tokens: 4138821
+    wall_time_seconds: 130
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.7d
   milestone: M8
   title: Publish API and /teacher/publish page (8.7 Phase D, apps/web)
@@ -4274,7 +4295,9 @@ tasks:
   status: todo
 - id: 9.6f
   milestone: M13
-  title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime'
+  title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
+    (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the
+    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime'
   accept: EXPLAIN on a pair with 10,000 messages shows an index scan with no full Sort per page; the new messages test cases pass; the migration is additive.
   deps:
   - 9.6a
