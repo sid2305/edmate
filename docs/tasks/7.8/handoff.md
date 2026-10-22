@@ -1,8 +1,8 @@
-# Task 7.8 handoff (Phase A)
+# Task 7.8 handoff
 
-Status: PARTIAL (Phase B, the CLI `--scorecard` flag in `apps/cli`, is left to do)
+Status: DONE
 
-Tool calls used: 18
+Tool calls used: 18 + 14
 
 ## What was built
 
@@ -77,15 +77,22 @@ No files outside `packages/evals/src/{scorecard.ts,scorecard.test.ts,index.ts}` 
   not be hidden behind "unmeasured."
 - risk: low
 
+## Phase B (apps/cli)
+
+- `apps/cli/src/commands/gate.ts` (edit): added `--scorecard <file>` to `parseArgs` options and
+  `GATE_USAGE`; after the existing `--report` write, if `values.scorecard !== undefined`,
+  `mkdirSync` + `writeFileSync` `JSON.stringify(buildScorecard(result), null, 2)` (imports
+  `buildScorecard` from `@edmate/evals`). No change to exit code or stdout summary lines.
+- `apps/cli/src/commands/gate.test.ts` (edit): three new tests under the style-card-scope describe
+  block: `--scorecard` writes the `Scorecard` JSON (3 categories, `pass`/`changes` match) when the
+  gate passes; `--report` and `--scorecard` together both write their files; `--scorecard` omitted
+  writes no scorecard file. Existing tests unchanged.
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/cli...`: 26/26 tasks green, 13 test
+files / 138 tests passed; `gate.ts` at 100% statements/functions/lines. `python3
+.githooks/secret-scan.py --all`: clean. No files outside `apps/cli/src/commands/gate.ts` and
+`gate.test.ts` touched.
+
 ## Left to do
 
-Phase B (separate builder, `apps/cli`):
-- `apps/cli/src/commands/gate.test.ts` (edit): a new `--scorecard <file>` flag on
-  `edmate gate demo --change <kind>` writes the `Scorecard` JSON (via `buildScorecard` +
-  `ScorecardSchema`) built from the same `GateResult` the command already produces; flag omitted
-  by default; `--report` and `--scorecard` together both write; the command's existing exit-code
-  behaviour is unchanged.
-- `apps/cli/src/commands/gate.ts` (edit): add `--scorecard <file>` to `parseArgs` options and
-  `GATE_USAGE`; after building `result`, if `values.scorecard !== undefined`, `mkdirSync` +
-  `writeFileSync` `JSON.stringify(buildScorecard(result))` next to the existing `--report`
-  pattern.
+None.
