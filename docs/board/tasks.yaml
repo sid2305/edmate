@@ -2248,7 +2248,7 @@ tasks:
   accept: a teacher adds a web link or YouTube video and it reaches ready or a fixed failure reason; private and internal addresses are refused.
   deps:
   - '8.2'
-  status: todo
+  status: planning
   branch: null
   risk: risky
 - id: 9.4b
@@ -4542,8 +4542,9 @@ tasks:
   deps:
   - '8.2'
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.2d-pinned-fetcher
+  model: plan:opus build:opus-5.5/medium
 - id: 8.2e
   milestone: M8
   title: Web-link ingest job, processor and last-attempt failed status (8.2b Phase B)
