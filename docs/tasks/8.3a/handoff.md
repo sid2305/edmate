@@ -3,7 +3,7 @@
 - **Status:** DONE
 - **Branch:** `m8/8.3a-outline-db` (local `work-83a`)
 - **Worktree:** `.claude/worktrees/agent-a88e019b17bb568a3`
-- **Tool calls used:** 66 (budget 150)
+- **Tool calls used:** 89 (harness count; the builder counted 66; budget 150)
 - **Scope:** `packages/db` only. Nothing in `packages/contracts`, `.claude/`, `.github/` or `apps/` changed.
 - **Risky path:** `packages/db/src/repositories/**`. Security-reviewer is required; database-reviewer is recommended (new table, two cascading FKs, a third named delete exception).
 
@@ -77,6 +77,11 @@ python3 .githooks/secret-scan.py --all          → clean (no findings)
 - `listForModule` returns `[]` for an empty module, so skip it before calling `draftOutline`.
 
 ## Decisions
+
+### 22 Oct 2026 · 8.3a Lead approves the outline repositories on the risky repositories path · decided by lead · risk: high
+- Decided: merge 8.3a. The security review found every new method scoped by teacher, with real cross-teacher refusal tests. The database review found the migration additive, cascades indexed and lock order consistent. Accept for the MVP that an outline edit removing a topic with student evidence is refused rather than moving the evidence.
+- Why: refusing loses no student data, and teachers can still rename and reorder those topics. Moving evidence onto a surviving topic, batching the per-topic writes and a stale-save check go to follow-up task 8.3c.
+- risk: high
 
 ### 22 Oct 2026 · 8.3a Outline edits keep topic ids and never delete topics with student evidence · decided by builder · risk: high
 - Decided: `replaceOutline` updates a listed topic in place: title, order, module and its links. It inserts topics that have no id. It deletes the unlisted topics of the named modules, but if any of them has `evidence_events`, the whole edit is `invalid` and nothing is written.
