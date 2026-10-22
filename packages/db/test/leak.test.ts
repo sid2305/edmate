@@ -55,6 +55,68 @@ describe('driver errors are scrubbed', () => {
       ['discovery.search', () => repos.discovery.search({ q: 'private words here' })],
       ['discovery.teacherBySlug', () => repos.discovery.teacherBySlug({ slug: 'tch-leak-9' })],
       ['sessions.get', () => repos.sessions.get(scope, 'ses_leak_3')],
+      // Task 8.7a: the publish repository.
+      [
+        'publish.startRun',
+        () =>
+          repos.publish.startRun(tscope, {
+            agentId: 'agt_leak_1',
+            courseId: 'crs_leak_1',
+            styleCardId: 'sty_leak_1',
+            promptPackVersion: '1.0.0',
+            modelPolicy: {
+              tiers: {
+                small: { provider: 'p', model: 'm' },
+                main: { provider: 'p', model: 'private words here' },
+              },
+            },
+            judgeModel: 'private words here',
+          }),
+      ],
+      ['publish.markRunning', () => repos.publish.markRunning(tscope, 'run_leak_1')],
+      ['publish.getRun', () => repos.publish.getRun(tscope, 'run_leak_1')],
+      [
+        'publish.recordResults',
+        () =>
+          repos.publish.recordResults(tscope, {
+            runId: 'run_leak_1',
+            results: [
+              {
+                caseId: 'case_leak_1',
+                passed: false,
+                details: {
+                  origin: 'agent',
+                  group: 'accuracy',
+                  suite: 's',
+                  failedChecks: [],
+                  question: 'private words here',
+                },
+              },
+            ],
+          }),
+      ],
+      [
+        'publish.finishRun',
+        () =>
+          repos.publish.finishRun(tscope, {
+            runId: 'run_leak_1',
+            status: 'error',
+            summary: { groups: [], errorCode: 'stale' },
+          }),
+      ],
+      [
+        'publish.goLive',
+        () =>
+          repos.publish.goLive(tscope, {
+            runId: 'run_leak_1',
+            passRate: 1,
+            summary: { groups: [] },
+            scorecard: { pass: true, changes: [], categories: [] },
+          }),
+      ],
+      ['publish.latestRun', () => repos.publish.latestRun(tscope)],
+      ['publish.failedCases', () => repos.publish.failedCases(tscope, 'run_leak_1')],
+      ['publish.publicScorecard', () => repos.publish.publicScorecard({ agentId: 'agt_leak_1' })],
       [
         'teacherQuestions.open',
         () =>

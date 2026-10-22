@@ -1,7 +1,7 @@
-// Task 9.1 Phase C: the `/` dispatcher. Written and red before `page.tsx` exists (TDD). Four
-// branches over a stubbed `currentPrincipal`: anonymous and staff land on sign-in (no staff
-// console exists yet -- a logged decision, not a blocker), student lands on `/home`, teacher on
-// `/teacher`.
+// Task 9.1 Phase C / 9.2 Q3: the `/` dispatcher. Written and red before `page.tsx` exists (TDD).
+// Four branches over a stubbed `currentPrincipal`: anonymous now lands on `/teachers` (9.2), staff
+// still lands on sign-in (no staff console exists yet -- a logged decision, not a blocker),
+// student lands on `/home`, teacher on `/teacher`.
 import { describe, expect, it, vi } from 'vitest';
 
 const { currentPrincipal, redirect } = vi.hoisted(() => ({
@@ -19,9 +19,9 @@ async function dispatch() {
 }
 
 describe('the `/` dispatcher', () => {
-  it('sends an anonymous visitor to sign-in', async () => {
+  it('sends an anonymous visitor to /teachers (9.2)', async () => {
     currentPrincipal.mockResolvedValueOnce(null);
-    await expect(dispatch()).rejects.toThrow('REDIRECT /sign-in');
+    await expect(dispatch()).rejects.toThrow('REDIRECT /teachers');
   });
 
   it('sends a student to /home', async () => {

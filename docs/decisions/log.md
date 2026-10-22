@@ -10,6 +10,208 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7a publish repository: verified-teacher check and go-live in one transaction · decided by builder · risk: high
+- Decided: `goLive` runs in one transaction: teacher profile `verified` read `FOR SHARE`, the run row `FOR UPDATE` (id + teacher_id + suite gate; must be `running`), the agent `FOR UPDATE` (refused if suspended), then agent live + live_version, each basis package's live_version, one `agent.publish` and one `package.publish` audit row each, and the run marked `passed` with `published_at`. `startRun` takes a per-teacher advisory lock (namespace 8701) and the same `FOR SHARE` verified check. The teacher id comes only from the scope.
+- Why: a teacher whose verification is revoked, or an agent suspended, while the gate runs must never go live; one transaction means no half-published state.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.7a refusals carry a reason through PublishRefusedError · decided by builder · risk: low
+- Decided: a `RepositoryError` subclass `PublishRefusedError` adds `reason` (`no_packages`, `suspended`, `nothing_to_publish`, `gate_running`); the kind stays `invalid` or `integrity`.
+- Why: the studio must show why a publish was refused; no contracts change needed.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a db mirrors the evals types locally · decided by builder · risk: low
+- Decided: strict zod mirrors of the scorecard, summary, case details, group names and deadlines live in `publish.ts`; db does not import `@edmate/evals`.
+- Why: db must not depend on evals; Phase C should check the mirrors match when it wires them.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a a stale run is measured from updated_at · decided by builder · risk: medium
+- Decided: an open run is stale after its deadline (2 h for first_publish or prompt_pack_bump, else 15 min) plus 15 min grace since its last `updated_at`; `startRun` then closes it as `error` with `errorCode: 'stale'` and starts a new one.
+- Why: a crashed worker must not block publishing forever, while a slow but live run keeps its slot.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7a change kinds from the last published basis · decided by builder · risk: medium
+- Decided: change kinds compare the new basis with the last passed run's basis (canonical JSON); a course change counts as `material`; nothing changed on a live agent is refused `nothing_to_publish`; nothing changed on an agent that is not live (for example unpublished) runs as `first_publish`.
+- Why: gives the gate the narrowest correct scope while never blocking a teacher whose agent is offline.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7a migration 0021, judge model in the model column · decided by builder · risk: low
+- Decided: migration number 0021 (next free), additive nullable columns; the judge model pin is stored in the existing `eval_runs.model` column.
+- Why: no rewrite of existing eval rows; offline eval runs (no agent_id/status) are ignored by the publish reads.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a own test database container · decided by builder · risk: low
+- Decided: ran the int suites against my own `pgvector/pgvector:0.8.1-pg16` container on 127.0.0.1:55487, removed after the build.
+- Why: nothing listened on the shared port and other sessions' containers must not be touched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a one lock order for publish writes · decided by builder · risk: low
+- Decided: startRun and goLive both lock in this order: the per-teacher advisory lock (8701), the teacher profile FOR SHARE, the agent FOR UPDATE, then the run FOR UPDATE. goLive reads the run's agent id without a lock first (agent_id is never updated), then rechecks it under the run lock. markRunning, recordResults and finishRun lock the run row only.
+- Why: goLive locked the run before the agent, the reverse of startRun. A Publish re-click during goLive deadlocked (40P01), and the passed gate could be lost (database-reviewer, CRITICAL).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a A malformed/legacy skill payload falls back to the generic SkillCard · decided by builder · risk: low
+- Decided: `ChatView` only renders `PracticeCard` when a `skill: 'practice'` event's payload has
+  the exact shape `practice.next_item` produces (string `id`/`prompt`, a known `kind`, level
+  1-3); anything else (including the pre-existing `ChatView.test.tsx` fixture payload `{q: ...}`)
+  renders the generic `SkillCard`, unchanged.
+- Why: keeps the dedicated card strictly tied to the real tool output per the plan ("the real
+  `practice.next_item` output shape... renders"), without a schema import from
+  `packages/harness`, and avoids a crash or blank card on a payload that doesn't match (fail
+  closed to the existing, harmless fallback) rather than trusting `unknown` at render time.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a activeSkill updates only on a final turn, not per streamed skill event · decided by builder · risk: low
+- Decided: `activeSkill` is set from `turn.skills.at(-1)` only once a turn reaches `status ===
+  'final'` (a `useEffect` on `[active, turn]`), not as each `skill` event streams in.
+- Why: the composer/hint button/launcher are already disabled while a turn streams, so no
+  submit can race ahead of the final skill name; waiting for `final` keeps the effect simple
+  (one state transition per turn, matching the reducer's own "nothing changes after done" rule)
+  rather than re-deriving it from in-flight events.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a The active skill carries only onto hints and answer checks, and clears after a turn with no skill cards · decided by builder · risk: low
+- Decided: `activeSkill` is reset to null when a final turn has no skill cards. It is carried
+  onto a `hint_request` or `check_answer` that names no skill of its own, never onto a plain
+  `message`.
+- Why: a typed message after a practice item is the student leaving practice, so tagging it
+  `skill: 'practice'` would silently keep every later turn on the practice ladder
+  (typescript-reviewer HIGH). A hint during practice still needs the tag.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7f persona always fails the case · decided by builder · risk: low
+- Decided: when `input.persona` is defined, the gate always throws (fails that case loudly)
+  rather than trying to honor it for a `kind: 'skill_action'` start turn only. `TurnInput` has no
+  `persona` field at all; a persona only enters the pipeline via a start turn's `skillPayload`
+  (bare id), and every later turn needs a *stored* `personaId` in that session's help state. The
+  gate creates a brand-new session (and a fresh help-state map) on every single `reply()` call,
+  so there is no continuity across a case's turns — a start-turn-only hack would silently produce
+  wrong, non-roleplay results for every multi-turn persona case (confirmed real multi-turn persona
+  suites exist, e.g. `evals/suites/persona/persona-roleplay-model-answer-en.yaml`). Failing the
+  case outright matches the brief ("fail any case that names one, with a clear reason, never
+  silently score it") and `runCaseSafely`'s existing catch-and-fail-this-case design.
+- Why: a half-working persona path (first turn only) would be worse than a clear failure, because
+  it would score a roleplay case as if it ran correctly when it did not resume the persona at all.
+- risk: low — gate-only behavior, no change to prompt-pack behaviour or contracts; persona gate
+  support is left as a known gap for whoever picks it up next (would need a `TurnInput.persona`
+  field or similar, which is a contracts change needing an ADR per rule 2).
+
+---
+
+### 22 Oct 2026 · 9.2b A Redis outage fails the discovery rate limit open, not closed · decided by lead · risk: medium
+- Decided: unlike the sign-in limiter (fails closed, `src/auth/rate-limit.ts`), `discoveryRateLimiter` fails open on a store error or a missing `REDIS_URL`: the `/teachers` page still serves, and the failure is logged by code only (`rate_limit_unavailable`), never the client's IP.
+- Why: this limit protects database load on data that's already public and already published (scope decision 1/2 of the 9.2 plan); refusing every search because Redis blipped would hurt real students more than an occasional burst of searches hurts the database.
+- risk: medium (an attacker who can also knock out Redis loses the limit; accepted, since the data behind it is public by design).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limiter gets its own Redis client, not the sign-in limiter's connection · decided by builder · risk: low
+- Decided: `src/discovery/rateLimit.ts` lazily builds its own `ioredis` client on `REDIS_URL`, the same way `src/turn/runtime.ts` and `src/studio/runtime.ts` already do, instead of reusing the connection `src/auth/index.ts`'s `emailSignIn()` opens internally.
+- Why: that connection is never exported from `src/auth/**` (only `redisSignInCounters`/`createSignInLimiter`, which take a connection, are exported from `rate-limit.ts`, and `index.ts` itself exports no client), and the brief explicitly forbids editing `auth/**` to add one. "The client the sign-in limiter already uses" is read here as the established pattern (ioredis + `REDIS_URL`, read-only reused), not a shared connection object -- every other Redis-using module in `apps/web` already opens its own client the same way.
+- risk: low (an extra Redis connection, same as `turn/runtime.ts` and `studio/runtime.ts` each already open their own).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limit's client bucket uses the rightmost x-forwarded-for entry · decided by lead · risk: low
+- Decided: `discoveryClientBucket` takes the rightmost (Caddy-appended) `x-forwarded-for` entry, mirroring the sign-in limiter's `clientIp`, and sends a missing, empty or non-IP entry to one shared `unknown` bucket. The lead's brief first asked for the first entry; the fix round changed it to the rightmost.
+- Why: the security review (HIGH) found the first entry is client-controlled, so a caller could rotate a fake first value to get unlimited buckets. The logic is mirrored, not imported, so this module doesn't pull in the sign-in limiter's `@edmate/queue` dependency and `src/auth/**` is untouched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Widen all three timings in the retrieval-leak int test · decided by builder · risk: low
+- Decided: widened `leakTimeoutMs` (20 → 1000 ms), `leakBuildTimeoutMs` (40 → 400 ms) and the post-drop sleep (80 → 800 ms), not just the one named in the brief.
+- Why: a real Postgres round trip on the second `leakCheck` call could exceed the old 40 ms build timeout even outside CI. Lead note (from code-reviewer): this flips the order of the two timeouts, so the first call's fallback now comes from the build's own overrun (`leak_failed`) rather than the outer race (`leak_timeout`). The test doesn't assert which code fired, and a build that is never dropped still fails it, so the regression it guards is still caught.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Queue latency bound stays absolute at 2,500 ms · decided by builder · risk: low
+- Decided: the bound stays an absolute constant (2,500 ms) rather than `DB_DELAY_MS / n`.
+- Why: it matches the file's named top-level constants; 2,500 ms is still half of `DB_DELAY_MS` (5,000 ms), so "done arrives well before the slow write" still holds.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d "Full course" preset price is $55, not the plan's example $29 · decided by builder · risk: low
+- Decided: with the plan's provisional per-turn cost (21,000 micro-USD under the real B-42 Sonnet 5
+  / Haiku 4.5 prices: 5,000/500 main tokens + 4×1,200/60 small tokens) and 20 messages/day, the
+  maximum monthly estimate is $12.60. At $29/month that is 44% of the price — over the 25% warning
+  at the preset's own defaults. At $55/month it is 23%. Kept the daily limit at 20 (higher than
+  the free preset's 10, matching "full course" being the bigger package) and raised the price
+  instead, per the lead's "Full course" answer ("Phase D sets the ... daily limit (or its price) so
+  the at-most estimate stays under 25%, and logs the numbers as a decision").
+- Why: the plan's own example numbers ($29, 20/day) would show the cost warning on a freshly
+  created default package, which the lead's answer rules out.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d "Full course"'s unlisted fields: `finalAnswers: 'allowed'`, `lockedReply: 'generic'` · decided by builder · risk: low
+- Decided: the plan's Phase D file list gives "Full course" its price, skills, ceiling, daily
+  limit, live classes and trial, but not `finalAnswers` or `lockedReply` (only the free preset's
+  are given). Picked `'allowed'` (a paid, full package trusts the student with final answers) and
+  `'generic'` (a paid package's locked-reply message is less important than the free package's,
+  which exists to upsell).
+- Why: both fields are required by `PackageConfigSchema`; a default had to be chosen for the
+  preset to be a valid package. The human can change either later; no behaviour depends on this
+  pairing yet (publish is 8.7).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d en.json uses a new `packageBuilder` namespace, not `packages` · decided by builder · risk: low
+- Decided: `apps/web/messages/en.json` already has a top-level `packages` key for the student's
+  package-compare page (`app/packages/[agentId]/PackageCompare.tsx`, `useTranslations('packages')`).
+  The plan's Phase D text ("a new top-level `packages` key") predates that collision. Used
+  `packageBuilder` instead and left the existing `packages` namespace untouched.
+- Why: reusing `packages` would either silently clash with the student page's existing keys or
+  require renaming that page's namespace, which is out of this phase's files.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d No `packagesClient.ts`; `PackagesView.tsx` calls `fetch` directly · decided by builder · risk: low
+- Decided: unlike `uploadClient.ts` (8.2) and `styleCardClient.ts` (8.4b), this phase's plan lists
+  only `page.tsx`, `PackagesView.tsx`, and the two test files as files to create — no separate
+  client module. Kept the `fetch` calls, body-shaping and error-code mapping inside
+  `PackagesView.tsx` itself, importing `PackageView`/`PackageDraft` only as types (`import type`,
+  erased at compile time, same pattern already used by `OnboardingForm.tsx` for `@edmate/db`).
+- Why: follows "only the plan's Phase D files" literally; adding an extra file was not needed for
+  the tests to pass.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d Merge before the timed two-package walkthrough · decided by lead · risk: medium
+- Decided: 8.6d merges without the manual timed walkthrough ("two packages in under 15 minutes") that Phase D's exit conditions ask for. The walkthrough runs on the dev stack in board task 8.6g, together with the 9.2b walkthrough.
+- Why: the human's focus is a testable product fast; the page's behaviour is covered by unit and axe tests, and the timing check needs the compose stack, which builders don't bring up. The code-reviewer raised this as HIGH; it is deferred, not waived.
+- risk: medium
+
+---
+
 ### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
 - Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
 - Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").

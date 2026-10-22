@@ -31,6 +31,11 @@ describe('HomeView', () => {
     expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
   });
 
+  it('has a "Find a teacher" nav link to /teachers (task 9.2)', async () => {
+    render(await HomeView());
+    expect(screen.getByRole('link', { name: 'Find a teacher' })).toHaveAttribute('href', '/teachers');
+  });
+
   it('with a live subscription, links to its chat instead of the placeholder (task 9.4)', async () => {
     const { container } = render(await HomeView({ chats: ['demo-agent'] }));
     expect(screen.getByRole('link', { name: "Chat with your teacher's agent" })).toHaveAttribute(
