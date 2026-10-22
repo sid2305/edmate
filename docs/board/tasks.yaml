@@ -5153,6 +5153,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.2i
+  milestone: M13
+  title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h review MEDIUM, replaces the re-read check); the pinned transport sends the Host header as bareHostName like SNI (LOW); document the all-transient-failure path in packages/ingest address.ts (LOW); ADR-0014 Decision 6 wording: 2 s per query x 2 tries, WEB_INGEST_ATTEMPTS = 2, FAMILY_GRACE_MS 500 ms, SNI and the `..` refusal (LOW; docs/adr needs its reviewers)'
+  accept: each follow-up has a test where code changes; touched packages green.
+  deps:
+  - 8.2h
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
