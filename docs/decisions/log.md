@@ -10,6 +10,117 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.5a safety alerts are staff-only, the ack is audited and lock-ordered, no personal columns · decided by builder · risk: high
+- Decided: `safety_alerts` stores ids, level, kind, the scrubbed excerpt and timestamps only. `listForStaff` and `acknowledge` require `by` to be staff now (via `role-lock.ts`; the repository never names the users table). `acknowledge` locks the actor's role FOR SHARE, then the alert row FOR UPDATE, and commits exactly one `safety_alert.ack` audit row with the ack (never the excerpt). Worker writes are scoped through the alert's own session. Reviewer: security-reviewer (risky path `packages/db/src/repositories/**`).
+- Why: plan Phase A and lead answers Q1, Q3 and Q4; lessons "lock order".
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.5a migration 0022 is additive only · decided by builder · risk: medium
+- Decided: `0022_safety_alerts.sql` only creates the table, its constraints, its FKs and indexes; no drop, update, delete or change to another table. `schema.test.ts` asserts this. Reviewer: database-reviewer (recommended: new table, lock order, concurrent-ack test).
+- Why: plan Phase A ("additive only"); generated after merging origin/main, 0022 was free.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.5a listForStaff orders acknowledged alerts oldest first too · decided by builder · risk: low
+- Decided: with `status: 'all'`, acknowledged alerts follow the open ones, oldest first (same key as open ones), and a staff read takes no lock beyond `lockRole`'s momentary share lock outside a transaction.
+- Why: the plan sets the order only for open alerts; one simple, deterministic order keeps the query on one sort.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d plan page clearance stays at default (age) · decided by builder · risk: low
+- Decided: `app/learn/[agentId]/plan/page.tsx` calls `requireRole(['student'])` at the default
+  clearance, not `clearance: 'agent'`, and is added to `clearance-scan.test.ts`'s existing
+  allowlist (alongside the memory and progress pages).
+- Why: `docs/tasks/9.6/plan.md`'s Lead answer says the plan page follows the same precedent as
+  the memory page: a student waiting on a parent's consent can still manage their own plan. The
+  repo-wide clearance scan (task 9.4 Phase C / 9.6 Phase B) already encodes this exact exception
+  for memory and progress; extending it is the documented, minimal fix rather than a new pattern.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d packageId round-trip via getById fails closed · decided by builder · risk: low
+- Decided: after a successful `change`, the handler resolves the new `packageVersionId` back to
+  a public `packageId` via `packageVersions.getById`; if that lookup unexpectedly returns null,
+  the handler throws `RepositoryError('integrity', ...)`, which the exhaustive switch maps to
+  400 (not 500).
+- Why: an empty or wrong `packageId` in the response would silently point the client at the
+  wrong plan; failing closed with a 400 (a data-integrity problem, not a server crash) matches
+  the `invalid`/`integrity` convention already used elsewhere in this handler, and is covered by
+  a test ("...fails closed, never an empty packageId").
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d 64KB body cap duplicated locally · decided by builder · risk: low
+- Decided: `change.ts` re-implements the same 64KB `readCapped`/`readJson` pattern already used
+  in `turn/routes.ts`, as a module-local helper, rather than extracting a shared utility.
+- Why: no shared module for this existed yet and the plan's scope for 9.6d is the PATCH route and
+  plan page only; extracting a shared helper would touch files outside that scope. Left as a
+  "left to do" item below for a future cleanup task.
+- risk: low
+
+---
+
+### 22 Oct 2026 · Eval pass thresholds for feedback and revision (B-40, task 7.4) · decided by you · risk: high
+Decided: feedback ≥ 70% (the 5.7 target), revision ≥ 80% (like pedagogy); platform accuracy is covered by each agent's own accuracy cases; the distress near-miss cases are held to the 99% safety rate, not the 100% distress group. All provisional until the 7.2 expert pass.
+Why: The quality gate fails closed on a suite with no threshold, so a first-publish gate could not pass; the spec only names the 70% feedback target.
+Alternatives: 80% for both (b); other numbers (c).
+Reversible: Yes, numbers in the suite config.
+
+### 22 Oct 2026 · Eval suites grow to MVP sizes first (B-41, task 7.2) · decided by you · risk: high
+Decided: MVP sizes for the exit gate: locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60 (about 234 new cases). The remaining ~390 cases to reach the plan's ~1,000 land in task 7.2f before the pilot gate.
+Why: Every case costs model calls on each live run and each first-publish gate; the MVP sizes cover every attack type the plan lists.
+Alternatives: Full sizes now (b): about 2.5x the agent calls and live-run cost.
+Reversible: Yes, 7.2f adds the rest.
+
+### 22 Oct 2026 · First-publish gate runs in full; material edits after publish are ungated for the MVP (B-43, task 8.7) · decided by you · risk: high
+Decided: Run the publish gate as specified and store its cost per publish. After publish, material edits reach students with a "changed since last publish" note until the teacher republishes; automatic re-gating is task 13.regate.
+Why: It matches the spec and the pilot has few teachers; blocking edits would slow teachers down.
+Alternatives: A smaller gate (b); block edits until republish (c).
+Reversible: Yes.
+
+### 22 Oct 2026 · Downgrade and cancel apply at once until payments (B-44, task 9.6) · decided by you · risk: high
+Decided: Downgrade and cancel take effect immediately until 10.3, which moves them to period end. The plan page says so, and the cancel confirm offers both exports first.
+Why: Nothing ends a billing period before M10 and the schema has no scheduled-change column; there is no payment to protect yet.
+Alternatives: Schedule now with an additive migration (b): one more risky phase.
+Reversible: Yes, 10.3 changes it.
+
+### 22 Oct 2026 · Live-class invites and reminders are in-app only for the pilot (B-45, task 11.1) · decided by you · risk: high
+Decided: An "upcoming live classes" block on /home with 24 h and 1 h labels; nothing is sent. Email reminders are a follow-up once an email vendor and an identity-boundary change are agreed (same gap as safety alerts, 4.3).
+Why: Only the sign-in code may read student emails today and no background job sends mail; faster to a testable product.
+Alternatives: Build email reminders now (b): an ADR plus a scheduled job, about two risky phases.
+Reversible: Yes.
+
+### 22 Oct 2026 · A rejected teacher's existing students keep access in the closed pilot (B-46, task 9.3c) · decided by you · risk: high
+Decided: Existing students keep access until their plan ends; only new starts are blocked. Before the pilot opens to strangers, a safety-reason rejection cuts access at once (board task behind GATE).
+Why: Rejections in a small pilot are rare and staff can contact the students.
+Alternatives: Cut access at once for every rejection (b).
+Reversible: Yes.
+
+### 22 Oct 2026 · YouTube material comes from the owner's exported captions; web links fetch any public https site (B-47, task 8.2b) · decided by you · risk: high
+Decided: The teacher uploads the caption file (.vtt or .srt) exported from YouTube Studio for their own video; Edmate never calls YouTube. Web links may fetch any https site that resolves only to public addresses; private, internal and cloud-metadata addresses are always refused.
+Why: No reliable, key-free way to fetch a YouTube transcript within YouTube's terms; the official API needs the owner's OAuth consent and a Google Cloud project. A fixed site list would block most teachers' own pages.
+Alternatives: Official API later (b); unofficial scraping (c); a staff-kept site list (2).
+Reversible: Yes, (b) stays open as a later ADR.
+
+### 22 Oct 2026 · Escalated safety alerts reach only the staff inbox until real paging lands (B-48, task 12.5) · decided by you · risk: high
+Decided: During internal testing an escalated alert is shown at the top of every staff user's in-app inbox with an overdue marker and reaches no phone or email. Task 4.3c (real paging) must merge before real students; it needs vendor accounts and the on-call contact from the human as environment values.
+Why: Testing uses no real students and the pilot gate already requires 4.3c.
+Alternatives: Pull 4.3c forward now (b).
+Reversible: Yes.
+
+### 22 Oct 2026 · Takedown pauses the subscription; old chat text stays (B-49, task 12.2) · decided by you · risk: high
+Decided: When staff take down a teacher's agent, the student's subscription pauses and billing stops until the agent is restored (feeds the M10 payments tasks). Past chat replies and session summaries that quoted the material keep that text; it is blanked only if a rights holder asks.
+Why: Students already saw the text; a pause is simpler than a pro-rata refund and fair to the student.
+Alternatives: End with a pro-rata refund (b); leave the subscription as is (c); blank quoted text on takedown (2).
+Reversible: Yes.
+
+
 ### 22 Oct 2026 · 8.2e The job payload carries the URL; failed web jobs are removed from Redis · decided by builder · risk: high
 - Decided: The web link's URL travels only in the BullMQ job payload (`IngestJob.url`); Postgres keeps a `.link` storage key and the title. Web jobs are enqueued with `removeOnFail: true` (and `removeOnComplete: true`), so the URL leaves Redis when the job finishes or fails for the last time. The dead-letter copy keeps only refs. The URL is never logged and never put in an error message.
 - Why: Plan Decision 9 and the lead's answers say the URL must not be stored in Postgres or logged. Removing the job on failure stops the URL from sitting in Redis's failed-job history for 7 days. An integration test checks that no Redis key holds it.

@@ -47,6 +47,8 @@ export const DATA_MODEL_TABLES = [
   'reports',
   'takedowns',
   'safety_events',
+  // Safety alert inbox (task 12.5a).
+  'safety_alerts',
   'audit_log',
   // Sign-in tables (task 1.3), behind the identity store rather than a repository.
   'auth_accounts',

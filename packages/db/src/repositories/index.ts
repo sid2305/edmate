@@ -18,6 +18,7 @@ import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
 import { retrievalRepo } from './retrieval.js';
+import { safetyAlertsRepo } from './safety-alerts.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
@@ -79,6 +80,7 @@ export function createRepositories(db: Db) {
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
     classQuestions: guardAll('classQuestions', classQuestionsRepo(db)),
+    safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
   };
 }
 
@@ -275,3 +277,11 @@ export {
   type TopicQuestionGroup,
 } from './class-questions.js';
 export { type ClusterableQuestion, clusterQuestions, type QuestionCluster } from './question-similarity.js';
+export {
+  SAFETY_ALERT_ACK_ACTION,
+  SAFETY_ALERT_LIST_MAX_LIMIT,
+  SAFETY_ALERT_NOTE_MAX_LENGTH,
+  type SafetyAlertAckInput,
+  type SafetyAlertListOptions,
+  type SafetyAlertRow,
+} from './safety-alerts.js';

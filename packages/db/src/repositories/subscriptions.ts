@@ -69,6 +69,17 @@ const StartOptions = z.strictObject({
   periodEnd: z.iso.datetime({ offset: true }),
 });
 
+/**
+ * True when `packageVersions`' row is free and its teacher's free tier is cost-alarm paused this
+ * UTC calendar month (task 9.6h): a `COST_ALARM_PAUSE_ACTION` audit row for that teacher since
+ * the month began. The month matches the cost alarm's own `monthStartUtc` (apps/worker).
+ */
+const alarmPausedFree = sql`(${packageVersions.config} -> 'pricePerMonth' -> 'amountMinor' = '0'::jsonb
+  and exists (select 1 from ${auditLog}
+    where ${auditLog.teacherId} = ${packageVersions.teacherId}
+      and ${auditLog.action} = ${COST_ALARM_PAUSE_ACTION}
+      and ${auditLog.ts} >= date_trunc('month', now() at time zone 'UTC') at time zone 'UTC'))`;
+
 /** Statuses a pause leaves alone: already paused (staff or alarm), or ended for good. */
 const NOT_LIVE = ['paused', 'ended'] as const;
 
@@ -203,6 +214,13 @@ export function subscriptionsRepo(db: Db) {
      * FOR SHARE` statement (already this method's whole transaction): the `teacherProfiles` row
      * is read FOR SHARE as part of the very statement that writes the subscription, so a
      * verification change can only land strictly before or after it, never mid-write.
+     *
+     * Task 9.6h: a free version is `invalid` while its teacher's free tier is cost-alarm paused
+     * this month (`alarmPausedFree`), so cost-alarm pause -> cancel -> start can't hand back free
+     * access before the next alarm run; a paid version is unaffected. And a pair gets one trial:
+     * if the student has had any earlier subscription with this teacher, a `trial` start is
+     * stored (and returned) as `active` with the same `periodEnd`, so cancel -> start can't farm
+     * a new trial (10.3 revisits trial rules with real billing).
      */
     async start(scope: StudentScope, input: StartInput): Promise<LiveSubscription> {
       const method = 'subscriptions.start';
@@ -211,6 +229,12 @@ export function subscriptionsRepo(db: Db) {
       const id = randomUUID();
 
       return translateWrite(method, async () => {
+        const [earlier] = await db
+          .select({ id: subscriptions.id })
+          .from(subscriptions)
+          .where(and(eq(subscriptions.studentId, studentId), eq(subscriptions.teacherId, teacherId)))
+          .limit(1);
+        const status = i.status === 'trial' && earlier ? 'active' : i.status;
         const result = await db.execute(
           insertSelect(
             subscriptions,
@@ -219,7 +243,7 @@ export function subscriptionsRepo(db: Db) {
               [subscriptions.studentId, sql`${studentId}::text`],
               [subscriptions.teacherId, sql`${packageVersions.teacherId}`],
               [subscriptions.packageVersionId, sql`${packageVersions.id}`],
-              [subscriptions.status, sql`${i.status}::subscription_status`],
+              [subscriptions.status, sql`${status}::subscription_status`],
               [subscriptions.periodEnd, sql`${new Date(i.periodEnd)}::timestamptz`],
             ],
             sql`from ${packageVersions}
@@ -235,12 +259,25 @@ export function subscriptionsRepo(db: Db) {
               where ${and(
                 eq(packageVersions.id, i.packageVersionId),
                 eq(packageVersions.teacherId, teacherId),
+                sql`not ${alarmPausedFree}`,
               )}
               for share of ${teacherProfiles}`,
           ),
         );
-        if (written(result) !== 1) throw new RepositoryError('not_found', method);
-        return { id, packageVersionId: i.packageVersionId, status: i.status, periodEnd: i.periodEnd };
+        if (written(result) !== 1) {
+          const [blocked] = await db
+            .select({ id: packageVersions.id })
+            .from(packageVersions)
+            .where(
+              and(
+                eq(packageVersions.id, i.packageVersionId),
+                eq(packageVersions.teacherId, teacherId),
+                alarmPausedFree,
+              ),
+            );
+          throw new RepositoryError(blocked ? 'invalid' : 'not_found', method);
+        }
+        return { id, packageVersionId: i.packageVersionId, status, periodEnd: i.periodEnd };
       });
     },
 
@@ -345,7 +382,10 @@ export function subscriptionsRepo(db: Db) {
      * agent's package is `not_found`, same as `start`. The current subscription must be `trial`,
      * `active` or `past_due` (`paused`/`ended` is `invalid`); the same version as now is also
      * `invalid` (nothing to change). `status` and `period_end` are kept: there is no payment yet,
-     * so neither proration nor a new billing period exists (9.6's Q1 = (a), until 10.3).
+     * so neither proration nor a new billing period exists (9.6's Q1 = (a), until 10.3) — except
+     * that a `trial` moved to a version whose offer has no trial (`trialDays` absent or 0) becomes
+     * `active` (task 9.6h). Task 9.6h also requires the teacher to be verified, as `start` does
+     * (9.3c): a teacher rejected after publishing can't be switched to (`not_found`).
      */
     async changePackage(
       scope: StudentScope,
@@ -375,9 +415,20 @@ export function subscriptionsRepo(db: Db) {
           /* v8 ignore next -- see above */
           if (!current) throw new RepositoryError('integrity', method);
 
+          // Known gap (task 9.6h, same as `start`): packages/agents are read here without a lock
+          // (see the lock-order note on `lockLive`), so a publish or suspend that commits between
+          // this read and the update below can leave the subscription on a version that has just
+          // stopped being live. Accepted: existing subscribers keep old versions anyway.
           const [target] = await tx
-            .select({ id: packageVersions.id })
+            .select({ id: packageVersions.id, trialDays: sql<unknown>`${packageVersions.config} -> 'trialDays'` })
             .from(packageVersions)
+            .innerJoin(
+              teacherProfiles,
+              and(
+                eq(teacherProfiles.userId, packageVersions.teacherId),
+                eq(teacherProfiles.verificationStatus, 'verified'),
+              ),
+            )
             .innerJoin(
               packages,
               and(
@@ -394,10 +445,12 @@ export function subscriptionsRepo(db: Db) {
               ),
             );
           if (!target) throw new RepositoryError('not_found', method);
+          const targetHasTrial = typeof target.trialDays === 'number' && target.trialDays > 0;
+          const status = live.status === 'trial' && !targetHasTrial ? 'active' : live.status;
 
           await tx
             .update(subscriptions)
-            .set({ packageVersionId: i.packageVersionId })
+            .set({ packageVersionId: i.packageVersionId, status })
             .where(eq(subscriptions.id, live.id));
           await writeChangeAudit(
             tx,
@@ -405,9 +458,9 @@ export function subscriptionsRepo(db: Db) {
             CHANGE_PACKAGE_ACTION,
             live,
             { status: live.status, packageVersionId: live.packageVersionId },
-            { status: live.status, packageVersionId: i.packageVersionId },
+            { status, packageVersionId: i.packageVersionId },
           );
-          return { id: live.id, packageVersionId: i.packageVersionId, status: live.status, periodEnd: live.periodEnd };
+          return { id: live.id, packageVersionId: i.packageVersionId, status, periodEnd: live.periodEnd };
         }),
       );
     },
@@ -453,6 +506,12 @@ export function subscriptionsRepo(db: Db) {
      * fixed "paused by Edmate" text for those instead of a resume button. Not currently `paused`
      * is also `invalid`. Resume restores the status the latest own-pause audit row's `before`
      * names; `period_end` never moves (no payment yet).
+     *
+     * Task 9.6h: "own" means the latest row's action is `STUDENT_PAUSE_ACTION` **and** it was
+     * written by this student (`actor` = the scope's student, `actorRole` = 'student'); a row with
+     * that action from anyone else means "paused by Edmate". Rows are ordered by (ts, created_at,
+     * id); since ids are random, two latest rows that tie on both timestamps are ambiguous and
+     * resume fails closed (`invalid`) rather than let the id pick.
      */
     async resume(scope: StudentScope, input: SubscriptionIdInput): Promise<LiveSubscription> {
       const method = 'subscriptions.resume';
@@ -464,8 +523,15 @@ export function subscriptionsRepo(db: Db) {
           const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
           if (live.status !== 'paused') throw new RepositoryError('invalid', method);
 
-          const [lastPause] = await tx
-            .select({ action: auditLog.action, before: auditLog.before })
+          const [lastPause, previous] = await tx
+            .select({
+              action: auditLog.action,
+              actor: auditLog.actor,
+              actorRole: auditLog.actorRole,
+              before: auditLog.before,
+              ts: auditLog.ts,
+              createdAt: auditLog.createdAt,
+            })
             .from(auditLog)
             .where(
               and(
@@ -474,9 +540,21 @@ export function subscriptionsRepo(db: Db) {
                 eq(auditLog.studentId, live.studentId),
               ),
             )
-            .orderBy(desc(auditLog.ts), desc(auditLog.id))
-            .limit(1);
-          if (!lastPause || lastPause.action !== STUDENT_PAUSE_ACTION) {
+            .orderBy(desc(auditLog.ts), desc(auditLog.createdAt), desc(auditLog.id))
+            .limit(2);
+          if (
+            !lastPause ||
+            lastPause.action !== STUDENT_PAUSE_ACTION ||
+            lastPause.actorRole !== 'student' ||
+            lastPause.actor !== live.studentId
+          ) {
+            throw new RepositoryError('invalid', method);
+          }
+          if (
+            previous &&
+            previous.ts.getTime() === lastPause.ts.getTime() &&
+            previous.createdAt.getTime() === lastPause.createdAt.getTime()
+          ) {
             throw new RepositoryError('invalid', method);
           }
           const parsed = StatusSnapshot.safeParse(lastPause.before);

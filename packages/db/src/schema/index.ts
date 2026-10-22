@@ -65,6 +65,7 @@ export {
   insights,
   liveClasses,
   reports,
+  safetyAlerts,
   safetyEvents,
   takedowns,
 } from './operations.js';
