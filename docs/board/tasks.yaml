@@ -4369,6 +4369,14 @@ tasks:
   - 8.7d
   risk: low
   status: todo
+- id: 8.7l
+  milestone: M13
+  title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start()'
+  accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
+  deps:
+  - 8.7d
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
