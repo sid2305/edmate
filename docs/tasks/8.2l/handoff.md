@@ -63,6 +63,11 @@ by its own unit/route/component test above.
 
 ## Decisions
 
+### 22 Oct 2026 · 8.2l caption upload security LOWs left as they are · decided by lead · risk: low
+- Decided: no byte sniffing of caption files in apps/web/src/studio/files.ts, and apps/web/src/studio/uploadClient.ts contentTypeFor keeps preferring the extension over a mismatched browser type.
+- Why: every upload type works this way today, and the server's `complete` re-checks the stored object's content type against the fixed table, so neither has a security effect (security-reviewer LOWs).
+- risk: low
+
 ### 22 Oct 2026 · 8.2l ADR-0014 amended for the B-47 caption-file answer · decided by builder · risk: high
 - Decided: `docs/adr/0014-web-link-egress.md`'s Status line records an 8.2c amendment; Decision
   10's pilot allow-list value is stated as `*` (no longer "stands until the human answers");
