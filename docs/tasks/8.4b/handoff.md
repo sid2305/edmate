@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.4b-style-card-page` (built on local branch `work-84b`)
 - Worktree: `.claude/worktrees/agent-aebf94b022ac8d43e`
-- Tool calls used: 32
+- Tool calls used: 84 (harness counts: build 55, fix round 1 29)
 
 ## What changed
 - `apps/web/src/studio/styleCardClient.ts` (+ test): `getStyleCard`, `draftStyleCardApi`,
