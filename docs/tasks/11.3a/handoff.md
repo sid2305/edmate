@@ -80,4 +80,4 @@ No migration, no schema edit, `teacher-questions.ts` untouched, no `packages/con
 - `weeklyInsights.ts`: compute `weekStart` (the Monday of the week being reported, `YYYY-MM-DD`) and call only `repos.insights.computeAndSaveWeek(scope, weekStart)` for each teacher. Don't call the reads or build a payload in the worker; there is no public `saveWeek`.
 - Scheduler, logSink and wiring as in the plan's Phase B.
 
-Tool calls used: 37 + 30
+Tool calls used: 101 (harness count: 56 build + 45 fix; the builders reported 37 + 30)
