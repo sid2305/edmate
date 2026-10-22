@@ -26,10 +26,10 @@ import {
   type IdSource,
   type PipelineDeps,
 } from '@edmate/harness';
+import type { AccessWorld, MemorySessionStateStore } from '@edmate/harness/testing';
 import {
   memoryAlertSink,
   memorySafetyEventSink,
-  memorySessionStateStore,
   memoryTeacherQuestionStore,
   memoryTraceSink,
   memoryTranscriptStore,
@@ -40,7 +40,13 @@ import {
 } from '@edmate/harness/testing';
 import { createChatGateway, gatewayFor, type Env } from './gateway.js';
 import { buildChatRetrieval } from './retrieval.js';
-import { buildChatWorld, loadChatContent, loadChatPromptPacks, type ChatWorldOptions } from './world.js';
+import {
+  buildChatWorld,
+  loadChatContent,
+  loadChatPersonas,
+  loadChatPromptPacks,
+  type ChatWorldOptions,
+} from './world.js';
 
 /** A real clock: `Date.now()`/`setTimeout`, cancellable only by letting the sleep elapse. */
 export function systemClock(): Clock {
@@ -105,6 +111,27 @@ export function memoryProfileStore(): ProfileStore {
   };
 }
 
+/**
+ * The session-state port over the CLI's in-memory world (task 5.8a): a saved help state is written
+ * onto the world's session row, which `memoryTurnConfigStore` hands to the next turn, as the
+ * database does in production; `saved` keeps every write, in order, like `memorySessionStateStore`.
+ * Without it each turn started from an empty help state, so a
+ * role-play never got past question 1 (and the help ladder never climbed).
+ */
+export function worldSessionStateStore(world: AccessWorld): MemorySessionStateStore {
+  const saved: MemorySessionStateStore['saved'] = [];
+  return {
+    saved,
+    saveHelpState(sessionId, helpState) {
+      const session = world.sessions.find((s) => s.id === sessionId);
+      if (session === undefined) return Promise.reject(new Error(`no session ${sessionId}`));
+      session.helpState = helpState;
+      saved.push({ sessionId, helpState });
+      return Promise.resolve();
+    },
+  };
+}
+
 const SAFE_REPLY = "Sorry, I can't answer that right now. Please try again.";
 function distressReply(_lang: Lang, locale: LocalePack): string {
   const lines = locale.helplines.map((h) => `${h.name}: ${h.number}`).join('; ');
@@ -137,6 +164,8 @@ export interface ChatSetup {
   studentId: string;
   sessionId: string;
   content: DemoTeacherContent;
+  /** Where `deps.personas` came from: the real signed library, or none (role-play off). */
+  personasSource: 'real' | 'none';
 }
 
 /** Builds one run's full `PipelineDeps`, ready for `runTurn(input, { deps, steps: defaultSteps })`. */
@@ -147,6 +176,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     opts,
   );
   const { library: promptPacks } = loadChatPromptPacks();
+  const { personas, source: personasSource } = loadChatPersonas();
 
   const clock = opts.clock ?? systemClock();
   const usage = memoryUsageMeter();
@@ -184,7 +214,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     limits: createTurnLimits(clock),
     profiles: memoryProfileStore(),
     transcripts: memoryTranscriptStore(),
-    sessionState: memorySessionStateStore(),
+    sessionState: worldSessionStateStore(world),
     retrieval: buildChatRetrieval(content, teacherId),
     teacherQuestions: memoryTeacherQuestionStore(),
     usage,
@@ -194,7 +224,8 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     fallbackReplies: chatFallbackReplies(),
     promptPacks,
     distressCheck: (text, lang) => hasDistressKeyword(text, lang),
+    ...(personas === undefined ? {} : { personas }),
   };
 
-  return { deps, teacherId, agentId, studentId, sessionId, content };
+  return { deps, teacherId, agentId, studentId, sessionId, content, personasSource };
 }

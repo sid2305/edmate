@@ -12,9 +12,10 @@ import {
   GROUNDED_VERDICT,
   judgeGateway,
   ScriptedGateway,
+  spyGateway,
 } from '@edmate/harness/testing';
 import { describe, expect, it } from 'vitest';
-import { CHAT_USAGE, renderEvent, runChatCommand } from './chat.js';
+import { CHAT_USAGE, chatTurnInput, renderEvent, runChatCommand, type ChatMode } from './chat.js';
 import { buildChatDeps, slackClock, type ChatDepsOptions } from './chat/deps.js';
 
 // Task 3.9b: on a loaded CI runner the cold first turn overran preGuard's 400 ms budget on the real
@@ -43,7 +44,10 @@ const used = {
 };
 
 /** Scripted enough for several turns: one classifier match per turn (never consumed twice). */
-function scriptedChatGateway(turns: number) {
+function scriptedChatGateway(
+  turns: number,
+  reply = 'A variable stores a value so your program can use it later. [1]',
+) {
   const scripted = new ScriptedGateway(
     {
       generateObject: Array.from({ length: turns }, () => [
@@ -52,7 +56,7 @@ function scriptedChatGateway(turns: number) {
         { match: (req: { system: string }) => req.system.includes('jailbreak_override'), value: { category: 'none' } },
       ]).flat(),
       stream: Array.from({ length: turns }, () => ({
-        steps: [say('A variable stores a value so your program can use it later. [1]'), used],
+        steps: [say(reply), used],
       })),
     },
     { sleep: () => Promise.resolve() },
@@ -186,5 +190,130 @@ describe('renderEvent', () => {
     expect(render({ type: 'replace', text: 'new text' })).toContain('new text');
     expect(render({ type: 'error', code: 'provider_error', retryable: true })).toContain('provider_error');
     expect(render({ type: 'done', messageId: 'm_1', usage: [] })).toBe('\n');
+  });
+});
+
+describe('chatTurnInput (5.8a role-play mode)', () => {
+  const IDS = { agentId: 'demo-agent', sessionId: 'demo-session', studentId: 'demo-teacher' };
+  const TS = '2026-10-21T00:00:00.000Z';
+  const now = () => TS;
+  const NORMAL: ChatMode = { mode: 'normal' };
+  const ROLEPLAY: ChatMode = { mode: 'roleplay', persona: 'job-interview' };
+  const base = { ...IDS, lang: 'en', clientTs: TS };
+
+  it('a start sends only the bare persona id, with no text, and enters role-play mode', () => {
+    const out = chatTurnInput(NORMAL, '/roleplay job-interview', IDS, now);
+    expect(out.input).toStrictEqual({
+      ...base,
+      kind: 'skill_action',
+      skill: 'mock_interview',
+      skillPayload: { persona: 'job-interview' },
+    });
+    expect(out.input).not.toHaveProperty('text');
+    expect(out.state).toEqual(ROLEPLAY);
+    expect(out.notice).toBeUndefined();
+  });
+
+  it.each(['/roleplay', '/roleplay   ', '/roleplay a b', '/roleplay job-interview@1.0.0', '/roleplay ../x'])(
+    'refuses %j locally with a usage line and sends no turn',
+    (line) => {
+      for (const state of [NORMAL, ROLEPLAY]) {
+        const out = chatTurnInput(state, line, IDS, now);
+        expect(out.input).toBeUndefined();
+        expect(out.state).toEqual(state);
+        expect(out.notice).toMatch(/usage: \/roleplay <persona-id>/u);
+      }
+    },
+  );
+
+  it.each(['A variable names a value.', '/pause need help', 'stop', 'I would use a list.'])(
+    'in role-play mode sends %j as a mock_interview message',
+    (line) => {
+      const out = chatTurnInput(ROLEPLAY, line, IDS, now);
+      expect(out.input).toStrictEqual({ ...base, kind: 'message', skill: 'mock_interview', text: line });
+      expect(out.state).toEqual(ROLEPLAY);
+    },
+  );
+
+  it('/leave sends no turn and later lines carry no skill', () => {
+    const left = chatTurnInput(ROLEPLAY, '/leave', IDS, now);
+    expect(left.input).toBeUndefined();
+    expect(left.state).toEqual(NORMAL);
+    expect(left.notice).toMatch(/left the role-play/u);
+    const next = chatTurnInput(left.state, 'What is a loop?', IDS, now);
+    expect(next.input).toStrictEqual({ ...base, kind: 'message', text: 'What is a loop?' });
+  });
+
+  it('/leave outside role-play only says so', () => {
+    const out = chatTurnInput(NORMAL, '/leave', IDS, now);
+    expect(out.input).toBeUndefined();
+    expect(out.state).toEqual(NORMAL);
+    expect(out.notice).toMatch(/not in a role-play/u);
+  });
+
+  it('a plain session never sends a skill, even for /pause or stop', () => {
+    for (const line of ['hello', '/pause', 'stop']) {
+      const out = chatTurnInput(NORMAL, line, IDS, now);
+      expect(out.input).toStrictEqual({ ...base, kind: 'message', text: line });
+    }
+  });
+});
+
+describe('edmate chat: a scripted role-play session (5.8a)', () => {
+  it(
+    'sends every role-play line with the mock_interview skill until /leave',
+    async () => {
+      // No citation: a role-play start retrieves no material, so a cited reply would be rewritten.
+      const spy = spyGateway(scriptedChatGateway(5, 'Welcome. First question: what does a variable hold?'));
+      const rec = capture();
+      const code = await runChatCommand(
+        ['--package', 'paid'],
+        rec.io,
+        { env: {}, cwd: '.', gateway: spy, buildDeps: slackBuildDeps },
+        linesStream([
+          '/roleplay job-interview@1.0.0',
+          '/roleplay job-interview',
+          'A variable names a value.',
+          '/pause need help',
+          'stop',
+          '/leave',
+          'What is a variable?',
+          'exit',
+        ]),
+      );
+      expect(code).toBe(0);
+      expect(rec.err).toEqual([]);
+      const text = rec.out.join('');
+      expect(text).toContain('/roleplay <persona-id>');
+      expect(text).toContain('usage: /roleplay <persona-id>');
+      const mains = spy.requests.filter((r) => r.tier === 'main').map((r) => r.system);
+      expect(mains).toHaveLength(5);
+      for (const system of mains.slice(0, 4)) {
+        expect(system).toContain('Skill: mock interview');
+        expect(system).toContain('[[PERSONA]]');
+      }
+      expect(mains[4]).not.toContain('Skill: mock interview');
+    },
+    30000,
+  );
+
+  it('says role-play is unavailable when no personas loaded', async () => {
+    const rec = capture();
+    const code = await runChatCommand(
+      [],
+      rec.io,
+      {
+        env: {},
+        cwd: '.',
+        gateway: scriptedChatGateway(1),
+        buildDeps: async (opts) => {
+          const setup = await slackBuildDeps(opts);
+          return { ...setup, personasSource: 'none' };
+        },
+      },
+      linesStream(['exit']),
+    );
+    expect(code).toBe(0);
+    expect(rec.out.join('')).toContain('Role-play is unavailable');
   });
 });

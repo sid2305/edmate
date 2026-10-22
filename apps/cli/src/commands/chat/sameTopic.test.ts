@@ -3,10 +3,10 @@
 // `PipelineDeps` over the real demo-teacher content; one session carries several turns through the
 // real `defaultSteps` pipeline (rule 4: the gateway is scripted, never a real model call).
 //
-// `edmate chat`'s composition saves help state (`memorySessionStateStore`) but never reloads it
-// (`memoryTurnConfigStore(world)` reads the world's fixed session, task 3.9a finding): this test
-// wraps `setup.deps.turnConfig.load` to return the last saved help state, in-test plumbing only
-// (out of bounds for this task: `apps/cli/src/commands/chat/deps.ts` is unchanged).
+// Before 5.8a, `edmate chat`'s composition saved help state but never reloaded it (task 3.9a
+// finding), so this test wraps `setup.deps.turnConfig.load` to return the last saved help state.
+// Since 5.8a `worldSessionStateStore` writes it back onto the world's session, so the wrapper is
+// now a no-op kept for this test's history; `saved` still records every write.
 import type { TurnEvent, TurnInput } from '@edmate/contracts';
 import { defaultSteps, runTurn, type PipelineDeps } from '@edmate/harness';
 import {

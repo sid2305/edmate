@@ -30,6 +30,7 @@ import {
   type Clock,
   type IdKind,
   type IdSource,
+  type PersonaLibrary,
   type PipelineDeps,
   type PromptPackLibrary,
   type TurnLimits,
@@ -91,6 +92,8 @@ export interface TurnProcess {
   factories: ProviderAdapterFactories;
   prices: PriceTable;
   promptPacks: PromptPackLibrary;
+  /** The signed role-play personas (`content/skills/mock_interview`, 5.8a). */
+  personas: PersonaLibrary;
   entitlements: EntitlementStore;
   turnConfig: TurnConfigStore;
   retrieval: RetrievalIndex;
@@ -140,6 +143,7 @@ export function turnDepsFor(p: TurnProcess, scope: StudentScope): PipelineDeps {
     teacherQuestions: teacherQuestionStoreFor(p.repos, scope),
     fallbackReplies: webFallbackReplies(),
     promptPacks: p.promptPacks,
+    personas: p.personas,
     distressCheck: (text, lang) => hasDistressKeyword(text, lang),
   };
 }

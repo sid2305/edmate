@@ -14,7 +14,12 @@ import {
 import { defaultSteps, type TurnLimits } from '@edmate/harness';
 import { createTurnQueues, redisTurnLimits, type TurnQueues } from '@edmate/queue';
 import { Redis } from 'ioredis';
-import { loadLocalePacks, pickLocalePack, readPromptPackLibrary } from '@edmate/content';
+import {
+  loadLocalePacks,
+  pickLocalePack,
+  readPersonaLibrary,
+  readPromptPackLibrary,
+} from '@edmate/content';
 import { processPorts, systemClock, systemIds, turnDepsFor } from './deps';
 import { errorName, TurnUnavailableError, type ServerLog, type TurnBackend } from './routes';
 
@@ -63,6 +68,9 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
   const dir = contentDir(env);
   const { packs } = loadLocalePacks(join(dir, 'locales'));
   const promptPacks = readPromptPackLibrary(join(dir, 'prompt-packs'));
+  // Signed role-play personas (5.8a). A broken dir fails the build like a broken prompt pack. The
+  // browser can't send a skill until 9.5, so no web turn reaches a persona yet.
+  const personas = readPersonaLibrary(join(dir, 'skills', 'mock_interview'));
   const market = configuredMarket(env, packs);
   const { repos, identity } = hooks.database();
   const { queues, limits } = hooks.redis(redisUrl);
@@ -79,6 +87,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
     factories,
     prices: loadBundledPrices(),
     promptPacks,
+    personas,
     ...ports,
     clock: systemClock(),
     ids: systemIds(),
