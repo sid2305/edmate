@@ -3823,6 +3823,47 @@ tasks:
   - 8.7b
   risk: medium
   status: todo
+- id: 9.6a
+  milestone: M9
+  title: 'Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.2a
+  risk: high
+  status: todo
+- id: 9.6b
+  milestone: M9
+  title: 'Progress page, complete JSON export and notes PDF (9.6 Phase B, apps/web)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6a
+  risk: medium
+  status: todo
+- id: 9.6c
+  milestone: M9
+  title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6a
+  risk: high
+  status: todo
+- id: 9.6d
+  milestone: M9
+  title: 'PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6c
+  risk: medium
+  status: todo
+- id: 9.6e
+  milestone: M9
+  title: 'Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6d
+  - 9.2b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
