@@ -152,10 +152,10 @@ export interface Transcript { text: string; language?: Lang; durationMs: number;
 
 // ---- Payments (ADR-0015) ----
 export type ProviderId = string;           // ^[a-z][a-z0-9_-]{1,31}$; equals LocalePack.payments.provider; 'tbd' never names an adapter
-export type ProviderRef = string;          // a provider's own id: ^[A-Za-z0-9_.:-]{1,128}$
+export type ProviderRef = string;          // a provider's own id: ^[A-Za-z0-9_.:-]{1,128}$, at least one letter or digit
 export interface PaymentOffer {            // built server-side from the package version; never from the client
   packageVersionId: string; name: string; price: Money; interval: 'month'; trialDays?: number;
-}                                   // price.amountMinor > 0; name 1..120 chars, one line; trialDays 1..90
+}                                   // price.amountMinor > 0; name 1..120 chars, one line (no Cc, Cf, Zl or Zp), a letter or digit; trialDays 1..90
 export interface ProviderSubscription {    // the provider's view; 10.3's state machine decides the entitlement
   provider: ProviderId; providerRef: ProviderRef;
   subscriptionId: string;           // Edmate's subscriptions.id, carried as provider metadata; required
@@ -186,7 +186,7 @@ export interface Payments {                // one provider; callers get it only 
   pause(x: { providerRef: ProviderRef; when: 'now' | 'period_end'; idempotencyKey: string }): Promise<ProviderSubscription>;
   resume(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;
   cancel(x: { providerRef: ProviderRef; when: 'now' | 'period_end'; idempotencyKey: string }): Promise<ProviderSubscription>;
-  clearScheduled(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;   // undoes a scheduled plan change, cancel or pause
+  clearScheduled(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;   // undoes a scheduled plan change, cancel, pause or resume
   getSubscription(providerRef: ProviderRef): Promise<ProviderSubscription>;
   refund(x: { paymentRef: ProviderRef; amount?: Money; idempotencyKey: string }):
     Promise<{ refundRef: ProviderRef; status: 'pending' | 'succeeded' }>;   // no amount = full refund

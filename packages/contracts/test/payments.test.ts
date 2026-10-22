@@ -9,11 +9,16 @@ import {
   providerSubscriptionActive,
 } from '../fixtures/index.js';
 import {
+  CheckoutResultSchema,
   EntitlementSchema,
+  IdempotencyKeySchema,
   PAYMENT_LIMITS,
   PaymentEventSchema,
+  PaymentFactSchema,
   PaymentOfferSchema,
+  ProviderRefSchema,
   ProviderSubscriptionSchema,
+  RefundResultSchema,
 } from '../src/index.js';
 
 const ok = (r: { success: boolean }) => r.success;
@@ -39,14 +44,35 @@ describe('PaymentOffer', () => {
     expect(ok(PaymentOfferSchema.safeParse({ ...paymentOfferMinimal, price }))).toBe(true);
   });
 
-  it('counts the name in code points: 120 emoji pass, 121 fail', () => {
-    const name = (n: number) => '\u{1F4D8}'.repeat(n);
+  it('counts the name in code points: a letter and 119 emoji pass, 120 emoji fail', () => {
+    const name = (n: number) => 'A' + '\u{1F4D8}'.repeat(n - 1);
     expect(ok(PaymentOfferSchema.safeParse({ ...paymentOfferMinimal, name: name(120) }))).toBe(
       true,
     );
     expect(ok(PaymentOfferSchema.safeParse({ ...paymentOfferMinimal, name: name(121) }))).toBe(
       false,
     );
+  });
+
+  it('refuses format characters and names with no letter or digit', () => {
+    for (const bad of [
+      'a\u200bb',
+      'a\ufeffb',
+      'a\u2066b',
+      'a\u2029b',
+      'a\u009fb',
+      '\u{1F4D8}',
+      '-- !',
+    ]) {
+      expect(ok(PaymentOfferSchema.safeParse({ ...paymentOfferMinimal, name: bad }))).toBe(false);
+    }
+    for (const good of [
+      '7',
+      '\u00c9tude 1',
+      '\u0905\u0932\u094d\u091c\u0947\u092c\u094d\u0930\u093e',
+    ]) {
+      expect(ok(PaymentOfferSchema.safeParse({ ...paymentOfferMinimal, name: good }))).toBe(true);
+    }
   });
 
   it('refuses control characters in the name', () => {
@@ -77,7 +103,10 @@ describe('ProviderSubscription', () => {
     const parse = (providerRef: string) =>
       ok(ProviderSubscriptionSchema.safeParse({ ...providerSubscriptionActive, providerRef }));
     expect(parse('a.b:c_d-e'.padEnd(128, 'x'))).toBe(true);
-    for (const bad of ['', 'a b', 'sub​1', 'subé', 'a@b']) expect(parse(bad)).toBe(false);
+    for (const bad of ['', 'a b', 'sub\u200b1', 'sub\u00e9', 'a@b', '.', '..', ':-_.']) {
+      expect(parse(bad)).toBe(false);
+    }
+    expect(parse('.a')).toBe(true);
   });
 
   it('accepts every scheduled change kind', () => {
@@ -127,5 +156,61 @@ describe('PaymentEvent', () => {
       ['facts', 0, 'tax', 'currency'],
       ['facts', 0, 'fee', 'amountMinor'],
     ]);
+  });
+});
+
+describe('helper schemas (unregistered)', () => {
+  it('IdempotencyKey: 8 to 128 of letters, digits, _ or -', () => {
+    const parse = (k: unknown) => ok(IdempotencyKeySchema.safeParse(k));
+    for (const good of ['sub_01-chk', 'k'.repeat(8), 'K'.repeat(128)])
+      expect(parse(good)).toBe(true);
+    for (const bad of ['k'.repeat(7), 'k'.repeat(129), 'sub 0001', 'a@b.example', 'sub.0001', 8]) {
+      expect(parse(bad)).toBe(false);
+    }
+  });
+
+  it('ProviderRef: needs a letter or digit, refuses dot-only refs', () => {
+    expect(ok(ProviderRefSchema.safeParse('sub_fake_0001'))).toBe(true);
+    for (const bad of ['.', '..', '', 'a/b', 'r'.repeat(129), null]) {
+      expect(ok(ProviderRefSchema.safeParse(bad))).toBe(false);
+    }
+  });
+
+  it('CheckoutResult: https url only, optional providerRef, strict', () => {
+    const base = {
+      checkoutRef: 'chk_fake_0001',
+      url: 'https://checkout.example.test/c/chk_fake_0001',
+    };
+    const parse = (v: unknown) => ok(CheckoutResultSchema.safeParse(v));
+    expect(parse(base)).toBe(true);
+    expect(parse({ ...base, providerRef: 'sub_fake_0001' })).toBe(true);
+    for (const url of [
+      'http://checkout.example.test/c',
+      ' https://checkout.example.test/c',
+      'https://user@checkout.example.test/c',
+      'javascript:alert(1)',
+      'checkout.example.test/c',
+    ]) {
+      expect(parse({ ...base, url })).toBe(false);
+    }
+    expect(parse({ ...base, checkoutRef: '..' })).toBe(false);
+    expect(parse({ ...base, providerRef: undefined })).toBe(false);
+    expect(parse({ ...base, email: 'x' })).toBe(false);
+  });
+
+  it('RefundResult: a ref and a pending or succeeded status', () => {
+    const parse = (v: unknown) => ok(RefundResultSchema.safeParse(v));
+    expect(parse({ refundRef: 'rfd_fake_0001', status: 'pending' })).toBe(true);
+    expect(parse({ refundRef: 'rfd_fake_0001', status: 'succeeded' })).toBe(true);
+    expect(parse({ refundRef: 'rfd_fake_0001', status: 'failed' })).toBe(false);
+    expect(parse({ refundRef: '..', status: 'pending' })).toBe(false);
+    expect(parse({ refundRef: 'rfd_fake_0001', status: 'pending', amount: 1 })).toBe(false);
+  });
+
+  it('PaymentFact: parses one queued fact on its own', () => {
+    expect(ok(PaymentFactSchema.safeParse(paymentSucceeded))).toBe(true);
+    expect(ok(PaymentFactSchema.safeParse(paymentEventSubscription.facts[0]))).toBe(true);
+    expect(ok(PaymentFactSchema.safeParse({ ...paymentSucceeded, type: 'ignored' }))).toBe(false);
+    expect(ok(PaymentFactSchema.safeParse({ ...paymentSucceeded, cardLast4: '0000' }))).toBe(false);
   });
 });

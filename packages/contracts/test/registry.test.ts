@@ -3,8 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { invalidFixtures, schemas, unknownInvalidCases, validFixtures } from '../fixtures/index.js';
 import * as C from '../src/index.js';
 
+/** Exported helper schemas that are not Core contracts data types (ADR-0015 §9). */
+const HELPER_SCHEMAS = [
+  'CheckoutResult',
+  'IdempotencyKey',
+  'PaymentFact',
+  'ProviderRef',
+  'RefundResult',
+];
+
 const exportedSchemaNames = Object.keys(C)
-  .filter((k) => k.endsWith('Schema'))
+  .filter((k) => k.endsWith('Schema') && !HELPER_SCHEMAS.includes(k.slice(0, -'Schema'.length)))
   .map((k) => k.slice(0, -'Schema'.length))
   .sort();
 
@@ -13,6 +22,13 @@ describe('fixture registry', () => {
     expect(Object.keys(schemas).sort()).toEqual(exportedSchemaNames);
     for (const name of exportedSchemaNames) {
       expect(schemas[name as keyof typeof schemas]).toBe(C[`${name}Schema` as keyof typeof C]);
+    }
+  });
+
+  it('exports the helper schemas outside the registry', () => {
+    for (const name of HELPER_SCHEMAS) {
+      expect(C[`${name}Schema` as keyof typeof C]).toBeDefined();
+      expect(Object.keys(schemas)).not.toContain(name);
     }
   });
 

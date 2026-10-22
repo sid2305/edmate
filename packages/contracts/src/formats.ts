@@ -19,6 +19,17 @@ export const market = () =>
 /** Currency: an ISO 4217 code. */
 export const currencyCode = () => z.string().regex(/^[A-Z]{3}$/, 'ISO 4217 code');
 export const tier = () => z.enum(['small', 'main']);
+/**
+ * `https://host[:port]` then an optional path, query or fragment: lower-case scheme, no userinfo,
+ * no whitespace or backslash in the authority, nothing around the URL (ADR-0005 fix round 1).
+ * The shape check runs first: `z.url` trims its input, so on its own it would accept " https://…".
+ */
+const HTTPS_URL = /^https:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
+export const httpsUrl = () =>
+  z
+    .string()
+    .regex(HTTPS_URL, 'https://host/path, no userinfo')
+    .pipe(z.url({ protocol: /^https$/ }));
 /** Calendar dates: YYYY-MM-DD, a real day (ADR-0008). */
 export const date = () => z.iso.date();
 /**

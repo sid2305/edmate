@@ -2,7 +2,7 @@
 // so they are strict Zod schemas. The `Payments` port itself is type-only, in ports.ts.
 import { z } from 'zod';
 import { EntitlementSchema } from './access.js';
-import { id, timestamp } from './formats.js';
+import { httpsUrl, id, timestamp } from './formats.js';
 import { countChars } from './limits.js';
 import { MoneySchema } from './shared.js';
 
@@ -28,27 +28,57 @@ const providerId = () =>
     .string()
     .regex(/^[a-z][a-z0-9_-]{1,31}$/, 'lower-case provider id, 2 to 32 characters')
     .refine((p) => p !== UNWIRED_PROVIDER, '"tbd" never names a provider');
-/** A provider's own id for a subscription, payment, refund, checkout or event. */
-const providerRef = () =>
-  z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/, 'letters, digits, _ . : or -, 1 to 128 characters');
+/**
+ * Helper schemas (ADR-0015 §3, §9): exported for the adapters, the fake and the shared contract
+ * suite to parse port inputs and outputs. Not in the fixture registry, so the count stays 39.
+ */
 
-/** One line: no control characters or line separators. */
-const isOneLine = (s: string): boolean =>
-  [...s].every((ch) => {
-    const c = ch.codePointAt(0) ?? 0;
-    return c > 0x1f && c !== 0x7f && c !== 0x2028 && c !== 0x2029;
-  });
+/** A write's idempotency key: built from Edmate ids, never personal data. */
+export const IdempotencyKeySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{8,128}$/, 'letters, digits, _ or -, 8 to 128 characters');
+
+/**
+ * A provider's own id for a subscription, payment, refund, checkout or event. At least one letter
+ * or digit, so a dot-only value ('.', '..') can never become a URL path segment.
+ */
+export const ProviderRefSchema = z
+  .string()
+  .regex(
+    /^(?=.*[A-Za-z0-9])[A-Za-z0-9_.:-]{1,128}$/,
+    'letters, digits, _ . : or -, 1 to 128 characters, at least one letter or digit',
+  );
+const providerRef = () => ProviderRefSchema;
+
+/** What `startCheckout` returns: the provider's hosted https page. */
+export const CheckoutResultSchema = z.strictObject({
+  checkoutRef: ProviderRefSchema,
+  url: httpsUrl(),
+  providerRef: ProviderRefSchema.exactOptional(),
+});
+export type CheckoutResult = z.infer<typeof CheckoutResultSchema>;
+
+/** What `refund` returns. */
+export const RefundResultSchema = z.strictObject({
+  refundRef: ProviderRefSchema,
+  status: z.enum(['pending', 'succeeded']),
+});
+export type RefundResult = z.infer<typeof RefundResultSchema>;
+
+/** Control, format (bidi, zero-width, BOM), line and paragraph separator characters. */
+const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 export type ProviderId = string;
-export type ProviderRef = string;
+export type ProviderRef = z.infer<typeof ProviderRefSchema>;
 
 /** Built server-side from the package version; never from the client. */
 export const PaymentOfferSchema = z.strictObject({
   packageVersionId: id(),
   name: z
     .string()
-    .refine(isOneLine, 'one line')
-    .refine((n) => n.trim() !== '', 'must not be blank')
+    .refine((n) => !NOT_ONE_LINE.test(n), 'one line: no control, format or separator characters')
+    .refine((n) => LETTER_OR_DIGIT.test(n), 'at least one letter or digit')
     .refine(
       (n) => countChars(n) <= PAYMENT_LIMITS.offerNameMaxChars,
       `at most ${PAYMENT_LIMITS.offerNameMaxChars} characters`,
@@ -135,7 +165,8 @@ const PaymentSucceededSchema = z
     }
   });
 
-const PaymentFactSchema = z.discriminatedUnion('type', [
+/** One fact in a delivery; exported so 10.2's worker can parse a single queued fact. */
+export const PaymentFactSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('subscription'), subscription: ProviderSubscriptionSchema }),
   PaymentSucceededSchema,
   z.strictObject({

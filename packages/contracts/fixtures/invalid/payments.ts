@@ -20,7 +20,12 @@ const paid = (over: object): unknown => ({
 const usd = (amountMinor: number) => ({ amountMinor, currency: 'USD' });
 const at = '2026-11-22T00:00:00Z';
 
-const offerCases: InvalidCase[] = [
+/** name, value, the path of the issue it must report. */
+type Row = [string, unknown, InvalidCase['path']];
+const cases = (schema: string, rows: Row[]): InvalidCase[] =>
+  rows.map(([name, value, path]) => ({ schema, name, value, path }));
+
+const offerCases = cases('PaymentOffer', [
   ['float price', offer({ price: usd(999.5) }), ['price', 'amountMinor']],
   ['negative price', offer({ price: usd(-1) }), ['price', 'amountMinor']],
   ['zero price (a free package has no offer)', offer({ price: usd(0) }), ['price', 'amountMinor']],
@@ -45,13 +50,16 @@ const offerCases: InvalidCase[] = [
   ['empty name', offer({ name: '' }), ['name']],
   ['blank name', offer({ name: '   ' }), ['name']],
   ['two-line name', offer({ name: 'Algebra\nbasics' }), ['name']],
-  ['name with a line separator', offer({ name: 'Algebra basics' }), ['name']],
+  ['name with a line separator', offer({ name: 'Algebra\u2028basics' }), ['name']],
   ['name over 120 characters', offer({ name: 'x'.repeat(121) }), ['name']],
   ['unsafe packageVersionId', offer({ packageVersionId: 'pkv/../1' }), ['packageVersionId']],
+  ['name with a NEL (U+0085)', offer({ name: 'Algebra\u0085basics' }), ['name']],
+  ['name with a right-to-left override (U+202E)', offer({ name: 'Algebra \u202e99.0$' }), ['name']],
+  ['zero-width-only name', offer({ name: '\u200b\u200c\u200d' }), ['name']],
   ['extra key', offer({ studentEmail: 'x' }), []],
-].map(([name, value, path]) => ({ schema: 'PaymentOffer', name, value, path }) as InvalidCase);
+]);
 
-const subscriptionCases: InvalidCase[] = [
+const subscriptionCases = cases('ProviderSubscription', [
   ['unknown status', sub({ status: 'trialing' }), ['status']],
   ['provider "tbd"', sub({ provider: 'tbd' }), ['provider']],
   ['upper-case provider', sub({ provider: 'Paddle' }), ['provider']],
@@ -83,14 +91,13 @@ const subscriptionCases: InvalidCase[] = [
     },
     ['scheduled'],
   ],
+  ['dot-only providerRef', sub({ providerRef: '..' }), ['providerRef']],
   ['extra key (buyer email)', sub({ customerEmail: 'x' }), []],
-].map(
-  ([name, value, path]) => ({ schema: 'ProviderSubscription', name, value, path }) as InvalidCase,
-);
+]);
 
 const refundFact = paymentEventRefund.facts[0];
 
-const eventCases: InvalidCase[] = [
+const eventCases = cases('PaymentEvent', [
   ['empty eventId', event({ eventId: '' }), ['eventId']],
   ['non-ISO occurredAt', event({ occurredAt: 'yesterday' }), ['occurredAt']],
   ['empty providerType', event({ providerType: '' }), ['providerType']],
@@ -168,6 +175,6 @@ const eventCases: InvalidCase[] = [
     },
     ['facts', 1, 'paymentRef'],
   ],
-].map(([name, value, path]) => ({ schema: 'PaymentEvent', name, value, path }) as InvalidCase);
+]);
 
 export const invalid: InvalidCase[] = [...offerCases, ...subscriptionCases, ...eventCases];

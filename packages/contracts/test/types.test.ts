@@ -146,6 +146,19 @@ describe('Payments (ADR-0015)', () => {
     expectTypeOf({ ...base, when: 'now' as const, proration: 'prorate' as const }).toExtend<In>();
     expectTypeOf({ ...base, when: 'period_end' as const }).toExtend<In>();
     expectTypeOf({ ...base, when: 'now' as const }).not.toExtend<In>();
+    const changePlan = (_x: In): void => undefined;
+    // @ts-expect-error 'period_end' takes no proration
+    changePlan({ ...base, when: 'period_end', proration: 'prorate' });
+  });
+
+  it('checkout and refund results are the exported helper schema types', () => {
+    expectTypeOf<Awaited<ReturnType<P['startCheckout']>>>().toEqualTypeOf<
+      z.infer<typeof C.CheckoutResultSchema>
+    >();
+    expectTypeOf<Awaited<ReturnType<P['refund']>>>().toEqualTypeOf<
+      z.infer<typeof C.RefundResultSchema>
+    >();
+    expectTypeOf<C.PaymentFact>().toEqualTypeOf<z.infer<typeof C.PaymentFactSchema>>();
   });
 
   it('refund returns only a ref and a pending or succeeded status', () => {
