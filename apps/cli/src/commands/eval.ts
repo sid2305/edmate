@@ -26,8 +26,8 @@ Runs every .yaml/.yml eval case under <dir>.
                     (needs EDMATE_JUDGE_MODEL="<provider>:<model>" and that provider's key)
   --report <file>   also write a JSON report
 Without --record nothing is called live; a missing fixture fails the run.
-No agent under test is wired yet (it arrives with the harness pipeline), so --record
-fails until one is.
+--record runs the real turn pipeline (task 7.6) over the demo-teacher content; it needs
+ANTHROPIC_API_KEY (or EDMATE_ANTHROPIC_API_KEY) and EDMATE_JUDGE_MODEL, neither logged.
 `;
 
 export interface EvalCommandDeps {

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { runChatCommand } from './commands/chat.js';
 import { runContentCommand } from './commands/content.js';
-import { runEvalCommand, unwiredAgent } from './commands/eval.js';
+import { runEvalCommand } from './commands/eval.js';
+import { buildLiveEvalAgent } from './commands/eval/liveAgent.js';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -48,8 +49,10 @@ export async function run(argv: readonly string[], io: CliIo = defaultIo): Promi
       io.stdout(USAGE);
       return 0;
     case 'eval':
+      // Lazy: `buildLiveEvalAgent` only builds the real pipeline (and loads a key) on the first
+      // `.reply()` call, so replay (fixtures only, no --record) never needs ANTHROPIC_API_KEY.
       return runEvalCommand(rest, io, {
-        agent: unwiredAgent,
+        agent: buildLiveEvalAgent({ env: process.env }),
         env: process.env,
         cwd: process.cwd(),
       });
