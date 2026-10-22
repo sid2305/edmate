@@ -5428,7 +5428,7 @@ tasks:
   status: todo
   branch: null
   model: null
-- id: 3.11f
+- id: 3.11g
   milestone: M13
   title: 'Flaky timing bound in packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (2048 ms vs a 2000 ms bound on a CI runner, #191, 22 Oct 2026): use a loose gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
