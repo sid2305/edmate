@@ -5423,9 +5423,9 @@ tasks:
   deps:
   - 12.2e
   risk: medium
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2g-staff-reports-followups
+  model: plan:lead build:sonnet
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
@@ -6044,8 +6044,9 @@ tasks:
   deps:
   - 11.4b
   risk: medium
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.4c-add-recording
+  model: plan:opus build:opus
 - id: 11.4d
   milestone: M13
   title: 'ffmpeg chunker in the worker so MP4, WebM and M4A recordings of any length can be transcribed (needs an ADR: new system binary)'
