@@ -67,6 +67,15 @@ decisions:
     - 'Global: a merchant of record'
     recommendation: Subscriptions + split payouts to teachers; compare fees
     answer: Razorpay in India (UPI AutoPay, Route split payouts); a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax; both behind the one Payments port
+  mor-provider:
+    status: open
+    question: 'US merchant of record: Paddle or Lemon Squeezy, and has it accepted Edmate''s model in writing? (B-53)'
+    options:
+    - Paddle
+    - Lemon Squeezy
+    - Stripe Billing + Stripe Tax (fallback if refused)
+    recommendation: Paddle; get its written OK before 10.1 Phase C
+    answer: null
   revenue-share:
     status: open
     question: Edmate's revenue share and floor price per package
@@ -2147,8 +2156,9 @@ tasks:
   accept: a failed principal lookup leaves a log line; route paths come from one constant each.
   deps:
   - '9.1'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.1b-auth-paths-followups
+  model: plan:lead build:sonnet
 - id: '9.0'
   milestone: M9
   title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff
@@ -3357,9 +3367,9 @@ tasks:
   deps:
   - '9.0'
   risk: normal
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/9.0c-warm-db-pool
+  model: plan:sonnet build:sonnet
 - id: 9.0d
   milestone: M9
   title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
@@ -5427,7 +5437,8 @@ tasks:
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
     12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
-    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for
+    a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -6209,13 +6220,45 @@ tasks:
   deps:
   - '2.4'
   - M1
-  status: planning
+  status: running
   needs_decision:
   - payment-provider
   - pilot-market
   risk: risky
   branch: null
   model: plan:opus
+- id: 10.1a
+  milestone: M10
+  title: Payments port, Zod schemas and ADR-0015 in packages/contracts (10.1 Phase A)
+  accept: ADR-0015 accepted after architect, security-reviewer and typescript-reviewer; contracts schemas, fixtures and spec-types match the ADR; contracts tests green.
+  deps:
+  - '10.1'
+  risk: risky
+  status: running
+  branch: m10/10.1a-payments-port
+  model: plan:opus arch:opus build:opus
+- id: 10.1b
+  milestone: M10
+  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B)'
+  accept: the contract suite passes on the fake and on a second fake provider with no caller change; payments tests green.
+  deps:
+  - 10.1a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 10.1c
+  milestone: M10
+  title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
+  accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
+  deps:
+  - 10.1b
+  risk: risky
+  status: todo
+  needs_decision:
+  - mor-provider
+  branch: null
+  model: null
 - id: '10.2'
   milestone: M10
   title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
