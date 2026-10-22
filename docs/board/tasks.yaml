@@ -4212,7 +4212,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: todo
+  status: running
+  branch: m9/9.6c-plan-changes
+  model: plan:sonnet build:sonnet
 - id: 9.6d
   milestone: M9
   title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
@@ -4438,7 +4440,8 @@ tasks:
   status: todo
 - id: 9.6g
   milestone: M9
-  title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher answer to its question by timestamp only (link by question or message id); routes.ts drops the double cast for the real cursor type; toWinAnsi strips 0x80-0x9F; fromError logs the error name on 500'
+  title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher
+    answer to its question by timestamp only (link by question or message id); routes.ts drops the double cast for the real cursor type; toWinAnsi strips 0x80-0x9F; fromError logs the error name on 500'
   accept: a pdf test asserts the bullet byte is 0x95; a notes test with two questions answered close together pairs each with its own answer; no `as unknown as` in routes.ts.
   deps:
   - 9.6b
