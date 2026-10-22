@@ -702,6 +702,87 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 9.2a: public teacher discovery. Only a verified teacher with a live agent and a live
+  // package version is reachable; a pending or rejected teacher, a draft or suspended agent, and
+  // an agent with no live package must all stay invisible, never a thrown error.
+  'discovery.search': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      const token = `discoverytoken${Math.floor(Math.random() * 1e9)}`;
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified',
+           bio = $2, languages = '{"en"}' where user_id = $1`,
+        [teacherId('A'), token],
+      );
+      const got = await r.discovery.search({ q: token, page: 1 });
+      expect(got.teachers.map((t) => t.slug)).toEqual([profileSlug('A')]);
+      expect(Object.keys(got.teachers[0] ?? {}).sort()).toEqual(
+        ['bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
+      );
+      n += 1;
+      // A still-pending teacher (B, by default from beforeAll) never matches, however the query
+      // is phrased, even with a bio word unique to B and nowhere in A's row.
+      const bToken = `pendingbiotoken${Math.floor(Math.random() * 1e9)}`;
+      await raw.query(`update teacher_profiles set bio = $2 where user_id = $1`, [
+        teacherId('B'),
+        bToken,
+      ]);
+      const pending = await r.discovery.search({ q: bToken, page: 1 });
+      expect(pending.teachers).toEqual([]);
+      await raw.query(`update teacher_profiles set bio = '' where user_id = $1`, [teacherId('B')]);
+      n += 1;
+      // Not even an unrelated random query ever throws or returns another teacher's row.
+      const rand = prng(6464);
+      for (let i = 0; i < 10; i += 1) {
+        const q = randomId(rand).slice(0, 20);
+        await expect(r.discovery.search({ q, page: 1 })).resolves.toBeDefined();
+        n += 1;
+      }
+      await raw.query(`update teacher_profiles set verification_status = 'pending' where user_id = $1`, [
+        teacherId('A'),
+      ]);
+      return n;
+    },
+  },
+  'discovery.teacherBySlug': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
+        [teacherId('A')],
+      );
+      const got = await r.discovery.teacherBySlug({ slug: profileSlug('A') });
+      expect(got?.slug).toBe(profileSlug('A'));
+      expect(Object.keys(got ?? {}).sort()).toEqual(
+        ['agentIds', 'bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
+      );
+      n += 1;
+      // B stays pending: its slug resolves to nothing, not an error.
+      expect(await r.discovery.teacherBySlug({ slug: profileSlug('B') })).toBeNull();
+      n += 1;
+      // Well-formed but unknown slugs resolve to null; a malformed one is `scope`, never a leak.
+      const rand = prng(7474);
+      for (let i = 0; i < 10; i += 1) {
+        const suffix = Array.from({ length: 3 + Math.floor(rand() * 20) }, () =>
+          'abcdefghijklmnopqrstuvwxyz0123456789'.charAt(Math.floor(rand() * 36)),
+        ).join('');
+        expect(await r.discovery.teacherBySlug({ slug: `unknown-${suffix}` })).toBeNull();
+        n += 1;
+      }
+      await expect(r.discovery.teacherBySlug({ slug: 'Not A Slug!' })).rejects.toMatchObject({
+        kind: 'scope',
+      });
+      n += 1;
+      await raw.query(`update teacher_profiles set verification_status = 'pending' where user_id = $1`, [
+        teacherId('A'),
+      ]);
+      return n;
+    },
+  },
   'modules.ids': {
     scope: 'teacher',
     op: 'read',

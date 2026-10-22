@@ -46,13 +46,23 @@ Isolation between teachers and between students is enforced here, not by Postgre
     `messages.append` reports a duplicate (caller-chosen, globally unique) message id as
     `not_found`, so ids in other sessions can't be probed.
 
-11. **Two reads without a teacher or student scope.** `agents.owner({ agentId })` (task 3.2)
-    returns `{ teacherId }` for a `live` agent and nothing for a draft, suspended or missing one,
-    because which teacher owns a live agent is public on teacher pages.
-    `usageLedger.teacherIdsWithUsageSince({ since })` (task 3.8) is a system read for the
-    scheduled cost alarm: the sorted ids of teachers with non-eval usage since a date, and nothing
-    else (no student, package or figure). Both arguments are parsed like a scope (`scope` error
-    before any SQL). Only server jobs call the second; no route exposes it.
+11. **The public reads: no teacher or student scope at all.** `agents.owner({ agentId })` (task
+    3.2) returns `{ teacherId }` for a `live` agent and nothing for a draft, suspended or missing
+    one, because which teacher owns a live agent is public on teacher pages.
+    `packageVersions.liveForAgent({ agentId })` (task 9.3) returns the public `offer` of each of a
+    live agent's live packages, never the teacher's internal config. `discovery.search` and
+    `discovery.teacherBySlug` (task 9.2) are the only unauthenticated reads anyone can reach from a
+    page: a verified teacher with a live agent and at least one live, sellable package shows a
+    `PublicTeacherCard` (slug, `users.name` as `displayName`, subject, a 280-character bio excerpt
+    on search cards, languages, `packageCount`, `hasFree`) or, by slug, a `PublicTeacherPage`
+    (the card plus the agent's live ids, capped at 5) — never `userId`, email, phone, photo,
+    payout ref or verification status. A pending, rejected, role-changed, draft-agent,
+    suspended-agent or no-live-package teacher is absent from `search` and `null` by slug, the
+    same as a missing one (no enumeration). `usageLedger.teacherIdsWithUsageSince({ since })`
+    (task 3.8) is a system read for the scheduled cost alarm: the sorted ids of teachers with
+    non-eval usage since a date, and nothing else (no student, package or figure). Every argument
+    is parsed like a scope or a strict input (`scope`/`invalid` before any SQL). Only server jobs
+    call `usageLedger`'s read; no route exposes it.
 
 12. **Help state** (ADR-0005, task 3.8). `sessions.saveHelpState` writes `help_state` of the
     scope's own open session only (`ended_at IS NULL` in the same UPDATE; else `not_found`), and
