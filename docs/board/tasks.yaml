@@ -2192,9 +2192,9 @@ tasks:
   - '1.7'
   - '7.8'
   - '9.1'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '9.3'
   milestone: M9
   title: Package compare and start; until M10 a paid package starts as an active subscription with no payment (checkout moves to 10.8)
@@ -3376,8 +3376,8 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 8.6f
   milestone: M13
-  title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version locking between packages.ts and package-versions.ts;
-    ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
+  title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version
+    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
   accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
   deps:
   - 8.6b
@@ -3387,11 +3387,32 @@ tasks:
   model: null
 - id: 8.5d
   milestone: M13
-  title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket from src/turn
-    instead of copying them; one route test through testChatDepsFor that checks the usage ledger source teacher_preview; postCorrection uses the teacherScope() helper; per-field max on correction text'
+  title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket
+    from src/turn instead of copying them; one route test through testChatDepsFor that checks the usage ledger source teacher_preview; postCorrection uses the teacherScope() helper; per-field max on correction
+    text'
   accept: a preview turn that escalates writes no teacher_questions row; the MEDIUM and LOWs in docs/tasks/8.5b/review.md are fixed or closed with a reason.
   deps:
   - 8.5b
+  risk: medium
+  status: todo
+  branch: null
+  model: null
+- id: 9.3c
+  milestone: M9
+  title: '9.2 plan Q5: the package page and subscriptions.start refuse a package whose teacher is not verified (a teacher rejected after publishing can''t be started by typing the URL)'
+  accept: a test starts a subscription on a rejected teacher's package and gets a refusal with nothing written; the package page shows not found.
+  deps:
+  - '9.3'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 9.2d
+  milestone: M13
+  title: '9.2 plan Q2 follow-up: a public display name the teacher sets in onboarding, shown on discovery and teacher pages instead of the sign-in name'
+  accept: a teacher sets a display name and the public pages show it; the sign-in name no longer appears publicly.
+  deps:
+  - '9.2'
   risk: medium
   status: todo
   branch: null
