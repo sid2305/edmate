@@ -4867,6 +4867,66 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.2a
+  milestone: M12
+  title: 'Reports repository: a student files a report on a chat reply, staff list and review it (12.2 Phase A)'
+  accept: 'per docs/tasks/12.2/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  deps:
+  - '12.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2b
+  milestone: M12
+  title: 'Takedowns repository: retrieval, material and module lists skip taken-down documents at once; an agent takedown suspends it (12.2 Phase B)'
+  accept: 'per docs/tasks/12.2/plan.md Phase B and Lead answers; db typecheck, lint and test green.'
+  deps:
+  - '12.2a'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2c
+  milestone: M12
+  title: 'Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)'
+  accept: 'per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - '12.2a'
+  status: todo
+  branch: null
+  model: null
+- id: 12.2d
+  milestone: M12
+  title: 'Staff reports and takedowns API (12.2 Phase D)'
+  accept: 'per docs/tasks/12.2/plan.md Phase D and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - '12.2b'
+  - '12.2c'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2e
+  milestone: M12
+  title: '/staff/reports page that re-reads the queue every 60 s (12.2 Phase E)'
+  accept: 'per docs/tasks/12.2/plan.md Phase E and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - '12.2d'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2f
+  milestone: M13
+  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents'
+  accept: 'each follow-up has a test; touched packages green.'
+  deps:
+  - '12.2e'
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
