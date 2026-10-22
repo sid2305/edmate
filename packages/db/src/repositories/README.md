@@ -438,6 +438,20 @@ nothing), each with a window label (`reminder_24h` / `reminder_1h` / `starting_s
 computed here, from `startsAt` vs `now`, inside `live-classes.ts` (the one place this label is
 computed; `options.now` only overrides the clock for deterministic tests).
 
+## Live-class recordings (task 11.4)
+
+A class's recording, transcript or captions is an ordinary document with `documents.live_class_id`
+set (migration 0024: nullable, FK `ON DELETE SET NULL`, validated after migrate; partial index).
+`documents.create(scope, { …, liveClassId })` links it only to one of the scope's own classes that
+has already started (`starts_at <= now()`), checked in the same `INSERT … SELECT` as the module:
+another teacher's class, a future one and a missing one are all `not_found` and nothing is written,
+so class ids can't be probed. `startReplace` keeps the link; `get`, `listForTeacher` and
+`DocumentRow` don't show it. `liveClasses.listRecordingsForTeacher(scope)` is one query (the
+scope's documents joined to the scope's own classes): `{ liveClassId, documentId, sourceTitle,
+status, failureReason? }`, newest first, at most `RECORDING_LIST_MAX` (500). Scope is validated
+before any SQL; the isolation grid has its `CASES` entry and `scope.test.ts` sweeps it. Chunks are
+searchable once written, like any document; status is display only.
+
 ## Pre-class question queue (task 11.2a)
 
 "Topic" is the existing lexical cluster (5.10/8.9's own convention), not the curriculum `topics`

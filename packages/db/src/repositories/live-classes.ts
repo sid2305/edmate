@@ -4,13 +4,19 @@
 // (`reminder_24h` / `reminder_1h` / `starting_soon` / `later`) is computed here, in
 // `listUpcomingForStudent`, from `startsAt` vs `now` — the one place it is computed (see README).
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { liveClasses, packages, packageVersions, subscriptions } from '../schema/index.js';
+import {
+  documents,
+  liveClasses,
+  packages,
+  packageVersions,
+  subscriptions,
+} from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
-import { iso } from './map.js';
+import { type DocumentStatus, iso } from './map.js';
 import {
   IdSchema,
   parseArg,
@@ -84,6 +90,19 @@ export interface TeacherLiveClassRow {
   link: string | null;
   startsAt: string;
   packageIds: string[];
+}
+
+/** Most rows one `liveClasses.listRecordingsForTeacher` call returns (`DOCUMENT_LIST_MAX` precedent). */
+export const RECORDING_LIST_MAX = 500;
+
+/** Task 11.4a: one document linked to one of the teacher's own live classes. */
+export interface LiveClassRecording {
+  liveClassId: string;
+  documentId: string;
+  sourceTitle: string;
+  status: DocumentStatus;
+  /** A fixed failure code; only when `status` is `failed`. */
+  failureReason?: string;
 }
 
 /** One of the scope's own upcoming, entitled classes, with its window label. */
@@ -168,6 +187,40 @@ export function liveClassesRepo(db: Db) {
         .where(eq(liveClasses.teacherId, teacherId))
         .orderBy(asc(liveClasses.startsAt), asc(liveClasses.id));
       return rows.map((r) => ({ ...r, startsAt: iso(r.startsAt) }));
+    },
+
+    /**
+     * Task 11.4a: the scope's own documents linked to one of its own live classes (recordings,
+     * transcripts, captions), newest first, at most `RECORDING_LIST_MAX`. One query: documents of
+     * the scope joined to live classes of the same teacher, so another teacher's rows never appear.
+     * `status` is display only (never a retrieval gate); `failureReason` only when `failed`.
+     */
+    async listRecordingsForTeacher(scope: TeacherScope): Promise<LiveClassRecording[]> {
+      const method = 'liveClasses.listRecordingsForTeacher';
+      const { teacherId } = teacherScope(scope, method);
+      const rows = await db
+        .select({
+          liveClassId: liveClasses.id,
+          documentId: documents.id,
+          sourceTitle: documents.sourceTitle,
+          status: documents.status,
+          failureReason: documents.failureReason,
+        })
+        .from(documents)
+        .innerJoin(
+          liveClasses,
+          and(eq(liveClasses.id, documents.liveClassId), eq(liveClasses.teacherId, teacherId)),
+        )
+        .where(and(eq(documents.teacherId, teacherId), isNotNull(documents.liveClassId)))
+        .orderBy(desc(documents.createdAt), desc(documents.id))
+        .limit(RECORDING_LIST_MAX);
+      return rows.map((r) => ({
+        liveClassId: r.liveClassId,
+        documentId: r.documentId,
+        sourceTitle: r.sourceTitle,
+        status: r.status,
+        ...(r.failureReason === null ? {} : { failureReason: r.failureReason }),
+      }));
     },
 
     /**

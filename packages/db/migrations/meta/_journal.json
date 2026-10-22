@@ -169,6 +169,13 @@
       "when": 1792687341593,
       "tag": "0023_agents_regulated_subject",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792697768761,
+      "tag": "0024_document_live_class",
+      "breakpoints": true
     }
   ]
 }
