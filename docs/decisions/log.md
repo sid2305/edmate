@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6e placeholder condition widens to all three lists · decided by builder · risk: low
+- Decided: `/home`'s empty-state placeholder (`t('placeholder')`) now shows only when `chats`,
+  `startable` and `paused` are all empty, rather than just the first two.
+- Why: the plan's Phase E tests say "the placeholder shows only when all three lists are empty",
+  so a student with only a paused plan (no active chat, nothing startable) must see the Paused
+  list instead of the "come back soon" placeholder.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e separate labels for the paused-page link vs. the active-page link · decided by builder · risk: low
+- Decided: the compare page uses `packages.managePlan` ("Manage plan") for the paused branch and
+  `packages.changePlan` ("Change plan") for the active branch, rather than one shared label.
+- Why: both link to the same `/learn/<id>/plan` route, but the two states call for different
+  wording -- a paused plan is being managed (resumed, cancelled), an active one is being changed
+  (upgrade/downgrade). Keeping them distinct also matches /home's own `pausedLink` ("Manage
+  plan") label for the paused list, so the same state always reads the same way across the app.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e `liveChatAgents`'s existing paused exclusion is left as is · decided by builder · risk: low
+- Decided: `liveChatAgents` (the function behind `homeChatLinks`, which decides the /home chat
+  list) still excludes `paused` from its `NOT_LIVE` set, so a paused subscription gets no chat
+  link there; the new paused list is additional, built from a separate `pausedAgents` function.
+- Why: human answer B-49 ("a paused subscription keeps its old chat") is about an already-open
+  chat *session* continuing to work, not about `/home` offering a fresh chat link for a paused
+  plan -- `entitle` already refuses turns on a paused subscription
+  (`packages/harness/src/access/entitlement.ts`, out of this phase's bounds), so a chat link
+  here would only lead to a dead end. The Phase E brief and plan only ask for a *new* paused
+  entry point (the plan page), not a change to the existing chat-link set, and the pre-existing
+  `liveChats.test.ts` case ("paused is neither chat nor start -- 9.6") already pins this
+  behaviour; it is left green, not altered.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 67 tool calls against the brief's budget of 50.
+- Why: the extra calls went on page tests, an axe check and a merge of main; both reviews approved with no blocking findings.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.2k vtt/srt are file kinds with file-job retries and no mimeType · decided by builder · risk: low
 - Decided: `IngestFileKindSchema` gains `'vtt' | 'srt'`; the schema's existing `mimeType`/`url`
   refines (which key off `fileKind === 'video' | 'audio'` and `fileKind === 'web'` respectively)

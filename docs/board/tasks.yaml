@@ -4402,9 +4402,30 @@ tasks:
   - 9.6d
   - 9.2b
   risk: low
-  status: running
+  status: done
   branch: m9/9.6e-paused-entry-points
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 32
+    tokens_in: 112
+    tokens_out: 762
+    cache_read_tokens: 1979262
+    wall_time_seconds: 76
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 8.6g
   milestone: M8
   title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure
@@ -5756,7 +5777,7 @@ tasks:
 - id: 11.4a
   milestone: M11
   title: 'Link a document to its live class: nullable documents.live_class_id, own started class only, listRecordingsForTeacher (11.4 Phase A)'
-  accept: 'per docs/tasks/11.4/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  accept: per docs/tasks/11.4/plan.md Phase A and Lead answers; db typecheck, lint and test green.
   deps:
   - 12.3b
   risk: high
@@ -5764,8 +5785,8 @@ tasks:
   branch: null
 - id: 11.4b
   milestone: M11
-  title: 'Studio API for class recordings, and media the worker can''t split refused at upload (11.4 Phase B)'
-  accept: 'per docs/tasks/11.4/plan.md Phase B and Lead answers; web typecheck, lint and test green.'
+  title: Studio API for class recordings, and media the worker can't split refused at upload (11.4 Phase B)
+  accept: per docs/tasks/11.4/plan.md Phase B and Lead answers; web typecheck, lint and test green.
   deps:
   - 11.4a
   - 8.2l
@@ -5775,8 +5796,8 @@ tasks:
   branch: null
 - id: 11.4c
   milestone: M11
-  title: 'Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)'
-  accept: 'per docs/tasks/11.4/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  title: Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)
+  accept: per docs/tasks/11.4/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
   - 11.4b
   risk: medium
@@ -5785,7 +5806,7 @@ tasks:
 - id: 11.4d
   milestone: M13
   title: 'ffmpeg chunker in the worker so MP4, WebM and M4A recordings of any length can be transcribed (needs an ADR: new system binary)'
-  accept: 'ADR reviewed by architect, security-reviewer and typescript-reviewer; a long MP4 fixture splits and ingests; worker typecheck, lint and test green.'
+  accept: ADR reviewed by architect, security-reviewer and typescript-reviewer; a long MP4 fixture splits and ingests; worker typecheck, lint and test green.
   deps:
   - 11.4b
   risk: high
