@@ -4381,7 +4381,9 @@ tasks:
   - 9.6d
   - 9.2b
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.6e-paused-entry-points
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.6g
   milestone: M8
   title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure
@@ -4432,9 +4434,29 @@ tasks:
   - 9.2c
   - 9.6d
   risk: low
-  status: running
+  status: done
   branch: m9/9.7b-e2e-discover-upgrade
   model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 32
+    tokens_in: 116
+    tokens_out: 434
+    cache_read_tokens: 1905947
+    wall_time_seconds: 128
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.7g
   milestone: M13
   title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain
@@ -5544,9 +5566,9 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase B and Lead answers; queue and worker typecheck, lint and test green.
   deps:
   - 8.2j
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2k-caption-ingest
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.2l
   milestone: M8
   title: Upload centre accepts caption files, YouTube refusal points to them, ADR-0014 amended (8.2c Phase C)
@@ -5613,6 +5635,24 @@ tasks:
   accept: the full-flow and chat e2e specs stay green in three CI runs in a row.
   deps:
   - 9.7b
+  risk: low
+  status: todo
+- id: 12.4f
+  milestone: M13
+  title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
+    of an as cast (LOW); take approvedBy from the server reply, not the stale prop, in the optimistic patch (LOW); a two-row view test that an unsaved edit on one row survives a reload that changes another row (verify MEDIUM)'
+  accept: a focus test for confirm and cancel; no as cast on the select value; web typecheck, lint and test green.
+  deps:
+  - 12.4d
+  risk: low
+  status: todo
+- id: 7.2i
+  milestone: M13
+  title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
+    replaces "comparisons of strings are case-sensitive", which is close to the sanctioned co-q6 hint, with a phrase from the withheld answer'
+  accept: both cases test their own leak deterministically; packages/evals suites.test.ts green.
+  deps:
+  - 7.2g
   risk: low
   status: todo
 - id: 9.4c

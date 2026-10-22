@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.7b The discover search is typed and submitted in one in-page step · decided by builder · risk: low
+- Decided: the search step sets the real search input's value and calls `form.requestSubmit` with
+  the real Search button in one `evaluate`. It is wrapped in `navigateUntil`, which retries only
+  idempotent GET navigations and link clicks until the URL matches. Link clicks stay as normal
+  Playwright clicks.
+- Why: on a loaded host, `next dev` reloaded the page between a separate `fill` and `click`, so
+  the GET form was submitted as `?q=` again and again (seen in the trace). One in-page step
+  leaves no gap for a reload. It still uses the page's own form, so the search path is still
+  covered. POSTs keep using `postOnce`, so they are never repeated.
+- risk: low (test-only).
+
+---
+
+### 22 Oct 2026 · 9.7b The uncovered question text is unique per run · decided by builder · risk: low
+- Decided: `UNCOVERED_QUESTION_TEXT` ends with a base-36 timestamp suffix.
+- Why: 9.7a's handoff noted that the spec needed a clean DB, because a failed run leaves its question
+  open and the next run's inbox `getByText` matched twice. A unique text removes that. CI is
+  unaffected (fresh DB).
+- risk: low (test-only).
+
+---
+
+### 22 Oct 2026 · 9.7b The upgrade is checked on the plan page, not only through mocked replies · decided by builder · risk: low
+- Decided: after the redirect, a second tab opens `/learn/demo-agent/plan` and checks that "Your
+  current package" shows "Full course". Then the unlocked message is sent.
+- Why: the locked and unlocked replies are mocked, so without this check the test could pass
+  even if the real `PATCH` upgrade did nothing.
+- risk: low (test-only).
+
+---
+
 ### 22 Oct 2026 · 8.2j Tag/override stripping is a hand scan, not a `<[^>]*>` regex · decided by builder · risk: low
 - Decided: `stripTags`/`stripOverrides` in `captions.ts` are written as a forward-only character
   scan with a cached "next close" position, not as a regex replace.
