@@ -25,6 +25,7 @@
     "outlineLink": "Outline",
     "onboardingLink": "Your profile",
     "styleCardLink": "Teaching style",
+    "packagesLink": "Packages",
     "insightsLink": "Insights",
     "questionsLink": "Questions"
   },
@@ -270,6 +271,68 @@
     },
     "errors": {
       "generic": "Something went wrong. Please try again."
+    }
+  },
+  "packageBuilder": {
+    "title": "Packages",
+    "intro": "Build what your agent can do and sell as a package. Every package shows its monthly AI cost.",
+    "loading": "Loading your packages…",
+    "setupRequired": "Set up your style card before you make a package.",
+    "setupLink": "Go to your teaching style",
+    "empty": "You have no packages yet. Create one below.",
+    "listLabel": "Your packages",
+    "estimateLine": "about {typical} a month per subscriber (up to {max})",
+    "shareOfPrice": "That's {percent}% of the price at most.",
+    "costWarning": "This package can cost more than a quarter of its price in AI use. Consider raising the price or lowering the daily limit.",
+    "freePreset": "Free starter",
+    "fullPreset": "Full course",
+    "newPackageTitle": "New package",
+    "editingTitle": "Editing {name}",
+    "nameLabel": "Package name",
+    "modulesLabel": "Modules",
+    "skillsLabel": "Skills",
+    "helpCeilingLabel": "Help ceiling",
+    "finalAnswersLabel": "Final answers",
+    "finalAnswers": {
+      "never": "Never",
+      "after_attempt": "After an attempt",
+      "allowed": "Allowed"
+    },
+    "dailyMessageLimitLabel": "Messages a day",
+    "liveClassesPerMonthLabel": "Live classes a month",
+    "priceLabel": "Price a month (USD)",
+    "freeHint": "$0 = free package.",
+    "trialDaysLabel": "Trial days",
+    "lockedReplyLabel": "Locked reply",
+    "lockedReply": {
+      "name_package": "Name the package",
+      "generic": "Generic message"
+    },
+    "saveButton": "Save",
+    "saving": "Saving…",
+    "createButton": "Create package",
+    "editLabel": "Edit {name}",
+    "cancelEdit": "Cancel",
+    "version": "Version {version}",
+    "errors": {
+      "validation": "Check the package settings and try again.",
+      "input_too_large": "The request is too large.",
+      "not_found": "That package was not found. Reload and try again.",
+      "unauthorized": "Please sign in again.",
+      "forbidden": "You can't manage packages here.",
+      "rate_limited": "Too many requests. Wait a moment, then try again.",
+      "provider_error": "Something went wrong. Please try again.",
+      "style_card_required": "Set up your style card before you make a package.",
+      "package_limit": "You already have the most packages allowed.",
+      "conflict": "This package changed while you were saving. Reload and try again."
+    },
+    "skills": {
+      "explain": "Explain",
+      "coach": "Coach",
+      "practice": "Practice",
+      "feedback": "Feedback",
+      "mock_interview": "Mock interview",
+      "revision": "Revision"
     }
   },
   "testChat": {
