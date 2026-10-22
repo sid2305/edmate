@@ -3719,9 +3719,30 @@ tasks:
   deps:
   - 9.2a
   risk: low
-  status: running
+  status: done
   branch: m9/9.2b-teachers-page
-  model: plan:opus build:sonnet-5/medium
+  model: plan:opus build:sonnet fix:opus review:sonnet x3
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 9.2c
   milestone: M9
   title: Teacher profile page /teachers/[slug] (9.2 Phase C, apps/web)
@@ -4014,7 +4035,8 @@ tasks:
   status: todo
 - id: 8.7g
   milestone: M13
-  title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain message; its collectReply fails the case on every non-blocked error code, as the gate does (not only guard_blocked); agent.ts collectReply doc comment says which error events throw'
+  title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain
+    message; its collectReply fails the case on every non-blocked error code, as the gate does (not only guard_blocked); agent.ts collectReply doc comment says which error events throw'
   accept: a CLI live eval case naming a persona fails loudly and a skill case reaches the skill route, each with a test.
   deps:
   - 8.7f
