@@ -106,4 +106,4 @@ A plain `role="status"` paragraph, no dismiss control, shown only when the flag 
 Nothing outstanding for this task's scope.
 
 Status: DONE
-Tool calls used: 112
+Tool calls used: 158 (harness count; the builder reported 112)
