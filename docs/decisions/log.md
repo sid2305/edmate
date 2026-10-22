@@ -10,6 +10,39 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6g answeredPairs pairs by exact same-transaction timestamp, not packages/db · decided by builder · risk: low
+- Decided: Fixed the question/answer pairing bug using only fields already in `ExportJson`
+  (`teacherQuestions[].answeredAt`/`createdAt`, `messages[].createdAt`) by matching on exact
+  timestamp equality first, instead of adding an id link. No `packages/db` or `packages/contracts`
+  change was made.
+- Why: `Message` has no `questionId` field and `TeacherQuestion` has no message-id field (checked
+  `packages/contracts/src/turn.ts`); the db's `teacherQuestions.answer` text column exists but
+  isn't selected by `listForStudent` and isn't in the contracts schema, so exposing it would need a
+  `packages/contracts` schema change (ADR-gated) as well as a `packages/db` select change — out of
+  scope for this task per the brief. Exact-timestamp matching is correct rather than approximate
+  because `teacherQuestions.answer`'s single transaction writes both the question's `answeredAt`
+  and the teacher message's `createdAt` from the same Postgres `now()`, so for any questions closed
+  together they are identical, not merely close; this also correctly maps every such question to
+  the one shared message a grouped answer produces, rather than only the first.
+- risk: low — read-only pairing logic inside a student's own export; no new field is exposed,
+  no schema changes.
+
+---
+
+### 22 Oct 2026 · 9.6g bullet width uses a fixed AFM constant, not a full table · decided by builder · risk: low
+- Decided: Added one named constant (`BULLET_WIDTH = 350`, the standard Helvetica AFM value) for
+  the bullet glyph's width instead of building out a full width table for the Latin-1 supplement
+  range; documented `DEFAULT_WIDTH` as the deliberate fallback for the rest of that range (the
+  brief's "or document the fallback" option).
+- Why: the review's LOW finding and the brief treat the bullet (reachable from every `li` block)
+  and the general Latin-1 fallback (reachable only for the accented/punctuation characters in that
+  range, which the pilot's English-only content rarely uses) as separable in severity; the bullet's
+  width is load-bearing for every bulleted line's wrap, so it gets an exact value, while the rest
+  keeps the existing deliberate approximation, now documented inline.
+- risk: low — wrapping accuracy only, never shown text or injection-relevant.
+
+---
+
 ### 22 Oct 2026 · 8.2d ADR-0014 accepted; review MEDIUM and LOW findings go to 8.2e · decided by lead · risk: high
 - Decided: ADR-0014 is Accepted, after architect, security-reviewer and typescript-reviewer (all opus) approved with no CRITICAL or HIGH findings. The lead made the ADR wording fixes (no SNI for IP literals, headers dropped after decompressing, x-gzip, 8.2g named, uncancellable DNS noted). The code MEDIUM and LOW findings are fixed in 8.2e before the fetcher runs on the production path: the timer crash in pinnedTransport, the orphaned promise in untilAborted, the exported redactUrl, repeated trailing dots, the cancellable resolver, explicit rejectUnauthorized, one DNS error message, 3fff::/20, retryable DNS errors and the cancel error mask.
 - Why: nothing calls the fetcher in production until 8.2e, so no finding is reachable today, and 8.2e works in the same files.

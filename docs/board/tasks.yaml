@@ -4581,9 +4581,29 @@ tasks:
   deps:
   - 9.6b
   risk: low
-  status: running
+  status: done
   branch: m9/9.6g-export-fixes
   model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 27
+    tokens_in: 84
+    tokens_out: 3100
+    cache_read_tokens: 1429424
+    wall_time_seconds: 168
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 11.3a
   milestone: M11
   title: Weekly insights repository in packages/db, minimum 5 distinct students per group (11.3 Phase A)
