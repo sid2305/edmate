@@ -36,3 +36,26 @@ export {
   type GateUsageMeter,
   type GateUsageTotals,
 } from './ports.js';
+export {
+  basisOf,
+  caseResults,
+  errorCodeOf,
+  GateResultMismatchError,
+  gateProcessor,
+  passRateOf,
+  runSummary,
+  type GateJobLike,
+  type GateOutcome,
+  type GatePreparation,
+  type GateProcessorDeps,
+  type PrepareGate,
+} from './processor.js';
+export {
+  createGateWorker,
+  gateConcurrencyFromEnv,
+  gateContentDir,
+  gateSuitesDir,
+  livePrepareGate,
+  type GateWorkerOptions,
+  type LiveGateOptions,
+} from './workers.js';

@@ -19,10 +19,18 @@ RUN pnpm turbo run build --filter=@edmate/worker
 RUN pnpm --filter=@edmate/worker deploy --prod --legacy /out
 
 FROM node:22.22.3-alpine3.22 AS runtime
-ENV NODE_ENV=production
+# The publish gate (task 8.7) reads locale packs, prompt packs and skill personas from content/ and
+# the platform eval suites from evals/suites/; a missing dir ends a gate run `error`, never a pass.
+ENV NODE_ENV=production \
+    EDMATE_CONTENT_DIR=/app/content \
+    EDMATE_EVAL_SUITES_DIR=/app/evals/suites
 WORKDIR /app
 COPY --from=build --chown=node:node /out/package.json ./package.json
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /out/dist ./dist
+COPY --from=build --chown=node:node /repo/content/locales ./content/locales
+COPY --from=build --chown=node:node /repo/content/prompt-packs ./content/prompt-packs
+COPY --from=build --chown=node:node /repo/content/skills ./content/skills
+COPY --from=build --chown=node:node /repo/evals/suites ./evals/suites
 USER node
 CMD ["node", "dist/index.js"]

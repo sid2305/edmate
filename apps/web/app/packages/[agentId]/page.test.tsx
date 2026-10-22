@@ -71,7 +71,7 @@ describe('/packages/[agentId]', () => {
     state.requireRole.mockResolvedValueOnce({ userId: 'std_amy', role: 'student' });
     state.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
     state.findLive.mockResolvedValueOnce(null);
-    state.liveForAgent.mockResolvedValueOnce([]);
+    state.liveForAgent.mockResolvedValueOnce([{ packageVersionId: 'pv_1', offer: OFFER }]);
     render(await PackagesPage({ params: Promise.resolve({ agentId: 'agt_demo' }) }));
     expect(state.requireRole).toHaveBeenCalledWith(['student'], { clearance: 'agent' });
   });
@@ -101,6 +101,16 @@ describe('/packages/[agentId]', () => {
       '/learn/agt_demo',
     );
     expect(state.liveForAgent).not.toHaveBeenCalled();
+  });
+
+  it('a rejected teacher (liveForAgent empty) is notFound, not an empty compare view', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'std_amy', role: 'student' });
+    state.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
+    state.findLive.mockResolvedValueOnce(null);
+    state.liveForAgent.mockResolvedValueOnce([]);
+    await expect(
+      PackagesPage({ params: Promise.resolve({ agentId: 'agt_demo' }) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
   it('a student with no live subscription sees the compare view, scoped to the owner', async () => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { countWords, LIMITS } from '@edmate/contracts';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -71,6 +71,37 @@ const NewSession = z.strictObject({
   packageId: IdSchema,
   packageVersion: z.int().min(0),
 });
+
+/**
+ * Task 9.6a: a keyset page cursor for the export readers (`sessions.listForStudent`,
+ * `messages.listForStudent`). `(createdAt, id)` is the tie-break order both readers use, so a
+ * cursor from one page names exactly where the next page resumes, stable across a `created_at`
+ * tie (ordered by `id` within the tie). A malformed cursor (bad id format or not an ISO instant)
+ * is `invalid`.
+ */
+export const ExportCursorSchema = z.strictObject({ createdAt: z.iso.datetime(), id: IdSchema });
+export type ExportCursor = z.infer<typeof ExportCursorSchema>;
+
+/** Largest page `sessions.listForStudent`/`messages.listForStudent` return; a bigger `limit` is `invalid`. */
+export const EXPORT_PAGE_MAX = 500;
+
+export const ExportListOptions = z.strictObject({
+  after: ExportCursorSchema.optional(),
+  limit: z.int().min(1).max(EXPORT_PAGE_MAX),
+});
+export type ExportListOptions = z.infer<typeof ExportListOptions>;
+
+/** One session of a complete export (task 9.6a): never `help_state` or `studentId`/`teacherId`. */
+export interface SessionExportRow {
+  id: string;
+  agentId: string;
+  agentVersion: number;
+  packageId: string | null;
+  packageVersion: number | null;
+  summary: string | null;
+  createdAt: string;
+  endedAt: string | null;
+}
 
 export function sessionsRepo(db: Db) {
   return {
@@ -282,6 +313,57 @@ export function sessionsRepo(db: Db) {
         ...row,
         endedAt: row.endedAt === null ? null : iso(row.endedAt),
         createdAt: iso(row.createdAt),
+      };
+    },
+
+    /**
+     * Task 9.6a: every one of the scope's own sessions (open and ended), oldest first by
+     * `(createdAt, id)`, for a complete export. Never `help_state` (the answer key) and never
+     * `studentId`/`teacherId` — only `sessions.get` (one session, by id) carries those. `limit`
+     * is capped at `EXPORT_PAGE_MAX`; 0 or over the cap, or a malformed `after`, is `invalid`.
+     * `next` is the cursor of the last row returned, or `null` on the last page.
+     */
+    async listForStudent(
+      scope: StudentScope,
+      options: { after?: ExportCursor; limit: number },
+    ): Promise<{ items: SessionExportRow[]; next: ExportCursor | null }> {
+      const method = 'sessions.listForStudent';
+      const sc = studentScope(scope, method);
+      const { after, limit } = parseArg(ExportListOptions, options, method);
+      const cursor = after
+        ? (() => {
+            const at = new Date(after.createdAt);
+            return or(gt(sessions.createdAt, at), and(eq(sessions.createdAt, at), gt(sessions.id, after.id)));
+          })()
+        : undefined;
+      const rows = await db
+        .select({
+          id: sessions.id,
+          agentId: sessions.agentId,
+          agentVersion: sessions.agentVersion,
+          packageId: sessions.packageId,
+          packageVersion: sessions.packageVersion,
+          summary: sessions.summary,
+          createdAt: sessions.createdAt,
+          endedAt: sessions.endedAt,
+        })
+        .from(sessions)
+        .where(
+          and(eq(sessions.studentId, sc.studentId), eq(sessions.teacherId, sc.teacherId), cursor),
+        )
+        .orderBy(asc(sessions.createdAt), asc(sessions.id))
+        .limit(limit + 1);
+      const page = rows.slice(0, limit);
+      const last = page[page.length - 1];
+      const next: ExportCursor | null =
+        rows.length > limit && last ? { createdAt: iso(last.createdAt), id: last.id } : null;
+      return {
+        items: page.map((r) => ({
+          ...r,
+          endedAt: r.endedAt === null ? null : iso(r.endedAt),
+          createdAt: iso(r.createdAt),
+        })),
+        next,
       };
     },
   };

@@ -384,6 +384,149 @@ describe('ChatView', () => {
     });
   });
 
+  it('a feedback submission carries skill: feedback once; the next plain message carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Get feedback' }));
+    type('Here is my essay.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    expect(f.calls[0]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Here is my essay.',
+      skill: 'feedback',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    f.push(tok('Nice structure, but check your thesis.'), done);
+
+    type('What about my conclusion?');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'What about my conclusion?',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('starting the mock interview sends skill_action with the persona, and shows Pause/Stop', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    expect(f.calls[0]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'skill_action',
+      skill: 'mock_interview',
+      skillPayload: { persona: 'job-interview' },
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    f.push(tok('Tell me about yourself.'), done);
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    expect(await axe(f.view.container)).toHaveNoViolations();
+  });
+
+  it('a mock-interview answer typed in the Composer carries skill: mock_interview, no skillPayload', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Viva' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(tok('Question one: explain recursion.'), done);
+
+    type('Recursion is a function calling itself.');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Recursion is a function calling itself.',
+      skill: 'mock_interview',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('/pause keeps the mock interview active; Stop clears it so the next message has no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(tok('Question one.'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: '/pause',
+      skill: 'mock_interview',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    f.push(tok('Paused.'), done);
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    expect(f.calls[2]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'stop',
+      skill: 'mock_interview',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    f.push(tok('Debrief: good answers overall.'), done);
+
+    type('Thanks!');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(4));
+    expect(f.calls[3]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Thanks!',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a mock interview that comes back locked clears activeSkill: Pause/Stop hidden, next message has no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push({ type: 'locked', packageName: 'Interview Prep' }, tok('That is in another package.'), done);
+    expect(screen.getByText('This is part of Interview Prep.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+
+    type('Can I try something else?');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Can I try something else?',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a practice start that comes back locked also leaves the next message with no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push({ type: 'locked', packageName: 'Algebra Plus' }, tok('That is in another package.'), done);
+    expect(screen.getByText('This is part of Algebra Plus.')).toBeInTheDocument();
+
+    type('Something else');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Something else',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
   it('a practice payload with non-string options falls back to the generic SkillCard', async () => {
     const f = setup();
     type('Practice please');
