@@ -4512,6 +4512,41 @@ tasks:
   - 11.3a
   status: todo
   branch: null
+- id: 8.2d
+  milestone: M8
+  title: Pinned, SSRF-safe web fetcher and ADR-0014 web-link egress (8.2b Phase A)
+  accept: per docs/tasks/8.2b/plan.md Phase A and Lead answers; ingest and worker typecheck, lint and test green.
+  deps:
+  - '8.2'
+  risk: high
+  status: todo
+  branch: null
+- id: 8.2e
+  milestone: M8
+  title: Web-link ingest job, processor and last-attempt failed status (8.2b Phase B)
+  accept: per docs/tasks/8.2b/plan.md Phase B; queue and worker typecheck, lint and test green.
+  deps:
+  - 8.2d
+  risk: high
+  status: todo
+  branch: null
+- id: 8.2f
+  milestone: M8
+  title: Add a web link in the upload centre; YouTube links refused with fixed words (8.2b Phase C)
+  accept: per docs/tasks/8.2b/plan.md Phase C; web typecheck, lint and test green.
+  deps:
+  - 8.2e
+  risk: high
+  status: todo
+  branch: null
+- id: 8.2c
+  milestone: M8
+  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube)'
+  accept: per the B-47 answer.
+  deps:
+  - 8.2f
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
