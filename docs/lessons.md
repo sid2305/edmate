@@ -37,3 +37,9 @@ Sources: log "21 Oct 2026 · 0.17 agent limits and merge-gate budget check (.cla
 Distress detection let a hard self-harm phrase count as soft when it sat next to a game word ("killed myself in" a game). Three fix rounds narrowed that exemption to game-shaped phrases, but each version still left a path where a real hard phrase could be read as soft. The human removed the exemption entirely: every hard phrase escalates whatever words sit near it, and an occasional false page is accepted. Lesson: in a safety guard, prefer certainty over precision; if an exemption needs a third fix round, ask the human whether it should exist at all.
 
 Sources: log "19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word"; log "19 Oct 2026 · 4.3 gets one more narrow fix round"
+
+## A studio page that trusts a 200 response gets stuck
+
+Two studio pages (8.4b style card, 8.3c outline) shipped the same HIGH bug: the client read the JSON of a 200 response without a catch, and the page set its "saving" or "drafting" flag without a `finally`, so a malformed reply or a network error left the buttons disabled for good. Lesson: every studio client wraps the body read in try/catch and returns an error code, and every page action uses try/catch/finally with a busy flag. UI briefs now say so up front.
+
+Sources: docs/tasks/8.4b/review.md; docs/tasks/8.3c/review.md

@@ -10,6 +10,27 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.4b Style card client types stay local, not imported from contracts · decided by builder · risk: low
+- Decided: `styleCardClient.ts` defines its own `StyleCardView`/`StyleCardDraft` types instead of
+  importing `StyleCard` from `@edmate/contracts`, matching `uploadClient.ts`'s `DocumentView`.
+- Why: no existing `'use client'` file in `apps/web` imports `@edmate/contracts`; keeping the
+  client file's only dependency on its own small types keeps the pattern consistent and avoids
+  pulling the contracts package into the browser bundle for no benefit.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.4b One edit surface serves both the drafted and the directly-edited card · decided by builder · risk: low
+- Decided: `StyleCardView` has a single editable text box and tags field. "Generate draft" from
+  the interview fills them; "Save" always saves whatever is currently in them, whether or not a
+  draft was ever generated.
+- Why: this is the simplest way to satisfy both "preview and edit the drafted card" and "edit the
+  current card directly, no interview" from the plan's `StyleCardView.tsx` description, with one
+  save path instead of two.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.6a Sonnet 5 cache prices kept as a comment only · decided by builder · risk: low
 - Decided: `prices.yaml` records `claude-sonnet-5` input $2 and output $10 per million. The cache-read
   ($0.20) and 5-minute cache-write ($2.50) prices are a comment next to it, not fields.
