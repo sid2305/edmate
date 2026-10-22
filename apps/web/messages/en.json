@@ -104,6 +104,19 @@
       "answerLabel": "Your answer",
       "submit": "Submit answer"
     },
+    "feedback": {
+      "toggle": "Get feedback"
+    },
+    "mockInterview": {
+      "launcher": "Start mock interview",
+      "personas": {
+        "job-interview": "Job interview",
+        "viva": "Viva"
+      },
+      "start": "Let's start the mock interview.",
+      "pause": "Pause",
+      "stop": "Stop"
+    },
     "errors": {
       "unauthorized": "Please sign in again to keep chatting.",
       "forbidden": "You can't use this chat yet.",
