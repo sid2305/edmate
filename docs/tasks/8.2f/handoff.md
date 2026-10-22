@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.2f-web-link-ui` (pushed from the local `work-82f`)
 - Worktree: `.claude/worktrees/agent-acfd9fabf5aa0d1c3`
-- Tool calls used: 24
+- Tool calls used: 48 (harness count for the resume run; the builder reported 24; the first run, stopped mid-build, was not counted)
 
 ## Summary
 
