@@ -138,6 +138,11 @@ export interface MemoryBackendOptions {
   /** Extra or replacement object calls (default: the three clear classifiers). */
   objects?: ScriptedObjectCall[];
   world?: AccessWorld;
+  /**
+   * Replaces the scripted gateway and the judge wrappers entirely (9.0): the given gateway answers
+   * every stream, classifier and judge call, through the real `defaultSteps`.
+   */
+  gateway?: ModelGateway;
 }
 
 export function memoryBackend(opts: MemoryBackendOptions = {}) {
@@ -148,7 +153,8 @@ export function memoryBackend(opts: MemoryBackendOptions = {}) {
     clock,
   );
   const observed = observedGateway(
-    adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
+    opts.gateway ??
+      adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
   );
   const entitlements = memoryEntitlementStore(world, { market: 'IN' });
   const transcripts = memoryTranscriptStore();
