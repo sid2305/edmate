@@ -30,7 +30,14 @@ const GROUP_KEYS = [
 ] as const;
 const CHANGE_KEYS = ['first_publish', 'prompt_pack_bump', 'material', 'packages', 'style_card'] as const;
 const SCORECARD_KEYS = ['hints_before_answers', 'locked_content', 'accuracy'] as const;
-const RUN_ERROR_KEYS = ['gate_unavailable', 'stale', 'enqueue_failed', 'not_verified', 'suspended'] as const;
+const RUN_ERROR_KEYS = [
+  'gate_unavailable',
+  'stale',
+  'enqueue_failed',
+  'not_verified',
+  'suspended',
+  'regulated_unapproved',
+] as const;
 const START_ERROR_KEYS = [
   'not_verified',
   'no_packages',
@@ -38,6 +45,7 @@ const START_ERROR_KEYS = [
   'gate_running',
   'nothing_to_publish',
   'suspended',
+  'regulated_unapproved',
   'conflict',
   'unavailable',
 ] as const;

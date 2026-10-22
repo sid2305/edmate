@@ -173,6 +173,7 @@ describe('PublishView', () => {
     ['enqueue_failed', /could not be started/],
     ['not_verified', /not verified, so nothing was published/],
     ['suspended', /suspended, so nothing was published/],
+    ['regulated_unapproved', /Edmate staff review it before it can be published/],
     ['repository_failed', /Something went wrong during the check/],
     [null, /Something went wrong during the check/],
   ])('error run %s: a plain message, never the raw code', async (code, text) => {
@@ -191,6 +192,10 @@ describe('PublishView', () => {
     [err(409, 'validation', 'no_packages'), 'Make at least one package before you publish.'],
     [err(409, 'validation', 'style_card_required'), 'Set up your style card before you publish.'],
     [err(409, 'validation', 'suspended'), 'Your agent is suspended, so it cannot be published.'],
+    [
+      err(409, 'validation', 'regulated_unapproved'),
+      "Your agent covers a regulated subject (investing, health or law), so Edmate staff review it before it can be published. We'll let you know when it's approved.",
+    ],
     [err(409, 'validation', 'conflict'), 'Something changed while you were publishing. Reload and try again.'],
     [err(503, 'provider_error', 'unavailable'), 'Publishing is not available right now. Try again soon.'],
     [err(500, 'provider_error', 'something_new'), 'Something went wrong. Try again.'],
