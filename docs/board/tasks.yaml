@@ -5814,6 +5814,15 @@ tasks:
   risk: high
   status: todo
   branch: null
+- id: 8.2n
+  milestone: M13
+  title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words; a complete-route test for .srt; drop the HTMLInputElement cast in UploadsView.test.tsx; replace updates documents.kind when the file kind changes (a PDF replaced by a .vtt stays material); the needs-transcription rule moves onto UploadType (a transcribe field) instead of routes.ts'
+  accept: 'web typecheck, lint and test green; the refusal test fails if the words revert.'
+  deps:
+  - 8.2l
+  risk: low
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
