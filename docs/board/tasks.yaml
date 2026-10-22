@@ -2332,7 +2332,7 @@ tasks:
   model: null
 - id: 6.2a
   milestone: M13
-  title: '6.2 review follow-ups: before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long
+  title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long
     unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s
     evidence row having no explicit ts'
   accept: rebuild time for a long history is bounded and tested; no non-null assertions left in learner.ts.
@@ -2430,7 +2430,7 @@ tasks:
   model: null
 - id: 6.5a
   milestone: M13
-  title: 'Memory reset watermark: a memory_reset_at per learner profile; evidence append/appendAndFold drop events older than it and sessions.end skips sessions started before it, so a job queued before
+  title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold drop events older than it and sessions.end skips sessions started before it, so a job queued before
     a reset cannot re-seed memory. Land with or before 6.4a.'
   accept: A test queues an evidence event and a session end from before a reset, applies them after it, and the profile stays empty.
   deps:
@@ -2476,6 +2476,15 @@ tasks:
   accept: A broken persona file names itself in the CLI banner, the banner shows the prompt-pack source, and `/leave now` leaves the role-play.
   deps:
   - 5.8a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.5b
+  milestone: M13
+  title: "6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset with no profile row still ends the open session."
+  accept: "The page and the route share one scope resolution, and the wiring test passes."
+  deps: ["6.5"]
   risk: risky
   status: todo
   branch: null
