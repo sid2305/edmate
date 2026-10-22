@@ -1,5 +1,5 @@
 Status: DONE
-Tool calls used: 19
+Tool calls used: 74 (harness counts: build 33, fix round 41)
 
 ## What changed
 Added `apps/web/src/studio/insights.ts` (Phase A of 8.8's plan): a pure aggregation module with
@@ -34,6 +34,11 @@ in `page.test.tsx` if a trace/group fixture is needed there too — they mirror
 - `python3 .githooks/secret-scan.py --all` → no output (clean).
 
 ## Decisions
+
+### 22 Oct 2026 · 8.8a Lead accepts the newest-first trace listing in the teacher repository · decided by lead · risk: high
+- Decided: merge the change to packages/db/src/repositories/turn-traces.ts (`listForTeacherSince` orders newest-first, caps, then reverses), reviewed by code-reviewer, typescript-reviewer and security-reviewer.
+- Why: capped reads returned the oldest window, so insights showed stale health; the teacher-isolation join and selected columns are unchanged (security-reviewer confirmed), and an integration test pins the newest-two result.
+- risk: high (risky path: packages/db/src/repositories/**)
 
 ### 22 Oct 2026 · 8.8a sample text is the group's oldest question, not newest or first-inserted · decided by builder · risk: low
 - Decided: `InsightsQuestionGroup.sample` is `group.questions[0]?.text ?? ''`, and
@@ -90,4 +95,3 @@ packages/db/test/compose.port.yaml up -d postgres`), 992 passed / 4 skipped (pre
 unrelated); `turn-traces.ts` at 100/100/100/100 coverage. `python3 .githooks/secret-scan.py --all`
 → clean.
 
-Tool calls used: 29
