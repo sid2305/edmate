@@ -4051,6 +4051,38 @@ tasks:
   deps: []
   risk: high
   status: todo
+- id: 11.1a
+  milestone: M11
+  title: 'Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)'
+  accept: per docs/tasks/11.1/plan.md Phase A; db typecheck, lint, test and int tests green.
+  deps:
+  - 9.3c
+  risk: high
+  status: todo
+- id: 11.1b
+  milestone: M11
+  title: 'Teacher studio live classes: schedule with an external link, attach packages, list (11.1 Phase B, apps/web; plan docs/tasks/11.1/plan.md)'
+  accept: per docs/tasks/11.1/plan.md Phase B; web typecheck, lint and test green.
+  deps:
+  - 11.1a
+  risk: low
+  status: todo
+- id: 11.1c
+  milestone: M11
+  title: 'Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)'
+  accept: per docs/tasks/11.1/plan.md Phase C; web typecheck, lint and test green.
+  deps:
+  - 11.1a
+  risk: low
+  status: todo
+- id: 11.1d
+  milestone: M13
+  title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b)'
+  accept: a teacher can edit or cancel a class, with tests.
+  deps:
+  - 11.1b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
