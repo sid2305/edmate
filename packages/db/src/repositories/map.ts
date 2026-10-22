@@ -389,6 +389,44 @@ export function toOutline(value: Outline, method: string): Outline {
   return checked(OutlineSchema, value, method);
 }
 
+const RegulatedAgentRowSchema = z.strictObject({
+  agentId: z.string().min(1),
+  /** The teacher's public slug, or null when the teacher has no profile. */
+  teacherSlug: z.string().min(1).nullable(),
+  status: z.enum(['draft', 'live', 'suspended']),
+  liveVersion: z.int().min(1).nullable(),
+  regulatedSubject: AgentConfigSchema.shape.regulatedSubject.unwrap().nullable(),
+  approvedAt: z.iso.datetime().nullable(),
+  /** The approving staff user's id; never a name or email. */
+  approvedBy: z.string().min(1).nullable(),
+});
+
+/**
+ * One agent as the staff regulated-subject list sees it (task 12.4a): ids, the public slug and
+ * the flag columns. No contract type exists for it (same precedent as AuditRow); no name, email
+ * or phone.
+ */
+export type RegulatedAgentRow = z.infer<typeof RegulatedAgentRowSchema>;
+
+export function toRegulatedAgentRow(
+  row: {
+    agentId: string;
+    teacherSlug: string | null;
+    status: string;
+    liveVersion: number | null;
+    regulatedSubject: string | null;
+    approvedAt: Date | null;
+    approvedBy: string | null;
+  },
+  method: string,
+): RegulatedAgentRow {
+  return checked(
+    RegulatedAgentRowSchema,
+    { ...row, approvedAt: row.approvedAt === null ? null : iso(row.approvedAt) },
+    method,
+  );
+}
+
 // Task 12.2a: the staff reports queue. The categories live here (not in reports.ts) so this file
 // never imports a repository; reports.ts re-exports them.
 /** What a student can say about a reply: a closed set, never free text (12.2 Q2). */

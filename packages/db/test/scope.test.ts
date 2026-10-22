@@ -138,6 +138,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // pass a bare staff id. A malformed one is `invalid` before any SQL (safety-alerts.test.ts);
     // a wrong one is `not_found` or `scope` (safety-alerts.int.test.ts, the isolation grid).
     if (name.startsWith('safetyAlerts.')) continue;
+    // regulatedSubjects (12.4a) takes a bare staff id `by` first, like listPendingForStaff: a
+    // malformed one is `invalid` before any SQL (regulated-subjects.test.ts); a non-staff one is
+    // `scope` (regulated-subjects.int.test.ts, the isolation grid).
+    if (name.startsWith('regulatedSubjects.')) continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
