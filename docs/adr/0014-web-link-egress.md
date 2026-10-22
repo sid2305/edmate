@@ -84,4 +84,4 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 
 ## Reviewers
 
-architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer. The 8.2e amendment was reviewed by architect (opus), security-reviewer (opus) and typescript-reviewer (opus).
+architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer. The 8.2e amendment was reviewed by architect (opus), security-reviewer (opus) and typescript-reviewer (opus). The 8.2c amendment (8.2l) was reviewed by architect (opus), security-reviewer (sonnet) and typescript-reviewer (opus).
