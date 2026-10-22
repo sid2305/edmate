@@ -113,6 +113,17 @@ describe('UploadsView', () => {
     expect(rows[2]).toHaveTextContent('Replace the file to try again.');
   });
 
+  it('accepts caption files and shows the YouTube hint (task 8.2c)', async () => {
+    api([]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    await screen.findByText(/No files yet/);
+    const picker = screen.getByLabelText('Upload a file') as HTMLInputElement;
+    expect(picker.accept.split(',')).toEqual(expect.arrayContaining(['.vtt', '.srt']));
+    expect(
+      await screen.findByText(/In YouTube Studio, download its captions/),
+    ).toBeInTheDocument();
+  });
+
   it('shows an empty state, and no upload control without a module', async () => {
     api([]);
     renderIntl(<UploadsView moduleIds={[]} putFile={okPut} />);

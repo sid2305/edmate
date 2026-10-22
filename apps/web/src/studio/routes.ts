@@ -144,7 +144,8 @@ const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
   bad_port: "Links must use the site's standard web address (no port number).",
   internal_name: "That link can't be read: it isn't a public site.",
   private_address: "That link can't be read: it isn't a public site.",
-  youtube_unsupported: "YouTube links aren't supported yet. Upload the video file instead.",
+  youtube_unsupported:
+    "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.",
 };
 
 const validation = (message: string = MSG.validation) => apiError('validation', message, 400);

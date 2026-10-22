@@ -57,6 +57,17 @@ describe('the upload type table', () => {
     expect(contentTypeFor(new File(['x'], 'page.html', { type: 'text/html' }))).toBeNull();
     expect(contentTypeFor(new File(['x'], 'noext', { type: '' }))).toBeNull();
   });
+
+  it('maps caption file extensions (task 8.2c): browsers often report no type for .srt', () => {
+    expect(contentTypeFor(new File(['x'], 'captions.srt', { type: '' }))).toBe(
+      'application/x-subrip',
+    );
+    expect(contentTypeFor(new File(['x'], 'captions.srt', { type: 'text/plain' }))).toBe(
+      'application/x-subrip',
+    );
+    expect(contentTypeFor(new File(['x'], 'captions.vtt', { type: 'text/vtt' }))).toBe('text/vtt');
+    expect(contentTypeFor(new File(['x'], 'CAPTIONS.VTT', { type: '' }))).toBe('text/vtt');
+  });
 });
 
 describe('the JSON calls', () => {

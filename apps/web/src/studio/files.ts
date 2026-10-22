@@ -36,6 +36,19 @@ const media = (contentType: string, ext: string, fileKind: IngestFileKind): Uplo
   chunkKind: 'transcript',
   maxBytes: MAX_MEDIA_UPLOAD_BYTES,
 });
+/**
+ * Task 8.2c, Phase C: a caption file (.vtt or .srt) the teacher exports from YouTube Studio.
+ * Chunk kind `transcript` (Q2): a citation reads as a recording with a timestamp, the same as
+ * audio and video. Cap is the ordinary 20 MB document limit (Q3): a third, smaller limit would
+ * add complexity a usually-sub-1 MB caption file doesn't need.
+ */
+const caption = (contentType: string, ext: string, fileKind: IngestFileKind): UploadType => ({
+  contentType,
+  ext,
+  fileKind,
+  chunkKind: 'transcript',
+  maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
+});
 
 export const UPLOAD_TYPES: readonly UploadType[] = [
   doc('application/pdf', 'pdf', 'pdf'),
@@ -47,6 +60,10 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
   media('audio/mp4', 'm4a', 'audio'),
   media('video/mp4', 'mp4', 'video'),
   media('video/webm', 'webm', 'video'),
+  // Task 8.2c: no IANA type exists for SubRip; `application/x-subrip` is the common convention
+  // (decisions, risk: low). The client falls back to the extension when the browser reports none.
+  caption('text/vtt', 'vtt', 'vtt'),
+  caption('application/x-subrip', 'srt', 'srt'),
 ];
 
 /** The upload type for an exact content type, or null (anything not on the list). */

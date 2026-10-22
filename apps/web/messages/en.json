@@ -219,7 +219,8 @@
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
     "chooseFile": "Upload a file",
-    "acceptHint": "PDF, Word, PowerPoint or Markdown up to 20 MB; audio or video up to 500 MB.",
+    "acceptHint": "PDF, Word, PowerPoint, Markdown or a caption file (.vtt/.srt) up to 20 MB; audio or video up to 500 MB.",
+    "youtubeHint": "Have a YouTube video? In YouTube Studio, download its captions (.vtt or .srt) and upload that file here.",
     "module": "Module",
     "moduleOption": "Module {n}",
     "noModules": "Set up a module for your course before you upload files.",
@@ -247,7 +248,7 @@
     "linkTitle": "Title (optional)",
     "addLink": "Add link",
     "errors": {
-      "unsupported_type": "That file type can't be uploaded. Use PDF, Word, PowerPoint, Markdown, audio or video.",
+      "unsupported_type": "That file type can't be uploaded. Use PDF, Word, PowerPoint, Markdown, a caption file (.vtt or .srt), audio or video.",
       "input_too_large": "That file is too big. Documents can be up to 20 MB, audio and video up to 500 MB.",
       "not_uploaded": "The file hasn't arrived yet. Wait a moment, then try again.",
       "upload_failed": "The upload didn't finish. Check your connection, then replace the file.",
