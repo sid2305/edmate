@@ -72,44 +72,44 @@ qr-15..18 become free-package locked cases.
 ## Decisions
 
 ### Recall items without an answer get a generic judge statement
-qa-recall in-course items have notes headings but no reference answer. For these items,
+Decided: qa-recall in-course items have notes headings but no reference answer. For these items,
 `AnswerableItem.answer` is optional. When it is missing or blank, the accuracy case's judge
 statement is "The reply answers the question from the course material instead of refusing or
 passing it to the teacher." It keeps `must_cite_source: true`. Builder, risk: low.
 
 ### Items answered in another module are keyed on that module by the adapter
-To route an item answered only in a locked module (rule 2, Decision 4), the generator has no
+Decided: To route an item answered only in a locked module (rule 2, Decision 4), the generator has no
 `expectedModuleId` field. Instead, the caller's adapter passes the *answering* module as
 `moduleId`. The demo adapter maps qa-recall `expectedModuleId` to `moduleId` this way.
 Builder, risk: low.
 
 ### Ids are lowercased before sanitising
-A case id is lowercased first, and every character outside `[a-z0-9-]` then becomes `-`. This
+Decided: A case id is lowercased first, and every character outside `[a-z0-9-]` then becomes `-`. This
 way `Loops` becomes `loops`, not `-oops`. The case's `package` field keeps the real,
 unsanitised package id. Builder, risk: low.
 
 ### Module-level locked cases cite the package file
-`AgentPackage` gained a `sourceLabel` field. The `summary`, `already-paid` and `outline` cases
+Decided: `AgentPackage` gained a `sourceLabel` field. The `summary`, `already-paid` and `outline` cases
 cite `<package sourceLabel>#locked:<moduleId>`, and `direct` cases cite the item's own source.
 This keeps `source` caller-supplied instead of prose written by the generator.
 Builder, risk: low.
 
 ### Out-of-course cases run under the first package
-An out-of-course case is package-independent, but `EvalCase.package` is required, so the
+Decided: An out-of-course case is package-independent, but `EvalCase.package` is required, so the
 generator sets it to the first package in the input. Out-of-course items also carry a
 `provenance` field, which gives them `generated:qa-recall` for the demo.
 Builder, risk: low.
 
 ### No packages, or an invalid generated case, throws
-If the input has no packages, the generator throws `PerAgentSuiteError` rather than returning
+Decided: If the input has no packages, the generator throws `PerAgentSuiteError` rather than returning
 an empty suite, which would look like a pass. It also throws when a generated case fails
 `EvalCaseSchema` (for example, an empty question), naming the case id and its source.
 Builder, risk: low.
 
 ### Reference answers are collapsed and truncated
-The reference answer in a judge statement is collapsed to one line and cut at 280 characters,
+Decided: The reference answer in a judge statement is collapsed to one line and cut at 280 characters,
 with `…` added when it is cut. Builder, risk: low.
 
 ### Provenance tag confirmed by the lead
-`reviewed_by: generated:<provenance>` is used as the lead confirmed in Q1. The sign-off rule
+Decided: `reviewed_by: generated:<provenance>` is used as the lead confirmed in Q1. The sign-off rule
 covers `evals/suites/**` only. Planner and lead, risk: medium.

@@ -1750,9 +1750,30 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: running
+  status: done
   branch: m7/7.3-suite-generator
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:sonnet x2
+  metrics:
+    tool_calls: 109
+    tokens_in: 324
+    tokens_out: 43650
+    cache_read_tokens: 7250828
+    wall_time_seconds: 895
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: '7.4'
   milestone: M7
   title: 'Quality gate, scoped by change: first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case
@@ -2430,9 +2451,10 @@ tasks:
   model: null
 - id: 7.3b
   milestone: M13
-  title: "Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES."
-  accept: "The evals package's error classes share one style and the 7.3 tests still pass."
-  deps: ["7.3"]
+  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.'
+  accept: The evals package's error classes share one style and the 7.3 tests still pass.
+  deps:
+  - '7.3'
   risk: normal
   status: todo
   branch: null
