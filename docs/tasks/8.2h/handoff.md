@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.2h-web-link-followups` (pushed from the local `work-82h`)
 - Worktree: `.claude/worktrees/agent-a5f62b685b2c68f7f`
-- Tool calls used: 34 (this resumed run; an earlier interrupted builder left a draft patch that was applied, checked and finished)
+- Tool calls used: 43 (harness count for this resumed run; the builder reported 34; an earlier interrupted builder left a draft patch that was applied, checked and finished)
 
 ## Summary
 
