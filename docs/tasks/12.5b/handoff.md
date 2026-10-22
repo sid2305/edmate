@@ -132,4 +132,4 @@ Tests were written first (`processors.test.ts`'s new/changed cases, `dbStore.tes
 - 4.3c: real paging (SMS/email) replaces the structured log line; vendor accounts, on-call phone
   and email stay the human's to supply, never committed here.
 
-Tool calls used: 44
+Tool calls used: 103 (harness count; the builder reported 44)
