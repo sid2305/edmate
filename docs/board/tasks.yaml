@@ -5753,6 +5753,44 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 11.4a
+  milestone: M11
+  title: 'Link a document to its live class: nullable documents.live_class_id, own started class only, listRecordingsForTeacher (11.4 Phase A)'
+  accept: 'per docs/tasks/11.4/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  deps:
+  - 12.3b
+  risk: high
+  status: todo
+  branch: null
+- id: 11.4b
+  milestone: M11
+  title: 'Studio API for class recordings, and media the worker can''t split refused at upload (11.4 Phase B)'
+  accept: 'per docs/tasks/11.4/plan.md Phase B and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - 11.4a
+  - 8.2l
+  - 12.3c
+  risk: medium
+  status: todo
+  branch: null
+- id: 11.4c
+  milestone: M11
+  title: 'Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)'
+  accept: 'per docs/tasks/11.4/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - 11.4b
+  risk: medium
+  status: todo
+  branch: null
+- id: 11.4d
+  milestone: M13
+  title: 'ffmpeg chunker in the worker so MP4, WebM and M4A recordings of any length can be transcribed (needs an ADR: new system binary)'
+  accept: 'ADR reviewed by architect, security-reviewer and typescript-reviewer; a long MP4 fixture splits and ingests; worker typecheck, lint and test green.'
+  deps:
+  - 11.4b
+  risk: high
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
