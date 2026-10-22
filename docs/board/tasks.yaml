@@ -3586,9 +3586,9 @@ tasks:
   deps:
   - 8.6c
   risk: medium
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.6d-package-builder
+  model: plan:opus build:sonnet
 - id: 8.8b
   milestone: M8
   title: 'Studio insights page (8.8 Phase B, apps/web UI): health and top question groups'
