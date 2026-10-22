@@ -10,6 +10,114 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3c builder ran far over its brief budget · decided by lead · risk: low
+- Decided: accept 210 tool calls against the brief's 70 (1.2 × 70 = 84). The lead told the builder to wrap up at 206 calls.
+- Why: the work is in scope and all three reviewers approve with no findings. Most of the extra calls went on repeated full web gate runs while waiting on background test runs; future briefs for apps/web say to run the gate once in the foreground.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.3c routes now requiring the rights declaration · decided by builder · risk: medium
+- Decided: `rightsDeclared: z.literal(true)` is now required (not merely accepted) on three
+  studio routes: `POST /api/studio/documents` (upload-create), the web-link add route under
+  the same documents collection, and `POST /api/studio/documents/:id/replace`. A missing or
+  `false` value returns the pre-existing 400 validation response and nothing is written,
+  replaced or enqueued.
+- Why: 12.3b made the field an optional repository input; the plan for 12.3c calls for every
+  studio route that calls a `documents` method taking `rightsDeclared` to require it, so a
+  teacher cannot upload, replace or link material without confirming they hold the rights.
+- risk: medium — a validation-logic change on three write paths in the teacher upload
+  centre; covered by one new 400 test per route plus updated fixtures on every existing
+  test, and the full `@edmate/web` gate is green.
+
+---
+
+### 22 Oct 2026 · 12.3c public rights page shows a neutral placeholder, no new ADR · decided by builder · risk: low
+- Decided: `/legal/rights` is a plain, anonymous-accessible server component (same shell as
+  `/teachers`); it reads the US pack's `compliance.grievance` field and shows a neutral
+  fallback sentence ("A grievance contact for this market has not yet been published.")
+  whenever that field is pending or blank, in every market, for the length of the pilot.
+  The repeat-infringer note names no number or threshold. The page writes no real contact,
+  helpline, name or email anywhere in code, content or test fixtures.
+- Why: task 12.3's lead answer (Q1) says the public page shows a neutral placeholder while
+  `compliance.grievance` is pending; the checkbox copy itself needed no separate human
+  sign-off gate (Q4). No `/api/**` route, `apps/web/src/auth` file or `packages/**` file was
+  touched, so no ADR applies.
+- risk: low — content-only addition to a public page; `app/legal` was added to the existing
+  `src/chat/no-raw-html.test.ts` scan (extends an existing check, not a new one) and the page
+  has an axe test.
+
+---
+
+### 22 Oct 2026 · 11.4a builder ran over the Phase A budget · decided by lead · risk: low
+- Decided: accept 83 tool calls against Phase A's ~60 in docs/tasks/11.4/plan.md (1.2 × 60 = 72).
+- Why: the extra calls went on the post-migrate foreign-key validation (migrate.ts and its test, which the plan did not list) and the db integration runs against a disposable Postgres; the work stays in scope and all four reviewers approve.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4a documents.create links only an own started live class; new listRecordingsForTeacher · decided by builder · risk: high
+- Decided: `documents.create` accepts `liveClassId` only for one of the scope's own classes with `starts_at <= now()`, checked in the same `INSERT … SELECT` as the module. Another teacher's class, a future class and a missing class all give `not_found` and write nothing, so class ids can't be probed. `liveClasses.listRecordingsForTeacher` reads only the scope's documents joined to the scope's own classes (`teacher_id` on both sides), so no cross-teacher read is possible. Risky path `packages/db/src/repositories/**`; required reviewer: security-reviewer. Recommended: database-reviewer, code-reviewer, typescript-reviewer.
+- Why: plan Phase A and lead answers Q1/Q6; the same `not_found` shape as a foreign module keeps the existing no-probe rule.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.4a migration 0024 adds documents.live_class_id (additive only) · decided by builder · risk: medium
+- Decided: nullable `live_class_id`, no backfill; FK `ON DELETE SET NULL` added `NOT VALID` and validated by an appended post-migrate step (pattern of 0009/0023, since drizzle runs migration files in one transaction); a plain (not concurrent) partial index `WHERE live_class_id IS NOT NULL`, because every existing row is null and the table is small. Reviewer: database-reviewer.
+- Why: additive only, so 11.1d's later delete of a class never blocks or strands its recordings; the validation scan stays out of the migration's lock.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 11.4a recordings list cap and shape · decided by builder · risk: low
+- Decided: `RECORDING_LIST_MAX = 500` (the `DOCUMENT_LIST_MAX` precedent), ordered by `created_at desc, id desc`; `failureReason` is omitted unless set.
+- Why: matches the documents list conventions the upload centre already uses.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4f builder ran over its brief budget · decided by lead · risk: low
+- Decided: accept 53 tool calls against the brief's 40 (1.2 × 40 = 48).
+- Why: the extra calls went on the focus-restore tests across a row remount; the work is in scope and all three reviewers approve.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4f risky path touched · decided by builder · risk: high
+- Decided: this PR edits `apps/web/app/staff/**` (`staff/agents/agent-row.tsx`, `view.tsx`,
+  `view.test.tsx`). Per the plan's risky-path list, `security-reviewer` must review this PR
+  before merge, even though every change here is UI-only (focus handling, input parsing, and
+  which reply a client trusts) with no new server surface.
+- Why: the directory gates a staff-only privilege boundary (regulated-subject approval), so the
+  plan requires security review on any touch to it regardless of the change's size.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4f approvedBy comes from a reload, not a richer POST reply · decided by builder · risk: low
+- Decided: to get the real `approvedBy` after a successful approve/revoke, `onSetApproval` calls
+  `loadAgents()` (a GET) rather than asking the POST reply to carry `approvedBy` itself.
+- Why: `apps/web/app/api/staff/agents` is out of this task's scope (`app/api` edits are
+  out-of-bounds per the brief), so the POST response shape (`{agentId, changed}`) could not
+  change. A reload is already wired into this view (manual Reload button) and is the only
+  in-scope way to read server-side truth for a field the POST never returns.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4f confirm-focus restore lives in the parent, not the row · decided by builder · risk: low
+- Decided: the row's own `useEffect`-based focus restore only runs for Cancel. Yes/confirm focus
+  restore is done by the parent `StaffAgentsView`, by DOM id, after the row's `busy` state clears.
+- Why: a successful approval can change the row's key and remount `AgentRow`, resetting any
+  local "please refocus" ref before the async call resolves; a stable DOM id queried from the
+  parent (which isn't remounted) survives that. Caught by writing the confirm-focus test first:
+  it failed under the row-only design (remount lost the pending-focus flag) and passes with
+  this split.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 7.2i leak-co2-translate-en bans the literal translate-variant text, not a translated word · decided by builder · risk: low
 - Decided: the restored translation-specific phrase is `"En français: « Warm »"` — the literal
   text the 'translate' form renders for this case (an English word inside French framing) — not

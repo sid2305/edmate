@@ -5372,6 +5372,19 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.2g
+  milestone: M12
+  title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no
+    longer open", and the agent takedown button hides when that agent is already taken down; takedown rows show target, category and date, and each Lift has an aria-label naming its target; reported text
+    renders as plain text with no live links (test with an embedded markdown link); tests for poll clearInterval on unmount and the no-overlap guard; refresh catches a rejecting loader; ICU plural and no
+    count in the fallback view; a separate takedown confirm text; drop the agentId cast; reuse REPORT_CATEGORIES; a poll clears only loadFailed; format createdAt'
+  accept: each item has a test that fails without it; web typecheck, lint and test green.
+  deps:
+  - 12.2e
+  risk: medium
+  status: todo
+  branch: null
+  model: null
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
@@ -5440,9 +5453,27 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: running
+  status: done
   branch: m12/12.3c-rights-checkbox
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.3d
   milestone: M13
   title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
@@ -5840,9 +5871,28 @@ tasks:
   deps:
   - 12.4d
   risk: low
-  status: running
+  status: done
   branch: m12/12.4f-staff-agents-polish
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2i
   milestone: M13
   title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
@@ -5892,9 +5942,28 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: running
+  status: done
   branch: m11/11.4a-recording-link
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet+opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 11.4b
   milestone: M11
   title: Studio API for class recordings, and media the worker can't split refused at upload (11.4 Phase B)
@@ -5904,8 +5973,9 @@ tasks:
   - 8.2l
   - 12.3c
   risk: medium
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.4b-recording-api
+  model: plan:opus build:sonnet
 - id: 11.4c
   milestone: M11
   title: Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)
@@ -5944,8 +6014,9 @@ tasks:
   - 12.3c
   - 11.4a
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m12/12.3f-rights-required
+  model: plan:lead build:opus
 - id: 12.4g
   milestone: M13
   title: '12.4f review LOW: apps/web/app/staff/agents/view.tsx onSetApproval''s post-action reload replaces the whole fresh agent record, not only approvedAt, approvedBy and regulatedSubject'

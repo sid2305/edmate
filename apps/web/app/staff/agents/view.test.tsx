@@ -105,6 +105,59 @@ describe('StaffAgentsView', () => {
     await waitFor(() => expect(setApproval).toHaveBeenCalledWith({ agentId: 'agt_approved', approved: false }));
   });
 
+  it('cancel returns keyboard focus to the row action button', () => {
+    renderIntl(<StaffAgentsView initial={[FLAGGED]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Approve' })).toHaveFocus();
+  });
+
+  it('confirm returns keyboard focus to the row action button once the call settles', async () => {
+    const setApproval = vi.fn(async () => ({ ok: true as const, changed: true }));
+    renderIntl(<StaffAgentsView initial={[FLAGGED]} setApproval={setApproval} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Revoke' })).toHaveFocus());
+  });
+
+  it('approval takes approvedBy from the reload reply, not the stale pre-action prop', async () => {
+    const setApproval = vi.fn(async () => ({ ok: true as const, changed: true }));
+    const APPROVED_BY_SERVER = agent({
+      agentId: 'agt_flagged',
+      regulatedSubject: 'health',
+      approvedAt: '2026-10-22T11:00:00.000Z',
+      approvedBy: 'stf_9',
+    });
+    const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [APPROVED_BY_SERVER] }));
+    renderIntl(
+      <StaffAgentsView initial={[FLAGGED]} setApproval={setApproval} loadAgents={loadAgents} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    await waitFor(() => expect(loadAgents).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('2026-10-22T11:00:00.000Z')).toBeInTheDocument());
+  });
+
+  it('a dirty, unsaved edit on one row survives a reload that only changes another row', async () => {
+    const OTHER_BEFORE = agent({ agentId: 'agt_other', regulatedSubject: 'investing' });
+    const OTHER_AFTER = agent({
+      agentId: 'agt_other',
+      regulatedSubject: 'investing',
+      approvedAt: '2026-10-22T12:00:00.000Z',
+      approvedBy: 'stf_3',
+    });
+    const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [FLAGGED, OTHER_AFTER] }));
+    renderIntl(
+      <StaffAgentsView initial={[FLAGGED, OTHER_BEFORE]} loadAgents={loadAgents} />,
+    );
+    const flaggedSelect = screen.getAllByLabelText('Regulated subject')[0];
+    if (!flaggedSelect) throw new Error('expected at least one subject select');
+    fireEvent.change(flaggedSelect, { target: { value: 'law' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(screen.getByText('2026-10-22T12:00:00.000Z')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('Law')).toBeInTheDocument();
+  });
+
   it('while an action is in flight every row action is disabled', async () => {
     renderIntl(<StaffAgentsView initial={[FLAGGED, UNFLAGGED]} setApproval={never} />);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
