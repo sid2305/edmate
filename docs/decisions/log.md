@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 11.4g ran over budget · decided by lead · risk: low
+- Decided: accept 234 tool calls (88 build + 146 fix round) against a 60-call budget; the result is small (three views and their tests) and both reviewers approved after re-verifying.
+- Why: the Sonnet agents under-reported their calls by about 2 to 4 times and didn't stop at the brief's limit; the lead raises this in the 0.22 review rather than redoing the work.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4g no new failureReason key for the client-reported failed row · decided by builder · risk: low
+- Decided: a client-side `failed` row from a PUT/complete failure gets `status: 'failed'` but no
+  `failureReason` set (so `LiveClassesView`'s `reasonKey()` falls back to `'other'`, showing
+  "Processing failed. Replace the file to try again.").
+- Why: the brief's own text ("the status the documents list already uses for a failed upload")
+  already exists (`uploads.status.failed`); a synthetic reason string would either need a new
+  `en.json` key (the brief caps new keys to what's needed) or reuse an existing reason whose
+  wording doesn't match this case. The generic fallback text is accurate and uses no new key.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4g one shared poll-timeout key and time-based cap · decided by builder · risk: low
+- Decided: both views use the same `uploads.pollTimeout` key and both cap on elapsed time (not
+  attempt count), each via its own small `useEffect`/`useRef` logic (no new shared helper file).
+- Why: the brief allows reusing one helper "if that is simpler"; a shared file would need to sit
+  outside the three named files the brief scopes this task to. Elapsed time is simpler to reason
+  about than counting ticks across `LiveClassesView`'s `setInterval` and `UploadsView`'s
+  self-rescheduling `setTimeout`, and matches "about 10 minutes" from the brief directly.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 10.1a review MEDIUMs fixed before merge · decided by lead · risk: high
 - Decided: fix the review MEDIUMs (exported helper schemas, offer-name and ref rules, ADR notes on caller-claimed idempotency keys and server-set webhook binding) in one fix round before merge instead of deferring them; the lead restored the ADR sentence that adapters without provider idempotency check existing refunds before refunding (typescript re-verify MEDIUM) and noted that 10.8 strips format characters from offer names; ADR-0015 is Accepted.
 - Why: any later fix would be a contracts change needing another ADR and three reviews; the restored sentence is the reviewed original wording. Reviewers: architect, security-reviewer and typescript-reviewer (all re-verified the fix).

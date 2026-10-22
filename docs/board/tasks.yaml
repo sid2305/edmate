@@ -6246,9 +6246,30 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: running
+  status: done
   branch: m11/11.4g-recording-upload-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
