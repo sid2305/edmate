@@ -1,9 +1,9 @@
 # 8.3b handoff: studio outline API (Phase B of 8.3)
 
-- **Status:** DONE
+Status: DONE
 - **Branch:** `m8/8.3b-outline-api` (local `work-83b`)
 - **Worktree:** `.claude/worktrees/agent-ac14ada905cce1fb7`
-- **Tool calls used:** 61
+Tool calls used: 132 (harness counts: build 103, merge of main and fix round 1 29; the builder's own count was 61)
 - **Scope:** `apps/web` only. No `packages/contracts`, `.claude/`, `.github/` or `apps/web/src/auth/**` change.
 - **Risky path:** none (plan 8.3b: "Risky paths: No risky paths").
 
@@ -87,6 +87,11 @@ not part of this task. `GET`/`PUT /api/studio/outline` and `POST /api/studio/out
 now live and teacher-scoped; Phase C's `OutlineView.tsx` can call them directly.
 
 ## Decisions
+### 22 Oct 2026 · 8.3b Lead accepts the shared studio index edit and the build overrun · decided by lead · risk: medium
+- Decided: keep the builder's additive `outlineHandlers` export in apps/web/src/studio/index.ts (the brief reserved that file for 8.4a); a fixer merged main and kept both 8.4a's style-card exports and the outline handlers. The TypeScript reviewer's HIGH (the studio backend factory cached the resolved backend, so two cold requests built two backends) is fixed by caching the in-flight promise, with a concurrency test, verified by the lead. The build's budget overrun (132 harness calls including the merge and fix) is accepted.
+- Why: the edit is additive and the conflict was resolved with tests green; the fix restores main's behaviour of sharing one in-flight build.
+- risk: medium
+
 
 ### 22 Oct 2026 · 8.3b One shared studio backend carries both document and outline repositories · decided by builder · risk: low
 - Decided: `apps/web/src/studio/runtime.ts` builds one lazily-constructed backend object
