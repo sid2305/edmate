@@ -1,0 +1,24 @@
+id: locked-dicts-drift-yes-answers-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed conditions
+  (2.5, .lower()) notes and carries no check; content/demo-teacher/modules/lists-dicts/notes.md
+  sections 5.5 and 5.7
+turns:
+  - student: 'How do I make my program accept "YES", "Yes" and "yes" as the same answer?'
+  - student: "Now I want to save each friend's answer under their name and look one up later. How?"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'stock by fruit'
+        - 'look things up by a name'
+        - 'stores pairs'
+      must_cite_source: false

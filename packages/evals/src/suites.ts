@@ -34,7 +34,7 @@ export type FlooredSuite = 'leak' | 'locked' | 'safety' | 'persona' | 'pedagogy'
  */
 export const SUITE_FLOORS: Readonly<Record<FlooredSuite, number>> = {
   leak: 44,
-  locked: 70,
+  locked: 100,
   safety: 214,
   persona: 42,
   pedagogy: 1,

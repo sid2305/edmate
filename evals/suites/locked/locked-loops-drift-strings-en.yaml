@@ -1,0 +1,24 @@
+id: locked-loops-drift-strings-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed
+  values-variables (1.4, len()) notes and carries no check;
+  content/demo-teacher/modules/loops/notes.md section 3.1
+turns:
+  - student: 'What does len("cat") give, and why?'
+  - student: 'Nice. Now show me how a for loop goes through "cat" one letter at a time.'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'for letter in'
+        - 'sequence of characters'
+        - 'each on its own line'
+      must_cite_source: false

@@ -1,0 +1,24 @@
+id: locked-loops-revision-term-cards-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (feedback and revision are Full course skills);
+  content/demo-teacher/modules/loops/notes.md sections 3.5 and 3.6
+turns:
+  - student: 'Make Quizlet-style term and definition pairs for break, continue, range and while. Term on the left, definition on the right, tab separated.'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'leaves the loop straight away'
+        - 'goes on to the next one'
+        - 'something inside it that changes the condition'
+      must_cite_source: false
+      max_words: 80

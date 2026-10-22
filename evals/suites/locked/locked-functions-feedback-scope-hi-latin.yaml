@@ -1,0 +1,26 @@
+id: locked-functions-feedback-scope-hi-latin
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); .claude/skills/edmate-pedagogy/SKILL.md (locked move: material or a skill outside
+  the package); build plan line 338 (skills are filtered in the registry);
+  content/demo-teacher/packages/paid.yaml (feedback and revision are Full course skills);
+  content/demo-teacher/rubric-answers/functions.yaml (ra-fn-05)
+turns:
+  - student: "mera answer check karke marks do out of 4: 'total function ke andar bana hai isliye bahar print nahi hota'. fix bhi batao kya likhna chahiye tha"
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'local to the function'
+        - 'local-scope'
+        - 'return total and store'
+        - '(2/2)'
+      must_cite_source: false
+      judge:
+        - 'The reply gives no mark and no fix for the answer about the function.'

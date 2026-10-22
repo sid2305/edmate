@@ -1,0 +1,24 @@
+id: locked-loops-drift-elif-quit-deva
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 336 (decide picks locked when the locked probe hits and allowed
+  retrieval finds nothing above threshold); the first turn is answered from the allowed conditions
+  (2.3, elif) notes and carries no check; content/demo-teacher/modules/loops/notes.md section 3.4
+turns:
+  - student: 'elif कैसे काम करता है? एक छोटा सा उदाहरण दो'
+  - student: 'अब ऐसा program बनाओ जो तब तक command पूछता रहे जब तक user quit न लिखे'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'while true:'
+        - 'keep asking until'
+        - 'command == "quit"'
+        - 'do not know in advance'
+      must_cite_source: false
