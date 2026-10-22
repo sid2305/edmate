@@ -5973,9 +5973,9 @@ tasks:
     gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
   deps: []
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/3.11g-linear-time-test
+  model: plan:lead build:sonnet
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
@@ -6246,9 +6246,30 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: running
+  status: done
   branch: m11/11.4g-recording-upload-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -6315,9 +6336,29 @@ tasks:
   deps:
   - '10.1'
   risk: risky
-  status: running
+  status: done
   branch: m10/10.1a-payments-port
-  model: plan:opus arch:opus build:opus
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 22
+      by_severity:
+        MEDIUM: 5
+        LOW: 17
+      by_status:
+        fixed: 14
+        open: 0
+        deferred: 8
+        wontfix: 0
+    human_questions: 0
 - id: 10.1b
   milestone: M10
   title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B); 10.1a review LOWs: one shared
@@ -6328,9 +6369,9 @@ tasks:
   deps:
   - 10.1a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m10/10.1b-payments-package
+  model: plan:opus build:opus
 - id: 10.1c
   milestone: M10
   title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
