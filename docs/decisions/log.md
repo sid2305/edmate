@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.8 combine platform and agent origin into one scorecard rate, keep the split · decided by builder · risk: low
+- Decided: `buildScorecard` sums `total`/`passed` across a category's `platform` and `agent`
+  `GateGroupResult` rows into one combined rate, and additionally carries each origin's own
+  `total`/`passed` in `byOrigin` so the split is never lost. A combined category's `pass` is true
+  only when every contributing origin's row passed.
+- Why: the lead's answer to the plan's open question 1 (21 Oct 2026): one combined rate per
+  category, with per-origin counts kept visible.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.8 no generatedAt/agentVersion field, no db persistence in 7.8 · decided by builder · risk: low
+- Decided: `Scorecard` carries only `pass`, `changes` and `categories`; `buildScorecard` is pure
+  (reads only `gate.groups`/`gate.pass`/`gate.changes`, no clock, no I/O), and 7.8 adds no
+  `packages/db` write.
+- Why: the lead's answers to open questions 2 and 3 (21 Oct 2026): 8.7 attaches a scorecard to a
+  published agent version and owns storing gate results/scorecards (same precedent as 7.4 Q3);
+  inventing a clock or identity field here for no acceptance benefit would make the function
+  impure ahead of 8.7's actual storage design.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.8 measured:false vs empty_group kept distinct · decided by builder · risk: low
+- Decided: a category with no row at all for its group is `measured: false` (never claims a pass
+  or fail); a category whose row exists but has zero cases (`reason: 'empty_group'`) is
+  `measured: true` with `percent: null` and `pass: false` (a real failure, the group was expected
+  to run and didn't get any cases).
+- Why: plan's explicit design note -- "a scorecard must not look like it answered something it
+  didn't" (lessons.md), while an expected-but-empty group is still a real gate failure that must
+  not be hidden behind "unmeasured."
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 7.4 merge: scoped teacher eval-case read path reviewed and merged · decided by lead · risk: high
 - Decided: merge 7.4, including `packages/db` `teacherEvalCases.listForTeacher` (a risky path), reviewed by security-reviewer and code-reviewer (the group's required reviewers) plus typescript-reviewer; all approved with no CRITICAL or HIGH. MEDIUM and LOW findings go to 7.4a; the undecided feedback and revision thresholds (blocker B-40) go to 7.4b, and until then a first_publish or prompt_pack_bump gate fails closed with a clear error.
 - Why: the gate already blocks a bad agent and publishes a good one; the open thresholds only keep the full scope failing closed, which is the safe direction.

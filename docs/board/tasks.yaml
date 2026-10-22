@@ -1940,9 +1940,31 @@ tasks:
   - '7.4'
   - M3
   - M4
-  status: review
+  status: done
   branch: m7/7.8-teaching-scorecard
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet fix:sonnet
+  metrics:
+    tool_calls: 181
+    tokens_in: 556
+    tokens_out: 63381
+    cache_read_tokens: 11506642
+    wall_time_seconds: 962
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '8.1'
   milestone: M8
   title: 'Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1)'
@@ -2605,7 +2627,7 @@ tasks:
   model: null
 - id: 7.4a
   milestone: M13
-  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSignal
+  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna; 7.8 review LOW: scorecard.ts Object.keys(SCORECARD_GROUPS) casts become a typed key list'
     later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the
     as ScopedCase cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared
     demo-content adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now'
