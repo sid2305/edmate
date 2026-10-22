@@ -2199,9 +2199,31 @@ tasks:
     answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged
   deps:
   - '5.8'
-  status: running
+  status: done
   branch: m5/5.8a-signed-set-pick
-  model: plan:opus build:opus
+  model: plan:opus build:opus x2 review:sonnet,opus
+  metrics:
+    tool_calls: 586
+    tokens_in: 1934
+    tokens_out: 120825
+    cache_read_tokens: 55257294
+    wall_time_seconds: 8719
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 6
+        wontfix: 0
+    human_questions: 0
 - id: 7.7a
   milestone: M13
   title: '7.7 follow-ups: a health report surface (CLI or staff console) over listForTeacherSince + computeHealthMetrics; a (session_id, created_at) composite index on turn_traces once real traffic is known;
@@ -2332,9 +2354,9 @@ tasks:
   model: null
 - id: 6.2a
   milestone: M13
-  title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long
-    unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s
-    evidence row having no explicit ts'
+  title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
+    replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild
+    is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s evidence row having no explicit ts'
   accept: rebuild time for a long history is bounded and tested; no non-null assertions left in learner.ts.
   deps:
   - '6.2'
@@ -2430,8 +2452,8 @@ tasks:
   model: null
 - id: 6.5a
   milestone: M13
-  title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold drop events older than it and sessions.end skips sessions started before it, so a job queued before
-    a reset cannot re-seed memory. Land with or before 6.4a.'
+  title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
+    drop events older than it and sessions.end skips sessions started before it, so a job queued before a reset cannot re-seed memory. Land with or before 6.4a.'
   accept: A test queues an evidence event and a session end from before a reset, applies them after it, and the profile stays empty.
   deps:
   - '6.5'
@@ -2482,9 +2504,11 @@ tasks:
   model: null
 - id: 6.5b
   milestone: M13
-  title: "6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset with no profile row still ends the open session."
-  accept: "The page and the route share one scope resolution, and the wiring test passes."
-  deps: ["6.5"]
+  title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
+    with no profile row still ends the open session.'
+  accept: The page and the route share one scope resolution, and the wiring test passes.
+  deps:
+  - '6.5'
   risk: risky
   status: todo
   branch: null

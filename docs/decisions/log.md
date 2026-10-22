@@ -10,6 +10,85 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 5.8a merge: role-play wiring and the run-time pick of the newest signed prompt-pack set · decided by lead · risk: high
+- Decided: merge 5.8a. `isSignedSet`/`newestSignedSet` in `packages/content/src/promptPacks.ts` (risky path) serve only a set whose manifest and every pinned pack are signed. The CLI and the seed pick that set at run time (1.3.0 today); the CLI falls back only to the harness fixture set. Personas reach CLI chat and the web runtime, and `/roleplay` and `/leave` drive a mock interview in the CLI. The work is on `m5/5.8a-signed-set-pick` because the rebased branch could not be force-pushed.
+- Why: code-reviewer (sonnet) and typescript-reviewer (opus) approve with no CRITICAL or HIGH. Two MEDIUMs and four LOWs are deferred: the pre-release ranking to 5.8b, the rest to 5.8e.
+- risk: high (`packages/content/src/promptPacks.ts`).
+
+---
+
+### 21 Oct 2026 · 5.8a budget overrun: 120 tool calls against 85 · decided by lead · risk: low
+- Decided: accept the overrun. The Phase B count is corrected to the harness figure of 73.
+- Why: the task spans four packages plus a rebase onto 5.8c, and the work is complete and approved.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 5.8a: role-play wired into the CLI and web; CLI and seed pick the newest signed set at run time · risk: high
+- Decided:
+  - `readPersonaLibrary` feeds `deps.personas` in `buildChatDeps` (both sources) and in the web
+    turn runtime.
+  - The CLI REPL starts a role-play with `/roleplay <id>` (payload `{ persona: id }` only) and
+    sends `skill: 'mock_interview'` on every line until `/leave`.
+  - The CLI and the seed pick `newestSignedSet` at run time (manifest and every pack signed, semver
+    precedence). No set version is hard-coded.
+- Why:
+  - It is what the acceptance asks for.
+  - The browser cannot send a skill until 9.5, so production web behaviour is unchanged.
+  - Once a set is signed (5.8c and later), the next CLI run and the next fresh seed use it with no
+    code change.
+- risk: high (which prompt-pack set goes live; role-play enabled in two composition roots).
+- Phase A landed the first two points; Phase B landed the run-time pick. Today it picks 1.3.0.
+
+---
+
+### The seed picks its prompt-pack set at seed time; no env override for the pack dir · risk: low
+- Decided: `seedDemoTeacher` computes `newestSignedSet(readPromptPackLibrary(promptPacksDir))` before the
+  transaction; `buildDemoSeed` takes the version as an argument, so it stays pure.
+- No signed set, or an unreadable dir, throws and writes nothing.
+- `EDMATE_SEED_CONTENT_DIR` gets no matching prompt-pack variable: prompt packs are shared by every
+  teacher, not part of a teacher's content tree, so the override has no reason to move them. Tests
+  use the `promptPacksDir` option.
+
+---
+
+### The CLI falls back to the fixture set when no set is signed · risk: low
+- Decided: `loadChatPromptPacks` treats "no signed set" like an unreadable dir: it uses the harness fixture
+  set and reports `source: 'fixture'`, instead of running an unsigned set.
+
+---
+
+### CLI personas fall back to none; web personas fail closed · risk: low
+- Decided: In the CLI, a persona-dir failure means no role-play (coach), with a banner line, like the
+  prompt-pack fixture fallback.
+- On the web, a persona-dir failure fails the runtime build, like the prompt-pack dir.
+- The content snapshot test checks the real dir in CI.
+
+---
+
+### The CLI's help state now persists between turns · risk: low
+- Decided: `buildChatDeps` writes each saved help state onto the in-memory world's session row
+  (`worldSessionStateStore`), which `memoryTurnConfigStore` hands to the next turn.
+- Without it, the role-play count and stored persona id were lost every turn (the 3.9a gap).
+- Side effect: the CLI help ladder now climbs across turns, as it does on the web.
+
+---
+
+### Demo paid package gets `mock_interview` (per Q2) · risk: low
+- Decided: This matches the PRD's skills for the top package. Already-seeded databases report it as drift
+  and need a re-seed.
+
+---
+
+### ADR-0013 rollback stays free until 9.5 · risk: low
+- Decided: No web turn can carry `skill: 'mock_interview'` until 9.5, and CLI sessions live in memory. So no
+  stored help state gains `personaPhase` from this task.
+- Recorded here; 5.8b writes the ADR note.
+
+Tool calls used: 120 (Phase A 47 from the handoff, Phase B 73 by harness count)
+
+---
+
 ### Recall items without an answer get a generic judge statement
 Decided: qa-recall in-course items have notes headings but no reference answer. For these items,
 `AnswerableItem.answer` is optional. When it is missing or blank, the accuracy case's judge
