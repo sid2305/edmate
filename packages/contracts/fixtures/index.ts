@@ -8,6 +8,7 @@ import { invalid as localeInvalid } from './invalid/locale.js';
 import { invalid as mediaInvalid } from './invalid/media.js';
 import { invalid as memoryInvalid } from './invalid/memory.js';
 import { invalid as modelInvalid } from './invalid/model.js';
+import { invalid as paymentsInvalid } from './invalid/payments.js';
 import { invalid as safetyInvalid } from './invalid/safety.js';
 import { invalid as sharedInvalid } from './invalid/shared.js';
 import { invalid as teacherInvalid } from './invalid/teacher.js';
@@ -18,6 +19,7 @@ import { valid as localeValid } from './valid/locale.js';
 import { valid as mediaValid } from './valid/media.js';
 import { valid as memoryValid } from './valid/memory.js';
 import { valid as modelValid } from './valid/model.js';
+import { valid as paymentsValid } from './valid/payments.js';
 import { valid as safetyValid } from './valid/safety.js';
 import { valid as sharedValid } from './valid/shared.js';
 import { valid as teacherValid } from './valid/teacher.js';
@@ -64,6 +66,9 @@ export const schemas = {
   TranscribeInput: C.TranscribeInputSchema,
   TranscriptSegment: C.TranscriptSegmentSchema,
   Transcript: C.TranscriptSchema,
+  PaymentOffer: C.PaymentOfferSchema,
+  ProviderSubscription: C.ProviderSubscriptionSchema,
+  PaymentEvent: C.PaymentEventSchema,
 } as const;
 
 export type SchemaName = keyof typeof schemas;
@@ -82,6 +87,7 @@ export const validFixtures: {
   ...safetyValid,
   ...traceValid,
   ...mediaValid,
+  ...paymentsValid,
 };
 
 const allInvalid: readonly InvalidCase[] = [
@@ -95,6 +101,7 @@ const allInvalid: readonly InvalidCase[] = [
   ...safetyInvalid,
   ...traceInvalid,
   ...mediaInvalid,
+  ...paymentsInvalid,
 ];
 
 /** Values each schema must reject, by schema name. */
@@ -122,6 +129,21 @@ export {
   transcriptSegmentFirst,
   transcriptSegmentSecond,
 } from './valid/media.js';
+export {
+  paymentEventCharged,
+  paymentEventEmpty,
+  paymentEventFailed,
+  paymentEventRefund,
+  paymentEventSubscription,
+  paymentOfferMinimal,
+  paymentOfferTrial,
+  paymentSucceeded,
+  providerSubscriptionActive,
+  providerSubscriptionCancelScheduled,
+  providerSubscriptionEnded,
+  providerSubscriptionPaused,
+  providerSubscriptionTrialPlanScheduled,
+} from './valid/payments.js';
 export { demoLearnerProfile, evidenceCheck, learnerProfileNew } from './valid/memory.js';
 export {
   modelChunkText,
