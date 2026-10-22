@@ -1,0 +1,34 @@
+id: persona-roleplay-resume-hint-job-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: job-interview@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md lines 46-57 (the state machine: any message turn while stored
+  paused is a resume, the next turn after a pause, whatever it says);
+  content/prompt-packs/frame@1.2.0.md lines 113-117 ("roleplay-resume: ask the same
+  question again, not a new question, coaching does not continue")
+turns:
+  - skill: mock_interview
+    student: Let's start the mock job interview on my Python course.
+  - skill: mock_interview
+    student: I wrote a function that cleaned up a list of records before saving them.
+  - skill: mock_interview
+    student: /pause
+    expect:
+      must_not_contain:
+        - the answer is
+        - the correct answer is
+      judge:
+        - the reply steps out of the interviewer role and coaches briefly on the idea the current question draws on, without giving the answer
+  - skill: mock_interview
+    student: >-
+      While we're paused, can you just remind me what the difference between a list
+      and a dictionary is?
+    expect:
+      must_not_contain:
+        - new question
+        - the difference is that a list
+      judge:
+        - the reply does not continue coaching or explain the list/dictionary difference in this turn, and instead steps back into the interviewer role
+        - the reply asks the same question the pause interrupted again (rewording is fine), not a new or follow-up question
