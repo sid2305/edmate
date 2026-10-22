@@ -67,21 +67,15 @@ export interface WebFetcherOptions {
   /** Bare host names matched exactly, or 'any-public' for any host that passes every check. */
   readonly allowedHosts: readonly string[] | 'any-public';
   readonly transport: PinnedTransport;
-  /** Every address a host name resolves to; production passes systemResolveHost. */
-  readonly resolveHost: (host: string) => Promise<readonly string[]>;
+  /**
+   * Every address a host name resolves to; production passes systemResolveHost. The signal aborts
+   * at the deadline so a slow lookup can be cancelled. A rejection whose `code` is ENOTFOUND,
+   * ENODATA or ENONAME means "no such name"; any other rejection is a retryable DNS failure.
+   */
+  readonly resolveHost: (host: string, signal: AbortSignal) => Promise<readonly string[]>;
   readonly maxBytes?: number;
   /** One deadline for the whole fetch, every hop and DNS lookup included. */
   readonly timeoutMs?: number;
-}
-
-/** `scheme://host/path`, without userinfo, query string or fragment. */
-export function redactUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.host}${u.pathname}`;
-  } catch {
-    return '[unparseable url]';
-  }
 }
 
 /** Letters, digits and hyphens in dot-separated labels: no `*` wildcard, no empty label. */
@@ -198,18 +192,42 @@ function decode(bytes: Uint8Array, contentType: string): string {
   }
 }
 
-/** Settles with `p`, or rejects as soon as the signal aborts (a slow DNS answer can't stall). */
+/**
+ * Settles with `p`, or rejects as soon as the signal aborts (a slow DNS answer can't stall). `p` is
+ * always handled first, so a rejection that arrives after the abort is never left unhandled.
+ */
 function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    signal.throwIfAborted();
     const onAbort = (): void => {
       reject(new Error('aborted'));
     };
-    signal.addEventListener('abort', onAbort, { once: true });
     p.then(resolve, reject).finally(() => {
       signal.removeEventListener('abort', onAbort);
     });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+/** Resolver codes that mean the name has no address (refused like a non-public answer). */
+const NO_SUCH_NAME: ReadonlySet<string> = new Set(['ENOTFOUND', 'ENODATA', 'ENONAME']);
+
+/**
+ * One refusal for "no such name" and "a non-public address", so a teacher can't use the answer to
+ * learn which internal names exist.
+ */
+const unreachableHost = (): IngestError => forbidden("names a host that isn't a public site");
+
+/** Closing a response never replaces the real outcome; the port says cancel() is safe to call. */
+async function quietCancel(res: TransportResponse): Promise<void> {
+  try {
+    await res.cancel();
+  } catch {
+    // Nothing to report: the response is being dropped either way.
+  }
 }
 
 interface Target {
@@ -238,16 +256,15 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
     }
     let addresses: readonly string[];
     try {
-      addresses = await untilAborted(opts.resolveHost(host), signal);
-    } catch {
+      addresses = await untilAborted(opts.resolveHost(host, signal), signal);
+    } catch (err) {
       signal.throwIfAborted();
-      addresses = [];
+      const code = (err as { code?: unknown } | null)?.code;
+      if (typeof code === 'string' && NO_SUCH_NAME.has(code)) throw unreachableHost();
+      throw new IngestError('provider_error', true, "the web link's host could not be looked up");
     }
     const [first] = addresses;
-    if (first === undefined) {
-      throw new IngestError('not_found', false, "the web link's host could not be resolved");
-    }
-    if (!addresses.every(isPublicAddress)) throw forbidden('resolves to a non-public address');
+    if (first === undefined || !addresses.every(isPublicAddress)) throw unreachableHost();
     return { address: first, family: familyOf(first) };
   }
 
@@ -290,7 +307,12 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
     } catch {
       throw new IngestError('validation', false, 'the web link is not a valid URL');
     }
-    const signal = AbortSignal.timeout(timeoutMs);
+    // A plain timer (not AbortSignal.timeout), cleared when the fetch ends.
+    const deadline = new AbortController();
+    const timer = setTimeout(() => {
+      deadline.abort(new DOMException('the web page download timed out', 'TimeoutError'));
+    }, timeoutMs);
+    const { signal } = deadline;
     try {
       for (let hop = 0; ; hop += 1) {
         const target = await checkTarget(current, signal);
@@ -308,7 +330,7 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
         try {
           next = await readResponse(res, current, hop, signal);
         } finally {
-          await res.cancel();
+          await quietCancel(res);
         }
         if (!(next instanceof URL)) return next;
         current = next;
@@ -321,6 +343,8 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
         (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError'));
       if (timeout) throw new IngestError('provider_error', true, 'the web page download timed out');
       throw new IngestError('provider_error', true, 'could not download the web page');
+    } finally {
+      clearTimeout(timer);
     }
   }
 

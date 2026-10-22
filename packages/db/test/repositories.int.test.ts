@@ -200,6 +200,17 @@ const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 
 /** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
 const profileSlug = (t: Teacher) => `teacher-${t.toLowerCase()}`;
 const ISO_STAFF = 'stf_iso';
+/** Task 12.5a: an alert naming `actor`'s student and teacher but `target`'s session. */
+const isoAlert = (actor: Pair, target: Pair) => ({
+  id: uid('alr_iso'),
+  level: 'critical' as const,
+  kind: 'distress' as const,
+  studentId: studentId(studentOf(actor)),
+  teacherId: teacherId(teacherOf(actor)),
+  sessionId: ids.session(target),
+  excerptRedacted: `[${actor}] synthetic excerpt`,
+  createdAt: '2026-10-22T10:00:00.000Z',
+});
 const chunkOwners = (cs: Chunk[]) =>
   cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
 /** Task 8.2: a document of `target`'s that `actor` tries to delete (each pair used once). */
@@ -2853,6 +2864,96 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (rows: { studentId: string; teacherId: string }[]) =>
       rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
   },
+  // Task 12.5a: safety alerts carry their own student x teacher x session (the worker is the
+  // writer, staff the reader), so these are checked like the public cases: every write through
+  // another pair's session is not_found, and only a staff user reads or acknowledges.
+  'safetyAlerts.record': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const p of PAIRS) {
+        for (const target of PAIRS) {
+          const alert = isoAlert(p, target);
+          if (p === target) {
+            expect(await r.safetyAlerts.record(alert)).toEqual({ written: true });
+          } else {
+            await expectFailsClosed(() => r.safetyAlerts.record(alert), ['not_found'], `${p}->${target}`);
+          }
+          cases += 1;
+        }
+      }
+      return cases;
+    },
+  },
+  'safetyAlerts.markEscalated': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const p of PAIRS) {
+        for (const target of PAIRS) {
+          const alert = isoAlert(p, target);
+          if (p === target) {
+            expect(await r.safetyAlerts.markEscalated(alert, 0)).toEqual({ round: 1 });
+          } else {
+            await expectFailsClosed(
+              () => r.safetyAlerts.markEscalated(alert, 0),
+              ['not_found'],
+              `${p}->${target}`,
+            );
+          }
+          cases += 1;
+        }
+      }
+      return cases;
+    },
+  },
+  'safetyAlerts.isAcknowledged': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      expect(await r.safetyAlerts.isAcknowledged(uid('alr_iso_missing'))).toBe(false);
+      return 1;
+    },
+  },
+  'safetyAlerts.listForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(
+          r.safetyAlerts.listForStaff(by, { status: 'all', limit: 50 }),
+        ).rejects.toMatchObject({ kind: 'scope' });
+        cases += 1;
+      }
+      await r.safetyAlerts.listForStaff(ISO_STAFF, { status: 'all', limit: 50 });
+      return cases + 1;
+    },
+  },
+  'safetyAlerts.acknowledge': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const alert = isoAlert('1A', '1A');
+      await r.safetyAlerts.record(alert);
+      let cases = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expectFailsClosed(
+          () => r.safetyAlerts.acknowledge(by, { alertId: alert.id }),
+          ['scope'],
+          `${by} acknowledging`,
+        );
+        cases += 1;
+      }
+      expect(await r.safetyAlerts.isAcknowledged(alert.id)).toBe(false);
+      expect(await r.safetyAlerts.acknowledge(ISO_STAFF, { alertId: alert.id })).toEqual({
+        acknowledged: true,
+      });
+      return cases + 1;
+    },
+  },
   // Task 5.10: grouping, answering, and the student's own notifications.
   'teacherQuestions.listGroupsForTeacher': {
     scope: 'teacher',
@@ -3242,6 +3343,20 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) => r.publish.latestRun({ teacherId: rid }),
     owners: (x: { judgeModel: string } | null) => (x ? markers(x.judgeModel) : []),
   },
+  'publish.changedSinceLastPublish': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope, t) => {
+      await seedChangedSincePublish(t);
+      return { changed: await r.publish.changedSinceLastPublish(scope), t: scope.teacherId };
+    },
+    random: async (r, _scope, rid) => ({
+      changed: await r.publish.changedSinceLastPublish({ teacherId: rid }),
+      t: rid,
+    }),
+    owners: (x: { changed: boolean; t: string }) => (x.changed ? [teacherOfId(x.t)] : []),
+  },
   'publish.failedCases': {
     scope: 'teacher',
     op: 'read',
@@ -3503,6 +3618,37 @@ async function insertRun(t: Teacher, id: string, status: string): Promise<void> 
     ],
   );
 }
+/**
+ * Task 8.7k: a published run whose basis matches nothing the teacher currently has (a style card
+ * id no row has, an empty package map, a huge material revision), dated ten years out so it is
+ * always the newest published run regardless of other cases' real goLive calls -- a positive
+ * control that `changedSinceLastPublish` reads `true` for t, never for the other teacher.
+ */
+async function seedChangedSincePublish(t: Teacher): Promise<void> {
+  await raw.query(
+    `insert into eval_runs
+       (id, teacher_id, agent_version_id, agent_id, suite, model, status, changes, basis, published_at)
+     values ($1, $2, $3, $4, 'gate', $5, 'passed', '{first_publish}', $6, now() + interval '10 years')
+     on conflict (id) do nothing`,
+    [
+      `run_cspub_${t.toLowerCase()}`,
+      teacherId(t),
+      `av_${t.toLowerCase()}`,
+      ids.agent(t),
+      `judge-[${t}]`,
+      JSON.stringify({
+        agentVersion: 1,
+        courseId: ids.course(t),
+        styleCardId: 'sty_cspub_missing',
+        promptPackVersion: 'cspub-mismatch',
+        modelPolicy: agentConfig(t).modelPolicy,
+        materialRevision: 999999,
+        packageVersions: {},
+      }),
+    ],
+  );
+}
+
 /** Ends t's open runs (raw), so a positive control can start or insert a fresh one. */
 async function closeOpenRuns(t: Teacher): Promise<void> {
   await raw.query(

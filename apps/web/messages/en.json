@@ -15,7 +15,16 @@
     "placeholder": "Your teacher's agent will be here soon.",
     "chatLink": "Chat with your teacher's agent",
     "startableTitle": "Packages you can start",
-    "startLink": "Start a package"
+    "startLink": "Start a package",
+    "liveClasses": {
+      "title": "Upcoming live classes",
+      "join": "Join",
+      "window": {
+        "reminder_24h": "Starting in 24 hours",
+        "reminder_1h": "Starting in 1 hour",
+        "starting_soon": "Starting soon"
+      }
+    }
   },
   "teacher": {
     "title": "Teacher studio",
@@ -163,6 +172,43 @@
       "practising": "practising",
       "not_started": "not started"
     }
+  },
+  "plan": {
+    "title": "Your plan",
+    "navLink": "Plan",
+    "noPaymentNotice": "While Edmate is free to try, changes take effect right away.",
+    "currentTitle": "Your current package",
+    "periodEnd": "Renews or ends {date}",
+    "status": {
+      "trial": "Trial",
+      "active": "Active",
+      "past_due": "Past due",
+      "paused": "Paused"
+    },
+    "otherPackagesTitle": "Other packages with this teacher",
+    "actions": {
+      "upgrade": "Upgrade",
+      "downgrade": "Downgrade",
+      "switch": "Switch"
+    },
+    "changing": "Changing…",
+    "manageTitle": "Manage your plan",
+    "pauseButton": "Pause",
+    "pausing": "Pausing…",
+    "resumeButton": "Resume",
+    "resuming": "Resuming…",
+    "pausedByEdmate": "This plan was paused by Edmate and can't be resumed here.",
+    "cancelTitle": "Cancel your plan",
+    "cancelButton": "Cancel",
+    "cancelConfirmIntro": "Cancelling ends your access to this teacher's agent. Download your notes and progress first if you want to keep them.",
+    "exportJsonLink": "Download the complete JSON export",
+    "exportPdfLink": "Download your notes (PDF)",
+    "cancelConfirmButton": "Yes, cancel my plan",
+    "cancelling": "Cancelling…",
+    "cancelKeepButton": "Keep my plan",
+    "noSubscription": "You don't have a package with this teacher yet.",
+    "choosePackageLink": "Choose a package",
+    "actionError": "Something went wrong. Try again."
   },
   "uploads": {
     "title": "Your teaching files",
@@ -473,6 +519,7 @@
     "publishAgainButton": "Publish again",
     "starting": "Starting…",
     "idle": "Your agent has not been published yet.",
+    "changedNote": "You've made changes since your last publish.",
     "running": "The quality gate is checking your agent. This can take a while; this page updates by itself.",
     "passed": "Your agent is live.",
     "failed": "Your agent was not published: some checks did not pass. Nothing changed for your students.",

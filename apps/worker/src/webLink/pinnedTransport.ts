@@ -54,10 +54,10 @@ export function pinnedLookup(address: string, family: 4 | 6): LookupFunction {
   };
 }
 
-/** The request options for one pinned request; exported so the safety rules can be asserted. */
 /** `autoSelectFamily` is a socket option Node passes through; @types/node's RequestOptions omits it. */
 export type PinnedRequestOptions = https.RequestOptions & { readonly autoSelectFamily: false };
 
+/** The request options for one pinned request; exported so the safety rules can be asserted. */
 export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOptions {
   const host = req.url.hostname.replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '');
   return {
@@ -67,6 +67,8 @@ export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOption
     family: req.family,
     autoSelectFamily: false,
     agent: false,
+    // Explicit: it overrides NODE_TLS_REJECT_UNAUTHORIZED=0 anywhere in the worker's env.
+    rejectUnauthorized: true,
     signal: req.signal,
     // SNI must be a host name, never an IP literal (RFC 6066).
     ...(isIP(host) === 0 ? { servername: host } : {}),
@@ -113,19 +115,27 @@ export function createPinnedTransport(opts: PinnedTransportOptions = {}): Pinned
         clearTimeout(timer);
         reject(err);
       };
+      let client: ClientRequest;
+      try {
+        client = request(req.url, pinnedRequestOptions(req), (res) => {
+          if (settled) {
+            res.destroy();
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          resolve(wrap(res));
+        });
+      } catch {
+        // The raw error can quote the URL; no timer is armed yet, so nothing is left to fire.
+        settled = true;
+        reject(transportError('Error', 'the connection failed'));
+        return;
+      }
       const timer = setTimeout(() => {
         fail(transportError('TimeoutError', 'no response in time'));
         client.destroy();
       }, timeoutMs);
-      const client = request(req.url, pinnedRequestOptions(req), (res) => {
-        if (settled) {
-          res.destroy();
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        resolve(wrap(res));
-      });
       client.on('error', (err) => {
         const name = err.name === 'AbortError' ? 'AbortError' : 'Error';
         fail(transportError(name, 'the connection failed'));

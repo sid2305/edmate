@@ -28,6 +28,8 @@ import {
   scheduleWeeklyInsights,
   WEEKLY_INSIGHTS_QUEUE,
 } from './insights/index.js';
+import { createWorkerWebFetcher, WebLinkConfigError } from './webLink/index.js';
+import type { WebFetcher } from '@edmate/ingest';
 import { describeError, jsonLog } from './log.js';
 import { storageConfigFromEnv } from './storage/roundtrip.js';
 import { createStorageClient } from './storage/client.js';
@@ -123,9 +125,18 @@ try {
     forcePathStyle: storageConfig.forcePathStyle,
   });
   const storage = createStorageClient(s3Client, storageConfig.bucket);
+  // Task 8.2e: web links (ADR-0014). A malformed EDMATE_WEB_LINK_HOSTS turns off web links only
+  // (they then fail as unsupported); the code is logged, never the value.
+  let webFetcher: WebFetcher | undefined;
+  try {
+    webFetcher = createWorkerWebFetcher(process.env);
+  } catch (error) {
+    const code = error instanceof WebLinkConfigError ? error.code : 'web_link_setup_failed';
+    log({ level: 'error', event: 'ingest.web_links_disabled', code });
+  }
   ingest = createIngestWorker({
     connection,
-    deps: { repos: db.repos, storage, gateway },
+    deps: { repos: db.repos, storage, gateway, ...(webFetcher ? { webFetcher } : {}) },
     deadLetter,
     log,
     autorun: true,

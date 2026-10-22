@@ -4,6 +4,7 @@ import {
   EntitlementSchema,
   EvidenceEventSchema,
   MessageSchema,
+  SafetyAlertSchema,
   TeacherQuestionSchema,
   UsageSchema,
 } from '@edmate/contracts';
@@ -470,4 +471,41 @@ describe('migrations are create-only', () => {
     const [first] = migrationSql();
     expect(first?.sql).toMatch(/CREATE EXTENSION IF NOT EXISTS vector/);
   });
+});
+
+describe('safety_alerts: the staff alert inbox (task 12.5a)', () => {
+  const t = table('safety_alerts') as SnapshotTable & {
+    checkConstraints: Record<string, { name: string; value: string }>;
+  };
+
+  it('checks level and kind against the contract enums, and caps the note', () => {
+    const value = (name: string) => t.checkConstraints[name]?.value ?? '';
+    for (const level of SafetyAlertSchema.shape.level.options) {
+      expect(value('safety_alerts_level_check')).toContain(`'${level}'`);
+    }
+    for (const kind of SafetyAlertSchema.shape.kind.options) {
+      expect(value('safety_alerts_kind_check')).toContain(`'${kind}'`);
+    }
+    expect(value('safety_alerts_ack_note_length')).toMatch(/char_length\("safety_alerts"\."ack_note"\) <= 500/);
+    expect(value('safety_alerts_ack_pair')).toMatch(/acknowledged_at" is null\) = \("safety_alerts"\."acknowledged_by" is null/);
+    expect(value('safety_alerts_escalation_round_non_negative')).toMatch(/escalation_round" >= 0/);
+  });
+
+  it('has the open-alert partial index on (created_at, id), and acknowledged_by -> users', () => {
+    const open = t.indexes['safety_alerts_open_created_at_id_idx'];
+    expect(open?.columns.map((c) => c.expression)).toEqual(['created_at', 'id']);
+    expect(open?.where).toMatch(/acknowledged_at" is null/);
+    const fk = Object.values(t.foreignKeys).find((f) => f.columnsFrom.includes('acknowledged_by'));
+    expect(fk?.tableTo).toBe('users');
+    for (const c of ['acknowledged_at', 'acknowledged_by', 'ack_note', 'escalated_at', 'last_paged_at']) {
+      expect(t.columns[c]?.notNull, c).toBe(false);
+    }
+  });
+
+  it('is created by an additive migration (no drop, alter of another table, update or delete)', () => {
+    const m = migrationSql().filter((f) => f.sql.includes('CREATE TABLE "safety_alerts"'));
+    expect(m).toHaveLength(1);
+    expect(m[0]!.sql).not.toMatch(
+      /\bDROP\b|\bDELETE FROM\b|^\s*UPDATE\b|\bTRUNCATE\b|ALTER TABLE "(?!safety_alerts")/m,
+    );  });
 });

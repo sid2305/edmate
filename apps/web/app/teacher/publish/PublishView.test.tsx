@@ -53,6 +53,7 @@ function run(over: Record<string, unknown> = {}) {
     startedAt: '2026-10-22T10:00:00.000Z',
     finishedAt: null,
     publishedAt: null,
+    changedSincePublish: false,
     ...over,
   };
 }
@@ -105,6 +106,26 @@ describe('PublishView', () => {
     const polls = calls.length;
     await new Promise((r) => setTimeout(r, 50));
     expect(calls.length).toBe(polls); // polling stops once the run is finished
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('a passed run with changedSincePublish shows the note; a clean one does not (task 8.7k)', async () => {
+    api([latest({ ...PASSED, changedSincePublish: true })]);
+    const { container } = renderIntl(<PublishView pollMs={10} />);
+    expect(await screen.findByText('Your agent is live.')).toBeInTheDocument();
+    expect(
+      screen.getByText("You've made changes since your last publish."),
+    ).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('a passed run with no changes since publish shows no note', async () => {
+    api([latest(PASSED)]);
+    const { container } = renderIntl(<PublishView pollMs={10} />);
+    expect(await screen.findByText('Your agent is live.')).toBeInTheDocument();
+    expect(
+      screen.queryByText("You've made changes since your last publish."),
+    ).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 

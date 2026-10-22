@@ -44,6 +44,7 @@ const RunSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   publishedAt: z.string().nullable(),
+  changedSincePublish: z.boolean(),
 });
 const LatestSchema = z.object({ run: RunSchema.nullable() });
 const StartedSchema = z.object({ runId: z.string() });
