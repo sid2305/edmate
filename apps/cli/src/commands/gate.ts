@@ -42,6 +42,8 @@ the fixtures a scope needs.
   --change <kind>   repeatable; one of: ${CHANGE_KINDS.join(', ')}
   --fixtures <dir>  recorded agent/judge fixtures (default: evals/fixtures)
   --seed <s>        rotates the style-card sample (default: "")
+  --deadline-ms <n> positive integer; overrides the scope's default run-time deadline (task 7.4c:
+                    15 min for material/packages/style_card, 120 min for a full-scope change)
   --report <file>   also write the GateResult as JSON
   --scorecard <file> also write the Scorecard (per-agent pass rates) as JSON
 
@@ -114,6 +116,7 @@ export async function runGateCommand(
         change: { type: 'string', multiple: true },
         fixtures: { type: 'string' },
         seed: { type: 'string' },
+        'deadline-ms': { type: 'string' },
         report: { type: 'string' },
         scorecard: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
@@ -143,6 +146,16 @@ export async function runGateCommand(
   if (changes.length === 0) {
     io.stderr(`edmate gate: at least one --change <kind> is required\n\n${GATE_USAGE}`);
     return 1;
+  }
+  let deadlineMs: number | undefined;
+  if (values['deadline-ms'] !== undefined) {
+    deadlineMs = Number(values['deadline-ms']);
+    if (!Number.isInteger(deadlineMs) || deadlineMs < 1) {
+      io.stderr(
+        `edmate gate: --deadline-ms must be a positive integer, got "${values['deadline-ms']}"\n\n${GATE_USAGE}`,
+      );
+      return 1;
+    }
   }
   for (const kind of changes) {
     if (!(CHANGE_KINDS as readonly string[]).includes(kind)) {
@@ -186,6 +199,7 @@ export async function runGateCommand(
       judgeGateway: replayJudgeGateway,
       recorder,
       styleSampleSeed: values.seed ?? '',
+      ...(deadlineMs === undefined ? {} : { deadlineMs }),
     });
 
     const lines = result.groups.map(

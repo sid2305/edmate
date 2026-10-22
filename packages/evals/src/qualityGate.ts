@@ -8,6 +8,7 @@
 import type { ModelGateway } from '@edmate/contracts';
 import type { EvalAgent } from './agent.js';
 import {
+  defaultGateDeadlineMs,
   GATE_THRESHOLDS,
   selectGateCases,
   type ChangeKind,
@@ -28,7 +29,12 @@ export const GATE_CONCURRENCY = 4;
  * until 7.6 / 7.7 measure real p95 (lead, Q6).
  */
 export const ASSUMED_CALL_SECONDS = 8;
-/** Run-time deadline: the acceptance's "< 15 minutes". */
+/**
+ * Run-time deadline for a non-full-scope gate: the acceptance's "< 15 minutes". A full-scope
+ * change (`first_publish` / `prompt_pack_bump`) gets a larger default instead; see
+ * `defaultGateDeadlineMs` (task 7.4c). Kept here unchanged for existing importers of its literal
+ * value.
+ */
 export const GATE_DEADLINE_MS = 15 * 60_000;
 export const DEADLINE_NOT_RUN = 'not run: gate deadline passed';
 
@@ -158,7 +164,10 @@ function locksSomething(input: PerAgentSuiteInput): boolean {
 
 export async function runQualityGate(input: GateInput): Promise<GateResult> {
   const concurrency = positiveInteger(input.concurrency ?? GATE_CONCURRENCY, 'concurrency');
-  const deadlineMs = positiveInteger(input.deadlineMs ?? GATE_DEADLINE_MS, 'deadlineMs');
+  const deadlineMs = positiveInteger(
+    input.deadlineMs ?? defaultGateDeadlineMs(input.changes),
+    'deadlineMs',
+  );
   const now = input.now ?? Date.now;
   const styleOnly = input.changes.every((c) => c === 'style_card');
 
