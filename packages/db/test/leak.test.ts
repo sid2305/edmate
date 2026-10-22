@@ -156,4 +156,38 @@ describe('driver errors are scrubbed', () => {
       expectScrubbed(await call().catch((e: unknown) => e), method, SECRETS);
     }
   });
+
+  it('safetyAlerts: a driver error never carries the excerpt or the note (task 12.5a)', async () => {
+    const alert = {
+      id: 'alr_leak_2',
+      level: 'critical' as const,
+      kind: 'distress' as const,
+      studentId: 'stu_leak_7',
+      teacherId: 'tch_leak_9',
+      sessionId: 'ses_leak_3',
+      excerptRedacted: 'private words here',
+      createdAt: '2026-10-22T10:00:00Z',
+    };
+    const secrets = [...SECRETS, 'alr_leak_2', 'stf_leak_4', 'private ack note'];
+    const calls: [string, () => Promise<unknown>][] = [
+      ['safetyAlerts.record', () => repos.safetyAlerts.record(alert)],
+      ['safetyAlerts.markEscalated', () => repos.safetyAlerts.markEscalated(alert, 2)],
+      ['safetyAlerts.isAcknowledged', () => repos.safetyAlerts.isAcknowledged('alr_leak_2')],
+      [
+        'safetyAlerts.listForStaff',
+        () => repos.safetyAlerts.listForStaff('stf_leak_4', { status: 'open', limit: 10 }),
+      ],
+      [
+        'safetyAlerts.acknowledge',
+        () =>
+          repos.safetyAlerts.acknowledge('stf_leak_4', {
+            alertId: 'alr_leak_2',
+            note: 'private ack note',
+          }),
+      ],
+    ];
+    for (const [method, call] of calls) {
+      expectScrubbed(await call().catch((e: unknown) => e), method, secrets);
+    }
+  });
 });
