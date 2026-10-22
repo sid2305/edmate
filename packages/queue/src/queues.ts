@@ -282,8 +282,10 @@ export type SafetyEventJob = z.infer<typeof SafetyEventJobSchema>;
 // ---- ingest (task 8.2 Phase 2) ----------------------------------------------------------------
 
 /**
- * `@edmate/ingest`'s `DocumentKind`, the two media kinds its `VideoSource` covers, and `web`: a
- * teacher's web link (task 8.2e, ADR-0014).
+ * `@edmate/ingest`'s `DocumentKind`, the two media kinds its `VideoSource` covers, `web` (a
+ * teacher's web link, task 8.2e, ADR-0014), and `vtt`/`srt` (a teacher-exported YouTube caption
+ * file, task 8.2c, B-47): both are an ordinary uploaded file, so they carry no `mimeType` and no
+ * `url` and keep the file-job retry count, the same as pdf/docx/pptx/markdown.
  */
 export const IngestFileKindSchema = z.enum([
   'pdf',
@@ -293,6 +295,8 @@ export const IngestFileKindSchema = z.enum([
   'video',
   'audio',
   'web',
+  'vtt',
+  'srt',
 ]);
 export type IngestFileKind = z.infer<typeof IngestFileKindSchema>;
 

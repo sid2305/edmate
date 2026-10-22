@@ -93,6 +93,37 @@ describe('IngestJobSchema', () => {
   });
 });
 
+describe('IngestJobSchema: caption files (task 8.2c, B-47)', () => {
+  const base = { teacherId: 'tch_1', documentId: 'doc_1' };
+
+  it.each(['vtt', 'srt'] as const)('accepts a %s caption job with no mimeType and no url', (fileKind) => {
+    expect(IngestJobSchema.safeParse({ ...base, fileKind }).success).toBe(true);
+  });
+
+  it.each(['vtt', 'srt'] as const)('refuses a %s caption job that carries a mimeType', (fileKind) => {
+    expect(
+      IngestJobSchema.safeParse({ ...base, fileKind, mimeType: 'text/vtt' }).success,
+    ).toBe(false);
+  });
+
+  it.each(['vtt', 'srt'] as const)('refuses a %s caption job that carries a url', (fileKind) => {
+    expect(
+      IngestJobSchema.safeParse({ ...base, fileKind, url: 'https://a.example.org/' }).success,
+    ).toBe(false);
+  });
+
+  it.each(['vtt', 'srt'] as const)(
+    'a %s caption job gets the file-job attempts (5), not WEB_INGEST_ATTEMPTS',
+    async (fileKind) => {
+      const add = vi.fn(async (_name: string, _data: unknown, _opts: object) => undefined);
+      await enqueueIngest({ add }, { ...base, fileKind }, `ingest/a.${fileKind}`);
+      const opts = add.mock.calls[0]?.[2] as { attempts?: number; removeOnFail?: unknown };
+      expect(opts.attempts).toBe(RETRY.attempts);
+      expect(opts.removeOnFail).toEqual({ age: 7 * 24 * 60 * 60, count: 1_000 });
+    },
+  );
+});
+
 describe('IngestJobSchema: web links (task 8.2e)', () => {
   const base = { teacherId: 'tch_1', documentId: 'doc_1' };
   const url = 'https://lessons.example.org/unit/1?key=abc';
