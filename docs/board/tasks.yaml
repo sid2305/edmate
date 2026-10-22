@@ -5641,8 +5641,7 @@ tasks:
   model: null
 - id: 8.2m
   milestone: M13
-  title: '8.2j review LOWs: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad
-    file reports its own error first'
+  title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad file reports its own error first; 8.2k typescript MEDIUM: apps/worker ingest processor.ts DOCUMENT_KINDS/RECORDING_KINDS become typed sets or an exhaustive map over IngestFileKind so buildSource needs no unchecked as cast; 8.2k LOW: wrap the long it.each lines in packages/queue/test/queues.test.ts'
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
