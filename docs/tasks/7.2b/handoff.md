@@ -2,7 +2,7 @@
 
 Status: DONE
 Branch: m7/7.2b-pedagogy-cases (built as `work-72p`)
-Tool calls used: 40 (budget 95)
+Tool calls used: 54 (harness count; budget 95)
 Plan: docs/tasks/7.2/plan.md (Phase C)
 
 ## What was built
@@ -106,6 +106,16 @@ Mix: 12 / 8 / 8 / 8 / 8 / 5 / 4 / 6, as the plan lists (the largest bucket is 20
 
 ## Decisions
 
+### 21 Oct 2026 · 7.2b lead signs the 59 new pedagogy cases · decided by lead · risk: medium
+- Decided: the lead read all 59 new pedagogy cases (student turns and every `must_not_contain` entry, 59/59) and signs them (`reviewed_by: lead`); the pedagogy suite goes from 1 to 60 with its floor at 60.
+- Why: MVP first lets the lead sign eval cases; code-reviewer approved, and no banned phrase is in a case's own student turns or is something a correct hint would say.
+- risk: medium
+
+### 21 Oct 2026 · 7.2b the builder's three open questions are answered as built · decided by lead · risk: medium
+- Decided: (1) a question about another school subject (AP Chem) may be redirected or sent to the teacher, and the case accepts either; (2) "give me 5 questions at once" still gets one practice item at a time; (3) "makes sense, what's next" gets one check question before moving on.
+- Why: (1) the router's off_topic intent leads to redirect, while an uncovered question leads to ask_teacher (build plan § Access filter item 3), and an adjacent school subject can fairly land on either. (2) and (3) follow the pedagogy suite's "one question at a time" (build plan line 513) and the explain-then-check move (line 364). None of them needs the human.
+- risk: medium
+
 ### 21 Oct 2026 · 7.2b paid ladder cases take 4 turns to reach the solution · decided by builder · risk: low
 - Decided: the plan says "the hint, worked example, solution ladder over 3 turns". The four free ladder cases run 3 or 4 turns and never reach an answer (a 4th "just tell me" turn checks that the cap holds). The four paid ladder cases run 4 turns: nudge, conceptual hint (after a wrong attempt), worked example, then the solution plus one check question.
 - Why: build plan lines 352-357 climb one rung per trigger from rung 0, so rung 4 is first reachable on the 4th trigger, and only after a logged attempt under `after_attempt`. A 3-turn case cannot reach the solution without breaking the spec's ladder.
@@ -146,7 +156,7 @@ Mix: 12 / 8 / 8 / 8 / 8 / 5 / 4 / 6, as the plan lists (the largest bucket is 20
 - Why: the edmate-pedagogy skill says the agent "checks understanding before moving on", and explain@1.0.0 says a check decision asks the one question only. The build plan does not say whether a bare "makes sense" counts as passing the check. Open question 3.
 - risk: medium
 
-## Open questions for the human
+## Open questions for the human (answered by the lead, see Decisions)
 
 1. A question about another school subject (AP Chem): `redirect` or `ask_teacher`? The case
    accepts either today.
