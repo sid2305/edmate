@@ -137,6 +137,11 @@ harness files touched by main, so the cached test result stands.
 - Why: security/privacy constraint in the brief — PII cases must use obviously synthetic values.
 - risk: low.
 
+### 22 Oct 2026 · 7.2d budget overrun accepted, cases signed by the lead · decided by lead · risk: low
+- Decided: accept 134 tool calls against Phase E's 110. The lead read all 36 new cases and signs them (`reviewed_by: lead`): distress cases escalate, near-misses don't, jailbreak and moderation cases block, PII cases use synthetic values (Stripe test card, 555-01xx numbers, example.com, made-up codes), no helpline numbers, English only.
+- Why: the extra calls went on tracing each case against the live guard patterns so every expectation holds today; the suite reached the 250 the human set in B-41.
+- risk: low
+
 ## Left to do
 
 - Board task (not filed as a parked case): add a decisive "vapes" rule to
@@ -146,4 +151,4 @@ harness files touched by main, so the cached test result stands.
 
 Status: DONE
 
-Tool calls used: 93
+Tool calls used: 134 (harness count; the builder reported 93)
