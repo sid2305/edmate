@@ -460,6 +460,25 @@ action, note, ts }` to `staff_actions` and writes a `report.review` audit row (t
 `report:<id>`, the reply's teacher, note as reason). Lock order: role (`FOR SHARE`), then the
 report (`FOR UPDATE`); 12.2b's takedowns keep role first and report last.
 
+## Safety alerts (task 12.5a)
+
+The staff alert inbox (`safety_alerts`, migration 0022). The alert worker writes; only staff
+read. `record(alert)` and `markEscalated(alert, round)` take the contracts `SafetyAlert` (no
+separate scope: its student, teacher and session ids are the scope) and insert through the
+alert's own session, so another pair's session is `not_found` and nothing is written. `record` is
+idempotent (`written: false` on a replay). `markEscalated` upserts (it works without `record`):
+`escalation_round` becomes at least `round + 1`, `escalated_at` keeps its first value,
+`last_paged_at` is now, and the ack fields are never touched. `isAcknowledged(alertId)` is the
+worker's ack read (a missing row is `false`). `listForStaff(by, { status, limit })` and
+`acknowledge(by, { alertId, note? })` need `by` to be staff right now (role-lock.ts), else
+`scope`. The list holds ids, level, kind, the scrubbed excerpt, timestamps, the round, the ack
+fields and the teacher's public slug, never a name, email or phone; open alerts first, escalated
+first, oldest first, capped at `SAFETY_ALERT_LIST_MAX_LIMIT` (50). `acknowledge` runs in one
+transaction with the lock order in the file header (the acting user's role FOR SHARE, then the
+alert row FOR UPDATE): an alert already acknowledged returns `acknowledged: false` and writes
+nothing; otherwise the ack fields and one `safety_alert.ack` audit row (the note as its reason,
+at most 500 characters, never the excerpt) commit together.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

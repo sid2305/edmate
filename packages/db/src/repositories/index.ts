@@ -18,6 +18,7 @@ import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
 import { reportsRepo } from './reports.js';
 import { retrievalRepo } from './retrieval.js';
+import { safetyAlertsRepo } from './safety-alerts.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
@@ -79,6 +80,7 @@ export function createRepositories(db: Db) {
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
     reports: guardAll('reports', reportsRepo(db)),
+    safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
   };
 }
 
@@ -280,3 +282,11 @@ export {
   reportRowId,
   type StaffReportRow,
 } from './reports.js';
+export {
+  SAFETY_ALERT_ACK_ACTION,
+  SAFETY_ALERT_LIST_MAX_LIMIT,
+  SAFETY_ALERT_NOTE_MAX_LENGTH,
+  type SafetyAlertAckInput,
+  type SafetyAlertListOptions,
+  type SafetyAlertRow,
+} from './safety-alerts.js';

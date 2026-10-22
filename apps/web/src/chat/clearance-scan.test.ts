@@ -38,12 +38,18 @@ const MEMORY_PAGE = join('app', 'learn', '[agentId]', 'memory', 'page.tsx');
 // exports, reachable even with a parent's consent outstanding. Not the chat itself.
 const PROGRESS_PAGE = join('app', 'learn', '[agentId]', 'progress', 'page.tsx');
 
+// Task 9.6 Phase D: the same exception for the same reason -- a student's own plan page
+// (upgrade, downgrade, pause, resume, cancel), reachable even with a parent's consent
+// outstanding. Not the chat itself.
+const PLAN_PAGE = join('app', 'learn', '[agentId]', 'plan', 'page.tsx');
+
 describe('clearance scan (app/learn/**, src/chat/**)', () => {
   it('every guarded file asks for clearance: agent', () => {
     const files = ROOTS.flatMap((r) => filesUnder(join(WEB, r)))
       .filter((f) => f !== SELF)
       .filter((f) => !f.endsWith(MEMORY_PAGE))
-      .filter((f) => !f.endsWith(PROGRESS_PAGE));
+      .filter((f) => !f.endsWith(PROGRESS_PAGE))
+      .filter((f) => !f.endsWith(PLAN_PAGE));
     expect(files.some((f) => f.includes(join('app', 'learn')))).toBe(true);
     const problems = files.flatMap((f) => {
       const p = clearanceProblem(readFileSync(f, 'utf8'));

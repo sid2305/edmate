@@ -133,6 +133,11 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // reach the database. Their malformed/non-staff cases are in reports.test.ts and
     // reports.int.test.ts.
     if (name === 'reports.listOpenForStaff' || name === 'reports.review') continue;
+    // safetyAlerts (12.5a) takes no scope object either: the worker passes a contracts
+    // SafetyAlert (its ids are the scope, checked through the alert's own session) and staff
+    // pass a bare staff id. A malformed one is `invalid` before any SQL (safety-alerts.test.ts);
+    // a wrong one is `not_found` or `scope` (safety-alerts.int.test.ts, the isolation grid).
+    if (name.startsWith('safetyAlerts.')) continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
