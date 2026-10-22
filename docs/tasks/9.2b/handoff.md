@@ -23,8 +23,8 @@ Extra scope, deferred from 9.2a's security review: **request-level rate limiting
   default, counted with plain Redis `INCR`/`PEXPIRE` (lazily built on `REDIS_URL`, following the
   exact pattern `src/turn/runtime.ts` and `src/studio/runtime.ts` already use -- a lazily built
   `ioredis` client on an env var, not a client shared across modules). The client IP bucket is the
-  **first** `x-forwarded-for` entry (unlike the sign-in limiter's trusted, rightmost entry: this
-  limit isn't security-enforcing); a missing or unparseable entry goes to one shared `unknown`
+  **rightmost** `x-forwarded-for` entry, matching the sign-in limiter (changed from the first entry
+  in the fix round -- see Decisions); a missing or unparseable entry goes to one shared `unknown`
   bucket. A store failure, or no `REDIS_URL`, **fails open** (the page still serves) and logs a
   code-only warning, never the IP (lead decision, risk: medium -- see Decisions). Over the limit,
   the page shows `discovery.rateLimited` ("Too many searches. Try again in a minute.") and never
@@ -87,9 +87,9 @@ Not run in this build (no compose stack brought up, per the brief). Exact steps 
 - Why: that connection is never exported from `src/auth/**` (only `redisSignInCounters`/`createSignInLimiter`, which take a connection, are exported from `rate-limit.ts`, and `index.ts` itself exports no client), and the brief explicitly forbids editing `auth/**` to add one. "The client the sign-in limiter already uses" is read here as the established pattern (ioredis + `REDIS_URL`, read-only reused), not a shared connection object -- every other Redis-using module in `apps/web` already opens its own client the same way.
 - risk: low (an extra Redis connection, same as `turn/runtime.ts` and `studio/runtime.ts` each already open their own).
 
-### 22 Oct 2026 · 9.2b The rate limit's client bucket uses the first x-forwarded-for entry · decided by builder · risk: low
-- Decided: `discoveryClientBucket` takes the first entry (vs. the sign-in limiter's trusted, rightmost entry) and sends a missing or non-IP entry to one shared `unknown` bucket.
-- Why: the brief specified this directly; unlike the sign-in limiter this bucket is advisory (protects DB load, not an access boundary), so trusting a client-supplied header is an accepted trade-off, not a security gap.
+### 22 Oct 2026 · 9.2b The rate limit's client bucket uses the rightmost x-forwarded-for entry · decided by lead · risk: low
+- Decided: `discoveryClientBucket` takes the rightmost (Caddy-appended) `x-forwarded-for` entry, mirroring the sign-in limiter's `clientIp`, and sends a missing, empty or non-IP entry to one shared `unknown` bucket. The lead's brief first asked for the first entry; the fix round changed it to the rightmost.
+- Why: the security review (HIGH) found the first entry is client-controlled, so a caller could rotate a fake first value to get unlimited buckets. The logic is mirrored, not imported, so this module doesn't pull in the sign-in limiter's `@edmate/queue` dependency and `src/auth/**` is untouched.
 - risk: low
 
 ## Left to do
@@ -100,3 +100,13 @@ Not run in this build (no compose stack brought up, per the brief). Exact steps 
 Status: DONE
 
 Tool calls used: 64
+
+## Fix round
+
+- [HIGH, security-reviewer] `discoveryClientBucket` bucketed on the first, client-controlled `x-forwarded-for` entry. Now it uses the rightmost (proxy-appended) entry, like `src/auth/rate-limit.ts`; logic mirrored, `src/auth/**` not edited.
+- Tests first (red, then green) in `apps/web/src/discovery/rateLimit.test.ts`: `<fake>, <real>` lands in the same bucket as `<real>` alone; rotating the fake first entry keeps one bucket and the limit still bites; missing, empty, trailing-comma and non-IP rightmost entries go to `unknown`.
+- Decision "first x-forwarded-for entry" replaced by "rightmost x-forwarded-for entry" (see Decisions).
+- MEDIUM/LOW findings deferred to 9.2e.
+- Evidence: `corepack pnpm vitest run src/discovery/rateLimit.test.ts` → `Tests 17 passed (17)`; `turbo run typecheck lint test --filter=@edmate/web...` green; secret scan clean.
+
+Status: DONE

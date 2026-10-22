@@ -34,15 +34,19 @@ export interface DiscoveryRateLimiter {
 }
 
 /**
- * The first `x-forwarded-for` entry (the brief's choice; the sign-in limiter instead trusts the
- * rightmost, proxy-appended entry, because that one is security-enforcing and this one is not).
- * Missing, or not a bare IP literal, goes to the shared `unknown` bucket.
+ * The rightmost `x-forwarded-for` entry, exactly like the sign-in limiter's `clientIp`
+ * (`src/auth/rate-limit.ts`): behind Caddy that entry is the peer Caddy saw; entries to its left
+ * come from the client and are ignored, so rotating a fake first entry can't mint new buckets
+ * (9.2b fix round, security review HIGH). The logic is mirrored rather than imported so this
+ * module doesn't pull in the sign-in limiter's queue dependency. Missing, empty, or not a bare IP
+ * literal goes to the shared `unknown` bucket.
  */
 export function discoveryClientBucket(headers: HeaderReader): string {
   const header = headers.get('x-forwarded-for');
   if (header === null) return UNKNOWN_CLIENT;
-  const first = (header.split(',')[0] ?? '').trim();
-  return isIP(first) === 0 ? UNKNOWN_CLIENT : first;
+  const entries = header.split(',');
+  const last = (entries[entries.length - 1] ?? '').trim();
+  return isIP(last) === 0 ? UNKNOWN_CLIENT : last;
 }
 
 /** Error name only (never the message or cause): they can quote a host or, here, an IP. */

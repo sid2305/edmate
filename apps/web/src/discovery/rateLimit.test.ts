@@ -17,25 +17,51 @@ function headersOf(value: string | null): { get(name: string): string | null } {
 }
 
 describe('discoveryClientBucket', () => {
-  it('takes the first entry of x-forwarded-for', () => {
-    expect(discoveryClientBucket(headersOf('1.2.3.4, 5.6.7.8'))).toBe('1.2.3.4');
+  // 9.2b fix round (security review HIGH): Caddy appends the real peer IP, so only the rightmost
+  // x-forwarded-for entry is trustworthy; entries to its left are client-controlled.
+  it('takes the rightmost (proxy-appended) entry of x-forwarded-for', () => {
+    expect(discoveryClientBucket(headersOf('1.2.3.4, 5.6.7.8'))).toBe('5.6.7.8');
   });
 
-  it('trims the first entry', () => {
-    expect(discoveryClientBucket(headersOf(' 1.2.3.4 , 5.6.7.8'))).toBe('1.2.3.4');
+  it('puts "<fake>, <real>" in the same bucket as "<real>" alone', () => {
+    expect(discoveryClientBucket(headersOf('9.9.9.9, 5.6.7.8'))).toBe(
+      discoveryClientBucket(headersOf('5.6.7.8')),
+    );
+  });
+
+  it('trims the rightmost entry', () => {
+    expect(discoveryClientBucket(headersOf('1.2.3.4 ,  5.6.7.8 '))).toBe('5.6.7.8');
   });
 
   it('falls back to the shared unknown bucket when the header is missing', () => {
     expect(discoveryClientBucket(headersOf(null))).toBe(UNKNOWN_CLIENT);
   });
 
-  it('falls back to the shared unknown bucket when the first entry is not an IP', () => {
-    expect(discoveryClientBucket(headersOf('not-an-ip, 5.6.7.8'))).toBe(UNKNOWN_CLIENT);
+  it('falls back to the shared unknown bucket when the rightmost entry is empty or not an IP', () => {
     expect(discoveryClientBucket(headersOf(''))).toBe(UNKNOWN_CLIENT);
+    expect(discoveryClientBucket(headersOf('5.6.7.8, not-an-ip'))).toBe(UNKNOWN_CLIENT);
+    expect(discoveryClientBucket(headersOf('5.6.7.8,'))).toBe(UNKNOWN_CLIENT);
   });
 
-  it('accepts an IPv6 first entry', () => {
-    expect(discoveryClientBucket(headersOf('::1'))).toBe('::1');
+  it('ignores a non-IP fake first entry when the rightmost entry is a real IP', () => {
+    expect(discoveryClientBucket(headersOf('not-an-ip, 5.6.7.8'))).toBe('5.6.7.8');
+  });
+
+  it('accepts an IPv6 rightmost entry', () => {
+    expect(discoveryClientBucket(headersOf('1.2.3.4, ::1'))).toBe('::1');
+  });
+});
+
+describe('rotating the fake first x-forwarded-for entry', () => {
+  it('does not create new buckets, so the limit still applies', async () => {
+    const store = fakeStore();
+    const limiter = createDiscoveryRateLimiter({ store, limit: 3 });
+    const results: boolean[] = [];
+    for (let i = 0; i < 5; i++) {
+      results.push(await limiter.allow(headersOf(`10.0.0.${i}, 5.6.7.8`)));
+    }
+    expect(results).toEqual([true, true, true, false, false]);
+    expect(store.counts.size).toBe(1);
   });
 });
 
