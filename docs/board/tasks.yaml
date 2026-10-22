@@ -4300,9 +4300,30 @@ tasks:
   accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
   deps: []
   risk: high
-  status: running
+  status: done
   branch: m8/8.7h-audit-uuid
-  model: plan:lead build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 17
+    tokens_in: 66
+    tokens_out: 595
+    cache_read_tokens: 840926
+    wall_time_seconds: 291
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 11.1a
   milestone: M11
   title: Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)

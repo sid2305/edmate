@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7h UUID-shaped values are exempt from the phone digit-run rule · decided by builder · risk: high
+- Decided: in `redactPersonalData`'s string scrubber, a UUID-shaped span (whole value or embedded
+  in free text, case-insensitive) is never treated as a phone-number candidate, even when one of
+  its hyphen-separated groups is all digits. A phone number elsewhere in the same string, including
+  right next to a UUID, is still redacted.
+- Why: about 1 in 40 real UUIDs (crypto-random) have a group that is all digits, and the previous
+  phone regex redacted that group, corrupting `runId`/`entityId` in audit rows. Exempting the UUID
+  shape (not loosening the phone digit-run length/format rules) fixes this without weakening
+  phone/PII detection for ordinary text.
+- risk: high (this file is on the risky-paths list for `packages/db/src/repositories/**`; it
+  changes what the audit scrubber redacts).
+
+---
+
 ### 22 Oct 2026 · 8.7d the web pins the judge from EDMATE_JUDGE_MODEL without importing @edmate/evals · decided by builder · risk: low
 - Decided: `publishRuntime.ts` reads `EDMATE_JUDGE_MODEL` itself, parsed the same way as `resolveJudgeModel`, and stores `<provider>:<model>` as the run's judge. The worker accepts that form. If the variable is missing or malformed, POST answers 503 and the reason `judge_model` is logged.
 - Why: the worker refuses a run pinned to a different judge, so the web must pin the same one. Adding `@edmate/evals` to the web bundle for five lines of parsing is not worth it.
