@@ -151,4 +151,4 @@ sort) is deferred, untouched.
   `validates the three NOT VALID 0023 constraints outside the migration transaction` test.
 - `python3 .githooks/secret-scan.py --all` → exit 0.
 
-Tool calls used: 50 + 31 (fix round 1)
+Tool calls used: 134 (harness count: 72 build + 62 fix; the builders reported 50 + 31)
