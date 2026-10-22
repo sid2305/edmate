@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.6c-packages-api` (built on local branch `work-86c`)
 - Worktree: `.claude/worktrees/agent-a1f59d653947df038`
-- Tool calls used: 38
+Tool calls used: 93 (harness counts: build 62, fix round 31)
 
 ## Summary
 
