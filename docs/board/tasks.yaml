@@ -5515,9 +5515,29 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
   deps:
   - 8.2f
-  status: running
+  status: done
   branch: m8/8.2j-caption-parse
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 36
+    tokens_in: 130
+    tokens_out: 830
+    cache_read_tokens: 2449516
+    wall_time_seconds: 172
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 8.2k
   milestone: M8
   title: Caption files ingested by the worker and searchable (8.2c Phase B)
@@ -5544,9 +5564,29 @@ tasks:
   accept: the node job and the e2e job each finish well inside their limits on a full PR run; .github/workflows/ci.yml reviewed by security-reviewer
   deps: []
   risk: risky
-  status: running
+  status: done
   branch: m0/0.23-ci-e2e-job
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 10
+    tokens_in: 38
+    tokens_out: 1839
+    cache_read_tokens: 443475
+    wall_time_seconds: 72
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 3.11g
   milestone: M13
   title: 'Flaky timing bound in packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (2048 ms vs a 2000 ms bound on a CI runner, #191, 22 Oct 2026): use a loose
