@@ -5025,9 +5025,9 @@ tasks:
   deps:
   - 11.2a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m11/11.2b-question-queue-ui
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.5a
   milestone: M12
   title: safety_alerts table and repository with an audited staff ack (12.5 Phase A)
