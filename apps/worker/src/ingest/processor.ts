@@ -55,6 +55,7 @@ export interface IngestProcessorDeps {
 export const SIGNED_URL_TTL_SECONDS = 600;
 
 const DOCUMENT_KINDS = new Set(['pdf', 'docx', 'pptx', 'markdown']);
+const RECORDING_KINDS = new Set(['video', 'audio']);
 
 /** A RepositoryError a retry can't fix becomes a PermanentJobError; `failed` (db down) retries. */
 function classifyRepoError(job: string, error: unknown): never {
@@ -161,11 +162,28 @@ export function ingestProcessor(
       throw new PermanentJobError(`${job.name}: document has no stored file`);
     }
 
+    // Task 9.0 D3: EDMATE_INGEST_EMBEDDINGS=off ships no transcriber, so a recording job is
+    // refused here, before any storage read or write -- a config fact, not a provider failure,
+    // and distinct from `packages/ingest`'s own 'validation' code for a job that *should* have a
+    // transcriber but doesn't get one.
+    if (RECORDING_KINDS.has(fileKind) && deps.gateway.transcriber === undefined) {
+      try {
+        await deps.repos.documents.updateStatus(scope, documentId, 'failed', 'unsupported');
+      } catch (error) {
+        if (error instanceof RepositoryError && error.kind === 'not_found') {
+          log({ level: 'info', event: 'ingest.stale_skipped', documentId });
+          return 'stale_skipped';
+        }
+        return classifyRepoError(job.name, error);
+      }
+      throw new PermanentJobError(`${job.name}: unsupported`);
+    }
+
     const { writer, stale } = buildWriter(deps.repos, storageKey);
     const indexDeps: IndexDocumentDeps = {
       writer,
-      embedder: deps.gateway.embedder,
-      transcriber: deps.gateway.transcriber,
+      ...(deps.gateway.embedder ? { embedder: deps.gateway.embedder } : {}),
+      ...(deps.gateway.transcriber ? { transcriber: deps.gateway.transcriber } : {}),
       onEmbedFailed: (code) => {
         log({ level: 'warn', event: 'ingest.embed_failed', documentId, code });
       },

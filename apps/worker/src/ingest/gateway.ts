@@ -12,14 +12,29 @@ import {
 import { storageConfigFromEnv } from '../storage/roundtrip.js';
 
 export interface IngestGateway {
-  readonly embedder: Pick<ModelGateway, 'embed'>;
-  readonly transcriber: Transcriber;
+  /** Absent when `EDMATE_INGEST_EMBEDDINGS=off`: chunks are stored for full text only (D3). */
+  readonly embedder?: Pick<ModelGateway, 'embed'>;
+  /** Absent when `EDMATE_INGEST_EMBEDDINGS=off`: audio/video jobs fail as `unsupported`. */
+  readonly transcriber?: Transcriber;
 }
 
-/** Reads the OpenAI key and the configured S3 host from `env`; throws if the key is unusable. */
+/** Task 9.0 D3: `off`, unset or `openai`, or a config error naming the variable (never its value,
+ * so a typo never reaches a log line). */
+const INGEST_EMBEDDINGS_ENV = 'EDMATE_INGEST_EMBEDDINGS';
+
+/**
+ * Reads the OpenAI key and the configured S3 host from `env`; throws if the key is unusable.
+ * `EDMATE_INGEST_EMBEDDINGS=off` skips both the embedder and the transcriber and reads no key at
+ * all -- explicit, never a silent fallback when a key happens to be missing (9.0 D3).
+ */
 export async function createIngestGateway(
   env: Readonly<Record<string, string | undefined>>,
 ): Promise<IngestGateway> {
+  const mode = env[INGEST_EMBEDDINGS_ENV];
+  if (mode === 'off') return {};
+  if (mode !== undefined && mode !== 'openai') {
+    throw new Error(`createIngestGateway: ${INGEST_EMBEDDINGS_ENV} is not a supported value`);
+  }
   const keys = await loadProviderKeys({ source: envKeySource(env), required: ['openai'] });
   const openaiKeys = keys.get('openai');
   const s3Host = new URL(storageConfigFromEnv(env).endpoint).host;

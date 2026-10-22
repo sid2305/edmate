@@ -8,8 +8,8 @@ const FAKE_KEY = 'sk-fake-not-a-real-key-0000000000000000'; // secret-scan: allo
 describe('createIngestGateway', () => {
   it('builds an embedder and a transcriber from the environment', async () => {
     const gateway = await createIngestGateway({ EDMATE_OPENAI_API_KEY: FAKE_KEY });
-    expect(typeof gateway.embedder.embed).toBe('function');
-    expect(typeof gateway.transcriber.transcribe).toBe('function');
+    expect(typeof gateway.embedder?.embed).toBe('function');
+    expect(typeof gateway.transcriber?.transcribe).toBe('function');
   });
 
   it('allows only the configured S3 host for the transcriber', async () => {
@@ -18,11 +18,39 @@ describe('createIngestGateway', () => {
       S3_ENDPOINT: 'http://minio.internal:9000',
     });
     await expect(
-      gateway.transcriber.transcribe({ url: 'https://evil.example/a.mp3', mimeType: 'audio/mpeg' }),
+      gateway.transcriber?.transcribe({ url: 'https://evil.example/a.mp3', mimeType: 'audio/mpeg' }),
     ).rejects.toThrow();
   });
 
   it('rejects when the key is missing', async () => {
     await expect(createIngestGateway({})).rejects.toThrow();
+  });
+
+  it('rejects when the key is missing and the mode is explicitly openai', async () => {
+    await expect(
+      createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'openai' }),
+    ).rejects.toThrow();
+  });
+
+  it('EDMATE_INGEST_EMBEDDINGS=off reads no key and returns no embedder or transcriber', async () => {
+    const gateway = await createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'off' });
+    expect(gateway.embedder).toBeUndefined();
+    expect(gateway.transcriber).toBeUndefined();
+  });
+
+  it('EDMATE_INGEST_EMBEDDINGS=off needs no key at all, even with none set', async () => {
+    await expect(createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'off' })).resolves.toEqual({});
+  });
+
+  it('an unsupported EDMATE_INGEST_EMBEDDINGS value is a config error naming the variable, not its value', async () => {
+    await expect(createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'bogus' })).rejects.toThrow(
+      /EDMATE_INGEST_EMBEDDINGS/,
+    );
+    try {
+      await createIngestGateway({ EDMATE_INGEST_EMBEDDINGS: 'bogus' });
+      throw new Error('expected createIngestGateway to throw');
+    } catch (error) {
+      expect(String((error as Error).message)).not.toContain('bogus');
+    }
   });
 });
