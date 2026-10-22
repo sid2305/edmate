@@ -116,6 +116,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         sourceTitle: `${id} title`,
         storageKey: 'uploads/k1.pdf',
         status: 'uploading',
+        rightsDeclaredAt: expect.any(String) as string,
         createdAt: expect.any(String) as string,
         updatedAt: expect.any(String) as string,
       });
@@ -124,6 +125,8 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
 
     it('returns rightsDeclaredAt once the declaration is stored, and omits it before (12.3b)', async () => {
       const id = await doc([], 'uploads/k-rights.pdf');
+      // 12.3f: every create stamps it; a null column (a row from before 12.3f) is omitted.
+      await raw.query(`update documents set rights_declared_at = null where id = $1`, [id]);
       expect(Object.keys((await repos.documents.get(A, id))!)).not.toContain('rightsDeclaredAt');
       await raw.query(
         `update documents set rights_declared_at = '2026-10-22T09:30:00Z' where id = $1`,

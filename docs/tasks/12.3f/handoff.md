@@ -37,8 +37,13 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
 
 ## Tests
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/worker...`
-  with `TEST_DATABASE_URL`/`TEST_REDIS_URL` on a disposable container (`t123f-pg`, `t123f-redis`):
-  see the gate result in the lead's report (run after `git merge origin/main`).
+  with `TEST_DATABASE_URL`/`TEST_REDIS_URL` on disposable containers (`t123f-pg`, `t123f-redis`),
+  after `git merge origin/main` → `Tasks: 38 successful, 38 total`; `@edmate/db:test Test Files
+  74 passed (74)`; `@edmate/worker:test Test Files 37 passed (37)` (integration suites included).
+- `python3 .githooks/secret-scan.py --all` → clean (no output, exit 0).
+- Two existing 12.3b tests in `documents.int.test.ts` were adjusted: a new row now always carries
+  `rightsDeclaredAt`, and the "omitted before declaration" check nulls the column first (as for a
+  row from before 12.3f).
 - `corepack pnpm turbo run typecheck --filter=@edmate/web` → fails only at
   `app/api/staff/reports/route.int.test.ts(105,7)` (see Why PARTIAL).
 
@@ -54,4 +59,4 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
   `apps/web/app/api/staff/reports/route.int.test.ts` (line ~105) so `@edmate/web` typecheck is
   green, then run `--filter=@edmate/web` typecheck/lint/test.
 
-Tool calls used: 30
+Tool calls used: 37
