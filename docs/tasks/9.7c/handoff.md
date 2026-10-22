@@ -93,7 +93,7 @@
 None for this task's scope.
 
 Status: DONE
-Tool calls used: 71 (harness count: build 49, fix round 22; the agents reported 32 and 20)
+Tool calls used: 96 (harness count: build 49, fix round 22, CI fix 25; the agents reported 32 and 20)
 
 ## Fix round (22 Oct 2026)
 - Cause: Playwright's `testDir` is `./e2e` and its default `testMatch` includes `*.test.ts`, so CI

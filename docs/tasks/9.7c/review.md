@@ -5,3 +5,4 @@ global-setup now refuses a TEST_DATABASE_URL that is not on this machine before 
 
 ## Findings
 - [CRITICAL] [fixed] apps/web/e2e/localDatabaseGuard.ts:14 — the guard checked only the URL hostname; a ?host= or ?hostaddr= query parameter overrode it for pg. Fixed by refusing those keys (any case) before the hostname check; tests added.
+- [HIGH] [fixed] apps/web/playwright.config.ts — CI's e2e job loaded the vitest file e2e/localDatabaseGuard.test.ts and crashed; testMatch is now '**/*.spec.ts' (the lead found the cause in the CI log; a sonnet fixer made the change).
