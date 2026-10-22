@@ -11,7 +11,11 @@ import { queuedTurnPorts } from '../src/index.js';
 import { type AddedJob, fakeQueue } from './fakeQueue.js';
 
 const DB_DELAY_MS = 5_000;
-const BOUND_MS = 500;
+// A loose gross-regression guard, not a tight timing (docs/lessons.md "Wall-clock bounds fail on
+// shared CI runners"): a 500 ms bound measured 516.8 ms and 541 ms on loaded CI runners (PRs #148,
+// #84) though nothing enqueues a real wait. Kept well under DB_DELAY_MS so "well before" still
+// holds, with generous headroom for a busy shared machine.
+const BOUND_MS = 2_500;
 
 const timers: ReturnType<typeof setTimeout>[] = [];
 afterEach(() => {
