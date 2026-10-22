@@ -50,7 +50,7 @@ task 9.2 plan Q5 decision 2: that read is unchanged in this task).
   since neither read checked verification.
 - risk: high (a `packages/db/src/repositories/**` change).
 
-### 22 Oct 2026 · 9.3c re-check verification inside start's own write statement, FOR SHARE · decided by lead · risk: high
+### 22 Oct 2026 · 9.3c re-check verification inside start's own write statement, FOR SHARE · decided by builder · risk: high
 - Decided: `subscriptions.start` re-checks the teacher's profile as part of the same
   `INSERT ... SELECT ... FOR SHARE OF teacher_profiles` statement that writes the subscription
   (not a separate pre-check), so a verification change can't commit mid-start. Refuses with the
@@ -85,6 +85,11 @@ task 9.2 plan Q5 decision 2: that read is unchanged in this task).
   verified.
 - risk: low (test-only; no production behaviour change).
 
+### 22 Oct 2026 · 9.3c existing subscribers of a rejected teacher keep access for now · decided by lead · risk: medium
+- Decided: 9.3c blocks only new starts and the package page; the turn path and agents.owner are unchanged, so students who subscribed before a rejection keep learning until the human answers B-46.
+- Why: whether to cut access is a product decision; the brief kept it out of scope, and the reviewers confirmed the gap is tracked.
+- risk: medium (a rejected teacher's agent stays reachable for existing students meanwhile).
+
 ## Left to do
 
 - **Open question (lead decision 2, not acted on here):** `agents.owner` (used by
@@ -100,4 +105,4 @@ task 9.2 plan Q5 decision 2: that read is unchanged in this task).
 
 Status: DONE
 
-Tool calls used: 59
+Tool calls used: 106 (harness; over the 70 budget)
