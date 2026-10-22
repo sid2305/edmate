@@ -35,6 +35,16 @@ import { queuedTranscriptStore } from './transcriptStore.js';
 import { type QueuedUsageMeter, queuedUsageMeter } from './usageMeter.js';
 
 export * from './queues.js';
+export {
+  createGateQueue,
+  enqueueGate,
+  GATE_JOB,
+  GATE_QUEUE,
+  type GateJob,
+  GateJobSchema,
+  gateJobId,
+  gateJobOptions,
+} from './gate.js';
 export { queuedAlertSink, type QueuedAlertSinkOptions } from './alertSink.js';
 export { type ProfileReader, queuedProfileStore } from './profileStore.js';
 export { queuedSafetyEventSink } from './safetyEventSink.js';
