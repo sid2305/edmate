@@ -5643,6 +5643,14 @@ tasks:
   - 12.4d
   risk: low
   status: todo
+- id: 7.2i
+  milestone: M13
+  title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en replaces "comparisons of strings are case-sensitive", which is close to the sanctioned co-q6 hint, with a phrase from the withheld answer'
+  accept: both cases test their own leak deterministically; packages/evals suites.test.ts green.
+  deps:
+  - 7.2g
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
