@@ -2322,7 +2322,7 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
-  status: todo
+  status: planning
   branch: null
   risk: risky
 - id: 8.2a
