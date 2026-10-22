@@ -65,8 +65,8 @@ removed afterwards).
 - `TEST_DATABASE_URL=… corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` →
   db, typecheck and lint green; `@edmate/harness#test` failed once on a load-sensitive guard test
   (`a soft hit never escalates…`, 4.2 s, harness untouched) and passed on rerun
-  (`turbo run test --filter=@edmate/harness` → `Tasks: 2 successful, 2 total`). Final run after
-  `git merge origin/main` is in the commit's gate (see the lead's report).
+  (`turbo run test --filter=@edmate/harness` → `Tasks: 2 successful, 2 total`). After
+  `git merge origin/main` the same gate (`--concurrency=4`) → `Tasks: 26 successful, 26 total`.
 - `python3 .githooks/secret-scan.py --all` → clean.
 
 Covered: active copyright on own document and own agent counted; harmful not counted; lifted not
@@ -98,4 +98,4 @@ before any SQL; isolation grid (A counts, B and a ghost teacher 0, back to basel
 - Update the callers that change with it: `apps/web/src/studio/routes.ts` (3 calls),
   `apps/web/src/studio/routes.test.ts`, `apps/worker/test/ingest.int.test.ts` and the db tests.
 
-Tool calls used: 44
+Tool calls used: 48
