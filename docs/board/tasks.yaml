@@ -4328,6 +4328,14 @@ tasks:
   - 9.6a
   risk: high
   status: todo
+- id: 12.1c
+  milestone: M13
+  title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id) WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users'
+  accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
+  deps:
+  - 12.1a
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
