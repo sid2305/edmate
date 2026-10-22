@@ -1580,11 +1580,12 @@ tasks:
   branch: m5/5.11a-drafter-gateway-errors
   model: plan:lead build:sonnet-5/medium review:code-sonnet,ts-sonnet
 - id: 6.0b
-  milestone: M6
+  milestone: M13
   title: 'DPDP gate for learner memory (logged decision, 18 Oct 2026; raised again by 3.17): before any India pilot, decide and enforce what learner memory (mastery, mistakes, summaries, evidence) may be
     kept for India learners under 18; no tracking or behavioural monitoring of children; likely a locale-pack rule plus a ProfileStore check (ADR if contracts change)'
   accept: an India learner under 18 has no learner memory written or read beyond what the locale pack allows; tests; human sign-off on the rule.
   deps:
+  - GATE
   - '3.17'
   - '3.10'
   - '1.7'
@@ -2016,7 +2017,6 @@ tasks:
   title: Outline editor with source links; reorder, rename, merge, split
   accept: outline for 20 files in < 10 minutes; edits versioned.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.11'
@@ -2030,7 +2030,6 @@ tasks:
   title: Style interview (incl. common mistakes) and style card editor
   accept: the teacher can preview and edit the card; the agent uses the new version on the next turn.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.11'
@@ -2044,7 +2043,6 @@ tasks:
   title: Test chat as a student per package; mark and correct answers
   accept: a correction changes the next answer and becomes an eval case.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -2057,7 +2055,6 @@ tasks:
   title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
   accept: two packages in < 15 minutes; estimate shown per package.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -2072,7 +2069,6 @@ tasks:
   title: 'Publish flow with quality-gate results, the teaching scorecard and the public profile page (7.4: publish goes through gatedPublish)'
   accept: failures show which cases failed; a pass publishes in < 1 minute.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -2087,7 +2083,6 @@ tasks:
   title: Insights view (earnings view moves to 10.7)
   accept: insights show no individual student.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -2100,7 +2095,6 @@ tasks:
   title: 'Questions inbox: grouped open questions, answer with a module choice, dismiss'
   accept: an answer reaches every grouped student and becomes a teacher note and eval case.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.10'
@@ -2137,12 +2131,24 @@ tasks:
   - '9.1'
   status: todo
   branch: null
+- id: '9.0'
+  milestone: M9
+  title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff verify →
+    upload → ingest; student sign-in → package → subscribe → chat with a real model key); fix any wiring problem found (CORS, public endpoint, env); write docs/try-it.md with the exact steps, env values to
+    fill (never committed), how a test account becomes staff, and a test teacher and student'
+  accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in the handoff with screenshots or trimmed logs (no keys).
+  deps:
+  - '9.4'
+  - '8.2'
+  - '9.3'
+  status: todo
+  branch: null
+  model: null
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
   accept: search < 1 s on a 200-teacher seed.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '7.8'
@@ -2903,7 +2909,6 @@ tasks:
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
   accept: e2e per skill.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '9.1'
@@ -2915,7 +2920,6 @@ tasks:
   title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export; no payment until M10
   accept: export is complete JSON plus notes PDF.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '9.1'
@@ -2927,7 +2931,6 @@ tasks:
   title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer'
   accept: green in CI with scripted gateway.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '8.9'

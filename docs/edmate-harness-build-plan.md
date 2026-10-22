@@ -635,6 +635,8 @@ Mobile-first (360 px up), laptop-friendly; English UI in the MVP.
 
 ### M8 · Teacher studio (depends on: GATE, 1.3, 5.1, 5.2)
 
+> **Gate is a pre-pilot check (22 Oct 2026).** M8, M9, M11 and M12 tasks no longer depend on the harness exit gate; it runs once before real students. Task 9.0 (end-to-end run and try-it guide) goes first.
+
 - **8.1** Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1). *Accept:* an unverified teacher cannot publish.
 - **8.2** Upload centre with live processing status, delete and replace. *Accept:* status updates live; a deleted file leaves retrieval within 1 minute.
 - **8.3** Outline editor with source links; reorder, rename, merge, split. *Accept:* outline for 20 files in < 10 minutes; edits versioned.

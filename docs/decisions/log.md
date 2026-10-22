@@ -10,6 +10,13 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · The product tasks no longer wait for the harness exit gate · decided by you · risk: high
+Decided: Every M8, M9, M11 and M12 task is buildable now; the exit gate (GATE) is a pre-pilot check, not a dependency. 6.0b (India-only memory consent) is parked in M13. New task 9.0 runs the thin slice end to end on the dev stack and writes docs/try-it.md; it goes first. M10 (payments) stays last.
+Why: Both builder slots sat idle for most of two days because the only ready work was M13 polish and eval suites in one package, while the ten real product tasks were hidden behind GATE. The human wants a testable product as fast as possible.
+Alternatives: Keep GATE as a dependency and finish M7 first (weeks of idle slots).
+Reversible: Yes, it's a board dependency; the gate check still runs before the pilot.
+
+
 ### 21 Oct 2026 · 0.21 budget overrun accepted · decided by lead · risk: low
 - Decided: the build used 84 tool calls against a lead-set budget of 30 (2.8×); accepted.
 - Why: a load-dependent flake needs repeated reproduction runs under CPU pressure, and the lead's budget didn't allow for that; the fix is one test file, and both reviewers approved with no CRITICAL or HIGH findings. Future flake tasks get a budget of about 60.
