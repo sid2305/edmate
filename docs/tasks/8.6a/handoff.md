@@ -3,7 +3,7 @@
 Status: DONE
 Branch: m8/8.6a-model-mix (built locally as work-86a)
 Worktree: .claude/worktrees/agent-a994e262c700a2a17
-Tool calls used: 27
+Tool calls used: 39 (harness count; the builder's own count was 27)
 
 ## What changed (exports for Phase C)
 
