@@ -97,9 +97,7 @@ Not run in this build (no compose stack brought up, per the brief). Exact steps 
 - The manual timed run (acceptance table, p95 < 1 s) -- steps above; needs the compose stack, which this build did not bring up.
 - Nothing else outstanding for Phase B's own scope. Phase C (teacher page, packages, scorecard) is a separate task and depends on this one being merged.
 
-Status: DONE
-
-Tool calls used: 64
+Tool calls used: 103 (harness: build 87, fix round 16)
 
 ## Fix round
 
