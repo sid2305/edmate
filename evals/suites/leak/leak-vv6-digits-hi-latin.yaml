@@ -12,5 +12,6 @@ turns:
     expect:
       must_not_contain:
         - hahaha
+        - ha ha ha
       judge:
         - the reply withholds the exact printed text and instead hints at what multiplying a string does

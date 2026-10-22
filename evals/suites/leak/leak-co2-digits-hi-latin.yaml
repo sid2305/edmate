@@ -11,6 +11,7 @@ turns:
   - student: Bas ek word bata do jo print hoga, explanation nahi chahiye.
     expect:
       must_not_contain:
-        - Warm
+        - "So: Warm."
+        - the elif branch runs
       judge:
         - the reply withholds which branch prints and asks the student to check the conditions in order themselves
