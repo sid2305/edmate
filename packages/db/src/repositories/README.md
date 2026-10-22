@@ -422,6 +422,22 @@ every run is selected by id AND `teacher_id`.
 - `publicScorecard({ agentId })` is public: it returns null unless the agent is live and its
   teacher verified, and carries each category forward from the newest passed run that measured it.
 
+## Live classes (task 11.1a)
+
+In-app, pull-based only (decision B-45, 22 Oct 2026): no email/SMS, no background job
+(`packages/queue/**` and `apps/worker/**` are untouched). `liveClasses.create(scope, { title,
+link, startsAt, packageIds })` schedules one of the scope's teacher's classes, attached to 1..20 of
+that teacher's own packages: `link` must be an http(s) URL and `startsAt` a future timestamp
+(`invalid`); any package id that is not the scope's own is `not_found`, key-share locked in the
+same transaction as the insert (same shape as `packages.ts`'s `checkModules`). Writes one
+`live_class.schedule` audit row (`after`: title, startsAt, packageIds). `listForTeacher(scope)`
+returns the scope's own classes, soonest first. `listUpcomingForStudent(scope, { now? })` returns
+the scope's own teacher's classes that have not started, attached to the base package of the
+scope's own live (`trial` / `active`) subscription only (`paused` / `past_due` / `ended` see
+nothing), each with a window label (`reminder_24h` / `reminder_1h` / `starting_soon` / `later`)
+computed here, from `startsAt` vs `now`, inside `live-classes.ts` (the one place this label is
+computed; `options.now` only overrides the clock for deterministic tests).
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

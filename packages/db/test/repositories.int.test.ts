@@ -274,6 +274,12 @@ const dismissReplay: Partial<Record<Teacher, string>> = {};
  * pair has at least one of its own readable notifications, and gives `notifications.markRead`'s
  * cross-scope attempt a fixed id to call against without writing anything new first. */
 const notifTarget: Partial<Record<Pair, string>> = {};
+/** Task 11.1a: one scheduled, far-future live class per teacher, attached to that teacher's own
+ * seeded package — gives `liveClasses.listForTeacher` / `listUpcomingForStudent` a fixed row to
+ * read without writing anything new first. */
+const liveClassFor: Partial<Record<Teacher, string>> = {};
+/** Far enough out that no window label ever flips mid-run; still a valid future `startsAt`. */
+const LIVE_CLASS_STARTS_AT = '2030-01-01T00:00:00Z';
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
@@ -3226,6 +3232,118 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 11.1a: a teacher's live classes, attached to packages, and the entitled student's own
+  // upcoming view (in-app only, decision B-45). `create` checks every package id is the scope's
+  // own before writing (same shape as `packages.ts`'s `checkModules`); `listUpcomingForStudent`'s
+  // broader scenarios (paused/past_due/ended, wrong package, a past class) have their own
+  // dedicated test below, since its entitlement is per package (shared by every subscriber of
+  // it), not per pair like every other student-scoped read here.
+  'liveClasses.create': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.liveClasses.create(scope, {
+        title: `[${target}] new live class ${++counter}`,
+        link: 'https://meet.example.com/new',
+        startsAt: LIVE_CLASS_STARTS_AT,
+        packageIds: [ids.pkg(target)],
+      }),
+    verify: async (r, actor, res) => {
+      const { id } = res as { id: string };
+      for (const t of TEACHERS) {
+        const list = await r.liveClasses.listForTeacher(tScope(t));
+        expect(
+          list.some((c) => c.id === id),
+          `${t} listing ${actor}'s new live class`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's package",
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad package`,
+            link: 'https://meet.example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(otherTeacher(a))],
+          }),
+        'not_found',
+      ],
+      [
+        'a non-http(s) link',
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad link`,
+            link: 'ftp://example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(a)],
+          }),
+        'invalid',
+      ],
+      [
+        'a startsAt in the past',
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad startsAt`,
+            link: 'https://meet.example.com/x',
+            startsAt: '2000-01-01T00:00:00Z',
+            packageIds: [ids.pkg(a)],
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'liveClasses.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.liveClasses.listForTeacher(scope),
+    random: (r, _scope, rid) => r.liveClasses.listForTeacher({ teacherId: rid }),
+    // Filtered to teacher-level tags: this teacher's own classes also include the per-pair
+    // dedicated fixtures below (real rows, correctly theirs), whose titles carry a pair tag for
+    // `listUpcomingForStudent`'s case instead — not a second owner of this teacher-scoped read.
+    owners: (xs: { title: string }[]) =>
+      xs.flatMap((x) => markers(x.title)).filter((m): m is Teacher => (TEACHERS as readonly string[]).includes(m)),
+  },
+  'liveClasses.listUpcomingForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    // Points this one pair's own subscription at its own dedicated package (fixture above) right
+    // before reading, so the row it gets back is exclusively its own — every other pair's read in
+    // this grid redirects only its own row, never another's (keyed by studentId + teacherId) — then
+    // restores it, so a later test that depends on the seed's original subscription state (for
+    // example "ended subscriptions are not live") still sees it.
+    call: async (r, scope) => {
+      const p = pairOfIds(scope.studentId, scope.teacherId);
+      const before = await raw.query(
+        `select package_version_id from subscriptions where student_id = $1 and teacher_id = $2`,
+        [scope.studentId, scope.teacherId],
+      );
+      const originalPackageVersionId = (before.rows[0] as { package_version_id: string } | undefined)
+        ?.package_version_id;
+      await raw.query(
+        `update subscriptions set package_version_id = $1
+         where student_id = $2 and teacher_id = $3 and status <> 'ended'`,
+        [`lcpv_${p.toLowerCase()}`, scope.studentId, scope.teacherId],
+      );
+      try {
+        return await r.liveClasses.listUpcomingForStudent(scope);
+      } finally {
+        if (originalPackageVersionId !== undefined) {
+          await raw.query(
+            `update subscriptions set package_version_id = $1
+             where student_id = $2 and teacher_id = $3 and status <> 'ended'`,
+            [originalPackageVersionId, scope.studentId, scope.teacherId],
+          );
+        }
+      }
+    },
+    random: (r, _scope, rid) =>
+      r.liveClasses.listUpcomingForStudent({ studentId: rid, teacherId: rid }),
+    owners: (xs: { title: string }[]) => xs.flatMap((x) => markers(x.title)),
+  },
 };
 
 /** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */
@@ -3501,6 +3619,55 @@ describe.skipIf(!up)(
         savePkg[t] = (
           await repos.packages.create(tScope(t), { agentId: ids.agent(t), draft: pkgDraft(t) })
         ).packageId;
+      }
+      for (const t of TEACHERS) {
+        liveClassFor[t] = (
+          await repos.liveClasses.create(tScope(t), {
+            title: `[${t}] live class`,
+            link: 'https://meet.example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(t)],
+          })
+        ).id;
+      }
+      // Task 11.1a: `listUpcomingForStudent`'s entitlement is per package, shared by every
+      // student subscribed to it — coarser than the "exclusively one pair" shape every other
+      // isolation case assumes. A dedicated package + live class per pair (not the shared teacher
+      // package above), so `CASES['liveClasses.listUpcomingForStudent']`'s `call` can point that
+      // one pair's own subscription at its own exclusive package just before reading (see there).
+      // Named without a `pkg_`/`[X]` marker and without a bracket name tag: other isolation cases
+      // (`packages.listForTeacher`, `packageVersions.listForAgent`) read every one of this
+      // teacher's packages too, and would otherwise read this fixture's pair tag as a second owner
+      // of a teacher-scoped row.
+      for (const p of PAIRS) {
+        const t = teacherOf(p);
+        const lc_ = p.toLowerCase();
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name) values ($1, $2, $3, $4)`,
+          [`lcpkg_${lc_}`, teacherId(t), ids.agent(t), `live pkg ${lc_}`],
+        );
+        const config = {
+          ...packageConfig(t, 1, []),
+          id: `lcpkg_${lc_}`,
+          name: `live pkg ${lc_}`,
+        };
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config)
+           values ($1, $2, $3, 1, $4::jsonb)`,
+          [`lcpv_${lc_}`, teacherId(t), `lcpkg_${lc_}`, JSON.stringify(config)],
+        );
+        await raw.query(
+          `insert into live_classes (id, teacher_id, package_ids, title, starts_at, link)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [
+            `cls_lc_${lc_}`,
+            teacherId(t),
+            [`lcpkg_${lc_}`],
+            `[${p}] live class`,
+            new Date(LIVE_CLASS_STARTS_AT),
+            'https://meet.example.com/x',
+          ],
+        );
       }
     });
 
@@ -3937,6 +4104,96 @@ describe.skipIf(!up)(
         );
         expect(n).toBe(1);
       });
+    });
+
+    // Task 11.1a: `listUpcomingForStudent`'s full acceptance grid (11.1's "Tests (Phase A)"),
+    // self-contained (not tch_a / tch_b, whose subscriptions this suite's other cases churn).
+    it('listUpcomingForStudent: only a live (trial/active) subscriber to an attached package sees a future class', async () => {
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '11.1a teacher', 'en', 'test', 'teacher')`,
+        ['tch_11a'],
+      );
+      await raw.query(
+        `insert into agents (id, teacher_id, status, live_version) values ('agt_11a', 'tch_11a', 'live', 1)`,
+      );
+      await raw.query(
+        `insert into packages (id, teacher_id, agent_id, name) values
+           ('pkg_11a', 'tch_11a', 'agt_11a', '11a package'),
+           ('pkg_11a_other', 'tch_11a', 'agt_11a', '11a other package')`,
+      );
+      await raw.query(
+        `insert into package_versions (id, teacher_id, package_id, version, config) values
+           ('pv_11a', 'tch_11a', 'pkg_11a', 1, '{}'::jsonb),
+           ('pv_11a_other', 'tch_11a', 'pkg_11a_other', 1, '{}'::jsonb)`,
+      );
+      const future = await repos.liveClasses.create(
+        { teacherId: 'tch_11a' },
+        {
+          title: '11a future class',
+          link: 'https://meet.example.com/11a',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: ['pkg_11a'],
+        },
+      );
+      const pastId = 'cls_11a_past';
+      await raw.query(
+        `insert into live_classes (id, teacher_id, package_ids, title, starts_at, link)
+         values ($1, 'tch_11a', $2, '11a past class', $3, 'https://meet.example.com/11a-past')`,
+        [pastId, ['pkg_11a'], new Date('2000-01-01T00:00:00Z')],
+      );
+
+      const statuses = ['trial', 'active', 'past_due', 'paused', 'ended'] as const;
+      const studentOfStatus = (status: string) => `stu_11a_${status}`;
+      for (const status of statuses) {
+        const sid = studentOfStatus(status);
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,
+          [sid],
+        );
+        await raw.query(
+          `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+           values ($1, $2, 'tch_11a', 'pv_11a', $3, '2030-01-01T00:00:00Z')`,
+          [`sub_11a_${status}`, sid, status],
+        );
+      }
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values
+           ('stu_11a_wrong_pkg', 'wp', 'en', 'test', 'student'),
+           ('stu_11a_no_sub', 'ns', 'en', 'test', 'student')`,
+      );
+      await raw.query(
+        `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+         values ('sub_11a_wrong_pkg', 'stu_11a_wrong_pkg', 'tch_11a', 'pv_11a_other', 'active', '2030-01-01T00:00:00Z')`,
+      );
+
+      const scope = (studentId: string) => ({ studentId, teacherId: 'tch_11a' });
+      for (const status of ['trial', 'active'] as const) {
+        const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus(status)));
+        expect(rows.map((r) => r.id), status).toEqual([future.id]);
+        expect(rows.map((r) => r.id), status).not.toContain(pastId);
+      }
+      for (const status of ['past_due', 'paused', 'ended'] as const) {
+        expect(
+          await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus(status))),
+          status,
+        ).toEqual([]);
+      }
+      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_wrong_pkg'))).toEqual([]);
+      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_no_sub'))).toEqual([]);
+
+      // `options.now` overrides the clock (deterministic tests only): every window label.
+      const startsAt = new Date(LIVE_CLASS_STARTS_AT);
+      const minsBefore = (mins: number) => new Date(startsAt.getTime() - mins * 60_000).toISOString();
+      const windowAt = async (now: string) => {
+        const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus('trial')), {
+          now,
+        });
+        return rows.find((r) => r.id === future.id)?.window;
+      };
+      expect(await windowAt(minsBefore(3))).toBe('starting_soon');
+      expect(await windowAt(minsBefore(30))).toBe('reminder_1h');
+      expect(await windowAt(minsBefore(10 * 60))).toBe('reminder_24h');
+      expect(await windowAt(minsBefore(48 * 60))).toBe('later');
     });
 
     it('listForTeacher never returns studentId', async () => {
