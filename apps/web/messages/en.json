@@ -147,6 +147,22 @@
     "resetting": "Resetting…",
     "resetError": "Something went wrong. Try again."
   },
+  "progress": {
+    "title": "Your progress",
+    "navLink": "Progress",
+    "covered": "{n} topics covered",
+    "mastered": "{n} mastered",
+    "empty": "Nothing to show yet -- keep learning and it will show up here.",
+    "nextStepsTitle": "Next steps",
+    "nextStepsEmpty": "Nothing new to try yet.",
+    "exportJsonLink": "Download the complete JSON export",
+    "exportPdfLink": "Download your notes (PDF)",
+    "state": {
+      "mastered": "mastered",
+      "practising": "practising",
+      "not_started": "not started"
+    }
+  },
   "uploads": {
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
@@ -443,6 +459,83 @@
       "hints_before_answers": "Hints before answers",
       "locked_content": "Locked content",
       "accuracy": "Accuracy"
+    }
+  },
+  "publish": {
+    "navLink": "Publish",
+    "title": "Publish",
+    "intro": "Publishing runs the quality gate on your agent. If every check passes, your agent and all your packages go live together. If a check fails, nothing changes for your students.",
+    "loading": "Loading your publish status…",
+    "loadError": "Your publish status could not be loaded. Reload the page to try again.",
+    "pollError": "The status could not be refreshed just now. Trying again.",
+    "publishButton": "Publish",
+    "publishAgainButton": "Publish again",
+    "starting": "Starting…",
+    "idle": "Your agent has not been published yet.",
+    "running": "The quality gate is checking your agent. This can take a while; this page updates by itself.",
+    "passed": "Your agent is live.",
+    "failed": "Your agent was not published: some checks did not pass. Nothing changed for your students.",
+    "errorHeading": "The check did not finish.",
+    "startedAt": "Started {time}.",
+    "finishedAt": "Checks finished {time}.",
+    "publishedAt": "Published {time}.",
+    "changesLabel": "What this publish covers:",
+    "changes": {
+      "first_publish": "First publish",
+      "prompt_pack_bump": "Platform update",
+      "material": "Your materials",
+      "packages": "Your packages",
+      "style_card": "Your style card"
+    },
+    "groupsHeading": "Groups that did not pass",
+    "groupBelow": "{group} ({origin}): {passed} of {total} passed; needs {minPercent}%.",
+    "groupEmpty": "{group} ({origin}): there are no test cases for this group yet, so it cannot pass.",
+    "origins": {
+      "platform": "platform tests",
+      "agent": "your tests"
+    },
+    "groups": {
+      "leak": "Hidden content stays hidden",
+      "locked": "Locked modules",
+      "safety-distress": "Student distress",
+      "safety": "Safety",
+      "accuracy": "Accuracy",
+      "persona": "Teaching persona",
+      "pedagogy": "Teaching approach",
+      "advice": "Regulated advice",
+      "grounding": "Answers from your materials",
+      "other": "Other checks"
+    },
+    "failedHeading": "Cases that failed",
+    "caseId": "Case {caseId}",
+    "caseWhy": "Why: {checks}",
+    "caseQuestion": "Your question: {question}",
+    "scorecardHeading": "Teaching scorecard",
+    "scorecardLine": "{label}: {passed} of {total} passed ({percent}%)",
+    "scorecardNotMeasured": "{label}: not measured in this check",
+    "scorecard": {
+      "hints_before_answers": "Hints before answers",
+      "locked_content": "Locked content stays locked",
+      "accuracy": "Accuracy"
+    },
+    "runErrors": {
+      "gate_unavailable": "The quality gate is not set up on this server yet (it needs a model key). Nothing was published.",
+      "stale": "The check stopped before it finished. Nothing was published. Try again.",
+      "enqueue_failed": "The check could not be started. Nothing was published. Try again.",
+      "not_verified": "Your profile is not verified, so nothing was published.",
+      "suspended": "Your agent is suspended, so nothing was published.",
+      "generic": "Something went wrong during the check. Nothing was published. Try again."
+    },
+    "startErrors": {
+      "not_verified": "Your profile must be verified before you can publish.",
+      "no_packages": "Make at least one package before you publish.",
+      "style_card_required": "Set up your style card before you publish.",
+      "gate_running": "A check is already running. Wait for it to finish.",
+      "nothing_to_publish": "Nothing has changed since your last publish.",
+      "suspended": "Your agent is suspended, so it cannot be published.",
+      "conflict": "Something changed while you were publishing. Reload and try again.",
+      "unavailable": "Publishing is not available right now. Try again soon.",
+      "generic": "Something went wrong. Try again."
     }
   }
 }

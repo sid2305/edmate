@@ -36,7 +36,9 @@ Isolation between teachers and between students is enforced here, not by Postgre
    scope's columns (`teacherId`, and `studentId` for `evidence_events`) in the same statement
    (`test/scope.test.ts` checks).
 9. **No personal details.** No method selects from the user table, so display names, emails and
-   phone numbers never leave through a repository. `teacherQuestions.listForTeacher` never selects
+   phone numbers never leave through a repository, except `discovery.ts` (`users.name` only, never
+   email or phone, § 11 below) and `teacherProfiles.listPendingForStaff` (task 12.1a, § 11 below):
+   staff-only, name and email, never phone. `teacherQuestions.listForTeacher` never selects
    `student_id`.
 
 10. **Driver errors are scrubbed.** `createRepositories` wraps every method in `guarded()`: any
@@ -63,6 +65,13 @@ Isolation between teachers and between students is enforced here, not by Postgre
     non-eval usage since a date, and nothing else (no student, package or figure). Every argument
     is parsed like a scope or a strict input (`scope`/`invalid` before any SQL). Only server jobs
     call `usageLedger`'s read; no route exposes it.
+
+    `teacherProfiles.listPendingForStaff(by)` (task 12.1a) is not a public read -- it takes no
+    `TeacherScope`/`StudentScope`, but it is staff-only, checked by a plain (unlocked) read of
+    `by`'s role: a malformed `by` is `invalid`, a well-formed `by` that is not staff now is
+    `scope`. It is the one repository method that joins `users` for `name` and `email` (never
+    `phone`), because staff need them to check a teacher's declared identity before approving or
+    rejecting; pending teachers only, oldest first, capped at `STAFF_QUEUE_MAX_LIMIT` (50).
 
 12. **Help state** (ADR-0005, task 3.8). `sessions.saveHelpState` writes `help_state` of the
     scope's own open session only (`ended_at IS NULL` in the same UPDATE; else `not_found`), and

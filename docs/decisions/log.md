@@ -10,6 +10,151 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6b answered-question pairing in the notes PDF · decided by builder · risk: low
+- Decided: `notesDocument()` pairs each `answered` `TeacherQuestion` with the next unused
+  `role: 'teacher'` chat message whose `createdAt` is on or after the question's `answeredAt`
+  (falling back to `createdAt`), in chronological order of both lists.
+- Why: `TeacherQuestion` (packages/contracts) has no `answer` field -- the teacher's answer text is
+  only ever written as a chat message into whichever session happens to be open at answer-time.
+  This heuristic is the closest available approximation given the current schema; it can mis-pair
+  in pathological message timing but never leaks another student's or another question's data,
+  since it only ever reads from this one student's own messages.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b en.json namespace · decided by builder · risk: low
+- Decided: only a `progress` namespace was added to `apps/web/messages/en.json`, not a separate
+  `export` namespace.
+- Why: every string this phase needed (including the two export link labels) fit naturally under
+  `progress`; adding an empty or redundant `export` namespace would have been dead weight. No other
+  builder's lines were touched; `git merge origin/main` was clean (fast-forward, no conflicts).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b clearance-scan exception · decided by builder · risk: low
+- Decided: added `/learn/[agentId]/progress/page.tsx` to `clearance-scan.test.ts`'s one deliberate
+  default-clearance exception list, alongside the existing memory page.
+- Why: the progress page intentionally asks for the default clearance (`age`, not `agent`) for the
+  same reason the memory page does -- it is the student's own view and exports, not the chat itself,
+  and should stay reachable while a parent's consent is outstanding. Without this the pre-existing
+  scan test (not part of Phase B's own file list, but a shared guard over all of `app/learn/**`)
+  would fail on a correct, intended page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b the handoff was recovered from the builder's transcript · decided by lead · risk: low
+- Decided: the builder wrote this handoff but never committed it, and the lead removed its worktree before checking. The lead rebuilt the file word for word from the builder's own Write and Edit calls in its transcript and committed it; only the tool-call line changed, to the harness count.
+- Why: the builder could not be resumed once its worktree was gone, and its decisions must reach the log as written. From now on the lead checks `git status` in a builder's worktree before removing it, and briefs ask builders to confirm a clean tree before returning.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7h UUID-shaped values are exempt from the phone digit-run rule · decided by builder · risk: high
+- Decided: in `redactPersonalData`'s string scrubber, a UUID-shaped span (whole value or embedded
+  in free text, case-insensitive) is never treated as a phone-number candidate, even when one of
+  its hyphen-separated groups is all digits. A phone number elsewhere in the same string, including
+  right next to a UUID, is still redacted.
+- Why: about 1 in 40 real UUIDs (crypto-random) have a group that is all digits, and the previous
+  phone regex redacted that group, corrupting `runId`/`entityId` in audit rows. Exempting the UUID
+  shape (not loosening the phone digit-run length/format rules) fixes this without weakening
+  phone/PII detection for ordinary text.
+- risk: high (this file is on the risky-paths list for `packages/db/src/repositories/**`; it
+  changes what the audit scrubber redacts).
+
+---
+
+### 22 Oct 2026 · 8.7d the web pins the judge from EDMATE_JUDGE_MODEL without importing @edmate/evals · decided by builder · risk: low
+- Decided: `publishRuntime.ts` reads `EDMATE_JUDGE_MODEL` itself, parsed the same way as `resolveJudgeModel`, and stores `<provider>:<model>` as the run's judge. The worker accepts that form. If the variable is missing or malformed, POST answers 503 and the reason `judge_model` is logged.
+- Why: the worker refuses a run pinned to a different judge, so the web must pin the same one. Adding `@edmate/evals` to the web bundle for five lines of parsing is not worth it.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d a failed enqueue ends the run error (enqueue_failed) · decided by builder · risk: low
+- Decided: if the gate job can't be queued after `startRun`, the handler calls `finishRun(error, { groups: [], errorCode: 'enqueue_failed' })` and answers 503. If that `finishRun` also fails, the failure is logged and the run waits for the stale rule.
+- Why: no silent failures. Without this, a Redis blip would block the next publish (`gate_running`) for up to 2 h 15 min.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d publish reasons ride a top-level `reason`, as in 8.6c · decided by builder · risk: low
+- Decided: `error.code` stays a contract `ErrorCode` (`forbidden`, `validation`, `not_found`, `provider_error`, `input_too_large`). The publish case is a top-level `reason` (see the table above), and the page keys its copy on it.
+- Why: there is no new `ErrorCode` without an ADR, and this is the same pattern as 8.6c.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d the publish pins reuse the packages runtime · decided by builder · risk: low
+- Decided: the newest signed prompt-pack set and `MODEL_MIX.paid` come from calling 8.6c's `createPackagesRuntime`, read-only, not from a copy. The style card is the newest one, the course comes from `courses.ensureDefault`, and the agent is the one on the teacher's packages. No packages means 409 `no_packages`; no style card means 409 `style_card_required`, both before `startRun`.
+- Why: one place pins the agent, and 8.6c's files stay untouched. Side effect: a mix that can't be priced also blocks publishing (503), the same as on the packages page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d the page polls every 5 s while a run is open · decided by builder · risk: low
+- Decided: `/teacher/publish` polls GET every 5 s while the run is `queued` or `running`, one request at a time. A failed poll keeps the last run and shows "could not be refreshed just now". Polling stops when the run finishes or the page closes.
+- Why: a gate can run up to 2 h; 5 s is cheap and feels live.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d review: the pick() narrowing cast stays · decided by lead · risk: low
+- Decided: the `(v as K)` cast in PublishView.tsx pick() is kept (wontfix); 8.7d's other MEDIUM and LOW review findings go to board task 8.7l.
+- Why: the cast follows an `.includes()` check against the same literal list, which is the usual way to narrow in TypeScript; nothing in the deferred findings blocks a teacher from publishing.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1a Staff-only join of users for name/email in listPendingForStaff · decided by builder · risk: high
+- Decided: `teacherProfiles.listPendingForStaff` is the one repository method that selects
+  `users.name` and `users.email` (never `phone`), gated by checking the caller's own role is
+  `staff` right now (unlocked read of `users.role`, before any other SQL). `role-lock.ts` itself
+  stays personal-data-free: the staff check here is a plain, local `select role from users` in
+  `teacher-profiles.ts`, not routed through `role-lock.ts`, so that file's own test (it selects only
+  `{ role: users.role }`) is unaffected.
+- Why: staff need the teacher's declared name and email to actually check identity before
+  approving or rejecting (same precedent as `identity.getUserByEmail`); the plan (Q2) accepted this
+  scoped to this one method. `packages/db/src/repositories/**` is a risk path
+  (`security-reviewer`), and this is the first repository method to read personal data outside
+  `discovery.ts`'s existing public-display-name exception, so it is logged `risk: high` per the
+  plan's "Risky paths touched" section.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.1a listPendingForStaff excluded from the scope.test.ts bad-scope grid · decided by builder · risk: low
+- Decided: `teacherProfiles.listPendingForStaff` is excluded from `scope.test.ts`'s "every
+  repository method rejects a bad scope" grid, with a comment explaining why (same pattern as the
+  existing `discovery.search` exclusion).
+- Why: that grid's `BAD_SCOPES` fixtures assume the first argument is a `TeacherScope`/
+  `StudentScope` object; `listPendingForStaff`'s first argument is a bare staff id, so a fixture
+  like the plain string `'tch_a'` is actually a well-formed id by `IdSchema` and would reach the
+  database (against the grid's unreachable-host pool) instead of failing before any SQL. Its own
+  malformed/non-staff cases are covered directly in `teacher-profiles.test.ts` and
+  `teacher-profiles.int.test.ts`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1a isolation-grid case is `scope: 'public'`, not a teacher/student pair · decided by builder · risk: low
+- Decided: `teacherProfiles.listPendingForStaff`'s entry in `repositories.int.test.ts`'s `CASES`
+  record uses `scope: 'public'` (the `agents.owner`-style "no teacher or student scope at all"
+  case), with its own `check` asserting the staff/non-staff split and that every returned row is
+  `pending` with the right shape — not an exact pending set, since an earlier case in the same file
+  (`teacherProfiles.assertVerifiedForPublish`) deliberately flips verification status for the
+  teachers in the seed and test order determines which one ends up verified.
+- Why: the method genuinely has no `TeacherScope`/`StudentScope` first argument, so it cannot run
+  through `runGrid`'s per-teacher/per-pair actor loop; asserting the exact pending set would be
+  brittle against `CASES`' insertion order (a correctness risk a future reorder could silently
+  break). The int test in `teacher-profiles.int.test.ts` already asserts the exact pending set,
+  name/email join and cap in an isolated, controlled database.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.7a CI runs the Playwright e2e suite in the node job · decided by builder · risk: high
 - Decided: added two steps to the existing `.github/workflows/ci.yml` `node` job, after "Build
   smoke": "Install Playwright browsers" (`corepack pnpm --filter @edmate/web exec playwright

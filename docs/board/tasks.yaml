@@ -2237,9 +2237,10 @@ tasks:
   accept: a verified teacher who changes subject is pending again; a bio-only edit leaves verified; covered by a db integration test.
   deps:
   - 8.1a
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.1c-subject-reverify
   risk: risky
+  model: build:opus-5.5/medium
 - id: 8.2b
   milestone: M8
   title: 'Web-link and YouTube uploads in the upload centre (deferred from 8.2 by the human, B-31): the worker fetches a teacher-given URL or YouTube transcript behind an allow-listed, SSRF-safe fetcher,
@@ -4025,9 +4026,30 @@ tasks:
   - 8.7c
   - 8.6c
   risk: low
-  status: running
+  status: done
   branch: m8/8.7d-publish-page
-  model: plan:opus build:opus
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 56
+    tokens_in: 182
+    tokens_out: 354
+    cache_read_tokens: 2860258
+    wall_time_seconds: 165
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 1
+    human_questions: 0
 - id: 8.7e
   milestone: M8
   title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
@@ -4036,7 +4058,9 @@ tasks:
   - 8.7d
   - 9.2c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7e-public-scorecard
+  model: plan:opus build:sonnet
 - id: 13.regate
   milestone: M13
   title: Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)
@@ -4072,9 +4096,31 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: running
+  status: done
   branch: m12/12.1a-staff-queue
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:opus review:sonnet
+  metrics:
+    tool_calls: 73
+    tokens_in: 254
+    tokens_out: 987
+    cache_read_tokens: 3272977
+    wall_time_seconds: 1148
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        HIGH: 2
+        LOW: 3
+        MEDIUM: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 12.1b
   milestone: M12
   title: Staff console page and verification routes in apps/web (12.1 Phase B)
@@ -4082,7 +4128,9 @@ tasks:
   deps:
   - 12.1a
   risk: high
-  status: todo
+  status: running
+  branch: m12/12.1b-staff-console
+  model: plan:sonnet build:opus
 - id: 8.7f
   milestone: M8
   title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
@@ -4155,9 +4203,31 @@ tasks:
   deps:
   - 9.6a
   risk: medium
-  status: running
+  status: done
   branch: m9/9.6b-progress-export
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 76
+    tokens_in: 262
+    tokens_out: 1115
+    cache_read_tokens: 5804537
+    wall_time_seconds: 218
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 9.6c
   milestone: M9
   title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
@@ -4165,7 +4235,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: todo
+  status: running
+  branch: m9/9.6c-plan-changes
+  model: plan:sonnet build:sonnet
 - id: 9.6d
   milestone: M9
   title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
@@ -4231,7 +4303,7 @@ tasks:
   deps:
   - 9.7a
   - 9.2c
-  - 9.6b
+  - 9.6d
   risk: low
   status: todo
 - id: 8.7g
@@ -4251,9 +4323,30 @@ tasks:
   accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
   deps: []
   risk: high
-  status: running
+  status: done
   branch: m8/8.7h-audit-uuid
-  model: plan:lead build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 17
+    tokens_in: 66
+    tokens_out: 595
+    cache_read_tokens: 840926
+    wall_time_seconds: 291
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 11.1a
   milestone: M11
   title: Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)
@@ -4261,7 +4354,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: running
+  branch: m11/11.1a-live-classes-repo
+  model: plan:sonnet build:sonnet
 - id: 11.1b
   milestone: M11
   title: 'Teacher studio live classes: schedule with an external link, attach packages, list (11.1 Phase B, apps/web; plan docs/tasks/11.1/plan.md)'
@@ -4354,7 +4449,9 @@ tasks:
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
-    WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users'
+    WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users; 12.1b review LOWs: decide whether the staff POST may
+    change an already verified or rejected teacher (revoke) or only a pending one, and test it; add apps/web/app/staff/** to the security-reviewer risk group; the real-Postgres route test cleans up its
+    staff user and rows in the shared CI database; MAX_REASON_CHARS comes from one shared constant; list() maps the integrity error kind explicitly'
   accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
   deps:
   - 12.1a
@@ -4371,12 +4468,50 @@ tasks:
   status: todo
 - id: 8.7l
   milestone: M13
-  title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start()'
+  title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
+    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard
+    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
   risk: low
   status: todo
+- id: 8.7m
+  milestone: M13
+  title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
+    with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
+  accept: tests for the hex-padded and glued cases (the glued case redacts the phone digits); the crafted-UUID cases are all UUID-shaped; redact-json.ts stays at 100% coverage.
+  deps:
+  - 8.7h
+  risk: high
+  status: todo
+- id: 9.6g
+  milestone: M9
+  title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher
+    answer to its question by timestamp only (link by question or message id); routes.ts drops the double cast for the real cursor type; toWinAnsi strips 0x80-0x9F; fromError logs the error name on 500'
+  accept: a pdf test asserts the bullet byte is 0x95; a notes test with two questions answered close together pairs each with its own answer; no `as unknown as` in routes.ts.
+  deps:
+  - 9.6b
+  risk: low
+  status: todo
+- id: 11.3a
+  milestone: M11
+  title: Weekly insights repository in packages/db, minimum 5 distinct students per group (11.3 Phase A)
+  accept: per docs/tasks/11.3/plan.md Phase A and Lead answers; db typecheck, lint and test green.
+  deps:
+  - '8.1'
+  risk: high
+  status: running
+  branch: m11/11.3a-insights-repo
+  model: plan:sonnet build:opus-5.5/medium
+- id: 11.3b
+  milestone: M11
+  title: Weekly insights worker job, Monday 07:00 in the US pack timezone (11.3 Phase B)
+  accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
+  deps:
+  - 11.3a
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

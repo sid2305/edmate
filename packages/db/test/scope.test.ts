@@ -122,6 +122,12 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // teachers" -- a legitimate call, not a bad scope), so it cannot satisfy this grid; its own
     // malformed-input cases are covered directly in discovery.int.test.ts and leak.test.ts.
     if (name === 'discovery.search') continue;
+    // teacherProfiles.listPendingForStaff (12.1a) takes a bare staff id, not a TeacherScope or
+    // StudentScope object: some BAD_SCOPES entries (for example the plain string 'tch_a') are
+    // well-formed ids by its own IdSchema, so they would reach the database instead of failing
+    // before any SQL. Its own malformed/non-staff cases are covered in teacher-profiles.test.ts
+    // and teacher-profiles.int.test.ts.
+    if (name === 'teacherProfiles.listPendingForStaff') continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
@@ -221,17 +227,27 @@ describe('repositories source', () => {
     }
   });
 
-  it('never reads from users (no names, emails or phones), except discovery.ts', () => {
+  it('never reads from users (no names, emails or phones), except discovery.ts and the staff-only queue in teacher-profiles.ts', () => {
     // Task 9.2a lead decision (Q2): a teacher's public sign-in name is their public display name
     // on the discovery page and card -- teacherProfiles has no separate displayName column, and
     // the WHERE clause (verified + live agent + live package) already keeps this to public rows
     // only. discovery.ts reads only `users.role` and `users.name`, never email or phone.
-    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts') && x !== 'discovery.ts')) {
+    for (const f of readdirSync(dir).filter(
+      (x) => x.endsWith('.ts') && x !== 'discovery.ts' && x !== 'teacher-profiles.ts',
+    )) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(/\busers\b/.test(src), `${f} mentions users`).toBe(false);
     }
     const discoverySrc = readFileSync(join(dir, 'discovery.ts'), 'utf8');
     expect(/\busers\.(email|phone)\b/.test(discoverySrc)).toBe(false);
+    // Task 12.1a lead decision (Q2): the staff verification queue is the one place a teacher's
+    // declared name and email reach a repository caller, and only staff see it (checked by role
+    // in listPendingForStaff). `users.phone` stays out even here.
+    const profilesSrc = readFileSync(join(dir, 'teacher-profiles.ts'), 'utf8');
+    expect(/\busers\.phone\b/.test(profilesSrc)).toBe(false);
+    expect(profilesSrc).toContain('listPendingForStaff');
+    expect(profilesSrc).toContain('users.name');
+    expect(profilesSrc).toContain('users.email');
   });
 
   it('reads a user only through role-lock.ts, which selects the role column alone (8.1)', () => {

@@ -5,15 +5,29 @@
 //
 // `photo` has no input yet (the column stays null until a storage port exists, 8.2 or later) and
 // `payoutAccountRef` belongs to payments (M10); neither is read or written here.
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
-import { teacherProfiles } from '../schema/index.js';
+import { teacherProfiles, users } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
-import { toTeacherProfile, type TeacherProfileRow } from './map.js';
+import {
+  toTeacherProfile,
+  toTeacherVerificationQueueRow,
+  type TeacherProfileRow,
+  type TeacherVerificationQueueRow,
+} from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
+
+/** Re-exported for index.ts (STAFF_QUEUE_MAX_LIMIT sits alongside it there). */
+export type { TeacherVerificationQueueRow };
+
+/**
+ * The staff queue (task 12.1a) is capped like its siblings (`*_MAX_LIMIT`): a staff user sees at
+ * most this many pending teachers in one read, oldest first.
+ */
+export const STAFF_QUEUE_MAX_LIMIT = 50;
 
 /**
  * Lower-case words joined by single hyphens, 3 to 60 characters: it appears in public URLs.
@@ -185,6 +199,37 @@ export function teacherProfilesRepo(db: Db) {
         .from(teacherProfiles)
         .where(eq(teacherProfiles.userId, teacherId));
       if (row?.status !== 'verified') throw new RepositoryError('scope', method);
+    },
+
+    /**
+     * The staff verification queue (task 12.1a): pending teachers, oldest first, capped at
+     * `STAFF_QUEUE_MAX_LIMIT`. `by` must be a user who is staff right now (a plain, unlocked read
+     * of the role column — this is a read, not a write, so no `FOR SHARE` is needed, unlike
+     * `setVerification`'s `by` check). Joins `users` for the declared name and email, same
+     * precedent as `identity.getUserByEmail`: staff need them to actually check identity. A
+     * malformed `by` is `invalid`; a well-formed `by` that is not staff is `scope`.
+     */
+    async listPendingForStaff(by: unknown): Promise<TeacherVerificationQueueRow[]> {
+      const method = 'teacherProfiles.listPendingForStaff';
+      const id = parseArg(IdSchema, by, method);
+      const [actor] = await db.select({ role: users.role }).from(users).where(eq(users.id, id));
+      if (actor?.role !== 'staff') throw new RepositoryError('scope', method);
+      const rows = await db
+        .select({
+          id: teacherProfiles.id,
+          userId: teacherProfiles.userId,
+          slug: teacherProfiles.slug,
+          subject: teacherProfiles.subject,
+          verificationStatus: teacherProfiles.verificationStatus,
+          name: users.name,
+          email: users.email,
+        })
+        .from(teacherProfiles)
+        .innerJoin(users, eq(users.id, teacherProfiles.userId))
+        .where(eq(teacherProfiles.verificationStatus, 'pending'))
+        .orderBy(asc(teacherProfiles.createdAt), asc(teacherProfiles.id))
+        .limit(STAFF_QUEUE_MAX_LIMIT);
+      return rows.map((r) => toTeacherVerificationQueueRow(r, method));
     },
   };
 }

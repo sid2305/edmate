@@ -1,4 +1,5 @@
 // Unit (no database): redactPersonalData scrubs personal keys out of audit before/after payloads.
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from '../src/index.js';
 
@@ -231,6 +232,48 @@ describe('redactPersonalData', () => {
     expect(redactPersonalData({ 'e\u200bmail': 'x', 'na\u200dme': 'y' })).toEqual({
       'e\u200bmail': REDACTED,
       'na\u200dme': REDACTED,
+    });
+  });
+
+  // 8.7h: a UUID whose first (or any) group is all digits must not be read as a phone number.
+  it('keeps 10,000 random UUIDs unredacted (property test)', () => {
+    for (let i = 0; i < 10_000; i += 1) {
+      const id = randomUUID();
+      expect(redactPersonalData({ runId: id })).toEqual({ runId: id });
+    }
+  });
+
+  it.each([
+    'runId',
+    '00000000-0000-4000-8000-000000000000',
+    '12345678-1234-4234-8234-123456789012',
+    '99999999-9999-4999-8999-999999999999',
+    '11112222-3333-4444-5555-666677778888',
+  ])('keeps a crafted UUID whose groups are all digits: %s', (id) => {
+    expect(redactPersonalData({ runId: id })).toEqual({ runId: id });
+    expect(redactPersonalData(id)).toBe(id);
+  });
+
+  it('keeps a UUID embedded in free text, case-insensitively', () => {
+    const upper = '12345678-1234-4234-8234-123456789012'.toUpperCase();
+    expect(redactPersonalData({ note: `run 12345678-1234-4234-8234-123456789012 failed` })).toEqual(
+      { note: 'run 12345678-1234-4234-8234-123456789012 failed' },
+    );
+    expect(redactPersonalData({ note: `run ${upper} failed` })).toEqual({
+      note: `run ${upper} failed`,
+    });
+  });
+
+  it('still redacts a phone number that sits right next to a UUID', () => {
+    const id = '12345678-1234-4234-8234-123456789012';
+    expect(redactPersonalData({ note: `id ${id} call 555-010-0199` })).toEqual({
+      note: `id ${id} call ${REDACTED}`,
+    });
+  });
+
+  it('still redacts a digit run inside free text that is not UUID-shaped', () => {
+    expect(redactPersonalData({ note: 'call 5550100199 now' })).toEqual({
+      note: `call ${REDACTED} now`,
     });
   });
 

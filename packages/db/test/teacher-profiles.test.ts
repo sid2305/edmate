@@ -111,4 +111,19 @@ describe('teacherProfiles input checks', () => {
       await failure(repo.setVerification(scope, { status: 'verified', by: scope.teacherId })),
     ).toEqual({ kind: 'scope', method: 'teacherProfiles.setVerification' });
   });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['an empty string', ''],
+    ['SQL in the id', "x' or 1=1"],
+    ['a 129-char id', 'a'.repeat(129)],
+    ['a scope object, not a bare id', { teacherId: 'stf_1' }],
+    ['an array', ['stf_1']],
+  ])('listPendingForStaff rejects %s as invalid before any SQL', async (_label, by) => {
+    expect(await failure(repo.listPendingForStaff(by as never))).toEqual({
+      kind: 'invalid',
+      method: 'teacherProfiles.listPendingForStaff',
+    });
+  });
 });
