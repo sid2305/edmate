@@ -27,6 +27,7 @@ function hooks() {
     repos: vi.fn(() => repos as never),
     s3: vi.fn(() => ({ send }) as never),
     queue: vi.fn(() => ({ add })),
+    linkRateLimit: vi.fn(() => ({ take: vi.fn(async () => true) })),
     log: { error: vi.fn() },
   };
   return { h, add, send, repos };

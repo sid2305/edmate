@@ -6,7 +6,8 @@ import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createGuard, type CookieReader, type Principal, type RoleContext } from '../auth/guard';
-import { MAX_DOCUMENT_UPLOAD_BYTES, MAX_MEDIA_UPLOAD_BYTES, uploadTypeOfKey } from './files';
+import { MAX_DOCUMENT_UPLOAD_BYTES, MAX_MEDIA_UPLOAD_BYTES, isLinkKey, uploadTypeOfKey } from './files';
+import { fakeLinkRateLimiter, failingLinkRateLimiter } from './linkRateLimit';
 import {
   MAX_BODY_BYTES,
   StudioUnavailableError,
@@ -113,6 +114,7 @@ function memoryBackend() {
     }),
     newDocumentId: () => `doc_${++n}`,
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
+    linkRateLimit: fakeLinkRateLimiter(),
   };
   return { backend, rows, objects, enqueued, deleted, logs };
 }
@@ -283,6 +285,151 @@ describe('POST /api/studio/documents (create)', () => {
   });
 });
 
+const LINK_URL = 'https://example.org/lesson-one';
+
+describe('POST /api/studio/links (addLink, task 8.2f)', () => {
+  it('creates a processing row under a .link key, enqueues the job, and titles it from the host', async () => {
+    const s = setup();
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    expect(res.status).toBe(202);
+    const body = await json(res);
+    expect(body).toEqual({ documentId: 'doc_1', status: 'processing' });
+    const row = s.rows.get('doc_1')!;
+    expect(row).toMatchObject({
+      teacherId: 't_asha',
+      status: 'processing',
+      sourceTitle: 'example.org',
+    });
+    expect(row.storageKey).toBe('teachers/t_asha/documents/doc_1.link');
+    expect(isLinkKey(row.storageKey!)).toBe(true);
+    expect(s.enqueued).toEqual([
+      {
+        job: { teacherId: 't_asha', documentId: 'doc_1', fileKind: 'web', url: LINK_URL },
+        storageKey: row.storageKey,
+      },
+    ]);
+  });
+
+  it('uses a given title over the host default', async () => {
+    const s = setup();
+    await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, sourceTitle: 'Week 1 reading' }),
+      ctx(ASHA),
+    );
+    expect(s.rows.get('doc_1')!.sourceTitle).toBe('Week 1 reading');
+  });
+
+  it('refuses every bad URL shape as 400, with nothing written or enqueued', async () => {
+    const s = setup();
+    for (const url of [
+      'http://example.org/',
+      'https://user:pass@example.org/',
+      'https://localhost/',
+      'https://127.0.0.1/',
+      'https://192.168.1.1/',
+      'not a url',
+      `https://example.org/${'x'.repeat(3000)}`,
+    ]) {
+      const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url }), ctx(ASHA));
+      expect(res.status, url).toBe(400);
+      expect((await json(res)).error?.code).toBe('validation');
+    }
+    expect(s.rows.size).toBe(0);
+    expect(s.enqueued).toEqual([]);
+  });
+
+  it('refuses a YouTube link with its own fixed words, 400, nothing written', async () => {
+    const s = setup();
+    const res = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: 'https://www.youtube.com/watch?v=x' }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(400);
+    const body = await json(res);
+    expect(body.error?.code).toBe('validation');
+    expect(body.error?.message).toMatch(/YouTube/);
+    expect(s.rows.size).toBe(0);
+  });
+
+  it("answers another teacher's module as not_found, writes and enqueues nothing", async () => {
+    const s = setup();
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL }), ctx(ASHA));
+    expect(res.status).toBe(404);
+    expect(s.rows.size).toBe(0);
+    expect(s.enqueued).toEqual([]);
+  });
+
+  it('refuses a client-sent teacherId, storageKey or fileKind (strict body)', async () => {
+    const s = setup();
+    const res = await s.h.addLink(
+      req('POST', '/x', {
+        moduleId: 'm_asha',
+        url: LINK_URL,
+        teacherId: 't_ben',
+        storageKey: 'evil',
+        fileKind: 'pdf',
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('an enqueue failure marks the row failed/enqueue_failed and is 503', async () => {
+    const s = setup();
+    s.backend.enqueue = vi.fn(async () => {
+      throw new TypeError('redis down');
+    });
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    expect(res.status).toBe(503);
+    expect(s.rows.get('doc_1')).toMatchObject({ status: 'failed', failureReason: 'enqueue_failed' });
+  });
+
+  it('is rate-limited per teacher: the 21st link in the window is 429, nothing written', async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+      expect(res.status).toBe(202);
+    }
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    expect(res.status).toBe(429);
+    expect((await json(res)).error?.code).toBe('rate_limited');
+    expect(s.rows.size).toBe(20);
+  });
+
+  it("doesn't share a rate-limit bucket between teachers", async () => {
+    const s = setup();
+    for (let i = 0; i < 20; i += 1) {
+      await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    }
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL }), ctx(BEN));
+    expect(res.status).toBe(202);
+  });
+
+  it('a rate-limit store error fails closed: 503, nothing written, no URL logged', async () => {
+    const s = setup();
+    s.backend.linkRateLimit = failingLinkRateLimiter(new RangeError('redis unreachable'));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    expect(res.status).toBe(503);
+    expect((await json(res)).error?.code).toBe('provider_error');
+    expect(s.rows.size).toBe(0);
+    expect(s.enqueued).toEqual([]);
+    expect(s.logs).toEqual([
+      { event: 'studio.link_rate_limit_unavailable', fields: { error: 'RangeError' } },
+    ]);
+  });
+
+  it('the list view never includes the URL or the storage key', async () => {
+    const s = setup();
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.list(req('GET', '/x'), ctx(ASHA));
+    const body = await json(res);
+    const text = JSON.stringify(body);
+    expect(text).not.toContain(LINK_URL);
+    expect(text).not.toContain('.link');
+    expect((body.documents as { source: string }[])[0]!.source).toBe('link');
+  });
+});
+
 describe('GET /api/studio/documents (list)', () => {
   it("lists only the session teacher's documents, without storage keys", async () => {
     const s = setup();
@@ -298,6 +445,7 @@ describe('GET /api/studio/documents (list)', () => {
       moduleId: 'm_asha',
       kind: 'material',
       sourceTitle: 'Algebra notes',
+      source: 'file',
       status: 'uploading',
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
@@ -529,6 +677,15 @@ describe('DELETE /api/studio/documents/:id', () => {
     expect((await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: documentId }))).status).toBe(204);
     expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
   });
+
+  it('a link row deletes no S3 object (there is none)', async () => {
+    const s = setup();
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: 'doc_1' }));
+    expect(res.status).toBe(204);
+    expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
+    expect(s.rows.has('doc_1')).toBe(false);
+  });
 });
 
 describe('POST /api/studio/documents/:id/replace', () => {
@@ -631,6 +788,18 @@ describe('POST /api/studio/documents/:id/replace', () => {
     );
     expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
   });
+
+  it('refuses to replace a link: delete it and add it again instead', async () => {
+    const s = setup();
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 1 }),
+      ctx(ASHA, { id: 'doc_1' }),
+    );
+    expect(res.status).toBe(400);
+    expect(s.backend.storage.createUploadUrl).not.toHaveBeenCalled();
+    expect(s.rows.get('doc_1')!.storageKey).toBe('teachers/t_asha/documents/doc_1.link');
+  });
 });
 
 describe('failures', () => {
@@ -720,6 +889,7 @@ describe('through the real guard and ROUTE_POLICY', () => {
       ...s,
       list: guard.withRole(['teacher'], s.h.list),
       create: guard.withRole(['teacher'], s.h.create),
+      addLink: guard.withRole(['teacher'], s.h.addLink),
       remove: guard.withRole(['teacher'], s.h.remove),
     };
   }
@@ -750,6 +920,22 @@ describe('through the real guard and ROUTE_POLICY', () => {
       403,
     );
     expect(g.rows.size).toBe(0);
+  });
+
+  it('addLink: anonymous 401, student/staff 403, cross-origin 403; a teacher succeeds', async () => {
+    const g = guarded();
+    const body = { moduleId: 'm_asha', url: LINK_URL };
+    expect((await g.addLink(call('POST', '/api/studio/links', null, body))).status).toBe(401);
+    expect((await g.addLink(call('POST', '/api/studio/links', 'student', body))).status).toBe(403);
+    expect((await g.addLink(call('POST', '/api/studio/links', 'staff', body))).status).toBe(403);
+    expect(
+      (await g.addLink(call('POST', '/api/studio/links', 'asha', body, 'https://evil.test')))
+        .status,
+    ).toBe(403);
+    expect(g.rows.size).toBe(0);
+    expect(
+      (await g.addLink(call('POST', '/api/studio/links', 'asha', body))).status,
+    ).toBe(202);
   });
 
   it("DELETE is open to teachers, scoped to the session: Ben can't delete Asha's document", async () => {

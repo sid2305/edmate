@@ -16,6 +16,7 @@ import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
+import { reportsRepo } from './reports.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyAlertsRepo } from './safety-alerts.js';
 import { safetyEventsRepo } from './safety-events.js';
@@ -78,6 +79,7 @@ export function createRepositories(db: Db) {
     publish: guardAll('publish', publishRepo(db)),
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
+    reports: guardAll('reports', reportsRepo(db)),
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
   };
 }
@@ -268,6 +270,18 @@ export {
   type TeacherLiveClassRow,
   type UpcomingLiveClass,
 } from './live-classes.js';
+export {
+  REPORT_CATEGORIES,
+  REPORT_CITED_DOCUMENTS_MAX,
+  REPORT_NOTE_MAX,
+  REPORTS_QUEUE_MAX_LIMIT,
+  type ReportCategory,
+  type ReportDecision,
+  type ReportFileInput,
+  type ReportReviewInput,
+  reportRowId,
+  type StaffReportRow,
+} from './reports.js';
 export {
   SAFETY_ALERT_ACK_ACTION,
   SAFETY_ALERT_LIST_MAX_LIMIT,

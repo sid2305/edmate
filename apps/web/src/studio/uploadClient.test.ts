@@ -6,6 +6,7 @@ import { UPLOAD_TYPES } from './files';
 import {
   ACCEPT,
   CLIENT_UPLOAD_TYPES,
+  addLink,
   completeDocument,
   contentTypeFor,
   createDocument,
@@ -117,16 +118,46 @@ describe('the JSON calls', () => {
       ok: false,
       status: 409,
       code: 'validation',
+      message: 'x',
     });
     await expect(listDocuments()).resolves.toEqual({
       ok: false,
       status: 413,
       code: 'input_too_large',
+      message: 'x',
     });
     await expect(deleteDocument('d')).resolves.toEqual({
       ok: false,
       status: 502,
       code: 'provider_error',
+    });
+  });
+
+  it('adds a link with exactly the fields given', async () => {
+    const made = { documentId: 'doc_1', status: 'processing' };
+    const calls = stubFetch(reply(202, made));
+    await expect(addLink({ moduleId: 'm1', url: 'https://example.org/a' })).resolves.toEqual({
+      ok: true,
+      value: made,
+    });
+    expect(calls[0]).toMatchObject({
+      url: '/api/studio/links',
+      init: {
+        method: 'POST',
+        body: JSON.stringify({ moduleId: 'm1', url: 'https://example.org/a' }),
+      },
+    });
+  });
+
+  it('a refused link carries the server\'s fixed message through', async () => {
+    stubFetch(
+      reply(400, { error: { code: 'validation', message: "YouTube links aren't supported yet.", retryable: false } }),
+    );
+    await expect(addLink({ moduleId: 'm1', url: 'https://youtu.be/x' })).resolves.toEqual({
+      ok: false,
+      status: 400,
+      code: 'validation',
+      message: "YouTube links aren't supported yet.",
     });
   });
 

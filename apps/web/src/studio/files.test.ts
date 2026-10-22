@@ -3,6 +3,8 @@ import {
   MAX_DOCUMENT_UPLOAD_BYTES,
   MAX_MEDIA_UPLOAD_BYTES,
   UPLOAD_TYPES,
+  isLinkKey,
+  newLinkKey,
   newStorageKey,
   uploadTypeFor,
   uploadTypeOfKey,
@@ -55,5 +57,20 @@ describe('storage keys', () => {
     expect(uploadTypeOfKey(newStorageKey('t_1', 'd', type))).toBe(type);
     expect(uploadTypeOfKey('teachers/t_1/documents/d/x.exe')).toBeNull();
     expect(uploadTypeOfKey('noextension')).toBeNull();
+  });
+});
+
+describe('link keys (task 8.2f)', () => {
+  it('builds a stable key under the teacher and document, with no upload type', () => {
+    const key = newLinkKey('t_1', 'doc_1');
+    expect(key).toBe('teachers/t_1/documents/doc_1.link');
+    expect(uploadTypeOfKey(key)).toBeNull();
+  });
+
+  it('is recognised by isLinkKey and nothing else is', () => {
+    expect(isLinkKey(newLinkKey('t_1', 'doc_1'))).toBe(true);
+    const fileType = uploadTypeFor('application/pdf')!;
+    expect(isLinkKey(newStorageKey('t_1', 'doc_1', fileType))).toBe(false);
+    expect(isLinkKey('noextension')).toBe(false);
   });
 });
