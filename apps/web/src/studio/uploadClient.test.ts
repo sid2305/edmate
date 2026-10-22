@@ -2,16 +2,20 @@
 // Task 8.2 Phase 4: the browser side of the studio document API. Fetch is stubbed (rule 4); the
 // PUT runs over a fake XMLHttpRequest. Written red before uploadClient.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { UPLOAD_TYPES } from './files';
+import { MAX_UNSPLIT_MEDIA_BYTES, UPLOAD_TYPES, isRecordingType, uploadTypeFor } from './files';
 import {
   ACCEPT,
   CLIENT_UPLOAD_TYPES,
+  RECORDING_ACCEPT,
+  RECORDING_UPLOAD_EXTS,
+  UNSPLIT_MEDIA_MAX_BYTES,
   addLink,
   completeDocument,
   contentTypeFor,
   createDocument,
   deleteDocument,
   listDocuments,
+  needsSmallerFile,
   putFile,
   replaceDocument,
 } from './uploadClient';
@@ -70,6 +74,45 @@ describe('the upload type table', () => {
   });
 });
 
+describe('recording types (task 11.4 Phase B)', () => {
+  it('RECORDING_UPLOAD_EXTS is a subset of CLIENT_UPLOAD_TYPES, each mapping to chunkKind transcript', () => {
+    const clientExts = new Set(CLIENT_UPLOAD_TYPES.map((t) => t.ext));
+    for (const ext of RECORDING_UPLOAD_EXTS) {
+      expect(clientExts.has(ext)).toBe(true);
+      const type = UPLOAD_TYPES.find((t) => t.ext === ext)!;
+      expect(isRecordingType(type)).toBe(true);
+    }
+  });
+
+  it('RECORDING_ACCEPT holds exactly the recording extensions and types', () => {
+    const parts = RECORDING_ACCEPT.split(',');
+    for (const ext of RECORDING_UPLOAD_EXTS) expect(parts).toContain(`.${ext}`);
+    expect(parts).not.toContain('.pdf');
+    expect(parts).not.toContain('application/pdf');
+  });
+
+  it('pins UNSPLIT_MEDIA_MAX_BYTES to the server MAX_UNSPLIT_MEDIA_BYTES (24 MB)', () => {
+    expect(UNSPLIT_MEDIA_MAX_BYTES).toBe(24 * 1024 * 1024);
+    expect(UNSPLIT_MEDIA_MAX_BYTES).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+  });
+
+  it('needsSmallerFile flags only m4a/mp4/webm over the cap', () => {
+    const big = 25 * 1024 * 1024;
+    const small = 10 * 1024 * 1024;
+    expect(needsSmallerFile(new File(['x'], 'a.mp4', { type: 'video/mp4' }), 'video/mp4')).toBe(
+      false,
+    );
+    const bigMp4 = new File([new Uint8Array(big)], 'a.mp4', { type: 'video/mp4' });
+    expect(needsSmallerFile(bigMp4, 'video/mp4')).toBe(true);
+    const bigMp3 = new File([new Uint8Array(big)], 'a.mp3', { type: 'audio/mpeg' });
+    expect(needsSmallerFile(bigMp3, 'audio/mpeg')).toBe(false);
+    const smallWebm = new File([new Uint8Array(small)], 'a.webm', { type: 'video/webm' });
+    expect(needsSmallerFile(smallWebm, 'video/webm')).toBe(false);
+    expect(needsSmallerFile(new File(['x'], 'a.pdf'), null)).toBe(false);
+    expect(uploadTypeFor('video/webm')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+  });
+});
+
 describe('the JSON calls', () => {
   it('lists documents', async () => {
     const calls = stubFetch(reply(200, { documents: [{ id: 'doc_1' }] }));
@@ -113,6 +156,29 @@ describe('the JSON calls', () => {
         JSON.stringify({ contentType: 'application/pdf', byteSize: 9, rightsDeclared: true }),
       ],
     ]);
+  });
+
+  it('sends liveClassId only when given (task 11.4 Phase B)', async () => {
+    const made = { documentId: 'doc_1', uploadUrl: 'https://b.test/k', uploadHeaders: {} };
+    const calls = stubFetch(reply(201, made), reply(201, made));
+    await createDocument({
+      moduleId: 'm1',
+      sourceTitle: 'Live class: A, 1 Jan',
+      contentType: 'text/vtt',
+      byteSize: 3,
+      rightsDeclared: true,
+      liveClassId: 'lc_1',
+    });
+    await createDocument({
+      moduleId: 'm1',
+      sourceTitle: 'A',
+      contentType: 'text/markdown',
+      byteSize: 3,
+      rightsDeclared: true,
+    });
+    const bodies = calls.map((c) => JSON.parse(c.init!.body as string) as Record<string, unknown>);
+    expect(bodies[0]).toMatchObject({ liveClassId: 'lc_1' });
+    expect(bodies[1]).not.toHaveProperty('liveClassId');
   });
 
   it('completes and deletes, escaping the id', async () => {

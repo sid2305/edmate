@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_DOCUMENT_UPLOAD_BYTES,
   MAX_MEDIA_UPLOAD_BYTES,
+  MAX_UNSPLIT_MEDIA_BYTES,
   UPLOAD_TYPES,
   isLinkKey,
+  isRecordingType,
   newLinkKey,
   newStorageKey,
   uploadTypeFor,
@@ -53,6 +55,30 @@ describe('upload types', () => {
   it('keeps the document cap at the ingest limit (20 MB)', () => {
     expect(MAX_DOCUMENT_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
     expect(MAX_MEDIA_UPLOAD_BYTES).toBeLessThan(600_000_000);
+  });
+});
+
+describe('the fail-fast cap for media the worker cannot split (task 11.4 Phase B, Q3)', () => {
+  it('pins MAX_UNSPLIT_MEDIA_BYTES to 24 MB', () => {
+    expect(MAX_UNSPLIT_MEDIA_BYTES).toBe(24 * 1024 * 1024);
+  });
+
+  it('keeps the mp3/wav cap at 500 MB; m4a/mp4/webm get the 24 MB cap', () => {
+    expect(uploadTypeFor('audio/mpeg')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
+    expect(uploadTypeFor('audio/wav')?.maxBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
+    expect(uploadTypeFor('audio/mp4')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+    expect(uploadTypeFor('video/mp4')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+    expect(uploadTypeFor('video/webm')?.maxBytes).toBe(MAX_UNSPLIT_MEDIA_BYTES);
+  });
+
+  it('isRecordingType is true exactly for the transcript-kind types', () => {
+    for (const t of UPLOAD_TYPES) {
+      expect(isRecordingType(t)).toBe(t.chunkKind === 'transcript');
+    }
+    expect(isRecordingType(uploadTypeFor('application/pdf')!)).toBe(false);
+    expect(isRecordingType(uploadTypeFor('text/vtt')!)).toBe(true);
+    expect(isRecordingType(uploadTypeFor('audio/mpeg')!)).toBe(true);
+    expect(isRecordingType(uploadTypeFor('video/mp4')!)).toBe(true);
   });
 });
 

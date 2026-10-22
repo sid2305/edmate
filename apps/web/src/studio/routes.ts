@@ -18,7 +18,16 @@ import { z } from 'zod';
 import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import type { StudioStorage } from '../storage/presign';
-import { isLinkKey, newLinkKey, newStorageKey, uploadTypeFor, uploadTypeOfKey, type UploadType } from './files';
+import {
+  MAX_UNSPLIT_MEDIA_BYTES,
+  isLinkKey,
+  isRecordingType,
+  newLinkKey,
+  newStorageKey,
+  uploadTypeFor,
+  uploadTypeOfKey,
+  type UploadType,
+} from './files';
 import type { LinkRateLimiter } from './linkRateLimit';
 
 /** The server log: an event name and fixed codes or error names, never ids or message text. */
@@ -114,6 +123,8 @@ const NewFileSchema = z.strictObject({
 const CreateSchema = NewFileSchema.extend({
   moduleId: Id,
   sourceTitle: z.string().trim().min(1).max(500),
+  /** Task 11.4 Phase B: a live-class recording, linked to one of the teacher's own classes. */
+  liveClassId: Id.optional(),
 });
 // A coarse body cap; the exact 2048-character rule lives in `checkWebLinkUrl` (shared with the
 // worker, ADR-0014), which also returns the fixed per-code refusal.
@@ -131,6 +142,8 @@ const MSG = {
   bodyTooLarge: 'The request is too large.',
   notFound: 'That document was not found.',
   notUploaded: 'The file has not finished uploading.',
+  mediaTooLarge:
+    "Videos and M4A audio over 24 MB can't be transcribed yet. Upload the audio as MP3, or the class transcript (.vtt or .srt).",
   unavailable: 'Uploads are not available right now. Try again soon.',
   failed: 'Something went wrong. Try again.',
   linkReplace: "A link can't be replaced. Delete it and add the link again.",
@@ -189,7 +202,12 @@ type Work = (
 function newFile(input: z.infer<typeof NewFileSchema>): UploadType | Response {
   const type = uploadTypeFor(input.contentType);
   if (!type) return validation(MSG.type);
-  if (input.byteSize > type.maxBytes) return tooLarge(MSG.tooLarge);
+  if (input.byteSize > type.maxBytes) {
+    // Task 11.4 Phase B (Q3): an M4A, MP4 or WebM over the Whisper-split cap is refused here,
+    // before any upload URL is signed, with words that point to a splittable or transcript
+    // alternative. Today such a file uploads (the 500 MB media cap) and fails minutes later.
+    return tooLarge(type.maxBytes === MAX_UNSPLIT_MEDIA_BYTES ? MSG.mediaTooLarge : MSG.tooLarge);
+  }
   return type;
 }
 
@@ -241,6 +259,9 @@ const create: Work = async (b, scope, req) => {
   if (body instanceof Response) return body;
   const type = newFile(body);
   if (type instanceof Response) return type;
+  // Task 11.4 Phase B: only a transcript-kind type (caption, audio or video) may carry
+  // `liveClassId`. Checked before anything is signed or written.
+  if (body.liveClassId !== undefined && !isRecordingType(type)) return validation(MSG.type);
   const id = b.newDocumentId();
   const key = newStorageKey(scope.teacherId, id, type);
   await b.documents.create(scope, {
@@ -250,6 +271,7 @@ const create: Work = async (b, scope, req) => {
     sourceTitle: body.sourceTitle,
     storageKey: key,
     rightsDeclared: body.rightsDeclared,
+    ...(body.liveClassId === undefined ? {} : { liveClassId: body.liveClassId }),
   });
   const uploadUrl = await b.storage.createUploadUrl({
     key,

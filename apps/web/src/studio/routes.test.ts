@@ -1,7 +1,7 @@
 // Task 8.2 Phase 3: the studio document API's handlers over a memory backend (no S3, no Redis, no
 // database; rule 4). The teacher always comes from the session's principal: every route has a test
 // where another teacher's document id is `not_found`, with nothing written, deleted or enqueued.
-import { RepositoryError, type DocumentRow } from '@edmate/db';
+import { RepositoryError, type DocumentInput, type DocumentRow } from '@edmate/db';
 import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -34,8 +34,12 @@ function memoryBackend() {
     ['m_asha', 't_asha'],
     ['m_ben', 't_ben'],
   ]);
+  // Task 11.4 Phase B: a live class owned by the teacher, standing in for 11.4a's own-started-class
+  // check (`not_found` for another teacher's, a future, or a missing class).
+  const liveClasses = new Map([['lc_asha', 't_asha']]);
   const objects = new Map<string, { contentLength?: number; contentType?: string }>();
   const enqueued: { job: IngestJob; storageKey: string }[] = [];
+  const createCalls: DocumentInput[] = [];
   const deleted: string[] = [];
   const logs: { event: string; fields?: Record<string, string> }[] = [];
   let n = 0;
@@ -57,7 +61,11 @@ function memoryBackend() {
         );
       },
       async create({ teacherId }, d) {
+        createCalls.push(d);
         if (modules.get(d.moduleId) !== teacherId) throw notFound('documents.create');
+        if (d.liveClassId !== undefined && liveClasses.get(d.liveClassId) !== teacherId) {
+          throw notFound('documents.create');
+        }
         rows.set(d.id, {
           id: d.id,
           teacherId,
@@ -116,7 +124,7 @@ function memoryBackend() {
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
     linkRateLimit: fakeLinkRateLimiter(),
   };
-  return { backend, rows, objects, enqueued, deleted, logs };
+  return { backend, rows, objects, enqueued, createCalls, deleted, logs };
 }
 
 function setup() {
@@ -152,7 +160,10 @@ const NEW_PDF = {
 };
 
 /** Asha creates a document and "uploads" its bytes to the memory bucket. */
-async function uploaded(s: ReturnType<typeof setup>, over: Partial<typeof NEW_PDF> = {}) {
+async function uploaded(
+  s: ReturnType<typeof setup>,
+  over: Partial<typeof NEW_PDF> & { liveClassId?: string } = {},
+) {
   const res = await s.h.create(
     req('POST', '/api/studio/documents', { ...NEW_PDF, ...over }),
     ctx(ASHA),
@@ -315,6 +326,72 @@ describe('POST /api/studio/documents (create)', () => {
     expect(read.status).toBe(413);
     expect((await json(read)).error?.code).toBe('input_too_large');
     expect(s.rows.size).toBe(0);
+  });
+});
+
+describe('POST /api/studio/documents (create, task 11.4 Phase B: class recordings)', () => {
+  it('a caption file with liveClassId gives 201 and the repo receives it', async () => {
+    const s = setup();
+    const res = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'text/vtt', liveClassId: 'lc_asha' }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(201);
+    expect(s.createCalls.at(-1)).toMatchObject({ liveClassId: 'lc_asha' });
+  });
+
+  it("a plain document type with liveClassId is 400, nothing written (only transcript-kind types may carry it)", async () => {
+    const s = setup();
+    const res = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, liveClassId: 'lc_asha' }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(400);
+    expect((await json(res)).error?.code).toBe('validation');
+    expect(s.rows.size).toBe(0);
+  });
+
+  it('a repo not_found for liveClassId (foreign, future or missing class) is 404, no upload URL signed', async () => {
+    const s = setup();
+    const res = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'audio/mpeg', liveClassId: 'lc_unknown' }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(404);
+    expect((await json(res)).error?.code).toBe('not_found');
+    expect(s.rows.size).toBe(0);
+    expect(s.backend.storage.createUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it('a 30 MB video/mp4 is 413 with the new words, with or without liveClassId', async () => {
+    const s = setup();
+    const without = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'video/mp4', byteSize: 30 * 1024 * 1024 }),
+      ctx(ASHA),
+    );
+    expect(without.status).toBe(413);
+    expect((await json(without)).error?.message).toMatch(/24 MB/);
+    const withClass = await s.h.create(
+      req('POST', '/x', {
+        ...NEW_PDF,
+        contentType: 'video/mp4',
+        byteSize: 30 * 1024 * 1024,
+        liveClassId: 'lc_asha',
+      }),
+      ctx(ASHA),
+    );
+    expect(withClass.status).toBe(413);
+    expect((await json(withClass)).error?.message).toMatch(/24 MB/);
+    expect(s.rows.size).toBe(0);
+  });
+
+  it('a 30 MB audio/mpeg gives 201 (MP3 keeps the 500 MB splittable cap)', async () => {
+    const s = setup();
+    const res = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'audio/mpeg', byteSize: 30 * 1024 * 1024 }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(201);
   });
 });
 
@@ -569,6 +646,19 @@ describe('POST /api/studio/documents/:id/complete', () => {
       documentId,
       fileKind: 'vtt',
     });
+  });
+
+  it('a class recording (task 11.4 Phase B) enqueues at once, with the same job shape as any upload', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s, {
+      contentType: 'text/vtt',
+      liveClassId: 'lc_asha',
+    });
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(202);
+    expect(s.enqueued).toEqual([
+      { job: { teacherId: 't_asha', documentId, fileKind: 'vtt' }, storageKey: row.storageKey },
+    ]);
   });
 
   it("answers another teacher's document as not_found and touches nothing", async () => {
