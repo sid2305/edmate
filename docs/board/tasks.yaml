@@ -3847,7 +3847,9 @@ tasks:
   deps:
   - 9.5a
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.5b-feedback-interview
+  model: plan:sonnet build:sonnet
 - id: 13.skillpresent
   milestone: M13
   title: 'Harness: wire feedback (5.7) and mock-interview (5.8) present() hooks so they emit structured skill events (interview progress), then show them in 9.5 screens'
