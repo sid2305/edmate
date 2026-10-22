@@ -10,6 +10,80 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.4c Staff agents API boundary (staff-only, strict body, session id, note never logged) · decided by builder · risk: high
+- Decided: `/api/staff/agents` GET and POST are `withRole(['staff'])` under the existing `/api/staff/**` policy row; the POST body is a strict discriminated union (unknown keys such as `by` are 400), the acting staff id comes only from the session, repository errors map to fixed codes, and only the error's name is logged, never its message or the note. Reviewer: security-reviewer (risky path `apps/web/app/api/staff/**`).
+- Why: plan 12.4 Phase C and the 12.1b/12.5c staff pattern; the flag decides what regulated subject reaches the harness on the next publish, so only staff may set it and every change is audited by the repository.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4c Approving an unflagged agent is 400 validation with its own message · decided by builder · risk: low
+- Decided: the repository's `invalid` on `approval` (the body already passed the same schema, so it can only mean the agent has no subject) is a 400 `validation` with the text "Set a regulated subject on this agent before approving it." There is no `conflict` error code in contracts, and adding one needs an ADR.
+- Why: gives the 12.4d page a clear message without a contracts change.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4b Publish refuses flagged, unapproved agents at start and go-live · decided by builder · risk: high
+- Decided: `startRun` refuses a flagged agent with no approval (`invalid` / `regulated_unapproved`)
+  right after the `suspended` check, under the existing agent `FOR UPDATE` lock and before any write;
+  `goLive` re-checks it under its agent lock and also refuses when the run's version subject is not
+  the agent's current staff subject. The refused run stays `running` and the worker ends it `error`
+  with the reason as its code (its existing path). Lock order unchanged (advisory, profile FOR
+  SHARE, agent FOR UPDATE, run FOR UPDATE); the one new read (the run's version config) takes no
+  lock. The staff column is the only source of a new version's `regulatedSubject`. Reviewers:
+  security-reviewer (the publish block, risky path `packages/db/src/repositories/**`) and
+  database-reviewer (the goLive re-check, no new lock, lock order).
+- Why: plan Phase B and acceptance "flagged agents cannot publish without staff approval"; lessons
+  on lock order and failing closed.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4b A subject mismatch at go-live reuses the regulated_unapproved reason · decided by builder · risk: low
+- Decided: when staff change or clear the subject after a run started, `goLive` refuses with the
+  same `regulated_unapproved` reason (also when staff cleared the flag), not a new reason word.
+- Why: the plan names one reason; the teacher's fix is the same (publish again, with approval if
+  flagged), and the studio and worker need no new mapping.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.5c risky-path reviewers · decided by builder · risk: high
+- Decided: this PR touches `apps/web/app/api/staff/**` (a risk-paths group). Per the 12.5 plan, it
+  needs `security-reviewer`, and `apps/web/app/staff/**` (the UI, same staff-only boundary) is
+  reviewed by the same pass rather than split out separately.
+- Why: the plan's risky-paths section names `security-reviewer` for the staff API; the staff UI
+  consumes the same guard and the same alert data, so reviewing it apart would leave the boundary
+  only half-checked.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.5c polling tests use real timers · decided by builder · risk: low
+- Decided: `view.test.tsx`'s polling tests use a short `pollMs` (5–10ms) with the real clock and
+  `waitFor`, not `vi.useFakeTimers()`.
+- Why: matches the established, working convention in `PublishView.test.tsx` for an
+  almost-identical polling component; fake timers interacting with React effects was a needless
+  risk to introduce fresh.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.5c budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (156 harness-counted calls against a budget of 90); no re-run.
+- Why: the build is complete, its gate is green and the security review found nothing to fix; the extra calls were test iteration on the polling view, not scope growth.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.5c no server rate limit on staff alerts · decided by lead · risk: low
+- Decided: won't fix the LOW finding on apps/web/app/api/staff/alerts/route.ts (no server-side rate limit) in this task.
+- Why: the route is staff-only, returns at most 50 rows and matches the existing staff verification routes; a shared rate limit for staff routes belongs in its own task if pilot traffic shows a need.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.3a content/legal/rights-declaration/global.md is a student-safety risky path · decided by builder · risk: high
 - Decided: the new file sits under `content/legal/**`, already in the student-safety risky-path
   group per task 1.7; this handoff names code-reviewer as required reviewer for this group, per

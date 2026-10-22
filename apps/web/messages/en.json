@@ -615,7 +615,8 @@
       "validation": "Check the reason (up to 500 characters) and try again.",
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the verification queue. Try again."
-    }
+    },
+    "alertsBanner": "{open} open safety alerts, {escalated} escalated. Go to the alert inbox."
   },
   "liveClassesStudio": {
     "title": "Live classes",
@@ -649,5 +650,42 @@
     "sending": "Sending…",
     "cancel": "Cancel",
     "thanks": "Thanks, our team will review this."
+  },
+  "staffAlerts": {
+    "nav": "Alerts",
+    "title": "Safety alert inbox",
+    "intro": "Open safety alerts, most urgent first. Acknowledging an alert stops on-call paging.",
+    "listLabel": "Open alerts",
+    "empty": "No open safety alerts.",
+    "reload": "Reload",
+    "reloading": "Reloading…",
+    "pollError": "Could not refresh the inbox. Showing the last list.",
+    "acked": "Acknowledged.",
+    "kind": {
+      "distress": "Distress",
+      "abuse": "Abuse",
+      "misuse": "Misuse",
+      "other": "Other"
+    },
+    "teacher": "Teacher",
+    "noTeacherSlug": "No teacher profile",
+    "excerpt": "Excerpt",
+    "noteLabel": "Note (optional)",
+    "acknowledge": "Acknowledge",
+    "acking": "Acknowledging…",
+    "escalatedMarker": "Escalated: unacknowledged for {minutes} min, on-call paged {rounds} times",
+    "kindLabel": "Type",
+    "errors": {
+      "forbidden": "You can't acknowledge this alert: your staff access may have changed.",
+      "not_found": "That alert was not found. Reload the list.",
+      "validation": "Check the note (up to 500 characters) and try again.",
+      "generic": "Something went wrong. Try again.",
+      "loadFailed": "Could not load the alert inbox. Try again."
+    },
+    "level": {
+      "info": "Info",
+      "alert": "Alert",
+      "critical": "Critical"
+    }
   }
 }

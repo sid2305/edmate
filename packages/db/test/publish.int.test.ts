@@ -224,6 +224,24 @@ async function publish(t: T, p: Partial<PublishPins> = {}, card = scorecard(['ac
   return run.id;
 }
 
+/** Staff set the agent's regulated subject (12.4a repo) and optionally approve it. */
+async function flag(
+  t: T,
+  subject: 'investing' | 'health' | 'law' | null,
+  approved = false,
+): Promise<void> {
+  await repos.regulatedSubjects.setSubject(STAFF, { agentId: t.agentId, subject });
+  if (approved) await repos.regulatedSubjects.setApproval(STAFF, { agentId: t.agentId, approved });
+}
+
+const versions = (t: T) =>
+  count('select count(*) n from agent_versions where agent_id = $1', [t.agentId]);
+const runs = (t: T) => count('select count(*) n from eval_runs where agent_id = $1', [t.agentId]);
+const publishAudits = (t: T) =>
+  count(`select count(*) n from audit_log where target = $1 and action = 'agent.publish'`, [
+    `agent:${t.agentId}`,
+  ]);
+
 describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON})`}`, () => {
   beforeAll(async () => {
     await createDatabase(dbName);
@@ -288,6 +306,62 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       const t = await makeTeacher({ status: 'suspended' });
       const e = await refusal(repos.publish.startRun(scope(t), pins(t)));
       expect([e.kind, e.reason]).toEqual(['invalid', 'suspended']);
+    });
+
+    it('(a) a flagged, unapproved agent is invalid / regulated_unapproved, nothing written', async () => {
+      const t = await makeTeacher();
+      await flag(t, 'health');
+      const e = await refusal(repos.publish.startRun(scope(t), pins(t)));
+      expect([e.kind, e.reason, e.message]).toEqual([
+        'invalid',
+        'regulated_unapproved',
+        'publish.startRun: invalid',
+      ]);
+      expect(await versions(t)).toBe(1);
+      expect(await runs(t)).toBe(0);
+    });
+
+    it('(a) the refusal comes before a stale open run is touched', async () => {
+      const t = await makeTeacher();
+      const old = await repos.publish.startRun(scope(t), pins(t));
+      await raw.query(
+        `update eval_runs set updated_at = now() - interval '3 hours' where id = $1`,
+        [old.id],
+      );
+      await flag(t, 'investing');
+      const e = await refusal(repos.publish.startRun(scope(t), pins(t)));
+      expect(e.reason).toBe('regulated_unapproved');
+      expect((await repos.publish.getRun(scope(t), old.id))?.status).toBe('queued');
+      expect(await versions(t)).toBe(2);
+    });
+
+    it('(b) staff approval lets the run start with the staff subject', async () => {
+      const t = await makeTeacher();
+      await flag(t, 'health');
+      await refusal(repos.publish.startRun(scope(t), pins(t)));
+      await repos.regulatedSubjects.setApproval(STAFF, { agentId: t.agentId, approved: true });
+      const run = await repos.publish.startRun(scope(t), pins(t));
+      const v = await repos.agentVersions.get(scope(t), {
+        agentId: t.agentId,
+        version: run.agentVersion,
+      });
+      expect(v?.regulatedSubject).toBe('health');
+    });
+
+    it('(e) changing the subject clears the approval, so start is refused again', async () => {
+      const t = await makeTeacher();
+      await flag(t, 'health', true);
+      await flag(t, 'law');
+      const e = await refusal(repos.publish.startRun(scope(t), pins(t)));
+      expect(e.reason).toBe('regulated_unapproved');
+      expect(await versions(t)).toBe(1);
+      await repos.regulatedSubjects.setApproval(STAFF, { agentId: t.agentId, approved: true });
+      const run = await repos.publish.startRun(scope(t), pins(t));
+      const v = await repos.agentVersions.get(scope(t), {
+        agentId: t.agentId,
+        version: run.agentVersion,
+      });
+      expect(v?.regulatedSubject).toBe('law');
     });
 
     it("another teacher's agent, course or style card is not_found", async () => {
@@ -369,14 +443,26 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
   });
 
   describe('startRun', () => {
-    it('carries the regulated subject and languages into the new version', async () => {
-      const t = await makeTeacher({ regulatedSubject: 'health' });
+    it('carries the staff-set regulated subject and languages into the new version', async () => {
+      const t = await makeTeacher();
+      await flag(t, 'health', true);
       const run = await repos.publish.startRun(scope(t), pins(t));
       const v = await repos.agentVersions.get(scope(t), {
         agentId: t.agentId,
         version: run.agentVersion,
       });
       expect(v).toMatchObject({ regulatedSubject: 'health', languages: demoAgentConfig.languages });
+    });
+
+    it('the staff column is the only source: a subject only in the old version is not copied', async () => {
+      const t = await makeTeacher({ regulatedSubject: 'health' });
+      const run = await repos.publish.startRun(scope(t), pins(t));
+      const v = await repos.agentVersions.get(scope(t), {
+        agentId: t.agentId,
+        version: run.agentVersion,
+      });
+      expect(v).not.toHaveProperty('regulatedSubject');
+      expect(v).toMatchObject({ languages: demoAgentConfig.languages });
     });
 
     it('cuts agent version N+1 with the pins and snapshots every package', async () => {
@@ -846,6 +932,80 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
       );
       expect([e.kind, e.reason]).toEqual(['invalid', 'suspended']);
       expect(await agentRow(t)).toEqual({ status: 'suspended', live_version: null });
+    });
+
+    describe('(c) the regulated re-check', () => {
+      const input = (runId: string) => ({
+        runId,
+        passRate: 1,
+        summary: summary(),
+        scorecard: scorecard([]),
+      });
+      async function refusedAtGoLive(t: T, runId: string): Promise<void> {
+        const e = await refusal(repos.publish.goLive(scope(t), input(runId)));
+        expect([e.kind, e.reason, e.message]).toEqual([
+          'invalid',
+          'regulated_unapproved',
+          'publish.goLive: invalid',
+        ]);
+        expect(await agentRow(t)).toEqual({ status: 'draft', live_version: null });
+        expect(await pkgLive(t.pkgId)).toBeNull();
+        expect(await publishAudits(t)).toBe(0);
+        expect((await repos.publish.getRun(scope(t), runId))?.status).toBe('running');
+      }
+
+      it('a run started before the flag is refused at goLive', async () => {
+        const t = await makeTeacher();
+        const run = await repos.publish.startRun(scope(t), pins(t));
+        await repos.publish.markRunning(scope(t), run.id);
+        await flag(t, 'health');
+        await refusedAtGoLive(t, run.id);
+      });
+
+      it('a run started before the flag is refused even once staff approve the flag', async () => {
+        const t = await makeTeacher();
+        const run = await repos.publish.startRun(scope(t), pins(t));
+        await repos.publish.markRunning(scope(t), run.id);
+        // Approved, but the run's version was cut with no subject.
+        await flag(t, 'health', true);
+        await refusedAtGoLive(t, run.id);
+      });
+
+      it('a run started before a revoke is refused at goLive', async () => {
+        const t = await makeTeacher();
+        await flag(t, 'law', true);
+        const run = await repos.publish.startRun(scope(t), pins(t));
+        await repos.publish.markRunning(scope(t), run.id);
+        await repos.regulatedSubjects.setApproval(STAFF, { agentId: t.agentId, approved: false });
+        await refusedAtGoLive(t, run.id);
+      });
+
+      it('a run whose version subject differs from the staff subject is refused', async () => {
+        const t = await makeTeacher();
+        await flag(t, 'health', true);
+        const run = await repos.publish.startRun(scope(t), pins(t));
+        await repos.publish.markRunning(scope(t), run.id);
+        await flag(t, 'investing', true);
+        await refusedAtGoLive(t, run.id);
+      });
+
+      it('a run cut with a subject staff later cleared is refused', async () => {
+        const t = await makeTeacher();
+        await flag(t, 'health', true);
+        const run = await repos.publish.startRun(scope(t), pins(t));
+        await repos.publish.markRunning(scope(t), run.id);
+        await flag(t, null);
+        await refusedAtGoLive(t, run.id);
+      });
+
+      it('an approved agent whose subject is unchanged goes live with one publish audit row', async () => {
+        const t = await makeTeacher();
+        await flag(t, 'health', true);
+        const runId = await publish(t);
+        expect(await agentRow(t)).toEqual({ status: 'live', live_version: 2 });
+        expect(await publishAudits(t)).toBe(1);
+        expect((await repos.publish.getRun(scope(t), runId))?.status).toBe('passed');
+      });
     });
 
     it("another teacher's run is not_found; bad input is invalid", async () => {
