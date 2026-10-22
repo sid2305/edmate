@@ -15,6 +15,7 @@ export async function TeacherView() {
       nav={[
         { href: '/teacher', label: t('nav') },
         { href: '/teacher/uploads', label: t('uploadsLink') },
+        { href: '/teacher/outline', label: t('outlineLink') },
         { href: '/teacher/onboarding', label: t('onboardingLink') },
         { href: '/teacher/style-card', label: t('styleCardLink') },
       ]}
