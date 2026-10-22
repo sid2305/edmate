@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer and typescript-reviewer). Task 8.2b Phase A (board 8.2d).
+Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer and typescript-reviewer). Task 8.2b Phase A (board 8.2d). Amended in 8.2e (22 Oct 2026, after review by architect, security-reviewer and typescript-reviewer): 3fff::/20 refused; every trailing dot stripped before the name and IP-literal checks; names resolved with a cancellable `dns.promises.Resolver`.
 
 ## Date
 
@@ -18,10 +18,10 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 ## Decision
 
 1. **Resolve once per hop and connect only to the checked address.**
-   - Each hop looks the host up once and gets every address. The hop is refused if any address is not public. Otherwise one checked address (the first) is pinned.
+   - Each hop looks the host up once and gets every A and AAAA address. If one family fails transiently while the other answers, the answers that came back are judged and one is pinned (the connection is still pinned, so this is safe). The hop is refused if any address is not public. Otherwise one checked address (the first) is pinned.
    - A transport port (`PinnedTransport`) gets the URL and the pinned address and connects to exactly that address, with no second lookup. In production it is `node:https.request` with a `lookup` that always returns the pinned address (both the single-address and the `all: true` forms), `autoSelectFamily: false` and `agent: false`.
    - TLS SNI and the certificate check use the URL's host name. Certificate checks are never turned off.
-   - An IP-literal host is checked as written and connected to directly. It sends no SNI (RFC 6066 forbids an IP address there); the certificate is still checked.
+   - An IP-literal host is checked after every trailing dot is stripped (so `127.0.0.1..` is judged as `127.0.0.1`) and, if public, connected to directly with no lookup. It sends no SNI (RFC 6066 forbids an IP address there); the certificate is still checked.
 2. **Refused addresses.** Only public unicast passes.
    - IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, and 224/4 and everything above it.
    - Metadata services are covered by these ranges: 169.254.169.254 (AWS, GCP, Azure), 100.100.100.200 (Alibaba), 192.0.0.192 (Oracle), fd00:ec2::254 (AWS IPv6, inside fc00::/7), and `metadata.google.internal` (name denylist).
@@ -37,7 +37,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
    - Any other encoding is refused.
    - A declared `content-length` over the cap is refused before the body is read.
    - The 20 MB cap for uploaded files is unchanged.
-6. **Time.** 15 s in total across all hops, DNS lookups included. Each hop also has 5 s to connect and send its response headers.
+6. **Time.** 15 s in total across all hops, DNS lookups included. The resolver allows 5 s per query and 2 tries, inside that 15 s. Each hop also has 5 s to connect and send its response headers.
 7. **Content types.** Only `text/html` and `application/xhtml+xml`. Anything else, including a linked PDF, fails as `unsupported`.
 8. **No cookies or credentials.**
    - Request headers are a fixed list: `user-agent: EdmateBot/0.1`, `accept` and `accept-encoding: identity`.
@@ -75,7 +75,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 - Only the first checked address is tried, with no fallback to another address. A host whose first address is down fails, and it may fail again on retry.
 - Names are resolved with a `dns.promises.Resolver` (A and AAAA queries, its own timeout), not `dns.lookup`, and the resolver is cancelled when the deadline wins, so a slow-DNS link never holds a libuv thread past the deadline (8.2e). It skips `/etc/hosts` and search-domain expansion. A name with no answer and a name that answers with a non-public address get the same refusal and words, so a teacher can't probe which internal names exist; a transient DNS failure (SERVFAIL, timeout) is retryable.
 - A failed link can't be retried in place. The teacher deletes it and adds it again (lead answer Q3).
-- Tests never touch the real internet (rule 4): a fake resolver and fake transport in `packages/ingest`, and a local `node:http` server on 127.0.0.1 for the worker transport.
+- Tests never touch the real internet (rule 4): a fake resolver and fake transport in `packages/ingest`, a local `node:http` server on 127.0.0.1 for the worker transport, and real-TLS tests against 127.0.0.1 with a throwaway self-signed certificate made by `openssl` at test time (they fail, not skip, when `openssl` is missing).
 - Changing a range, a mode, a limit or the YouTube rule takes an ADR that amends or supersedes this one.
 - **Rollback:**
   - Phase A adds code that nothing calls, so reverting it is free.
@@ -84,4 +84,4 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 
 ## Reviewers
 
-architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer.
+architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer. The 8.2e amendment was reviewed by architect (opus), security-reviewer (opus) and typescript-reviewer (opus).
