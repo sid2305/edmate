@@ -1,7 +1,7 @@
 # Task 8.9b handoff: web, teacher questions inbox API (8.9 Phase B)
 
 Status: DONE
-Tool calls used: 61
+Tool calls used: 95 (harness count)
 
 - Branch: `m8/8.9b-questions-api` (built on local branch `work-89b`)
 - Worktree: `.claude/worktrees/agent-ad5c885b18d2fd999`
