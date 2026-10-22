@@ -2359,9 +2359,31 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
-  status: running
+  status: done
   branch: m13/9.3b-home-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 177
+    tokens_in: 554
+    tokens_out: 38150
+    cache_read_tokens: 18152513
+    wall_time_seconds: 494
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.16a
   milestone: M0
   title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
