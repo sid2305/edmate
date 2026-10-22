@@ -5075,9 +5075,9 @@ tasks:
   deps:
   - 12.2a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2b-takedowns-repo
+  model: plan:opus build:opus review:sonnet
 - id: 12.2c
   milestone: M12
   title: Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)
