@@ -10,6 +10,7 @@
 import type { Skill, SourceRef } from '@edmate/contracts';
 import { useTranslations } from 'next-intl';
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { z } from 'zod';
 import type { ClientTurn } from '../turn/clientInput';
 import { Composer } from './Composer';
 import { HintButton } from './HintButton';
@@ -23,16 +24,21 @@ import { SourcesList } from './SourcesList';
 import { TeacherQuestionNotice } from './TeacherQuestionNotice';
 import { initialTurn, reduceTurn, type SkillCardData, type StreamItem, type TurnView } from './turnState';
 
-/** Is `payload` a well-shaped practice item (the one skill with a dedicated card)? */
+/** The practice item payload (the one skill with a dedicated card). */
+const practicePayload = z.object({
+  id: z.string(),
+  kind: z.enum(['numeric', 'mcq', 'short', 'code_output']),
+  level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  prompt: z.string(),
+  options: z.array(z.string()).optional(),
+});
+
+/** Is `payload` a well-shaped practice item? A failed parse falls back to the generic SkillCard. */
 function asPracticeCard(card: SkillCardData): PracticeCardData | null {
   if (card.skill !== 'practice') return null;
-  const p = card.payload;
-  if (typeof p !== 'object' || p === null) return null;
-  const { id, kind, level, prompt, options } = p as Record<string, unknown>;
-  if (typeof id !== 'string' || typeof prompt !== 'string') return null;
-  if (kind !== 'numeric' && kind !== 'mcq' && kind !== 'short' && kind !== 'code_output') return null;
-  if (level !== 1 && level !== 2 && level !== 3) return null;
-  if (options !== undefined && !Array.isArray(options)) return null;
+  const parsed = practicePayload.safeParse(card.payload);
+  if (!parsed.success) return null;
+  const { id, kind, level, prompt, options } = parsed.data;
   return { id, kind, level, prompt, ...(options === undefined ? {} : { options }) };
 }
 
@@ -107,9 +113,10 @@ export function ChatView({
   /** True once a turn has been started; `turn` is meaningless before. */
   const [active, setActive] = useState(false);
   const [lastRequest, setLastRequest] = useState<TurnRequest | null>(null);
-  /** The skill named by the last final turn's own `skill` event (last one wins); attached to the
-   * next submit/hint unless that call names its own `skill` (9.5a: so a practice `check_answer`
-   * and a hint asked mid-practice both stay on the practice ladder). */
+  /** The skill named by the last final turn's own `skill` event (last one wins), or null when that
+   * turn had no skill cards. Carried onto the next `hint_request` or `check_answer` that names no
+   * `skill` of its own (9.5a: a hint asked mid-practice stays on the practice ladder); never onto a
+   * plain `message`, so leaving practice by typing is not silently tagged. */
   const [activeSkill, setActiveSkill] = useState<Skill | null>(null);
   const session = useRef<string | null>(sessionId);
   const handle = useRef<TurnHandle | null>(null);
@@ -127,8 +134,7 @@ export function ChatView({
 
   useEffect(() => {
     if (!active || turn.status !== 'final') return;
-    const last = turn.skills.at(-1);
-    if (last !== undefined) setActiveSkill(last.skill);
+    setActiveSkill(turn.skills.at(-1)?.skill ?? null);
   }, [active, turn]);
 
   const streaming = active && turn.status === 'streaming';
@@ -163,7 +169,7 @@ export function ChatView({
 
   function submit(request: TurnRequest, shown: string) {
     const effective: TurnRequest =
-      request.skill !== undefined || activeSkill === null
+      request.skill !== undefined || activeSkill === null || request.kind === 'message'
         ? request
         : { ...request, skill: activeSkill };
     const key = `local-${nextKey.current++}`;

@@ -90,6 +90,40 @@ Widened the client turn schema to accept `check_answer` and `skill_action` plus 
   rather than re-deriving it from in-flight events.
 - risk: low
 
+### 22 Oct 2026 · 9.5a The active skill carries only onto hints and answer checks, and clears after a turn with no skill cards · decided by builder · risk: low
+- Decided: `activeSkill` is reset to null when a final turn has no skill cards. It is carried
+  onto a `hint_request` or `check_answer` that names no skill of its own, never onto a plain
+  `message`.
+- Why: a typed message after a practice item is the student leaving practice, so tagging it
+  `skill: 'practice'` would silently keep every later turn on the practice ladder
+  (typescript-reviewer HIGH). A hint during practice still needs the tag.
+- risk: low
+
+## Fix round
+
+Fixes the two typescript-reviewer HIGH findings in `apps/web/src/chat/ChatView.tsx`.
+
+- **Sticky `activeSkill`:** the final-turn effect now sets `turn.skills.at(-1)?.skill ?? null`,
+  so a final turn with no skill cards clears it; `submit` skips the carry when
+  `request.kind === 'message'`.
+- **`asPracticeCard` cast:** replaced by a local zod schema (`id`, `kind` enum, `level` 1|2|3,
+  `prompt`, `options: z.array(z.string()).optional()`) with `safeParse` and no cast. A failed
+  parse still falls back to the generic SkillCard.
+
+New tests in `ChatView.test.tsx` (written first and seen failing, 3 failed / 17 passed):
+- after a practice item, a plain Composer message carries no `skill`;
+- after a final turn with no skill cards, a hint carries no `skill`;
+- a practice payload with `options: [1, {}, null]` renders the generic SkillCard, not a PracticeCard.
+The existing "hint asked while a practice item is active carries skill: practice" test still passes.
+
+Evidence:
+- `corepack pnpm vitest run src/chat/ChatView.test.tsx` → `Tests  20 passed (20)`
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` → exit 0,
+  `Tasks: 34 successful, 34 total`; web coverage `All files | 97.93 | 96.66 | 95.03 | 98.79`
+- `python3 .githooks/secret-scan.py --all` → clean (no output)
+
+Fix-round tool calls used: 17
+
 ## Left to do
 
 - Run `apps/web/e2e/skills.spec.ts` against a live compose stack once one is available in this

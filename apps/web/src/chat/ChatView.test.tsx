@@ -345,4 +345,59 @@ describe('ChatView', () => {
       clientTs: NOW.toISOString(),
     });
   });
+
+  it('after a practice item, a plain Composer message carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    type('Something else');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Something else',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('after a final turn with no skill cards, a hint carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    f.push(tok('Well done, practice is over.'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Get a hint' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    expect(f.calls[2]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'hint_request',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a practice payload with non-string options falls back to the generic SkillCard', async () => {
+    const f = setup();
+    type('Practice please');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(
+      {
+        type: 'skill',
+        skill: 'practice',
+        payload: { id: 'itm_1', kind: 'mcq', level: 1, prompt: 'Pick one', options: [1, {}, null] },
+      },
+      done,
+    );
+    expect(screen.getByText('Practice', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('Pick one')).toBeNull();
+    expect(screen.queryByLabelText('Your answer')).toBeNull();
+  });
 });
