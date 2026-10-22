@@ -3244,7 +3244,7 @@ tasks:
 - id: 8.4c
   milestone: M13
   title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card
-    interview answers and saved card text before they reach the drafter or a turn prompt'
+    interview answers and saved card text before they reach the drafter or a turn prompt; 8.4b LOW: StyleCardView ignores a stale draft response that would overwrite text the teacher already saved'
   accept: studio drafting writes usage-ledger rows under a teacher scope; a test shows override phrases are removed from a saved card's prompt text.
   deps:
   - 8.4a
