@@ -107,6 +107,11 @@ task and not reachable from any new code path I added).
   task — see note below).
 - risk: low
 
+### 22 Oct 2026 · 11.2a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 151 tool calls for the build plus 60 for the fix round against the plan's ~90 for Phase A.
+- Why: the extra calls went on the isolation grid and the similarity tests the plan asked for, the work merged clean, and splitting it now would only cost more; later db phases get a tighter brief.
+- risk: low
+
 ## Note for the lead (not a blocker, pre-existing)
 
 While chasing the `src/repositories/**` 100%-lines/statements gate threshold, I found
@@ -149,4 +154,4 @@ None for Phase A's own scope. Phase B (apps/web) is explicitly out of bounds for
 
 Status: DONE
 
-Tool calls used: 142
+Tool calls used: 151 (harness count; the builder reported 142; the fix round added 60 more)
