@@ -1,7 +1,7 @@
 # Task 8.5a handoff: db, make preview and corrections queryable (8.5 Phase A)
 
 Status: DONE
-Tool calls used: 40
+Tool calls used: 63 (harness count; the builder's own count was 40)
 
 - Branch: `m8/8.5a-corrections-db` (built on local branch `work-85a`)
 - Worktree: `.claude/worktrees/agent-a6b462c7caed10b9e`
@@ -80,6 +80,11 @@ with no version, orders newest first, `[]` for another teacher's agent.
 - `docs/tasks/8.5/plan.md` was already in the repo; not copied.
 
 ## Decisions
+### 22 Oct 2026 · 8.5a Lead accepts the corrections repository scope checks · decided by lead · risk: high
+- Decided: merge 8.5a. corrections.record, agentVersions.latest and packageVersions.listForAgent (risky path packages/db/src/repositories/**) are reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the signed-in teacher, a correction on another teacher's module rolls back as not_found, and the isolation grid covers all three methods. The LOWs (a composite packages (teacher_id, agent_id) index, the silent 100-row cap on listForAgent in packages/db/src/repositories/package-versions.ts, and the double teacherNoteParts call in packages/db/src/repositories/corrections.ts) are deferred to 8.5c (M13).
+- Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher has a handful of packages per agent, so the cap and the index only matter at a scale the pilot won't reach.
+- risk: high
+
 
 ### 22 Oct 2026 · 8.5a corrections and test-chat reads are teacher-scoped in the same statement · decided by builder · risk: high
 - Decided: `corrections.record` writes only through `insertTeacherNote`'s `INSERT … SELECT FROM
