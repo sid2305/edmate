@@ -50,4 +50,4 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
 ## Left to do
 None.
 
-Tool calls used: 44
+Tool calls used: 51 (harness count; the builder reported 44)
