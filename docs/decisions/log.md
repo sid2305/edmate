@@ -10,6 +10,161 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7c a failed run lookup ends the run error · decided by builder · risk: low
+- Decided: `getRun` runs inside the processor's error handling. If it throws, the failure is logged (`gate.error`, code `repository_<kind>`) and the run is finished `error`. If that also fails, `gate.finish_failed` is logged and the job fails (dead-lettered); the run then stays open until the stale rule closes it.
+- Why: no silent failures; a run should not wait up to 2 h 15 min as stale when the database blipped once.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c error codes are fixed words · decided by builder · risk: low
+- Decided: a run that ends `error` stores one of these codes:
+  - `gate_unavailable`, with the reason in the log;
+  - `result_mismatch` (gate results don't line up with the case scope, so nothing is stored);
+  - a goLive refusal reason (`suspended`, ...);
+  - `not_verified` (scope error);
+  - `repository_<kind>`;
+  - `gate_error`.
+
+  The cost so far is kept when known. No message text or ids are stored in the code.
+- Why: Phase D maps codes to plain messages; free text could carry personal data.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c a run pinned to another judge fails closed · decided by builder · risk: low
+- Decided: if the run's stored judge model doesn't match this worker's `EDMATE_JUDGE_MODEL` (bare model or `provider:model`), the run ends `error` / `gate_unavailable` (`judge_model`).
+- Why: a scorecard must be measured by the judge the run was started for.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c gate worker always starts; content loaded per run · decided by builder · risk: low
+- Decided: the worker process always starts the gate worker. Models, content and suites are checked per run, so a deployment without keys still closes every run as `error` with a reason, and a fixed content dir is picked up without a restart. The image ships only `content/{locales,prompt-packs,skills}` (not demo-teacher or legal) plus `evals/suites/`.
+- Why: a gate run that is never picked up would look "running" to the teacher until it went stale.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c own test containers · decided by builder · risk: low
+- Decided: ran the int suites against my own `pgvector/pgvector:0.8.1-pg16` (127.0.0.1:55491) and `redis:7.4.6-alpine` (127.0.0.1:56391) containers, removed after the build.
+- Why: the running edmate-* containers belong to other sessions.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7c uncovered gate worker lambdas are accepted · decided by lead · risk: low
+- Decided: the locale and pack-market lambdas and the error handler in apps/worker/src/gate/workers.ts stay without unit tests; the int test covers the real queue and worker.
+- Why: covering them needs a live model turn or a broken Redis; the paths are thin wiring.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5b Mock interview carries onto a plain Composer message; feedback and practice never do · decided by builder · risk: low
+- Decided: `submit`'s carry-along rule tags a plain `message` turn with `skill: 'mock_interview'`
+  while that skill is active (an interview answer is typed in the ordinary Composer, per the
+  plan — there is no dedicated answer form), but a plain message never carries `practice` or
+  `feedback` along. `activeSkill`'s reset effect keeps `mock_interview` across a turn with no
+  skill cards (since it never emits one, Q2) and only `stopMockInterview` clears it.
+- Why: matches the plan's stated shape exactly (practice/feedback have their own trigger per
+  turn; mock interview's answer is an ordinary typed message) without reusing the 9.5a bug this
+  task's own lessons.md entry warns about — this keeps the same "every state that tags outgoing
+  turns has a stated reset point, with a test for the turn after it" rule, just with a different
+  reset trigger (Stop, not the next plain message) because mock interview's whole point is that
+  typing stays in-skill until the student presses Stop.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5b Reused the WIP commit from the cut-off builder as-is · decided by builder · risk: low
+- Decided: reviewed the uncommitted WIP commit (`2287846`) line-by-line against the Phase B plan
+  and the 9.5a review's two HIGHs before accepting it; made no further code changes since it
+  already matched the plan (feedback one-shot tag, mock-interview carry/reset, CSS, and the
+  e2e cases were all present) and passed the full gate on the first run.
+- Why: avoids throwing away correct work just because the prior builder was cut off mid-note;
+  the gate (typecheck/lint/test, secret scan) is the objective check, and it was green before
+  and after the `origin/main` merge.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3c add the verified join to packageVersions.liveForAgent and subscriptions.start · decided by lead · risk: high
+- Decided: `packageVersions.liveForAgent` and `subscriptions.start` both require
+  `teacherProfiles.verificationStatus = 'verified'` (an inner join), so a pending or rejected
+  teacher's live agent/package is invisible and unstartable, the same as a missing one.
+- Why: 9.2's plan Q5 found that a teacher rejected after publishing stayed startable by typed URL,
+  since neither read checked verification.
+- risk: high (a `packages/db/src/repositories/**` change).
+
+---
+
+### 22 Oct 2026 · 9.3c re-check verification inside start's own write statement, FOR SHARE · decided by builder · risk: high
+- Decided: `subscriptions.start` re-checks the teacher's profile as part of the same
+  `INSERT ... SELECT ... FOR SHARE OF teacher_profiles` statement that writes the subscription
+  (not a separate pre-check), so a verification change can't commit mid-start. Refuses with the
+  existing `not_found` kind (the same one a non-live `packageVersionId` already uses) — no new
+  error kind invented.
+- Why: the lead's instruction was to re-check verification "inside subscriptions.start's
+  transaction ... reading the profile FOR SHARE". Since `start` was already a single atomic
+  `INSERT ... SELECT` statement (no separate transaction wrapper), the simplest statement that
+  satisfies both "read FOR SHARE" and "inside the same transaction" is one `INSERT ... SELECT ...
+  FOR SHARE OF` statement with the verified join folded into its own `FROM`/`WHERE`, rather than a
+  separate `SELECT ... FOR SHARE` followed by a second `INSERT ... SELECT` inside an explicit
+  `db.transaction` (that two-statement form was tried first; it made the final
+  `written(result) !== 1` defensive check unreachable — every mismatch that could fail the insert
+  was already caught by the earlier select — dropping `src/repositories` coverage below the
+  package's 100% statement threshold). The one-statement form keeps `written(result) !== 1` as the
+  single, fully-exercised refusal path.
+- risk: high (a `packages/db/src/repositories/**` change).
+
+---
+
+### 22 Oct 2026 · 9.3c seeded teachers A and B are verified by default in the isolation grid · decided by builder · risk: low
+- Decided: `packages/db/test/repositories.int.test.ts`'s `beforeAll` sets both seeded teachers'
+  `teacher_profiles` rows to `verified` right after creating them (previously left at the schema
+  default, `pending`). `discovery.search`/`discovery.teacherBySlug`'s existing "teacher B stays
+  pending" assertions now explicitly push B to `pending` for that one assertion and restore it to
+  `verified` afterward, instead of relying on the old default.
+- Why: once `liveForAgent`/`subscriptions.start` check verification, the grid's many pre-existing
+  passing assertions for both methods (reached before `discovery.*` in file order) need the seeded
+  teachers verified by default, the same way a real published, reviewed teacher would be. Adding
+  a brand-new always-verified teacher fixture instead (leaving A/B pending) was rejected: the grid
+  test that asserts `createRepositories(db)` has exactly one case per method
+  (`'has a case for exactly the methods...'`) does not care, but the `liveForAgent` and
+  `subscriptions.start` cases already assert success for A/B specifically, so A/B had to become
+  verified.
+- risk: low (test-only; no production behaviour change).
+
+---
+
+### 22 Oct 2026 · 9.3c existing subscribers of a rejected teacher keep access for now · decided by lead · risk: medium
+- Decided: 9.3c blocks only new starts and the package page; the turn path and agents.owner are unchanged, so students who subscribed before a rejection keep learning until the human answers B-46.
+- Why: whether to cut access is a product decision; the brief kept it out of scope, and the reviewers confirmed the gap is tracked.
+- risk: medium (a rejected teacher's agent stays reachable for existing students meanwhile).
+
+---
+
+### 22 Oct 2026 · 9.2c The teacher page has no rate limit · decided by builder · risk: low
+- Decided: `/teachers/[slug]` does not use 9.2b's discovery rate limiter.
+- Why: the plan's Phase C does not apply it; a teacher page is one indexed lookup by slug plus at most five package reads, and malformed slugs 404 before any SQL. Adding it later is one call, like `/teachers`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2c Agents with no live packages left get no section on the teacher page · decided by builder · risk: low
+- Decided: when `liveForAgent` returns nothing for one of the teacher's agent ids (a package unpublished between the two reads), that agent gets no package list and no "Choose a package" link; if none have packages, the page says "No packages are available yet."
+- Why: a link to an empty compare page is a dead end; the profile read and the package reads are separate statements, so this can happen briefly.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2c An unmeasured scorecard category may not carry a percent or a pass · decided by builder · risk: low
+- Decided: `toPublicScorecard` returns `null` for a stored category with `measured: false` and a non-null percent or `pass: true`; a measured category with a null percent (zero cases) shows "Not measured yet".
+- Why: 7.8's `buildScorecard` never produces those shapes, so one is corrupt data; failing closed shows "no published scorecard yet" instead of an invented number.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7a publish repository: verified-teacher check and go-live in one transaction · decided by builder · risk: high
 - Decided: `goLive` runs in one transaction: teacher profile `verified` read `FOR SHARE`, the run row `FOR UPDATE` (id + teacher_id + suite gate; must be `running`), the agent `FOR UPDATE` (refused if suspended), then agent live + live_version, each basis package's live_version, one `agent.publish` and one `package.publish` audit row each, and the run marked `passed` with `published_at`. `startRun` takes a per-teacher advisory lock (namespace 8701) and the same `FOR SHARE` verified check. The teacher id comes only from the scope.
 - Why: a teacher whose verification is revoked, or an agent suspended, while the gate runs must never go live; one transaction means no half-published state.

@@ -3,7 +3,7 @@ import type { Entitlement } from '@edmate/contracts';
 import { and, asc, eq, gte, inArray, ne, notExists, notInArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { auditLog, packageVersions, subscriptions } from '../schema/index.js';
+import { auditLog, packageVersions, subscriptions, teacherProfiles } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
@@ -94,10 +94,12 @@ export function subscriptionsRepo(db: Db) {
      * Starts a subscription with no payment (task 9.3; checkout is 10.8): the scope's student
      * subscribes to one of the scope's teacher's package versions. The write only lands when
      * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a
-     * stray or another teacher's id never writes). The one-live-row-per-pair unique index already
-     * refuses a second live subscription for the same student x teacher (`invalid`, via
-     * `translateWrite`). The caller picks `status` and `periodEnd`; this method only enforces
-     * scope and shape (same split as `entitlementStoreFor.build`).
+     * stray or another teacher's id never writes), and only when that teacher is currently
+     * verified (task 9.3c: a teacher rejected after publishing can't be started by typing the
+     * URL) — the same `not_found` a non-live package already uses. One `INSERT ... SELECT …
+     * FOR SHARE` statement (already this method's whole transaction): the `teacherProfiles` row
+     * is read FOR SHARE as part of the very statement that writes the subscription, so a
+     * verification change can only land strictly before or after it, never mid-write.
      */
     async start(scope: StudentScope, input: StartInput): Promise<LiveSubscription> {
       const method = 'subscriptions.start';
@@ -117,10 +119,16 @@ export function subscriptionsRepo(db: Db) {
               [subscriptions.status, sql`${i.status}::subscription_status`],
               [subscriptions.periodEnd, sql`${new Date(i.periodEnd)}::timestamptz`],
             ],
-            sql`from ${packageVersions} where ${and(
-              eq(packageVersions.id, i.packageVersionId),
-              eq(packageVersions.teacherId, teacherId),
-            )}`,
+            sql`from ${packageVersions}
+              inner join ${teacherProfiles} on ${and(
+                eq(teacherProfiles.userId, packageVersions.teacherId),
+                eq(teacherProfiles.verificationStatus, 'verified'),
+              )}
+              where ${and(
+                eq(packageVersions.id, i.packageVersionId),
+                eq(packageVersions.teacherId, teacherId),
+              )}
+              for share of ${teacherProfiles}`,
           ),
         );
         if (written(result) !== 1) throw new RepositoryError('not_found', method);

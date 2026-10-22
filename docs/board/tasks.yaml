@@ -3534,9 +3534,31 @@ tasks:
   deps:
   - '9.3'
   risk: high
-  status: running
+  status: done
   branch: m9/9.3c-verified-start
-  model: build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 224
+    tokens_in: 706
+    tokens_out: 43200
+    cache_read_tokens: 18816114
+    wall_time_seconds: 46403
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 2
 - id: 9.2d
   milestone: M13
   title: '9.2 plan Q2 follow-up: a public display name the teacher sets in onboarding, shown on discovery and teacher pages instead of the sign-in name'
@@ -3750,9 +3772,29 @@ tasks:
   deps:
   - 9.2b
   risk: low
-  status: running
+  status: done
   branch: m9/9.2c-teacher-page
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 45
+    tokens_in: 150
+    tokens_out: 1425
+    cache_read_tokens: 2774205
+    wall_time_seconds: 188
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: '13.7'
   milestone: M13
   title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
@@ -3847,9 +3889,30 @@ tasks:
   deps:
   - 9.5a
   risk: low
-  status: running
+  status: done
   branch: m9/9.5b-feedback-interview
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 41
+    tokens_in: 150
+    tokens_out: 1985
+    cache_read_tokens: 2245381
+    wall_time_seconds: 660
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 13.skillpresent
   milestone: M13
   title: 'Harness: wire feedback (5.7) and mock-interview (5.8) present() hooks so they emit structured skill events (interview progress), then show them in 9.5 screens'
@@ -3930,9 +3993,30 @@ tasks:
   - 8.7a
   - 8.7b
   risk: low
-  status: running
+  status: done
   branch: m8/8.7c-gate-queue
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 66
+    tokens_in: 212
+    tokens_out: 960
+    cache_read_tokens: 4138821
+    wall_time_seconds: 130
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.7d
   milestone: M8
   title: Publish API and /teacher/publish page (8.7 Phase D, apps/web)
@@ -3986,7 +4070,9 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: todo
+  status: running
+  branch: m12/12.1a-staff-queue
+  model: plan:sonnet build:sonnet
 - id: 12.1b
   milestone: M12
   title: Staff console page and verification routes in apps/web (12.1 Phase B)
@@ -4118,7 +4204,9 @@ tasks:
   accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
   deps: []
   risk: high
-  status: todo
+  status: running
+  branch: m8/8.7h-audit-uuid
+  model: plan:lead build:sonnet
 - id: 11.1a
   milestone: M11
   title: Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)
@@ -4176,6 +4264,43 @@ tasks:
   accept: both tests pass against Postgres; no production change unless a test finds a bug.
   deps:
   - 9.3c
+  risk: high
+  status: todo
+- id: 9.7c
+  milestone: M13
+  title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
+    MEDIUM)'
+  accept: global-setup throws on a non-local host with a clear message, with a unit test; the local e2e run is unchanged.
+  deps:
+  - 9.7a
+  risk: low
+  status: todo
+- id: 9.5c
+  milestone: M13
+  title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts
+    against the compose stack once CI runs e2e'
+  accept: an a11y test finds the persona buttons inside a labelled group; skills.spec.ts passes in the CI e2e job.
+  deps:
+  - 9.5b
+  risk: low
+  status: todo
+- id: 8.7j
+  milestone: M13
+  title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate
+    step), and caseResults asserts a non-empty changes list before treating a run as style-only; tests for both'
+  accept: no `as GateResult` cast remains; a test shows a missing gate result ends the run error; an empty changes list throws instead of scoping as style-only.
+  deps:
+  - 8.7c
+  risk: low
+  status: todo
+- id: 9.6f
+  milestone: M13
+  title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
+    (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the
+    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime'
+  accept: EXPLAIN on a pair with 10,000 messages shows an index scan with no full Sort per page; the new messages test cases pass; the migration is additive.
+  deps:
+  - 9.6a
   risk: high
   status: todo
 - id: 9.4c

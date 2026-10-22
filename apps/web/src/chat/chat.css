@@ -137,3 +137,49 @@ p.bubble-text {
   list-style: none;
   padding: 0;
 }
+
+.chat-skill-launcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-skill-launcher button[aria-pressed='true'] {
+  background: var(--color-brand);
+  color: #fff;
+  border-color: var(--color-brand);
+}
+
+.chat-mock-interview-launcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-mock-interview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.practice-card .practice-options {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.practice-answer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.practice-answer input {
+  font: inherit;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
