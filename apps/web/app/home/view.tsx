@@ -16,11 +16,17 @@ export interface HomeViewProps {
 export async function HomeView({ chats = [], startable = [] }: HomeViewProps = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('home');
+  // 9.2: a link to the public discovery page; its label lives under `discovery`, not `home` (9.2
+  // Phase B only adds a new top-level `discovery` key to en.json).
+  const discovery = await getTranslations('discovery');
   return (
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[{ href: '/home', label: t('nav') }]}
+      nav={[
+        { href: '/home', label: t('nav') },
+        { href: '/teachers', label: discovery('findTeacherNav') },
+      ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

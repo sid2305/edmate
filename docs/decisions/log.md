@@ -10,6 +10,95 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.5a A malformed/legacy skill payload falls back to the generic SkillCard · decided by builder · risk: low
+- Decided: `ChatView` only renders `PracticeCard` when a `skill: 'practice'` event's payload has
+  the exact shape `practice.next_item` produces (string `id`/`prompt`, a known `kind`, level
+  1-3); anything else (including the pre-existing `ChatView.test.tsx` fixture payload `{q: ...}`)
+  renders the generic `SkillCard`, unchanged.
+- Why: keeps the dedicated card strictly tied to the real tool output per the plan ("the real
+  `practice.next_item` output shape... renders"), without a schema import from
+  `packages/harness`, and avoids a crash or blank card on a payload that doesn't match (fail
+  closed to the existing, harmless fallback) rather than trusting `unknown` at render time.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a activeSkill updates only on a final turn, not per streamed skill event · decided by builder · risk: low
+- Decided: `activeSkill` is set from `turn.skills.at(-1)` only once a turn reaches `status ===
+  'final'` (a `useEffect` on `[active, turn]`), not as each `skill` event streams in.
+- Why: the composer/hint button/launcher are already disabled while a turn streams, so no
+  submit can race ahead of the final skill name; waiting for `final` keeps the effect simple
+  (one state transition per turn, matching the reducer's own "nothing changes after done" rule)
+  rather than re-deriving it from in-flight events.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a The active skill carries only onto hints and answer checks, and clears after a turn with no skill cards · decided by builder · risk: low
+- Decided: `activeSkill` is reset to null when a final turn has no skill cards. It is carried
+  onto a `hint_request` or `check_answer` that names no skill of its own, never onto a plain
+  `message`.
+- Why: a typed message after a practice item is the student leaving practice, so tagging it
+  `skill: 'practice'` would silently keep every later turn on the practice ladder
+  (typescript-reviewer HIGH). A hint during practice still needs the tag.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7f persona always fails the case · decided by builder · risk: low
+- Decided: when `input.persona` is defined, the gate always throws (fails that case loudly)
+  rather than trying to honor it for a `kind: 'skill_action'` start turn only. `TurnInput` has no
+  `persona` field at all; a persona only enters the pipeline via a start turn's `skillPayload`
+  (bare id), and every later turn needs a *stored* `personaId` in that session's help state. The
+  gate creates a brand-new session (and a fresh help-state map) on every single `reply()` call,
+  so there is no continuity across a case's turns — a start-turn-only hack would silently produce
+  wrong, non-roleplay results for every multi-turn persona case (confirmed real multi-turn persona
+  suites exist, e.g. `evals/suites/persona/persona-roleplay-model-answer-en.yaml`). Failing the
+  case outright matches the brief ("fail any case that names one, with a clear reason, never
+  silently score it") and `runCaseSafely`'s existing catch-and-fail-this-case design.
+- Why: a half-working persona path (first turn only) would be worse than a clear failure, because
+  it would score a roleplay case as if it ran correctly when it did not resume the persona at all.
+- risk: low — gate-only behavior, no change to prompt-pack behaviour or contracts; persona gate
+  support is left as a known gap for whoever picks it up next (would need a `TurnInput.persona`
+  field or similar, which is a contracts change needing an ADR per rule 2).
+
+---
+
+### 22 Oct 2026 · 9.2b A Redis outage fails the discovery rate limit open, not closed · decided by lead · risk: medium
+- Decided: unlike the sign-in limiter (fails closed, `src/auth/rate-limit.ts`), `discoveryRateLimiter` fails open on a store error or a missing `REDIS_URL`: the `/teachers` page still serves, and the failure is logged by code only (`rate_limit_unavailable`), never the client's IP.
+- Why: this limit protects database load on data that's already public and already published (scope decision 1/2 of the 9.2 plan); refusing every search because Redis blipped would hurt real students more than an occasional burst of searches hurts the database.
+- risk: medium (an attacker who can also knock out Redis loses the limit; accepted, since the data behind it is public by design).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limiter gets its own Redis client, not the sign-in limiter's connection · decided by builder · risk: low
+- Decided: `src/discovery/rateLimit.ts` lazily builds its own `ioredis` client on `REDIS_URL`, the same way `src/turn/runtime.ts` and `src/studio/runtime.ts` already do, instead of reusing the connection `src/auth/index.ts`'s `emailSignIn()` opens internally.
+- Why: that connection is never exported from `src/auth/**` (only `redisSignInCounters`/`createSignInLimiter`, which take a connection, are exported from `rate-limit.ts`, and `index.ts` itself exports no client), and the brief explicitly forbids editing `auth/**` to add one. "The client the sign-in limiter already uses" is read here as the established pattern (ioredis + `REDIS_URL`, read-only reused), not a shared connection object -- every other Redis-using module in `apps/web` already opens its own client the same way.
+- risk: low (an extra Redis connection, same as `turn/runtime.ts` and `studio/runtime.ts` each already open their own).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limit's client bucket uses the rightmost x-forwarded-for entry · decided by lead · risk: low
+- Decided: `discoveryClientBucket` takes the rightmost (Caddy-appended) `x-forwarded-for` entry, mirroring the sign-in limiter's `clientIp`, and sends a missing, empty or non-IP entry to one shared `unknown` bucket. The lead's brief first asked for the first entry; the fix round changed it to the rightmost.
+- Why: the security review (HIGH) found the first entry is client-controlled, so a caller could rotate a fake first value to get unlimited buckets. The logic is mirrored, not imported, so this module doesn't pull in the sign-in limiter's `@edmate/queue` dependency and `src/auth/**` is untouched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Widen all three timings in the retrieval-leak int test · decided by builder · risk: low
+- Decided: widened `leakTimeoutMs` (20 → 1000 ms), `leakBuildTimeoutMs` (40 → 400 ms) and the post-drop sleep (80 → 800 ms), not just the one named in the brief.
+- Why: a real Postgres round trip on the second `leakCheck` call could exceed the old 40 ms build timeout even outside CI. Lead note (from code-reviewer): this flips the order of the two timeouts, so the first call's fallback now comes from the build's own overrun (`leak_failed`) rather than the outer race (`leak_timeout`). The test doesn't assert which code fired, and a build that is never dropped still fails it, so the regression it guards is still caught.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Queue latency bound stays absolute at 2,500 ms · decided by builder · risk: low
+- Decided: the bound stays an absolute constant (2,500 ms) rather than `DB_DELAY_MS / n`.
+- Why: it matches the file's named top-level constants; 2,500 ms is still half of `DB_DELAY_MS` (5,000 ms), so "done arrives well before the slow write" still holds.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.6d "Full course" preset price is $55, not the plan's example $29 · decided by builder · risk: low
 - Decided: with the plan's provisional per-turn cost (21,000 micro-USD under the real B-42 Sonnet 5
   / Haiku 4.5 prices: 5,000/500 main tokens + 4×1,200/60 small tokens) and 20 messages/day, the

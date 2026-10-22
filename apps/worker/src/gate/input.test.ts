@@ -12,7 +12,7 @@ import {
   type BuildGateInputOptions,
   type GateBasis,
 } from './input.js';
-import { AGENT, AGENT_VERSION, fakeRepos, fakeWorld, freePkg, paidPkg, TEACHER } from './testkit.js';
+import { AGENT, AGENT_VERSION, fakeRepos, fakeWorld, freePkg, paidPkg, TEACHER } from '../../test/gate/testkit.js';
 
 const basis: GateBasis = {
   teacherId: TEACHER,

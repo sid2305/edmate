@@ -207,16 +207,21 @@ describe.skipIf(!up)(`leakCheck on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
     });
 
     it('a background build that never ends is dropped after leakBuildTimeoutMs', async () => {
+      // Loose bounds (docs/lessons.md "Wall-clock bounds fail on shared CI runners"): the real
+      // database call on the second leakCheck must finish well inside leakBuildTimeoutMs and
+      // leakTimeoutMs even on a slow, shared runner, so those are generous rather than tight.
+      // Only leakBuildTimeoutMs needs to be short relative to the sleep below, so the dropped
+      // build is reliably cleared before the second call starts a fresh one.
       let hang = true;
       const material = (scope: { teacherId: string }) =>
         hang ? never() : repos.retrieval.material(scope);
       const r = retrievalIndexFor(withRetrieval({ material }), {
-        leakTimeoutMs: 20,
-        leakBuildTimeoutMs: 40,
+        leakTimeoutMs: 1_000,
+        leakBuildTimeoutMs: 400,
       });
       expect(await r.leakCheck(['clean words'], SCOPE)).toEqual({ hit: true });
       hang = false;
-      await sleep(80);
+      await sleep(800);
       expect(await r.leakCheck(['clean words'], SCOPE)).toEqual({ hit: false });
     });
 

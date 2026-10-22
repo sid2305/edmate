@@ -94,7 +94,15 @@
       "feedback": "Feedback",
       "mock_interview": "Mock interview",
       "revision": "Revision",
-      "study_plan": "Study plan"
+      "study_plan": "Study plan",
+      "launcher": {
+        "practice": "Practice"
+      }
+    },
+    "practice": {
+      "start": "Let's practice.",
+      "answerLabel": "Your answer",
+      "submit": "Submit answer"
     },
     "errors": {
       "unauthorized": "Please sign in again to keep chatting.",
@@ -357,6 +365,19 @@
       "not_found": "That module isn't yours any more. Reload the page and try again.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "discovery": {
+    "title": "Find a teacher",
+    "findTeacherNav": "Find a teacher",
+    "signInNav": "Sign in",
+    "homeNav": "Home",
+    "searchLabel": "Search by subject or topic",
+    "searchButton": "Search",
+    "freeBadge": "Free package",
+    "emptyState": "No teachers found",
+    "nextLabel": "Next",
+    "prevLabel": "Previous",
+    "rateLimited": "Too many searches. Try again in a minute."
   },
   "questionsInbox": {
     "title": "Questions inbox",

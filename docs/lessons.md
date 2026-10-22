@@ -43,3 +43,9 @@ Sources: log "19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard 
 Two studio pages (8.4b style card, 8.3c outline) shipped the same HIGH bug: the client read the JSON of a 200 response without a catch, and the page set its "saving" or "drafting" flag without a `finally`, so a malformed reply or a network error left the buttons disabled for good. Lesson: every studio client wraps the body read in try/catch and returns an error code, and every page action uses try/catch/finally with a busy flag. UI briefs now say so up front.
 
 Sources: docs/tasks/8.4b/review.md
+
+## Chat UI state that is set but never cleared, and payloads that are cast
+
+The 9.5a practice screen shipped two HIGH bugs in ChatView. `activeSkill` was set when a practice card arrived but never cleared, so every later plain message was tagged as practice. And the card's payload, which comes from the server as `unknown`, was cast to its type instead of checked. Lesson: every piece of chat state that tags outgoing turns needs a stated reset point, with a test for the turn after it; and a client reads every server event payload through a zod `safeParse`, falling back to a generic view when it fails. UI briefs for 9.5b, 9.6 and 9.7 say so up front.
+
+Sources: docs/tasks/9.5a/review.md
