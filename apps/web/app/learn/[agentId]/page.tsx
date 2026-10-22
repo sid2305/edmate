@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import messages from '../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { HOME_PATH, requireRole, serverDatabase } from '../../../src/auth';
 import { ChatView } from '../../../src/chat/ChatView';
 import { loadChat } from '../../../src/chat/loadChat';
 import { AppShell } from '../../../src/ui/AppShell';
@@ -40,7 +40,7 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/home', label: home('nav') },
+        { href: HOME_PATH, label: home('nav') },
         // 6.5: the student's own view, export and reset of what the agent remembers.
         { href: `/learn/${encodeURIComponent(data.agentId)}/memory`, label: memory('navLink') },
         // 9.6: the progress page, with links to the complete JSON export and notes PDF.

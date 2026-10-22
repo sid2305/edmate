@@ -17,6 +17,7 @@ vi.mock('../../../../src/auth', () => ({
   serverDatabase: () => ({
     repos: { agents: { owner: state.owner }, learnerProfiles: { get: state.get } },
   }),
+  HOME_PATH: '/home',
 }));
 vi.mock('../../../home/actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({

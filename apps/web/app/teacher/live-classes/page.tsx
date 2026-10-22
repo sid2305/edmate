@@ -6,7 +6,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { requireRole, serverDatabase, TEACHER_PATH } from '../../../src/auth';
 import { loadLiveClasses } from '../../../src/studio/liveClasses/loadLiveClasses';
 import { LiveClassesView } from './LiveClassesView';
 import { AppShell } from '../../../src/ui/AppShell';
@@ -26,7 +26,7 @@ export default async function LiveClassesPage() {
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[{ href: '/teacher', label: teacher('nav') }]}
+      nav={[{ href: TEACHER_PATH, label: teacher('nav') }]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

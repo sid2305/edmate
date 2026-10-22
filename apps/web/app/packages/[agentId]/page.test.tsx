@@ -23,6 +23,7 @@ vi.mock('../../../src/auth', () => ({
       packageVersions: { liveForAgent: state.liveForAgent },
     },
   }),
+  HOME_PATH: '/home',
 }));
 vi.mock('../../home/actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({

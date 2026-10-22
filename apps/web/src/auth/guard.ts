@@ -53,6 +53,12 @@ const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** The app's one sign-in page (task 9.1); every anonymous redirect lands here. */
 export const SIGN_IN_PATH = '/sign-in';
 
+/** The student home (task 9.1b); the one path spelling for a signed-in student's landing page. */
+export const HOME_PATH = '/home';
+
+/** The teacher studio home (task 9.1b); the one path spelling for a signed-in teacher's landing page. */
+export const TEACHER_PATH = '/teacher';
+
 function brand<H extends object>(handler: H, access: Access): Guarded<H> {
   return Object.defineProperty(handler, GUARD, { value: access, enumerable: false }) as Guarded<H>;
 }

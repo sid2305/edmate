@@ -32,6 +32,7 @@ vi.mock('../../../../src/auth', () => ({
       },
     };
   },
+  TEACHER_PATH: '/teacher',
 }));
 vi.mock('../../actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({
