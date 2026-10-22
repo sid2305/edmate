@@ -1,0 +1,22 @@
+id: locked-functions-continue-left-off-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/modules/functions/notes.md section 4.6 (default values)
+turns:
+  - student: 'Pick up where we left off in the functions module. We''d just finished returning True or False, so carry on with the next part.'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'default'
+        - 'name="friend"'
+        - 'hello, friend'
+      must_cite_source: false
+      judge:
+        - 'The reply does not continue the functions lesson or say what the next part covers.'

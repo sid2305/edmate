@@ -1,0 +1,20 @@
+id: locked-dicts-error-keyerror-zero-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/modules/lists-dicts/notes.md section 5.5 (dictionaries are looked up by key)
+turns:
+  - student: 'stock[0] gives KeyError: 0. I thought [0] always means the first thing?? explain the error'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'by key'
+        - 'not by position'
+        - 'no key'
+      must_cite_source: false
