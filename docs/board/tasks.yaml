@@ -4689,8 +4689,9 @@ tasks:
   accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
   deps:
   - 11.3a
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.3b-insights-job
+  model: plan:sonnet build:sonnet
 - id: 8.2d
   milestone: M8
   title: Pinned, SSRF-safe web fetcher and ADR-0014 web-link egress (8.2b Phase A)
