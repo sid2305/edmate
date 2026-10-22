@@ -5250,10 +5250,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '12.5'
   milestone: M12
   title: Safety alert inbox with acknowledgement
