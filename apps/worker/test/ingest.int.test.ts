@@ -255,6 +255,62 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
     }
   });
 
+  it('enqueue -> process: a synthetic .vtt caption reaches ready and a scoped search hits a chunk with a timestamp locator (task 8.2c Phase B)', async () => {
+    const storage = fakeStorage();
+    const { id, storageKey } = await createDocument(
+      db.repos,
+      `ingest/${randomBytes(4).toString('hex')}.vtt`,
+    );
+    storage.put(
+      storageKey,
+      md(
+        'WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nINGEST-INT-CANARY-caption content.\n\n00:00:05.000 --> 00:00:07.000\nMore of the lesson.\n',
+      ),
+    );
+    await db.repos.documents.updateStatus(scope, id, 'processing');
+
+    const lines: LogLine[] = [];
+    const queue = createIngestQueue(connection, { prefix });
+    const worker = createIngestWorker({
+      connection,
+      deps: { repos: db.repos, storage, gateway: fakeGateway() },
+      deadLetter,
+      log: (l) => lines.push(l),
+      prefix,
+      autorun: true,
+    });
+    try {
+      await enqueueIngest(
+        queue,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'vtt' } satisfies IngestJob,
+        storageKey,
+      );
+
+      const row = await until(
+        () => db.repos.documents.get(scope, id),
+        (r) => r?.status === 'ready',
+      );
+      expect(row?.status).toBe('ready');
+      expect(await chunkCount(id)).toBeGreaterThan(0);
+
+      const hits = await until(
+        () =>
+          db.repos.retrieval.search(scope, {
+            q: 'INGEST-INT-CANARY-caption',
+            allowedModuleIds: ['mod_ing_01'],
+            k: 10,
+          }),
+        (hs) => hs.length > 0,
+      );
+      const hit = hits.find((h) => h.documentId === id);
+      expect(hit).toBeDefined();
+      expect(hit?.source.locator).toBe('0:00');
+    } finally {
+      await worker.close();
+      await queue.close();
+    }
+  });
+
   it('EDMATE_INGEST_EMBEDDINGS=off: a markdown job reaches ready with no embedder, and full text finds it', async () => {
     const storage = fakeStorage();
     const { id, storageKey } = await createDocument(
