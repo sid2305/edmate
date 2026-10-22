@@ -7,6 +7,7 @@ import { scriptedStreamProviderError } from '@edmate/harness/testing';
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 import { memoryBackend, says, type MemoryBackendOptions } from '../../test/turn-backend';
+import { devModelAdapter } from './devModel';
 import { createGuard, type GuardDeps, type Principal } from '../auth/guard';
 import {
   createSessionHandlers,
@@ -220,6 +221,19 @@ describe('POST /api/sessions/:id/turns', () => {
     expect(tokens.join('')).toBe('Hello there.');
     expect(got.at(-1)?.type).toBe('done');
     expect(r.scopes).toEqual([{ studentId: 'stu_1', teacherId: 'tch_a' }]);
+  }, 20_000);
+
+  it('the dev model (9.0) runs a real defaultSteps turn to done, quoting the material', async () => {
+    const r = routes({ gateway: devModelAdapter('claude-haiku-4-5') });
+    const body = turnBody('Fractions have a numerator and a denominator? Explain please.');
+    const res = await r.turn(post('/api/sessions/ses_1a/turns', 'clear', body), ctx('ses_1a'));
+    expect(res.status).toBe(200);
+    const got = await events(res);
+    expect(got.some((e) => e.type === 'error')).toBe(false);
+    expect(got.at(-1)?.type).toBe('done');
+    const tokens = got.filter((e) => e.type === 'token').map((e) => (e as { text: string }).text);
+    expect(tokens.join('')).toContain('[dev model]');
+    expect(tokens.join('')).toContain('numerator and a denominator');
   }, 20_000);
 
   it("uses the principal's id, never one from the body (400, nothing run)", async () => {
