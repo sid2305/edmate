@@ -5088,9 +5088,9 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4a-regulated-flag-repo
+  model: plan:opus build:opus review:sonnet
 - id: 12.4b
   milestone: M12
   title: Publish refuses a flagged agent without staff approval (12.4 Phase B)
