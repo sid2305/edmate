@@ -30,6 +30,7 @@ vi.mock('../../../../src/auth', () => ({
       packageVersions: { getById: state.getById },
     },
   }),
+  HOME_PATH: '/home',
 }));
 vi.mock('../../../home/actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({

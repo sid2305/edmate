@@ -7,7 +7,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import messages from '../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { HOME_PATH, requireRole, serverDatabase } from '../../../src/auth';
 import { AppShell } from '../../../src/ui/AppShell';
 import { StartSessionSchema } from '../../../src/turn/clientInput';
 import { signOutAndRedirect } from '../../home/actions';
@@ -43,7 +43,7 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
         <AppShell
           brand={shell('brand')}
           skipLabel={shell('skipToContent')}
-          nav={[{ href: '/home', label: home('nav') }]}
+          nav={[{ href: HOME_PATH, label: home('nav') }]}
           signOutAction={signOutAndRedirect}
           signOutLabel={shell('signOut')}
         >
@@ -59,7 +59,7 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
       <AppShell
         brand={shell('brand')}
         skipLabel={shell('skipToContent')}
-        nav={[{ href: '/home', label: home('nav') }]}
+        nav={[{ href: HOME_PATH, label: home('nav') }]}
         signOutAction={signOutAndRedirect}
         signOutLabel={shell('signOut')}
       >
@@ -88,7 +88,7 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[{ href: '/home', label: home('nav') }]}
+      nav={[{ href: HOME_PATH, label: home('nav') }]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

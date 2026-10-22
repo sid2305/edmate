@@ -356,20 +356,24 @@ describe('src/auth wiring', () => {
     }));
   });
 
-  it('currentPrincipal: a lookup failure reads as null, not thrown', async () => {
+  it('currentPrincipal: a lookup failure reads as null, not thrown, and logs exactly once', async () => {
     setAuthEnv();
     fakes.db.length = 0;
     const auth = await load();
     expect(await auth.currentPrincipal()).toBeNull();
     const { identity } = fakes.db[0]!;
     identity.getSessionAndUser = vi.fn(async () => {
-      throw new Error('db unreachable');
+      throw new Error('db unreachable for cp@example.test');
     });
     pageCookies.mockImplementation(async () => ({
       get: (name: string) => (name === 'authjs.session-token' ? { value: 'x'.repeat(32) } : undefined),
       set: vi.fn(),
     }));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(auth.currentPrincipal()).resolves.toBeNull();
+    expect(errorSpy).toHaveBeenCalledOnce();
+    expect(errorSpy).toHaveBeenCalledWith('[auth] currentPrincipal Error');
+    errorSpy.mockRestore();
     pageCookies.mockImplementation(async () => ({
       get: (_name: string) => undefined,
       set: vi.fn(),

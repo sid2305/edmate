@@ -4,7 +4,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { requireRole, serverDatabase, TEACHER_PATH } from '../../../src/auth';
 import { AppShell } from '../../../src/ui/AppShell';
 import { signOutAndRedirect } from '../actions';
 import { UploadsView } from './UploadsView';
@@ -23,7 +23,7 @@ export default async function UploadsPage() {
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: teacher('nav') },
+        { href: TEACHER_PATH, label: teacher('nav') },
         { href: '/teacher/uploads', label: teacher('uploadsLink') },
       ]}
       signOutAction={signOutAndRedirect}

@@ -2156,9 +2156,27 @@ tasks:
   accept: a failed principal lookup leaves a log line; route paths come from one constant each.
   deps:
   - '9.1'
-  status: running
+  status: done
   branch: m13/9.1b-auth-paths-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '9.0'
   milestone: M9
   title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff
@@ -2299,7 +2317,8 @@ tasks:
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
     both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
-    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound'
+    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound; 9.0c review LOW: instrumentation.test
+    asserts register() returns undefined (pins it non-async)'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2328,8 +2347,9 @@ tasks:
     newline; the migration is additive; the db tests pass
   deps:
   - '5.10'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/5.10b-teacher-questions-locking
+  model: plan:lead build:sonnet
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
@@ -6279,7 +6299,9 @@ tasks:
   model: plan:opus arch:opus build:opus
 - id: 10.1b
   milestone: M10
-  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B)'
+  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B); 10.1a review LOWs: one shared
+    input check every adapter calls (idempotency key, https returnUrl) tested in the suite; refund with amount omitted (full refund) is tested or made explicit; a PaymentsErrorCode union pinned to the ADR
+    §7 list; the suite tests a retry after a timeout and that clearScheduled clears a scheduled resume; refund JSDoc says it checks existing refunds first, and the timeout-retry test covers refund; clearScheduled with nothing scheduled returns the current snapshot; offer name also refuses lone surrogates, private-use and Hangul filler, with a ZWJ-emoji case'
   accept: the contract suite passes on the fake and on a second fake provider with no caller change; payments tests green.
   deps:
   - 10.1a
@@ -6301,7 +6323,7 @@ tasks:
   model: null
 - id: '10.2'
   milestone: M10
-  title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
+  title: 'Signed, idempotent, order-independent webhooks → subscriptions → entitlements (10.1a review: queue the whole PaymentEvent or re-check the provider per fact; compare occurredAt as instants)'
   accept: replayed and out-of-order webhooks end in the correct state.
   deps:
   - '10.1'
@@ -6574,7 +6596,7 @@ tasks:
   model: null
 - id: '10.8'
   milestone: M10
-  title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3)'
+  title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'
