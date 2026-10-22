@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7e the loader reads the first agent id only · decided by builder · risk: low
+- Decided: `teacherScorecard` calls `publicScorecard` with `teacher.agentIds[0]`, not every agent
+  id the page lists packages for.
+- Why: 8.7 and the MVP rules fix one agent per teacher; `agentIds` on the discovery row is a list
+  only because the packages section was written generically (9.2c). Reading just the first id
+  avoids a second, redundant call and keeps the scorecard tied to the agent whose packages the
+  page already shows first.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.1c Subject change resets verification in the same UPDATE · decided by builder · risk: high
+- Decided: `teacherProfiles.update` sets `verification_status` to `pending` inside the same `UPDATE` as the subject change, via a `CASE` on the row's old subject; no extra read, no new lock, so the repository's lock order is unchanged. Touches the risky path `packages/db/src/repositories/**`; reviewer: security-reviewer.
+- Why: human answer B-30; a single statement leaves no window for a concurrent `setVerification` to be overwritten or skipped.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.1c A rejected teacher who changes subject returns to pending · decided by builder · risk: medium
+- Decided: the `CASE` resets any status (not only `verified`) to `pending` on a real subject change, so a rejected teacher who changes subject re-enters the staff queue.
+- Why: matches the plan's statement as written; a new subject is a new claim staff should look at, and `pending` grants nothing (the publish guard still refuses). If the human prefers rejected to stick, it is a one-word change to the `CASE`.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.1c "Same subject" means equal after the schema's trim, case-sensitive · decided by builder · risk: low
+- Decided: the comparison runs on the zod-trimmed input with SQL `<>`, so "  Maths  " equals "Maths" but "maths" counts as a change.
+- Why: the stored value is already trimmed; case-folding would be a new rule the spec didn't make, and erring towards re-verification is the safe side.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.1b Staff role boundary for the verification API and the new risk-paths line · decided by builder · risk: high
 - Decided: `/api/staff/verifications` GET/POST are `withRole(['staff'])` only (signed-out 401,
   student and teacher 403, cross-site POST 403); the acting staff id is only ever the session
