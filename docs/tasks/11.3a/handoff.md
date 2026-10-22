@@ -6,28 +6,30 @@ Worktree: .claude/worktrees/agent-a64239553d86c5192
 
 ## Summary
 New `insightsRepo(db)` in `@edmate/db`, wired as `repos.insights`:
-- `weeklyTopQuestions(scope, since)`: question groups opened since `since` (any status).
-- `openQuestionGroups(scope)`: question groups still open, any age.
-- `stickingTopics(scope, since)`: topics students got wrong (`evidence_events.correct = false`, by `ts`).
-- `unhelpfulAnswerCount(scope, since)`: turns with move `ask_teacher` or a failed `grounding` guard entry; `null` under the floor.
-- `saveWeek(scope, weekStart, payload)`: upsert on `insights_teacher_id_week_key`. `getWeek(scope, weekStart)`: the stored row or `null`. A stored payload that doesn't parse throws `integrity`.
+- `weeklyTopQuestions(scope, weekStart)`: question groups opened in the week (any status).
+- `openQuestionGroups(scope)`: question groups still open, any age (no window).
+- `stickingTopics(scope, weekStart)`: topics students got wrong (`evidence_events.correct = false`, by `ts`).
+- `unhelpfulAnswerCount(scope, weekStart)`: turns with move `ask_teacher` or a failed `grounding` guard entry; `null` under the floor.
+- `computeAndSaveWeek(scope, weekStart)`: runs the four reads and upserts the payload on `insights_teacher_id_week_key`. The only write; `saveWeek` is internal (not on the repo object), so no caller can store a forged payload.
+- `getWeek(scope, weekStart)`: the stored row or `null`. A stored payload that doesn't parse throws `integrity`.
 
-Privacy floor: every aggregate needs at least 5 **distinct students** (`INSIGHTS_MIN_STUDENTS`). The repository enforces it in SQL (`having count(distinct student_id) >= 5`), and each list is capped at the top 5 (`INSIGHTS_TOP_N`). `student_id` appears only inside `count(distinct …)`: no read selects or returns it. `saveWeek`'s strict zod schema (`WeeklyInsightsPayloadSchema`, local to @edmate/db) refuses a group, topic or count under the floor, any extra field, more than 5 entries, or a week that is not a Monday date.
+`weekStart` is a Monday `YYYY-MM-DD` (anything else is `invalid`). The windowed reads use the fixed window [weekStart 00:00 UTC, +7 days), both bounds in SQL (`>= start AND < end`), so a caller can't pick nested or open-ended windows.
 
-Payload shape: `{ topQuestions: Group[], stickingTopics: Topic[], unhelpfulAnswers: number | null, openTeacherQuestions: Group[] }`. Group is `{ groupId, students, questions, oldestAt, sample }`, where `sample` is the group's oldest question text cut to 280 characters. Topic is `{ topicId, title, students, misses }`.
+Privacy floor: every aggregate needs at least 5 **distinct students** (`INSIGHTS_MIN_STUDENTS`), enforced in SQL (`having count(distinct student_id) >= 5`); each list is capped at the top 5 (`INSIGHTS_TOP_N`). The teacher's own 8.5 preview rows (student id = teacher id) are excluded from every read (`student_id <> teacher_id`; `sessions.student_id <> sessions.teacher_id` for unhelpful turns). `student_id` appears only inside `count(distinct …)` and that filter: no read selects or returns it. The strict zod schema (`WeeklyInsightsPayloadSchema`, local to @edmate/db) checks the computed payload before it is stored.
+
+Payload shape: `{ topQuestions: Group[], stickingTopics: Topic[], unhelpfulAnswers: number | null, openTeacherQuestions: Group[] }`. Group is `{ groupId, students, questions }` (no question text, no timestamp). Topic is `{ topicId, title, students, misses }`.
 
 ## Files
 - `packages/db/src/repositories/insights.ts` (new)
-- `packages/db/src/repositories/index.ts`: appended the `insights` repo and its barrel exports
-- `packages/db/test/insights.int.test.ts` (new, 21 tests)
-- `packages/db/test/repositories.int.test.ts`: 6 `CASES` entries, plus fixtures past the floor for teachers A (5 students) and B (6 students, more unhelpful turns so the two counts differ)
+- `packages/db/src/repositories/index.ts`: appended the `insights` repo and its barrel exports (additions only)
+- `packages/db/test/insights.int.test.ts` (new, 27 tests)
+- `packages/db/test/repositories.int.test.ts`: 6 `CASES` entries, plus fixtures past the floor inside week 2026-10-05 for teachers A (5 students) and B (6 students, more unhelpful turns so the two counts differ). Additions only; the earlier unrelated Prettier reformatting is reverted.
 
 No migration, no schema edit, `teacher-questions.ts` untouched, no `packages/contracts` change.
 
 ## Tests
-- `TEST_DATABASE_URL=… corepack pnpm vitest run test/insights.int.test.ts` → `Tests 21 passed (21)`. Covers 4 vs 5 distinct students for each of the four aggregates; many rows from fewer than 5 students dropped (questions, open questions, topics, unhelpful turns); window and status filters; top-5 ordering; cross-teacher isolation, including a fifth student who only asked teacher B, so A still has 4; no `stu_`/`studentId` in any payload or saved row; upsert replaces the same week; invalid payload, week and scope; `integrity` on a corrupt stored payload; `not_found` for an unknown teacher.
-- `vitest run test/repositories.int.test.ts` → `Tests 133 passed (133)`; 108 methods, including `insights.*` at `cases=22 leaks=0` for each read.
-- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` (own Postgres on port 55413) → `Tasks: 26 successful, 26 total`; db `Test Files 63 passed (63)`; `insights.ts | 100 | 100 | 100 | 100`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --continue` (own Postgres on port 55471) → `Tasks: 26 successful, 26 total`; db `Test Files 63 passed (63)`; `insights.ts | 100 | 100 | 100 | 100`; grid: each `insights.*` read `cases=22 leaks=0`, `insights.computeAndSaveWeek teacher write cases=4 leaks=0`. (A first run hit an unrelated 2000 ms timeout in `@edmate/harness` runner.test.ts under load; it passed on re-run.)
+- insights.int.test.ts covers: 4 vs 5 distinct students for each read; many rows from fewer than 5 students dropped; for each of the four reads, 4 real students plus a teacher preview row → dropped / `null` (and preview turns don't add to the count); a row at weekStart − 1 ms and a row at weekStart + 7 days both excluded; top-5 ordering; cross-teacher isolation; `computeAndSaveWeek` stores exactly the reads' output, leaves next week's rows out, and the saved text has no `stu_`, student id, question text, `sample` or `oldestAt`; re-run replaces the week; the repo object has no payload-taking write; schema refuses under-floor, extra fields (`studentId`, `sample`, `oldestAt`) and over top-N; non-Monday week `invalid` on every windowed method; `integrity`; `not_found`; bad scope.
 - `python3 .githooks/secret-scan.py --all` → clean.
 
 ## Deviations
@@ -35,7 +37,7 @@ No migration, no schema edit, `teacher-questions.ts` untouched, no `packages/con
 
 ## Decisions
 ### 22 Oct 2026 · 11.3a The insights privacy floor counts distinct students, in the repository's own SQL · decided by builder · risk: high
-- Decided: every insights aggregate (question groups, open-question groups, sticking topics, the unhelpful-answer count) needs `count(distinct student_id) >= 5`, enforced with SQL `HAVING` inside `insightsRepo`. Below the floor, a group or topic is dropped and the count is `null`. No read selects or returns `student_id`. `saveWeek`'s schema also refuses anything under the floor. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
+- Decided: every insights aggregate (question groups, open-question groups, sticking topics, the unhelpful-answer count) needs `count(distinct student_id) >= 5`, enforced with SQL `HAVING` inside `insightsRepo`. Below the floor, a group or topic is dropped and the count is `null`. No read selects or returns `student_id`. The payload schema also refuses anything under the floor before it is stored. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
 - Why: the lead's answer (22 Oct 2026) says the floor counts students, never rows; acceptance says "no student identifiable". Doing it in SQL keeps student ids out of process memory and out of every caller.
 - risk: high
 
@@ -45,22 +47,37 @@ No migration, no schema edit, `teacher-questions.ts` untouched, no `packages/con
 - risk: low
 
 ### 22 Oct 2026 · 11.3a "Unhelpful answers" = ask_teacher move or failed grounding guard · decided by builder · risk: low
-- Decided: count turns since `since` whose move is `ask_teacher`, or whose `guards` hold `{name: 'grounding', ok: false}`; teacher ownership comes through the session join.
+- Decided: count turns in the week whose move is `ask_teacher`, or whose `guards` hold `{name: 'grounding', ok: false}`; teacher ownership comes through the session join.
 - Why: plan decision 3. There is no rating feature yet.
 - risk: low
 
-### 22 Oct 2026 · 11.3a A question group carries one sample text, cut to 280 characters · decided by builder · risk: medium
-- Decided: each group shows its oldest question's text (`left(…, 280)`) as `sample`, so the teacher knows what was asked. No student id or name is attached.
-- Why: a top-questions list needs a question to show. The teacher already sees these texts in the 8.8 inbox (by design, lead answer), and the group passes the 5-student floor. A student could still type identifying words into a question; the security reviewer may prefer dropping `sample`.
-- risk: medium
-
 ### 22 Oct 2026 · 11.3a Weeks are stored by their Monday date; openQuestionGroups has no time window · decided by builder · risk: low
-- Decided: `saveWeek`/`getWeek` take the ISO week's Monday as `YYYY-MM-DD` and refuse any other day. `openQuestionGroups` counts open questions of any age.
+- Decided: `computeAndSaveWeek`/`getWeek` and the windowed reads take the ISO week's Monday as `YYYY-MM-DD` and refuse any other day. `openQuestionGroups` counts open questions of any age.
 - Why: the `insights.week` column comment says "Monday of the ISO week". "Currently open" means not yet answered, whatever its age.
 - risk: low
 
-## Left to do (Phase B, apps/worker)
-- `weeklyInsights.ts`: compute `since = run time − 7 days` and `weekStart` (the Monday of the run's week in the US pack's timezone), call the four reads plus `saveWeek` on `repos.insights`, and use `WeeklyInsightsPayload`/`InsightQuestionGroup`/`StickingTopic` from `@edmate/db`.
-- Scheduler, logSink and wiring as in the plan's Phase B. Every value the reads return already passes `saveWeek`'s schema, so the worker should save them as they are.
+### 22 Oct 2026 · 11.3a Teacher preview rows never count toward insights · decided by lead · risk: high
+- Decided: every insights read excludes the teacher's own 8.5 test-chat rows (`student_id <> teacher_id` for question groups, open question groups and sticking topics; `sessions.student_id <> sessions.teacher_id` for the unhelpful-answer count). Each read has a test with 4 real students plus a preview row: the group is dropped or the count is `null`. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
+- Why: security review HIGH. Preview turns run with studentId = teacherId, so the teacher could be the fifth "student" and a group of 4 real students would pass the floor.
+- risk: high
 
-Tool calls used: 37
+### 22 Oct 2026 · 11.3a Question groups carry only ids and counts: no sample text, no oldestAt · decided by lead · risk: high
+- Decided: `sample` (one student's verbatim question) and `oldestAt` (one question's exact time) are dropped from the reads and the payload schema; a group is `{ groupId, students, questions }`. A later studio view resolves `groupId` to live text through `teacherQuestions.listGroupsForTeacher`, so erasure and answer state still apply. This also clears the `left()` vs zod length mismatch and the `array_agg` cost.
+- Why: security review MEDIUM. A sample is one student's free text that can carry a name or contact detail and would outlive the student's erasure inside `insights.payload`; `oldestAt` is a per-student timestamp.
+- risk: high
+
+### 22 Oct 2026 · 11.3a Insights read a fixed week, and only computeAndSaveWeek writes · decided by lead · risk: high
+- Decided: the reads take `weekStart` (a Monday, validated like the stored week) instead of a caller-chosen `since`; the repo derives [weekStart 00:00 UTC, +7 days) with both bounds in SQL. A new `computeAndSaveWeek(scope, weekStart)` runs the four reads, builds the payload and upserts it. `saveWeek` is internal and not on the repo object (the isolation grid tests `computeAndSaveWeek` instead), so no caller can store a forged payload. The file header now states exactly what the floor and window guarantee.
+- Why: security review MEDIUM. With a caller-chosen open-ended window, two nested windows could be differenced down to one student; a delayed run would also count rows from after its week.
+- risk: high
+
+### 22 Oct 2026 · 11.3a Open question groups stay cumulative · decided by lead · risk: low
+- Decided: `openQuestionGroups` keeps no time window ("currently open"), so its `students` count is cumulative; comparing two weeks can show that one new student asked a group. Accepted, not banded.
+- Why: security review LOW. The teacher already sees each question in the 8.8 inbox, so the comparison reveals nothing new.
+- risk: low
+
+## Left to do (Phase B, apps/worker)
+- `weeklyInsights.ts`: compute `weekStart` (the Monday of the week being reported, `YYYY-MM-DD`) and call only `repos.insights.computeAndSaveWeek(scope, weekStart)` for each teacher. Don't call the reads or build a payload in the worker; there is no public `saveWeek`.
+- Scheduler, logSink and wiring as in the plan's Phase B.
+
+Tool calls used: 37 + 30

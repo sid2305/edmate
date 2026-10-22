@@ -100,7 +100,10 @@ export {
   type TeacherQuestionGroup,
 } from './teacher-questions.js';
 export { TEACHER_EVAL_CASES_MAX, type TeacherEvalCaseRow } from './teacher-eval-cases.js';
-export { NOTIFICATIONS_MAX_LIMIT, type NotificationRow } from './notifications.js';
+export {
+  NOTIFICATIONS_MAX_LIMIT,
+  type NotificationRow,
+} from './notifications.js';
 export type {
   TeacherProfileCreate,
   TeacherProfileUpdate,
@@ -244,7 +247,6 @@ export {
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
 export {
   INSIGHTS_MIN_STUDENTS,
-  INSIGHTS_SAMPLE_MAX_LENGTH,
   INSIGHTS_TOP_N,
   type InsightQuestionGroup,
   type InsightsWeek,

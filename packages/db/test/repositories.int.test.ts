@@ -269,18 +269,12 @@ const dismissReplay: Partial<Record<Teacher, string>> = {};
  * cross-scope attempt a fixed id to call against without writing anything new first. */
 const notifTarget: Partial<Record<Pair, string>> = {};
 
-// Task 11.3a: weekly insights fixtures (seeded in beforeAll).
-const INSIGHTS_READ_WEEK = '2026-10-19';
-const INSIGHTS_WRITE_WEEK = '2026-10-12';
+// Task 11.3a: weekly insights fixtures (seeded in beforeAll inside INSIGHTS_WEEK).
+const INSIGHTS_WEEK = '2026-10-05';
+const INSIGHTS_AT = '2026-10-07T10:00:00.000Z';
 const insightsUnhelpful: Partial<Record<Teacher, number>> = {};
-const insightsPayload = (sample: string) => ({
-  topQuestions: [
-    { groupId: 'g_iso', students: 5, questions: 5, oldestAt: '2026-10-14T00:00:00.000Z', sample },
-  ],
-  stickingTopics: [],
-  unhelpfulAnswers: null,
-  openTeacherQuestions: [],
-});
+const insightsGroupOwner = (g: { groupId: string }) =>
+  g.groupId === 'g_ins_A' ? 'A' : g.groupId === 'g_ins_B' ? 'B' : `leak:${g.groupId}`;
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
@@ -333,8 +327,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
   'documents.updateStatus': {
     scope: 'teacher',
     op: 'write',
-    attempt: (r, scope, _actor, target) =>
-      r.documents.updateStatus(scope, repDoc(target), 'processing'),
+    attempt: (r, scope, _actor, target) => r.documents.updateStatus(scope, repDoc(target), 'processing'),
     verify: async (r, actor) => {
       for (const t of TEACHERS) {
         const row = await r.documents.get(tScope(t), repDoc(actor));
@@ -369,9 +362,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'teacher',
     op: 'write',
     attempt: (r, scope, actor, target) =>
-      r.documents.startReplace(scope, repDoc(target), {
-        storageKey: `[${actor}] key ${++counter}`,
-      }),
+      r.documents.startReplace(scope, repDoc(target), { storageKey: `[${actor}] key ${++counter}` }),
     verify: async (r, actor) => {
       const row = await r.documents.get(tScope(actor), repDoc(actor));
       expect(row?.status).toBe('uploading');
@@ -762,10 +753,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         n += 1;
       }
       // Both teachers stay verified (their default state since beforeAll, task 9.3c).
-      await raw.query(
-        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
-        [teacherId('A')],
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
+        teacherId('A'),
+      ]);
       return n;
     },
   },
@@ -781,16 +771,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       const got = await r.discovery.teacherBySlug({ slug: profileSlug('A') });
       expect(got?.slug).toBe(profileSlug('A'));
       expect(Object.keys(got ?? {}).sort()).toEqual(
-        [
-          'agentIds',
-          'bio',
-          'displayName',
-          'hasFree',
-          'languages',
-          'packageCount',
-          'slug',
-          'subject',
-        ].sort(),
+        ['agentIds', 'bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
       );
       n += 1;
       // B pushed back to pending (from its default-verified state): its slug resolves to
@@ -819,10 +800,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       });
       n += 1;
       // A stays verified (its default state since beforeAll, task 9.3c).
-      await raw.query(
-        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
-        [teacherId('A')],
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
+        teacherId('A'),
+      ]);
       return n;
     },
   },
@@ -853,17 +833,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     attempt: (r, scope) => r.courses.ensureDefault(scope),
     verify: async (r, actor, res) => {
       expect((res as CourseRow).id).toBe(ids.course(actor));
-      expect(await r.modules.ids(tScope(actor))).toEqual([
-        ids.module(actor, 1),
-        ids.module(actor, 2),
-      ]);
+      expect(await r.modules.ids(tScope(actor))).toEqual([ids.module(actor, 1), ids.module(actor, 2)]);
     },
     mismatches: () => [
-      [
-        'a scope id that is not a user',
-        (r) => r.courses.ensureDefault({ teacherId: 'tch_ghost' }),
-        'not_found',
-      ],
+      ['a scope id that is not a user', (r) => r.courses.ensureDefault({ teacherId: 'tch_ghost' }), 'not_found'],
     ],
   },
   'outline.getOutline': {
@@ -877,8 +850,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
   'outline.replaceOutline': {
     scope: 'teacher',
     op: 'write',
-    attempt: (r, scope, actor, target) =>
-      r.outline.replaceOutline(scope, outlineEdit(actor, target)),
+    attempt: (r, scope, actor, target) => r.outline.replaceOutline(scope, outlineEdit(actor, target)),
     verify: async (r, actor, res) => {
       expect((res as { outlineVersion: number }).outlineVersion).toBeGreaterThan(1);
       const mine = await r.outline.getOutline(tScope(actor));
@@ -896,10 +868,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       [
         "another teacher's chunk id",
         (r) =>
-          r.outline.replaceOutline(
-            tScope(a),
-            outlineEdit(a, a, chunkId(isoDoc(otherTeacher(a)), 0)),
-          ),
+          r.outline.replaceOutline(tScope(a), outlineEdit(a, a, chunkId(isoDoc(otherTeacher(a)), 0))),
         'invalid',
       ],
       [
@@ -1404,9 +1373,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           expect(row, `${p} reads ${actor}'s session`).toBeNull();
         }
         const summary = (await r.learnerProfiles.get(sScope(p)))?.lastSummary;
-        expect(summary, `${p}'s summary`).toBe(
-          p === actor ? `[${actor}] wrap-up` : `[${p}] last time`,
-        );
+        expect(summary, `${p}'s summary`).toBe(p === actor ? `[${actor}] wrap-up` : `[${p}] last time`);
       }
       // Put the summary back to the seed's own value, same as endOnPackageChange's own case.
       await raw.query(
@@ -1427,14 +1394,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
       [
         'a summary over the word limit',
-        (r) =>
-          r.sessions.end(
-            sScope(a),
-            endable2(a),
-            Array(LIMITS.lastSummaryMaxWords + 1)
-              .fill('w')
-              .join(' '),
-          ),
+        (r) => r.sessions.end(sScope(a), endable2(a), Array(LIMITS.lastSummaryMaxWords + 1).fill('w').join(' ')),
         'invalid',
       ],
     ],
@@ -1788,10 +1748,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       await onlyPairSees(
         (sc) => r.learnerProfiles.get(sc),
         actor,
-        (x) =>
-          (x as LearnerProfile | null)?.mistakes.some(
-            (m) => m.tag === tag && m.lastSeen === lastSeen,
-          ) ?? false,
+        (x) => (x as LearnerProfile | null)?.mistakes.some((m) => m.tag === tag && m.lastSeen === lastSeen) ?? false,
       );
     },
   },
@@ -1954,8 +1911,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return [
         [
           "another teacher's topic",
-          (r) =>
-            r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, topicId: ids.topic(other) }]),
+          (r) => r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, topicId: ids.topic(other) }]),
           'scope',
         ],
         [
@@ -2809,21 +2765,17 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) =>
       r.teacherQuestions.listGroupsForTeacher({ teacherId: rid }, { limit: 100 }),
     owners: (groups: { questions: { text: string }[] }[]) =>
-      groups.flatMap((g) =>
-        g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair))),
-      ),
+      groups.flatMap((g) => g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair)))),
   },
   // Task 11.3a: weekly insights. Each teacher has its own students past the 5-student floor
-  // (seeded in beforeAll); a number result is attributed through insightsUnhelpful.
+  // (seeded in beforeAll); groups are attributed by groupId, a count through insightsUnhelpful.
   'insights.weeklyTopQuestions': {
     scope: 'teacher',
     op: 'read',
     targeted: false,
-    call: (r, scope) => r.insights.weeklyTopQuestions(scope, '2000-01-01T00:00:00Z'),
-    random: (r, _scope, rid) =>
-      r.insights.weeklyTopQuestions({ teacherId: rid }, '2000-01-01T00:00:00Z'),
-    owners: (gs: { sample: string }[]) =>
-      gs.flatMap((g) => markers(g.sample).map((m) => m.slice(-1))),
+    call: (r, scope) => r.insights.weeklyTopQuestions(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.weeklyTopQuestions({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
   },
   'insights.openQuestionGroups': {
     scope: 'teacher',
@@ -2831,16 +2783,14 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     targeted: false,
     call: (r, scope) => r.insights.openQuestionGroups(scope),
     random: (r, _scope, rid) => r.insights.openQuestionGroups({ teacherId: rid }),
-    owners: (gs: { sample: string }[]) =>
-      gs.flatMap((g) => markers(g.sample).map((m) => m.slice(-1))),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
   },
   'insights.stickingTopics': {
     scope: 'teacher',
     op: 'read',
     targeted: false,
-    call: (r, scope) => r.insights.stickingTopics(scope, '2000-01-01T00:00:00Z'),
-    random: (r, _scope, rid) =>
-      r.insights.stickingTopics({ teacherId: rid }, '2000-01-01T00:00:00Z'),
+    call: (r, scope) => r.insights.stickingTopics(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.stickingTopics({ teacherId: rid }, INSIGHTS_WEEK),
     owners: (ts: { topicId: string; title: string }[]) =>
       ts.flatMap((t) => [
         ...markers(t.title),
@@ -2851,9 +2801,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'teacher',
     op: 'read',
     targeted: false,
-    call: (r, scope) => r.insights.unhelpfulAnswerCount(scope, '2000-01-01T00:00:00Z'),
-    random: (r, _scope, rid) =>
-      r.insights.unhelpfulAnswerCount({ teacherId: rid }, '2000-01-01T00:00:00Z'),
+    call: (r, scope) => r.insights.unhelpfulAnswerCount(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.unhelpfulAnswerCount({ teacherId: rid }, INSIGHTS_WEEK),
     owners: (n: number | null) =>
       n === null ? [] : [TEACHERS.find((t) => insightsUnhelpful[t] === n) ?? `leak:${n}`],
   },
@@ -2861,40 +2810,32 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'teacher',
     op: 'read',
     targeted: false,
-    call: (r, scope) => r.insights.getWeek(scope, INSIGHTS_READ_WEEK),
-    random: (r, _scope, rid) => r.insights.getWeek({ teacherId: rid }, INSIGHTS_READ_WEEK),
-    owners: (w: { payload: { topQuestions: { sample: string }[] } } | null) =>
-      w ? w.payload.topQuestions.flatMap((g) => markers(g.sample)) : [],
+    call: (r, scope) => r.insights.getWeek(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.getWeek({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (w: { payload: { topQuestions: { groupId: string }[] } } | null) =>
+      w ? w.payload.topQuestions.map(insightsGroupOwner) : [],
   },
-  'insights.saveWeek': {
+  'insights.computeAndSaveWeek': {
     scope: 'teacher',
     op: 'write',
-    // Untargeted: the week is always saved for the scope's own teacher.
+    // Untargeted: the week is always computed from and saved for the scope's own teacher.
     owns: () => true,
-    attempt: (r, scope, actor) =>
-      r.insights.saveWeek(
-        scope,
-        INSIGHTS_WRITE_WEEK,
-        insightsPayload(`[${actor}] saved ${++counter}`),
-      ),
+    attempt: (r, scope) => r.insights.computeAndSaveWeek(scope, INSIGHTS_WEEK),
     verify: async (r, actor, res) => {
-      const sample = (res as { payload: { topQuestions: { sample: string }[] } }).payload
-        .topQuestions[0]!.sample;
+      const saved = res as {
+        payload: { topQuestions: { groupId: string }[]; unhelpfulAnswers: number | null };
+      };
+      expect(saved.payload.topQuestions.map(insightsGroupOwner)).toEqual([actor]);
+      expect(saved.payload.unhelpfulAnswers).toBe(insightsUnhelpful[actor]);
       for (const t of TEACHERS) {
-        const w = await r.insights.getWeek(tScope(t), INSIGHTS_WRITE_WEEK);
-        expect(w?.payload.topQuestions[0]?.sample === sample, `${t} sees ${actor}'s week`).toBe(
-          t === actor,
-        );
+        const w = await r.insights.getWeek(tScope(t), INSIGHTS_WEEK);
+        expect(w?.payload.topQuestions.map(insightsGroupOwner), `${t}'s week`).toEqual([t]);
       }
     },
     mismatches: (a) => [
       [
-        'a group under the 5-student floor',
-        (r) =>
-          r.insights.saveWeek(tScope(a), INSIGHTS_WRITE_WEEK, {
-            ...insightsPayload('x'),
-            topQuestions: [{ ...insightsPayload('x').topQuestions[0]!, students: 4 }],
-          }),
+        'a week that is not a Monday',
+        (r) => r.insights.computeAndSaveWeek(tScope(a), '2026-10-06'),
         'invalid',
       ],
     ],
@@ -2904,9 +2845,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     op: 'write',
     attempt: async (r, scope, actor, target) => {
       const qid =
-        actor === target
-          ? await openedQuestion(r, `1${actor}` as Pair, 'primary')
-          : answerTarget[target]!;
+        actor === target ? await openedQuestion(r, `1${actor}` as Pair, 'primary') : answerTarget[target]!;
       return r.teacherQuestions.answer(scope, {
         questionId: qid,
         moduleId: ids.module(target, 1),
@@ -3031,13 +2970,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     targeted: false,
     call: (r, scope) => r.notifications.listForStudent(scope, { unreadOnly: false, limit: 50 }),
     random: (r, _scope, rid) =>
-      r.notifications.listForStudent(
-        { studentId: rid, teacherId: rid },
-        {
-          unreadOnly: false,
-          limit: 50,
-        },
-      ),
+      r.notifications.listForStudent({ studentId: rid, teacherId: rid }, {
+        unreadOnly: false,
+        limit: 50,
+      }),
     owners: (rows: { questionText: string }[]) => rows.flatMap((x) => markers(x.questionText)),
   },
   'notifications.markRead': {
@@ -3550,9 +3486,9 @@ describe.skipIf(!up)(
           [`er_iso_${t.toLowerCase()}`, isoRun(t), JSON.stringify(isoResult(t, 'iso').details)],
         );
       }
-      // Task 11.3a: past the insights floor for each teacher (A: 5 students, B: 6, B with
-      // more unhelpful turns so the two counts differ). Distinct question text, so 5.10's lexical
-      // grouping never joins these rows to the answer/dismiss fixtures.
+      // Task 11.3a: past the insights floor for each teacher inside INSIGHTS_WEEK (A: 5 students,
+      // B: 6, B with more unhelpful turns so the two counts differ). Distinct question text, so
+      // 5.10's lexical grouping never joins these rows to the answer/dismiss fixtures.
       for (const [t, n, turns] of [
         ['A', 5, 1],
         ['B', 6, 3],
@@ -3572,8 +3508,8 @@ describe.skipIf(!up)(
             [ses, st, teacherId(t), ids.agent(t), ids.pkg(t)],
           );
           await raw.query(
-            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, group_id)
-             values ($1, $2, $3, $4, $5, $6)`,
+            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, group_id, created_at)
+             values ($1, $2, $3, $4, $5, $6, $7)`,
             [
               `tq_ins${i}_${t}`,
               teacherId(t),
@@ -3581,33 +3517,30 @@ describe.skipIf(!up)(
               st,
               `[9${t}] zqxv weekly fixture`,
               `g_ins_${t}`,
+              INSIGHTS_AT,
             ],
           );
           await raw.query(
-            `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source)
-             values ($1, $2, $3, $4, false, 'check')`,
-            [`ev_ins${i}_${t}`, st, teacherId(t), ids.topic(t)],
+            `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source, ts)
+             values ($1, $2, $3, $4, false, 'check', $5)`,
+            [`ev_ins${i}_${t}`, st, teacherId(t), ids.topic(t), INSIGHTS_AT],
           );
           for (let k = 0; k < turns; k++) {
             await raw.query(
               `insert into turn_traces (id, session_id, steps, model, input_tokens, output_tokens,
-                 cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage)
-               values ($1, $2, '[]', '', 0, 0, 0, $1, 1, 1, 'on_task', 'ask_teacher', '[]', '[]')`,
-              [`tt_ins${i}_${t}_${k}`, ses],
+                 cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage, created_at)
+               values ($1, $2, '[]', '', 0, 0, 0, $1, 1, 1, 'on_task', 'ask_teacher', '[]', '[]', $3)`,
+              [`tt_ins${i}_${t}_${k}`, ses, INSIGHTS_AT],
             );
           }
         }
-        await repos.insights.saveWeek(
-          tScope(t),
-          INSIGHTS_READ_WEEK,
-          insightsPayload(`[${t}] week`),
-        );
       }
       for (const t of TEACHERS) {
         insightsUnhelpful[t] = (await repos.insights.unhelpfulAnswerCount(
           tScope(t),
-          '2000-01-01T00:00:00Z',
+          INSIGHTS_WEEK,
         ))!;
+        await repos.insights.computeAndSaveWeek(tScope(t), INSIGHTS_WEEK);
       }
       expect(insightsUnhelpful.A).not.toBe(insightsUnhelpful.B);
       for (const t of TEACHERS) {
@@ -3736,39 +3669,26 @@ describe.skipIf(!up)(
       await raw.query(
         `insert into package_versions (id, teacher_id, package_id, version, config) values
            ('pv_93c', 'tch_93c', 'pkg_93c', 1, $1)`,
-        [
-          JSON.stringify({
-            ...packageConfig('A', 1, []),
-            id: 'pkg_93c',
-            agentId: 'agt_93c',
-            teacherId: 'tch_93c',
-          }),
-        ],
+        [JSON.stringify({ ...packageConfig('A', 1, []), id: 'pkg_93c', agentId: 'agt_93c', teacherId: 'tch_93c' })],
       );
 
       expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
 
-      await raw.query(
-        `update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`,
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
       expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
 
-      await raw.query(
-        `update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`,
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
       const live = await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' });
       expect(live.map((p) => p.packageVersionId)).toEqual(['pv_93c']);
     });
 
-    it("subscriptions.start refuses a rejected teacher's package, writing nothing; a verified one still starts", async () => {
+    it('subscriptions.start refuses a rejected teacher\'s package, writing nothing; a verified one still starts', async () => {
       await raw.query(
         `insert into users (id, name, locale, market, role) values ($1, '93c student', 'en', 'test', 'student')`,
         ['stu_93c'],
       );
       const scope = { studentId: 'stu_93c', teacherId: 'tch_93c' };
-      await raw.query(
-        `update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`,
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
       const before = await snapshot();
       await expect(
         repos.subscriptions.start(scope, {
@@ -3778,20 +3698,14 @@ describe.skipIf(!up)(
         }),
       ).rejects.toMatchObject({ kind: 'not_found' });
       expect(await snapshot()).toBe(before);
+      expect(await rawCount(`select count(*)::int as n from subscriptions where student_id = $1`, [
+        'stu_93c',
+      ])).toBe(0);
       expect(
-        await rawCount(`select count(*)::int as n from subscriptions where student_id = $1`, [
-          'stu_93c',
-        ]),
-      ).toBe(0);
-      expect(
-        await rawCount(`select count(*)::int as n from audit_log where student_id = $1`, [
-          'stu_93c',
-        ]),
+        await rawCount(`select count(*)::int as n from audit_log where student_id = $1`, ['stu_93c']),
       ).toBe(0);
 
-      await raw.query(
-        `update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`,
-      );
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
       const started = await repos.subscriptions.start(scope, {
         packageVersionId: 'pv_93c',
         status: 'active',
@@ -3891,10 +3805,7 @@ describe.skipIf(!up)(
       let after: { createdAt: string; id: string } | undefined;
       const seen: string[] = [];
       for (let guard = 0; guard < 10; guard += 1) {
-        const page = await repos.sessions.listForStudent(sc, {
-          ...(after ? { after } : {}),
-          limit: 2,
-        });
+        const page = await repos.sessions.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
         seen.push(...page.items.map((s) => s.id));
         if (page.next === null) break;
         after = page.next;
@@ -3904,16 +3815,7 @@ describe.skipIf(!up)(
 
       const [row] = (await repos.sessions.listForStudent(sc, { limit: 2 })).items;
       expect(row && Object.keys(row).sort()).toEqual(
-        [
-          'agentId',
-          'agentVersion',
-          'createdAt',
-          'endedAt',
-          'id',
-          'packageId',
-          'packageVersion',
-          'summary',
-        ].sort(),
+        ['agentId', 'agentVersion', 'createdAt', 'endedAt', 'id', 'packageId', 'packageVersion', 'summary'].sort(),
       );
 
       const last = await repos.sessions.listForStudent(sc, { limit: 500 });
@@ -3960,10 +3862,7 @@ describe.skipIf(!up)(
       let after: { createdAt: string; id: string } | undefined;
       const seen: { id: string; sessionId: string }[] = [];
       for (let guard = 0; guard < 10; guard += 1) {
-        const page = await repos.messages.listForStudent(sc, {
-          ...(after ? { after } : {}),
-          limit: 2,
-        });
+        const page = await repos.messages.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
         seen.push(...page.items.map((m) => ({ id: m.id, sessionId: m.sessionId })));
         if (page.next === null) break;
         after = page.next;
