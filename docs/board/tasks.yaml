@@ -2459,6 +2459,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 0.19b
+  milestone: M13
+  title: "closeout.py checks the handoff's Decisions (each entry has a Decided: line) before it appends to the log. Today it appends first and then refuses, and a re-run skips the bad entries as duplicates (seen on 7.3)."
+  accept: "A test: a handoff whose entry has no Decided: line leaves docs/decisions/log.md unchanged."
+  deps: []
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
