@@ -64,4 +64,4 @@ Playwright's Chromium (cached by OS + the `@playwright/test` version read out of
   CI run, since this environment has no Docker/Postgres service to run the e2e job against.
 
 Status: DONE
-Tool calls used: 15
+Tool calls used: 22 (harness count; the builder reported 15)
