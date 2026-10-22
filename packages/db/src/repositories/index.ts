@@ -7,6 +7,7 @@ import { chunksRepo, documentsRepo } from './chunks.js';
 import { correctionsRepo } from './corrections.js';
 import { discoveryRepo } from './discovery.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
+import { liveClassesRepo } from './live-classes.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { notificationsRepo } from './notifications.js';
@@ -73,6 +74,7 @@ export function createRepositories(db: Db) {
     courses: guardAll('courses', coursesRepo(db)),
     outline: guardAll('outline', outlineRepo(db)),
     publish: guardAll('publish', publishRepo(db)),
+    liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
   };
 }
 
@@ -242,3 +244,13 @@ export {
   type SearchInput,
 } from './retrieval.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
+export {
+  type CreateLiveClassInput,
+  LIVE_CLASS_PACKAGE_IDS_MAX,
+  LIVE_CLASS_PACKAGE_IDS_MIN,
+  LIVE_CLASS_TITLE_MAX_LENGTH,
+  type ListUpcomingOptions,
+  type LiveClassWindow,
+  type TeacherLiveClassRow,
+  type UpcomingLiveClass,
+} from './live-classes.js';
