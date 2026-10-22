@@ -2048,7 +2048,8 @@ tasks:
   - '5.11'
   - '5.2'
   - '8.1'
-  status: todo
+  - 8.4a
+  status: planning
   branch: null
   model: null
 - id: '8.5'
@@ -2060,7 +2061,8 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  - 8.5b
+  status: planning
   branch: null
   model: null
 - id: '8.6'
@@ -2242,7 +2244,8 @@ tasks:
     chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 9.0b review LOW: apps/worker gateway.test.ts
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
-    both sleep branches'
+    both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
+    cause'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2796,9 +2799,9 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2e-advice-persona-cases
+  model: plan:sonnet build:sonnet
 - id: 7.2f
   milestone: M13
   title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
@@ -3016,6 +3019,36 @@ tasks:
   deps:
   - 8.3a
   risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.4a
+  milestone: M8
+  title: '8.4 Phase A: packages/db style-card create/latest and the studio style-card API (draft, save) (plan docs/tasks/8.4/plan.md)'
+  accept: 8.4 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: running
+  branch: m8/8.4a-style-card-api
+  model: plan:sonnet build:opus
+- id: 8.5a
+  milestone: M8
+  title: '8.5 Phase A: packages/db corrections repository, agentVersions.latest, packageVersions.listForAgent (plan docs/tasks/8.5/plan.md)'
+  accept: 8.5 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.5b
+  milestone: M8
+  title: '8.5 Phase B: apps/web test-chat composition and API routes (plan docs/tasks/8.5/plan.md)'
+  accept: 8.5 plan Phase B exit conditions.
+  deps:
+  - 8.5a
+  risk: normal
   status: todo
   branch: null
   model: null
