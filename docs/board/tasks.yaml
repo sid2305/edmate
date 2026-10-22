@@ -2627,11 +2627,10 @@ tasks:
   model: null
 - id: 7.4a
   milestone: M13
-  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna
-    later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the
-    as ScopedCase cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared
-    demo-content adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now; 7.8 review LOW: scorecard.ts Object.keys(SCORECARD_GROUPS)
-    casts become a typed key list'
+  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna later;
+    resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the as ScopedCase
+    cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared demo-content
+    adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now; 7.8 review LOW: scorecard.ts Object.keys(SCORECARD_GROUPS) casts become a typed key list'
   accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
   deps:
   - '7.4'
@@ -2691,7 +2690,7 @@ tasks:
   deps:
   - '7.1'
   risk: risky
-  status: running
+  status: review
   branch: m7/7.2a-locked-cases
   model: plan:opus build:opus
 - id: 7.2b
@@ -2755,9 +2754,9 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.4c-gate-deadline-per-scope
+  model: plan:sonnet build:sonnet
 - id: 1.7h
   milestone: M13
   title: 'US PII pattern (7.2 plan Q3): US.yaml has piiPatterns: [] and the guard has no SSN shape; add a human-signed US SSN pattern and its safety PII cases'
