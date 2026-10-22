@@ -101,6 +101,16 @@ A plain `role="status"` paragraph, no dismiss control, shown only when the flag 
   keeps the query to one round trip.
 - risk: low
 
+### 22 Oct 2026 · 8.7k Lead accepts the budget overrun · decided by lead · risk: low
+- Decided: accept the build's 158 harness calls against the plan's 70-call cap; no extra phase is split out after the fact.
+- Why: the count includes a merge of main with conflicts in shared test files and a disposable Postgres run; the review found no CRITICAL or HIGH and the scope stayed inside the plan.
+- risk: low
+
+### 22 Oct 2026 · 8.7k Lead keeps `await TeacherView(...)` in apps/web/app/teacher/page.tsx · decided by lead · risk: low
+- Decided: the review LOW on apps/web/app/teacher/page.tsx (calling the async view as a function instead of JSX) is wontfix.
+- Why: the tests can't render an async Server Component as a JSX child, and the welcome/age page already uses the same pattern.
+- risk: low
+
 ## Left to do
 
 Nothing outstanding for this task's scope.
