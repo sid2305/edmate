@@ -5035,9 +5035,9 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.5c-staff-alert-inbox
+  model: plan:opus build:sonnet review:sonnet
 - id: 12.2a
   milestone: M12
   title: 'Reports repository: a student files a report on a chat reply, staff list and review it (12.2 Phase A)'
