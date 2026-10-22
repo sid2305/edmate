@@ -2140,10 +2140,12 @@ tasks:
   accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in
     the handoff with screenshots or trimmed logs (no keys).
   deps:
+  - 9.0a
+  - 9.0b
   - '9.4'
   - '8.2'
   - '9.3'
-  status: planning
+  status: todo
   branch: null
   model: plan:opus
 - id: '9.2'
@@ -2897,6 +2899,26 @@ tasks:
         deferred: 3
         wontfix: 0
     human_questions: 0
+- id: 9.0a
+  milestone: M9
+  title: '9.0 Phase A: web runtime, image and compose wiring (prompt packs and skills in the web image, compose env, dev-only scripted model switch guarded to localhost) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase A exit conditions.
+  deps:
+  - '9.4'
+  risk: normal
+  status: running
+  branch: m9/9.0a-web-wiring
+  model: plan:opus build:opus
+- id: 9.0b
+  milestone: M9
+  title: '9.0 Phase B: worker ingest without embeddings (EDMATE_INGEST_EMBEDDINGS=off) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase B exit conditions.
+  deps:
+  - '8.2'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
