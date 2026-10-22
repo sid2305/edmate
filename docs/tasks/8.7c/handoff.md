@@ -5,7 +5,7 @@ Status: DONE
 - Branch: `m8/8.7c-gate-queue` (built locally as `work-87c`, on top of the earlier builder's WIP commit 0e93476)
 - Worktree: `.claude/worktrees/agent-a58be1bc11908677a`
 - Plan: `docs/tasks/8.7/plan.md` (Phase C)
-- Tool calls used: 45 (this run; the earlier cut-off run's count is unknown)
+- Tool calls used: 52 (harness, resumed run; the cut-off first run is not counted)
 
 ## Summary
 
@@ -112,6 +112,11 @@ locales IN,US,global
 ### 22 Oct 2026 · 8.7c own test containers · decided by builder · risk: low
 - Decided: ran the int suites against my own `pgvector/pgvector:0.8.1-pg16` (127.0.0.1:55491) and `redis:7.4.6-alpine` (127.0.0.1:56391) containers, removed after the build.
 - Why: the running edmate-* containers belong to other sessions.
+- risk: low
+
+### 22 Oct 2026 · 8.7c uncovered gate worker lambdas are accepted · decided by lead · risk: low
+- Decided: the locale and pack-market lambdas and the error handler in apps/worker/src/gate/workers.ts stay without unit tests; the int test covers the real queue and worker.
+- Why: covering them needs a live model turn or a broken Redis; the paths are thin wiring.
 - risk: low
 
 ## Left to do
