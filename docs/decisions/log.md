@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.0 Demo teacher, not a fresh one, in the try-it flow · decided by builder · risk: low
+- Decided: the plan's D1. The guide and the spec use the seeded `demo-teacher@example.invalid`, which has the only live agent and packages. The guide says in one line that a brand-new teacher can't get an agent until the agent builder (8.x) ships.
+- Why: a fresh teacher has no agent, so no student could chat with them.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0 The dev model answers the post-guard judges "all clear" · decided by builder · risk: medium
+- Decided: under the plan's D2, the dev model's stream answers the grounding judge's and advice judge's exact fixed rubrics with `{"grounded": true}` and `{"personalAdvice": false}`. It matches on exact string equality with the constants exported from `@edmate/harness`. Every other prompt still gets the tutor reply.
+- Why: without this, grounding replaced every dev-model reply with the ask-teacher text and raised a teacher question, so the stack run could never show a quoted reply. The classifiers already got all-clear verdicts under D2, and this extends the same thing to the two judges that use text calls. Nothing changes when the flag is off. The guard is still local-only and exact-value.
+- risk: medium. It widens what the dev model stands in for (two more guards). A `security-reviewer` read of `devModel.ts` is recommended, as for Phase A.
+
+---
+
+### 22 Oct 2026 · 9.0 The stack spec runs only on demand · decided by builder · risk: low
+- Decided: the plan's D5. `e2e:stack` has its own Playwright config. It is local only (it refuses non-local URLs and DB hosts) and is not in CI. `pnpm e2e` ignores `e2e/stack/**`.
+- Why: it needs a running, seeded compose stack.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0 Compose defaults and ingest without embeddings, as used by the run · decided by builder · risk: low
+- Decided: the plan's D3 and D4 (built in 9.0a and 9.0b) were used as built, with no change. The guide asks the human for only `AUTH_SECRET` and the Anthropic key, and relies on the defaults: market `US`, `demo-agent`, embeddings `off`.
+- Why: the run showed they're enough. The upload reached Ready with no OpenAI key, and chat retrieval found it by full text.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0 The stack spec signs staff in only when needed · decided by builder · risk: low
+- Decided: the spec runs `grant-role` first and signs the staff address in only if the CLI fails ("no user has that email"). Each run signs in a fresh `student-<ms>@example.test`.
+- Why: each address gets 5 sign-in links an hour. A rerun hit that limit on the staff address during the build.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0 Playwright output is gitignored · decided by builder · risk: low
+- Decided: `.gitignore` adds `test-results/` and `playwright-report/`.
+- Why: the plan wants screenshots in a gitignored output dir, and that dir wasn't ignored. Screenshots of a run could otherwise be committed by accident.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 0.17a Lead merges after the fourth fix round, without another probe, and accepts the budget overrun · decided by lead · risk: high
 - Decided: merge 0.17a after fix round 4 (HTML comments masked), with no further security probing round. Any further way to hide a decoy line becomes a new board task. This also accepts the tool calls over budget.
 - Why: the human's answer to B-39 (a), 22 Oct 2026. Every round fixed its finding, the branch is strictly better than main, and all 106 merge-gate tests pass.

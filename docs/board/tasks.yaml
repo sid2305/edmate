@@ -2159,9 +2159,30 @@ tasks:
   - '9.4'
   - '8.2'
   - '9.3'
-  status: review
+  status: done
   branch: m9/9.0-try-it
-  model: plan:opus build:opus
+  model: plan:opus build:opus(A) sonnet(B) opus(C) review:sonnet
+  metrics:
+    tool_calls: 162
+    tokens_in: 482
+    tokens_out: 84730
+    cache_read_tokens: 16495728
+    wall_time_seconds: 3300
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
