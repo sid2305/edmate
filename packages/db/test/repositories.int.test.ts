@@ -2860,6 +2860,214 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 8.7a: the publish repository. Every run read and write goes through the scope's
+  // teacher (the run row is selected by id AND teacher_id); `publicScorecard` is public and
+  // only shows a live agent of a verified teacher. Fixture runs carry `judge-[T]` as their model
+  // and `[T]` in their failed checks, so a leak shows up as another owner marker.
+  'publish.startRun': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor !== target) return r.publish.startRun(scope, isoPins(target));
+      await closeOpenRuns(actor);
+      await setVerified(actor, true);
+      try {
+        return await r.publish.startRun(scope, isoPins(actor));
+      } finally {
+        await setVerified(actor, false);
+      }
+    },
+    verify: async (r, actor, res) => {
+      const { id } = res as { id: string };
+      for (const t of TEACHERS) {
+        expect(
+          (await r.publish.getRun(tScope(t), id)) !== null,
+          `${t} reading ${actor}'s run`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a client-set teacherId',
+        (r) =>
+          r.publish.startRun(tScope(a), {
+            ...isoPins(a),
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+    ],
+  },
+  'publish.markRunning': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const runId = actor === target ? await freshRun(actor, 'queued') : isoRun(target);
+      expect(await r.publish.markRunning(scope, runId)).toBe(true);
+      return runId;
+    },
+    verify: async (r, actor, runId) => {
+      for (const t of TEACHERS) {
+        const got = await r.publish.getRun(tScope(t), runId as string);
+        expect(got?.status === 'running', `${t} sees ${actor}'s running run`).toBe(t === actor);
+      }
+    },
+  },
+  'publish.recordResults': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const runId = actor === target ? await freshRun(actor, 'running') : isoRun(target);
+      await r.publish.recordResults(scope, {
+        runId,
+        results: [isoResult(actor, `rec_${++counter}`)],
+      });
+      return runId;
+    },
+    verify: async (r, actor, runId) => {
+      for (const t of TEACHERS) {
+        const got = await r.publish.failedCases(tScope(t), runId as string);
+        expect(got.length > 0, `${t} reading ${actor}'s results`).toBe(t === actor);
+      }
+    },
+  },
+  'publish.finishRun': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const runId = actor === target ? await freshRun(actor, 'running') : isoRun(target);
+      await r.publish.finishRun(scope, {
+        runId,
+        status: 'error',
+        summary: { groups: [], errorCode: 'iso' },
+      });
+      return runId;
+    },
+    verify: async (r, actor, runId) => {
+      for (const t of TEACHERS) {
+        const got = await r.publish.getRun(tScope(t), runId as string);
+        expect(got?.status === 'error', `${t} reading ${actor}'s finished run`).toBe(t === actor);
+      }
+    },
+  },
+  'publish.goLive': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const input = (runId: string) => ({
+        runId,
+        passRate: 1,
+        summary: { groups: [] },
+        scorecard: { pass: true, changes: ['first_publish' as const], categories: [] },
+      });
+      if (actor !== target) return r.publish.goLive(scope, input(isoRun(target)));
+      const runId = await freshRun(actor, 'running');
+      await setVerified(actor, true);
+      try {
+        await r.publish.goLive(scope, input(runId));
+      } finally {
+        await setVerified(actor, false);
+      }
+      return runId;
+    },
+    verify: async (r, actor, runId) => {
+      for (const t of TEACHERS) {
+        const got = await r.publish.getRun(tScope(t), runId as string);
+        expect(got?.status === 'passed', `${t} reading ${actor}'s published run`).toBe(t === actor);
+      }
+      // The seed's live versions are unchanged (the fixture basis is version 1 of each).
+      expect(await r.agents.get(tScope(actor), ids.agent(actor))).toMatchObject({
+        status: 'live',
+        liveVersion: 1,
+      });
+    },
+  },
+  'publish.getRun': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.publish.getRun(scope, isoRun(t)),
+    random: (r, scope, rid) => r.publish.getRun(scope, rid),
+    owners: (x: { judgeModel: string } | null) => (x ? markers(x.judgeModel) : []),
+  },
+  'publish.latestRun': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.publish.latestRun(scope),
+    random: (r, _scope, rid) => r.publish.latestRun({ teacherId: rid }),
+    owners: (x: { judgeModel: string } | null) => (x ? markers(x.judgeModel) : []),
+  },
+  'publish.failedCases': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.publish.failedCases(scope, isoRun(t)),
+    random: (r, scope, rid) => r.publish.failedCases(scope, rid),
+    owners: (xs: { details: { failedChecks: string[] } }[]) =>
+      xs.flatMap((x) => x.details.failedChecks.flatMap(markers)),
+  },
+  'publish.publicScorecard': {
+    scope: 'public',
+    op: 'read',
+    // Public by design (the teacher page): only a live agent of a verified teacher with a
+    // published run has one; a pending teacher, a suspended agent and an unknown agent all get
+    // null, never a thrown error.
+    check: async (r) => {
+      let n = 0;
+      const card = {
+        pass: true,
+        changes: ['first_publish'],
+        categories: [
+          {
+            key: 'accuracy',
+            measured: true,
+            total: 1,
+            passed: 1,
+            percent: 100,
+            pass: true,
+            byOrigin: [{ origin: 'platform', total: 1, passed: 1 }],
+          },
+        ],
+      };
+      for (const t of TEACHERS) {
+        const runId = await freshRun(t, 'running');
+        await raw.query(
+          `update eval_runs set status = 'passed', published_at = now(), scorecard = $2 where id = $1`,
+          [runId, JSON.stringify(card)],
+        );
+      }
+      await setVerified('A', true);
+      try {
+        const got = await r.publish.publicScorecard({ agentId: ids.agent('A') });
+        expect(got?.categories.map((c) => c.key)).toEqual(['accuracy']);
+        expect(Object.keys(got ?? {}).sort()).toEqual(['categories', 'publishedAt']);
+        n += 1;
+        // B is pending: nothing, even though its agent is live with a published run.
+        expect(await r.publish.publicScorecard({ agentId: ids.agent('B') })).toBeNull();
+        n += 1;
+        await raw.query(`update agents set status = 'suspended' where id = $1`, [ids.agent('A')]);
+        expect(await r.publish.publicScorecard({ agentId: ids.agent('A') })).toBeNull();
+        await raw.query(`update agents set status = 'live' where id = $1`, [ids.agent('A')]);
+        n += 1;
+        const rand = prng(8707);
+        for (let i = 0; i < 10; i += 1) {
+          expect(await r.publish.publicScorecard({ agentId: randomId(rand) })).toBeNull();
+          n += 1;
+        }
+        await expect(
+          r.publish.publicScorecard({
+            agentId: ids.agent('A'),
+            teacherId: teacherId('A'),
+          } as never),
+        ).rejects.toMatchObject({ kind: 'scope' });
+        n += 1;
+      } finally {
+        await setVerified('A', false);
+      }
+      return n;
+    },
+  },
 };
 
 /** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */
@@ -2891,6 +3099,72 @@ async function onlyPairSeesTurn(r: Repos, actor: Pair, turnId: string) {
     const rows = await r.usageLedger.listForTurn(sScope(p), turnId);
     expect(rows.length, `${p} sees ${actor}'s usage row`).toBe(p === actor ? 1 : 0);
   }
+}
+
+/** Task 8.7a: each teacher's fixed closed gate run (inserted in beforeAll) with one failed case. */
+const isoRun = (t: Teacher) => `run_iso_${t.toLowerCase()}`;
+/** A basis naming the seed's version 1 of t's agent and package. */
+const isoBasis = (t: Teacher) => ({
+  agentVersion: 1,
+  courseId: ids.course(t),
+  styleCardId: ids.styleCard(t),
+  promptPackVersion: agentConfig(t).promptPackVersion,
+  modelPolicy: agentConfig(t).modelPolicy,
+  materialRevision: 0,
+  packageVersions: { [ids.pkg(t)]: 1 },
+});
+/** startRun pins for t; a fresh prompt-pack version, so a run always has something to publish. */
+const isoPins = (t: Teacher) => ({
+  agentId: ids.agent(t),
+  courseId: ids.course(t),
+  styleCardId: ids.styleCard(t),
+  promptPackVersion: `1.0.${++counter}`,
+  modelPolicy: agentConfig(t).modelPolicy,
+  judgeModel: `judge-[${t}]`,
+});
+const isoResult = (t: Teacher, caseId: string) => ({
+  caseId,
+  passed: false,
+  details: {
+    origin: 'platform' as const,
+    group: 'accuracy' as const,
+    suite: 'iso',
+    failedChecks: [`[${t}] check`],
+  },
+});
+async function insertRun(t: Teacher, id: string, status: string): Promise<void> {
+  await raw.query(
+    `insert into eval_runs (id, teacher_id, agent_version_id, agent_id, suite, model, status, changes, basis)
+     values ($1, $2, $3, $4, 'gate', $5, $6, '{first_publish}', $7)`,
+    [
+      id,
+      teacherId(t),
+      `av_${t.toLowerCase()}`,
+      ids.agent(t),
+      `judge-[${t}]`,
+      status,
+      JSON.stringify(isoBasis(t)),
+    ],
+  );
+}
+/** Ends t's open runs (raw), so a positive control can start or insert a fresh one. */
+async function closeOpenRuns(t: Teacher): Promise<void> {
+  await raw.query(
+    `update eval_runs set status = 'error' where agent_id = $1 and status in ('queued', 'running')`,
+    [ids.agent(t)],
+  );
+}
+async function freshRun(t: Teacher, status: 'queued' | 'running'): Promise<string> {
+  await closeOpenRuns(t);
+  const id = uid(`run_iso_${t.toLowerCase()}`);
+  await insertRun(t, id, status);
+  return id;
+}
+async function setVerified(t: Teacher, verified: boolean): Promise<void> {
+  await raw.query(
+    `update teacher_profiles set verification_status = $2::teacher_verification_status where user_id = $1`,
+    [teacherId(t), verified ? 'verified' : 'pending'],
+  );
 }
 
 /** Seeded PRNG (mulberry32), so random ids are reproducible. */
@@ -3050,6 +3324,13 @@ describe.skipIf(!up)(
       }
       for (const p of PAIRS) {
         notifTarget[p] = await makeNotification(repos, p);
+      }
+      for (const t of TEACHERS) {
+        await insertRun(t, isoRun(t), 'failed');
+        await raw.query(
+          `insert into eval_results (id, eval_run_id, case_id, passed, details) values ($1, $2, 'iso', false, $3)`,
+          [`er_iso_${t.toLowerCase()}`, isoRun(t), JSON.stringify(isoResult(t, 'iso').details)],
+        );
       }
       for (const t of TEACHERS) {
         savePkg[t] = (
