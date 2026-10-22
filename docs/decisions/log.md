@@ -10,6 +10,63 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.4a Lead accepts the style-card repo scope checks and the unmetered drafting · decided by lead · risk: high
+- Decided: merge 8.4a. styleCards.create (risky path packages/db/src/repositories/**) is reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the session teacher, students and staff are refused, and the per-teacher advisory lock closes the version race. Drafting stays unmetered for now; metering teacher studio calls and stripping override phrases from style-card text are follow-up task 8.4c (M13). The hashtext-collision LOW on packages/db/src/repositories/style-cards.ts is wontfix: a collision only serialises two teachers' saves.
+- Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher's style card only reaches that teacher's own students, and studio drafting is a small, teacher-only cost until the pilot.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.4a styleCards.create versions and scope checks · decided by builder · risk: high
+- Decided: `styleCards.create` (risky path `packages/db/src/repositories/**`) requires the scope to
+  be a teacher right now (share-locked role read: unknown user `not_found`, student or staff
+  `scope`), serialises one teacher's saves with `pg_advisory_xact_lock(8401, hashtext(teacherId))`
+  and inserts `max(version) + 1`; every read and write is filtered by the scope's teacher id.
+  Reviewer: security-reviewer.
+- Why: row locks can't guard a teacher's first card (no rows yet); the two-key advisory form never
+  meets `migrate.ts`'s single-key lock, and a hash collision only serialises two teachers' saves.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.4a Extra caps on a saved style card · decided by builder · risk: low
+- Decided: on top of the contract's 300 words, a saved card is at most 4000 characters with at
+  most 20 tags of 1 to 60 characters; tags are trimmed and de-duplicated; empty text is refused.
+  The interview is capped at 800 characters an answer and 3 samples of 1500 characters.
+- Why: the card goes into every turn's prompt, and the contract alone allows one huge word or an
+  unbounded tag list; the interview caps keep a full interview under the 16 KB body cap.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.4a Model-facing question topics live in code · decided by builder · risk: low
+- Decided: `styleCardQuestions.ts` holds one short English topic per question key, sent to the
+  drafter model as each answer's `question`. The teacher-facing question copy still goes in
+  `messages/en.json` (Phase B), as the lead answered for Q2.
+- Why: the drafter needs to know what an answer is about whatever the teacher's UI locale; the
+  key alone (for example `howMuchToTell`) is a poor prompt.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.4a Drafting is not metered yet · decided by builder · risk: medium
+- Decided: the draft call goes through the router without the usage meter, and a failure is
+  logged by code (`studio.style_card_draft_failed`). The dev model returns a fixed draft with no
+  tags when `EDMATE_DEV_MODEL=scripted` on a local stack.
+- Why: the usage ledger has no teacher-side studio scope today (ingest's drafting is unmetered
+  too). Metering teacher studio calls should be its own task; flagging for the lead.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.4a Draft failures map to 502/503 · decided by builder · risk: low
+- Decided: a model failure or a draft with a tag outside the teacher's list is `502
+  provider_error` (retryable); no gateway (for example no provider key) is `503 provider_error`.
+- Why: neither is the teacher's input error, so `validation` (400) would mislead the page.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.0d Lead accepts the small budget overrun · decided by lead · risk: low
 - Decided: the builder used 49 tool calls against a 40 budget (stop-at 60); the lead accepts it.
 - Why: finding the cause needed a load reproduction and a 20-run loop. The fix is test-only and one reviewer approved it with no findings.
