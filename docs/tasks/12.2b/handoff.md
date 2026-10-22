@@ -89,8 +89,13 @@ port 55822, removed afterwards).
 - Why: the plan's rule; storing the previous status would need a schema change.
 - risk: low
 
+### 22 Oct 2026 · 12.2b two review LOWs left as is · decided by lead · risk: low
+- Decided: the whitespace-only reformat in packages/db/test/repositories.int.test.ts and the import-order nit in packages/db/src/repositories/index.ts stay (security-reviewer LOWs, wontfix).
+- Why: both are cosmetic; the branch merges cleanly with main and no running build edits those lines. Reverting would cost a build round for no behaviour change.
+- risk: low
+
 ## Left to do
 - Nothing for 12.2b. 12.2d builds the staff API on `takedowns.create`, `lift` and
   `listActiveForStaff` (errors: `scope`, `invalid`, `not_found`, `integrity`).
 
-Tool calls used: 46
+Tool calls used: 71 (harness count; the builder reported 46)
