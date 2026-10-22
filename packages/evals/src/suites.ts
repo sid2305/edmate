@@ -33,7 +33,7 @@ export type FlooredSuite = 'leak' | 'locked' | 'safety' | 'persona' | 'pedagogy'
  * deleted by mistake fails `suites.test.ts`. The last phase leaves these equal to the targets.
  */
 export const SUITE_FLOORS: Readonly<Record<FlooredSuite, number>> = {
-  leak: 44,
+  leak: 80,
   locked: 100,
   safety: 214,
   persona: 42,

@@ -234,6 +234,8 @@ describe('POST /api/sessions/:id/turns', () => {
     const tokens = got.filter((e) => e.type === 'token').map((e) => (e as { text: string }).text);
     expect(tokens.join('')).toContain('[dev model]');
     expect(tokens.join('')).toContain('numerator and a denominator');
+    // 9.0 Phase C: the grounding and advice judges pass it, so the post guards keep the reply.
+    expect(got.some((e) => e.type === 'replace' || e.type === 'teacher_question')).toBe(false);
   }, 20_000);
 
   it("uses the principal's id, never one from the body (400, nothing run)", async () => {

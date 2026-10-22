@@ -290,3 +290,55 @@ export function toTeacherProfile(
     method,
   );
 }
+
+// Task 8.3: the studio outline. No contract type exists for it (same precedent as DocumentRow);
+// `@edmate/ingest`'s OutlineDraft is the drafter's output, not the stored shape.
+const CourseRowSchema = z.strictObject({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  outlineVersion: z.int().min(1),
+});
+/** A teacher's course as the studio sees it. */
+export type CourseRow = z.infer<typeof CourseRowSchema>;
+
+/** A courses row, or `integrity` (also for a missing row the caller expected to exist). */
+export function toCourseRow(
+  row: { id: string; title: string; outlineVersion: number } | undefined,
+  method: string,
+): CourseRow {
+  return checked(CourseRowSchema, row, method);
+}
+
+const OutlineSourceSchema = z.strictObject({
+  chunkId: z.string().min(1),
+  sourceTitle: z.string().min(1),
+  locator: z.string(),
+});
+const OutlineTopicRowSchema = z.strictObject({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  order: z.int(),
+  /** The chunks backing this topic, in link order: display fields only, never chunk text. */
+  chunkIds: z.array(OutlineSourceSchema),
+});
+const OutlineModuleRowSchema = z.strictObject({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  order: z.int(),
+  topics: z.array(OutlineTopicRowSchema),
+});
+const OutlineSchema = z.strictObject({
+  courseId: z.string().min(1),
+  outlineVersion: z.int().min(1),
+  modules: z.array(OutlineModuleRowSchema),
+});
+/** One source link of a topic: which chunk, from which file, where in it. */
+export type OutlineSource = z.infer<typeof OutlineSourceSchema>;
+export type OutlineTopicRow = z.infer<typeof OutlineTopicRowSchema>;
+export type OutlineModuleRow = z.infer<typeof OutlineModuleRowSchema>;
+/** A teacher's whole outline: modules in order, each with its topics and their source links. */
+export type Outline = z.infer<typeof OutlineSchema>;
+
+export function toOutline(value: Outline, method: string): Outline {
+  return checked(OutlineSchema, value, method);
+}

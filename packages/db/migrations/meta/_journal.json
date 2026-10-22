@@ -134,6 +134,13 @@
       "when": 1792592236883,
       "tag": "0018_ask_the_teacher",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792647441724,
+      "tag": "0019_outline_topic_chunks",
+      "breakpoints": true
     }
   ]
 }

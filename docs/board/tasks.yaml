@@ -2048,7 +2048,8 @@ tasks:
   - '5.11'
   - '5.2'
   - '8.1'
-  status: todo
+  - 8.4a
+  status: planning
   branch: null
   model: null
 - id: '8.5'
@@ -2060,7 +2061,8 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  - 8.5b
+  status: planning
   branch: null
   model: null
 - id: '8.6'
@@ -2157,9 +2159,30 @@ tasks:
   - '9.4'
   - '8.2'
   - '9.3'
-  status: running
+  status: done
   branch: m9/9.0-try-it
-  model: plan:opus build:opus
+  model: plan:opus build:opus(A) sonnet(B) opus(C) review:sonnet
+  metrics:
+    tool_calls: 162
+    tokens_in: 482
+    tokens_out: 84730
+    cache_read_tokens: 16495728
+    wall_time_seconds: 3300
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
@@ -2242,7 +2265,8 @@ tasks:
     chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 9.0b review LOW: apps/worker gateway.test.ts
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
-    both sleep branches'
+    both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
+    cause'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2434,9 +2458,31 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: running
+  status: done
   branch: m0/0.17a-budget-parse
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 425
+    tokens_in: 1392
+    tokens_out: 123088
+    cache_read_tokens: 33746319
+    wall_time_seconds: 24102
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 4
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 4
+        LOW: 1
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 0.16b
   milestone: M13
   title: metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already
@@ -2776,9 +2822,30 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: review
+  status: done
   branch: m7/7.2c-leak-cases
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet x2 review:sonnet
+  metrics:
+    tool_calls: 97
+    tokens_in: 346
+    tokens_out: 44168
+    cache_read_tokens: 12207869
+    wall_time_seconds: 1760
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        MEDIUM: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2d
   milestone: M7
   title: '7.2 Phase E: safety suite 214 to 250 cases (plan docs/tasks/7.2/plan.md)'
@@ -2796,9 +2863,9 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2e-advice-persona-cases
+  model: plan:sonnet build:sonnet
 - id: 7.2f
   milestone: M13
   title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
@@ -2982,9 +3049,31 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: review
+  status: done
   branch: m8/8.3a-outline-db
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 112
+    tokens_in: 348
+    tokens_out: 44720
+    cache_read_tokens: 15320205
+    wall_time_seconds: 1055
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 8.3b
   milestone: M8
   title: '8.3 Phase B: apps/web studio outline API (GET, PUT, generate) (plan docs/tasks/8.3/plan.md)'
@@ -3019,6 +3108,58 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.4a
+  milestone: M8
+  title: '8.4 Phase A: packages/db style-card create/latest and the studio style-card API (draft, save) (plan docs/tasks/8.4/plan.md)'
+  accept: 8.4 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: running
+  branch: m8/8.4a-style-card-api
+  model: plan:sonnet build:opus
+- id: 8.5a
+  milestone: M8
+  title: '8.5 Phase A: packages/db corrections repository, agentVersions.latest, packageVersions.listForAgent (plan docs/tasks/8.5/plan.md)'
+  accept: 8.5 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.5b
+  milestone: M8
+  title: '8.5 Phase B: apps/web test-chat composition and API routes (plan docs/tasks/8.5/plan.md)'
+  accept: 8.5 plan Phase B exit conditions.
+  deps:
+  - 8.5a
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 9.0c
+  milestone: M13
+  title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool
+    at start or give that read its own timeout, and test it'
+  accept: a fresh web container's first turn logs no background failure; a test covers it.
+  deps:
+  - '9.0'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 9.0d
+  milestone: M9
+  title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
+    or its deps can fail at random'
+  accept: the cause is named in the handoff; the test passes 20 runs in a row locally under CPU load; no assertion is weakened.
+  deps:
+  - '9.4'
+  risk: normal
+  status: running
+  branch: m9/9.0d-sse-test-flake
+  model: build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

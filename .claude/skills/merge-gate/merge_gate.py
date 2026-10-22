@@ -62,8 +62,15 @@ MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
-# "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE).
-BUDGET_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls", re.I | re.M)
+# At most 3 leading spaces (no tab) before a live line: 4+ columns is a CommonMark indented code
+# block, i.e. quoted/hidden text, so it never counts. Whitespace is allowed only after a marker.
+LIVE_INDENT = r"^ {0,3}"
+# "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE), or
+# the heading form "## Budget: 24 tool calls" / "### Budget: 24 tool calls".
+BUDGET_LINE = re.compile(
+    LIVE_INDENT + r"(?:#{2,3}[ \t]+)?(?:[-*\d.]+[ \t]*)?\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls",
+    re.I | re.M,
+)
 # The first "<N> ... calls" number inside a `## Budget` section's prose, e.g. "~70 tool calls",
 # "About 40 builder calls", "~60 tool calls". The leading `~`/`About` is optional and not captured.
 BUDGET_SECTION_NUM = re.compile(r"(?:~\s*|\babout\b\s+)?(\d+)\s*(?:[a-zA-Z][a-zA-Z-]*\s+)?calls?\b", re.I)
@@ -96,20 +103,66 @@ def matches(path, glob):
     return fnmatch.fnmatch(path, glob) or fnmatch.fnmatch(path, glob.replace("/**", "/*"))
 
 
-REVIEWERS_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Reviewers?:\s*(\S.*)$", re.I)
+FENCE_OPEN = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+# GitHub never renders an HTML comment, but the parser used to read right through it, so a decoy
+# `Budget:`/`Reviewers:` line hidden inside one would silently win. One line may open and close
+# several comments; a comment opened on one line and closed on a later one hides every line in
+# between (same convention as a fenced code block).
+HTML_COMMENT_OPEN = re.compile(r"<!--")
+HTML_COMMENT_CLOSE = re.compile(r"-->")
+
+
+def fence_mask(lines):
+    """(hidden, unclosed_at): hidden[i] is True for a fence marker line, a line inside a fenced
+    code block, or a line that is (part of) an HTML comment `<!-- ... -->`. A fence opened by a
+    run of N backticks (or tildes) closes only on a line that is a run of at least N of the SAME
+    character with nothing else after it (CommonMark), so ``` is never closed by ~~~, a shorter
+    run, or a line like ```md. An HTML comment closes on the first `-->` found (single-line or
+    spanning several lines); it never nests. unclosed_at is the index of the opening line of a
+    fence or HTML comment the document never closes, else None (callers must not silently treat
+    everything after it as absent)."""
+    hidden, opener, opened_at = [], None, None
+    in_comment, comment_opened_at = False, None
+    for i, line in enumerate(lines):
+        if in_comment:
+            hidden.append(True)
+            if HTML_COMMENT_CLOSE.search(line):
+                in_comment, comment_opened_at = False, None
+            continue
+        if opener is not None:
+            hidden.append(True)
+            m = FENCE_OPEN.match(line)
+            run = m.group(1) if m else ""
+            if run and run[0] == opener[0] and len(run) >= len(opener) and not line[m.end():].strip():
+                opener, opened_at = None, None
+            continue
+        cm = HTML_COMMENT_OPEN.search(line)
+        if cm:
+            hidden.append(True)
+            if HTML_COMMENT_CLOSE.search(line, cm.end()):
+                continue
+            in_comment, comment_opened_at = True, i
+            continue
+        m = FENCE_OPEN.match(line)
+        if m:
+            opener, opened_at = m.group(1), i
+        hidden.append(m is not None)
+    return hidden, opened_at if opener is not None else comment_opened_at
+
+
+REVIEWERS_LINE = re.compile(LIVE_INDENT + r"(?:[-*\d.]+[ \t]*)?Reviewers?:\s*(\S.*)$", re.I)
 
 
 def reviewer_names(review):
-    """Names on the first `Reviewers:` line outside code fences, or None if there is none.
+    """Names on the first `Reviewers:` line outside code fences (and not indented 4+ columns,
+    which is an indented code block), or None if there is none.
     The line may carry a leading bullet/number ("- Reviewers: ...", same convention as
     STATUS_LINE). The value is a comma-separated list; each item is a name with an optional
     `(model)` suffix; a trailing period on the whole line is ignored. Any other item
     ("security-reviewer skipped", "not architect") does not count."""
-    fenced = False
-    for line in (review or "").splitlines():
-        if line.lstrip().startswith(("```", "~~~")):
-            fenced = not fenced
-            continue
+    lines = (review or "").splitlines()
+    hidden, _ = fence_mask(lines)
+    for line, fenced in zip(lines, hidden):
         m = None if fenced else REVIEWERS_LINE.match(line)
         if m:
             items = [i.strip() for i in m.group(1).rstrip().rstrip(".").split(",")]
@@ -134,14 +187,31 @@ def board_branch(task_id):
     return board_field(task_id, "branch")
 
 
-def section(text, heading):
-    """Body of a `## heading` section, up to the next `## ` heading (or None)."""
-    m = re.search(rf"^##\s+{heading}\b.*$", text or "", re.M)
+def unfenced(text):
+    """Text with the contents of ``` / ~~~ fenced code blocks blanked out (line positions kept),
+    the same fence-tracking convention as reviewer_names(), so a decoy inside a quoted code
+    example never matches as if it were real document structure."""
+    lines = (text or "").splitlines()
+    hidden, _ = fence_mask(lines)
+    return "\n".join("" if h else line for line, h in zip(lines, hidden))
+
+
+def _section_in(clean, heading):
+    """(heading line, body) of the first `## heading` section in already-unfenced text, the body
+    running up to the next `## ` heading; (None, None) if there is no such section."""
+    m = re.search(rf"^##\s+{heading}\b.*$", clean, re.M)
     if not m:
-        return None
-    rest = text[m.end():]
+        return None, None
+    rest = clean[m.end():]
     nxt = re.search(r"^##\s", rest, re.M)
-    return rest[: nxt.start()] if nxt else rest
+    return m.group(0), (rest[: nxt.start()] if nxt else rest)
+
+
+def section(text, heading):
+    """Body of a `## heading` section (its first unfenced occurrence), up to the next `## `
+    heading (or None). Fenced code is blanked out first, so a quoted `## heading` inside an
+    example never counts as the section."""
+    return _section_in(unfenced(text), heading)[1]
 
 
 def entries(text):
@@ -168,19 +238,43 @@ def status_is_done(value):
 
 
 def budget_cap(plan):
-    """The plan's tool-call cap: a `Budget: <N> tool calls` line, or (failing that) the first
-    `<N> ... calls` number inside a `## Budget` section. Returns None if neither is present at all
-    (old-style plan, silent skip) or UNPARSEABLE if a `## Budget` section exists but no number
-    could be found in it (must surface as a visible FAIL, not a silent skip)."""
-    text = plan or ""
-    m = BUDGET_LINE.search(text)
-    if m:
-        return int(m.group(1))
-    sect = section(text, "Budget")
-    if sect is None:
-        return None
-    m2 = BUDGET_SECTION_NUM.search(sect)
-    return int(m2.group(1)) if m2 else UNPARSEABLE
+    """The plan's tool-call cap. When the plan has a `## Budget` section (its first unfenced
+    occurrence — a decoy heading quoted in prose or inside a fenced code block is ignored, the
+    same convention as reviewer_names()), the cap comes from that section only, in order: its own
+    heading line if that is itself a `## Budget: <N> tool calls` heading; else an explicit
+    `Budget: <N> tool calls` line anywhere in its (unfenced) body; else the `<N> ... calls` number
+    on the section body's first non-blank unfenced line — never a number from later in the
+    section's prose, so a decoy count (another task's total, an old estimate) can't set the cap.
+    If that first line has no such number the result is UNPARSEABLE (a visible FAIL, not a silent
+    skip). Only when there is no `## Budget` section at all does a whole-document `Budget: <N>
+    tool calls` line (outside fences) set the cap; a decoy such a line elsewhere in the document
+    can't win once a real `## Budget` section exists, since that section is then checked first.
+    A stray UNCLOSED code fence whose hidden tail holds a `## Budget` heading or a `Budget: <N>
+    tool calls` line gives UNPARSEABLE (visible FAIL) rather than a silent skip; an unclosed fence
+    with nothing budget-like after it changes nothing.
+    Returns None if nothing at all is present (old-style plan, silent skip)."""
+    lines = (plan or "").splitlines()
+    hidden, unclosed_at = fence_mask(lines)  # computed once; everything below reuses it
+    clean = "\n".join("" if h else line for line, h in zip(lines, hidden))
+    if unclosed_at is not None:
+        # A stray unclosed fence would blank out the rest of the document. If anything
+        # budget-like sits in that hidden tail, the cap can't be read safely: fail visibly.
+        tail = "\n".join(lines[unclosed_at + 1:])
+        if re.search(r"^##\s+Budget\b", tail, re.M | re.I) or BUDGET_LINE.search(tail):
+            return UNPARSEABLE
+    heading_line, body = _section_in(clean, "Budget")
+    if body is not None:
+        hm = BUDGET_LINE.match(heading_line.strip())
+        if hm:
+            return int(hm.group(1))
+        m = BUDGET_LINE.search(body)
+        if m:
+            return int(m.group(1))
+        first_line = next((ln for ln in body.splitlines() if ln.strip()), "")
+        m2 = BUDGET_SECTION_NUM.search(first_line)
+        return int(m2.group(1)) if m2 else UNPARSEABLE
+    m = BUDGET_LINE.search(clean)
+    return int(m.group(1)) if m else None
 
 
 def tool_calls_used(handoff):

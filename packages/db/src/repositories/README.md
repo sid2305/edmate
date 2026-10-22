@@ -24,12 +24,17 @@ Isolation between teachers and between students is enforced here, not by Postgre
    whose jsonb `teacherId` / `id` / `version` disagrees with its columns, throws `integrity`.
 7. **Ownership columns are immutable.** No method updates `teacher_id`, `student_id` or
    `session_id`. The delete methods are `documents.delete` and `documents.startReplace` (task 8.2,
-   § Documents below) and `learnerProfiles.reset`'s delete of `evidence_events` (task 6.5, §
-   Memory reset and export below); whole-account retention is 13.4.
+   § Documents below), `learnerProfiles.reset`'s delete of `evidence_events` (task 6.5, §
+   Memory reset and export below) and `outline.replaceOutline`'s delete of dropped `topics` and
+   of kept topics' `topic_chunks` links (task 8.3, § Outline below); whole-account retention is
+   13.4. `topic_chunks` has two `ON DELETE CASCADE` foreign keys (to `topics` and `chunks`), so
+   those deletes and `documents.delete` also drop links; no ownership column is ever updated by
+   them (an outline edit changes only titles, orders, a topic's module and the row set).
 8. **No raw SQL strings.** No `sql.raw(` and no `delete from` text in this folder; Drizzle
-   `.delete(` appears only in `chunks.ts` (on `chunks` and `documents`) and in `learner.ts` (on
-   `evidence_events` alone), each with the scope's columns (`teacherId`, and `studentId` for
-   `evidence_events`) in the same statement (`test/scope.test.ts` checks).
+   `.delete(` appears only in `chunks.ts` (on `chunks` and `documents`), in `learner.ts` (on
+   `evidence_events` alone) and in `outline.ts` (on `topics` and `topic_chunks`), each with the
+   scope's columns (`teacherId`, and `studentId` for `evidence_events`) in the same statement
+   (`test/scope.test.ts` checks).
 9. **No personal details.** No method selects from the user table, so display names, emails and
    phone numbers never leave through a repository. `teacherQuestions.listForTeacher` never selects
    `student_id`.
@@ -198,6 +203,34 @@ its chunks, then delete the row (or point it at the new key, reset it to `upload
 failure), and bump the material revision, all in one transaction: the next search and leakCheck
 miss the old material at once. They return the old storage key for the caller to delete the file.
 Another teacher's or a missing document is `not_found` and nothing is written.
+
+## Outline (task 8.3)
+
+`courses.get(scope)` is the scope's first course (by order) or null. `courses.ensureDefault(scope)`
+inserts the teacher's course ("My course") when there is none and, when the teacher has no module
+at all, one "Module 1" in it, in one transaction under a per-teacher transaction lock, so it is
+idempotent under concurrency; a scope id that is not a user is `not_found`.
+
+`outline.getOutline(scope)` reads the first course's modules, their topics and each topic's
+source links (`chunkId`, `sourceTitle`, `locator`; never chunk text), every statement with the
+scope's `teacher_id`. `outline.replaceOutline(scope, { modules })` rewrites the named modules in one
+transaction. Lock order is the scope's courses, then the named modules, then their topics (each by
+id), so two edits can't deadlock. Any named module that is not the scope's is `not_found`, and
+modules of two courses are `invalid`. A listed topic id must be a topic of one of the named modules
+(else `not_found`). A topic without an id is created. A topic of a named module that is not listed
+is deleted (merge), unless it has `evidence_events`: then the edit is `invalid`, because student
+data is never deleted by an outline edit. Links are inserted by `insertTopicLinks` (`chunks.ts`,
+the only file besides retrieval.ts that may name `chunks`): one `INSERT … SELECT` joining each
+link to the teacher's own chunk and topic, so an unknown or another teacher's chunk id writes
+fewer rows and the edit is `invalid`. The course's `outline_version` goes up by 1 and one
+`outline.edit` audit row (before/after `{ outlineVersion, moduleCount, topicCount }`, counts only)
+commits with it. Any failure writes nothing. Modules are renamed and reordered only: merging or
+splitting modules would move documents and chunks, which is out of scope.
+
+`chunks.listForModule(scope, moduleId)` returns the scope's chunks of `ready` documents in one
+module (`id`, `text`, `locator`, `sourceTitle`), ordered by document then chunk, for the outline
+drafter. Another teacher's or a missing module is `[]`. More than `MODULE_CHUNKS_MAX` is `invalid`,
+never a cut list.
 
 ## Ask the teacher (task 5.10)
 
