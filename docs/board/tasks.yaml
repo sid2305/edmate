@@ -4327,7 +4327,9 @@ tasks:
   deps:
   - 9.6c
   risk: medium
-  status: todo
+  status: running
+  branch: m9/9.6d-plan-page
+  model: plan:opus build:sonnet
 - id: 9.6e
   milestone: M9
   title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
@@ -4603,7 +4605,8 @@ tasks:
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
     ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard
-    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed'
+    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed; 8.7k review LOWs: /teacher catches a failed changed-since-publish read (log the error name, default to false); a comment
+    or coalesce for the NULL outline sub-select when there is no course'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
@@ -4687,8 +4690,9 @@ tasks:
   accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
   deps:
   - 11.3a
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.3b-insights-job
+  model: plan:sonnet build:sonnet
 - id: 8.2d
   milestone: M8
   title: Pinned, SSRF-safe web fetcher and ADR-0014 web-link egress (8.2b Phase A)
@@ -4745,7 +4749,7 @@ tasks:
   title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
     8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots,
     a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the
-    real one, a real https test, and fake timers in the deadline tests'
+    real one, a real https test, and fake timers in the deadline tests; from the 8.2e security review: a per-teacher limit on adding links, so one teacher can''t fill the ingest queue'
   accept: per the B-47 answer.
   deps:
   - 8.2f
@@ -4754,7 +4758,7 @@ tasks:
 - id: 8.2g
   milestone: M13
   title: 'Deploy egress rule for web links (ADR-0014 consequence): the deploy guide and compose let the worker reach only public port 443 plus its own database, Redis and object storage, as a second layer
-    behind the range check'
+    behind the range check; from the 8.2e architect review: the deploy guide says the web-link resolver ignores /etc/hosts and split-horizon DNS'
   accept: the deploy guide documents the rule, and the production compose or firewall example applies it.
   deps:
   - 8.2f
@@ -4770,7 +4774,9 @@ tasks:
   deps:
   - 9.6c
   risk: risky
-  status: todo
+  status: running
+  branch: m9/9.6h-subscription-hardening
+  model: build:opus
 - id: 11.3c
   milestone: M13
   title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference
@@ -4778,6 +4784,17 @@ tasks:
   accept: a test shows the current and a future week are refused; db typecheck, lint and test green; security-reviewer re-checks.
   deps:
   - 11.3a
+  risk: risky
+  status: todo
+- id: 8.2h
+  milestone: M8
+  title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web
+    jobs get fewer attempts (or their own queue) so a slow site can''t hold the concurrency-1 ingest slot for about 75 s per link; a sweeper for documents stuck in processing; refuse a host still ending
+    in a dot after parsing; SNI uses bareHostName; resolver timeout well under the 15 s deadline; LOWs: fileKind cast, typed failWith codes, one shared NO_SUCH_NAME set and code reader, processor.test.ts
+    misnamed test and as-never casts, prettier on the new lines'
+  accept: each MEDIUM has a failing-then-passing test; ingest, queue and worker typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 8.2e
   risk: risky
   status: todo
 - id: 9.4c
@@ -4924,9 +4941,9 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '11.3'
   milestone: M11
   title: 'Weekly insights worker: top questions, sticking topics, unhelpful answers, open teacher questions; aggregated with a minimum group size of 5'
@@ -4972,10 +4989,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '12.3'
   milestone: M12
   title: Rights declaration per upload, repeat-infringer handling, grievance contact per market
@@ -4984,9 +5001,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '12.4'
   milestone: M12
   title: Regulated-subject flag set manually by staff before publish
@@ -5007,9 +5024,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '13.1'
   milestone: M13
   title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
