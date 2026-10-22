@@ -109,6 +109,7 @@ const ListQuerySchema = z.strictObject({ moduleId: Id.optional() });
 const NewFileSchema = z.strictObject({
   contentType: z.string().max(200),
   byteSize: z.int().min(1),
+  rightsDeclared: z.literal(true),
 });
 const CreateSchema = NewFileSchema.extend({
   moduleId: Id,
@@ -120,6 +121,7 @@ const AddLinkSchema = z.strictObject({
   moduleId: Id,
   url: z.string().trim().min(1).max(4096),
   sourceTitle: z.string().trim().min(1).max(500).optional(),
+  rightsDeclared: z.literal(true),
 });
 
 const MSG = {
@@ -247,6 +249,7 @@ const create: Work = async (b, scope, req) => {
     kind: type.chunkKind,
     sourceTitle: body.sourceTitle,
     storageKey: key,
+    rightsDeclared: body.rightsDeclared,
   });
   const uploadUrl = await b.storage.createUploadUrl({
     key,
@@ -330,6 +333,7 @@ const addLink: Work = async (b, scope, req) => {
     kind: 'material',
     sourceTitle: body.sourceTitle ?? checked.displayTitle,
     storageKey: key,
+    rightsDeclared: body.rightsDeclared,
   });
   // `processing` first, same as `complete`: the worker's own `ready` write is refused from
   // `uploading`.
@@ -364,7 +368,10 @@ const replace: Work = async (b, scope, req, ctx) => {
     contentType: type.contentType,
     contentLength: body.byteSize,
   });
-  const { previousStorageKey } = await b.documents.startReplace(scope, id, { storageKey: key });
+  const { previousStorageKey } = await b.documents.startReplace(scope, id, {
+    storageKey: key,
+    rightsDeclared: body.rightsDeclared,
+  });
   await dropObject(b, previousStorageKey);
   return ok({ documentId: id, uploadUrl, uploadHeaders: { 'content-type': type.contentType } });
 };
