@@ -81,8 +81,12 @@ id, title }[] }`; `POST /api/studio/questions/answer` body `{ questionId, module
 noteQuestion? }` -> `AnswerResult`; `POST /api/studio/questions/dismiss` body `{ questionId }` ->
 204).
 
-## Decisions
+## Notes on decisions
 
-None — no risky path touched (`apps/web/src/studio/questions/**` and
+No risky path touched (`apps/web/src/studio/questions/**` and
 `apps/web/app/api/studio/questions/**` are not in `risk-paths.txt`), and no spec gap arose beyond
 what Phase A's handoff and the plan's lead answers already resolved.
+
+## Decisions
+
+None
