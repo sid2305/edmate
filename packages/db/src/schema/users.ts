@@ -1,7 +1,7 @@
 // Data model rows: users, teacher_profiles, consents.
 import { sql } from 'drizzle-orm';
 import { check, index, pgTable, smallint, text, uniqueIndex } from 'drizzle-orm/pg-core';
-import { id, teacherVerificationStatus, timestamps, tstz, userRole } from './_shared.js';
+import { id, teacherVerificationStatus, timestamps, tstz, tsvector, userRole } from './_shared.js';
 
 /** Students, teachers and staff. */
 export const users = pgTable(
@@ -58,11 +58,22 @@ export const teacherProfiles = pgTable(
       .default(sql`'{}'::text[]`),
     verificationStatus: teacherVerificationStatus('verification_status').notNull().default('pending'),
     payoutAccountRef: text('payout_account_ref'),
+    /**
+     * Task 9.2: free-text search over subject (weight A) and bio (weight B), 'simple' config (no
+     * language-specific stemming, works for every locale, like chunks.search).
+     */
+    search: tsvector('search')
+      .notNull()
+      .generatedAlwaysAs(
+        sql`setweight(to_tsvector('simple', "subject"), 'A') || setweight(to_tsvector('simple', "bio"), 'B')`,
+      ),
     ...timestamps(),
   },
   (t) => [
     uniqueIndex('teacher_profiles_user_id_key').on(t.userId),
     uniqueIndex('teacher_profiles_slug_key').on(t.slug),
+    index('teacher_profiles_search_idx').using('gin', t.search),
+    index('teacher_profiles_languages_idx').using('gin', t.languages),
   ],
 );
 

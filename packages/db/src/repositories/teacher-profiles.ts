@@ -15,16 +15,23 @@ import { RepositoryError, translateWrite } from './errors.js';
 import { toTeacherProfile, type TeacherProfileRow } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
-/** Lower-case words joined by single hyphens, 3 to 60 characters: it appears in public URLs. */
-const Slug = z
+/**
+ * Lower-case words joined by single hyphens, 3 to 60 characters: it appears in public URLs.
+ * Exported for discovery.ts (task 9.2: `teacherBySlug`'s input, read-only).
+ */
+export const Slug = z
   .string()
   .min(3)
   .max(60)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const Subject = z.string().trim().min(1).max(100);
 const Bio = z.string().max(2000);
-/** BCP 47-style tags such as `en` or `pt-BR`. */
-const Languages = z.array(z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)).max(10);
+/**
+ * One BCP 47-style tag such as `en` or `pt-BR`. Exported for discovery.ts (task 9.2: the
+ * `language` search filter, read-only).
+ */
+export const LanguageTag = z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/);
+const Languages = z.array(LanguageTag).max(10);
 
 const CreateInput = z.strictObject({
   slug: Slug,

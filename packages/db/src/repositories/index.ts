@@ -5,6 +5,7 @@ import { agentsRepo } from './agents.js';
 import { auditRepo } from './audit.js';
 import { chunksRepo, documentsRepo } from './chunks.js';
 import { correctionsRepo } from './corrections.js';
+import { discoveryRepo } from './discovery.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
@@ -37,12 +38,14 @@ function guardAll<T extends Methods>(repo: string, methods: T): T {
 
 /**
  * Every repository, as plain objects of plain functions (the isolation test enumerates them).
- * Every method takes a validated TeacherScope or StudentScope first (the one exception,
- * `agents.owner`, takes a public `{ agentId }` scope); see README.md.
+ * Every method takes a validated TeacherScope or StudentScope first (the public exceptions are
+ * `agents.owner`, `packageVersions.liveForAgent` and all of `discovery`, the public reads: see
+ * README.md).
  */
 export function createRepositories(db: Db) {
   return {
     agents: guardAll('agents', agentsRepo(db)),
+    discovery: guardAll('discovery', discoveryRepo(db)),
     agentVersions: guardAll('agentVersions', agentVersionsRepo(db)),
     modules: guardAll('modules', modulesRepo(db)),
     styleCards: guardAll('styleCards', styleCardsRepo(db)),
@@ -119,6 +122,13 @@ export {
   type StartInput,
 } from './subscriptions.js';
 export type { AgentRow, DraftAgentInput, PublicAgentScope } from './agents.js';
+export {
+  DISCOVERY_MAX_PAGE,
+  DISCOVERY_PAGE_SIZE,
+  DISCOVERY_QUERY_MAX_LENGTH,
+  type PublicTeacherCard,
+  type PublicTeacherPage,
+} from './discovery.js';
 export { PACKAGES_MAX, type PackageDraft, type TeacherPackageRow } from './packages.js';
 export {
   AGENT_PACKAGES_MAX,

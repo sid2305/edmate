@@ -28,7 +28,8 @@
     "db:grant-role": "node dist/bin/grant-role.js",
     "db:verify-teacher": "node dist/bin/verify-teacher.js",
     "db:questions": "node dist/bin/teacher-questions.js",
-    "db:seed": "node dist/bin/seed.js"
+    "db:seed": "node dist/bin/seed.js",
+    "db:seed-discovery": "node dist/bin/seed-discovery.js"
   },
   "dependencies": {
     "@edmate/content": "workspace:*",

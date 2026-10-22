@@ -10,6 +10,185 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
+- Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
+- Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Send answer uses the group's first remaining question id · decided by builder · risk: low
+- Decided: "Send answer" posts the id of the group's first remaining question; the teacher never picks an id.
+- Why: per 5.10's repository, any member id answers the whole group, so the effect is the same whichever id is sent.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Merged 8.8b's nav link and en.json namespace additively · decided by builder · risk: low
+- Decided: kept 8.8b's `insights` nav link and `en.json` namespace; `questionsLink` and `questionsInbox` land after `insights`.
+- Why: the plan's shared-file rule says keep both sides.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Lead accepts that non-English agents fail gate cases during the pilot · decided by lead · risk: medium
+- Decided: under builder decisions 6 and 7, a PilotLanguageClamped background report fails a gate case, so an agent with non-English languages cannot pass the gate until the English-only pilot policy changes. A retryable guard_blocked (failed pre-guard chain) also fails the case after the fix round.
+- Why: the pilot is English-only (human decision); a gate that passed with background failures, or counted a failed guard chain as a block, would overstate safety.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7b Platform case package labels pick a package by id or price tier · decided by builder · risk: low
+- Decided: Platform cases are labelled `package: free|paid`. A label first matches a package id exactly. Otherwise `free`/`paid` picks the widest candidate package of that price tier (price 0 = free), with ties broken by id. A label no package fits gets an agent that rejects, so those cases fail and are never skipped.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b outOfCourse is empty in Phase B · decided by builder · risk: low
+- Decided: `outOfCourse` is `[]` for now. Phase B has no content loading; Phase C or 8.7 content work fills it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Any EDMATE_DEV_MODEL value makes the gate unavailable · decided by builder · risk: low
+- Decided: Any non-blank `EDMATE_DEV_MODEL` makes the gate unavailable, not only `scripted`. The scripted dev model answers every classifier "all clear", so a gate over it would pass by default.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The judge must be Anthropic and comes only from EDMATE_JUDGE_MODEL · decided by builder · risk: low
+- Decided: The judge must be Anthropic (`judge_provider` otherwise). The judge model comes only from `EDMATE_JUDGE_MODEL`, as the decision log's eval-judge entry requires (pinned per release, no default). Judge calls are metered into the same run meter as `eval` usage.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Unpriced usage is counted as unmetered · decided by builder · risk: low
+- Decided: Unpriced or unknown usage is counted as `unmetered` with its reason, never as free.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Turn errors and background failures fail a case, except LockedLeakDetected · decided by builder · risk: low
+- Decided: A turn that ends in an `error` event (other than `guard_blocked`), or that has any background failure, fails its case. The one exception is `LockedLeakDetected`: the locked-stream guard withheld text and replaced the reply, and that reply is what the case scores. Every background report is still counted in `effects.backgroundFailures`.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The gate fixture agent is English-only · decided by builder · risk: low
+- Decided: The gate fixture agent is English-only (`languages: ['en']`), as the English-only pilot requires. Otherwise `PilotLanguageClamped` is reported in the background, and under decision 6 that fails the case. Agents with other languages will fail gate cases this way until that policy changes.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b GateBasis is a local type until Phase A · decided by builder · risk: low
+- Decided: `GateBasis` is a local type until Phase A's contract or db shape lands. Phase C should switch to it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b gateFallbackReplies and collectReply copy the web and CLI versions · decided by builder · risk: low
+- Decided: `gateFallbackReplies` and `collectReply` copy the web and CLI versions. A shared composition module is an M13 follow-up (plan scope 10).
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b contracts and harness become worker dependencies · decided by builder · risk: low
+- Decided: `@edmate/contracts` and `@edmate/harness` moved from devDependencies to dependencies, because worker runtime code now imports them.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The gate has its own TurnConfigStore · decided by builder · risk: low
+- Decided: The gate's `TurnConfigStore` is its own: the production `turnConfigStoreFor` needs session rows, and the gate writes none.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a Lead accepts the public discovery repository in packages/db/src/repositories/discovery.ts · decided by lead · risk: high
+- Decided: merge the public, unauthenticated discovery read (packages/db/src/repositories/discovery.ts, index.ts, teacher-profiles.ts) after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved; it exposes only slug, display name, subject, bio, languages, package count and hasFree for verified teachers with a live agent and a live package version.
+- Why: every decoy (pending, rejected, student role, draft or suspended agent, no live package, draft version) is tested absent; input is parsed by strict zod before any SQL and the tsquery is a bound parameter.
+- risk: high (risky path packages/db/src/repositories/**). Follow-ups in 9.2e; request-level rate limiting on the public /teachers routes belongs to 9.2b.
+
+---
+
+### 22 Oct 2026 · 9.2a Lead ratifies 'scope' errors for bad public input in packages/db/src/repositories/discovery.ts · decided by lead · risk: low
+- Decided: discovery.search and discovery.teacherBySlug throw RepositoryError('scope', method) on malformed input, not 'invalid' as the plan's prose said; the code-reviewer's MEDIUM on this is wontfix. Phase B maps 'scope' from these two methods to a 400 or an empty result.
+- Why: it matches the only two existing public-read methods (agents.owner, packageVersions.liveForAgent); a third convention would be worse.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a Public display name comes from users.name · decided by builder · risk: medium
+- Decided: displayName on the discovery card and page is the teacher's users.name; discovery.ts is a documented exception to scope.test.ts's "never reads users" guard, touching only users.role and users.name, never email or phone (tested).
+- Why: teacherProfiles has no display-name column (lead answer Q2), and the WHERE clause limits this to public rows.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.2a discovery.search is excluded from the generic bad-scope grid · decided by builder · risk: low
+- Decided: scope.test.ts's "every method rejects a bad scope" grid skips discovery.search, whose own malformed-input cases live in discovery.int.test.ts and leak.test.ts.
+- Why: {} is a legitimate browse-all call for search, not a bad scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a GIN-index test asserts no seq scan plus GIN usability on a join-free query · decided by builder · risk: low
+- Decided: at seed scale Postgres picks the btree join index for the full statement, so the test asserts no Seq Scan on teacher_profiles and, separately, that both GIN indexes are used when they are the only access path.
+- Why: a scale-dependent plan assertion would be brittle (database-reviewer MEDIUM on this test is deferred to 9.2e).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a Seed CLI lives in cli.ts · decided by builder · risk: low
+- Decided: the db:seed-discovery command is an exported function in packages/db/src/cli.ts with a 5-line bin wrapper, like every other bin in the package.
+- Why: follows the existing convention.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.8b Lead leaves a redundant type annotation in apps/web/app/teacher/insights/page.tsx · decided by lead · risk: low
+- Decided: the typescript-reviewer's LOW about a redundant explicit type annotation in apps/web/app/teacher/insights/page.tsx is wontfix.
+- Why: it is stylistic only and the inferred type is identical; MEDIUM/LOW findings don't hold a merge.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.8b "Overall p50/p95 latency" means the generate and firstToken steps, not a step breakdown · decided by builder · risk: low
+- Decided: the health block shows `health.stepLatencyMs.generate` (full reply latency) and
+  `health.stepLatencyMs.firstToken` as "Reply latency" and "First token", and nothing else from
+  `stepLatencyMs` (the other 9 pipeline steps are not shown).
+- Why: `HealthMetrics` has no single "overall turn" step — `stepLatencyMs` is keyed per
+  `trace.steps[].name` (admit, entitle, preGuard, route, escalate, buildContext, decide, generate,
+  postGuard, meter, commit) plus the derived `firstToken` entry; `generate` is the step that
+  produces the student-visible reply, so it is the one that matches "reply latency" in 8.8's
+  accept-shaping text, and the plan's own Q4 recommendation says to keep this first page short
+  rather than breaking down every pipeline step.
+- risk: low — a one-line follow-up to add more steps to the page if a reviewer wants the full
+  breakdown; `HealthMetrics.stepLatencyMs` already has the data.
+
+---
+
+### 22 Oct 2026 · 8.8b Group dates are shown as a plain ISO date slice, no locale formatting · decided by builder · risk: low
+- Decided: `oldestAt` (an ISO timestamp) is rendered as `oldestAt.slice(0, 10)` (`YYYY-MM-DD`),
+  not `toLocaleDateString()`.
+- Why: English-only pilot, no locale-pack timezone lookup on this page (that's 11.3's own
+  "Monday 07:00 in the locale pack's timezone" requirement, not this read-only page); a plain ISO
+  slice is deterministic in tests and avoids a server/client locale mismatch since this is a pure
+  server component with no hydration.
+
+---
+
 ### 22 Oct 2026 · 8.5e the correction form picks from the teacher's outline modules · decided by builder · risk: low
 - Decided: the page loads the modules for the correction form with `outline.getOutline` in the teacher's scope (id and title); with no outline the form says to add a module first and cannot be saved.
 - Why: the plan asked for a module select without naming a source; `modules.ids` gives ids only, and the outline is the teacher's own module list with titles (one course per teacher in the MVP).

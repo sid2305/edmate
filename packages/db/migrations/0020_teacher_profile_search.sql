@@ -1,0 +1,3 @@
+ALTER TABLE "teacher_profiles" ADD COLUMN "search" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('simple', "subject"), 'A') || setweight(to_tsvector('simple', "bio"), 'B')) STORED NOT NULL;--> statement-breakpoint
+CREATE INDEX "teacher_profiles_search_idx" ON "teacher_profiles" USING gin ("search");--> statement-breakpoint
+CREATE INDEX "teacher_profiles_languages_idx" ON "teacher_profiles" USING gin ("languages");

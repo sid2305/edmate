@@ -2102,9 +2102,9 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: plan:sonnet build:sonnet-5/medium review:sonnet
 - id: '8.9'
   milestone: M8
   title: 'Questions inbox: grouped open questions, answer with a module choice, dismiss'
@@ -2115,9 +2115,9 @@ tasks:
   - '5.10'
   - '5.2'
   - '8.1'
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: lead closeout
 - id: '9.1'
   milestone: M9
   title: App shell, mobile-first layouts (360 px up), next-intl, auth
@@ -3597,9 +3597,29 @@ tasks:
   - 8.8a
   - 8.3c
   risk: low
-  status: running
+  status: done
   branch: m8/8.8b-insights-page
   model: plan:sonnet build:sonnet-5/medium review:sonnet
+  metrics:
+    tool_calls: 22
+    tokens_in: 80
+    tokens_out: 684
+    cache_read_tokens: 850941
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.9b
   milestone: M8
   title: 'Teacher questions API (8.9 Phase B, apps/web): list, answer and dismiss routes'
@@ -3617,9 +3637,28 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: running
+  status: done
   branch: m8/8.9c-questions-inbox
-  model: plan:sonnet build:sonnet-5/medium
+  model: plan:sonnet build:sonnet-5/medium review:sonnet x2
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.2a
   milestone: M9
   title: Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)
@@ -3627,9 +3666,30 @@ tasks:
   deps:
   - 8.6b
   risk: high
-  status: running
+  status: done
   branch: m9/9.2a-discovery-repo
-  model: plan:opus build:sonnet
+  model: plan:opus build:opus-5.5/medium review:sonnet x4
+  metrics:
+    tool_calls: 62
+    tokens_in: 210
+    tokens_out: 1084
+    cache_read_tokens: 3600655
+    wall_time_seconds: 167
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 3
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 6
+        wontfix: 1
+    human_questions: 0
 - id: 9.2b
   milestone: M9
   title: Teachers search page /teachers (9.2 Phase B, apps/web), with request-level rate limiting on the public /teachers routes (9.2a security note)
@@ -3637,7 +3697,9 @@ tasks:
   deps:
   - 9.2a
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.2b-teachers-page
+  model: plan:opus build:sonnet-5/medium
 - id: 9.2c
   milestone: M9
   title: Teacher profile page /teachers/[slug] (9.2 Phase C, apps/web)
@@ -3648,11 +3710,14 @@ tasks:
   status: todo
 - id: 13.flaky
   milestone: M13
-  title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count'
+  title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
+    ms bound (PR #148)'
   accept: each test uses a fake clock or a loose bound per docs/lessons.md "Wall-clock bounds fail on shared CI runners"; 20 repeated CI-style runs pass.
   deps: []
   risk: low
-  status: todo
+  status: running
+  branch: m13/13.flaky-timing-tests
+  model: build:sonnet-5/medium
 - id: 8.5e
   milestone: M8
   title: 'Teacher test-chat page (8.5 Phase C, apps/web UI): package picker, chat, mark wrong, correction form'
@@ -3714,7 +3779,9 @@ tasks:
   deps:
   - 9.2a
   risk: high
-  status: todo
+  status: running
+  branch: m8/8.7a-publish-repo
+  model: plan:opus build:opus-5.5/medium
 - id: 8.7b
   milestone: M8
   title: Gate agent and gate-input assembly (8.7 Phase B, apps/worker)
@@ -3722,7 +3789,32 @@ tasks:
   deps:
   - '7.4'
   risk: low
-  status: todo
+  status: done
+  branch: m8/8.7b-gate-agent
+  model: plan:opus build:opus-5.5/medium fix:sonnet review:opus+sonnet
+  metrics:
+    tool_calls: 72
+    tokens_in: 244
+    tokens_out: 2391
+    cache_read_tokens: 7015417
+    wall_time_seconds: 320
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 9
+      by_severity:
+        HIGH: 1
+        MEDIUM: 4
+        LOW: 4
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 8
+        wontfix: 0
+    human_questions: 0
 - id: 8.7c
   milestone: M8
   title: Gate queue and gatedPublish processor (8.7 Phase C, packages/queue + apps/worker)
@@ -3760,7 +3852,8 @@ tasks:
   status: todo
 - id: 8.9d
   milestone: M13
-  title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes'
+  title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes; 8.9c review
+    LOWs: QuestionsInboxView onAnswer/onDismiss catch a rejected action and show the error banner, and a comment (or resync) on state seeded once from props'
   accept: tests use NextRequest; each RepositoryError kind has a mapped status and a test; web typecheck, lint and test green.
   deps:
   - 8.9b
@@ -3768,7 +3861,9 @@ tasks:
   status: todo
 - id: 9.2e
   milestone: M13
-  title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table instead of `as never`; batched pattern for generated-column migrations on large tables; one lateral join instead of repeated correlated subqueries in discovery.ts; comment that teacherBySlug''s full bio is intentional'
+  title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
+    instead of `as never`; batched pattern for generated-column migrations on large tables; one lateral join instead of repeated correlated subqueries in discovery.ts; comment that teacherBySlug''s full
+    bio is intentional'
   accept: each item done or logged as wontfix; db typecheck, lint and test green.
   deps:
   - 9.2a
@@ -3789,6 +3884,68 @@ tasks:
   deps:
   - 12.1a
   risk: high
+  status: todo
+- id: 8.7f
+  milestone: M8
+  title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
+    stream leaks locked text (scores the locked reply; a leak plus another background failure still fails); await run.finished in a finally when collectReply throws; a separate lockedLeaks counter; move
+    testkit.ts out of src/ and drop the unused @edmate/content dependency until 8.7c; exhaustive TurnEvent switch in collectReply; match LockedLeakDetected by an exported class or code, not error.name;
+    comment on GateUsageMeter.record widening ctx; apps/cli eval liveAgent.ts:92 still scores any guard_blocked as a block (a retryable one is a failed pre-guard chain and must fail the case, as fixed in
+    the gate). Do before the first live gate run (8.7e)'
+  accept: each item done or logged as wontfix; worker typecheck, lint and test green.
+  deps:
+  - 8.7b
+  risk: medium
+  status: todo
+- id: 9.6a
+  milestone: M9
+  title: Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.2a
+  risk: high
+  status: todo
+- id: 9.6b
+  milestone: M9
+  title: Progress page, complete JSON export and notes PDF (9.6 Phase B, apps/web)
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6a
+  risk: medium
+  status: todo
+- id: 9.6c
+  milestone: M9
+  title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6a
+  risk: high
+  status: todo
+- id: 9.6d
+  milestone: M9
+  title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6c
+  risk: medium
+  status: todo
+- id: 9.6e
+  milestone: M9
+  title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
+  accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.6d
+  - 9.2b
+  risk: low
+  status: todo
+- id: 8.6g
+  milestone: M8
+  title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure
+    tests'
+  accept: Timed walkthrough recorded in the handoff; the review items in docs/tasks/8.6d/review.md marked deferred 8.6g are fixed.
+  deps:
+  - 8.6d
+  risk: low
   status: todo
 - id: 9.4c
   milestone: M13
