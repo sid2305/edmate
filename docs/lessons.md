@@ -42,4 +42,4 @@ Sources: log "19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard 
 
 Two studio pages (8.4b style card, 8.3c outline) shipped the same HIGH bug: the client read the JSON of a 200 response without a catch, and the page set its "saving" or "drafting" flag without a `finally`, so a malformed reply or a network error left the buttons disabled for good. Lesson: every studio client wraps the body read in try/catch and returns an error code, and every page action uses try/catch/finally with a busy flag. UI briefs now say so up front.
 
-Sources: docs/tasks/8.4b/review.md; docs/tasks/8.3c/review.md
+Sources: docs/tasks/8.4b/review.md
