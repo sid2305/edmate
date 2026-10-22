@@ -58,6 +58,10 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
   const packages: PackageOffer[] = (await repos.packageVersions.liveForAgent({ agentId })).map(
     (p) => p.offer,
   );
+  // Task 9.3c: a teacher rejected after publishing has no live packages (liveForAgent's
+  // verified join), so typing their agent's URL is indistinguishable from an unknown agent --
+  // never an empty compare view.
+  if (packages.length === 0) return notFound();
   return (
     <AppShell
       brand={shell('brand')}
