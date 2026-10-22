@@ -63,6 +63,15 @@ describe('TeacherView', () => {
     );
   });
 
+  it('links to the insights page from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Insights' })).toHaveAttribute(
+      'href',
+      '/teacher/insights',
+    );
+  });
+
   it('links to the questions inbox from the main nav', async () => {
     render(await TeacherView());
     const nav = screen.getByRole('navigation', { name: 'Main' });

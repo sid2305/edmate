@@ -25,7 +25,22 @@
     "outlineLink": "Outline",
     "onboardingLink": "Your profile",
     "styleCardLink": "Teaching style",
+    "insightsLink": "Insights",
     "questionsLink": "Questions"
+  },
+  "insights": {
+    "title": "Insights",
+    "healthTitle": "Turn health (last 7 days)",
+    "turnsLabel": "Turns",
+    "errorRateLabel": "Error rate",
+    "guardRateLabel": "Guard-trip rate",
+    "replyLatencyLabel": "Reply latency (p50 / p95)",
+    "firstTokenLabel": "First token (p50 / p95)",
+    "cappedNotice": "Showing your most recent 200 turns, not the full week.",
+    "healthEmpty": "No turns yet in the last 7 days.",
+    "questionsTitle": "What students are stuck on",
+    "questionsSince": "{count} asked near-identically since {date}",
+    "questionsEmpty": "No open question groups right now."
   },
   "onboarding": {
     "title": "Your profile",
