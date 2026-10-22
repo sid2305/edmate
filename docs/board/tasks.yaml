@@ -4605,7 +4605,8 @@ tasks:
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
     ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard
-    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed; 8.7k review LOWs: /teacher catches a failed changed-since-publish read (log the error name, default to false); a comment or coalesce for the NULL outline sub-select when there is no course'
+    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed; 8.7k review LOWs: /teacher catches a failed changed-since-publish read (log the error name, default to false); a comment
+    or coalesce for the NULL outline sub-select when there is no course'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
@@ -4787,7 +4788,10 @@ tasks:
   status: todo
 - id: 8.2h
   milestone: M8
-  title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web jobs get fewer attempts (or their own queue) so a slow site can''t hold the concurrency-1 ingest slot for about 75 s per link; a sweeper for documents stuck in processing; refuse a host still ending in a dot after parsing; SNI uses bareHostName; resolver timeout well under the 15 s deadline; LOWs: fileKind cast, typed failWith codes, one shared NO_SUCH_NAME set and code reader, processor.test.ts misnamed test and as-never casts, prettier on the new lines'
+  title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web
+    jobs get fewer attempts (or their own queue) so a slow site can''t hold the concurrency-1 ingest slot for about 75 s per link; a sweeper for documents stuck in processing; refuse a host still ending
+    in a dot after parsing; SNI uses bareHostName; resolver timeout well under the 15 s deadline; LOWs: fileKind cast, typed failWith codes, one shared NO_SUCH_NAME set and code reader, processor.test.ts
+    misnamed test and as-never casts, prettier on the new lines'
   accept: each MEDIUM has a failing-then-passing test; ingest, queue and worker typecheck, lint and test green; security-reviewer re-checks.
   deps:
   - 8.2e
@@ -4937,9 +4941,9 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '11.3'
   milestone: M11
   title: 'Weekly insights worker: top questions, sticking topics, unhelpful answers, open teacher questions; aggregated with a minimum group size of 5'
@@ -5020,9 +5024,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '13.1'
   milestone: M13
   title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
