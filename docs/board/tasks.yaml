@@ -5973,9 +5973,9 @@ tasks:
     gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
   deps: []
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/3.11g-linear-time-test
+  model: plan:lead build:sonnet
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
