@@ -7,6 +7,7 @@ import {
   LearnerProfileSchema,
   MessageSchema,
   PackageConfigSchema,
+  SourceRefSchema,
   TeacherQuestionSchema,
   type AgentConfig,
   type LearnerProfile,
@@ -386,4 +387,61 @@ export type Outline = z.infer<typeof OutlineSchema>;
 
 export function toOutline(value: Outline, method: string): Outline {
   return checked(OutlineSchema, value, method);
+}
+
+// Task 12.2a: the staff reports queue. The categories live here (not in reports.ts) so this file
+// never imports a repository; reports.ts re-exports them.
+/** What a student can say about a reply: a closed set, never free text (12.2 Q2). */
+export const REPORT_CATEGORIES = [
+  'harmful',
+  'inappropriate',
+  'wrong_information',
+  'copyright',
+  'other',
+] as const;
+export const ReportCategorySchema = z.enum(REPORT_CATEGORIES);
+export type ReportCategory = z.infer<typeof ReportCategorySchema>;
+/** At most this many cited documents per report in the staff queue. */
+export const REPORT_CITED_DOCUMENTS_MAX = 10;
+
+const StaffReportRowSchema = z.strictObject({
+  id: z.string().min(1),
+  category: ReportCategorySchema,
+  status: z.literal('open'),
+  createdAt: z.string().min(1),
+  messageId: z.string().min(1),
+  /** From the reported message's session; null only when the message is gone. */
+  teacherId: z.string().min(1).nullable(),
+  agentId: z.string().min(1).nullable(),
+  /** The teacher's public slug; null when the teacher has no profile (or the message is gone). */
+  teacherSlug: z.string().min(1).nullable(),
+  message: z
+    .strictObject({
+      role: z.enum(['agent', 'teacher']),
+      text: z.string(),
+      sources: z.array(SourceRefSchema).optional(),
+      createdAt: z.string().min(1),
+    })
+    .nullable(),
+  /** The teacher's documents whose title a cited source names, for a takedown decision. */
+  citedDocuments: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1),
+        title: z.string(),
+        kind: ChunkKindSchema,
+        takenDown: z.boolean(),
+      }),
+    )
+    .max(REPORT_CITED_DOCUMENTS_MAX),
+});
+
+/**
+ * One open report as only staff see it (task 12.2a): the reported reply and where it came from.
+ * Never the reporter's id, name, email or phone, and never the session id.
+ */
+export type StaffReportRow = z.infer<typeof StaffReportRowSchema>;
+
+export function toStaffReportRow(value: unknown, method: string): StaffReportRow {
+  return checked(StaffReportRowSchema, value, method);
 }

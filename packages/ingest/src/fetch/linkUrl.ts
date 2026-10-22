@@ -64,6 +64,9 @@ export function webLinkRefusal(u: URL): WebLinkRefusal | undefined {
   const bareHost = bareHostName(u.hostname);
   if (isIpLiteral(bareHost)) return isPublicAddress(bareHost) ? undefined : 'private_address';
   if (isDeniedHostName(u.hostname)) return 'internal_name';
+  // One trailing dot is a fully qualified name; more is an empty label (`example.org..`), which
+  // would put a different name on the wire (Host, SNI) than the one checked here.
+  if (u.hostname.endsWith('..')) return 'invalid_url';
   return isYouTubeHost(u.hostname) ? 'youtube_unsupported' : undefined;
 }
 

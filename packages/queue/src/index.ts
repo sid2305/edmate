@@ -127,6 +127,9 @@ export function queuedTurnPorts(
 
 // ---- ingest (task 8.2 Phase 2) ----------------------------------------------------------------
 
+/** Tries for a web-link ingest job (task 8.2h): one retry for a blip, not five slow fetches. */
+export const WEB_INGEST_ATTEMPTS = 2;
+
 /** The ingest queue on a connection the caller owns (`prefix`: BullMQ's key prefix, for tests). */
 export function createIngestQueue(
   connection: ConnectionOptions,
@@ -146,6 +149,8 @@ export function createIngestQueue(
  * than reusing one a still-active old job might hold. A web job's payload holds the teacher's
  * URL, which can carry a share token, so it is removed from Redis on its final failure instead of
  * sitting in the failed set (ADR-0014 Decision 9); the document row keeps the failure reason.
+ * A web job also gets only WEB_INGEST_ATTEMPTS tries: the ingest worker runs one job at a time,
+ * and a slow teacher-chosen site can hold that slot for the whole fetch deadline on every try.
  */
 export async function enqueueIngest(
   queue: JobQueue,
@@ -153,12 +158,8 @@ export async function enqueueIngest(
   storageKey: string,
 ): Promise<void> {
   const data = IngestJobSchema.parse(job);
-  await queue.add(
-    JOB.ingestProcess,
-    data,
-    {
-      ...jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
-      ...(data.fileKind === 'web' ? { removeOnFail: true } : {}),
-    },
-  );
+  await queue.add(JOB.ingestProcess, data, {
+    ...jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
+    ...(data.fileKind === 'web' ? { attempts: WEB_INGEST_ATTEMPTS, removeOnFail: true } : {}),
+  });
 }

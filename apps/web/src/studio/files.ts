@@ -66,3 +66,19 @@ export function uploadTypeOfKey(key: string): UploadType | null {
   const ext = key.slice(dot + 1);
   return UPLOAD_TYPES.find((t) => t.ext === ext) ?? null;
 }
+
+/**
+ * Task 8.2f: a web link's storage key. `.link` is not in `UPLOAD_TYPES`, so `uploadTypeOfKey`
+ * returns null for it -- `complete` already refuses a link (400) with no change, and `.link` can
+ * never collide with a file extension. No random part: a document has at most one link, keyed by
+ * its own id (the random part on file keys is there only to let a replace's old and new key
+ * differ while `storageKey` is briefly both).
+ */
+export function newLinkKey(teacherId: string, documentId: string): string {
+  return `teachers/${teacherId}/documents/${documentId}.link`;
+}
+
+/** Whether a storage key is a web link's (not an uploaded file's). */
+export function isLinkKey(key: string): boolean {
+  return key.endsWith('.link');
+}

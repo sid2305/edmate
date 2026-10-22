@@ -453,7 +453,7 @@ describe('ingestProcessor', () => {
           ...mem.repos.documents,
           get: () => Promise.reject(new RepositoryError('failed', 'documents.get')),
         },
-      } as never,
+      } satisfies IngestProcessorDeps['repos'],
       storage: fakeStorage(),
       gateway: gateway(),
     };
@@ -471,7 +471,7 @@ describe('ingestProcessor', () => {
           ...mem.repos.documents,
           get: () => Promise.reject(new RepositoryError('scope', 'documents.get')),
         },
-      } as never,
+      } satisfies IngestProcessorDeps['repos'],
       storage: fakeStorage(),
       gateway: gateway(),
     };
@@ -584,14 +584,12 @@ describe('ingestProcessor: web links', () => {
     expect(mem.getRow()?.failureReason).toBe('unsupported');
   });
 
-  it('a refused link whose row was deleted meanwhile is a stale skip', async () => {
-    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
-    mem.setRow(null);
-    mem.setRow(row({ storageKey: LINK_KEY, status: 'ready' }));
+  it('a refused link whose row already moved on to ready is a stale skip', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY, status: 'ready' }));
     // ready -> failed is refused by the fake lifecycle (as by the repo): not_found.
-    await expect(
-      ingestProcessor(webDeps(mem), log)(webJob('https://127.0.0.1/a')),
-    ).resolves.toBe('stale_skipped');
+    await expect(ingestProcessor(webDeps(mem), log)(webJob('https://127.0.0.1/a'))).resolves.toBe(
+      'stale_skipped',
+    );
   });
 
   it('a non-retryable fetch failure marks the link failed with its code', async () => {
@@ -630,6 +628,19 @@ describe('ingestProcessor: web links', () => {
     expect(mem.getRow()?.status).toBe('failed');
     expect(mem.getRow()?.failureReason).toBe(code);
     expect(JSON.stringify(lines)).not.toContain(LEAK);
+  });
+
+  it('a replace before the last-attempt failed write of a link is a stale skip', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const next = row({ storageKey: 'teachers/tch_1/documents/doc_1/u2.link', status: 'uploading' });
+    const f = fetcherOf(() => {
+      mem.setRow(next);
+      return Promise.reject(new IngestError('provider_error', true, 'the site failed (HTTP 503)'));
+    });
+    await expect(
+      ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK, { made: 1, of: 2 })),
+    ).resolves.toBe('stale_skipped');
+    expect(mem.getRow()).toEqual(next);
   });
 
   it('a replace during the fetch is a stale skip', async () => {
@@ -690,12 +701,109 @@ describe('ingestProcessor: the last attempt for file jobs', () => {
           updateStatus: () =>
             Promise.reject(new RepositoryError('failed', 'documents.updateStatus')),
         },
-      } as never,
+      } satisfies IngestProcessorDeps['repos'],
       storage: fakeStorage(),
       gateway: gateway(),
     };
     await expect(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 }))).rejects.toBeInstanceOf(
       RepositoryError,
     );
+  });
+
+  /** Storage whose read fails after a replace has moved the row to `next` (8.2h race). */
+  function replacedDuringRead(
+    mem: ReturnType<typeof memoryRepos>,
+    next: DocumentRow,
+  ): StorageClient {
+    return {
+      ...fakeStorage(),
+      getObjectBytes: () => {
+        mem.setRow(next);
+        return Promise.reject(new Error('no object at docs/doc_1/v1'));
+      },
+    };
+  }
+
+  it.each([
+    ['uploading (replace in flight)', 'uploading' as const],
+    ['processing (the new job has started)', 'processing' as const],
+  ])(
+    'a replace before the last-attempt failed write leaves the new row %s, not failed',
+    async (_label, status) => {
+      lines.length = 0;
+      const mem = memoryRepos(row());
+      const next = row({ storageKey: 'docs/doc_1/v2', status });
+      const deps: IngestProcessorDeps = {
+        repos: mem.repos,
+        storage: replacedDuringRead(mem, next),
+        gateway: gateway(),
+      };
+      await expect(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 }))).resolves.toBe(
+        'stale_skipped',
+      );
+      expect(mem.getRow()).toEqual(next);
+      expect(mem.calls).not.toContain('updateStatus:failed');
+      expect(lines).toContainEqual({
+        level: 'info',
+        event: 'ingest.stale_skipped',
+        documentId: 'doc_1',
+      });
+    },
+  );
+
+  it('a replace before a permanent failure write leaves the new row alone too', async () => {
+    const mem = memoryRepos(row());
+    const next = row({ storageKey: 'docs/doc_1/v2', status: 'uploading' });
+    const storage: StorageClient = {
+      ...fakeStorage(),
+      getObjectBytes: () => {
+        mem.setRow(next);
+        return Promise.reject(new IngestError('input_too_large', false, 'too big'));
+      },
+    };
+    const deps: IngestProcessorDeps = { repos: mem.repos, storage, gateway: gateway() };
+    await expect(ingestProcessor(deps, log)(fileJob({ made: 0, of: 5 }))).resolves.toBe(
+      'stale_skipped',
+    );
+    expect(mem.getRow()).toEqual(next);
+  });
+
+  it('a document deleted before the last-attempt failed write is a stale skip', async () => {
+    const mem = memoryRepos(row());
+    const storage: StorageClient = {
+      ...fakeStorage(),
+      getObjectBytes: () => {
+        mem.setRow(null);
+        return Promise.reject(new Error('gone'));
+      },
+    };
+    const deps: IngestProcessorDeps = { repos: mem.repos, storage, gateway: gateway() };
+    await expect(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 }))).resolves.toBe(
+      'stale_skipped',
+    );
+    expect(mem.calls).not.toContain('updateStatus:failed');
+  });
+
+  it('a db outage on the re-read before the failed write is rethrown for a retry', async () => {
+    const mem = memoryRepos(row());
+    let gets = 0;
+    const deps: IngestProcessorDeps = {
+      repos: {
+        ...mem.repos,
+        documents: {
+          ...mem.repos.documents,
+          get: (scope, id) =>
+            ++gets === 1
+              ? mem.repos.documents.get(scope, id)
+              : Promise.reject(new RepositoryError('failed', 'documents.get')),
+        },
+      } satisfies IngestProcessorDeps['repos'],
+      storage: fakeStorage(),
+      gateway: gateway(),
+    };
+    await expect(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 }))).rejects.toBeInstanceOf(
+      RepositoryError,
+    );
+    expect(mem.getRow()?.status).toBe('processing');
   });
 });
