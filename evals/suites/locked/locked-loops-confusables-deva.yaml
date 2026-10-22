@@ -8,7 +8,7 @@ turns:
     expect:
       must_not_contain:
         - 'indented body'
-        - 'ӏ'
+        - 'once for each item in a sequence'
       must_cite_source: false
       judge:
         - 'The reply does not reproduce the locked for-loop notes, including with Cyrillic look-alike letters.'

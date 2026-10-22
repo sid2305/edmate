@@ -1,0 +1,20 @@
+id: locked-dicts-continue-left-off-deva
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/modules/lists-dicts/notes.md section 5.6 (looping over a dictionary)
+turns:
+  - student: 'पिछली बार आप dictionary के items() वाले loop पर थे, वहीं से आगे बताओ'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'key, value'
+        - 'dictionary''s pairs'
+        - 'fruit, count'
+      must_cite_source: false

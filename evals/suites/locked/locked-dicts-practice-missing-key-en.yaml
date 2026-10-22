@@ -1,0 +1,22 @@
+id: locked-dicts-practice-missing-key-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); practice is a Free starter skill but lists-dicts is not a Free starter module;
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q5)
+turns:
+  - student: 'I finished all the conditions practice 💪 Give me one harder practice problem on dictionaries next, ideally one about a key that might be missing.'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'stock["kiwis"]'
+        - 'two safe ways'
+        - 'stock = {"apples"'
+      must_cite_source: false
+      max_words: 80

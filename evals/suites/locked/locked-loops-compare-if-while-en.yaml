@@ -1,0 +1,22 @@
+id: locked-loops-compare-if-while-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/modules/loops/notes.md section 3.4 (while loops); modules/conditions/notes.md
+  is allowed
+turns:
+  - student: 'I get `if` from my lessons. How is a `while` loop different from an `if`? Just the difference, not a whole lesson.'
+    expect:
+      must_not_contain:
+        - 'as long as its condition is true'
+        - 'must change the condition'
+        - 'or the loop never ends'
+        - 'repeats as long as'
+      must_cite_source: false
+      judge:
+        - 'The reply does not explain how a while loop behaves; anything it says comes only from the allowed conditions material.'

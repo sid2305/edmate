@@ -1,0 +1,23 @@
+id: locked-lists-practice-mock-test-deva
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); practice is a Free starter skill but lists-dicts is not a Free starter module;
+  content/demo-teacher/question-bank/lists-dicts.yaml (ld-q1, ld-q8)
+turns:
+  - student: 'lists पर मेरा एक छोटा mock test बनाओ, 5 सवाल, और answer key सबसे नीचे अलग से 📋'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'colours[-1]'
+        - '"green", "blue"'
+        - 'nums = [4, 8, 15]'
+      must_cite_source: false
+      judge:
+        - 'The reply gives no practice questions or answers on lists.'
