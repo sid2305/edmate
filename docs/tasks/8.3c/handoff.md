@@ -122,3 +122,6 @@ successful (OutlineView.test.tsx 12 tests, outlineClient.test.ts passing, full w
 `python3 .githooks/secret-scan.py --all` — clean.
 
 Tool calls used: 19
+
+Merge with main (after 8.4b): en.json conflict resolved by keeping both namespaces.
+Merge tool calls: 13
