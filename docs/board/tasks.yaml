@@ -3505,7 +3505,7 @@ tasks:
 - id: 8.6f
   milestone: M13
   title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version
-    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
+    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers; 8.6c: Promise.all for the independent reads in packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields'
   accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
   deps:
   - 8.6b
