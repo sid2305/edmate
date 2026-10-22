@@ -4261,7 +4261,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: running
+  branch: m11/11.1a-live-classes-repo
+  model: plan:sonnet build:sonnet
 - id: 11.1b
   milestone: M11
   title: 'Teacher studio live classes: schedule with an external link, attach packages, list (11.1 Phase B, apps/web; plan docs/tasks/11.1/plan.md)'
@@ -4371,7 +4373,8 @@ tasks:
   status: todo
 - id: 8.7l
   milestone: M13
-  title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start()'
+  title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
+    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start()'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
