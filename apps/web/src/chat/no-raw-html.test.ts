@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const WEB = fileURLToPath(new URL('../..', import.meta.url));
-const ROOTS = ['src/chat', 'app/learn', 'app/teacher', 'src/studio'];
+const ROOTS = ['src/chat', 'app/learn', 'app/teacher', 'src/studio', 'app/legal'];
 const SELF = fileURLToPath(import.meta.url);
 const BANNED = [
   /dangerouslySetInnerHTML/,

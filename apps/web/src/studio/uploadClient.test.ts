@@ -87,9 +87,14 @@ describe('the JSON calls', () => {
         sourceTitle: 'A',
         contentType: 'text/markdown',
         byteSize: 3,
+        rightsDeclared: true,
       }),
     ).resolves.toEqual({ ok: true, value: made });
-    await replaceDocument('doc_1', { contentType: 'application/pdf', byteSize: 9 });
+    await replaceDocument('doc_1', {
+      contentType: 'application/pdf',
+      byteSize: 9,
+      rightsDeclared: true,
+    });
     expect(calls.map((c) => [c.url, c.init?.method, c.init?.body])).toEqual([
       [
         '/api/studio/documents',
@@ -99,12 +104,13 @@ describe('the JSON calls', () => {
           sourceTitle: 'A',
           contentType: 'text/markdown',
           byteSize: 3,
+          rightsDeclared: true,
         }),
       ],
       [
         '/api/studio/documents/doc_1/replace',
         'POST',
-        JSON.stringify({ contentType: 'application/pdf', byteSize: 9 }),
+        JSON.stringify({ contentType: 'application/pdf', byteSize: 9, rightsDeclared: true }),
       ],
     ]);
   });
@@ -147,7 +153,9 @@ describe('the JSON calls', () => {
   it('adds a link with exactly the fields given', async () => {
     const made = { documentId: 'doc_1', status: 'processing' };
     const calls = stubFetch(reply(202, made));
-    await expect(addLink({ moduleId: 'm1', url: 'https://example.org/a' })).resolves.toEqual({
+    await expect(
+      addLink({ moduleId: 'm1', url: 'https://example.org/a', rightsDeclared: true }),
+    ).resolves.toEqual({
       ok: true,
       value: made,
     });
@@ -155,7 +163,11 @@ describe('the JSON calls', () => {
       url: '/api/studio/links',
       init: {
         method: 'POST',
-        body: JSON.stringify({ moduleId: 'm1', url: 'https://example.org/a' }),
+        body: JSON.stringify({
+          moduleId: 'm1',
+          url: 'https://example.org/a',
+          rightsDeclared: true,
+        }),
       },
     });
   });
@@ -164,7 +176,9 @@ describe('the JSON calls', () => {
     stubFetch(
       reply(400, { error: { code: 'validation', message: "YouTube links aren't supported yet.", retryable: false } }),
     );
-    await expect(addLink({ moduleId: 'm1', url: 'https://youtu.be/x' })).resolves.toEqual({
+    await expect(
+      addLink({ moduleId: 'm1', url: 'https://youtu.be/x', rightsDeclared: true }),
+    ).resolves.toEqual({
       ok: false,
       status: 400,
       code: 'validation',

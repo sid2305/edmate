@@ -115,6 +115,8 @@ export function createDocument(input: {
   sourceTitle: string;
   contentType: string;
   byteSize: number;
+  /** Task 12.3c: sent only once the upload centre's rights checkbox is checked; never `false`. */
+  rightsDeclared: true;
 }): Promise<ApiResult<UploadTicket>> {
   return call(
     BASE,
@@ -130,6 +132,8 @@ export function addLink(input: {
   moduleId: string;
   url: string;
   sourceTitle?: string;
+  /** Task 12.3c: sent only once the upload centre's rights checkbox is checked; never `false`. */
+  rightsDeclared: true;
 }): Promise<ApiResult<{ documentId: string; status: string }>> {
   return call(
     LINKS_URL,
@@ -140,7 +144,8 @@ export function addLink(input: {
 
 export function replaceDocument(
   id: string,
-  input: { contentType: string; byteSize: number },
+  /** Task 12.3c: `rightsDeclared` sent only once the replace picker's checkbox is checked. */
+  input: { contentType: string; byteSize: number; rightsDeclared: true },
 ): Promise<ApiResult<UploadTicket>> {
   return call(
     `${docUrl(id)}/replace`,
