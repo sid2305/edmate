@@ -2,8 +2,7 @@
 
 Status: DONE
 
-Tool calls used: 107 (Phase A) + ~90 (Phase B, over its ~60 budget — the extra item below and the
-usage-sharing plumbing it needed cost more than planned; everything still finished green) = ~197
+Tool calls used: 215 (Phase A 107, Phase B 108, harness counts; Phase B went over its ~60 budget because of the lead's extra item and the usage-sharing plumbing it needed)
 
 ## State (both phases)
 
@@ -127,6 +126,16 @@ rather than `risk: high`.
 
 ## Decisions
 
+### 21 Oct 2026 · 7.6 merge: guardrails export reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6 with its `packages/harness/src/guardrails/**` change (a new `isBlockReply` export over the existing `BLOCK_REPLIES`; no guard logic changed), reviewed by code-reviewer (the group's required reviewer during the MVP phase), plus typescript-reviewer and security-reviewer. All three approved with no CRITICAL or HIGH; MEDIUM and LOW findings go to 7.6a.
+- Why: a risky path needs its required reviewers and a risk: high entry; the change is a read-only membership check.
+- risk: high
+
+### 21 Oct 2026 · 7.6 budget: 215 tool calls against 120 · decided by lead
+- Decided: accept the overrun (Phase A 107, Phase B 108 by the harness count; the handoff's ~197 was the builders' own estimate). Phase B also carried the lead's extra `reply.blocked` item, which was not in the plan's budget.
+- Why: the work is done, reviewed and green; the extra item closed a gap that would have failed every live must_block case.
+- risk: low
+
 ### 7.6 Phase B: cost is computed from a fresh usage meter per (model, suite) run, not a shared one across the whole sweep
 - Decided: `runModelSweep` builds one `memoryUsageMeter()` per (model, suite) pair (via
   `deps.liveAgentFor`'s `usage` parameter), not one meter for the entire sweep.
@@ -164,6 +173,40 @@ rather than `risk: high`.
   already a closed, fixed set of exact strings (task 4.4), so matching against it is exact, not a
   heuristic, and needs no pipeline change beyond exporting the one new helper.
 - risk: medium (lead's own label, task prompt 21 Oct 2026)
+
+### 7.6 Multi-turn cases seed prior turns directly, not by replaying them live
+- Decided: `EvalTurnInput.priorTurns` is pushed straight onto the session's transcript history via
+  `TranscriptStore.append`, never re-run live through the pipeline.
+- Why: replaying every prior turn live for every (model, suite, case) would multiply live-call cost
+  and make the sweep non-deterministic across providers; the transcript port is a plain, appendable
+  list the caller can seed directly.
+- risk: low
+
+### 7.6 The price table is reused, not rebuilt; real prices are never invented by a builder or planner
+- Decided: `packages/gateway/src/pricing/prices.yaml` (task 2.4) is read-only to this task; no USD
+  value is added or changed here.
+- Why: business-sensitive numbers need a named human, per the lead's hard constraint; the file
+  already exists and its own comment names this task as the moment to re-check it (Phase B, by a
+  human, after merge).
+- risk: low
+
+### 7.6 Phase A: plain turns only; no `TurnInput` change for `skill`/`persona`
+- Decided: `buildLiveEvalAgent` sends every turn as a plain `{ kind: 'message', text }`; a case that
+  names `EvalTurnInput.skill` or `.persona` is run as if neither were set, not forced onto the real
+  pipeline.
+- Why: `TurnInput` has no direct `skill`/`persona` field for a plain message turn (`skill` only
+  exists under `kind: 'skill_action'`); adding one would be a `packages/contracts` change needing an
+  ADR, out of this task's scope (lead answer Q2, 21 Oct 2026).
+- risk: low
+
+### 7.6 Phase A: a fresh `ChatSetup` per `reply()` call, not shared across a run
+- Decided: every `EvalAgent.reply()` call builds a brand-new in-memory `ChatSetup` (`buildChatDeps`)
+  rather than reusing one deps object across a suite or model run.
+- Why: simplest and matches the design's "one case = one fresh session" literally; no in-memory
+  world state (sessions, help state) can leak between unrelated cases. The cost is rebuilding
+  content/locale/prompt-pack reads per call, which is cheap (in-memory, no I/O beyond local files)
+  and not a live-call cost.
+- risk: low
 
 ## Open points (not fixed here, flagged rather than guessed at)
 
