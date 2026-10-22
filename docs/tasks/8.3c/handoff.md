@@ -102,3 +102,23 @@ because 8.4b has not merged to `main` yet. Pushed after.
 8.3 is now complete: a signed-in teacher can generate and edit their outline end to end
 (`/teacher/outline`), with source links visible and reorder/rename/merge/split all working, and
 the version shown after Save.
+
+## Fix round 1
+
+Addressed typescript-reviewer findings:
+1. `outlineClient.ts`'s `call()` now wraps the success-path `read(res)` in a try/catch, returning
+   `{ ok: false, status: res.status, code: 'provider_error' }` on a malformed 200 body instead of
+   rejecting. Added a test for a malformed-body 200.
+2. `OutlineView.tsx` now tracks a `busy` state: set before `onSave`/`doGenerate`'s awaited call and
+   reset in `finally`; Save and Generate are disabled while busy; each handler's throw is caught
+   into the error banner instead of becoming an unhandled rejection. Added tests: a rejecting Save
+   shows the alert and re-enables Save; Save and Generate are disabled while a request is in
+   flight and re-enabled once it resolves.
+3. The initial `useEffect` fetch now uses an `ignore` flag (set in its cleanup) so state is not set
+   after unmount, and also catches a throw into the banner.
+
+Tests: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` — all 34 tasks
+successful (OutlineView.test.tsx 12 tests, outlineClient.test.ts passing, full web suite green).
+`python3 .githooks/secret-scan.py --all` — clean.
+
+Tool calls used: 19

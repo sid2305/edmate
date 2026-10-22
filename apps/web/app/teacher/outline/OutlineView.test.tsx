@@ -195,6 +195,55 @@ describe('OutlineView', () => {
     });
   });
 
+  it('a rejecting Save shows the banner and re-enables Save', async () => {
+    api(outline());
+    renderIntl(<OutlineView />);
+    await screen.findByDisplayValue('Module 1');
+    const fetchFn = vi.mocked(fetch);
+    const original = fetchFn.getMockImplementation()!;
+    fetchFn.mockImplementationOnce((url: string | URL | Request, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'PUT') return Promise.reject(new TypeError('offline'));
+      return original(url as string, init);
+    });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(saveButton);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(saveButton).not.toBeDisabled();
+  });
+
+  it('Save and Generate are disabled while a request is in flight', async () => {
+    const s = api(outline());
+    renderIntl(<OutlineView />);
+    await screen.findByDisplayValue('Module 1');
+
+    let resolvePut: (() => void) | undefined;
+    const fetchFn = vi.mocked(fetch);
+    const original = fetchFn.getMockImplementation()!;
+    fetchFn.mockImplementationOnce(async (url: string | URL | Request, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'PUT') {
+        await new Promise<void>((resolve) => {
+          resolvePut = resolve;
+        });
+      }
+      return original(url as string, init);
+    });
+    s.next('PUT /api/studio/outline', { status: 200, body: outline() });
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    const generateButton = screen.getByRole('button', { name: 'Generate from uploads' });
+    fireEvent.click(saveButton);
+
+    expect(saveButton).toBeDisabled();
+    expect(generateButton).toBeDisabled();
+
+    resolvePut?.();
+    await screen.findByText(/Saved — version 1\./);
+    expect(saveButton).not.toBeDisabled();
+    expect(generateButton).not.toBeDisabled();
+  });
+
   it('Generate warns before discarding unsaved edits, then replaces the tree', async () => {
     const s = api(outline());
     renderIntl(<OutlineView />);

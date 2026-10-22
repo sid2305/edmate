@@ -83,4 +83,13 @@ describe('the outline calls', () => {
       code: 'provider_error',
     });
   });
+
+  it('a 200 with a malformed body resolves provider_error instead of rejecting', async () => {
+    stubFetch(new Response('not json', { status: 200, headers: { 'content-type': 'application/json' } }));
+    await expect(getOutline()).resolves.toEqual({
+      ok: false,
+      status: 200,
+      code: 'provider_error',
+    });
+  });
 });

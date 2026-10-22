@@ -77,7 +77,11 @@ async function call<T>(
     return { ok: false, status: 0, code: 'provider_error' };
   }
   if (!res.ok) return { ok: false, status: res.status, code: await errorCode(res) };
-  return { ok: true, value: await read(res) };
+  try {
+    return { ok: true, value: await read(res) };
+  } catch {
+    return { ok: false, status: res.status, code: 'provider_error' };
+  }
 }
 
 const asJson = <T>(res: Response) => res.json() as Promise<T>;

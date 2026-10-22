@@ -95,6 +95,7 @@ export function OutlineView() {
   const [modules, setModules] = useState<LocalModule[] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [banner, setBanner] = useState<ErrorKey | null>(null);
+  const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<number | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [mergeSelected, setMergeSelected] = useState<Record<string, boolean>>({});
@@ -103,11 +104,20 @@ export function OutlineView() {
   const nextTemp = useRef(0);
 
   useEffect(() => {
+    let ignore = false;
     void (async () => {
-      const result = await getOutline();
-      if (result.ok) setModules(toLocalModules(result.value.modules));
-      else setBanner(errorKey(result));
+      try {
+        const result = await getOutline();
+        if (ignore) return;
+        if (result.ok) setModules(toLocalModules(result.value.modules));
+        else setBanner(errorKey(result));
+      } catch {
+        if (!ignore) setBanner('provider_error');
+      }
     })();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const renameModule = (id: string, title: string) => {
@@ -208,26 +218,40 @@ export function OutlineView() {
   const onSave = useCallback(async () => {
     if (!modules) return;
     setBanner(null);
-    const result = await putOutline(toInput(modules));
-    if (result.ok) {
-      setModules(toLocalModules(result.value.modules));
-      setSaved(result.value.outlineVersion);
-      setDirty(false);
-    } else {
-      setBanner(errorKey(result));
+    setBusy(true);
+    try {
+      const result = await putOutline(toInput(modules));
+      if (result.ok) {
+        setModules(toLocalModules(result.value.modules));
+        setSaved(result.value.outlineVersion);
+        setDirty(false);
+      } else {
+        setBanner(errorKey(result));
+      }
+    } catch {
+      setBanner('provider_error');
+    } finally {
+      setBusy(false);
     }
   }, [modules]);
 
   const doGenerate = useCallback(async () => {
     setConfirmGenerate(false);
     setBanner(null);
-    const result = await generateOutline();
-    if (result.ok) {
-      setModules(toLocalModules(result.value.modules));
-      setSaved(null);
-      setDirty(false);
-    } else {
-      setBanner(errorKey(result));
+    setBusy(true);
+    try {
+      const result = await generateOutline();
+      if (result.ok) {
+        setModules(toLocalModules(result.value.modules));
+        setSaved(null);
+        setDirty(false);
+      } else {
+        setBanner(errorKey(result));
+      }
+    } catch {
+      setBanner('provider_error');
+    } finally {
+      setBusy(false);
     }
   }, []);
 
@@ -377,10 +401,10 @@ export function OutlineView() {
         ))
       )}
       <p className="outline-actions">
-        <button type="button" onClick={onGenerateClick} disabled={modules === null}>
+        <button type="button" onClick={onGenerateClick} disabled={modules === null || busy}>
           {t('generate')}
         </button>
-        <button type="button" onClick={() => void onSave()} disabled={modules === null}>
+        <button type="button" onClick={() => void onSave()} disabled={modules === null || busy}>
           {t('save')}
         </button>
       </p>
