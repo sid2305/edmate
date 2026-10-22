@@ -69,4 +69,4 @@ Acceptance covered here: "a report reaches staff on the very next read" (file, t
 ## Left to do
 - Nothing for 12.2a. 12.2b adds takedowns and the retrieval filter; its `notTakenDown` helper can replace the inline `takenDown` subquery here (it qualifies `"documents"."id"` by hand because drizzle leaves a one-table select's columns bare, which would bind to `takedowns.id` inside the subquery).
 
-Tool calls used: 34
+Tool calls used: 59 (harness count; the builder reported 34)
