@@ -12,6 +12,7 @@ import {
   tstz,
   vector,
 } from './_shared.js';
+import { liveClasses } from './operations.js';
 import { teacherId } from './users.js';
 
 /** From the teacher's outline. */
@@ -82,11 +83,19 @@ export const documents = pgTable(
     status: documentStatus('status').notNull().default('uploading'),
     /** A fixed failure code (an IngestErrorCode-like word), never raw error text; only when failed. */
     failureReason: text('failure_reason'),
+    /**
+     * The teacher's own live class this document records (task 11.4a); null for any other upload.
+     * `ON DELETE SET NULL`: deleting a class unlinks its recordings, it never blocks or removes them.
+     */
+    liveClassId: text('live_class_id').references(() => liveClasses.id, { onDelete: 'set null' }),
     ...timestamps(),
   },
   (t) => [
     index('documents_teacher_id_idx').on(t.teacherId),
     index('documents_module_id_idx').on(t.moduleId),
+    index('documents_live_class_id_idx')
+      .on(t.liveClassId)
+      .where(sql`${t.liveClassId} is not null`),
     check(
       'documents_failure_reason_only_when_failed',
       sql`${t.failureReason} is null or ${t.status} = 'failed'`,

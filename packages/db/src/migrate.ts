@@ -105,7 +105,8 @@ export type PostMigrateStep =
  * a schema-only index (task 3.16b); migration 0010 (task 3.16c) adds
  * `sessions_open_teacher_id_student_id_idx` the same schema-only way. Migration 0023 (task 12.4a)
  * adds `agents_regulated_approved_by_users_id_fk`, `agents_regulated_subject_check` and
- * `agents_regulated_approval_check` as `NOT VALID` the same way, so the validation scan of the
+ * `agents_regulated_approval_check` as `NOT VALID` the same way (and migration 0024, task 11.4a,
+ * `documents_live_class_id_live_classes_id_fk`), so the validation scan of the
  * existing `agents` rows runs outside drizzle's migration transaction. This is what makes the
  * constraints valid and the indexes built, outside any transaction. Append here, don't edit past
  * entries: migrations are forward-only and this list is replayed, idempotently, on every
@@ -132,6 +133,12 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
   },
   { kind: 'validateConstraint', table: 'agents', constraint: 'agents_regulated_subject_check' },
   { kind: 'validateConstraint', table: 'agents', constraint: 'agents_regulated_approval_check' },
+  // Migration 0024 (task 11.4a): documents.live_class_id's FK, added NOT VALID the same way.
+  {
+    kind: 'validateConstraint',
+    table: 'documents',
+    constraint: 'documents_live_class_id_live_classes_id_fk',
+  },
 ];
 
 /** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */
