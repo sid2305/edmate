@@ -5721,6 +5721,16 @@ tasks:
   - 7.2g
   risk: low
   status: todo
+- id: 12.3e
+  milestone: M13
+  title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of a non-null assertion after expect not toBeNull'
+  accept: packages/db typecheck, lint and test green; prettier --check clean on chunks.ts.
+  deps:
+  - 12.3b
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
