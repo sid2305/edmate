@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.2a Lead accepts the public discovery repository in packages/db/src/repositories/discovery.ts · decided by lead · risk: high
+- Decided: merge the public, unauthenticated discovery read (packages/db/src/repositories/discovery.ts, index.ts, teacher-profiles.ts) after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved; it exposes only slug, display name, subject, bio, languages, package count and hasFree for verified teachers with a live agent and a live package version.
+- Why: every decoy (pending, rejected, student role, draft or suspended agent, no live package, draft version) is tested absent; input is parsed by strict zod before any SQL and the tsquery is a bound parameter.
+- risk: high (risky path packages/db/src/repositories/**). Follow-ups in 9.2e; request-level rate limiting on the public /teachers routes belongs to 9.2b.
+
+---
+
+### 22 Oct 2026 · 9.2a Lead ratifies 'scope' errors for bad public input in packages/db/src/repositories/discovery.ts · decided by lead · risk: low
+- Decided: discovery.search and discovery.teacherBySlug throw RepositoryError('scope', method) on malformed input, not 'invalid' as the plan's prose said; the code-reviewer's MEDIUM on this is wontfix. Phase B maps 'scope' from these two methods to a 400 or an empty result.
+- Why: it matches the only two existing public-read methods (agents.owner, packageVersions.liveForAgent); a third convention would be worse.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a Public display name comes from users.name · decided by builder · risk: medium
+- Decided: displayName on the discovery card and page is the teacher's users.name; discovery.ts is a documented exception to scope.test.ts's "never reads users" guard, touching only users.role and users.name, never email or phone (tested).
+- Why: teacherProfiles has no display-name column (lead answer Q2), and the WHERE clause limits this to public rows.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.2a discovery.search is excluded from the generic bad-scope grid · decided by builder · risk: low
+- Decided: scope.test.ts's "every method rejects a bad scope" grid skips discovery.search, whose own malformed-input cases live in discovery.int.test.ts and leak.test.ts.
+- Why: {} is a legitimate browse-all call for search, not a bad scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a GIN-index test asserts no seq scan plus GIN usability on a join-free query · decided by builder · risk: low
+- Decided: at seed scale Postgres picks the btree join index for the full statement, so the test asserts no Seq Scan on teacher_profiles and, separately, that both GIN indexes are used when they are the only access path.
+- Why: a scale-dependent plan assertion would be brittle (database-reviewer MEDIUM on this test is deferred to 9.2e).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2a Seed CLI lives in cli.ts · decided by builder · risk: low
+- Decided: the db:seed-discovery command is an exported function in packages/db/src/cli.ts with a 5-line bin wrapper, like every other bin in the package.
+- Why: follows the existing convention.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.8b Lead leaves a redundant type annotation in apps/web/app/teacher/insights/page.tsx · decided by lead · risk: low
 - Decided: the typescript-reviewer's LOW about a redundant explicit type annotation in apps/web/app/teacher/insights/page.tsx is wontfix.
 - Why: it is stylistic only and the inferred type is identical; MEDIUM/LOW findings don't hold a merge.

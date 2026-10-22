@@ -3647,9 +3647,30 @@ tasks:
   deps:
   - 8.6b
   risk: high
-  status: running
+  status: done
   branch: m9/9.2a-discovery-repo
-  model: plan:opus build:sonnet
+  model: plan:opus build:opus-5.5/medium review:sonnet x4
+  metrics:
+    tool_calls: 62
+    tokens_in: 210
+    tokens_out: 1084
+    cache_read_tokens: 3600655
+    wall_time_seconds: 167
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 3
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 6
+        wontfix: 1
+    human_questions: 0
 - id: 9.2b
   milestone: M9
   title: Teachers search page /teachers (9.2 Phase B, apps/web), with request-level rate limiting on the public /teachers routes (9.2a security note)
@@ -3871,7 +3892,8 @@ tasks:
   status: todo
 - id: 8.6g
   milestone: M8
-  title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure tests'
+  title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure
+    tests'
   accept: Timed walkthrough recorded in the handoff; the review items in docs/tasks/8.6d/review.md marked deferred 8.6g are fixed.
   deps:
   - 8.6d
