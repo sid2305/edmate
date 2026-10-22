@@ -3,7 +3,7 @@
 Status: DONE
 - **Branch:** `m8/8.3c-outline-editor` (local `work-83c`)
 - **Worktree:** `.claude/worktrees/agent-a6a06a41ee562f034`
-Tool calls used: 32
+Tool calls used: 80 (harness counts: build 49, fix round 1 31)
 - **Scope:** `apps/web` only (`apps/web/app/teacher/outline/**`, `apps/web/app/teacher/view.tsx`
   (+test), `apps/web/messages/en.json`). No `packages/contracts`, `.claude/`, `.github/` or
   `apps/web/src/auth/**` change.
