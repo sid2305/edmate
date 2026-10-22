@@ -4380,6 +4380,14 @@ tasks:
   - 8.7d
   risk: low
   status: todo
+- id: 8.7m
+  milestone: M13
+  title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
+  accept: tests for the hex-padded and glued cases (the glued case redacts the phone digits); the crafted-UUID cases are all UUID-shaped; redact-json.ts stays at 100% coverage.
+  deps:
+  - 8.7h
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
