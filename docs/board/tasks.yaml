@@ -3334,6 +3334,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.9a
+  milestone: M8
+  title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'
+  accept: dismiss closes only the named row; another teacher's, missing or closed question is not_found with nothing written; db typecheck, lint and test green.
+  deps:
+  - 8.5a
+  risk: high
+  status: running
+  branch: m8/8.9a-dismiss-question
+  model: plan:sonnet build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
