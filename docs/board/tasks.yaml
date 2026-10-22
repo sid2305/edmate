@@ -2102,7 +2102,7 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '8.9'
@@ -3082,9 +3082,31 @@ tasks:
   - 8.3a
   - 9.0a
   risk: normal
-  status: running
+  status: done
   branch: m8/8.3b-outline-api
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 90
+    tokens_in: 288
+    tokens_out: 43181
+    cache_read_tokens: 9480727
+    wall_time_seconds: 3231
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 7.2g
   milestone: M7
   title: 'Leak-suite follow-ups from 7.2c: rewrite the 4 new "-deva" cases (mcq-range-step, authority-dict-update, pressure-sum-loop, partialreveal-mod-remainder) in Devanagari script, as the older -deva
@@ -3105,9 +3127,9 @@ tasks:
   deps:
   - 8.3a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: review
+  branch: m8/8.3c-outline-editor
+  model: plan:opus build:sonnet
 - id: 8.4a
   milestone: M8
   title: '8.4 Phase A: packages/db style-card create/latest and the studio style-card API (draft, save) (plan docs/tasks/8.4/plan.md)'
@@ -3145,9 +3167,29 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: review
+  status: done
   branch: m8/8.5a-corrections-db
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 69
+    tokens_in: 250
+    tokens_out: 1987
+    cache_read_tokens: 4357059
+    wall_time_seconds: 657
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 8.5b
   milestone: M8
   title: '8.5 Phase B: apps/web test-chat composition and API routes (plan docs/tasks/8.5/plan.md)'
@@ -3155,9 +3197,9 @@ tasks:
   deps:
   - 8.5a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.5b-test-chat-api
+  model: plan:opus build:opus
 - id: 9.0c
   milestone: M13
   title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool
@@ -3202,7 +3244,7 @@ tasks:
 - id: 8.4c
   milestone: M13
   title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card
-    interview answers and saved card text before they reach the drafter or a turn prompt'
+    interview answers and saved card text before they reach the drafter or a turn prompt; 8.4b LOW: StyleCardView ignores a stale draft response that would overwrite text the teacher already saved'
   accept: studio drafting writes usage-ledger rows under a teacher scope; a test shows override phrases are removed from a saved card's prompt text.
   deps:
   - 8.4a
@@ -3217,9 +3259,29 @@ tasks:
   deps:
   - '8.1'
   risk: normal
-  status: review
+  status: done
   branch: m8/8.6a-model-mix
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 17
+    tokens_in: 64
+    tokens_out: 322
+    cache_read_tokens: 814124
+    wall_time_seconds: 67
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 8.6b
   milestone: M8
   title: '8.6 Phase B: packages/db agents.ensureDraft and the packages repository (plan docs/tasks/8.6/plan.md)'
@@ -3227,7 +3289,7 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: running
+  status: review
   branch: m8/8.6b-packages-repo
   model: plan:opus build:opus
 - id: 8.5c
@@ -3249,6 +3311,88 @@ tasks:
   deps:
   - 8.3b
   risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 8.4b
+  milestone: M8
+  title: 'Teacher style-card studio page (8.4 Phase B): interview, draft, edit and save the style card'
+  accept: the studio page's interview -> draft -> edit -> save flow is covered by component tests; web typecheck, lint and test green.
+  deps:
+  - 8.4a
+  risk: medium
+  status: done
+  branch: m8/8.4b-style-card-page
+  model: plan:opus build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 76
+    tokens_out: 424
+    cache_read_tokens: 883361
+    wall_time_seconds: 79
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 8.6e
+  milestone: M13
+  title: '8.6a follow-ups (review LOW): DeepReadonly type for MODEL_MIX; named error class for the per-turn cost RangeErrors'
+  accept: a nested MODEL_MIX assignment fails typecheck; estimate.ts throws a named error class and tests match on the class, not the message.
+  deps:
+  - 8.6a
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 8.9a
+  milestone: M8
+  title: 'teacherQuestions.dismiss (8.9 Phase A, packages/db): close one open question, teacher-scoped'
+  accept: dismiss closes only the named row; another teacher's, missing or closed question is not_found with nothing written; db typecheck, lint and test green.
+  deps:
+  - 8.5a
+  risk: high
+  status: running
+  branch: m8/8.9a-dismiss-question
+  model: plan:sonnet build:sonnet
+- id: 8.8a
+  milestone: M8
+  title: 'Insights data (8.8 Phase A): loadInsights aggregates 7-day turn health and the top 5 open-question groups for a teacher (apps/web, no UI)'
+  accept: insights.test.ts covers volume, error and guard rates, p50/p95 latency and the top question groups with fakes; no student id in the output; web typecheck, lint and test green.
+  deps: []
+  risk: low
+  status: running
+  branch: m8/8.8a-insights-data
+  model: plan:sonnet build:sonnet
+- id: 8.6f
+  milestone: M13
+  title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a distinct error kind for the package cap; share the module check and version locking between packages.ts and package-versions.ts;
+    ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
+  accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
+  deps:
+  - 8.6b
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.5d
+  milestone: M13
+  title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket from src/turn
+    instead of copying them; one route test through testChatDepsFor that checks the usage ledger source teacher_preview; postCorrection uses the teacherScope() helper; per-field max on correction text'
+  accept: a preview turn that escalates writes no teacher_questions row; the MEDIUM and LOWs in docs/tasks/8.5b/review.md are fixed or closed with a reason.
+  deps:
+  - 8.5b
+  risk: medium
   status: todo
   branch: null
   model: null
