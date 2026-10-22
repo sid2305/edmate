@@ -1,8 +1,10 @@
-import { and, eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { AgentConfigSchema, type AgentConfig } from '@edmate/contracts';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { agents } from '../schema/index.js';
-import { RepositoryError } from './errors.js';
+import { agents, agentVersions, courses, styleCards } from '../schema/index.js';
+import { RepositoryError, translateWrite } from './errors.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
 
 /** An agent as stored (its config lives in agent_versions). */
@@ -19,6 +21,29 @@ export interface AgentRow {
  */
 const PublicAgentSchema = z.strictObject({ agentId: IdSchema });
 export type PublicAgentScope = z.infer<typeof PublicAgentSchema>;
+
+/**
+ * What the studio passes to `agents.ensureDraft` (task 8.6b): the pins of the agent's first
+ * version. Strict, so a client-set `teacherId`, `id` or `version` is `invalid`; the repository
+ * builds those from the scope and the rows. The model policy and pack version are checked by
+ * `AgentConfigSchema` once the full config is built.
+ */
+const DraftAgentInput = z.strictObject({
+  courseId: IdSchema,
+  styleCardId: IdSchema,
+  promptPackVersion: z.string(),
+  modelPolicy: z.unknown(),
+});
+export type DraftAgentInput = Pick<
+  AgentConfig,
+  'courseId' | 'styleCardId' | 'promptPackVersion' | 'modelPolicy'
+>;
+
+/**
+ * Namespace for the per-teacher agent bootstrap lock (two-key advisory form, so it can never meet
+ * migrate.ts's single-key lock or another repository's namespace). Arbitrary, used nowhere else.
+ */
+const AGENT_LOCK_NAMESPACE = 8601;
 
 export function agentsRepo(db: Db) {
   return {
@@ -54,6 +79,81 @@ export function agentsRepo(db: Db) {
         .where(and(eq(agents.id, r.data.agentId), eq(agents.status, 'live')))
         .limit(1);
       return row ? { teacherId: row.teacherId } : null;
+    },
+
+    /**
+     * The scope's teacher's agent (MVP: one per teacher), created on first use (task 8.6b). The
+     * course and style card must be the scope's (`not_found` otherwise, nothing written), checked
+     * on every call, even when the agent already exists. If the teacher has an agent, it is
+     * returned with its newest version number and nothing changes (publishing, 8.7, cuts new
+     * versions). Otherwise a `draft` agent and its version 1 are inserted, with a config built
+     * from the scope (`teacherId`), the input and `languages: ['en']`, parsed by
+     * `AgentConfigSchema` before any SQL (`invalid`). Concurrent calls for one teacher are
+     * serialised by a transaction-scoped advisory lock, so they make one agent.
+     */
+    async ensureDraft(
+      scope: TeacherScope,
+      input: DraftAgentInput,
+    ): Promise<{ agentId: string; version: number }> {
+      const method = 'agents.ensureDraft';
+      const { teacherId } = teacherScope(scope, method);
+      const d = parseArg(DraftAgentInput, input, method);
+      const agentId = randomUUID();
+      const config = parseArg(
+        AgentConfigSchema,
+        {
+          id: agentId,
+          version: 1,
+          teacherId,
+          courseId: d.courseId,
+          styleCardId: d.styleCardId,
+          promptPackVersion: d.promptPackVersion,
+          languages: ['en'],
+          modelPolicy: d.modelPolicy,
+        },
+        method,
+      );
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${AGENT_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
+          );
+          // KEY SHARE: the pinned course and card can't be deleted before the insert commits.
+          const [course] = await tx
+            .select({ id: courses.id })
+            .from(courses)
+            .where(and(eq(courses.id, d.courseId), eq(courses.teacherId, teacherId)))
+            .for('key share');
+          const [card] = await tx
+            .select({ id: styleCards.id })
+            .from(styleCards)
+            .where(and(eq(styleCards.id, d.styleCardId), eq(styleCards.teacherId, teacherId)))
+            .for('key share');
+          if (!course || !card) throw new RepositoryError('not_found', method);
+
+          const [existing] = await tx
+            .select({ id: agents.id })
+            .from(agents)
+            .where(eq(agents.teacherId, teacherId))
+            .orderBy(asc(agents.createdAt), asc(agents.id))
+            .limit(1);
+          if (existing) {
+            const [{ max }] = (await tx
+              .select({ max: sql<number | null>`max(${agentVersions.version})::int` })
+              .from(agentVersions)
+              .where(
+                and(eq(agentVersions.agentId, existing.id), eq(agentVersions.teacherId, teacherId)),
+              )) as [{ max: number | null }];
+            // An agent without a version is never written by this repository.
+            if (max === null) throw new RepositoryError('integrity', method);
+            return { agentId: existing.id, version: max };
+          }
+
+          await tx.insert(agents).values({ id: agentId, teacherId, status: 'draft' });
+          await tx.insert(agentVersions).values({ teacherId, agentId, version: 1, config });
+          return { agentId, version: 1 };
+        }),
+      );
     },
   };
 }
