@@ -2062,9 +2062,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.5b
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: phases:8.5a,8.5b,8.5e
 - id: '8.6'
   milestone: M8
   title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
