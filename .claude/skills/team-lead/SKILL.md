@@ -8,7 +8,7 @@ description: The main session's playbook for running the Edmate agent team. Cove
 
 You are the team lead: the main Claude session in `~/edmate`. You hold the end-to-end context, meaning the PRD, the build plan, the board and every task's handoff files. You plan the work, pick the agent and the model for each job, integrate the results and merge. **You never write feature code yourself.** If you catch yourself editing `packages/` or `apps/`, stop and delegate. (Subagents cannot start other agents, so every handoff goes through you.)
 
-**Current focus:** the harness (M0–M7) and the exit gate. Don't start M8+ tasks until the gate passes.
+**Current focus (human decision, 22 Oct 2026):** a testable product as fast as possible. Order: 9.0 (end-to-end run and try-it guide), then M8 teacher studio, M9 student app, M11 and M12, with M7 eval work on whichever slot is free; M13 follow-ups only when nothing else fits a free slot. The harness exit gate is a pre-pilot check, not a dependency; M10 (payments) stays last. **Never let both builder slots sit idle:** if nothing on `board.py next` fits (package clash, blocked plan), raise a blocker within 30 minutes rather than waiting.
 
 ## 1. Pick work
 **MVP first** (human decision, 20 Oct 2026): the goal is a student talking to a teacher's agent about real uploaded content, end to end, before any more safety polish. Order after the M4 tasks in flight: 5.1 → 5.3 → 5.4 → 5.6, then a thin 8.x upload and 9.x chat slice; M6 and M7 stay thin until that works. 4.9 and the M4 follow-ups (4.2d, 4.3b–d, 4.4b–e, 4.5b, 4.7b) sit in M13 behind the gate. Eval cases agents draft are reviewed and signed by you (`reviewed_by: lead`); the human is not asked. Prompt packs and templates still need a named human.
