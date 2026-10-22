@@ -4447,10 +4447,14 @@ describe.skipIf(!up)(
         const s = sc('stu_96h_a');
         const sub = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'active', periodEnd: PERIOD_END });
         await raw.query(`update teacher_profiles set verification_status = 'rejected' where id = 'tp_96h'`);
-        await expect(
-          repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL }),
-        ).rejects.toMatchObject({ kind: 'not_found' });
-        await raw.query(`update teacher_profiles set verification_status = 'verified' where id = 'tp_96h'`);
+        try {
+          await expect(
+            repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL }),
+          ).rejects.toMatchObject({ kind: 'not_found' });
+        } finally {
+          // Task 9.6i: restored even when the assertion fails, so later 9.6h tests aren't hidden.
+          await raw.query(`update teacher_profiles set verification_status = 'verified' where id = 'tp_96h'`);
+        }
         const changed = await repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL });
         expect(changed.packageVersionId).toBe(PV_NO_TRIAL);
       });
@@ -4463,6 +4467,9 @@ describe.skipIf(!up)(
           ['al_96h_staff', 'staff_96h', 'staff'],
           ['al_96h_system', 'system_cost_alarm', 'system'],
           ['al_96h_other_student', 'stu_96h_c', 'student'],
+          // Task 9.6i: this same student as actor but a non-student role isolates the actorRole check.
+          ['al_96i_self_staff', 'stu_96h_b', 'staff'],
+          ['al_96i_self_system', 'stu_96h_b', 'system'],
         ] as const;
         for (const [id, actor, role] of forged) {
           await raw.query(
@@ -4549,6 +4556,111 @@ describe.skipIf(!up)(
         );
         const free = await repos.subscriptions.start(sc('stu_96h_a'), { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END });
         expect(free.packageVersionId).toBe(PV_FREE);
+      });
+    });
+
+    describe('task 9.6i: the alarm-paused free tier in changePackage and the refusal re-read (9.6h re-check)', () => {
+      // Self-contained: one verified teacher whose free tier the cost alarm paused this month
+      // (in beforeAll), a live free package at version 2 (version 1 is an old free version) and
+      // two live paid packages.
+      const T = 'tch_96i';
+      const AGENT = 'agt_96i';
+      const PV_FREE = 'pv_96i_free_v2';
+      const PV_FREE_OLD = 'pv_96i_free_v1';
+      const PV_PAID = 'pv_96i_paid';
+      const PV_PAID_2 = 'pv_96i_paid_2';
+      const PERIOD_END = '2027-06-01T00:00:00Z';
+      const STUDENTS = ['stu_96i_x', 'stu_96i_a', 'stu_96i_b'];
+      const sc = (studentId: string) => ({ studentId, teacherId: T });
+      const now = new Date();
+      const MONTH_START = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+
+      beforeAll(async () => {
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, '96i teacher', 'en', 'test', 'teacher')`,
+          [T],
+        );
+        for (const s of STUDENTS) {
+          await raw.query(
+            `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,
+            [s],
+          );
+        }
+        await raw.query(
+          `insert into teacher_profiles (id, user_id, slug, subject, verification_status) values ('tp_96i', $1, 'teacher-96i', '96i subject', 'verified')`,
+          [T],
+        );
+        await raw.query(`insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`, [AGENT, T]);
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name, live_version) values
+             ('pkg_96i_free', $1, $2, '96i free', 2), ('pkg_96i_paid', $1, $2, '96i paid', 1),
+             ('pkg_96i_paid_2', $1, $2, '96i paid 2', 1)`,
+          [T, AGENT],
+        );
+        const FREE = '{"pricePerMonth":{"amountMinor":0,"currency":"USD"}}';
+        const PAID = '{"pricePerMonth":{"amountMinor":900,"currency":"USD"}}';
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config) values
+             ($1, $5, 'pkg_96i_free', 2, '${FREE}'::jsonb), ($2, $5, 'pkg_96i_free', 1, '${FREE}'::jsonb),
+             ($3, $5, 'pkg_96i_paid', 1, '${PAID}'::jsonb), ($4, $5, 'pkg_96i_paid_2', 1, '${PAID}'::jsonb)`,
+          [PV_FREE, PV_FREE_OLD, PV_PAID, PV_PAID_2, T],
+        );
+        // The alarm pauses one free subscription, which writes this month's marker.
+        await repos.subscriptions.start(sc('stu_96i_x'), { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END });
+        const paused = await repos.subscriptions.pauseFreeForTeacher(
+          { teacherId: T },
+          { monthStart: MONTH_START, reason: '96i test alarm' },
+        );
+        expect(paused).toHaveLength(1);
+      });
+
+      it('changePackage (MEDIUM): a paid start then a change to the alarm-paused free package is invalid; paid to paid still works', async () => {
+        const s = sc('stu_96i_a');
+        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_PAID, status: 'active', periodEnd: PERIOD_END });
+        await expect(
+          repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_FREE }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        expect(await repos.subscriptions.findLive(s)).toMatchObject({ packageVersionId: PV_PAID, status: 'active' });
+        const audit = await raw.query(
+          `select 1 from audit_log where target = $1 and action = $2`,
+          [`subscription:${sub.id}`, CHANGE_PACKAGE_ACTION],
+        );
+        expect(audit.rows).toEqual([]);
+        // An old (non-live) free version is still not_found, not invalid.
+        await expect(
+          repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_FREE_OLD }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+        const moved = await repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_PAID_2 });
+        expect(moved.packageVersionId).toBe(PV_PAID_2);
+      });
+
+      it('start (LOW): during the alarm, a non-live free version or a rejected teacher\'s free version is not_found, not invalid', async () => {
+        const s = sc('stu_96i_b');
+        await expect(
+          repos.subscriptions.start(s, { packageVersionId: PV_FREE_OLD, status: 'active', periodEnd: PERIOD_END }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+        // The live free version of a verified teacher is the alarm's invalid.
+        await expect(
+          repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        await raw.query(`update teacher_profiles set verification_status = 'rejected' where id = 'tp_96i'`);
+        try {
+          await expect(
+            repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
+          ).rejects.toMatchObject({ kind: 'not_found' });
+        } finally {
+          await raw.query(`update teacher_profiles set verification_status = 'verified' where id = 'tp_96i'`);
+        }
+        // A suspended agent's free package is not_found too.
+        await raw.query(`update agents set status = 'suspended' where id = $1`, [AGENT]);
+        try {
+          await expect(
+            repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
+          ).rejects.toMatchObject({ kind: 'not_found' });
+        } finally {
+          await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
+        }
+        expect(await repos.subscriptions.findLive(s)).toBeNull();
       });
     });
 

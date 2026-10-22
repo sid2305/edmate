@@ -5,7 +5,7 @@
 import type { PackageConfig } from '@edmate/contracts';
 import { RepositoryError, type LivePackage, type LiveSubscription } from '@edmate/db';
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Principal, RoleContext } from '../auth/guard';
 import { createPlanHandlers, MAX_BODY_BYTES, type PlanBackend } from './change';
 
@@ -303,6 +303,54 @@ describe('createPlanHandlers.patch', () => {
     const { patch } = createPlanHandlers(backend);
     const res = await patch(req({ agentId: 'agt_demo', action: 'pause' }), ctxFor(STUDENT, 'sub_1'));
     expect(res.status).toBe(500);
+  });
+
+  it('task 9.6i: a 500 logs only the error name, never its message or ids', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const failedKind = fakeBackend({
+        pause: () => {
+          throw new RepositoryError('failed', 'subscriptions.pause');
+        },
+      });
+      const res1 = await createPlanHandlers(failedKind.backend).patch(
+        req({ agentId: 'agt_demo', action: 'pause' }),
+        ctxFor(STUDENT, 'sub_1'),
+      );
+      expect(res1.status).toBe(500);
+      const unexpected = fakeBackend({
+        pause: () => {
+          throw new TypeError('boom sub_1 std_amy');
+        },
+      });
+      const res2 = await createPlanHandlers(unexpected.backend).patch(
+        req({ agentId: 'agt_demo', action: 'pause' }),
+        ctxFor(STUDENT, 'sub_1'),
+      );
+      expect(res2.status).toBe(500);
+      expect(spy.mock.calls).toEqual([['[subscriptions] RepositoryError'], ['[subscriptions] TypeError']]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('task 9.6i: a non-500 refusal logs nothing', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { backend } = fakeBackend({
+        pause: () => {
+          throw new RepositoryError('invalid', 'subscriptions.pause');
+        },
+      });
+      const res = await createPlanHandlers(backend).patch(
+        req({ agentId: 'agt_demo', action: 'pause' }),
+        ctxFor(STUDENT, 'sub_1'),
+      );
+      expect(res.status).toBe(409);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('a getById miss after a successful write fails closed (never an empty packageId)', async () => {
