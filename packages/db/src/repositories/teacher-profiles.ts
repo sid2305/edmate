@@ -227,7 +227,7 @@ export function teacherProfilesRepo(db: Db) {
         .from(teacherProfiles)
         .innerJoin(users, eq(users.id, teacherProfiles.userId))
         .where(eq(teacherProfiles.verificationStatus, 'pending'))
-        .orderBy(asc(teacherProfiles.createdAt))
+        .orderBy(asc(teacherProfiles.createdAt), asc(teacherProfiles.id))
         .limit(STAFF_QUEUE_MAX_LIMIT);
       return rows.map((r) => toTeacherVerificationQueueRow(r, method));
     },

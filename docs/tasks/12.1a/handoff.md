@@ -111,3 +111,17 @@ per the plan's phase split; not started here.
 
 Status: DONE
 Tool calls used: 46
+
+## Fix round
+Two HIGH review findings fixed, test first (both new tests were run red before the source change;
+the cap test needed no source change, only real coverage):
+- `listPendingForStaff` now orders by `created_at` then `id`
+  (`packages/db/src/repositories/teacher-profiles.ts`), like every other ordered query in the package.
+- `packages/db/test/teacher-profiles.int.test.ts`:
+  - "a staff user sees only pending teachers, oldest first, ties broken by id, with name and email
+    joined": the 10 ms sleep is gone; A and B share one `created_at` and fixed ids (A's larger,
+    rewritten first), and the queue must return B then A; after A is verified only B remains.
+  - "is empty when nothing is pending" (split out of the old mislabelled test).
+  - "never exceeds STAFF_QUEUE_MAX_LIMIT rows: the oldest ones come back": seeds
+    `STAFF_QUEUE_MAX_LIMIT + 1` pending teachers (created newest-first, then dated oldest-first) and
+    asserts exactly `STAFF_QUEUE_MAX_LIMIT` rows, oldest first.

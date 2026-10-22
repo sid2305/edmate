@@ -5,7 +5,12 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
-import { createRepositories, type Repositories, RepositoryError } from '../src/index.js';
+import {
+  createRepositories,
+  type Repositories,
+  RepositoryError,
+  STAFF_QUEUE_MAX_LIMIT,
+} from '../src/index.js';
 import { seed, studentId, teacherId } from './isolation-seed.js';
 import {
   createDatabase,
@@ -237,30 +242,75 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       });
     });
 
-    it('a staff user sees only pending teachers, oldest first, capped, with name and email joined', async () => {
-      const a = await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
-      await new Promise((r) => setTimeout(r, 10));
-      const b = await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Science' });
-      // Verified teachers never show up in the queue.
-      await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
-
-      const rows = await repos.teacherProfiles.listPendingForStaff(STAFF);
-      expect(rows).toEqual([
+    it('a staff user sees only pending teachers, oldest first, ties broken by id, with name and email joined', async () => {
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Science' });
+      // Both rows share one created_at, so only the id tie-breaker decides the order. A is
+      // inserted (and rewritten) first but gets the larger id, so insertion order would put it first.
+      const [idA, idB] = ['tp-tie-2', 'tp-tie-1'];
+      await raw.query(
+        `update teacher_profiles set id = $2, created_at = '2026-01-01T00:00:00Z' where user_id = $1`,
+        [teacherId('A'), idA],
+      );
+      await raw.query(
+        `update teacher_profiles set id = $2, created_at = '2026-01-01T00:00:00Z' where user_id = $1`,
+        [teacherId('B'), idB],
+      );
+      const rowB = {
+        id: idB,
+        teacherId: teacherId('B'),
+        slug: 'mr-beta',
+        subject: 'Science',
+        verificationStatus: 'pending',
+        name: '[B] teacher',
+        email: null,
+      };
+      expect(await repos.teacherProfiles.listPendingForStaff(STAFF)).toEqual([
+        rowB,
         {
-          id: b.id,
-          teacherId: teacherId('B'),
-          slug: 'mr-beta',
-          subject: 'Science',
+          id: idA,
+          teacherId: teacherId('A'),
+          slug: 'ms-alpha',
+          subject: 'Maths',
           verificationStatus: 'pending',
-          name: '[B] teacher',
+          name: '[A] teacher',
           email: null,
         },
       ]);
-      expect(rows.map((r) => r.teacherId)).not.toContain(a.teacherId);
+
+      // Verified teachers never show up in the queue.
+      await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
+      expect(await repos.teacherProfiles.listPendingForStaff(STAFF)).toEqual([rowB]);
     });
 
-    it('is empty when nothing is pending, and never exceeds STAFF_QUEUE_MAX_LIMIT rows', async () => {
+    it('is empty when nothing is pending', async () => {
       expect(await repos.teacherProfiles.listPendingForStaff(STAFF)).toEqual([]);
+    });
+
+    it('never exceeds STAFF_QUEUE_MAX_LIMIT rows: the oldest ones come back', async () => {
+      const total = STAFF_QUEUE_MAX_LIMIT + 1;
+      const ids = Array.from({ length: total }, (_, i) => `tch_cap_${String(i).padStart(3, '0')}`);
+      await raw.query(
+        `insert into users (id, name, locale, market, role)
+         select x, 'Cap teacher', 'en', 'test', 'teacher' from unnest($1::text[]) as x
+         on conflict (id) do nothing`,
+        [ids],
+      );
+      // Created newest-first, then dated so ids[0] is the oldest: the queue must follow
+      // created_at, not insertion order.
+      for (const tid of [...ids].reverse()) {
+        await repos.teacherProfiles.create({ teacherId: tid }, { slug: tid.replaceAll('_', '-'), subject: 'Maths' });
+      }
+      await raw.query(
+        `update teacher_profiles t
+         set created_at = timestamptz '2026-01-01T00:00:00Z' + (x.n * interval '1 minute')
+         from unnest($1::text[]) with ordinality as x(uid, n) where t.user_id = x.uid`,
+        [ids],
+      );
+
+      const rows = await repos.teacherProfiles.listPendingForStaff(STAFF);
+      expect(rows).toHaveLength(STAFF_QUEUE_MAX_LIMIT);
+      expect(rows.map((r) => r.teacherId)).toEqual(ids.slice(0, STAFF_QUEUE_MAX_LIMIT));
     });
   });
 
