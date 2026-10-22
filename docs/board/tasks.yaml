@@ -3357,9 +3357,9 @@ tasks:
   deps:
   - '9.0'
   risk: normal
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 9.0d
   milestone: M9
   title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
@@ -5427,7 +5427,7 @@ tasks:
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
     12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
-    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -6148,7 +6148,9 @@ tasks:
   model: null
 - id: 11.4g
   milestone: M11
-  title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the 5 s poll is capped by attempts or elapsed time (LiveClassesView.tsx:115), same fix in the upload centre (UploadsView.tsx isActive); RecordingUpload skips state updates and onRecording after unmount (RecordingUpload.tsx:107-158)'
+  title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the
+    5 s poll is capped by attempts or elapsed time (LiveClassesView.tsx:115), same fix in the upload centre (UploadsView.tsx isActive); RecordingUpload skips state updates and onRecording after unmount
+    (RecordingUpload.tsx:107-158)'
   accept: tests fail without the failed row, the poll cap and the unmount guard; web typecheck, lint and test green.
   deps:
   - 11.4c
@@ -6207,13 +6209,13 @@ tasks:
   deps:
   - '2.4'
   - M1
-  status: todo
+  status: planning
   needs_decision:
   - payment-provider
   - pilot-market
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '10.2'
   milestone: M10
   title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
