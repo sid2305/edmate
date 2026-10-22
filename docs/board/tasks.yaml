@@ -4817,6 +4817,56 @@ tasks:
   - 8.2e
   risk: risky
   status: todo
+- id: 11.2a
+  milestone: M11
+  title: 'Class questions repository and clustering in packages/db (11.2 Phase A)'
+  accept: 'per docs/tasks/11.2/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  deps:
+  - '11.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 11.2b
+  milestone: M11
+  title: 'Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B)'
+  accept: 'per docs/tasks/11.2/plan.md Phase B and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - '11.2a'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.5a
+  milestone: M12
+  title: 'safety_alerts table and repository with an audited staff ack (12.5 Phase A)'
+  accept: 'per docs/tasks/12.5/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  deps:
+  - '12.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.5b
+  milestone: M12
+  title: 'Alert worker stores alerts, marks escalation and reads acks from the DB (12.5 Phase B)'
+  accept: 'per docs/tasks/12.5/plan.md Phase B and Lead answers; worker typecheck, lint and test green, with the Redis + Postgres acceptance test.'
+  deps:
+  - '12.5a'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.5c
+  milestone: M12
+  title: 'Staff alert inbox at /staff/alerts with acknowledgement (12.5 Phase C)'
+  accept: 'per docs/tasks/12.5/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  deps:
+  - '12.5a'
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -4948,9 +4998,9 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 11.1a-c
 - id: '11.2'
   milestone: M11
   title: Pre-class question queue grouped by topic, fed by students and by unanswered ask-the-teacher questions
