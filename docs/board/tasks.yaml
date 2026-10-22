@@ -4862,7 +4862,9 @@ tasks:
   deps:
   - 8.2e
   risk: risky
-  status: todo
+  status: running
+  branch: m8/8.2h-web-link-followups
+  model: plan:sonnet build:opus
 - id: 11.2a
   milestone: M11
   title: Class questions repository and clustering in packages/db (11.2 Phase A)
