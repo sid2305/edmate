@@ -120,7 +120,7 @@ class Workflows(unittest.TestCase):
 
     def test_job_names_match_branch_protection(self):
         self.assertEqual(load("ci.yml")[1]["name"], "CI")
-        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"changes", "node", "python-harness", "secrets"})
+        self.assertEqual(set(load("ci.yml")[1]["jobs"]), {"changes", "e2e", "node", "python-harness", "secrets"})
         self.assertEqual(load("merge-gate.yml")[1]["name"], "Merge gate")
         self.assertEqual(set(load("merge-gate.yml")[1]["jobs"]), {"check"})
 

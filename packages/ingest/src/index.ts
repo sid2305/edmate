@@ -63,6 +63,12 @@ export { parseMarkdown } from './parse/markdown.js';
 export { parseDocx } from './parse/docx.js';
 export { parsePdf } from './parse/pdf.js';
 export { parsePptx } from './parse/pptx.js';
-export { formatTimestamp, parseVideoTranscript, VIDEO_UNIT_WINDOW_MS } from './parse/video.js';
+export { parseSrt, parseVtt } from './parse/captions.js';
+export {
+  formatTimestamp,
+  parseVideoTranscript,
+  unitsFromTimedText,
+  VIDEO_UNIT_WINDOW_MS,
+} from './parse/video.js';
 export { MAX_UNZIPPED_BYTES } from './parse/zip.js';
 export { MAX_DOCUMENT_BYTES, type ParsedDocument, type ParsedUnit } from './types.js';

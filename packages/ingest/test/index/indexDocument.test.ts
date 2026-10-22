@@ -174,6 +174,42 @@ describe('indexDocument', () => {
     expect(writer.inserts).toEqual([]);
   });
 
+  it('8.2c: a vtt DocumentInput is chunked with timestamp locators, headings off, bank check still runs', async () => {
+    const writer = recordingWriter();
+    const vtt =
+      'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nFractions name part of a whole.\n';
+    const result = await indexDocument(
+      { writer, embedder: hashedEmbedder() },
+      {
+        scope,
+        documentId: 'doc-vtt-1',
+        source: { kind: 'vtt', bytes: new TextEncoder().encode(vtt), sourceTitle: 'Captioned' },
+      },
+    );
+    expect(result).toEqual({ chunks: 1, embedded: true, embeddedChunks: 1 });
+    expect(writer.inserts[0]?.drafts).toEqual([
+      { ord: 0, text: 'Fractions name part of a whole.', locator: '0:00' },
+    ]);
+
+    const bankWriter = recordingWriter();
+    const bankErr = await indexDocument(
+      { writer: bankWriter },
+      {
+        scope,
+        documentId: 'doc-vtt-2',
+        source: {
+          kind: 'vtt',
+          bytes: new TextEncoder().encode(
+            'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nquestion: 2+2\n\n00:00:02.000 --> 00:00:03.000\nanswer: 4\n',
+          ),
+          sourceTitle: 'question-bank/vtt',
+        },
+      },
+    ).catch((e: unknown) => e);
+    expect((bankErr as IngestError).code).toBe('validation');
+    expect(bankWriter.inserts).toEqual([]);
+  });
+
   it('a parse error rejects as the IngestError, nothing written', async () => {
     const writer = recordingWriter();
     const err = await indexDocument(

@@ -10,6 +10,105 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.7b The discover search is typed and submitted in one in-page step · decided by builder · risk: low
+- Decided: the search step sets the real search input's value and calls `form.requestSubmit` with
+  the real Search button in one `evaluate`. It is wrapped in `navigateUntil`, which retries only
+  idempotent GET navigations and link clicks until the URL matches. Link clicks stay as normal
+  Playwright clicks.
+- Why: on a loaded host, `next dev` reloaded the page between a separate `fill` and `click`, so
+  the GET form was submitted as `?q=` again and again (seen in the trace). One in-page step
+  leaves no gap for a reload. It still uses the page's own form, so the search path is still
+  covered. POSTs keep using `postOnce`, so they are never repeated.
+- risk: low (test-only).
+
+---
+
+### 22 Oct 2026 · 9.7b The uncovered question text is unique per run · decided by builder · risk: low
+- Decided: `UNCOVERED_QUESTION_TEXT` ends with a base-36 timestamp suffix.
+- Why: 9.7a's handoff noted that the spec needed a clean DB, because a failed run leaves its question
+  open and the next run's inbox `getByText` matched twice. A unique text removes that. CI is
+  unaffected (fresh DB).
+- risk: low (test-only).
+
+---
+
+### 22 Oct 2026 · 9.7b The upgrade is checked on the plan page, not only through mocked replies · decided by builder · risk: low
+- Decided: after the redirect, a second tab opens `/learn/demo-agent/plan` and checks that "Your
+  current package" shows "Full course". Then the unlocked message is sent.
+- Why: the locked and unlocked replies are mocked, so without this check the test could pass
+  even if the real `PATCH` upgrade did nothing.
+- risk: low (test-only).
+
+---
+
+### 22 Oct 2026 · 8.2j Tag/override stripping is a hand scan, not a `<[^>]*>` regex · decided by builder · risk: low
+- Decided: `stripTags`/`stripOverrides` in `captions.ts` are written as a forward-only character
+  scan with a cached "next close" position, not as a regex replace.
+- Why: the plan requires "no nested quantifiers (no ReDoS)". A single, non-nested quantifier like
+  `<[^>]*>` is still quadratic on an adversarial input (many `<` never followed by `>`), which is a
+  well-known ReDoS shape independent of nesting. The scan is true O(n) in every case; a test with a
+  1 MB line of unclosed `<` and a loose 5 s bound (per `docs/lessons.md`, no tight timings) guards
+  the fix.
+- risk: low (new code, 100% branch-covered by the fixture tests above; no external input beyond the
+  teacher's own caption file reaches this function).
+
+---
+
+### 22 Oct 2026 · 8.2j Caption parser rules · decided by builder · risk: medium
+- Decided: VTT requires a `WEBVTT` header line (else `unsupported`); any cue block whose timing line
+  doesn't match the `[hh:]mm:ss.ttt --> [hh:]mm:ss.ttt` (or SRT comma-separated) shape is silently
+  skipped, which is also how `NOTE`/`STYLE`/`REGION` blocks (no timing line) are dropped without a
+  separate keyword check; a cue's first line is dropped when it exactly repeats the previous *kept*
+  cue's last line (YouTube rolling auto-captions); cues are bucketed through the shared
+  `unitsFromTimedText` so captions land in the same 90 s units a Whisper transcript gives; and every
+  thrown error is one of the two fixed `IngestError`s named in the plan, with no file text quoted.
+- Why: matches the plan (docs/tasks/8.2c/plan.md, Phase A) exactly; relying on "no timing line
+  parses" to also catch NOTE/STYLE/REGION (rather than a separate keyword-based skip) is simpler and
+  was verified correct by test (`captions.test.ts` "skips NOTE, STYLE and REGION blocks").
+- risk: medium (new parser on untrusted teacher-uploaded files; no network or file-system access,
+  no eval, output is plain text only; recommend the plan's optional, non-gating
+  `security-reviewer` pass on this file at the lead's discretion, per the plan's risky-paths note).
+
+---
+
+### 22 Oct 2026 · 8.2j budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (76 harness-counted calls against a budget of 60); no re-run.
+- Why: the phase is complete with 99.7% line coverage, and both reviewers found nothing above LOW; the extra calls went to tests, not scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 0.23 Split e2e into its own CI job · decided by builder · risk: high
+- Decided: Move "Install Playwright browsers" and the e2e test run out of `node` into a new `e2e`
+  job (`needs: changes`, same `if:`, `timeout-minutes: 20`, its own Postgres service, no Redis),
+  with the Playwright browser cache (`actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830`,
+  v4.3.0) keyed on `runner.os` and the `@playwright/test` version read from `pnpm-lock.yaml`;
+  on a cache hit, only `playwright install-deps chromium` runs.
+- Why: PR #188's `node` job was cancelled twice around 20 minutes at the Playwright install step;
+  splitting the job (plus caching the browser binary) keeps both jobs inside their limits.
+- risk: high (this is a `.github/**` workflow change; security-reviewer must review it).
+
+---
+
+### 22 Oct 2026 · 0.23 No Redis service in the e2e job · decided by builder · risk: low
+- Decided: The new `e2e` job gets a Postgres service but no Redis service.
+- Why: `apps/web/e2e/global-setup.ts` sets `REDIS_URL: 'redis://127.0.0.1:1'` on purpose
+  (syntactically valid, unreachable) because starting a session never touches the turn queue in
+  this suite — every turn is a `page.route` fixture. Adding an unused Redis service would only
+  slow the job down for no test coverage gained.
+- risk: low.
+
+---
+
+### 22 Oct 2026 · 0.23 `node`'s timeout-minutes left at 20 · decided by builder · risk: low
+- Decided: Did not raise `node`'s `timeout-minutes` above 20.
+- Why: `node` now runs only build, typecheck, lint, test and build-smoke — the same steps that
+  ran comfortably inside 20 minutes before 9.7 added Playwright to this job. No local estimate
+  suggested it needs more.
+- risk: low.
+
+---
+
 ### 22 Oct 2026 · 11.2b new ROUTE_POLICY row · decided by builder · risk: high
 - Decided: added exactly one row to `apps/web/src/auth/policy.ts` — `pattern:
   '/api/live-classes/*/questions'`, `methods: ['POST']`, `access: ['student']`, `clearance:
