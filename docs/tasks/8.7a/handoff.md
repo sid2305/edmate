@@ -5,7 +5,7 @@ Status: DONE
 - Branch: `m8/8.7a-publish-repo` (built locally as `work-87a`)
 - Worktree: `.claude/worktrees/agent-a721e1d524344802c`
 - Plan: `docs/tasks/8.7/plan.md` (Phase A)
-- Tool calls used: 62
+- Tool calls used: 123 (harness: build 94, fix round 29)
 
 ## Summary
 
