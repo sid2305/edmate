@@ -22,6 +22,20 @@ describe('driver errors are scrubbed', () => {
     expect((err as RepositoryError).cause).toMatchObject({ code: 'ECONNREFUSED' });
   });
 
+  it('sessions.listForStudent', async () => {
+    const err = await repos.sessions
+      .listForStudent(scope, { limit: 10 })
+      .catch((e: unknown) => e);
+    expectScrubbed(err, 'sessions.listForStudent', SECRETS);
+  });
+
+  it('messages.listForStudent', async () => {
+    const err = await repos.messages
+      .listForStudent(scope, { limit: 10 })
+      .catch((e: unknown) => e);
+    expectScrubbed(err, 'messages.listForStudent', SECRETS);
+  });
+
   it('messages.append', async () => {
     const err = await repos.messages
       .append(scope, 'ses_leak_3', {

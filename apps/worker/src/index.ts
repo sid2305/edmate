@@ -1,7 +1,9 @@
 // Worker process entrypoint: opens Redis and the database, then runs the no-op worker, the turn
 // queues' workers (meter, commit; task 3.8), the scheduled cost alarm (2.5, scheduled in 3.8) and
 // the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged) and
-// the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows).
+// the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows) and
+// the publish-gate worker (8.7: one gate run at a time; models, content and suites from the
+// environment, failing closed per run when any is missing).
 // REDIS_URL and DATABASE_URL come from the environment (docker/compose.yaml sets both).
 import { S3Client } from '@aws-sdk/client-s3';
 import { openDatabase } from '@edmate/db';
@@ -17,6 +19,7 @@ import {
 } from './alerts/index.js';
 import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
+import { createGateWorker, livePrepareGate } from './gate/workers.js';
 import { createIngestGateway, createIngestWorker } from './ingest/index.js';
 import { describeError, jsonLog } from './log.js';
 import { storageConfigFromEnv } from './storage/roundtrip.js';
@@ -66,6 +69,20 @@ const safetyEvent = createSafetyEventWorker({
   autorun: true,
 });
 
+// The publish-gate worker (task 8.7 Phase C): always started; a run whose models, content or suites
+// are missing ends `error` with a reason (never a skipped gate, never a publish).
+const gate = createGateWorker({
+  connection,
+  deadLetter,
+  log,
+  autorun: true,
+  deps: {
+    repos: db.repos,
+    log,
+    prepare: livePrepareGate({ env: process.env, repos: db.repos, log }),
+  },
+});
+
 // The ingest worker (task 8.2 Phase 2) needs the OpenAI key; without one it is skipped, same as a
 // dev box with no provider keys configured for the turn-side adapters.
 let ingest: ReturnType<typeof createIngestWorker> | undefined;
@@ -98,7 +115,16 @@ try {
   log({ level: 'error', event: 'ingest.worker_disabled', error: describeError(error) });
 }
 
-const workers = [noop, turn.meter, turn.commit, costAlarm, alert, safetyEvent, ...(ingest ? [ingest] : [])];
+const workers = [
+  noop,
+  turn.meter,
+  turn.commit,
+  costAlarm,
+  alert,
+  safetyEvent,
+  gate,
+  ...(ingest ? [ingest] : []),
+];
 
 noop.on('error', (error) => {
   log({ level: 'error', event: 'worker.error', queue: noop.name, error: describeError(error) });

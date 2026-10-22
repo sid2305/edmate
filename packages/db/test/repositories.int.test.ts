@@ -16,6 +16,7 @@ import {
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
+import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
 import {
   type AuditEntryInput,
   type AuditRow,
@@ -722,16 +723,20 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         ['bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
       );
       n += 1;
-      // A still-pending teacher (B, by default from beforeAll) never matches, however the query
-      // is phrased, even with a bio word unique to B and nowhere in A's row.
+      // A pending teacher (B, pushed back from its default-verified state for this check) never
+      // matches, however the query is phrased, even with a bio word unique to B and nowhere in
+      // A's row.
       const bToken = `pendingbiotoken${Math.floor(Math.random() * 1e9)}`;
-      await raw.query(`update teacher_profiles set bio = $2 where user_id = $1`, [
-        teacherId('B'),
-        bToken,
-      ]);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'pending', bio = $2 where user_id = $1`,
+        [teacherId('B'), bToken],
+      );
       const pending = await r.discovery.search({ q: bToken, page: 1 });
       expect(pending.teachers).toEqual([]);
-      await raw.query(`update teacher_profiles set bio = '' where user_id = $1`, [teacherId('B')]);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified', bio = '' where user_id = $1`,
+        [teacherId('B')],
+      );
       n += 1;
       // Not even an unrelated random query ever throws or returns another teacher's row.
       const rand = prng(6464);
@@ -740,7 +745,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         await expect(r.discovery.search({ q, page: 1 })).resolves.toBeDefined();
         n += 1;
       }
-      await raw.query(`update teacher_profiles set verification_status = 'pending' where user_id = $1`, [
+      // Both teachers stay verified (their default state since beforeAll, task 9.3c).
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
         teacherId('A'),
       ]);
       return n;
@@ -761,8 +767,17 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         ['agentIds', 'bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
       );
       n += 1;
-      // B stays pending: its slug resolves to nothing, not an error.
+      // B pushed back to pending (from its default-verified state): its slug resolves to
+      // nothing, not an error.
+      await raw.query(
+        `update teacher_profiles set verification_status = 'pending' where user_id = $1`,
+        [teacherId('B')],
+      );
       expect(await r.discovery.teacherBySlug({ slug: profileSlug('B') })).toBeNull();
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
+        [teacherId('B')],
+      );
       n += 1;
       // Well-formed but unknown slugs resolve to null; a malformed one is `scope`, never a leak.
       const rand = prng(7474);
@@ -777,7 +792,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         kind: 'scope',
       });
       n += 1;
-      await raw.query(`update teacher_profiles set verification_status = 'pending' where user_id = $1`, [
+      // A stays verified (its default state since beforeAll, task 9.3c).
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
         teacherId('A'),
       ]);
       return n;
@@ -1376,6 +1392,19 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 9.6a: the complete-export reader. Never returns help_state or studentId/teacherId; the
+  // owner marker comes from `summary` only (endable/endable2 and sessions.create's fresh rows
+  // carry none, but the seeded base session always does).
+  'sessions.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.sessions.listForStudent(scope, { limit: EXPORT_PAGE_MAX }),
+    random: (r, _scope, rid) =>
+      r.sessions.listForStudent({ studentId: rid, teacherId: rid }, { limit: EXPORT_PAGE_MAX }),
+    owners: (res: { items: { summary: string | null }[] }) =>
+      res.items.flatMap((s) => markers(s.summary ?? '')),
+  },
   'messages.history': {
     scope: 'student',
     op: 'read',
@@ -1426,6 +1455,18 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'invalid',
       ],
     ],
+  },
+  // Task 9.6a: the complete-export reader, joined on the pair across every session (open and
+  // ended). The owner marker comes from the message text, which always carries one (seeded and
+  // appended messages alike).
+  'messages.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.messages.listForStudent(scope, { limit: EXPORT_PAGE_MAX }),
+    random: (r, _scope, rid) =>
+      r.messages.listForStudent({ studentId: rid, teacherId: rid }, { limit: EXPORT_PAGE_MAX }),
+    owners: (res: { items: { text: string }[] }) => res.items.flatMap((m) => markers(m.text)),
   },
   'turnTraces.insert': {
     scope: 'student',
@@ -3311,6 +3352,13 @@ describe.skipIf(!up)(
           subject: `[${t}] subject`,
         });
       }
+      // Task 9.3c: both teachers verified by default, so liveForAgent/subscriptions.start see
+      // their packages unless a test explicitly flips one to pending or rejected (and restores
+      // it before returning, like discovery.search/teacherBySlug already do for 'pending').
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = any($1)`,
+        [TEACHERS.map((t) => teacherId(t))],
+      );
       for (const p of PAIRS) {
         const t = teacherOf(p);
         await raw.query(
@@ -3462,6 +3510,74 @@ describe.skipIf(!up)(
       return cases;
     }
 
+    // Task 9.3c: a teacher rejected (or never verified) after publishing can't be started by
+    // typing the URL. A fixture of its own (not A/B, whose verification status churns across the
+    // grid above), so this is self-contained.
+    it('liveForAgent is [] for a pending or rejected teacher, and sees the package once verified', async () => {
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93c teacher', 'en', 'test', 'teacher')`,
+        ['tch_93c'],
+      );
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+         values ('tp_93c', 'tch_93c', 'teacher-93c', '93c subject', 'pending')`,
+      );
+      await raw.query(
+        `insert into agents (id, teacher_id, status, live_version) values ('agt_93c', 'tch_93c', 'live', 1)`,
+      );
+      await raw.query(
+        `insert into packages (id, teacher_id, agent_id, name, live_version) values
+           ('pkg_93c', 'tch_93c', 'agt_93c', '93c package', 1)`,
+      );
+      await raw.query(
+        `insert into package_versions (id, teacher_id, package_id, version, config) values
+           ('pv_93c', 'tch_93c', 'pkg_93c', 1, $1)`,
+        [JSON.stringify({ ...packageConfig('A', 1, []), id: 'pkg_93c', agentId: 'agt_93c', teacherId: 'tch_93c' })],
+      );
+
+      expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
+
+      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
+      expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
+
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
+      const live = await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' });
+      expect(live.map((p) => p.packageVersionId)).toEqual(['pv_93c']);
+    });
+
+    it('subscriptions.start refuses a rejected teacher\'s package, writing nothing; a verified one still starts', async () => {
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '93c student', 'en', 'test', 'student')`,
+        ['stu_93c'],
+      );
+      const scope = { studentId: 'stu_93c', teacherId: 'tch_93c' };
+      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
+      const before = await snapshot();
+      await expect(
+        repos.subscriptions.start(scope, {
+          packageVersionId: 'pv_93c',
+          status: 'active',
+          periodEnd: '2027-01-01T00:00:00Z',
+        }),
+      ).rejects.toMatchObject({ kind: 'not_found' });
+      expect(await snapshot()).toBe(before);
+      expect(await rawCount(`select count(*)::int as n from subscriptions where student_id = $1`, [
+        'stu_93c',
+      ])).toBe(0);
+      expect(
+        await rawCount(`select count(*)::int as n from audit_log where student_id = $1`, ['stu_93c']),
+      ).toBe(0);
+
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
+      const started = await repos.subscriptions.start(scope, {
+        packageVersionId: 'pv_93c',
+        status: 'active',
+        periodEnd: '2027-01-01T00:00:00Z',
+      });
+      expect(started.packageVersionId).toBe('pv_93c');
+      expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: started.id });
+    });
+
     it('listForTeacher never returns studentId', async () => {
       const rows = await repos.teacherQuestions.listForTeacher(tScope('A'), {
         status: 'open',
@@ -3526,6 +3642,102 @@ describe.skipIf(!up)(
         await expect(repos.messages.history(sc, sid, bad)).rejects.toMatchObject({
           kind: 'invalid',
           method: 'messages.history',
+        });
+      }
+    });
+
+    it('sessions.listForStudent pages oldest first, stable across a created_at tie, and rejects bad input', async () => {
+      const sc = sScope('1A');
+      const t = teacherOf('1A');
+      const pageIds = ['ses_1a_p1', 'ses_1a_p2', 'ses_1a_p3', 'ses_1a_p4', 'ses_1a_p5'];
+      const times = [
+        '2026-10-18T00:00:00Z',
+        '2026-10-18T00:01:00Z',
+        '2026-10-18T00:01:00Z', // ties with p2; tie-break by id (p2 < p3).
+        '2026-10-18T00:02:00Z',
+        '2026-10-18T00:03:00Z',
+      ];
+      for (const [i, id] of pageIds.entries()) {
+        await raw.query(
+          `insert into sessions
+             (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, created_at)
+           values ($1, $2, $3, $4, 1, $5, 1, $6)`,
+          [id, sc.studentId, sc.teacherId, ids.agent(t), ids.pkg(t), times[i]],
+        );
+      }
+      let after: { createdAt: string; id: string } | undefined;
+      const seen: string[] = [];
+      for (let guard = 0; guard < 10; guard += 1) {
+        const page = await repos.sessions.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        seen.push(...page.items.map((s) => s.id));
+        if (page.next === null) break;
+        after = page.next;
+      }
+      const ours = seen.filter((id) => pageIds.includes(id));
+      expect(ours).toEqual(pageIds);
+
+      const [row] = (await repos.sessions.listForStudent(sc, { limit: 2 })).items;
+      expect(row && Object.keys(row).sort()).toEqual(
+        ['agentId', 'agentVersion', 'createdAt', 'endedAt', 'id', 'packageId', 'packageVersion', 'summary'].sort(),
+      );
+
+      const last = await repos.sessions.listForStudent(sc, { limit: 500 });
+      expect(last.next).toBeNull();
+
+      for (const bad of [0, 501]) {
+        await expect(repos.sessions.listForStudent(sc, { limit: bad })).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'sessions.listForStudent',
+        });
+      }
+      await expect(
+        repos.sessions.listForStudent(sc, {
+          limit: 2,
+          after: { createdAt: 'not a date', id: pageIds[0]! },
+        }),
+      ).rejects.toMatchObject({ kind: 'invalid', method: 'sessions.listForStudent' });
+      await expect(
+        repos.sessions.listForStudent(sc, {
+          limit: 2,
+          after: { createdAt: times[0]!, id: 'not an id!' },
+        }),
+      ).rejects.toMatchObject({ kind: 'invalid', method: 'sessions.listForStudent' });
+    });
+
+    it('messages.listForStudent pages every message of every own session, stable across a created_at tie', async () => {
+      const sc = sScope('1A');
+      // Two sessions seeded above (sessions.listForStudent's test): spreads the pair's messages
+      // across more than one session, open and otherwise.
+      const sessionIds = ['ses_1a_p1', 'ses_1a_p2'];
+      const msgs: { id: string; sessionId: string; createdAt: string }[] = [
+        { id: 'msg_1a_p_1', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:00:00Z' },
+        { id: 'msg_1a_p_2', sessionId: sessionIds[1]!, createdAt: '2026-10-18T01:01:00Z' },
+        { id: 'msg_1a_p_3', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:01:00Z' }, // ties with p_2
+        { id: 'msg_1a_p_4', sessionId: sessionIds[1]!, createdAt: '2026-10-18T01:02:00Z' },
+        { id: 'msg_1a_p_5', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:03:00Z' },
+      ];
+      for (const m of msgs) {
+        await raw.query(
+          `insert into messages (id, session_id, role, text, created_at) values ($1, $2, 'student', $3, $4)`,
+          [m.id, m.sessionId, `[1A] ${m.id}`, m.createdAt],
+        );
+      }
+      let after: { createdAt: string; id: string } | undefined;
+      const seen: { id: string; sessionId: string }[] = [];
+      for (let guard = 0; guard < 10; guard += 1) {
+        const page = await repos.messages.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        seen.push(...page.items.map((m) => ({ id: m.id, sessionId: m.sessionId })));
+        if (page.next === null) break;
+        after = page.next;
+      }
+      const ours = seen.filter((m) => msgs.some((x) => x.id === m.id));
+      expect(ours.map((m) => m.id)).toEqual(msgs.map((m) => m.id));
+      expect(ours.map((m) => m.sessionId)).toEqual(msgs.map((m) => m.sessionId));
+
+      for (const bad of [0, 501]) {
+        await expect(repos.messages.listForStudent(sc, { limit: bad })).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'messages.listForStudent',
         });
       }
     });
