@@ -17,6 +17,9 @@ vi.mock('../../src/auth', () => ({
   currentPrincipal: state.currentPrincipal,
   requireRole: state.requireRole,
   serverDatabase: () => ({ repos: { discovery: { search: state.search } } }),
+  HOME_PATH: '/home',
+  SIGN_IN_PATH: '/sign-in',
+  TEACHER_PATH: '/teacher',
 }));
 vi.mock('../../src/discovery/rateLimit', () => ({
   discoveryRateLimiter: () => ({ allow: state.allow }),

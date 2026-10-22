@@ -148,20 +148,23 @@ export const { withRole, publicRoute, providerRoute, requireRole } = createGuard
   () => ({ cookies, redirect, notFound }),
 );
 
-export { SIGN_IN_PATH } from './guard';
+export { HOME_PATH, SIGN_IN_PATH, TEACHER_PATH } from './guard';
 
 /**
  * A soft, non-throwing read of who (if anyone) is signed in: the `/` dispatcher's (Phase C) "who,
  * if anyone" check. Any lookup failure -- a thrown error from `getRuntime()` or the session
  * lookup, not just the `not_found` case `resolvePrincipal` already handles -- reads as signed
  * out, the same fail-safe-to-signed-out direction as `resolvePrincipal`. Not security-enforcing
- * by itself: `/home` and `/teacher` still call `requireRole`.
+ * by itself: `/home` and `/teacher` still call `requireRole`. A lookup failure is logged (name
+ * and Auth.js `type` only, matching the rest of this module: never the message, which can hold
+ * an email) before it reads as signed out, so a broken lookup isn't silent.
  */
 export async function currentPrincipal(): Promise<Principal | null> {
   try {
     const resolved = await resolvePrincipal(getRuntime().guard, await cookies());
     return resolved?.principal ?? null;
-  } catch {
+  } catch (error) {
+    console.error(`[auth] currentPrincipal ${describeError(error)}`);
     return null;
   }
 }

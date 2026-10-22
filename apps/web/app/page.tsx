@@ -4,14 +4,14 @@
 // task, logged as a decision, not a blocker), and an anonymous visitor to `/teachers` (9.2's
 // public discovery page is the MVP landing page; a marketing page comes with the launch phase).
 import { redirect } from 'next/navigation';
-import { currentPrincipal, SIGN_IN_PATH } from '../src/auth';
+import { currentPrincipal, HOME_PATH, SIGN_IN_PATH, TEACHER_PATH } from '../src/auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const principal = await currentPrincipal();
-  if (principal?.role === 'student') redirect('/home');
-  if (principal?.role === 'teacher') redirect('/teacher');
+  if (principal?.role === 'student') redirect(HOME_PATH);
+  if (principal?.role === 'teacher') redirect(TEACHER_PATH);
   if (principal?.role === 'staff') redirect(SIGN_IN_PATH);
   redirect('/teachers');
 }

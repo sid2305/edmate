@@ -5,7 +5,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
-import { requireRole } from '../../../src/auth';
+import { requireRole, TEACHER_PATH } from '../../../src/auth';
 import { AppShell } from '../../../src/ui/AppShell';
 import { signOutAndRedirect } from '../actions';
 import { OutlineView } from './OutlineView';
@@ -22,7 +22,7 @@ export default async function OutlinePage() {
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: teacher('nav') },
+        { href: TEACHER_PATH, label: teacher('nav') },
         { href: '/teacher/uploads', label: teacher('uploadsLink') },
         { href: '/teacher/outline', label: teacher('outlineLink') },
       ]}

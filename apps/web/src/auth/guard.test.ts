@@ -9,7 +9,9 @@ import {
   AGE_GATE_PATH,
   createGuard,
   GUARD,
+  HOME_PATH,
   SIGN_IN_PATH,
+  TEACHER_PATH,
   type CookieReader,
   type GuardDeps,
   type PageDeps,
@@ -353,6 +355,11 @@ describe('requireRole (server components and actions)', () => {
 
   it('SIGN_IN_PATH is the one sign-in page (task 9.1)', () => {
     expect(SIGN_IN_PATH).toBe('/sign-in');
+  });
+
+  it('HOME_PATH and TEACHER_PATH are the one spelling for each role home (task 9.1b)', () => {
+    expect(HOME_PATH).toBe('/home');
+    expect(TEACHER_PATH).toBe('/teacher');
   });
 
   it('is not-found for a wrong role (no role inheritance: staff are not teachers)', async () => {

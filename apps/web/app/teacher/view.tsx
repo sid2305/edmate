@@ -2,6 +2,7 @@
 // `app/teacher/onboarding/**`), reusing `AppShell`. Pure (no `requireRole`), so `view.test.tsx`
 // renders it directly.
 import { getTranslations } from 'next-intl/server';
+import { TEACHER_PATH } from '../../src/auth';
 import { AppShell } from '../../src/ui/AppShell';
 import { signOutAndRedirect } from './actions';
 
@@ -16,7 +17,7 @@ export async function TeacherView({
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: t('nav') },
+        { href: TEACHER_PATH, label: t('nav') },
         { href: '/teacher/uploads', label: t('uploadsLink') },
         { href: '/teacher/outline', label: t('outlineLink') },
         { href: '/teacher/onboarding', label: t('onboardingLink') },

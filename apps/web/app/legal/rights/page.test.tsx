@@ -12,7 +12,12 @@ const state = vi.hoisted(() => ({
   loadRightsPageData: vi.fn(),
 }));
 
-vi.mock('../../../src/auth', () => ({ currentPrincipal: state.currentPrincipal }));
+vi.mock('../../../src/auth', () => ({
+  currentPrincipal: state.currentPrincipal,
+  HOME_PATH: '/home',
+  SIGN_IN_PATH: '/sign-in',
+  TEACHER_PATH: '/teacher',
+}));
 vi.mock('../../../src/legal/page-data', () => ({
   loadRightsPageData: state.loadRightsPageData,
   RIGHTS_PAGE_MARKET: 'US',

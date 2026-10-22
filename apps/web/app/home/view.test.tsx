@@ -37,9 +37,9 @@ beforeAll(() => {
 });
 
 describe('HomeView', () => {
-  it('shows the placeholder and a Home nav link and sign-out button', async () => {
+  it('shows the placeholder and a sign-out button, with no self-link to /home (task 9.1b)', async () => {
     render(await HomeView());
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home');
+    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
   });
