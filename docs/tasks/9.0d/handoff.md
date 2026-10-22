@@ -1,7 +1,6 @@
 # 9.0d — fix the SSE test flake
 
-## Status
-DONE
+Status: DONE
 
 ## Tool calls used
 Tool calls used: 49 (harness count; budget 40, stop-at 60)
