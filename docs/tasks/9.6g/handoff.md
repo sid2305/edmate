@@ -95,4 +95,4 @@ None (all five findings fixed, gate green, pushed).
 
 Status: DONE
 
-Tool calls used: 46
+Tool calls used: 100 (harness count; the builder reported 58)
