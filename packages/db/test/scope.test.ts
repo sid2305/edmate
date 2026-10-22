@@ -128,6 +128,11 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // before any SQL. Its own malformed/non-staff cases are covered in teacher-profiles.test.ts
     // and teacher-profiles.int.test.ts.
     if (name === 'teacherProfiles.listPendingForStaff') continue;
+    // reports.listOpenForStaff and reports.review (12.2a) take a bare staff id first, like
+    // listPendingForStaff: a plain id string among BAD_SCOPES is well-formed for them and would
+    // reach the database. Their malformed/non-staff cases are in reports.test.ts and
+    // reports.int.test.ts.
+    if (name === 'reports.listOpenForStaff' || name === 'reports.review') continue;
     // safetyAlerts (12.5a) takes no scope object either: the worker passes a contracts
     // SafetyAlert (its ids are the scope, checked through the alert's own session) and staff
     // pass a bare staff id. A malformed one is `invalid` before any SQL (safety-alerts.test.ts);

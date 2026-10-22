@@ -11,13 +11,15 @@
 //   DELETE /api/studio/documents/:id           delete the row and chunks, then the stored file
 import type { DocumentRow, Repositories, TeacherScope } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
+import { checkWebLinkUrl, type WebLinkRefusal } from '@edmate/ingest';
 import type { IngestJob } from '@edmate/queue';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { apiError } from '../auth/errors';
 import type { RoleContext } from '../auth/guard';
 import type { StudioStorage } from '../storage/presign';
-import { newStorageKey, uploadTypeFor, uploadTypeOfKey, type UploadType } from './files';
+import { isLinkKey, newLinkKey, newStorageKey, uploadTypeFor, uploadTypeOfKey, type UploadType } from './files';
+import type { LinkRateLimiter } from './linkRateLimit';
 
 /** The server log: an event name and fixed codes or error names, never ids or message text. */
 export interface ServerLog {
@@ -35,6 +37,8 @@ export interface StudioBackend {
   enqueue(job: IngestJob, storageKey: string): Promise<void>;
   newDocumentId(): string;
   log: ServerLog;
+  /** Task 8.2f: a per-teacher cap on adding web links (ADR-0014 egress policy, review follow-up). */
+  linkRateLimit: LinkRateLimiter;
 }
 
 /** Thrown by the backend factory when it can't serve (no Redis); `reason` is safe to log. */
@@ -110,6 +114,13 @@ const CreateSchema = NewFileSchema.extend({
   moduleId: Id,
   sourceTitle: z.string().trim().min(1).max(500),
 });
+// A coarse body cap; the exact 2048-character rule lives in `checkWebLinkUrl` (shared with the
+// worker, ADR-0014), which also returns the fixed per-code refusal.
+const AddLinkSchema = z.strictObject({
+  moduleId: Id,
+  url: z.string().trim().min(1).max(4096),
+  sourceTitle: z.string().trim().min(1).max(500).optional(),
+});
 
 const MSG = {
   validation: 'Check the request and try again.',
@@ -120,11 +131,26 @@ const MSG = {
   notUploaded: 'The file has not finished uploading.',
   unavailable: 'Uploads are not available right now. Try again soon.',
   failed: 'Something went wrong. Try again.',
+  linkReplace: "A link can't be replaced. Delete it and add the link again.",
+  linkRateLimited: 'Too many links added. Wait a while, then try again.',
 } as const;
+
+/** The fixed 400 message for each way `checkWebLinkUrl` refuses a link (task 8.2f). */
+const LINK_REFUSAL_MESSAGE: Record<WebLinkRefusal, string> = {
+  invalid_url: 'Enter a valid web address.',
+  not_https: 'Links must start with https://.',
+  has_credentials: "A link can't include a user name or password.",
+  too_long: 'That web address is too long.',
+  bad_port: "Links must use the site's standard web address (no port number).",
+  internal_name: "That link can't be read: it isn't a public site.",
+  private_address: "That link can't be read: it isn't a public site.",
+  youtube_unsupported: "YouTube links aren't supported yet. Upload the video file instead.",
+};
 
 const validation = (message: string = MSG.validation) => apiError('validation', message, 400);
 const notFound = () => apiError('not_found', MSG.notFound, 404);
 const tooLarge = (message: string) => apiError('input_too_large', message, 413);
+const rateLimited = () => apiError('rate_limited', MSG.linkRateLimited, 429);
 const ok = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -133,13 +159,14 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-/** What the upload centre shows: no teacher id and no storage key. */
+/** What the upload centre shows: no teacher id and no storage key, only whether it's a link. */
 function view(row: DocumentRow) {
   return {
     id: row.id,
     moduleId: row.moduleId,
     kind: row.kind,
     sourceTitle: row.sourceTitle,
+    source: row.storageKey !== undefined && isLinkKey(row.storageKey) ? 'link' : 'file',
     status: row.status,
     ...(row.failureReason === undefined ? {} : { failureReason: row.failureReason }),
     createdAt: row.createdAt,
@@ -274,6 +301,48 @@ const complete: Work = async (b, scope, _req, ctx) => {
   return ok({ documentId: id, status: 'processing' }, 202);
 };
 
+/**
+ * Adds a web link (task 8.2f, Phase C of 8.2b). The URL is checked by the pure, shared
+ * `checkWebLinkUrl` (ADR-0014) before anything is written or rate-limited; it never reaches
+ * Postgres or a log line (ADR-0014 Decision 9) -- it travels only in the job enqueued below. The
+ * teacher's own rate limit is taken after the URL shape passes (so a malformed URL costs no
+ * quota) and before the row is created (so a limited teacher gets nothing written).
+ */
+const addLink: Work = async (b, scope, req) => {
+  const body = await parseBody(req, AddLinkSchema);
+  if (body instanceof Response) return body;
+  const checked = checkWebLinkUrl(body.url);
+  if (!checked.ok) return validation(LINK_REFUSAL_MESSAGE[checked.code]);
+  let allowed: boolean;
+  try {
+    allowed = await b.linkRateLimit.take(scope.teacherId);
+  } catch (error) {
+    b.log.error('studio.link_rate_limit_unavailable', { error: errorName(error) });
+    return apiError('provider_error', MSG.unavailable, 503);
+  }
+  if (!allowed) return rateLimited();
+  const id = b.newDocumentId();
+  const key = newLinkKey(scope.teacherId, id);
+  await b.documents.create(scope, {
+    id,
+    moduleId: body.moduleId,
+    kind: 'material',
+    sourceTitle: body.sourceTitle ?? checked.displayTitle,
+    storageKey: key,
+  });
+  // `processing` first, same as `complete`: the worker's own `ready` write is refused from
+  // `uploading`.
+  await b.documents.updateStatus(scope, id, 'processing');
+  try {
+    await b.enqueue({ teacherId: scope.teacherId, documentId: id, fileKind: 'web', url: checked.url }, key);
+  } catch (error) {
+    b.log.error('studio.enqueue_failed', { error: errorName(error) });
+    await markFailed(b, scope, id, 'enqueue_failed');
+    return apiError('provider_error', MSG.unavailable, 503);
+  }
+  return ok({ documentId: id, status: 'processing' }, 202);
+};
+
 const replace: Work = async (b, scope, req, ctx) => {
   const id = await docId(ctx);
   if (!id) return validation();
@@ -283,7 +352,11 @@ const replace: Work = async (b, scope, req, ctx) => {
   if (type instanceof Response) return type;
   // Ownership first, then sign, then commit: a signing failure leaves the row and its file as
   // they were, and another teacher's id gets nothing signed.
-  if (!(await b.documents.get(scope, id))) return notFound();
+  const existing = await b.documents.get(scope, id);
+  if (!existing) return notFound();
+  if (existing.storageKey !== undefined && isLinkKey(existing.storageKey)) {
+    return validation(MSG.linkReplace);
+  }
   const key = newStorageKey(scope.teacherId, id, type);
   const uploadUrl = await b.storage.createUploadUrl({
     key,
@@ -299,7 +372,8 @@ const remove: Work = async (b, scope, _req, ctx) => {
   const id = await docId(ctx);
   if (!id) return validation();
   const { storageKey } = await b.documents.delete(scope, id);
-  await dropObject(b, storageKey);
+  // A link never had an S3 object; only a file's key is dropped from the bucket.
+  if (storageKey !== null && !isLinkKey(storageKey)) await dropObject(b, storageKey);
   return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
 };
 
@@ -335,6 +409,7 @@ export function createStudioHandlers(
   return {
     list: run(list),
     create: run(create),
+    addLink: run(addLink),
     complete: run(complete),
     replace: run(replace),
     remove: run(remove),

@@ -3611,6 +3611,106 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       r.liveClasses.listUpcomingForStudent({ studentId: rid, teacherId: rid }),
     owners: (xs: { title: string }[]) => xs.flatMap((x) => markers(x.title)),
   },
+  // Task 12.2a: a student reports an agent reply in their own session only; the queue and the
+  // review are staff-only (checked by role, like teacherProfiles.listPendingForStaff).
+  'reports.file': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.reports.file(scope, {
+        sessionId: ids.session(target),
+        messageId: `msg_${target.toLowerCase()}_2`,
+        category: 'harmful',
+      }),
+    verify: async (r, actor, result) => {
+      const { id } = result as { id: string };
+      const rows = await r.reports.listOpenForStaff(ISO_STAFF);
+      const row = rows.find((x) => x.id === id);
+      expect(row, `${actor}'s report reaches staff`).toBeDefined();
+      expect(row!.teacherId).toBe(teacherId(teacherOf(actor)));
+      expect(markers(row!.message?.text ?? '')).toEqual([actor]);
+    },
+    mismatches: (a) => [
+      [
+        "the pair's own student message",
+        (r) =>
+          r.reports.file(sScope(a), {
+            sessionId: ids.session(a),
+            messageId: `msg_${a.toLowerCase()}_1`,
+            category: 'other',
+          }),
+        'not_found',
+      ],
+      [
+        'free text instead of a category',
+        (r) =>
+          r.reports.file(sScope(a), {
+            sessionId: ids.session(a),
+            messageId: `msg_${a.toLowerCase()}_2`,
+            category: 'my number is 555' as never,
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'reports.listOpenForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(r.reports.listOpenForStaff(by)).rejects.toMatchObject({ kind: 'scope' });
+        n += 1;
+      }
+      const rows = await r.reports.listOpenForStaff(ISO_STAFF);
+      const json = JSON.stringify(rows);
+      for (const st of ['1', '2'] as const) {
+        expect(json, 'no reporter id').not.toContain(studentId(st));
+      }
+      for (const row of rows) {
+        expect(Object.keys(row).sort()).toEqual(
+          [
+            'agentId',
+            'category',
+            'citedDocuments',
+            'createdAt',
+            'id',
+            'message',
+            'messageId',
+            'status',
+            'teacherId',
+            'teacherSlug',
+          ].sort(),
+        );
+      }
+      return n + 1;
+    },
+  },
+  'reports.review': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const { id } = await r.reports.file(sScope('2B'), {
+        sessionId: ids.session('2B'),
+        messageId: 'msg_2b_2',
+        category: 'other',
+      });
+      for (const by of [teacherId('B'), studentId('2'), 'stf_ghost']) {
+        await expect(r.reports.review(by, id, { decision: 'dismissed' })).rejects.toMatchObject({
+          kind: 'scope',
+        });
+      }
+      await expect(r.reports.review(ISO_STAFF, id, { decision: 'dismissed' })).resolves.toEqual({
+        id,
+        status: 'dismissed',
+      });
+      await expect(r.reports.review(ISO_STAFF, id, { decision: 'actioned' })).rejects.toMatchObject(
+        { kind: 'not_found' },
+      );
+      expect((await r.reports.listOpenForStaff(ISO_STAFF)).map((x) => x.id)).not.toContain(id);
+      return 5;
+    },
+  },
 };
 
 /** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */

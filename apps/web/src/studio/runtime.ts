@@ -21,6 +21,7 @@ import {
   type S3Like,
 } from '../storage/presign';
 import { anthropicFactories } from '../turn/runtime';
+import { redisLinkRateLimiter, type LinkRateLimiter } from './linkRateLimit';
 import { StudioUnavailableError, type ServerLog, type StudioBackend } from './routes';
 import type { OutlineBackend } from './outline';
 
@@ -33,6 +34,8 @@ export interface StudioHooks {
   repos(): Pick<Repositories, 'documents' | 'courses' | 'outline' | 'chunks'>;
   s3(config: ReturnType<typeof storageConfigFromEnv>): S3Like;
   queue(redisUrl: string, log: ServerLog): JobQueue;
+  /** Task 8.2f: the per-teacher web-link rate limit, on its own Redis connection. */
+  linkRateLimit(redisUrl: string, log: ServerLog): LinkRateLimiter;
   log: ServerLog;
 }
 
@@ -66,6 +69,7 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
       ? client
       : hooks.s3({ ...config, endpoint: config.publicEndpoint });
   const queue = hooks.queue(redisUrl, hooks.log);
+  const linkRateLimit = hooks.linkRateLimit(redisUrl, hooks.log);
   const factories = await anthropicFactories(env).catch(() => {
     throw new StudioUnavailableError('provider_key');
   });
@@ -80,6 +84,7 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
     enqueue: (job, storageKey) => enqueueIngest(queue, job, storageKey),
     newDocumentId: () => `doc_${randomUUID()}`,
     log: hooks.log,
+    linkRateLimit,
   };
 }
 
@@ -123,6 +128,15 @@ export const realHooks: StudioHooks = {
       log.error('studio.redis_error', { error: error instanceof Error ? error.name : 'unknown' }),
     );
     return createIngestQueue(connection);
+  },
+  linkRateLimit: (redisUrl, log) => {
+    const connection = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+    connection.on('error', (error: unknown) =>
+      log.error('studio.link_rate_limit_redis_error', {
+        error: error instanceof Error ? error.name : 'unknown',
+      }),
+    );
+    return redisLinkRateLimiter(connection);
   },
   log: consoleLog('[studio]'),
 };
