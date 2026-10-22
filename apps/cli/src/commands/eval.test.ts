@@ -243,6 +243,90 @@ describe('edmate eval --models (sweep, task 7.6 Phase B)', () => {
     expect(err.join('')).toContain('no liveAgentFor');
   });
 
+  it('rejects --models combined with --fixtures', async () => {
+    const { io, err } = capture();
+    expect(
+      await runEvalCommand(
+        ['.', '--models', 'live-models.yaml', '--record', '--fixtures', 'fx'],
+        io,
+        { agent, env: ENV, cwd: dir },
+      ),
+    ).toBe(1);
+    expect(err.join('')).toContain('cannot be combined with --fixtures or --report');
+  });
+
+  it('rejects --models combined with --report', async () => {
+    const { io, err } = capture();
+    expect(
+      await runEvalCommand(
+        ['.', '--models', 'live-models.yaml', '--record', '--report', 'out.json'],
+        io,
+        { agent, env: ENV, cwd: dir },
+      ),
+    ).toBe(1);
+    expect(err.join('')).toContain('cannot be combined with --fixtures or --report');
+  });
+
+  it('passes an openai-compatible entry\'s baseURL through to liveAgentFor', async () => {
+    mkdirSync(join(dir, 'suites', 'alpha'), { recursive: true });
+    writeFileSync(join(dir, 'suites/alpha/case.yaml'), CASE.replace('suite: cli', 'suite: alpha'));
+    writeFileSync(
+      join(dir, 'live-models.yaml'),
+      '- label: model-c\n  provider: openai-compatible\n  model: m\n  baseURL: https://example.com/v1\n',
+    );
+    const seen: (string | undefined)[] = [];
+    const liveAgentFor: NonNullable<EvalCommandDeps['liveAgentFor']> = ({ baseURL }) => {
+      seen.push(baseURL);
+      return { reply: () => Promise.resolve({ text: 'A fraction is part of a whole.' }) };
+    };
+    const { io } = capture();
+    const code = await runEvalCommand(['suites', '--models', 'live-models.yaml', '--record'], io, {
+      agent,
+      env: ENV,
+      cwd: dir,
+      makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+      liveAgentFor,
+    });
+    expect(code).toBe(0);
+    expect(seen).toEqual(['https://example.com/v1']);
+  });
+
+  it('a failing (model, suite) pair is recorded in summary.json and never aborts the sweep', async () => {
+    mkdirSync(join(dir, 'suites', 'alpha'), { recursive: true });
+    mkdirSync(join(dir, 'suites', 'beta'), { recursive: true });
+    // A bad case file throws a CaseLoadError while loading alpha's cases — a loader failure,
+    // never the "empty suite" case, so it must propagate as a failed pair, not zero cases.
+    writeFileSync(join(dir, 'suites/alpha/case.yaml'), 'id: [oops\n');
+    writeFileSync(
+      join(dir, 'suites/beta/case.yaml'),
+      CASE.replace('cli-case-001', 'beta-case-001').replace('suite: cli', 'suite: beta'),
+    );
+    writeFileSync(
+      join(dir, 'live-models.yaml'),
+      '- label: model-a\n  provider: anthropic\n  model: m\n',
+    );
+    const liveAgentFor: NonNullable<EvalCommandDeps['liveAgentFor']> = () => ({
+      reply: () => Promise.resolve({ text: 'A fraction is part of a whole.' }),
+    });
+    const { io, err } = capture();
+    const code = await runEvalCommand(['suites', '--models', 'live-models.yaml', '--record'], io, {
+      agent,
+      env: ENV,
+      cwd: dir,
+      makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+      liveAgentFor,
+    });
+    expect(code).toBe(1);
+    expect(err.join('')).toContain('model-a / alpha failed');
+    const summary = JSON.parse(
+      readFileSync(join(dir, 'evals/reports/live/summary.json'), 'utf8'),
+    ) as { model: string; suite: string; error?: string; passed?: number }[];
+    const alphaRow = summary.find((r) => r.suite === 'alpha');
+    const betaRow = summary.find((r) => r.suite === 'beta');
+    expect(alphaRow?.error).toContain('case.yaml');
+    expect(betaRow?.passed).toBe(1);
+  });
+
   it('one report per (model, suite); additive fields; exact cost arithmetic; unpriced never reported as free', async () => {
     mkdirSync(join(dir, 'suites', 'alpha'), { recursive: true });
     mkdirSync(join(dir, 'suites', 'beta'), { recursive: true });

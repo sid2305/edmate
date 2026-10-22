@@ -33,6 +33,8 @@ export interface LiveEvalAgentOptions {
   /** Test injection only: `slackClock` widens every step budget so a cold run on a loaded CI
    * runner doesn't overrun preGuard's timeout (same need as `chat/deps.test.ts`'s own tests). */
   clock?: Clock;
+  /** An `openai-compatible` candidate's base URL (task 7.6a), forwarded to `buildChatDeps`. */
+  baseURL?: string;
 }
 
 /** One `Message` row for the transcript store, built from a plain string. */
@@ -123,6 +125,7 @@ export function buildLiveEvalAgent(opts: LiveEvalAgentOptions): EvalAgent {
         ...(opts.clock === undefined ? {} : { clock: opts.clock }),
         ...(opts.usage === undefined ? {} : { usage: opts.usage }),
         ...(opts.onUnmetered === undefined ? {} : { onUnmetered: opts.onUnmetered }),
+        ...(opts.baseURL === undefined ? {} : { baseURL: opts.baseURL }),
       };
       const setup = await buildChatDeps(depsOpts);
       await seedPriorTurns(setup.sessionId, input.priorTurns, setup.deps.transcripts);

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CaseLoadError, loadCasesFromDir, loadCasesWithFiles } from './loader.js';
+import { CaseLoadError, NoCasesFoundError, loadCasesFromDir, loadCasesWithFiles } from './loader.js';
 
 const FIXTURE_SUITE = fileURLToPath(new URL('../test/fixtures/suite', import.meta.url));
 
@@ -54,8 +54,15 @@ describe('loadCasesFromDir', () => {
     expect(loadCasesFromDir(dir).map((c) => c.id)).toEqual(['case-a', 'case-ba', 'case-z']);
   });
 
-  it('throws when the directory holds no cases', () => {
+  it('throws a typed NoCasesFoundError when the directory holds no cases', () => {
     expect(() => loadCasesFromDir(dir)).toThrow(/no \.yaml or \.yml cases/);
+    try {
+      loadCasesFromDir(dir);
+      throw new Error('expected loadCasesFromDir to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(NoCasesFoundError);
+      expect((e as NoCasesFoundError).dir).toBe(dir);
+    }
   });
 
   it('throws CaseLoadError naming the file for invalid YAML', () => {

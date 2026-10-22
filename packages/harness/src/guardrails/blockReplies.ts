@@ -53,5 +53,5 @@ export function blockReplyFor(code: BlockCode): string {
  * a moderationIn/jailbreak guard block apart from an ordinary reply without a dedicated event).
  */
 export function isBlockReply(text: string): boolean {
-  return (Object.values(BLOCK_REPLIES) as string[]).includes(text);
+  return Object.values(BLOCK_REPLIES).includes(text);
 }

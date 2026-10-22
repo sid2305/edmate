@@ -8,6 +8,17 @@ import { z } from 'zod';
 import { displayPath } from './displayPath.js';
 import { EvalCaseSchema, type EvalCase } from './schema.js';
 
+/** `dir` has no `.yaml`/`.yml` case files under it (task 7.6a: a typed error, not a message-text
+ * match, so a caller like the live sweep can tell "empty suite" apart from any other load
+ * failure without depending on this error's wording). */
+export class NoCasesFoundError extends Error {
+  override readonly name = 'NoCasesFoundError';
+
+  constructor(readonly dir: string) {
+    super(`${dir}: no .yaml or .yml cases found`);
+  }
+}
+
 export class CaseLoadError extends Error {
   override readonly name = 'CaseLoadError';
 
@@ -64,7 +75,7 @@ export interface LoadedCaseFile {
  */
 export function loadCasesWithFiles(dir: string): LoadedCaseFile[] {
   const files = listCaseFiles(dir);
-  if (files.length === 0) throw new Error(`${dir}: no .yaml or .yml cases found`);
+  if (files.length === 0) throw new NoCasesFoundError(dir);
   const seen = new Map<string, string>();
   return files.map((file) => {
     const filePath = join(dir, file);

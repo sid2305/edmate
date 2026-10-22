@@ -169,6 +169,13 @@ export interface ChatDepsOptions extends ChatWorldOptions {
    * is given (test injection never meters).
    */
   onUnmetered?: (usage: Parameters<MeterSink['recordUnmetered']>[0]) => void;
+  /**
+   * An `openai-compatible` candidate's base URL (task 7.6a: the live sweep's own
+   * `evals/live-models.yaml` entry), forwarded to `createChatGateway`. Absent: only the
+   * Anthropic factory is built, as before. Ignored when `opts.gateway` is given (test injection
+   * never calls `createChatGateway`).
+   */
+  baseURL?: string;
 }
 
 export interface ChatSetup {
@@ -202,7 +209,10 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
     const injected = opts.gateway;
     gatewayForDeps = () => ({ gateway: injected, metered: false });
   } else {
-    const factories: ProviderAdapterFactories = await createChatGateway(opts.env);
+    const factories: ProviderAdapterFactories = await createChatGateway(
+      opts.env,
+      opts.baseURL === undefined ? undefined : { baseURL: opts.baseURL },
+    );
     const sink: MeterSink = {
       record: (u, ctx) => usage.record(u, ctx),
       recordUnmetered: (u) => {
