@@ -5,6 +5,7 @@
 // never logged, printed or carried in an error message (`loadProviderKeys` keeps it in a `Secret`).
 import {
   createAnthropicAdapter,
+  createOpenAICompatibleAdapter,
   createRouter,
   envKeySource,
   loadProviderKeys,
@@ -12,17 +13,43 @@ import {
   meterRouter,
   type PriceTable,
   type ProviderAdapterFactories,
+  type ProviderId,
 } from '@edmate/gateway';
 import type { TurnGateway, TurnGatewaySpec } from '@edmate/harness';
 import type { MeterSink } from '@edmate/gateway';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
-/** Builds the one Anthropic adapter factory `createRouter` needs for every tier. Anthropic only. */
-export async function createChatGateway(env: Env): Promise<ProviderAdapterFactories> {
-  const keys = await loadProviderKeys({ source: envKeySource(env), required: ['anthropic'] });
+export interface ChatGatewayOptions {
+  /**
+   * Builds an `openai-compatible` adapter factory too (task 7.6a), for the live model sweep's
+   * `openai-compatible` entries (`evals/live-models.yaml`'s own `baseURL` per entry, following
+   * `judgeGateway.ts`'s per-provider pattern). Absent (the plain `edmate chat` case): only the
+   * Anthropic factory is built, exactly as before. The key comes only from
+   * `EDMATE_OPENAI_COMPATIBLE_API_KEY` (`PROVIDER_KEYS`'s existing pattern) and is never logged.
+   */
+  baseURL?: string;
+}
+
+/** Builds the Anthropic adapter factory `createRouter` needs for every tier, plus an
+ * `openai-compatible` one when `opts.baseURL` is given (task 7.6a). */
+export async function createChatGateway(
+  env: Env,
+  opts?: ChatGatewayOptions,
+): Promise<ProviderAdapterFactories> {
+  const source = envKeySource(env);
+  const required: ProviderId[] =
+    opts?.baseURL === undefined ? ['anthropic'] : ['anthropic', 'openai-compatible'];
+  const keys = await loadProviderKeys({ source, required });
+  const baseURL = opts?.baseURL;
   return {
     anthropic: (model: string) => createAnthropicAdapter(keys.get('anthropic'), { model }),
+    ...(baseURL === undefined
+      ? {}
+      : {
+          'openai-compatible': (model: string) =>
+            createOpenAICompatibleAdapter(keys.get('openai-compatible'), { model, baseURL }),
+        }),
   };
 }
 

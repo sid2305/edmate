@@ -37,6 +37,7 @@ export {
 } from './judgeModel.js';
 export {
   CaseLoadError,
+  NoCasesFoundError,
   loadCasesFromDir,
   loadCasesWithFiles,
   type LoadedCaseFile,

@@ -13,6 +13,7 @@ import {
   loadCasesFromDir,
   loadLiveModels,
   memoryRecorder,
+  NoCasesFoundError,
   resolveJudgeModel,
   runSuite,
   toJsonReport,
@@ -39,9 +40,14 @@ ANTHROPIC_API_KEY (or EDMATE_ANTHROPIC_API_KEY) and EDMATE_JUDGE_MODEL, neither 
 
   --models <file>     sweep every model in <file> (evals/live-models.yaml's format) over every
                       suite under <dir> (a suite directory, or a directory of suite directories);
-                      always live (implies --record; an error if given without it)
+                      always live (implies --record; an error if given without it); rejected
+                      together with --fixtures or --report (the sweep has its own --report-dir
+                      and never touches the single-agent fixtures/report path)
   --report-dir <dir>  where the sweep writes one JSON report per (model, suite), plus a combined
                       summary.json (default: evals/reports/live)
+
+An --models entry with provider: openai-compatible needs EDMATE_OPENAI_COMPATIBLE_API_KEY (its
+baseURL comes from the entry itself, never an env var); neither key is ever logged.
 `;
 
 export interface EvalCommandDeps {
@@ -60,6 +66,8 @@ export interface EvalCommandDeps {
     modelPolicy: ModelPolicy;
     usage: MemoryUsageMeter;
     onUnmetered: (usage: { model: string }) => void;
+    /** An `openai-compatible` entry's own base URL (task 7.6a), absent for `anthropic`. */
+    baseURL?: string;
   }) => EvalAgent;
 }
 
@@ -115,6 +123,12 @@ export async function runEvalCommand(
   if (values.models !== undefined) {
     if (!values.record) {
       io.stderr(`edmate eval: --models needs --record (the sweep is always a live run)\n\n${EVAL_USAGE}`);
+      return 1;
+    }
+    if (values.fixtures !== undefined || values.report !== undefined) {
+      io.stderr(
+        `edmate eval: --models cannot be combined with --fixtures or --report (use --report-dir)\n\n${EVAL_USAGE}`,
+      );
       return 1;
     }
     if (deps.liveAgentFor === undefined) {
@@ -177,15 +191,23 @@ function listSweepSuites(dir: string): { name: string; dir: string }[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Loads a suite's cases, or `[]` for an empty suite directory (never an error, plan's own rule). */
+/** Loads a suite's cases, or `[]` for an empty suite directory (never an error, plan's own rule).
+ * Detects "empty" by `NoCasesFoundError`'s type (task 7.6a), never by matching its message text. */
 function loadSweepCases(dir: string) {
   try {
     return loadCasesFromDir(dir);
   } catch (e) {
-    if (message(e).includes('no .yaml or .yml cases found')) return [];
+    if (e instanceof NoCasesFoundError) return [];
     throw e;
   }
 }
+
+/** One row of `summary.json`: either a completed (model, suite) run, or (task 7.6a) a failed one
+ * that never produced a report — `error` is the only field set, so a reader can tell the two
+ * apart without guessing from missing numbers. */
+type SweepSummaryRow =
+  | { model: string; suite: string; passed: number; total: number; cost: ReportCost }
+  | { model: string; suite: string; error: string };
 
 /** One (model, suite) run's cost, from its own fresh usage meter (plan's "by tier" design, lead
  * answer Q3: split by the tier a call actually used, not by model). */
@@ -215,58 +237,55 @@ async function runModelSweep(
   const judgeGateway = await (deps.makeJudgeGateway ?? createJudgeGateway)(judgeModel, deps.env);
   const reportDir = resolve(deps.cwd, values['report-dir'] ?? 'evals/reports/live');
   const generatedAt = (deps.now ?? (() => new Date()))().toISOString();
-  const summary: { model: string; suite: string; passed: number; total: number; cost: ReportCost }[] =
-    [];
+  const summary: SweepSummaryRow[] = [];
   let anyFailed = false;
 
   for (const entry of entries) {
     const target = { provider: entry.provider, model: entry.model };
     const modelPolicy: ModelPolicy = { tiers: { small: target, main: target } };
     for (const suite of suites) {
-      const cases = loadSweepCases(suite.dir);
-      let report;
-      if (cases.length === 0) {
-        report = toJsonReport([], {
-          suite: suite.name,
-          generatedAt,
-          model: entry.label,
-          cost: { perTurnMicroUsd: 0, byTier: {}, unpricedCalls: 0 },
-        });
-      } else {
-        const usage = memoryUsageMeter();
-        let unpricedCalls = 0;
-        const agent = deps.liveAgentFor!({
-          modelPolicy,
-          usage,
-          onUnmetered: () => {
-            unpricedCalls += 1;
-          },
-        });
-        const { results, failed } = await runSuite(cases, {
-          agent,
-          judgeGateway,
-          judgeModel,
-          recorder: memoryRecorder('record'),
-        });
-        if (failed > 0) anyFailed = true;
-        const totalTurns = results.reduce((n, r) => n + r.turns.length, 0);
-        report = toJsonReport(results, {
-          suite: suite.name,
-          generatedAt,
-          model: entry.label,
-          cost: sweepCost(usage, unpricedCalls, totalTurns),
-        });
+      // Task 7.6a: one pair's throw (a loader problem, an agent-construction failure, a live
+      // call error) is recorded here and never aborts the rest of the sweep — earlier and later
+      // pairs' reports still land on disk and in this summary.
+      try {
+        const cases = loadSweepCases(suite.dir);
+        let cost: ReportCost;
+        let report;
+        if (cases.length === 0) {
+          cost = { perTurnMicroUsd: 0, byTier: {}, unpricedCalls: 0 };
+          report = toJsonReport([], { suite: suite.name, generatedAt, model: entry.label, cost });
+        } else {
+          const usage = memoryUsageMeter();
+          let unpricedCalls = 0;
+          const agent = deps.liveAgentFor!({
+            modelPolicy,
+            usage,
+            onUnmetered: () => {
+              unpricedCalls += 1;
+            },
+            ...(entry.baseURL === undefined ? {} : { baseURL: entry.baseURL }),
+          });
+          const { results, failed } = await runSuite(cases, {
+            agent,
+            judgeGateway,
+            judgeModel,
+            recorder: memoryRecorder('record'),
+          });
+          if (failed > 0) anyFailed = true;
+          const totalTurns = results.reduce((n, r) => n + r.turns.length, 0);
+          cost = sweepCost(usage, unpricedCalls, totalTurns);
+          report = toJsonReport(results, { suite: suite.name, generatedAt, model: entry.label, cost });
+        }
+        const reportPath = join(reportDir, entry.label, `${suite.name}.json`);
+        mkdirSync(dirname(reportPath), { recursive: true });
+        writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
+        summary.push({ model: entry.label, suite: suite.name, passed: report.passed, total: report.total, cost });
+      } catch (e) {
+        anyFailed = true;
+        const errorMessage = message(e);
+        io.stderr(`edmate eval: ${entry.label} / ${suite.name} failed: ${errorMessage}\n`);
+        summary.push({ model: entry.label, suite: suite.name, error: errorMessage });
       }
-      const reportPath = join(reportDir, entry.label, `${suite.name}.json`);
-      mkdirSync(dirname(reportPath), { recursive: true });
-      writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
-      summary.push({
-        model: entry.label,
-        suite: suite.name,
-        passed: report.passed,
-        total: report.total,
-        cost: report.cost!,
-      });
     }
   }
 
@@ -275,11 +294,12 @@ async function runModelSweep(
   writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
   io.stdout(
     summary
-      .map(
-        (r) =>
-          `${r.model} / ${r.suite}: ${r.passed}/${r.total} passed, ` +
-          `${r.cost.perTurnMicroUsd} microUSD/turn` +
-          (r.cost.unpricedCalls > 0 ? ` (${r.cost.unpricedCalls} unpriced calls)` : ''),
+      .map((r) =>
+        'error' in r
+          ? `${r.model} / ${r.suite}: FAILED: ${r.error}`
+          : `${r.model} / ${r.suite}: ${r.passed}/${r.total} passed, ` +
+            `${r.cost.perTurnMicroUsd} microUSD/turn` +
+            (r.cost.unpricedCalls > 0 ? ` (${r.cost.unpricedCalls} unpriced calls)` : ''),
       )
       .join('\n') + '\n',
   );

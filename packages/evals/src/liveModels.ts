@@ -9,6 +9,10 @@ import { load } from 'js-yaml';
 import { z } from 'zod';
 import { displayPath } from './displayPath.js';
 
+// This schema must never gain a key/secret field (e.g. an API key or token): a live sweep's
+// candidate list is a plain, checked-in config file (`evals/live-models.yaml`), and every key
+// this package uses comes from an env var only (`@edmate/gateway`'s `PROVIDER_KEYS`), never from
+// here (task 7.6a).
 export const LiveModelEntrySchema = z.strictObject({
   /** A short, unique, human-readable name for this entry's reports (e.g. its directory name). */
   label: z.string().min(1),
