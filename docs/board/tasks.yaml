@@ -2722,7 +2722,7 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: running
+  status: review
   branch: m7/7.2b-pedagogy-cases
   model: plan:sonnet build:opus
 - id: 7.2c
@@ -2845,7 +2845,7 @@ tasks:
   accept: The test passes 20 runs in a row under CI-like load, and the cause is written in the handoff.
   deps: []
   risk: normal
-  status: running
+  status: review
   branch: m0/0.21-sse-route-flake
   model: plan:lead build:sonnet
 - id: 9.4c
