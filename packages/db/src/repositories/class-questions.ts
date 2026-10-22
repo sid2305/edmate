@@ -4,7 +4,7 @@
 // change here (lead answer Q1-Q4, 22 Oct 2026).
 import { randomUUID } from 'node:crypto';
 import { LIMITS } from '@edmate/contracts';
-import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { classQuestions, liveClasses, packageVersions, subscriptions } from '../schema/index.js';
@@ -99,6 +99,9 @@ export function classQuestionsRepo(db: Db) {
                 sql`${packageVersions.packageId} = any(${liveClasses.packageIds})`,
               ),
             )
+            // Key-share locks the matched subscriptions row so a concurrent cancel/downgrade
+            // (which takes FOR NO KEY UPDATE) must wait until this insert commits, closing the
+            // entitlement-check-to-insert TOCTOU window.
             .for('key share');
           if (rows.length === 0) throw new RepositoryError('not_found', method);
 
@@ -137,7 +140,10 @@ export function classQuestionsRepo(db: Db) {
         .from(classQuestions)
         .innerJoin(liveClasses, eq(liveClasses.id, classQuestions.liveClassId))
         .where(and(eq(liveClasses.teacherId, teacherId), gt(liveClasses.startsAt, now)))
-        .orderBy(desc(classQuestions.createdAt), desc(classQuestions.id))
+        // Scan oldest-first so the cap keeps the longest-waiting questions when a teacher has
+        // more than QUEUE_SCAN_MAX pending: a DESC scan would drop the oldest ones instead
+        // (review finding, 11.2a fix round 1).
+        .orderBy(asc(classQuestions.createdAt), asc(classQuestions.id))
         .limit(QUEUE_SCAN_MAX);
 
       const byId = new Map(rows.map((r) => [r.id, r]));

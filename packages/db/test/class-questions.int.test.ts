@@ -266,6 +266,31 @@ describe.skipIf(!up)(`classQuestions on Postgres${up ? '' : ` (${SKIP_REASON})`}
       expect(magnetGroup!.groupId).not.toBe(rainbowGroup!.groupId);
     });
 
+    it('scans oldest-first past the cap: the oldest pending question survives, the newest is dropped', async () => {
+      // One bulk insert of QUEUE_SCAN_MAX + 1 (201) similar, synthetic pending questions on
+      // futureClassA, spaced one second apart so createdAt order is unambiguous: gs=0 is oldest,
+      // gs=200 is newest. QUEUE_SCAN_MAX below must match class-questions.ts's own constant.
+      const QUEUE_SCAN_MAX = 200;
+      await raw.query(
+        `insert into class_questions (id, live_class_id, text, created_at)
+         select 'cq_scan_' || gs,
+                $1,
+                'Why is photosynthesis important for plant growth and energy production (' || gs || ')',
+                now() - ((201 - gs) * interval '1 second')
+         from generate_series(0, 200) as gs`,
+        [futureClassA],
+      );
+
+      const groups = await repos.classQuestions.listQueueForTeacher({ teacherId: tA });
+      const group = groups.find((g) => g.sample.includes('photosynthesis'));
+      expect(group, 'photosynthesis group exists').toBeDefined();
+      // Exactly one of the 201 inserted rows is scanned out by the QUEUE_SCAN_MAX cap.
+      expect(group!.count).toBe(QUEUE_SCAN_MAX);
+      // `sample` is always the group's oldest member (question-similarity.ts): if the scan were
+      // still newest-first, the true oldest (gs=0) would have been dropped and this would fail.
+      expect(group!.sample).toContain('(0)');
+    });
+
     it('never returns a student id (the table has none; an explicit key sweep)', async () => {
       const groups = await repos.classQuestions.listQueueForTeacher({ teacherId: tA });
       expect(groups.length).toBeGreaterThan(0);

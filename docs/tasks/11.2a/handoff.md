@@ -120,6 +120,29 @@ future task that touches `teacher-questions.ts` should expect a pre-existing, un
 branch-coverage gap there. Not filing a blocker since it does not block my own work or anyone
 else's right now.
 
+## Fix round 1
+
+One HIGH from review:
+
+- `listQueueForTeacher` scanned `desc(createdAt), desc(id)` before `.limit(QUEUE_SCAN_MAX)`, so a
+  teacher with more than 200 pending questions had the oldest ones silently dropped instead of the
+  newest. Changed the scan to `asc(createdAt), asc(id)` with the same cap (same output ordering;
+  only the pre-cluster scan direction changed). Added
+  `class-questions.int.test.ts`'s `"scans oldest-first past the cap: the oldest pending question
+  survives, the newest is dropped"` (201 synthetic rows in one bulk insert, QUEUE_SCAN_MAX=200);
+  confirmed it fails against the old `desc` scan and passes against the fix.
+- Added a one-line comment on `submit`'s `.for('key share')` explaining it blocks a concurrent
+  subscription cancel/downgrade until the insert commits (TS [LOW] from review).
+
+Gate (disposable `edmate-test-112a-fix` pgvector/pgvector:pg16 container, since removed):
+
+```
+corepack pnpm turbo run typecheck lint test --filter=@edmate/db...
+ Tasks: 26 successful, 26 total
+```
+
+`python3 .githooks/secret-scan.py --all`: clean.
+
 ## Left to do
 
 None for Phase A's own scope. Phase B (apps/web) is explicitly out of bounds for this task.
