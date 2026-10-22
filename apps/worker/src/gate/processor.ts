@@ -190,14 +190,13 @@ export function gateProcessor(deps: GateProcessorDeps): (job: GateJobLike) => Pr
     const scope = { teacherId };
     const ids = { runId, teacherId };
 
-    const run = await deps.repos.publish.getRun(scope, runId);
-    if (run === null || run.status !== 'queued') {
-      log({ level: 'info', event: 'gate.skipped', ...ids, status: run?.status ?? 'missing' });
-      return 'skipped';
-    }
-
     let usage: (() => GateUsageTotals) | undefined;
     try {
+      const run = await deps.repos.publish.getRun(scope, runId);
+      if (run === null || run.status !== 'queued') {
+        log({ level: 'info', event: 'gate.skipped', ...ids, status: run?.status ?? 'missing' });
+        return 'skipped';
+      }
       if (!(await deps.repos.publish.markRunning(scope, runId))) {
         log({ level: 'info', event: 'gate.skipped', ...ids, status: 'not_queued' });
         return 'skipped';

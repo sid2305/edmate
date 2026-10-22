@@ -26,8 +26,8 @@ import {
   type EvalCase,
   type GateInput,
   type GateResult,
-  type ModelGateway,
 } from '@edmate/evals';
+import type { ModelGateway } from '@edmate/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
 import type { LogLine } from '../log.js';
@@ -445,10 +445,22 @@ describe('gateProcessor: redelivery and bad jobs', () => {
     expect(s.lines[0]).toMatchObject({ level: 'error', event: 'gate.invalid_job' });
   });
 
-  it('a getRun failure fails the job (the stale rule closes the run later)', async () => {
+  it('a getRun failure is logged and ends the run error', async () => {
     const down = new RepositoryError('failed', 'publish.getRun');
     const s = setup({ repo: { getRun: down } });
+    expect(await s.process(JOB)).toBe('error');
+    expect(s.prepare).not.toHaveBeenCalled();
+    expect(s.f.finished).toEqual([
+      { runId: RUN, status: 'error', summary: { groups: [], errorCode: 'repository_failed' } },
+    ]);
+    expect(s.lines).toMatchObject([{ level: 'error', event: 'gate.error', errorCode: 'repository_failed' }]);
+  });
+
+  it('a getRun failure with the database down fails the job loudly', async () => {
+    const down = new RepositoryError('failed', 'publish.getRun');
+    const s = setup({ repo: { getRun: down, finish: down } });
     await expect(s.process(JOB)).rejects.toBe(down);
+    expect(s.lines.map((l) => l.event)).toEqual(['gate.error', 'gate.finish_failed']);
   });
 });
 
@@ -486,7 +498,7 @@ describe('helpers', () => {
   });
 
   it('a style-card-only gate needs no per-agent suite', () => {
-    const style = Array.from({ length: 12 }, (_, i) => platformCase(`plat-ped-${i}`, i % 2 ? 'pedagogy' : 'persona'));
+    const style = Array.from({ length: 40 }, (_, i) => platformCase(`plat-ped-${i}`, i % 2 ? 'pedagogy' : 'persona'));
     const input = gateInput({ changes: ['style_card'], platformCases: style, styleSampleSeed: 'sty_1' });
     const scope = selectGateCases({ changes: ['style_card'], platformCases: style, requireAgentLocked: false, styleSampleSeed: 'sty_1' });
     const g = scripted(input);
