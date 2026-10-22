@@ -64,11 +64,15 @@ $ TEST_DATABASE_URL=postgres://…@127.0.0.1:55497/edmate corepack pnpm vitest r
       Tests  154 passed (154)
 ```
 
-Gate (see the final section for the full-run output):
+Gate, after merging origin/main (`--concurrency=2`; an earlier unthrottled run had one unrelated
+wall-clock retrieval-latency test fail under load, and it passed on the re-run):
 
 ```
 $ TEST_DATABASE_URL=… corepack pnpm turbo run typecheck lint test --filter=@edmate/db...
-GATE_RESULT
+@edmate/db:test:  Test Files  63 passed (63)
+@edmate/db:test:       Tests  1206 passed | 4 skipped (1210)
+@edmate/db:test:   subscriptions.ts |     100 |      100 |     100 |     100 |
+ Tasks:    26 successful, 26 total
 $ python3 .githooks/secret-scan.py --all
 (clean, no output)
 ```
@@ -111,4 +115,4 @@ The running `edmate-*` containers were not touched.
 
 Status: DONE
 
-Tool calls used: TOOLCALLS
+Tool calls used: 55
