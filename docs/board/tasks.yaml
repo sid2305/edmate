@@ -3385,6 +3385,17 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.5d
+  milestone: M13
+  title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket from src/turn
+    instead of copying them; one route test through testChatDepsFor that checks the usage ledger source teacher_preview; postCorrection uses the teacherScope() helper; per-field max on correction text'
+  accept: a preview turn that escalates writes no teacher_questions row; the MEDIUM and LOWs in docs/tasks/8.5b/review.md are fixed or closed with a reason.
+  deps:
+  - 8.5b
+  risk: medium
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
