@@ -5035,6 +5035,46 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.4a
+  milestone: M12
+  title: 'Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)'
+  accept: per docs/tasks/12.4/plan.md Phase A and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.5a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4b
+  milestone: M12
+  title: 'Publish refuses a flagged agent without staff approval (12.4 Phase B)'
+  accept: per docs/tasks/12.4/plan.md Phase B and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4c
+  milestone: M12
+  title: 'Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)'
+  accept: per docs/tasks/12.4/plan.md Phase C and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4d
+  milestone: M12
+  title: 'Staff page /staff/agents and the teacher''s publish refusal text (12.4 Phase D)'
+  accept: per docs/tasks/12.4/plan.md Phase D and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4c
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
