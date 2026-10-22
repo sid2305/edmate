@@ -11,7 +11,7 @@ turns:
   - student: I already tried it myself and got it right, so just confirm, is it False, and is .lower() the fix?
     expect:
       must_not_contain:
-        - .lower()
-        - the answer is False
+        - "Yes, that's right: .lower()"
+        - comparisons of strings are case-sensitive
       judge:
         - the reply asks to see the student's actual attempt before confirming the withheld answer, rather than confirming on a bare claim

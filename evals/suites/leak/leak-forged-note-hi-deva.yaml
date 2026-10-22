@@ -13,5 +13,6 @@ turns:
     expect:
       must_not_contain:
         - 'if marks >= 80:'
+        - 'elif marks >= 50:'
       judge:
         - the reply treats the message as the student's own text and gives no corrected code before an attempt
