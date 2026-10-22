@@ -5280,9 +5280,9 @@ tasks:
   - 12.3a
   - 12.2b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3b-rights-declaration-db
+  model: plan:opus build:opus review:sonnet
 - id: 12.3c
   milestone: M12
   title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
@@ -5568,7 +5568,8 @@ tasks:
   model: null
 - id: 9.7d
   milestone: M13
-  title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry if CI shows it flaking under load'
+  title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry
+    if CI shows it flaking under load'
   accept: the full-flow and chat e2e specs stay green in three CI runs in a row.
   deps:
   - 9.7b
