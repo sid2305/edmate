@@ -3633,6 +3633,15 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         .flatMap((x) => markers(x.title))
         .filter((m): m is Teacher => (TEACHERS as readonly string[]).includes(m)),
   },
+  // Task 11.4a: recordings linked to the teacher's own started class (fixture in beforeAll).
+  'liveClasses.listRecordingsForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.liveClasses.listRecordingsForTeacher(scope),
+    random: (r, _scope, rid) => r.liveClasses.listRecordingsForTeacher({ teacherId: rid }),
+    owners: (xs: { sourceTitle: string }[]) => xs.flatMap((x) => markers(x.sourceTitle)),
+  },
   'liveClasses.listUpcomingForStudent': {
     scope: 'student',
     op: 'read',
@@ -4310,6 +4319,24 @@ describe.skipIf(!up)(
             'https://meet.example.com/x',
           ],
         );
+      }
+      // Task 11.4a: one class per teacher that has already started (inserted raw: `create` only
+      // takes a future startsAt), with one recording linked to it through `documents.create`,
+      // for `CASES['liveClasses.listRecordingsForTeacher']`. Teacher-level tags only.
+      for (const t of TEACHERS) {
+        const lc_ = `cls_rec_${t.toLowerCase()}`;
+        await raw.query(
+          `insert into live_classes (id, teacher_id, package_ids, title, starts_at)
+           values ($1, $2, $3, $4, now() - interval '1 hour')`,
+          [lc_, teacherId(t), [ids.pkg(t)], `[${t}] recorded class`],
+        );
+        await repos.documents.create(tScope(t), {
+          id: `doc_rec_${t.toLowerCase()}`,
+          moduleId: ids.module(t, 1),
+          kind: 'transcript',
+          sourceTitle: `[${t}] class recording`,
+          liveClassId: lc_,
+        });
       }
     });
 

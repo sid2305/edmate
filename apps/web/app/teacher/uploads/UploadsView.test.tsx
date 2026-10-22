@@ -77,6 +77,11 @@ function pick(input: HTMLElement, file: File) {
   fireEvent.change(input, { target: { files: [file] } });
 }
 
+/** Checks the rights checkbox, required before any upload, replace or link control works. */
+function checkRights() {
+  fireEvent.click(screen.getByLabelText(/confirm I hold the rights/));
+}
+
 beforeEach(() => {
   vi.useRealTimers();
 });
@@ -137,6 +142,7 @@ describe('UploadsView', () => {
     const put = vi.fn<PutFile>(okPut);
     renderIntl(<UploadsView moduleIds={['mod_1']} putFile={put} />);
     await screen.findByText(/No files yet/);
+    checkRights();
     s.next('POST /api/studio/documents', ticket('doc_9', 'text/markdown'));
     s.next('POST /api/studio/documents/doc_9/complete', {
       status: 202,
@@ -154,6 +160,7 @@ describe('UploadsView', () => {
       sourceTitle: 'Week 1.md',
       contentType: 'text/markdown',
       byteSize: 4,
+      rightsDeclared: true,
     });
     expect(put).toHaveBeenCalledWith(
       'https://bucket.test/doc_9',
@@ -171,6 +178,7 @@ describe('UploadsView', () => {
     const s = api([]);
     renderIntl(<UploadsView moduleIds={['mod_1', 'mod_2']} putFile={okPut} />);
     await screen.findByText(/No files yet/);
+    checkRights();
     fireEvent.change(screen.getByLabelText('Module'), { target: { value: 'mod_2' } });
     s.next('POST /api/studio/documents', err(413, 'input_too_large'));
     pick(
@@ -185,6 +193,7 @@ describe('UploadsView', () => {
     const s = api([]);
     renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
     await screen.findByText(/No files yet/);
+    checkRights();
     pick(
       screen.getByLabelText('Upload a file'),
       new File(['x'], 'page.html', { type: 'text/html' }),
@@ -202,6 +211,7 @@ describe('UploadsView', () => {
       />,
     );
     await screen.findByText(/No files yet/);
+    checkRights();
     s.next('POST /api/studio/documents', ticket('doc_9', 'application/pdf'));
     s.state.docs = [doc({ id: 'doc_9', sourceTitle: 'a.pdf', status: 'uploading' })];
     pick(
@@ -216,6 +226,7 @@ describe('UploadsView', () => {
     const s = api([]);
     renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
     await screen.findByText(/No files yet/);
+    checkRights();
     s.next('POST /api/studio/documents', ticket('doc_9', 'application/pdf'));
     s.next('POST /api/studio/documents/doc_9/complete', err(409, 'validation'));
     s.state.docs = [doc({ id: 'doc_9', sourceTitle: 'a.pdf', status: 'uploading' })];
@@ -269,7 +280,9 @@ describe('UploadsView', () => {
     const s = api([doc({})]);
     const put = vi.fn<PutFile>(okPut);
     const { container } = renderIntl(<UploadsView moduleIds={['mod_1']} putFile={put} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Replace Algebra notes.pdf' }));
+    await screen.findByRole('button', { name: 'Replace Algebra notes.pdf' });
+    checkRights();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace Algebra notes.pdf' }));
     s.next('POST /api/studio/documents/doc_1/replace', {
       status: 200,
       body: {
@@ -289,6 +302,7 @@ describe('UploadsView', () => {
     expect(s.calls.find((c) => c.url.endsWith('/replace'))!.body).toEqual({
       contentType: 'audio/wav',
       byteSize: 2,
+      rightsDeclared: true,
     });
     expect(put).toHaveBeenCalledWith(
       'https://bucket.test/r',
@@ -296,6 +310,52 @@ describe('UploadsView', () => {
       expect.any(File),
       expect.any(Function),
     );
+  });
+
+  it('disables upload, replace and add-link until the rights checkbox is checked (task 12.3c)', async () => {
+    const s = api([doc({})]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    await screen.findByRole('button', { name: 'Replace Algebra notes.pdf' });
+    const filePicker = screen.getByLabelText('Upload a file') as HTMLInputElement;
+    const replaceButton = screen.getByRole('button', { name: 'Replace Algebra notes.pdf' });
+    const linkUrlInput = screen.getByLabelText('Add a web link');
+    const addLinkButton = screen.getByRole('button', { name: 'Add link' });
+    expect(filePicker.disabled).toBe(true);
+    expect(replaceButton).toBeDisabled();
+    fireEvent.change(linkUrlInput, { target: { value: 'https://example.org/a' } });
+    expect(addLinkButton).toBeDisabled();
+
+    checkRights();
+    expect(filePicker.disabled).toBe(false);
+    expect(replaceButton).not.toBeDisabled();
+    expect(addLinkButton).not.toBeDisabled();
+    expect(s.calls.filter((c) => c.method === 'POST')).toEqual([]);
+  });
+
+  it('adds a link only once the rights box is checked, sending rightsDeclared: true', async () => {
+    const s = api([]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    await screen.findByText(/No files yet/);
+    checkRights();
+    fireEvent.change(screen.getByLabelText('Add a web link'), {
+      target: { value: 'https://example.org/a' },
+    });
+    s.next('POST /api/studio/links', {
+      status: 202,
+      body: { documentId: 'doc_9', status: 'processing' },
+    });
+    s.state.docs = [doc({ id: 'doc_9', source: 'link', status: 'processing' })];
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    await waitFor(() =>
+      expect(s.calls.some((c) => c.method === 'POST' && c.url === '/api/studio/links')).toBe(
+        true,
+      ),
+    );
+    expect(s.calls.find((c) => c.url === '/api/studio/links')!.body).toEqual({
+      moduleId: 'mod_1',
+      url: 'https://example.org/a',
+      rightsDeclared: true,
+    });
   });
 
   it('deletes only after a confirm, and Cancel keeps the file', async () => {

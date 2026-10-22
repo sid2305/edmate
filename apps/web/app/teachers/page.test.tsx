@@ -123,6 +123,14 @@ describe('/teachers page', () => {
     expect(state.search).not.toHaveBeenCalled();
   });
 
+  it('links to the public rights-and-takedowns page (task 12.3c)', async () => {
+    render(await page());
+    expect(screen.getByRole('link', { name: 'Rights and takedowns' })).toHaveAttribute(
+      'href',
+      '/legal/rights',
+    );
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await page());
     expect(await axe(container)).toHaveNoViolations();

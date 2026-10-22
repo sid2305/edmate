@@ -12,6 +12,7 @@ import {
   chunks,
   documents,
   EMBEDDING_DIMENSIONS,
+  liveClasses,
   modules,
   teacherEvalCases,
   teacherMaterialRevisions,
@@ -125,6 +126,11 @@ const DocumentInputSchema = z.strictObject({
   storageKey: z.string().min(1).max(1024).optional(),
   /** Task 12.3b: the teacher declared they hold the rights. Optional until 12.3c requires it. */
   rightsDeclared: z.literal(true).optional(),
+  /**
+   * Task 11.4a: the scope's own live class this document records. It must have started
+   * (`starts_at <= now()`); otherwise `not_found`, like a foreign module.
+   */
+  liveClassId: IdSchema.optional(),
 });
 export type DocumentInput = z.infer<typeof DocumentInputSchema>;
 
@@ -284,6 +290,9 @@ export function documentsRepo(db: Db) {
      * Files a document under one of the scope's modules; `rightsDeclared: true` stamps
      * `rights_declared_at = now()` (task 12.3b). Another teacher's module, a missing one
      * and an id already taken (by anyone) are all `not_found`, so ids can't be probed.
+     * `liveClassId` (task 11.4a) links the document to one of the scope's own classes that has
+     * already started. Another teacher's class, a future one and a missing one are `not_found`
+     * the same way, checked in the same INSERT ... SELECT, and nothing is written.
      */
     async create(scope: TeacherScope, input: DocumentInput): Promise<{ id: string }> {
       const method = 'documents.create';
@@ -304,8 +313,13 @@ export function documentsRepo(db: Db) {
                   [documents.sourceTitle, sql`${d.sourceTitle}::text`],
                   [documents.storageKey, sql`${d.storageKey ?? null}::text`],
                   [documents.rightsDeclaredAt, d.rightsDeclared ? sql`now()` : sql`null`],
+                  [documents.liveClassId, sql`${d.liveClassId ?? null}::text`],
                 ],
-                sql`from ${modules} where ${modules.id} = ${d.moduleId} and ${modules.teacherId} = ${teacherId}`,
+                sql`from ${modules} where ${modules.id} = ${d.moduleId} and ${modules.teacherId} = ${teacherId}${
+                  d.liveClassId === undefined
+                    ? sql``
+                    : sql` and exists (select 1 from ${liveClasses} where ${liveClasses.id} = ${d.liveClassId} and ${liveClasses.teacherId} = ${teacherId} and ${liveClasses.startsAt} <= now())`
+                }`,
               ),
             );
             if (written(res) !== 1) throw new RepositoryError('not_found', method);

@@ -30,6 +30,7 @@ function pageHref(params: DiscoveryParams, page: number): string {
 export default async function TeachersPage({ searchParams }: TeachersPageProps) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('discovery');
+  const legal = await getTranslations('legal');
   const principal = await currentPrincipal();
   const nav = publicNav(principal, { signIn: t('signInNav'), home: t('homeNav') });
   const shellProps = {
@@ -86,6 +87,9 @@ export default async function TeachersPage({ searchParams }: TeachersPageProps) 
         {params.page > 1 ? <a href={pageHref(params, params.page - 1)}>{t('prevLabel')}</a> : null}
         {result.hasMore ? <a href={pageHref(params, params.page + 1)}>{t('nextLabel')}</a> : null}
       </nav>
+      <p className="app-footer">
+        <a href="/legal/rights">{legal('footerLink')}</a>
+      </p>
     </AppShell>
   );
 }

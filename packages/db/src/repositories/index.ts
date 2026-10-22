@@ -272,6 +272,8 @@ export {
   type LiveClassWindow,
   type TeacherLiveClassRow,
   type UpcomingLiveClass,
+  type LiveClassRecording,
+  RECORDING_LIST_MAX,
 } from './live-classes.js';
 export {
   CLASS_QUESTION_GROUPS_MAX,

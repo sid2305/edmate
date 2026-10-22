@@ -10,6 +10,7 @@ import {
   createRepositories,
   DOCUMENT_LIST_MAX,
   type DocumentRow,
+  RECORDING_LIST_MAX,
   type Repositories,
   RepositoryError,
 } from '../src/index.js';
@@ -508,6 +509,156 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         const err = await rejection(repos.chunks.insertManyIfStorageKey(A, id, key as never, draft));
         expect(err.kind).toBe('invalid');
       }
+    });
+  });
+
+  describe('live-class recordings (11.4a)', () => {
+    const LC_PAST = 'lc_rec_a_past';
+    const LC_PAST_2 = 'lc_rec_a_past2';
+    const LC_FUTURE = 'lc_rec_a_future';
+    const LC_B = 'lc_rec_b_past';
+    const linkOf = async (id: string) =>
+      (
+        await raw.query<{ lc: string | null }>(
+          'select live_class_id as lc from documents where id = $1',
+          [id],
+        )
+      ).rows[0]?.lc;
+    const recording = (id: string, liveClassId?: string) => ({
+      id,
+      moduleId: MOD.allowed,
+      kind: 'transcript' as const,
+      sourceTitle: `Live class: ${id}`,
+      storageKey: `uploads/${id}.vtt`,
+      ...(liveClassId ? { liveClassId } : {}),
+    });
+
+    beforeAll(async () => {
+      await raw.query(
+        `insert into live_classes (id, teacher_id, title, starts_at, created_at) values
+           ($1, $5, 'A past', now() - interval '2 hours', now() - interval '3 days'),
+           ($2, $5, 'A past 2', now() - interval '1 hour', now() - interval '2 days'),
+           ($3, $5, 'A future', now() + interval '2 days', now()),
+           ($4, $6, 'B past', now() - interval '2 hours', now())`,
+        [LC_PAST, LC_PAST_2, LC_FUTURE, LC_B, RA, RB],
+      );
+    });
+
+    it("create with the scope's own started class stores the link; get's row is unchanged", async () => {
+      await repos.documents.create(A, recording('doc_rec_own', LC_PAST));
+      expect(await linkOf('doc_rec_own')).toBe(LC_PAST);
+      const row = await repos.documents.get(A, 'doc_rec_own');
+      expect(row && Object.keys(row)).not.toContain('liveClassId');
+    });
+
+    it('without liveClassId the column stays null', async () => {
+      await repos.documents.create(A, recording('doc_rec_none'));
+      expect(await linkOf('doc_rec_none')).toBeNull();
+    });
+
+    it("another teacher's, a future and a missing class are not_found: no row, no revision bump", async () => {
+      const before = await repos.retrieval.revision(A);
+      for (const [i, lc] of [LC_B, LC_FUTURE, 'lc_missing'].entries()) {
+        const err = await rejection(repos.documents.create(A, recording(`doc_rec_bad${i}`, lc)));
+        expect(err.kind).toBe('not_found');
+        expect(await repos.documents.get(A, `doc_rec_bad${i}`)).toBeNull();
+      }
+      expect(await repos.retrieval.revision(A)).toBe(before);
+    });
+
+    it('rejects a malformed liveClassId before any SQL', async () => {
+      for (const bad of ['', "x' or 1=1", 'a'.repeat(129), 7]) {
+        const err = await rejection(
+          repos.documents.create(A, {
+            ...recording('doc_rec_malformed'),
+            liveClassId: bad as never,
+          }),
+        );
+        expect(err.kind).toBe('invalid');
+      }
+      expect(await repos.documents.get(A, 'doc_rec_malformed')).toBeNull();
+    });
+
+    it('startReplace keeps the link', async () => {
+      await repos.documents.create(A, recording('doc_rec_replace', LC_PAST));
+      await repos.documents.startReplace(A, 'doc_rec_replace', { storageKey: 'uploads/v2.vtt' });
+      expect(await linkOf('doc_rec_replace')).toBe(LC_PAST);
+    });
+
+    it("a linked transcript's chunks are found by its module's search, with a timestamp locator", async () => {
+      await repos.documents.create(A, recording('doc_rec_search', LC_PAST));
+      const res = await repos.chunks.insertManyIfStorageKey(
+        A,
+        'doc_rec_search',
+        'uploads/doc_rec_search.vtt',
+        [{ ord: 0, text: 'axolotl regeneration lecture', locator: '00:12:05' }],
+      );
+      expect(res.stale).toBe(false);
+      const hits = await search('axolotl');
+      const hit = hits.find((c) => c.documentId === 'doc_rec_search');
+      expect(hit?.source.locator).toBe('00:12:05');
+      const locked = await repos.retrieval.search(A, {
+        q: 'axolotl',
+        allowedModuleIds: [MOD.locked],
+        k: 50,
+      });
+      expect(locked.map((c) => c.documentId)).not.toContain('doc_rec_search');
+      const other = await repos.retrieval.search(B, {
+        q: 'axolotl',
+        allowedModuleIds: [MOD.other],
+        k: 50,
+      });
+      expect(other.map((c) => c.documentId)).not.toContain('doc_rec_search');
+    });
+
+    it('listRecordingsForTeacher lists only own linked documents, newest first, with status', async () => {
+      await repos.documents.create(A, recording('doc_rec_list1', LC_PAST_2));
+      await repos.documents.updateStatus(A, 'doc_rec_list1', 'processing');
+      await repos.documents.updateStatus(A, 'doc_rec_list1', 'failed', 'transcribe_failed');
+      await raw.query(
+        `insert into documents (id, teacher_id, module_id, kind, source_title, live_class_id)
+           values ('doc_rec_b', $1, $2, 'transcript', 'B rec', $3)`,
+        [RB, MOD.other, LC_B],
+      );
+      await raw.query(
+        `update documents set created_at = now() + interval '1 minute' where id = 'doc_rec_list1'`,
+      );
+
+      const mine = await repos.liveClasses.listRecordingsForTeacher(A);
+      expect(mine[0]).toEqual({
+        liveClassId: LC_PAST_2,
+        documentId: 'doc_rec_list1',
+        sourceTitle: 'Live class: doc_rec_list1',
+        status: 'failed',
+        failureReason: 'transcribe_failed',
+      });
+      const ids = mine.map((r) => r.documentId);
+      expect(ids).toEqual(
+        expect.arrayContaining(['doc_rec_own', 'doc_rec_replace', 'doc_rec_search']),
+      );
+      expect(ids).not.toContain('doc_rec_none');
+      expect(ids).not.toContain('doc_rec_b');
+      const own = mine.find((r) => r.documentId === 'doc_rec_own');
+      expect(own).toEqual({
+        liveClassId: LC_PAST,
+        documentId: 'doc_rec_own',
+        sourceTitle: 'Live class: doc_rec_own',
+        status: 'uploading',
+      });
+
+      const theirs = await repos.liveClasses.listRecordingsForTeacher(B);
+      expect(theirs.map((r) => r.documentId)).toEqual(['doc_rec_b']);
+    });
+
+    it('listRecordingsForTeacher rejects a bad scope before any SQL', async () => {
+      const err = await rejection(
+        repos.liveClasses.listRecordingsForTeacher({ teacherId: '' }),
+      );
+      expect(err.kind).toBe('scope');
+    });
+
+    it('caps listRecordingsForTeacher at RECORDING_LIST_MAX', () => {
+      expect(RECORDING_LIST_MAX).toBe(500);
     });
   });
 

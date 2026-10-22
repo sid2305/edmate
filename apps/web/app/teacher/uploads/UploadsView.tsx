@@ -80,6 +80,9 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const [linkTitle, setLinkTitle] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkBannerError, setLinkBannerError] = useState<string | null>(null);
+  // Task 12.3c: a teacher cannot upload, replace or add a link without checking this box; the
+  // client never sends `rightsDeclared: false` -- the checkbox simply disables every control.
+  const [rightsChecked, setRightsChecked] = useState(false);
   const replaceTarget = useRef<string | null>(null);
   const replacePicker = useRef<HTMLInputElement>(null);
 
@@ -145,7 +148,13 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
     e.target.value = '';
     if (!file) return;
     void send(file, (contentType, byteSize) =>
-      createDocument({ moduleId, sourceTitle: file.name, contentType, byteSize }),
+      createDocument({
+        moduleId,
+        sourceTitle: file.name,
+        contentType,
+        byteSize,
+        rightsDeclared: true,
+      }),
     );
   };
 
@@ -154,7 +163,9 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
     const id = replaceTarget.current;
     e.target.value = '';
     if (!file || !id) return;
-    void send(file, (contentType, byteSize) => replaceDocument(id, { contentType, byteSize }));
+    void send(file, (contentType, byteSize) =>
+      replaceDocument(id, { contentType, byteSize, rightsDeclared: true }),
+    );
   };
 
   const onDelete = async (id: string) => {
@@ -167,7 +178,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const onAddLink = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const url = linkUrl.trim();
-    if (!url || linkBusy) return;
+    if (!url || linkBusy || !rightsChecked) return;
     setLinkBusy(true);
     setLinkBannerError(null);
     try {
@@ -175,6 +186,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
         moduleId,
         url,
         ...(linkTitle.trim() ? { sourceTitle: linkTitle.trim() } : {}),
+        rightsDeclared: true,
       });
       if (!result.ok) {
         setLinkBannerError(result.message ?? t(`errors.${errorKey(result)}`));
@@ -221,6 +233,21 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
               </select>
             </p>
           ) : null}
+          <p className="uploads-field uploads-rights">
+            <label htmlFor="uploads-rights">
+              <input
+                id="uploads-rights"
+                type="checkbox"
+                checked={rightsChecked}
+                onChange={(e) => setRightsChecked(e.target.checked)}
+                aria-describedby="uploads-rights-hint"
+              />
+              {t('rightsLabel')}
+            </label>
+            <span id="uploads-rights-hint" className="uploads-hint">
+              {t('rightsHint')}
+            </span>
+          </p>
           <p className="uploads-field">
             <label htmlFor="uploads-file">{t('chooseFile')}</label>
             <input
@@ -228,6 +255,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
               type="file"
               accept={ACCEPT}
               aria-describedby="uploads-hint"
+              disabled={!rightsChecked}
               onChange={onUpload}
             />
             <span id="uploads-hint" className="uploads-hint">
@@ -256,7 +284,10 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                 onChange={(e) => setLinkTitle(e.target.value)}
               />
             </p>
-            <button type="submit" disabled={linkBusy || linkUrl.trim() === ''}>
+            <button
+              type="submit"
+              disabled={linkBusy || linkUrl.trim() === '' || !rightsChecked}
+            >
               {t('addLink')}
             </button>
             {linkBannerError ? (
@@ -274,6 +305,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
         data-replace-picker=""
         accept={ACCEPT}
         tabIndex={-1}
+        disabled={!rightsChecked}
         onChange={onReplace}
       />
       {banner ? (
@@ -333,6 +365,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                       <button
                         type="button"
                         aria-label={t('replaceLabel', { title: d.sourceTitle })}
+                        disabled={!rightsChecked}
                         onClick={() => {
                           replaceTarget.current = d.id;
                           replacePicker.current?.click();

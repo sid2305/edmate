@@ -138,9 +138,9 @@ describe('runQualityGate', () => {
 
   it('throws on an unknown suite or a duplicate id before running anything', async () => {
     const agent = agentFailing();
-    const feedback: EvalCase = {
-      id: 'fb-1',
-      suite: 'feedback',
+    const nonsense: EvalCase = {
+      id: 'ns-1',
+      suite: 'nonsense-suite',
       package: 'p1',
       reviewed_by: 'lead',
       source: 's',
@@ -148,14 +148,14 @@ describe('runQualityGate', () => {
     };
     await expect(
       runQualityGate(
-        gateInput({ changes: ['first_publish'], platformCases: [feedback], agentFor: () => agent }),
+        gateInput({ changes: ['first_publish'], platformCases: [nonsense], agentFor: () => agent }),
       ),
     ).rejects.toThrow(GateScopeError);
     await expect(
       runQualityGate(
         gateInput({
           changes: ['first_publish'],
-          platformCases: [{ ...feedback, id: accId(0), suite: 'leak' }],
+          platformCases: [{ ...nonsense, id: accId(0), suite: 'leak' }],
           agentFor: () => agent,
         }),
       ),
