@@ -303,6 +303,33 @@ A bad usage or a missing `--answer-file` never opens the database; a `Repository
 message; any other failure is `redact()`ed before it reaches the terminal. See
 `runTeacherQuestionsCli` (`src/cli.ts`) and `src/bin/teacher-questions.ts`.
 
+## Test chat and corrections (task 8.5)
+
+The teacher's test chat previews one of the teacher's own packages as a student would see it,
+before or after publishing. Teacher-scoped only; no student scope reaches any of these.
+
+**`corrections.record(scope, { moduleId, question, badAnswer, correctedAnswer })`**
+(`corrections.ts`) records a teacher marking an agent answer wrong, in one transaction:
+`insertTeacherNote` (above) with `origin 'correction'` and the corrected answer — so the note
+chunk, its `teacher_eval_cases` row and the material-revision bump are the same as for a teacher
+answer — then one `corrections` row (`teacher_id` = the scope's, and the bad answer kept for the
+record). The module ownership check is `insertTeacherNote`'s `INSERT … SELECT FROM modules WHERE id
+= $m AND teacher_id = $t`, run first, so a missing or another teacher's module is `not_found` and
+nothing is written. All three texts go through `teacherNoteParts` before any SQL (empty after
+trimming or over `TEACHER_NOTE_PART_MAX` = `LIMITS.turnTextMaxLength` is `invalid`); the stored
+texts are trimmed. Returns `{ correctionId, chunkId, evalCaseId }`. This file names no chunks
+table; it only calls `insertTeacherNote`.
+
+**`agentVersions.latest(scope, agentId)`** returns `{ version, config }` for the newest
+`agent_versions` row of the scope's own agent, whatever the agent's status (a draft is what the
+test chat previews); `null` for no version, a missing or another teacher's agent. Mirrors
+`packageVersions.latest`.
+
+**`packageVersions.listForAgent(scope, agentId)`** returns `{ packageId, name }[]`: the scope's own
+packages for that agent that have at least one `package_versions` row (an `EXISTS` filtered by the
+same teacher), any status, newest created first then id, at most `AGENT_PACKAGES_MAX` (100).
+Another teacher's or a missing agent is `[]`. `liveForAgent` stays the public, live-only read.
+
 ## Memory reset and export (task 6.5)
 
 `learnerProfiles.reset(scope)` is the student's own "reset what my tutor remembers". One

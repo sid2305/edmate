@@ -4,6 +4,7 @@ import { agentVersionsRepo } from './agent-versions.js';
 import { agentsRepo } from './agents.js';
 import { auditRepo } from './audit.js';
 import { chunksRepo, documentsRepo } from './chunks.js';
+import { correctionsRepo } from './corrections.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
@@ -57,6 +58,7 @@ export function createRepositories(db: Db) {
     usageLedger: guardAll('usageLedger', usageLedgerRepo(db)),
     documents: guardAll('documents', documentsRepo(db)),
     chunks: guardAll('chunks', chunksRepo(db)),
+    corrections: guardAll('corrections', correctionsRepo(db)),
     retrieval: guardAll('retrieval', retrievalRepo(db)),
     safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
     teacherProfiles: guardAll('teacherProfiles', teacherProfilesRepo(db)),
@@ -115,7 +117,13 @@ export {
   type StartInput,
 } from './subscriptions.js';
 export type { AgentRow, PublicAgentScope } from './agents.js';
-export type { LivePackage, PackageOffer } from './package-versions.js';
+export {
+  AGENT_PACKAGES_MAX,
+  type LivePackage,
+  type PackageOffer,
+  type TeacherPackageSummary,
+} from './package-versions.js';
+export type { CorrectionRecordInput, CorrectionRecordResult } from './corrections.js';
 export type {
   UnmeteredEntry,
   UnmeteredReason,
