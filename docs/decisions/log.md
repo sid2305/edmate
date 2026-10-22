@@ -10,6 +10,27 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2h Web-link jobs get 2 attempts; SNI and empty-label hosts tightened · decided by builder · risk: high
+- Decided: `enqueueIngest` gives `fileKind: 'web'` jobs `attempts: 2` (`WEB_INGEST_ATTEMPTS`); file jobs keep 5. The pinned transport's SNI uses `bareHostName`, and `webLinkRefusal` refuses a host ending in `..` as `invalid_url` (one trailing dot still allowed). Required reviewer: security-reviewer (ingest egress, ADR-0014).
+- Why: SEC MEDIUM from the 8.2e review (a slow teacher site held the concurrency-1 ingest slot ~75 s per link) and the SEC/TS LOWs on the checked name differing from the name on the wire.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.2h Failed write re-reads the row and compares storageKey (no db change) · decided by builder · risk: medium
+- Decided: before writing `failed`, the processor re-reads the document and skips (stale) unless its storageKey matches the one the job started with; this applies to every `failWith`, not only the last-attempt path. It is a read-then-write, not a compare-and-set.
+- Why: packages/db is out of bounds and has no storageKey-conditional status update; the remaining window is the time between the re-read and the write. A true compare-and-set (`documents.updateStatusIfStorageKey`) is Left to do.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.2h Resolver: 2 s x 2 tries and a 500 ms grace for the second family · decided by builder · risk: medium
+- Decided: `RESOLVER_OPTIONS = { timeout: 2_000, tries: 2 }`; once A or AAAA answers with addresses the other gets `FAMILY_GRACE_MS = 500` before the resolver is cancelled.
+- Why: TS LOW: with 5 s x 2 tries a dropped AAAA query used up the 15 s fetch deadline even when A answered at once.
+- risk: medium
+
+---
+
 ### 22 Oct 2026 · 8.2f The link route and `.link` key; replace refused for links · decided by builder · risk: high
 - Decided: `POST /api/studio/links` creates a document with a `.link` storage key (no S3 object),
   checks the URL with the shared `checkWebLinkUrl` before any write, and enqueues

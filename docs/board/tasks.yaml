@@ -4942,9 +4942,30 @@ tasks:
   deps:
   - 8.2e
   risk: risky
-  status: running
+  status: done
   branch: m8/8.2h-web-link-followups
-  model: plan:sonnet build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 126
+    tokens_out: 416
+    cache_read_tokens: 2935979
+    wall_time_seconds: 276
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 11.2a
   milestone: M11
   title: Class questions repository and clustering in packages/db (11.2 Phase A)
@@ -4957,7 +4978,8 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 11.2b
   milestone: M11
-  title: 'Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with a test'
+  title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with
+    a test
   accept: per docs/tasks/11.2/plan.md Phase B and Lead answers; web typecheck, lint and test green.
   deps:
   - 11.2a
@@ -5237,7 +5259,8 @@ tasks:
   model: null
 - id: 7.2h
   milestone: M13
-  title: '7.2d follow-up: packages/harness moderationPatterns.ts has no rule for "vapes" (and bare "drugs" is only ambiguous); add a decisive rule for buying or selling vapes at school, with a near-miss guard (a vape-detector science project), and a true-positive vapes safety case'
+  title: '7.2d follow-up: packages/harness moderationPatterns.ts has no rule for "vapes" (and bare "drugs" is only ambiguous); add a decisive rule for buying or selling vapes at school, with a near-miss
+    guard (a vape-detector science project), and a true-positive vapes safety case'
   accept: harness guard test for the new rule; the safety suite gains the vapes case; harness and evals green; safety-reviewer runs (guard change).
   deps:
   - 7.2d
