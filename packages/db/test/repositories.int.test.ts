@@ -16,6 +16,7 @@ import {
 import pg from 'pg';
 import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
+import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
 import {
   type AuditEntryInput,
   type AuditRow,
@@ -1391,6 +1392,19 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 9.6a: the complete-export reader. Never returns help_state or studentId/teacherId; the
+  // owner marker comes from `summary` only (endable/endable2 and sessions.create's fresh rows
+  // carry none, but the seeded base session always does).
+  'sessions.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.sessions.listForStudent(scope, { limit: EXPORT_PAGE_MAX }),
+    random: (r, _scope, rid) =>
+      r.sessions.listForStudent({ studentId: rid, teacherId: rid }, { limit: EXPORT_PAGE_MAX }),
+    owners: (res: { items: { summary: string | null }[] }) =>
+      res.items.flatMap((s) => markers(s.summary ?? '')),
+  },
   'messages.history': {
     scope: 'student',
     op: 'read',
@@ -1441,6 +1455,18 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'invalid',
       ],
     ],
+  },
+  // Task 9.6a: the complete-export reader, joined on the pair across every session (open and
+  // ended). The owner marker comes from the message text, which always carries one (seeded and
+  // appended messages alike).
+  'messages.listForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.messages.listForStudent(scope, { limit: EXPORT_PAGE_MAX }),
+    random: (r, _scope, rid) =>
+      r.messages.listForStudent({ studentId: rid, teacherId: rid }, { limit: EXPORT_PAGE_MAX }),
+    owners: (res: { items: { text: string }[] }) => res.items.flatMap((m) => markers(m.text)),
   },
   'turnTraces.insert': {
     scope: 'student',
@@ -3590,6 +3616,102 @@ describe.skipIf(!up)(
         await expect(repos.messages.history(sc, sid, bad)).rejects.toMatchObject({
           kind: 'invalid',
           method: 'messages.history',
+        });
+      }
+    });
+
+    it('sessions.listForStudent pages oldest first, stable across a created_at tie, and rejects bad input', async () => {
+      const sc = sScope('1A');
+      const t = teacherOf('1A');
+      const pageIds = ['ses_1a_p1', 'ses_1a_p2', 'ses_1a_p3', 'ses_1a_p4', 'ses_1a_p5'];
+      const times = [
+        '2026-10-18T00:00:00Z',
+        '2026-10-18T00:01:00Z',
+        '2026-10-18T00:01:00Z', // ties with p2; tie-break by id (p2 < p3).
+        '2026-10-18T00:02:00Z',
+        '2026-10-18T00:03:00Z',
+      ];
+      for (const [i, id] of pageIds.entries()) {
+        await raw.query(
+          `insert into sessions
+             (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version, created_at)
+           values ($1, $2, $3, $4, 1, $5, 1, $6)`,
+          [id, sc.studentId, sc.teacherId, ids.agent(t), ids.pkg(t), times[i]],
+        );
+      }
+      let after: { createdAt: string; id: string } | undefined;
+      const seen: string[] = [];
+      for (let guard = 0; guard < 10; guard += 1) {
+        const page = await repos.sessions.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        seen.push(...page.items.map((s) => s.id));
+        if (page.next === null) break;
+        after = page.next;
+      }
+      const ours = seen.filter((id) => pageIds.includes(id));
+      expect(ours).toEqual(pageIds);
+
+      const [row] = (await repos.sessions.listForStudent(sc, { limit: 2 })).items;
+      expect(row && Object.keys(row).sort()).toEqual(
+        ['agentId', 'agentVersion', 'createdAt', 'endedAt', 'id', 'packageId', 'packageVersion', 'summary'].sort(),
+      );
+
+      const last = await repos.sessions.listForStudent(sc, { limit: 500 });
+      expect(last.next).toBeNull();
+
+      for (const bad of [0, 501]) {
+        await expect(repos.sessions.listForStudent(sc, { limit: bad })).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'sessions.listForStudent',
+        });
+      }
+      await expect(
+        repos.sessions.listForStudent(sc, {
+          limit: 2,
+          after: { createdAt: 'not a date', id: pageIds[0]! },
+        }),
+      ).rejects.toMatchObject({ kind: 'invalid', method: 'sessions.listForStudent' });
+      await expect(
+        repos.sessions.listForStudent(sc, {
+          limit: 2,
+          after: { createdAt: times[0]!, id: 'not an id!' },
+        }),
+      ).rejects.toMatchObject({ kind: 'invalid', method: 'sessions.listForStudent' });
+    });
+
+    it('messages.listForStudent pages every message of every own session, stable across a created_at tie', async () => {
+      const sc = sScope('1A');
+      // Two sessions seeded above (sessions.listForStudent's test): spreads the pair's messages
+      // across more than one session, open and otherwise.
+      const sessionIds = ['ses_1a_p1', 'ses_1a_p2'];
+      const msgs: { id: string; sessionId: string; createdAt: string }[] = [
+        { id: 'msg_1a_p_1', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:00:00Z' },
+        { id: 'msg_1a_p_2', sessionId: sessionIds[1]!, createdAt: '2026-10-18T01:01:00Z' },
+        { id: 'msg_1a_p_3', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:01:00Z' }, // ties with p_2
+        { id: 'msg_1a_p_4', sessionId: sessionIds[1]!, createdAt: '2026-10-18T01:02:00Z' },
+        { id: 'msg_1a_p_5', sessionId: sessionIds[0]!, createdAt: '2026-10-18T01:03:00Z' },
+      ];
+      for (const m of msgs) {
+        await raw.query(
+          `insert into messages (id, session_id, role, text, created_at) values ($1, $2, 'student', $3, $4)`,
+          [m.id, m.sessionId, `[1A] ${m.id}`, m.createdAt],
+        );
+      }
+      let after: { createdAt: string; id: string } | undefined;
+      const seen: { id: string; sessionId: string }[] = [];
+      for (let guard = 0; guard < 10; guard += 1) {
+        const page = await repos.messages.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        seen.push(...page.items.map((m) => ({ id: m.id, sessionId: m.sessionId })));
+        if (page.next === null) break;
+        after = page.next;
+      }
+      const ours = seen.filter((m) => msgs.some((x) => x.id === m.id));
+      expect(ours.map((m) => m.id)).toEqual(msgs.map((m) => m.id));
+      expect(ours.map((m) => m.sessionId)).toEqual(msgs.map((m) => m.sessionId));
+
+      for (const bad of [0, 501]) {
+        await expect(repos.messages.listForStudent(sc, { limit: bad })).rejects.toMatchObject({
+          kind: 'invalid',
+          method: 'messages.listForStudent',
         });
       }
     });
