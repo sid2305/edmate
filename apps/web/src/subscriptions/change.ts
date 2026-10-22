@@ -107,9 +107,21 @@ async function readJson(req: Request): Promise<unknown> {
   }
 }
 
+/** The error's constructor name only -- never its message, which can carry a method name or
+ * ids (same convention as `export/routes.ts`; task 9.6i). */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+/** A 500, logging only the error's name (task 9.6i). */
+function failedLogged(error: unknown): Response {
+  console.error(`[subscriptions] ${errorName(error)}`);
+  return failed();
+}
+
 /** A thrown `RepositoryError`'s kind mapped to this route's fixed response per action. */
 function fromError(error: unknown, action: Body['action']): Response {
-  if (!(error instanceof RepositoryError)) return failed();
+  if (!(error instanceof RepositoryError)) return failedLogged(error);
   switch (error.kind) {
     case 'not_found':
     case 'scope':
@@ -119,7 +131,7 @@ function fromError(error: unknown, action: Body['action']): Response {
     case 'integrity':
       return validation();
     case 'failed':
-      return failed();
+      return failedLogged(error);
     default: {
       const _exhaustive: never = error.kind;
       return _exhaustive;

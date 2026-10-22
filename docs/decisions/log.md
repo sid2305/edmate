@@ -10,6 +10,85 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3a content/legal/rights-declaration/global.md is a student-safety risky path · decided by builder · risk: high
+- Decided: the new file sits under `content/legal/**`, already in the student-safety risky-path
+  group per task 1.7; this handoff names code-reviewer as required reviewer for this group, per
+  the plan's "Risky paths touched" section.
+- Why: the plan's lead answers (22 Oct 2026) name code-reviewer for 12.3a's content/legal change
+  and ask every risky phase to log a `risk: high` decision, even though the file itself is a
+  committed placeholder with no legal text.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.3a two review LOWs in packages/content/src/rightsDeclaration.ts left as is · decided by lead · risk: low
+- Decided: packages/content/src/rightsDeclaration.ts keeps the plain Error for a missing file and the existsSync-then-read order (typescript-reviewer LOWs, wontfix).
+- Why: both match privacyNotices.ts on purpose; the file is a committed local file, and Phase C's page catches errors broadly.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6i subscription re-check fixes on a risky path · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/subscriptions.ts` (risky path) now applies the cost-alarm free-tier check in `changePackage`, and `start`'s refusal re-read uses the same verified, live-version and live-agent joins. security-reviewer must re-check this PR before merge, as the board's accept line says.
+- Why: the file is on the merge gate's risk list, and the change alters who can switch to a free package.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6i the start route tells the alarm refusal apart with findLive · decided by builder · risk: low
+- Decided: on `invalid` from `start`, the route calls `findLive`. No live row means the alarm refusal: 409 with "This teacher's free plan is paused for now. Try again next month or choose another package." A live row keeps "You already have a package with this teacher." A `findLive` error goes through the normal error mapping.
+- Why: the repository's error kinds are fixed (a new kind would touch every route's mapping). With no live row, the unique index can't be the cause, so the alarm is the only `invalid` left.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6i the alarm marker window is documented, not closed · decided by builder · risk: low
+- Decided: no marker row is written when the alarm pauses nothing. A comment on `alarmPausedFree` records the window (at most a day, closed by the next run) and leaves a teacher-level marker to 10.3/7.6.
+- Why: the review rated it LOW and offered "accept and document". A teacher-level row would change what the alarm writes.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4a Staff-only, audited regulated-subject flag and approval on agents · decided by builder · risk: high
+- Decided: `regulatedSubjects.setSubject` / `setApproval` require a current staff user (`lockRole`,
+  FOR SHARE) inside the write transaction, then lock the agent FOR UPDATE; anyone else is `scope`
+  and nothing is written. Every change writes one `agent.regulated_flag` / `agent.regulated_approval`
+  audit row (actorRole `staff`, target `agent:<id>`, the agent's teacher, before/after subject and
+  approval, note as reason) in the same transaction; no-ops write nothing. A subject change clears
+  the approval; approving an unflagged agent is `invalid`; a repeat approval keeps the first
+  approver. `listForStaff` returns ids, the public slug and flag columns only (no name, email or
+  phone), newest first, capped at 200. Lock order (user role, then agent) is stated in the file
+  header; publish never locks a user row, so there is no cycle. Reviewer: security-reviewer
+  (staff-only flag and approve, audited, scoped), plus database-reviewer for the lock order.
+- Why: plan Phase A and the lead answers (Q1, Q5); the 12.5a staff pattern; lessons on lock order.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4a Migration 0023 adds the columns and backfills the subject from the newest version · decided by builder · risk: high
+- Decided: migration `0023_agents_regulated_subject` adds three nullable columns, an FK to users
+  and two check constraints, then one hand-added `UPDATE agents … FROM (SELECT DISTINCT ON
+  (agent_id) … ORDER BY agent_id, version DESC)` that copies the newest version's
+  `config->>'regulatedSubject'` when it is `investing`, `health` or `law`. Backfilled agents are
+  unapproved. Nothing is dropped or deleted. The `ALTER TABLE`s take an ACCESS EXCLUSIVE lock on
+  `agents` for the migration transaction and the `UPDATE` row-locks only flagged agents inside it;
+  pilot data has none, so the window is negligible. Reviewer: database-reviewer (backfill UPDATE,
+  check constraints, locks).
+- Why: lead answer Q3 (backfill, start unapproved); an out-of-set value is filtered so the new
+  check constraint can never fail the migration.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4a Staff list row has no teacher id · decided by builder · risk: low
+- Decided: the list row carries exactly the plan's fields (agent id, teacher slug, status,
+  liveVersion, subject, approvedAt, approvedBy); no teacher id. The slug is null when a teacher
+  has no profile.
+- Why: follow the plan's field list; 12.4d can ask for more if the page needs it.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 7.2d safety case additions (36 new cases) · decided by builder · risk: high
 - Decided: add 36 new safety eval cases exactly per the Phase E mix (distress 10, near-miss 6,
   jailbreak 8, moderation 6, PII 6; no SSN case), all `reviewed_by: lead`, English only, US-framed.

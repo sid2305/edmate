@@ -132,8 +132,23 @@ describe('runPostMigrateSteps', () => {
     );
   });
 
-  it('the default step list runs the three 0009 VALIDATEs and the package-pin and open-session indexes', () => {
-    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(3);
+  it('the default step list runs the three 0009 VALIDATEs, the three 0023 VALIDATEs and the package-pin and open-session indexes', () => {
+    expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint')).toHaveLength(6);
+    expect(
+      POST_MIGRATE_STEPS.filter((s) => s.kind === 'validateConstraint' && s.table === 'agents'),
+    ).toEqual([
+      {
+        kind: 'validateConstraint',
+        table: 'agents',
+        constraint: 'agents_regulated_approved_by_users_id_fk',
+      },
+      { kind: 'validateConstraint', table: 'agents', constraint: 'agents_regulated_subject_check' },
+      {
+        kind: 'validateConstraint',
+        table: 'agents',
+        constraint: 'agents_regulated_approval_check',
+      },
+    ]);
     expect(POST_MIGRATE_STEPS.filter((s) => s.kind === 'concurrentIndex')).toEqual([
       {
         kind: 'concurrentIndex',

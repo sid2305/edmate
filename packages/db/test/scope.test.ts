@@ -141,6 +141,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
     // takedowns (12.2b) take a bare staff id first, like reports.review. Their malformed and
     // non-staff cases are in takedowns.test.ts and takedowns.int.test.ts.
     if (name.startsWith('takedowns.')) continue;
+    // regulatedSubjects (12.4a) takes a bare staff id `by` first, like listPendingForStaff: a
+    // malformed one is `invalid` before any SQL (regulated-subjects.test.ts); a non-staff one is
+    // `scope` (regulated-subjects.int.test.ts, the isolation grid).
+    if (name.startsWith('regulatedSubjects.')) continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(

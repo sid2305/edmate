@@ -104,6 +104,21 @@ describe('PlanPage', () => {
     await expect(PlanPage({ params: params('agt_1') })).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
+  it('task 9.6i: a getById miss for the live subscription fails closed (notFound), never the internal version id', async () => {
+    state.requireRole.mockResolvedValue(PRINCIPAL);
+    state.owner.mockResolvedValue({ teacherId: 'tch_asha' });
+    state.findLive.mockResolvedValue({
+      id: 'sub_1',
+      packageVersionId: 'pv_paid_1',
+      status: 'active',
+      periodEnd: '2026-11-21T00:00:00.000Z',
+    });
+    state.liveForAgent.mockResolvedValue([OFFER]);
+    state.getById.mockResolvedValue(null);
+    await expect(PlanPage({ params: params('agt_1') })).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(state.viewProps).toEqual([]);
+  });
+
   it('renders the view with the live subscription, mapping the package version to its id', async () => {
     state.requireRole.mockResolvedValue(PRINCIPAL);
     state.owner.mockResolvedValue({ teacherId: 'tch_asha' });

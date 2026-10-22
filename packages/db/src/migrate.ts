@@ -103,7 +103,10 @@ export type PostMigrateStep =
  * Migration 0009 (task 3.16) adds `sessions_package_version_fk`, `sessions_package_pin_complete`
  * and `sessions_open_has_package` as `NOT VALID` and `sessions_package_id_package_version_idx` as
  * a schema-only index (task 3.16b); migration 0010 (task 3.16c) adds
- * `sessions_open_teacher_id_student_id_idx` the same schema-only way. This is what makes the
+ * `sessions_open_teacher_id_student_id_idx` the same schema-only way. Migration 0023 (task 12.4a)
+ * adds `agents_regulated_approved_by_users_id_fk`, `agents_regulated_subject_check` and
+ * `agents_regulated_approval_check` as `NOT VALID` the same way, so the validation scan of the
+ * existing `agents` rows runs outside drizzle's migration transaction. This is what makes the
  * constraints valid and the indexes built, outside any transaction. Append here, don't edit past
  * entries: migrations are forward-only and this list is replayed, idempotently, on every
  * migrateDatabase() call.
@@ -122,6 +125,13 @@ export const POST_MIGRATE_STEPS: readonly PostMigrateStep[] = [
     indexName: 'sessions_open_teacher_id_student_id_idx',
     sql: `CREATE INDEX CONCURRENTLY IF NOT EXISTS "sessions_open_teacher_id_student_id_idx" ON "sessions" USING btree ("teacher_id","student_id") WHERE "sessions"."ended_at" is null`,
   },
+  {
+    kind: 'validateConstraint',
+    table: 'agents',
+    constraint: 'agents_regulated_approved_by_users_id_fk',
+  },
+  { kind: 'validateConstraint', table: 'agents', constraint: 'agents_regulated_subject_check' },
+  { kind: 'validateConstraint', table: 'agents', constraint: 'agents_regulated_approval_check' },
 ];
 
 /** True once `ALTER TABLE ... VALIDATE CONSTRAINT` has already succeeded for this constraint. */

@@ -5167,9 +5167,29 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.3a-rights-declaration
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 22
+    tokens_in: 82
+    tokens_out: 807
+    cache_read_tokens: 1014982
+    wall_time_seconds: 69
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 12.3b
   milestone: M12
   title: Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)
@@ -5212,9 +5232,28 @@ tasks:
   deps:
   - 9.6h
   risk: high
-  status: running
+  status: done
   branch: m9/9.6i-subscription-recheck
   model: plan:lead build:opus review:sonnet
+  metrics:
+    tool_calls: 35
+    tokens_in: 120
+    tokens_out: 1218
+    cache_read_tokens: 2408907
+    wall_time_seconds: 319
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.5d
   milestone: M13
   title: 'Safety alerts follow-ups: listForStaff sort index and acknowledged_by FK index (12.5a review)'
@@ -5232,9 +5271,30 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: running
+  status: done
   branch: m12/12.4a-regulated-flag-repo
-  model: plan:opus build:opus review:sonnet
+  model: plan:opus build:opus fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 150
+    tokens_out: 1325
+    cache_read_tokens: 3205601
+    wall_time_seconds: 195
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 12.4b
   milestone: M12
   title: Publish refuses a flagged agent without staff approval (12.4 Phase B)
@@ -5242,9 +5302,9 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4b-publish-regulated-block
+  model: plan:opus build:opus review:sonnet
 - id: 12.4c
   milestone: M12
   title: Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)

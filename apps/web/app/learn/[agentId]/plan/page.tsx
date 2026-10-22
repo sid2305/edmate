@@ -44,11 +44,13 @@ export default async function PlanPage({ params }: PlanPageProps) {
   let subscription: PlanSubscription | null = null;
   if (live !== null && live.status !== 'ended') {
     const current = await repos.packageVersions.getById({ teacherId: owner.teacherId }, live.packageVersionId);
+    // Task 9.6i: fail closed like the PATCH route does, never showing the internal version id.
+    if (current === null) return notFound();
     subscription = {
       id: live.id,
       status: live.status as PlanSubscription['status'],
       periodEnd: live.periodEnd,
-      packageId: current?.id ?? live.packageVersionId,
+      packageId: current.id,
     };
   }
 

@@ -57,6 +57,7 @@ function fakeRepos(overrides: {
   owner?: (scope: { agentId: string }) => Promise<{ teacherId: string } | null>;
   liveForAgent?: (scope: { agentId: string }) => Promise<LivePackage[]>;
   start?: (scope: unknown, input: unknown) => Promise<LiveSubscription>;
+  findLive?: (scope: unknown) => Promise<LiveSubscription | null>;
 } = {}) {
   const calls: { method: string; scope: unknown; input?: unknown }[] = [];
   const owner = vi.fn(async (scope: { agentId: string }) => {
@@ -74,10 +75,15 @@ function fakeRepos(overrides: {
     if (overrides.start) return overrides.start(scope, input);
     return SUBSCRIPTION;
   });
+  const findLive = vi.fn(async (scope: unknown) => {
+    calls.push({ method: 'findLive', scope });
+    if (overrides.findLive) return overrides.findLive(scope);
+    return SUBSCRIPTION;
+  });
   const repos = {
     agents: { owner },
     packageVersions: { liveForAgent },
-    subscriptions: { start },
+    subscriptions: { start, findLive },
   } as unknown as Pick<Repositories, 'agents' | 'packageVersions' | 'subscriptions'>;
   return { calls, repos };
 }
@@ -169,6 +175,47 @@ describe('createSubscriptionHandlers', () => {
       ctxFor(STUDENT),
     );
     expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(JSON.stringify(body)).toContain('You already have a package with this teacher.');
+  });
+
+  it('task 9.6i: an invalid start with no live subscription is the alarm refusal, with its own fixed words', async () => {
+    const { repos, calls } = fakeRepos({
+      start: () => {
+        throw new RepositoryError('invalid', 'subscriptions.start');
+      },
+      findLive: async () => null,
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_free' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(409);
+    const text = JSON.stringify(await res.json());
+    expect(text).toContain("This teacher's free plan is paused for now.");
+    expect(text).not.toContain('already have');
+    expect(calls.find((c) => c.method === 'findLive')?.scope).toEqual({
+      studentId: 'std_amy',
+      teacherId: 'tch_asha',
+    });
+  });
+
+  it('task 9.6i: a findLive failure while explaining an invalid start is a 500, not a guess', async () => {
+    const { repos } = fakeRepos({
+      start: () => {
+        throw new RepositoryError('invalid', 'subscriptions.start');
+      },
+      findLive: () => {
+        throw new RepositoryError('failed', 'subscriptions.findLive');
+      },
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_free' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(500);
   });
 
   it('a malformed body is 400 before any repo call', async () => {

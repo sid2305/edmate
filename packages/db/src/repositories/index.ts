@@ -17,6 +17,7 @@ import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
+import { regulatedSubjectsRepo } from './regulated-subjects.js';
 import { reportsRepo } from './reports.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyAlertsRepo } from './safety-alerts.js';
@@ -85,6 +86,7 @@ export function createRepositories(db: Db) {
     reports: guardAll('reports', reportsRepo(db)),
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
     takedowns: guardAll('takedowns', takedownsRepo(db)),
+    regulatedSubjects: guardAll('regulatedSubjects', regulatedSubjectsRepo(db)),
   };
 }
 
@@ -308,3 +310,14 @@ export {
   type TakedownLiftInput,
   TAKEDOWNS_ACTIVE_MAX_LIMIT,
 } from './takedowns.js';
+export {
+  REGULATED_APPROVAL_ACTION,
+  REGULATED_FLAG_ACTION,
+  REGULATED_LIST_MAX,
+  REGULATED_NOTE_MAX,
+  REGULATED_SUBJECTS,
+  type RegulatedApprovalInput,
+  type RegulatedSubject,
+  type RegulatedSubjectInput,
+} from './regulated-subjects.js';
+export type { RegulatedAgentRow } from './map.js';
