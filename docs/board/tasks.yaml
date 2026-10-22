@@ -4280,7 +4280,7 @@ tasks:
   deps:
   - 9.7a
   - 9.2c
-  - 9.6b
+  - 9.6d
   risk: low
   status: todo
 - id: 8.7g
