@@ -84,8 +84,13 @@ the plan.
   that doesn't exist for these two methods.
 - risk: low
 
+### 22 Oct 2026 · 9.6a the export readers' missing index waits for 9.6f · decided by lead · risk: medium
+- Decided: database-reviewer's HIGH (no index for the export readers' pair filter plus (created_at, id) order) is re-rated MEDIUM and deferred to 9.6f, an additive index migration before opening up.
+- Why: the readers are correct and pair-scoped; export is rare and user-started; a closed-pilot pair has a few thousand messages at most, so a per-page sort is cheap; the 9.6 plan rules out a migration in this phase.
+- risk: medium
+
 ## Left to do
 None — Phase A is complete per the plan's exit conditions.
 
 Status: DONE
-Tool calls used: 44
+Tool calls used: 89 (harness; over the 70 budget)
