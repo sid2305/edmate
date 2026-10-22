@@ -8,6 +8,7 @@ import { signOutAndRedirect } from './actions';
 export async function TeacherView() {
   const shell = await getTranslations('shell');
   const t = await getTranslations('teacher');
+  const publish = await getTranslations('publish');
   return (
     <AppShell
       brand={shell('brand')}
@@ -19,6 +20,7 @@ export async function TeacherView() {
         { href: '/teacher/onboarding', label: t('onboardingLink') },
         { href: '/teacher/style-card', label: t('styleCardLink') },
         { href: '/teacher/packages', label: t('packagesLink') },
+        { href: '/teacher/publish', label: publish('navLink') },
         { href: '/teacher/insights', label: t('insightsLink') },
         { href: '/teacher/questions', label: t('questionsLink') },
       ]}
