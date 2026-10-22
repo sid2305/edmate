@@ -2062,9 +2062,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.5b
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: phases:8.5a,8.5b,8.5e
 - id: '8.6'
   milestone: M8
   title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
@@ -3586,9 +3586,9 @@ tasks:
   deps:
   - 8.6c
   risk: medium
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.6d-package-builder
+  model: plan:opus build:sonnet
 - id: 8.8b
   milestone: M8
   title: 'Studio insights page (8.8 Phase B, apps/web UI): health and top question groups'
@@ -3597,7 +3597,9 @@ tasks:
   - 8.8a
   - 8.3c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.8b-insights-page
+  model: plan:sonnet build:sonnet-5/medium review:sonnet
 - id: 8.9b
   milestone: M8
   title: 'Teacher questions API (8.9 Phase B, apps/web): list, answer and dismiss routes'
@@ -3615,7 +3617,9 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.9c-questions-inbox
+  model: plan:sonnet build:sonnet-5/medium
 - id: 9.2a
   milestone: M9
   title: Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)
@@ -3628,7 +3632,7 @@ tasks:
   model: plan:opus build:sonnet
 - id: 9.2b
   milestone: M9
-  title: Teachers search page /teachers (9.2 Phase B, apps/web)
+  title: Teachers search page /teachers (9.2 Phase B, apps/web), with request-level rate limiting on the public /teachers routes (9.2a security note)
   accept: per docs/tasks/9.2/plan.md Phase B; web typecheck, lint and test green.
   deps:
   - 9.2a
@@ -3656,9 +3660,29 @@ tasks:
   deps:
   - 8.5b
   risk: low
-  status: running
+  status: done
   branch: m8/8.5e-test-chat-ui
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 112
+    tokens_out: 691
+    cache_read_tokens: 1747684
+    wall_time_seconds: 128
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.5a
   milestone: M9
   title: 'Practice screen (9.5 Phase A, apps/web): skill input kinds, ChatView activeSkill, PracticeCard'
@@ -3741,6 +3765,30 @@ tasks:
   deps:
   - 8.9b
   risk: low
+  status: todo
+- id: 9.2e
+  milestone: M13
+  title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table instead of `as never`; batched pattern for generated-column migrations on large tables; one lateral join instead of repeated correlated subqueries in discovery.ts; comment that teacherBySlug''s full bio is intentional'
+  accept: each item done or logged as wontfix; db typecheck, lint and test green.
+  deps:
+  - 9.2a
+  risk: medium
+  status: todo
+- id: 12.1a
+  milestone: M12
+  title: Staff verification queue read in packages/db (12.1 Phase A)
+  accept: per docs/tasks/12.1/plan.md Phase A; db typecheck, lint and test green.
+  deps:
+  - 8.7a
+  risk: high
+  status: todo
+- id: 12.1b
+  milestone: M12
+  title: Staff console page and verification routes in apps/web (12.1 Phase B)
+  accept: per docs/tasks/12.1/plan.md Phase B; web typecheck, lint and test green.
+  deps:
+  - 12.1a
+  risk: high
   status: todo
 - id: 9.4c
   milestone: M13

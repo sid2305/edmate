@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.5e the correction form picks from the teacher's outline modules · decided by builder · risk: low
+- Decided: the page loads the modules for the correction form with `outline.getOutline` in the teacher's scope (id and title); with no outline the form says to add a module first and cannot be saved.
+- Why: the plan asked for a module select without naming a source; `modules.ids` gives ids only, and the outline is the teacher's own module list with titles (one course per teacher in the MVP).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.5e the question in the correction form is editable · decided by builder · risk: low
+- Decided: the question is pre-filled with the preceding student message but the teacher may edit it; the agent's answer is shown read-only and sent unchanged as `badAnswer`.
+- Why: a hint request's shown text ("Can I have a hint?") is a poor question for a teacher note; the bad answer must stay what the agent actually said.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.6c Error codes stay the contract's; a `reason` field names the case · decided by builder · risk: low
 - Decided: the lead's codes `package_limit`, `style_card_required`, `internal` are sent as a top-level
   `reason` next to the contract's `error` body; `error.code` stays an `ErrorCode` (`limit_reached`,

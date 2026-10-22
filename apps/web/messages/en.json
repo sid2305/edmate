@@ -318,5 +318,28 @@
       "mock_interview": "Mock interview",
       "revision": "Revision"
     }
+  },
+  "testChat": {
+    "title": "Test chat",
+    "intro": "Chat with your agent the way a student on one package would. Mark a wrong answer to correct it.",
+    "packageLabel": "Package",
+    "packageHint": "Changing the package starts a new test chat.",
+    "noPackages": "This agent has no package to test yet. Build a package first, then come back here.",
+    "markWrong": "Mark wrong",
+    "correctionTitle": "Correct this answer",
+    "moduleLabel": "Module",
+    "noModules": "Add a module to your course outline before you correct answers.",
+    "questionLabel": "Student question",
+    "badAnswerLabel": "Agent's answer",
+    "correctedLabel": "Correct answer",
+    "submit": "Save correction",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "saved": "Correction saved. The agent uses it from the next similar question.",
+    "errors": {
+      "validation": "That correction couldn't be saved. Check the fields are filled in and not too long.",
+      "not_found": "That module isn't yours any more. Reload the page and try again.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }
