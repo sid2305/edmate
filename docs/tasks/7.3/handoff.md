@@ -3,7 +3,7 @@
 Status: DONE
 Branch: m7/7.3-suite-generator (built locally as `work-73`)
 Worktree: .claude/worktrees/agent-a2262182648e4820c
-Tool calls used: 31
+Tool calls used: 34 (harness count)
 
 ## What was built
 
