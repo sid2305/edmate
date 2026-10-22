@@ -4294,7 +4294,7 @@ tasks:
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
-    MEDIUM)'
+    MEDIUM); a failed local full-flow run leaves its seeded teacher question open and the next local run fails strict mode on getByText, so global-setup resets that state or the spec uses a per-run unique question)'
   accept: global-setup throws on a non-local host with a clear message, with a unit test; the local e2e run is unchanged.
   deps:
   - 9.7a
