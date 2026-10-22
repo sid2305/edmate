@@ -444,5 +444,31 @@
       "locked_content": "Locked content",
       "accuracy": "Accuracy"
     }
+  },
+  "staff": {
+    "nav": "Verification",
+    "title": "Teacher verification",
+    "intro": "Teachers waiting for a manual identity check, oldest first. Check the declared name and email before you approve.",
+    "listLabel": "Pending teachers",
+    "empty": "No teachers are waiting for verification.",
+    "reload": "Reload",
+    "reloading": "Reloading…",
+    "subject": "Subject",
+    "name": "Declared name",
+    "email": "Email",
+    "noEmail": "No email on file",
+    "reasonLabel": "Reason (optional)",
+    "approve": "Approve",
+    "reject": "Reject",
+    "working": "Saving…",
+    "approved": "{slug} is now verified.",
+    "rejected": "{slug} was rejected.",
+    "errors": {
+      "forbidden": "You can't verify this teacher: it may be your own profile, or your staff access changed.",
+      "not_found": "That teacher was not found. Reload the list.",
+      "validation": "Check the reason (up to 500 characters) and try again.",
+      "generic": "Something went wrong. Try again.",
+      "loadFailed": "Could not load the verification queue. Try again."
+    }
   }
 }
