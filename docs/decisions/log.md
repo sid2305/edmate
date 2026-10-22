@@ -10,6 +10,111 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
+- Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
+- Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Send answer uses the group's first remaining question id · decided by builder · risk: low
+- Decided: "Send answer" posts the id of the group's first remaining question; the teacher never picks an id.
+- Why: per 5.10's repository, any member id answers the whole group, so the effect is the same whichever id is sent.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Merged 8.8b's nav link and en.json namespace additively · decided by builder · risk: low
+- Decided: kept 8.8b's `insights` nav link and `en.json` namespace; `questionsLink` and `questionsInbox` land after `insights`.
+- Why: the plan's shared-file rule says keep both sides.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Lead accepts that non-English agents fail gate cases during the pilot · decided by lead · risk: medium
+- Decided: under builder decisions 6 and 7, a PilotLanguageClamped background report fails a gate case, so an agent with non-English languages cannot pass the gate until the English-only pilot policy changes. A retryable guard_blocked (failed pre-guard chain) also fails the case after the fix round.
+- Why: the pilot is English-only (human decision); a gate that passed with background failures, or counted a failed guard chain as a block, would overstate safety.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7b Platform case package labels pick a package by id or price tier · decided by builder · risk: low
+- Decided: Platform cases are labelled `package: free|paid`. A label first matches a package id exactly. Otherwise `free`/`paid` picks the widest candidate package of that price tier (price 0 = free), with ties broken by id. A label no package fits gets an agent that rejects, so those cases fail and are never skipped.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b outOfCourse is empty in Phase B · decided by builder · risk: low
+- Decided: `outOfCourse` is `[]` for now. Phase B has no content loading; Phase C or 8.7 content work fills it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Any EDMATE_DEV_MODEL value makes the gate unavailable · decided by builder · risk: low
+- Decided: Any non-blank `EDMATE_DEV_MODEL` makes the gate unavailable, not only `scripted`. The scripted dev model answers every classifier "all clear", so a gate over it would pass by default.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The judge must be Anthropic and comes only from EDMATE_JUDGE_MODEL · decided by builder · risk: low
+- Decided: The judge must be Anthropic (`judge_provider` otherwise). The judge model comes only from `EDMATE_JUDGE_MODEL`, as the decision log's eval-judge entry requires (pinned per release, no default). Judge calls are metered into the same run meter as `eval` usage.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Unpriced usage is counted as unmetered · decided by builder · risk: low
+- Decided: Unpriced or unknown usage is counted as `unmetered` with its reason, never as free.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b Turn errors and background failures fail a case, except LockedLeakDetected · decided by builder · risk: low
+- Decided: A turn that ends in an `error` event (other than `guard_blocked`), or that has any background failure, fails its case. The one exception is `LockedLeakDetected`: the locked-stream guard withheld text and replaced the reply, and that reply is what the case scores. Every background report is still counted in `effects.backgroundFailures`.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The gate fixture agent is English-only · decided by builder · risk: low
+- Decided: The gate fixture agent is English-only (`languages: ['en']`), as the English-only pilot requires. Otherwise `PilotLanguageClamped` is reported in the background, and under decision 6 that fails the case. Agents with other languages will fail gate cases this way until that policy changes.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b GateBasis is a local type until Phase A · decided by builder · risk: low
+- Decided: `GateBasis` is a local type until Phase A's contract or db shape lands. Phase C should switch to it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b gateFallbackReplies and collectReply copy the web and CLI versions · decided by builder · risk: low
+- Decided: `gateFallbackReplies` and `collectReply` copy the web and CLI versions. A shared composition module is an M13 follow-up (plan scope 10).
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b contracts and harness become worker dependencies · decided by builder · risk: low
+- Decided: `@edmate/contracts` and `@edmate/harness` moved from devDependencies to dependencies, because worker runtime code now imports them.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7b The gate has its own TurnConfigStore · decided by builder · risk: low
+- Decided: The gate's `TurnConfigStore` is its own: the production `turnConfigStoreFor` needs session rows, and the gate writes none.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.2a Lead accepts the public discovery repository in packages/db/src/repositories/discovery.ts · decided by lead · risk: high
 - Decided: merge the public, unauthenticated discovery read (packages/db/src/repositories/discovery.ts, index.ts, teacher-profiles.ts) after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved; it exposes only slug, display name, subject, bio, languages, package count and hasFree for verified teachers with a live agent and a live package version.
 - Why: every decoy (pending, rejected, student role, draft or suspended agent, no live package, draft version) is tested absent; input is parsed by strict zod before any SQL and the tsquery is a bound parameter.

@@ -25,7 +25,8 @@
     "outlineLink": "Outline",
     "onboardingLink": "Your profile",
     "styleCardLink": "Teaching style",
-    "insightsLink": "Insights"
+    "insightsLink": "Insights",
+    "questionsLink": "Questions"
   },
   "insights": {
     "title": "Insights",
@@ -306,5 +307,24 @@
     "nextLabel": "Next",
     "prevLabel": "Previous",
     "rateLimited": "Too many searches. Try again in a minute."
+  },
+  "questionsInbox": {
+    "title": "Questions inbox",
+    "intro": "Students asked these questions and your agent couldn't answer. Pick a module and send one answer to every student who asked.",
+    "empty": "No open questions right now.",
+    "countLabel": "Asked by {count} students",
+    "moduleLabel": "Module",
+    "answerLabel": "Your answer",
+    "sendButton": "Send answer",
+    "sending": "Sending…",
+    "dismissButton": "Dismiss",
+    "dismissing": "Dismissing…",
+    "answered": "Answer sent to every student who asked.",
+    "dismissed": "Question dismissed.",
+    "errors": {
+      "validation": "Check the answer and try again.",
+      "not_found": "That question isn't there any more. Reload the page.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }
