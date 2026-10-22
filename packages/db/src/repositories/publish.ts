@@ -57,6 +57,8 @@ export const GATE_GROUP_NAMES = [
   'pedagogy',
   'advice',
   'grounding',
+  'feedback',
+  'revision',
 ] as const;
 export type GateGroupName = (typeof GATE_GROUP_NAMES)[number];
 /** Mirrors of `@edmate/evals` GATE_DEADLINE_MS and FULL_SCOPE_GATE_DEADLINE_MS. */

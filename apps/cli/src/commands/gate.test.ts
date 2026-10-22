@@ -365,20 +365,28 @@ describe('edmate gate', () => {
     });
   });
 
-  describe('full-scope change on the real suites (blocker B-40: no thresholds yet)', () => {
-    it('names the suites and groups that have no decided threshold, instead of guessing', async () => {
+  describe('full-scope change on the real suites (B-40: thresholds decided, no blocker)', () => {
+    it('no longer reports a blocker B-40 gap: feedback/revision have thresholds, platform accuracy is not required', async () => {
       const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
       try {
-        const { io, err } = capture();
+        const { io, err, out } = capture();
         const code = await runGateCommand(
           ['demo', '--change', 'first_publish'],
           io,
           { cwd: tmp, suitesDir: REAL_SUITES_DIR },
         );
+        // The blocker-B-40 precheck no longer fires: no missing threshold, no empty platform
+        // accuracy group (the per-agent accuracy group covers it). The gate instead runs for
+        // real and fails here only because this tmp cwd has no recorded fixtures — never on a
+        // missing threshold or an empty platform group.
+        expect(err.join('')).not.toContain('blocker B-40');
+        expect(err.join('')).not.toContain('no gate threshold decided');
+        expect(err.join('')).not.toContain('no platform cases yet');
         expect(code).toBe(1);
-        expect(err.join('')).toContain('blocker B-40');
-        expect(err.join('')).toContain('no gate threshold decided for suite(s): feedback, revision');
-        expect(err.join('')).toContain('no platform cases yet for group(s): accuracy');
+        expect(out.join('')).toContain('platform:feedback');
+        expect(out.join('')).toContain('platform:revision');
+        expect(out.join('')).not.toContain('platform:accuracy');
+        expect(out.join('')).toContain('agent:accuracy');
       } finally {
         rmSync(tmp, { recursive: true, force: true });
       }

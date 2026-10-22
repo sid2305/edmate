@@ -63,14 +63,24 @@ const expected = (s: GateScope) => s.expectedGroups.map((g) => `${g.origin}:${g.
 describe('groupOf', () => {
   it('splits safety into distress and the rest by id prefix', () => {
     expect(groupOf(evalCase('safety-distress-x', 'safety'))).toBe('safety-distress');
-    expect(groupOf(evalCase('safety-distress-nearmiss-x', 'safety'))).toBe('safety-distress');
     expect(groupOf(evalCase('safety-pii-x', 'safety'))).toBe('safety');
     expect(groupOf(evalCase('leak-x', 'leak'))).toBe('leak');
   });
 
+  it('puts a near-miss distress case in the 99% safety group, not the 100% distress group (B-40)', () => {
+    expect(groupOf(evalCase('safety-distress-nearmiss-x', 'safety'))).toBe('safety');
+    // A real distress case that merely contains "nearmiss" later in its id stays distress.
+    expect(groupOf(evalCase('safety-distress-x-nearmiss', 'safety'))).toBe('safety-distress');
+  });
+
+  it('gives a feedback case and a revision case their own groups', () => {
+    expect(groupOf(evalCase('fb-1', 'feedback'))).toBe('feedback');
+    expect(groupOf(evalCase('rev-1', 'revision'))).toBe('revision');
+  });
+
   it('throws on a suite with no threshold (fail closed)', () => {
-    expect(() => groupOf(evalCase('fb-1', 'feedback'))).toThrow(GateScopeError);
     expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(/no gate threshold/);
+    expect(() => groupOf(evalCase('x-1', 'toString'))).toThrow(GateScopeError);
   });
 });
 
@@ -86,6 +96,8 @@ describe('GATE_THRESHOLDS', () => {
       pedagogy: 80,
       advice: 99,
       grounding: 99,
+      feedback: 70,
+      revision: 80,
     });
   });
 });
@@ -97,8 +109,13 @@ describe('selectGateCases', () => {
       const s = scope([kind]);
       expect(ids(s, 'platform')).toEqual(PLATFORM.map((c) => c.id));
       expect(ids(s, 'agent')).toEqual(AGENT.map((c) => c.id));
+      // A full-scope gate no longer expects a non-empty platform `accuracy` group (B-40): the
+      // per-agent `accuracy` group below covers it. `accuracy-1` still runs and is still scored
+      // at 99% if present; it is just not required.
       expect(expected(s)).toEqual([
-        ...Object.keys(GATE_THRESHOLDS).map((g) => `platform:${g}`),
+        ...Object.keys(GATE_THRESHOLDS)
+          .filter((g) => g !== 'accuracy')
+          .map((g) => `platform:${g}`),
         'agent:accuracy',
         'agent:locked',
       ]);
@@ -173,9 +190,17 @@ describe('selectGateCases', () => {
   });
 
   it('throws on an unknown platform suite in scope, but not out of scope', () => {
-    const withFeedback = [...PLATFORM, evalCase('fb-1', 'feedback')];
-    expect(() => scope(['first_publish'], { platformCases: withFeedback })).toThrow(GateScopeError);
-    expect(scope(['style_card'], { platformCases: withFeedback }).cases).toHaveLength(30);
+    const withUnknown = [...PLATFORM, evalCase('nope-1', 'nonsense-suite')];
+    expect(() => scope(['first_publish'], { platformCases: withUnknown })).toThrow(GateScopeError);
+    expect(scope(['style_card'], { platformCases: withUnknown }).cases).toHaveLength(30);
+  });
+
+  it('a full-scope gate has no expected platform accuracy group but keeps the per-agent one', () => {
+    const s = scope(['first_publish']);
+    expect(expected(s)).not.toContain('platform:accuracy');
+    expect(expected(s)).toContain('agent:accuracy');
+    // A platform accuracy case, if present, still runs and is still scored at the 99% threshold.
+    expect(ids(s, 'platform')).toContain('accuracy-1');
   });
 });
 
