@@ -18,9 +18,11 @@ const SEED = 0x5a5e_c41c;
 const ITERATIONS = 2_000;
 /**
  * Per-call wall-clock bound: a backstop that catches a regression making evaluate slow, not the
- * primary defence (5.5 Q2). Generous so a busy CI machine does not flake; a real hang is seconds.
+ * primary defence (5.5 Q2). A loose gross-regression guard only (docs/lessons.md "Wall-clock
+ * bounds fail on shared CI runners"): shared, loaded CI runners are 8-12x slower than a laptop,
+ * so this must stay far above any real per-call time; a real hang is seconds.
  */
-const PER_CALL_MS = 250;
+const PER_CALL_MS = 2_000;
 
 /** The harness lib has no DOM or Node types; vitest prints console output. */
 function log(s: string): void {

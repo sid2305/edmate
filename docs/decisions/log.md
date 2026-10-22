@@ -10,6 +10,98 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.2b A Redis outage fails the discovery rate limit open, not closed · decided by lead · risk: medium
+- Decided: unlike the sign-in limiter (fails closed, `src/auth/rate-limit.ts`), `discoveryRateLimiter` fails open on a store error or a missing `REDIS_URL`: the `/teachers` page still serves, and the failure is logged by code only (`rate_limit_unavailable`), never the client's IP.
+- Why: this limit protects database load on data that's already public and already published (scope decision 1/2 of the 9.2 plan); refusing every search because Redis blipped would hurt real students more than an occasional burst of searches hurts the database.
+- risk: medium (an attacker who can also knock out Redis loses the limit; accepted, since the data behind it is public by design).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limiter gets its own Redis client, not the sign-in limiter's connection · decided by builder · risk: low
+- Decided: `src/discovery/rateLimit.ts` lazily builds its own `ioredis` client on `REDIS_URL`, the same way `src/turn/runtime.ts` and `src/studio/runtime.ts` already do, instead of reusing the connection `src/auth/index.ts`'s `emailSignIn()` opens internally.
+- Why: that connection is never exported from `src/auth/**` (only `redisSignInCounters`/`createSignInLimiter`, which take a connection, are exported from `rate-limit.ts`, and `index.ts` itself exports no client), and the brief explicitly forbids editing `auth/**` to add one. "The client the sign-in limiter already uses" is read here as the established pattern (ioredis + `REDIS_URL`, read-only reused), not a shared connection object -- every other Redis-using module in `apps/web` already opens its own client the same way.
+- risk: low (an extra Redis connection, same as `turn/runtime.ts` and `studio/runtime.ts` each already open their own).
+
+---
+
+### 22 Oct 2026 · 9.2b The rate limit's client bucket uses the rightmost x-forwarded-for entry · decided by lead · risk: low
+- Decided: `discoveryClientBucket` takes the rightmost (Caddy-appended) `x-forwarded-for` entry, mirroring the sign-in limiter's `clientIp`, and sends a missing, empty or non-IP entry to one shared `unknown` bucket. The lead's brief first asked for the first entry; the fix round changed it to the rightmost.
+- Why: the security review (HIGH) found the first entry is client-controlled, so a caller could rotate a fake first value to get unlimited buckets. The logic is mirrored, not imported, so this module doesn't pull in the sign-in limiter's `@edmate/queue` dependency and `src/auth/**` is untouched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Widen all three timings in the retrieval-leak int test · decided by builder · risk: low
+- Decided: widened `leakTimeoutMs` (20 → 1000 ms), `leakBuildTimeoutMs` (40 → 400 ms) and the post-drop sleep (80 → 800 ms), not just the one named in the brief.
+- Why: a real Postgres round trip on the second `leakCheck` call could exceed the old 40 ms build timeout even outside CI. Lead note (from code-reviewer): this flips the order of the two timeouts, so the first call's fallback now comes from the build's own overrun (`leak_failed`) rather than the outer race (`leak_timeout`). The test doesn't assert which code fired, and a build that is never dropped still fails it, so the regression it guards is still caught.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Queue latency bound stays absolute at 2,500 ms · decided by builder · risk: low
+- Decided: the bound stays an absolute constant (2,500 ms) rather than `DB_DELAY_MS / n`.
+- Why: it matches the file's named top-level constants; 2,500 ms is still half of `DB_DELAY_MS` (5,000 ms), so "done arrives well before the slow write" still holds.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d "Full course" preset price is $55, not the plan's example $29 · decided by builder · risk: low
+- Decided: with the plan's provisional per-turn cost (21,000 micro-USD under the real B-42 Sonnet 5
+  / Haiku 4.5 prices: 5,000/500 main tokens + 4×1,200/60 small tokens) and 20 messages/day, the
+  maximum monthly estimate is $12.60. At $29/month that is 44% of the price — over the 25% warning
+  at the preset's own defaults. At $55/month it is 23%. Kept the daily limit at 20 (higher than
+  the free preset's 10, matching "full course" being the bigger package) and raised the price
+  instead, per the lead's "Full course" answer ("Phase D sets the ... daily limit (or its price) so
+  the at-most estimate stays under 25%, and logs the numbers as a decision").
+- Why: the plan's own example numbers ($29, 20/day) would show the cost warning on a freshly
+  created default package, which the lead's answer rules out.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d "Full course"'s unlisted fields: `finalAnswers: 'allowed'`, `lockedReply: 'generic'` · decided by builder · risk: low
+- Decided: the plan's Phase D file list gives "Full course" its price, skills, ceiling, daily
+  limit, live classes and trial, but not `finalAnswers` or `lockedReply` (only the free preset's
+  are given). Picked `'allowed'` (a paid, full package trusts the student with final answers) and
+  `'generic'` (a paid package's locked-reply message is less important than the free package's,
+  which exists to upsell).
+- Why: both fields are required by `PackageConfigSchema`; a default had to be chosen for the
+  preset to be a valid package. The human can change either later; no behaviour depends on this
+  pairing yet (publish is 8.7).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d en.json uses a new `packageBuilder` namespace, not `packages` · decided by builder · risk: low
+- Decided: `apps/web/messages/en.json` already has a top-level `packages` key for the student's
+  package-compare page (`app/packages/[agentId]/PackageCompare.tsx`, `useTranslations('packages')`).
+  The plan's Phase D text ("a new top-level `packages` key") predates that collision. Used
+  `packageBuilder` instead and left the existing `packages` namespace untouched.
+- Why: reusing `packages` would either silently clash with the student page's existing keys or
+  require renaming that page's namespace, which is out of this phase's files.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d No `packagesClient.ts`; `PackagesView.tsx` calls `fetch` directly · decided by builder · risk: low
+- Decided: unlike `uploadClient.ts` (8.2) and `styleCardClient.ts` (8.4b), this phase's plan lists
+  only `page.tsx`, `PackagesView.tsx`, and the two test files as files to create — no separate
+  client module. Kept the `fetch` calls, body-shaping and error-code mapping inside
+  `PackagesView.tsx` itself, importing `PackageView`/`PackageDraft` only as types (`import type`,
+  erased at compile time, same pattern already used by `OnboardingForm.tsx` for `@edmate/db`).
+- Why: follows "only the plan's Phase D files" literally; adding an extra file was not needed for
+  the tests to pass.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6d Merge before the timed two-package walkthrough · decided by lead · risk: medium
+- Decided: 8.6d merges without the manual timed walkthrough ("two packages in under 15 minutes") that Phase D's exit conditions ask for. The walkthrough runs on the dev stack in board task 8.6g, together with the 9.2b walkthrough.
+- Why: the human's focus is a testable product fast; the page's behaviour is covered by unit and axe tests, and the timing check needs the compose stack, which builders don't bring up. The code-reviewer raised this as HIGH; it is deferred, not waived.
+- risk: medium
+
+---
+
 ### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
 - Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
 - Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").
