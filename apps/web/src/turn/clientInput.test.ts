@@ -1,5 +1,5 @@
-// Task 9.4 Phase A: what the browser may send for a turn. Strict: ids that the server owns
-// (studentId from the session, sessionId from the path) are refused, never merged.
+// Task 9.4 Phase A (widened in 9.5a): what the browser may send for a turn. Strict: ids that the
+// server owns (studentId from the session, sessionId from the path) are refused, never merged.
 import { LIMITS, TurnInputSchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { ClientTurnSchema, StartSessionSchema, toTurnInput } from './clientInput';
@@ -21,11 +21,41 @@ describe('ClientTurnSchema', () => {
     expect(ClientTurnSchema.safeParse({ ...noText, kind: 'hint_request' }).success).toBe(true);
   });
 
+  it('accepts a message tagged with a skill, and a check_answer carrying the typed answer', () => {
+    expect(ClientTurnSchema.safeParse({ ...ok, skill: 'practice' }).success).toBe(true);
+    expect(
+      ClientTurnSchema.safeParse({ ...ok, kind: 'check_answer', skill: 'practice', text: '12' })
+        .success,
+    ).toBe(true);
+  });
+
+  it('accepts skill_action only with a skill named, and takes a JSON skillPayload', () => {
+    const noText: Record<string, unknown> = { ...ok };
+    delete noText.text;
+    expect(
+      ClientTurnSchema.safeParse({
+        ...noText,
+        kind: 'skill_action',
+        skill: 'mock_interview',
+        skillPayload: { persona: 'job-interview' },
+      }).success,
+    ).toBe(true);
+    expect(ClientTurnSchema.safeParse({ ...noText, kind: 'skill_action' }).success).toBe(false);
+  });
+
+  it('rejects an oversize skillPayload', () => {
+    expect(
+      ClientTurnSchema.safeParse({
+        ...ok,
+        skill: 'practice',
+        skillPayload: { big: 'x'.repeat(LIMITS.skillPayloadMaxJsonLength) },
+      }).success,
+    ).toBe(false);
+  });
+
   it.each([
     ['studentId', { ...ok, studentId: 'stu_2' }],
     ['sessionId', { ...ok, sessionId: 'ses_2a' }],
-    ['check_answer', { ...ok, kind: 'check_answer' }],
-    ['skill_action', { ...ok, kind: 'skill_action' }],
     ['lang hi', { ...ok, lang: 'hi' }],
     ['empty text', { ...ok, text: '' }],
     ['blank text', { ...ok, text: '   \n ' }],
@@ -33,7 +63,7 @@ describe('ClientTurnSchema', () => {
     ['oversize text', { ...ok, text: 'x'.repeat(LIMITS.turnTextMaxChars + 1) }],
     ['bad agent id', { ...ok, agentId: '../agt' }],
     ['bad clientTs', { ...ok, clientTs: 'yesterday' }],
-    ['skill', { ...ok, skill: 'practice' }],
+    ['bad skill', { ...ok, skill: 'not-a-skill' }],
     ['not an object', 'hello'],
     ['null', null],
   ])('rejects %s', (_name, body) => {

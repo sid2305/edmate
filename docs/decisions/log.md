@@ -10,6 +10,60 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.5a A malformed/legacy skill payload falls back to the generic SkillCard · decided by builder · risk: low
+- Decided: `ChatView` only renders `PracticeCard` when a `skill: 'practice'` event's payload has
+  the exact shape `practice.next_item` produces (string `id`/`prompt`, a known `kind`, level
+  1-3); anything else (including the pre-existing `ChatView.test.tsx` fixture payload `{q: ...}`)
+  renders the generic `SkillCard`, unchanged.
+- Why: keeps the dedicated card strictly tied to the real tool output per the plan ("the real
+  `practice.next_item` output shape... renders"), without a schema import from
+  `packages/harness`, and avoids a crash or blank card on a payload that doesn't match (fail
+  closed to the existing, harmless fallback) rather than trusting `unknown` at render time.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a activeSkill updates only on a final turn, not per streamed skill event · decided by builder · risk: low
+- Decided: `activeSkill` is set from `turn.skills.at(-1)` only once a turn reaches `status ===
+  'final'` (a `useEffect` on `[active, turn]`), not as each `skill` event streams in.
+- Why: the composer/hint button/launcher are already disabled while a turn streams, so no
+  submit can race ahead of the final skill name; waiting for `final` keeps the effect simple
+  (one state transition per turn, matching the reducer's own "nothing changes after done" rule)
+  rather than re-deriving it from in-flight events.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a The active skill carries only onto hints and answer checks, and clears after a turn with no skill cards · decided by builder · risk: low
+- Decided: `activeSkill` is reset to null when a final turn has no skill cards. It is carried
+  onto a `hint_request` or `check_answer` that names no skill of its own, never onto a plain
+  `message`.
+- Why: a typed message after a practice item is the student leaving practice, so tagging it
+  `skill: 'practice'` would silently keep every later turn on the practice ladder
+  (typescript-reviewer HIGH). A hint during practice still needs the tag.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7f persona always fails the case · decided by builder · risk: low
+- Decided: when `input.persona` is defined, the gate always throws (fails that case loudly)
+  rather than trying to honor it for a `kind: 'skill_action'` start turn only. `TurnInput` has no
+  `persona` field at all; a persona only enters the pipeline via a start turn's `skillPayload`
+  (bare id), and every later turn needs a *stored* `personaId` in that session's help state. The
+  gate creates a brand-new session (and a fresh help-state map) on every single `reply()` call,
+  so there is no continuity across a case's turns — a start-turn-only hack would silently produce
+  wrong, non-roleplay results for every multi-turn persona case (confirmed real multi-turn persona
+  suites exist, e.g. `evals/suites/persona/persona-roleplay-model-answer-en.yaml`). Failing the
+  case outright matches the brief ("fail any case that names one, with a clear reason, never
+  silently score it") and `runCaseSafely`'s existing catch-and-fail-this-case design.
+- Why: a half-working persona path (first turn only) would be worse than a clear failure, because
+  it would score a roleplay case as if it ran correctly when it did not resume the persona at all.
+- risk: low — gate-only behavior, no change to prompt-pack behaviour or contracts; persona gate
+  support is left as a known gap for whoever picks it up next (would need a `TurnInput.persona`
+  field or similar, which is a contracts change needing an ADR per rule 2).
+
+---
+
 ### 22 Oct 2026 · 9.2b A Redis outage fails the discovery rate limit open, not closed · decided by lead · risk: medium
 - Decided: unlike the sign-in limiter (fails closed, `src/auth/rate-limit.ts`), `discoveryRateLimiter` fails open on a store error or a missing `REDIS_URL`: the `/teachers` page still serves, and the failure is logged by code only (`rate_limit_unavailable`), never the client's IP.
 - Why: this limit protects database load on data that's already public and already published (scope decision 1/2 of the 9.2 plan); refusing every search because Redis blipped would hurt real students more than an occasional burst of searches hurts the database.

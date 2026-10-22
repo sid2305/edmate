@@ -2,6 +2,7 @@
 // real model call) and a repositories proxy that throws on anything but the gate's read set.
 import type { ModelGateway, TurnEvent } from '@edmate/contracts';
 import type { Clock } from '@edmate/harness';
+import { LockedLeakDetected, lockedReplyText } from '@edmate/harness';
 import {
   adviceJudgeGateway,
   CLEAN_ADVICE_VERDICT,
@@ -19,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { collectReply, createGateAgent, gateAgentFactory, isGuardDetection, type GateAgentDeps } from './agent.js';
 import type { GateBasis } from './input.js';
 import { gateSideEffects, gateUsageMeter, systemClock } from './ports.js';
-import { AGENT, AGENT_VERSION, fakeRepos, fakeWorld, freePkg, paidPkg, TEACHER } from './testkit.js';
+import { AGENT, AGENT_VERSION, fakeRepos, fakeWorld, freePkg, paidPkg, TEACHER } from '../../test/gate/testkit.js';
 
 const REPLY = 'A common denominator is a shared multiple of both denominators. [1]';
 
@@ -47,6 +48,29 @@ function scripted(turns: number): ModelGateway {
         { match: (r: { system: string }) => r.system.includes('jailbreak_override'), value: { category: 'none' } },
       ]).flat(),
       stream: Array.from({ length: turns }, () => ({ steps: [{ type: 'text' as const, text: REPLY }, usage] })),
+    },
+    { sleep: () => Promise.resolve() },
+  );
+  return adviceJudgeGateway(judgeGateway(gateway, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT);
+}
+
+/** `scripted`, but the stream leaks a span of the locked module's material (4.6: `generate`'s
+ * stream check holds it back and the post guard's reply replacement fires, same as
+ * `packages/harness`' `runner.lockedLeak.test.ts`). */
+function scriptedLeak(turns: number): ModelGateway {
+  const gateway = new ScriptedGateway(
+    {
+      generateObject: Array.from({ length: turns }, () => [
+        { match: (r: { system: string }) => r.system.includes('thoughts of suicide or self-harm'), value: { distress: false } },
+        { match: (r: { system: string }) => r.system.includes('self_harm (wants to hurt themselves)'), value: { category: 'none' } },
+        { match: (r: { system: string }) => r.system.includes('jailbreak_override'), value: { category: 'none' } },
+      ]).flat(),
+      stream: Array.from({ length: turns }, () => ({
+        steps: [
+          { type: 'text' as const, text: 'Here it is: Integration by parts: choose u and dv, then integrate. ' },
+          usage,
+        ],
+      })),
     },
     { sleep: () => Promise.resolve() },
   );
@@ -113,6 +137,27 @@ describe('createGateAgent', () => {
     expect(totals.unmetered).toBe(0);
   }, 20_000);
 
+  it('a streamed locked leak scores the locked reply; the leak alone does not fail the case', async () => {
+    const s = setup({ gateway: scriptedLeak(1) });
+    const reply = await createGateAgent(s.deps, basis, paidPkg).reply(ask('Explain integration by parts'));
+    expect(reply.text).toBe(lockedReplyText());
+    expect(reply.text).not.toContain('Integration by parts: choose u and dv');
+    expect(s.fake.forbidden).toEqual([]);
+    // lockedLeaks counts it too, on its own (backgroundFailures counts every report logged,
+    // guard detections included; agent.ts only fails the case on the other kind).
+    expect(s.effects.lockedLeaks).toBe(1);
+    expect(s.effects.backgroundFailures).toBe(1);
+  }, 20_000);
+
+  it('a streamed locked leak plus another background failure still fails the case', async () => {
+    const s = setup({ gateway: scriptedLeak(1) });
+    s.deps.usage = { ...s.usageMeter, record: () => Promise.reject(new Error('meter down')) };
+    await expect(
+      createGateAgent(s.deps, basis, paidPkg).reply(ask('Explain integration by parts')),
+    ).rejects.toThrow(/gate turn background failure/);
+    expect(s.effects.backgroundFailures).toBeGreaterThan(0);
+  }, 20_000);
+
   it('a locked-module question gets the locked reply, never the locked material', async () => {
     const s = setup({ probeHit: true });
     const agent = createGateAgent(s.deps, basis, freePkg);
@@ -155,6 +200,23 @@ describe('createGateAgent', () => {
     const sent = JSON.stringify(spy.requests);
     expect(sent).toContain('What is a fraction?');
     expect(sent).toContain('equal parts of a whole');
+  }, 20_000);
+
+  it('a case naming a skill routes through that skill’s pack, not the default', async () => {
+    const spy = spyGateway(scripted(1));
+    const s = setup({ gateway: spy });
+    await createGateAgent(s.deps, basis, paidPkg).reply(ask('What is a common denominator?', { skill: 'feedback' }));
+    const sent = JSON.stringify(spy.requests);
+    expect(sent).toContain('[[SKILL:feedback]]');
+    expect(sent).not.toContain('[[SKILL:coach]]');
+  }, 20_000);
+
+  it('a case naming a persona fails the case, never scored as a plain message', async () => {
+    const s = setup();
+    await expect(
+      createGateAgent(s.deps, basis, paidPkg).reply(ask('Start a viva.', { persona: 'viva@1.0.0' })),
+    ).rejects.toThrow(/names persona "viva@1\.0\.0"/);
+    expect(s.fake.forbidden).toEqual([]);
   }, 20_000);
 
   it('a case for an unpinned package version, or another agent’s package, is refused', () => {
@@ -216,10 +278,10 @@ describe('createGateAgent', () => {
 });
 
 describe('isGuardDetection', () => {
-  it('only a locked-leak withholding is a guard detection', () => {
-    const leak = Object.assign(new Error('withheld'), { name: 'LockedLeakDetected' });
-    expect(isGuardDetection(leak)).toBe(true);
+  it('only a real LockedLeakDetected instance is a guard detection, never a look-alike name', () => {
+    expect(isGuardDetection(new LockedLeakDetected('reply'))).toBe(true);
     expect(isGuardDetection(new Error('meter down'))).toBe(false);
+    expect(isGuardDetection(Object.assign(new Error('withheld'), { name: 'LockedLeakDetected' }))).toBe(false);
     expect(isGuardDetection('LockedLeakDetected')).toBe(false);
   });
 });

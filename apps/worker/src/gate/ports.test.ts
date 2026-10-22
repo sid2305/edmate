@@ -43,7 +43,14 @@ describe('gateCasePorts (in memory, nothing durable)', () => {
     expect(q).toMatchObject({ status: 'open', text: 'q' });
     expect(q.id).toMatch(/^gateq_/);
     p.log.backgroundFailure({} as never);
-    expect(effects).toEqual({ alerts: 1, safetyEvents: 1, teacherQuestions: 1, traces: 1, backgroundFailures: 1 });
+    expect(effects).toEqual({
+      alerts: 1,
+      safetyEvents: 1,
+      teacherQuestions: 1,
+      traces: 1,
+      backgroundFailures: 1,
+      lockedLeaks: 0,
+    });
   });
 });
 

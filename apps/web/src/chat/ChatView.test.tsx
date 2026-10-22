@@ -136,12 +136,12 @@ describe('ChatView', () => {
       { type: 'sources', items: [{ title: 'Old source', locator: 'p. 1', kind: 'material' }] },
     );
     expect(screen.getByText('Wrong first try')).toBeInTheDocument();
-    expect(screen.getByText('Practice')).toBeInTheDocument();
+    expect(screen.getByText('Practice', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText(/Old source/)).toBeInTheDocument();
 
     f.push({ type: 'replace', text: '' });
     expect(screen.queryByText('Wrong first try')).toBeNull();
-    expect(screen.queryByText('Practice')).toBeNull();
+    expect(screen.queryByText('Practice', { selector: 'strong' })).toBeNull();
     expect(screen.queryByText(/Old source/)).toBeNull();
 
     f.push(tok('Second try.'), done);
@@ -279,5 +279,125 @@ describe('ChatView', () => {
     await waitFor(() => expect(f.send).toHaveBeenCalled());
     f.view.unmount();
     expect(f.calls[0]?.aborted).toBe(true);
+  });
+
+  const practiceItem = (id: string, prompt: string): TurnEvent => ({
+    type: 'skill',
+    skill: 'practice',
+    payload: { id, kind: 'numeric', level: 1, prompt },
+  });
+
+  it('starting practice renders a dedicated PracticeCard, not the generic SkillCard', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    expect(f.calls[0]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: "Let's practice.",
+      skill: 'practice',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+    expect(screen.getByText('What is 2 + 2?')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your answer')).toBeInTheDocument();
+    expect(await axe(f.view.container)).toHaveNoViolations();
+  });
+
+  it("a practice answer is a check_answer tagged skill: 'practice'; a correct attempt shows a fresh item", async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'check_answer',
+      text: '4',
+      skill: 'practice',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+    f.push(practiceItem('itm_2', 'What is 3 + 5?'), done);
+    // A fresh item card, shown as this turn's own card (the earlier item stays in the thread's
+    // history, same as any other past turn -- "a second turn keeps the first reply").
+    expect(screen.getByText('What is 3 + 5?')).toBeInTheDocument();
+    expect(screen.getByText('What is 2 + 2?')).toBeInTheDocument();
+  });
+
+  it('a hint asked while a practice item is active also carries skill: practice', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Get a hint' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'hint_request',
+      skill: 'practice',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('after a practice item, a plain Composer message carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    type('Something else');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Something else',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('after a final turn with no skill cards, a hint carries no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(practiceItem('itm_1', 'What is 2 + 2?'), done);
+
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit answer' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    f.push(tok('Well done, practice is over.'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Get a hint' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(3));
+    expect(f.calls[2]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'hint_request',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a practice payload with non-string options falls back to the generic SkillCard', async () => {
+    const f = setup();
+    type('Practice please');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(
+      {
+        type: 'skill',
+        skill: 'practice',
+        payload: { id: 'itm_1', kind: 'mcq', level: 1, prompt: 'Pick one', options: [1, {}, null] },
+      },
+      done,
+    );
+    expect(screen.getByText('Practice', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.queryByText('Pick one')).toBeNull();
+    expect(screen.queryByLabelText('Your answer')).toBeNull();
   });
 });

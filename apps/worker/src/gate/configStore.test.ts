@@ -13,7 +13,7 @@ import {
   paidPkg,
   styleCard,
   TEACHER,
-} from './testkit.js';
+} from '../../test/gate/testkit.js';
 
 const basis: GateBasis = {
   teacherId: TEACHER,

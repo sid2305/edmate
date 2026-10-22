@@ -94,7 +94,15 @@
       "feedback": "Feedback",
       "mock_interview": "Mock interview",
       "revision": "Revision",
-      "study_plan": "Study plan"
+      "study_plan": "Study plan",
+      "launcher": {
+        "practice": "Practice"
+      }
+    },
+    "practice": {
+      "start": "Let's practice.",
+      "answerLabel": "Your answer",
+      "submit": "Submit answer"
     },
     "errors": {
       "unauthorized": "Please sign in again to keep chatting.",
