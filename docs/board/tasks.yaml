@@ -3127,9 +3127,9 @@ tasks:
   deps:
   - 8.3a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.3c-outline-editor
+  model: plan:opus build:sonnet
 - id: 8.4a
   milestone: M8
   title: '8.4 Phase A: packages/db style-card create/latest and the studio style-card API (draft, save) (plan docs/tasks/8.4/plan.md)'
@@ -3321,7 +3321,7 @@ tasks:
   deps:
   - 8.4a
   risk: medium
-  status: running
+  status: review
   branch: m8/8.4b-style-card-page
   model: plan:opus build:sonnet
 - id: 8.6e
