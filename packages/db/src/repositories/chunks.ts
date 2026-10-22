@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { ChunkKindSchema } from '@edmate/contracts';
 import { teacherNoteParts, teacherNoteSource, teacherNoteText } from '@edmate/harness';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -15,6 +15,8 @@ import {
   modules,
   teacherEvalCases,
   teacherMaterialRevisions,
+  topicChunks,
+  topics,
 } from '../schema/index.js';
 import { vectorToDriver } from '../schema/_shared.js';
 import { RepositoryError, translateWrite } from './errors.js';
@@ -28,6 +30,89 @@ export const CHUNK_WRITE_MAX = 500;
 export const CHUNK_TEXT_MAX_LENGTH = 20_000;
 /** Chunk ids are `<documentId>-c<0000>`, so a document id leaves room for the suffix. */
 const DOCUMENT_ID_MAX_LENGTH = 122;
+/**
+ * Most chunks `chunks.listForModule` returns (task 8.3). More is `invalid`, never a cut list: a
+ * truncated module would give the outline drafter only part of the material without saying so.
+ */
+export const MODULE_CHUNKS_MAX = 2_000;
+
+/** One ready chunk of a module, for the outline drafter (task 8.3): the teacher's own material. */
+export interface ModuleChunk {
+  id: string;
+  text: string;
+  locator: string;
+  sourceTitle: string;
+}
+
+/** One source link of an outline topic (task 8.3), as stored in `topic_chunks`. */
+export interface TopicLinkInput {
+  topicId: string;
+  chunkId: string;
+  order: number;
+}
+
+/**
+ * Task 8.3: links outline topics to chunks in one statement, both ends teacher-checked: a row
+ * whose chunk or topic is not `teacherId`'s matches nothing and is not written. Returns the rows
+ * written; the caller treats fewer than `links.length` as a bad chunk id. Lives here because only
+ * this file and retrieval.ts may name the chunks table (test/access-audit.test.ts, rule 1).
+ */
+export async function insertTopicLinks(
+  tx: Tx,
+  teacherId: string,
+  links: readonly TopicLinkInput[],
+): Promise<number> {
+  if (links.length === 0) return 0;
+  const res = await tx.execute(
+    insertSelect(
+      topicChunks,
+      [
+        [topicChunks.id, sql`gen_random_uuid()::text`],
+        [topicChunks.teacherId, sql`c.teacher_id`],
+        [topicChunks.topicId, sql`tp.id`],
+        [topicChunks.chunkId, sql`c.id`],
+        [topicChunks.order, sql`v.ord`],
+      ],
+      sql`from jsonb_to_recordset(${JSON.stringify(
+        links.map((l) => ({ topic_id: l.topicId, chunk_id: l.chunkId, ord: l.order })),
+      )}::jsonb) as v(topic_id text, chunk_id text, ord integer)
+        join ${chunks} c on c.id = v.chunk_id and c.teacher_id = ${teacherId}
+        join ${topics} tp on tp.id = v.topic_id and tp.teacher_id = ${teacherId}`,
+    ),
+  );
+  return written(res);
+}
+
+/** One topic's source link with its display fields (no chunk text). */
+export interface TopicSourceRow {
+  topicId: string;
+  chunkId: string;
+  sourceTitle: string;
+  locator: string;
+}
+
+/**
+ * Task 8.3: the source links of `topicIds`, teacher-scoped on both the link and the chunk, in
+ * (topic, link order, chunk id) order. Display fields only: chunk text never leaves here.
+ */
+export async function topicSources(
+  db: Pick<Db, 'select'>,
+  teacherId: string,
+  topicIds: readonly string[],
+): Promise<TopicSourceRow[]> {
+  if (topicIds.length === 0) return [];
+  return db
+    .select({
+      topicId: topicChunks.topicId,
+      chunkId: chunks.id,
+      sourceTitle: chunks.sourceTitle,
+      locator: chunks.locator,
+    })
+    .from(topicChunks)
+    .innerJoin(chunks, and(eq(chunks.id, topicChunks.chunkId), eq(chunks.teacherId, teacherId)))
+    .where(and(eq(topicChunks.teacherId, teacherId), inArray(topicChunks.topicId, [...topicIds])))
+    .orderBy(asc(topicChunks.topicId), asc(topicChunks.order), asc(chunks.id));
+}
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -527,6 +612,39 @@ export function chunksRepo(db: Db) {
       return translateWrite(method, () =>
         db.transaction((tx) => insertTeacherNote(tx, teacherId, i, method)),
       );
+    },
+
+    /**
+     * Task 8.3: the scope's chunks in one of its modules whose document is `ready`, ordered by
+     * document (oldest first) then chunk id (document order), for the outline drafter. Another
+     * teacher's module and a missing one both give `[]` (an empty module is a normal state, so
+     * this is no existence oracle). More than `MODULE_CHUNKS_MAX` is `invalid`, never cut.
+     */
+    async listForModule(scope: TeacherScope, moduleId: string): Promise<ModuleChunk[]> {
+      const method = 'chunks.listForModule';
+      const { teacherId } = teacherScope(scope, method);
+      const modId = parseArg(IdSchema, moduleId, method);
+      const rows = await db
+        .select({
+          id: chunks.id,
+          text: chunks.text,
+          locator: chunks.locator,
+          sourceTitle: chunks.sourceTitle,
+        })
+        .from(chunks)
+        .innerJoin(
+          documents,
+          and(
+            eq(documents.id, chunks.documentId),
+            eq(documents.teacherId, teacherId),
+            eq(documents.status, 'ready'),
+          ),
+        )
+        .where(and(eq(chunks.teacherId, teacherId), eq(chunks.moduleId, modId)))
+        .orderBy(asc(documents.createdAt), asc(documents.id), asc(chunks.id))
+        .limit(MODULE_CHUNKS_MAX + 1);
+      if (rows.length > MODULE_CHUNKS_MAX) throw new RepositoryError('invalid', method);
+      return rows;
     },
   };
 }

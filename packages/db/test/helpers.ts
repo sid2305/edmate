@@ -13,6 +13,8 @@ export const DATA_MODEL_TABLES = [
   'courses',
   'modules',
   'topics',
+  // Outline source links (task 8.3).
+  'topic_chunks',
   'documents',
   'chunks',
   'teacher_material_revisions',

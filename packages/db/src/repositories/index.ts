@@ -8,6 +8,7 @@ import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { notificationsRepo } from './notifications.js';
+import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyEventsRepo } from './safety-events.js';
@@ -60,6 +61,8 @@ export function createRepositories(db: Db) {
     safetyEvents: guardAll('safetyEvents', safetyEventsRepo(db)),
     teacherProfiles: guardAll('teacherProfiles', teacherProfilesRepo(db)),
     notifications: guardAll('notifications', notificationsRepo(db)),
+    courses: guardAll('courses', coursesRepo(db)),
+    outline: guardAll('outline', outlineRepo(db)),
   };
 }
 
@@ -150,8 +153,26 @@ export {
   type DocumentInput,
   type DocumentListOptions,
   insertTeacherNote,
+  MODULE_CHUNKS_MAX,
+  type ModuleChunk,
   type TeacherNoteWriteInput,
 } from './chunks.js';
+export {
+  DEFAULT_COURSE_TITLE,
+  DEFAULT_MODULE_TITLE,
+  OUTLINE_MODULES_MAX,
+  OUTLINE_TITLE_MAX_LENGTH,
+  OUTLINE_TOPICS_MAX,
+  type OutlineInput,
+  TOPIC_CHUNKS_MAX,
+} from './outline.js';
+export type {
+  CourseRow,
+  Outline,
+  OutlineModuleRow,
+  OutlineSource,
+  OutlineTopicRow,
+} from './map.js';
 export { DOCUMENT_STATUSES, type DocumentRow, type DocumentStatus } from './map.js';
 export {
   type EmbedFallback,

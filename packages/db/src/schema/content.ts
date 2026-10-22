@@ -145,6 +145,32 @@ export const teacherMaterialRevisions = pgTable(
   (t) => [uniqueIndex('teacher_material_revisions_teacher_id_key').on(t.teacherId)],
 );
 
+/**
+ * Task 8.3: which chunks back each outline topic (the outline's source links). Both foreign keys
+ * cascade: rewriting a topic drops its links, and deleting a document's chunks (8.2) drops any
+ * topic's link to them. Display only, never a retrieval gate.
+ */
+export const topicChunks = pgTable(
+  'topic_chunks',
+  {
+    id: id(),
+    teacherId: teacherId(),
+    topicId: text('topic_id')
+      .notNull()
+      .references(() => topics.id, { onDelete: 'cascade' }),
+    chunkId: text('chunk_id')
+      .notNull()
+      .references(() => chunks.id, { onDelete: 'cascade' }),
+    order: integer('order').notNull(),
+    ...timestamps(),
+  },
+  (t) => [
+    index('topic_chunks_teacher_id_topic_id_idx').on(t.teacherId, t.topicId),
+    index('topic_chunks_chunk_id_idx').on(t.chunkId),
+    uniqueIndex('topic_chunks_topic_id_chunk_id_key').on(t.topicId, t.chunkId),
+  ],
+);
+
 /** The teacher's voice. Versions are immutable. */
 export const styleCards = pgTable(
   'style_cards',

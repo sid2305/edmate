@@ -219,6 +219,29 @@ describe('constraints the Data model states', () => {
     expect(gin?.columns.map((c) => c.expression)).toEqual(['search']);
   });
 
+  it('topic_chunks links topics to chunks, both foreign keys ON DELETE CASCADE (task 8.3)', () => {
+    const t = table('topic_chunks');
+    expect(Object.keys(t.columns).sort()).toEqual(
+      ['chunk_id', 'created_at', 'id', 'order', 'teacher_id', 'topic_id', 'updated_at'].sort(),
+    );
+    for (const c of ['teacher_id', 'topic_id', 'chunk_id', 'order']) {
+      expect(t.columns[c]?.notNull, c).toBe(true);
+    }
+    const fks = Object.values(t.foreignKeys) as (SnapshotTable['foreignKeys'][string] & {
+      onDelete?: string;
+    })[];
+    const to = (table: string) => fks.find((f) => f.tableTo === table);
+    expect(to('topics')).toMatchObject({ columnsFrom: ['topic_id'], onDelete: 'cascade' });
+    expect(to('chunks')).toMatchObject({ columnsFrom: ['chunk_id'], onDelete: 'cascade' });
+    expect(to('users')?.onDelete).toBe('no action');
+    expect(indexesLedBy(t, 'teacher_id')).toEqual(['topic_chunks_teacher_id_topic_id_idx']);
+    expect(indexesLedBy(t, 'chunk_id')).toEqual(['topic_chunks_chunk_id_idx']);
+    const uniq = Object.values(t.indexes).find((i) => i.isUnique);
+    expect(uniq?.columns.map((c) => c.expression)).toEqual(['topic_id', 'chunk_id']);
+    const created = migrationSql().filter((m) => m.sql.includes('CREATE TABLE "topic_chunks"'));
+    expect(created.map((m) => m.file)).toEqual(['0019_outline_topic_chunks.sql']);
+  });
+
   it('money is stored as bigint minor units with a currency', () => {
     for (const t of ['payments', 'ledger_entries', 'payouts', 'invoices']) {
       expect(table(t).columns.amount_minor?.type, t).toBe('bigint');
