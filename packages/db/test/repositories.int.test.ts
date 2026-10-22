@@ -3877,6 +3877,27 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return 4;
     },
   },
+  // Task 12.3b: a teacher's copyright takedown count is that teacher's alone. Lifted at the end,
+  // so the seed's document is back for every other case.
+  'takedowns.countUpheld': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const before = await r.takedowns.countUpheld({ teacherId: teacherId('A') });
+      const { id } = await r.takedowns.create(ISO_STAFF, {
+        kind: 'document',
+        targetId: isoDoc('A'),
+        category: 'copyright',
+      });
+      expect(await r.takedowns.countUpheld({ teacherId: teacherId('A') })).toBe(before + 1);
+      for (const other of [teacherId('B'), 'tch_ghost']) {
+        expect(await r.takedowns.countUpheld({ teacherId: other })).toBe(0);
+      }
+      await r.takedowns.lift(ISO_STAFF, id, {});
+      expect(await r.takedowns.countUpheld({ teacherId: teacherId('A') })).toBe(before);
+      return 4;
+    },
+  },
 };
 
 /** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */
