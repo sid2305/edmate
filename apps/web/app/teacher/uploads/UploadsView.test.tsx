@@ -18,6 +18,7 @@ const doc = (over: Partial<DocumentView>): DocumentView => ({
   moduleId: 'mod_1',
   kind: 'material',
   sourceTitle: 'Algebra notes.pdf',
+  source: 'file',
   status: 'ready',
   createdAt: '2026-10-20T00:00:00.000Z',
   updatedAt: '2026-10-20T00:00:00.000Z',
