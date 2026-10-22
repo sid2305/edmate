@@ -2,6 +2,7 @@
 // document always comes back with at least one located unit or an IngestError.
 import { IngestError } from './errors.js';
 import type { WebFetcher } from './fetch/webFetch.js';
+import { parseSrt, parseVtt } from './parse/captions.js';
 import { parseDocx } from './parse/docx.js';
 import { htmlTitle, parseHtml } from './parse/html.js';
 import { parseMarkdown } from './parse/markdown.js';
@@ -9,7 +10,7 @@ import { parsePdf } from './parse/pdf.js';
 import { parsePptx } from './parse/pptx.js';
 import { MAX_DOCUMENT_BYTES, type ParsedDocument } from './types.js';
 
-export type DocumentKind = 'pdf' | 'docx' | 'pptx' | 'markdown';
+export type DocumentKind = 'pdf' | 'docx' | 'pptx' | 'markdown' | 'vtt' | 'srt';
 
 export interface DocumentInput {
   readonly kind: DocumentKind;
@@ -38,6 +39,10 @@ export function parseDocument(input: DocumentInput): Promise<ParsedDocument> {
         return parseDocx(input.bytes, input.sourceTitle);
       case 'pptx':
         return parsePptx(input.bytes, input.sourceTitle);
+      case 'vtt':
+        return parseVtt(input.bytes, input.sourceTitle);
+      case 'srt':
+        return parseSrt(input.bytes, input.sourceTitle);
       default:
         throw new IngestError('unsupported', false, 'unknown document kind');
     }
