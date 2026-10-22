@@ -763,6 +763,64 @@ export function publishRepo(db: Db) {
     },
 
     /**
+     * Whether anything has changed since the scope's last published (passed, published) run:
+     * style card (version/id), packages (newest version per package), uploads (the material
+     * revision counter, bumped on create, replace and delete), or the outline (course
+     * `updated_at` against the run's `published_at` -- more sensitive than the gate's own
+     * `material` change kind, which this informational note intentionally is, plan decision).
+     * `false` when the scope has never published (nothing to compare). One SQL round trip.
+     */
+    async changedSinceLastPublish(scope: TeacherScope): Promise<boolean> {
+      const method = 'publish.changedSinceLastPublish';
+      const { teacherId } = teacherScope(scope, method);
+      const result = await db.execute<{ changed: boolean }>(sql`
+        with last as (
+          select agent_id, basis, published_at
+          from ${evalRuns}
+          where ${evalRuns.teacherId} = ${teacherId}::text
+            and ${evalRuns.suite} = ${GATE_SUITE}
+            and ${evalRuns.status} = 'passed'
+            and ${evalRuns.publishedAt} is not null
+          order by ${evalRuns.publishedAt} desc
+          limit 1
+        )
+        select (
+          (last.basis->>'styleCardId') is distinct from (
+            select ${styleCards.id} from ${styleCards}
+            where ${styleCards.teacherId} = ${teacherId}::text
+            order by ${styleCards.version} desc, ${styleCards.id} desc
+            limit 1
+          )
+          or (last.basis->>'materialRevision')::bigint is distinct from coalesce((
+            select ${teacherMaterialRevisions.revision} from ${teacherMaterialRevisions}
+            where ${teacherMaterialRevisions.teacherId} = ${teacherId}::text
+          ), 0)
+          or last.basis->'packageVersions' is distinct from (
+            select jsonb_object_agg(pkg.id, pkg.max_version)
+            from (
+              select ${packages.id} as id, max(${packageVersions.version})::int as max_version
+              from ${packages}
+              inner join ${packageVersions}
+                on ${packageVersions.packageId} = ${packages.id}
+                and ${packageVersions.teacherId} = ${teacherId}::text
+              where ${packages.teacherId} = ${teacherId}::text
+                and ${packages.agentId} = last.agent_id
+              group by ${packages.id}
+            ) pkg
+          )
+          or last.published_at < (
+            select ${courses.updatedAt} from ${courses}
+            where ${courses.teacherId} = ${teacherId}::text
+            order by ${courses.order} asc, ${courses.createdAt} asc, ${courses.id} asc
+            limit 1
+          )
+        ) as changed
+        from last
+      `);
+      return result.rows[0]?.changed === true;
+    },
+
+    /**
      * The failed cases of one of the scope's runs, newest first, at most `FAILED_CASES_MAX`;
      * `[]` for a missing or another teacher's run.
      */

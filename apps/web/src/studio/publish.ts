@@ -37,7 +37,10 @@ export interface PublishBackend {
     packages: Pick<Repositories['packages'], 'listForTeacher'>;
     courses: Pick<Repositories['courses'], 'ensureDefault'>;
     styleCards: Pick<Repositories['styleCards'], 'latest'>;
-    publish: Pick<Repositories['publish'], 'startRun' | 'finishRun' | 'latestRun' | 'failedCases'>;
+    publish: Pick<
+      Repositories['publish'],
+      'startRun' | 'finishRun' | 'latestRun' | 'failedCases' | 'changedSinceLastPublish'
+    >;
   };
   /** The newest signed prompt-pack set's version. */
   promptPackVersion: string;
@@ -66,6 +69,8 @@ export interface PublishRunView {
   startedAt: string;
   finishedAt: string | null;
   publishedAt: string | null;
+  /** Whether anything has changed since this run's own publish (task 8.7k); `false` otherwise. */
+  changedSincePublish: boolean;
 }
 
 /** The summary stored when the gate job can't be queued (a fixed code word, never error text). */
@@ -150,6 +155,7 @@ const latest: Work = async (b, scope) => {
   const run = await b.repos.publish.latestRun(scope);
   if (run === null) return ok({ run: null });
   const failed = run.status === 'failed' ? await b.repos.publish.failedCases(scope, run.id) : [];
+  const changedSincePublish = await b.repos.publish.changedSinceLastPublish(scope);
   const view: PublishRunView = {
     runId: run.id,
     status: run.status,
@@ -161,6 +167,7 @@ const latest: Work = async (b, scope) => {
     startedAt: run.createdAt,
     finishedAt: run.finishedAt,
     publishedAt: run.publishedAt,
+    changedSincePublish,
   };
   return ok({ run: view });
 };
