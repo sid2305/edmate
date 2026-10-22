@@ -4772,9 +4772,31 @@ tasks:
   deps:
   - 8.2d
   risk: high
-  status: running
+  status: done
   branch: m8/8.2e-web-link-job
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:opus
+  metrics:
+    tool_calls: 309
+    tokens_in: 1012
+    tokens_out: 48240
+    cache_read_tokens: 36814745
+    wall_time_seconds: 121661
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 17
+      by_severity:
+        MEDIUM: 3
+        LOW: 14
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 11
+        wontfix: 1
+    human_questions: 0
 - id: 8.2f
   milestone: M8
   title: Add a web link in the upload centre; YouTube links refused with fixed words (8.2b Phase C)

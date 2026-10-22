@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2e The job payload carries the URL; failed web jobs are removed from Redis · decided by builder · risk: high
+- Decided: The web link's URL travels only in the BullMQ job payload (`IngestJob.url`); Postgres keeps a `.link` storage key and the title. Web jobs are enqueued with `removeOnFail: true` (and `removeOnComplete: true`), so the URL leaves Redis when the job finishes or fails for the last time. The dead-letter copy keeps only refs. The URL is never logged and never put in an error message.
+- Why: Plan Decision 9 and the lead's answers say the URL must not be stored in Postgres or logged. Removing the job on failure stops the URL from sitting in Redis's failed-job history for 7 days. An integration test checks that no Redis key holds it.
+- risk: high (it sets where a teacher's URL may live)
+
+---
+
+### 22 Oct 2026 · 8.2e ADR-0014 adds 3fff::/20 and switches to a cancellable resolver · decided by builder · risk: high
+- Decided: ADR-0014 now also refuses 3fff::/20 (RFC 9637 documentation space) and strips every trailing dot from a host. Names are now looked up with `dns.promises.Resolver` (A and AAAA, 5 s timeout, 2 tries), which is cancelled at the fetch deadline. It replaces `dns.lookup`.
+- Why: These are 8.2d review findings: a lookup that could not be cancelled, a missing documentation range, and `localhost..`. The Resolver skips /etc/hosts and search domains, which is stricter, and a hung lookup can't outlive the deadline.
+- risk: high (it edits an egress ADR, a risky path)
+
+---
+
+### 22 Oct 2026 · 8.2e "No such name" and "not public" get one refusal · decided by builder · risk: medium
+- Decided: NXDOMAIN, NODATA, an empty answer and a non-public address all fail as `forbidden` with the same message. Other DNS failures are a retryable `provider_error`.
+- Why: Two different answers would let a teacher probe which internal names exist. One message hides that difference.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.2e IP literals are judged after stripping trailing dots · decided by builder · risk: medium
+- Decided: `webLinkRefusal` checks IP literals on the host with its trailing dots removed.
+- Why: I found this while fixing `localhost..`. WHATWG treats `127.0.0.1..` as a domain, but once the dots are stripped it is loopback, and the fetch could reach it. Table rows now cover it.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.2e Last-attempt rule for every ingest job · decided by builder · risk: medium
+- Decided: When a retryable failure happens on the final attempt (`attemptsMade + 1 >= opts.attempts`, where a missing `attempts` counts as 1, matching BullMQ), the document is marked `failed`: with the IngestError's code, or `provider_error` for an unexpected error. The raw error is not kept as the cause. If the database itself is down while writing that status, the job still throws a retryable error.
+- Why: Without this rule, a site that is down on every attempt, or a provider outage, left the document `processing` forever. This was the lead's answer for Phase B. The rule applies to file jobs too, because they had the same gap.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.2e TLS tests make a throwaway certificate with the openssl CLI · decided by builder · risk: low
+- Decided: `pinnedTransport.tls.test.ts` creates an EC certificate in a temporary directory with `openssl req -x509` when the tests run, and deletes it afterwards. No key is committed and no dependency is added.
+- Why: The rules say no new dependency and no committed key files. openssl ships with macOS and the CI images.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.2e Only the first checked address is tried · decided by builder · risk: low
+- Decided: Every resolved address must be public, but the transport connects only to the first one. There is no fallback to the others.
+- Why: ADR-0014 already accepts this. A fallback adds more surface for little gain at pilot scale.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.2e Lead closes the displayTitle finding on docs/tasks/8.2b/plan.md · decided by lead · risk: low
+- Decided: the architect's LOW on docs/tasks/8.2b/plan.md:165 (displayTitle as host + path) is wontfix: the code already returns the host only (`bareHostName`, linkUrl.ts:85), as ADR-0014 Decision 9 says, and 8.2f keeps the host-only default title.
+- Why: the plan text is historical; the behaviour already matches the ADR.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7k changed-since-publish teacher-scoped read · decided by builder · risk: high
 - Decided: `publish.changedSinceLastPublish` lives in the risky path
   `packages/db/src/repositories/publish.ts`. It takes a `TeacherScope`, goes through
