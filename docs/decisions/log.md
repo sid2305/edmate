@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2l caption upload security LOWs left as they are · decided by lead · risk: low
+- Decided: no byte sniffing of caption files in apps/web/src/studio/files.ts, and apps/web/src/studio/uploadClient.ts contentTypeFor keeps preferring the extension over a mismatched browser type.
+- Why: every upload type works this way today, and the server's `complete` re-checks the stored object's content type against the fixed table, so neither has a security effect (security-reviewer LOWs).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.2l ADR-0014 amended for the B-47 caption-file answer · decided by builder · risk: high
+- Decided: `docs/adr/0014-web-link-egress.md`'s Status line records an 8.2c amendment; Decision
+  10's pilot allow-list value is stated as `*` (no longer "stands until the human answers");
+  Decision 11's refusal text and B-47 line point at the caption-file export, keeping "Any YouTube
+  fetch needs its own ADR." The text matches the plan's draft (docs/tasks/8.2c/plan.md, Phase C)
+  verbatim; no wording beyond it was added.
+- Why: B-47 (human, 22 Oct 2026, log "YouTube material comes from the owner's exported captions;
+  web links fetch any public https site") answers the open question Decision 10 and 11 both
+  flagged as pending. The plan's Lead answers section names architect, security-reviewer and an
+  opus typescript-reviewer as required on this phase for exactly this edit.
+- risk: high (docs/adr/** is a risky path per `.claude/skills/merge-gate/risk-paths.txt`). Required
+  reviewers: architect, security-reviewer, typescript-reviewer.
+
+---
+
+### 22 Oct 2026 · 8.2l caption upload type table (chunk kind, cap, content type) · decided by builder · risk: low
+- Decided: `.vtt`/`.srt` are filed as `chunkKind: 'transcript'` at the existing 20 MB document cap,
+  with `application/x-subrip` as the SRT content type (no IANA type exists) and an
+  extension-based client fallback for it.
+- Why: matches the plan's Q2/Q3 recommendations and the Lead answers section ("accepted as
+  recommended"); `create`/`complete`/`contentTypeFor` needed no logic change because the existing
+  table-driven dispatch already produces the right behaviour once the table carries the new rows —
+  verified by the new route and client tests above.
+- risk: low (additive table rows and one message string; no change to existing types' behaviour,
+  confirmed by the full @edmate/web suite staying green with no snapshot changes needed).
+
+---
+
 ### 22 Oct 2026 · 12.3b countUpheld reads takedowns for the teacher's own content (risky path, security-reviewer) · decided by builder · risk: high
 - Decided: `takedowns.countUpheld(scope)` in `packages/db/src/repositories/takedowns.ts` counts active `copyright` takedowns on the teacher's own documents or agents, teacher-scoped and read only, with no lock and no caller yet; `documents.create` / `startReplace` in `chunks.ts` now stamp or clear `rights_declared_at`. Reviewer required: security-reviewer.
 - Why: the 12.3 plan's lead answers (12.2's literals, count only); `packages/db/src/repositories/**` is a risky path.

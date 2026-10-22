@@ -234,6 +234,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
               {t('acceptHint')}
             </span>
           </p>
+          <p className="uploads-youtube-hint">{t('youtubeHint')}</p>
           <form className="uploads-link-form" onSubmit={(e) => void onAddLink(e)}>
             <p className="uploads-field">
               <label htmlFor="uploads-link-url">{t('linkUrl')}</label>

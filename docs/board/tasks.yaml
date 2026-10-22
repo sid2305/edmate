@@ -5321,7 +5321,8 @@ tasks:
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
-    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
+    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -5397,9 +5398,9 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3c-rights-checkbox
+  model: plan:sonnet build:sonnet
 - id: 12.3d
   milestone: M13
   title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
@@ -5704,9 +5705,31 @@ tasks:
   deps:
   - 8.2k
   risk: high
-  status: running
+  status: done
   branch: m8/8.2l-caption-upload-ui
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:opus+sonnet
+  metrics:
+    tool_calls: 77
+    tokens_in: 256
+    tokens_out: 10801
+    cache_read_tokens: 4185552
+    wall_time_seconds: 362
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 8
+      by_severity:
+        MEDIUM: 1
+        LOW: 7
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 5
+        wontfix: 2
+    human_questions: 0
 - id: '0.23'
   milestone: M7
   title: 'CI node job runs out of its 20-minute limit now that the Playwright e2e runs in it (#188 cancelled twice at "Install Playwright browsers", 22 Oct 2026): move the e2e into its own job (or raise
@@ -5775,7 +5798,9 @@ tasks:
   deps:
   - 12.4d
   risk: low
-  status: todo
+  status: running
+  branch: m12/12.4f-staff-agents-polish
+  model: plan:lead build:sonnet
 - id: 7.2i
   milestone: M13
   title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
@@ -5846,6 +5871,17 @@ tasks:
   deps:
   - 8.2l
   risk: low
+  status: todo
+  branch: null
+- id: 12.3f
+  milestone: M12
+  title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
+    it; split from 12.3c so it does not collide with 11.4a in documents.ts
+  accept: a documents create, link or replace without rightsDeclared is a typecheck error and an invalid result; db and worker typecheck, lint and test green.
+  deps:
+  - 12.3c
+  - 11.4a
+  risk: high
   status: todo
   branch: null
 - id: 9.4c
