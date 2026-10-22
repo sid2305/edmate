@@ -336,12 +336,24 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: 3.1152.0
         version: 3.1152.0
+      '@edmate/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@edmate/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@edmate/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@edmate/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@edmate/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
+      '@edmate/harness':
+        specifier: workspace:*
+        version: link:../../packages/harness
       '@edmate/ingest':
         specifier: workspace:*
         version: link:../../packages/ingest
@@ -358,12 +370,6 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@edmate/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@edmate/harness':
-        specifier: workspace:*
-        version: link:../../packages/harness
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

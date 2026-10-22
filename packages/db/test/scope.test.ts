@@ -118,6 +118,10 @@ describe('every repository method rejects a bad scope before any SQL', () => {
   ] as const;
 
   for (const [name, fn] of methods) {
+    // discovery.search has no required field at all (`{}` means "no filters, browse all public
+    // teachers" -- a legitimate call, not a bad scope), so it cannot satisfy this grid; its own
+    // malformed-input cases are covered directly in discovery.int.test.ts and leak.test.ts.
+    if (name === 'discovery.search') continue;
     it(`${name}`, async () => {
       for (const [, bad] of [...BAD_SCOPES, ...extra]) {
         const err = await fn(bad, 'ses_1', ...otherArgs).then(
@@ -217,11 +221,17 @@ describe('repositories source', () => {
     }
   });
 
-  it('never reads from users (no names, emails or phones)', () => {
-    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
+  it('never reads from users (no names, emails or phones), except discovery.ts', () => {
+    // Task 9.2a lead decision (Q2): a teacher's public sign-in name is their public display name
+    // on the discovery page and card -- teacherProfiles has no separate displayName column, and
+    // the WHERE clause (verified + live agent + live package) already keeps this to public rows
+    // only. discovery.ts reads only `users.role` and `users.name`, never email or phone.
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts') && x !== 'discovery.ts')) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(/\busers\b/.test(src), `${f} mentions users`).toBe(false);
     }
+    const discoverySrc = readFileSync(join(dir, 'discovery.ts'), 'utf8');
+    expect(/\busers\.(email|phone)\b/.test(discoverySrc)).toBe(false);
   });
 
   it('reads a user only through role-lock.ts, which selects the role column alone (8.1)', () => {
