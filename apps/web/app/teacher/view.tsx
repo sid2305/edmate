@@ -18,6 +18,7 @@ export async function TeacherView() {
         { href: '/teacher/outline', label: t('outlineLink') },
         { href: '/teacher/onboarding', label: t('onboardingLink') },
         { href: '/teacher/style-card', label: t('styleCardLink') },
+        { href: '/teacher/packages', label: t('packagesLink') },
       ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}

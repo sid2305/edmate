@@ -63,6 +63,15 @@ describe('TeacherView', () => {
     );
   });
 
+  it('links to the package builder from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Packages' })).toHaveAttribute(
+      'href',
+      '/teacher/packages',
+    );
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await TeacherView());
     const results = await axe(container);
