@@ -517,6 +517,10 @@ it again (`takedowns.ts`; the `takedowns` table is from 0001, no migration).
 - Lock order: staff role row (`FOR SHARE`), the target row (`FOR UPDATE`), the takedown row,
   then the report. publish takes advisory, profile, agent, run; the agent is the only shared
   row, so there is no cycle (two-connection test against `publish.goLive`).
+- `countUpheld(scope)` (task 12.3b) counts the teacher's active `copyright` takedowns on their
+  own documents and agents; a lifted one does not count. The owner is the target's teacher now
+  or the teacher on the takedown's `takedown.create` audit row, so deleting a taken-down
+  document does not clear it. A read only: no lock, no caller, no threshold yet (12.3d).
 
 ## Regulated subjects (12.4)
 

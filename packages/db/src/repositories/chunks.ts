@@ -161,6 +161,7 @@ const documentColumns = {
   storageKey: documents.storageKey,
   status: documents.status,
   failureReason: documents.failureReason,
+  rightsDeclaredAt: documents.rightsDeclaredAt,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
 };

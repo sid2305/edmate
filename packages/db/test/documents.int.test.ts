@@ -120,6 +120,18 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect(Object.keys(row!)).not.toContain('failureReason');
     });
 
+    it('returns rightsDeclaredAt once the declaration is stored, and omits it before (12.3b)', async () => {
+      const id = await doc([], 'uploads/k-rights.pdf');
+      expect(Object.keys((await repos.documents.get(A, id))!)).not.toContain('rightsDeclaredAt');
+      await raw.query(
+        `update documents set rights_declared_at = '2026-10-22T09:30:00Z' where id = $1`,
+        [id],
+      );
+      expect((await repos.documents.get(A, id))?.rightsDeclaredAt).toBe('2026-10-22T09:30:00.000Z');
+      const listed = await repos.documents.listForTeacher(A);
+      expect(listed.find((d) => d.id === id)?.rightsDeclaredAt).toBe('2026-10-22T09:30:00.000Z');
+    });
+
     it("another teacher's or a missing document is null", async () => {
       const id = await doc([]);
       expect(await repos.documents.get(B, id)).toBeNull();
