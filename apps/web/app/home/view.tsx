@@ -5,9 +5,20 @@
 // 11.1c Phase C: a third block, "Upcoming live classes" -- title, start time, the join link (new
 // tab, since it leaves the app) and the window label. Shown whenever there is at least one
 // entitled class; it never affects the existing chats/startable placeholder.
+// 11.2b: each listed class also gets a small "ask a question" form (`AskQuestionForm`), feeding
+// the teacher's pre-class queue (`/api/live-classes/[id]/questions`).
+// Security review fix (22 Oct 2026): `AskQuestionForm` is a `'use client'` component that calls
+// `useTranslations('home')`; next-intl v4 throws ("No intl context found") when that runs with no
+// `NextIntlClientProvider` ancestor, so without this it crashed `/home` for every student with an
+// upcoming live class. Wrapped the same way `apps/web/app/teacher/live-classes/page.tsx` wraps
+// `LiveClassesView` -- locale "en", only the `home` messages the client form needs -- but here,
+// around the list itself (not in `page.tsx`), since `HomeView` is rendered directly in tests too.
+import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import type { UpcomingLiveClass } from '@edmate/db';
+import messages from '../../messages/en.json';
 import { AppShell } from '../../src/ui/AppShell';
+import { AskQuestionForm } from './AskQuestionForm';
 import { signOutAndRedirect } from './actions';
 
 export interface HomeViewProps {
@@ -71,22 +82,25 @@ export async function HomeView({ chats = [], startable = [], liveClasses = [] }:
       {liveClasses.length > 0 && (
         <>
           <h2>{t('liveClasses.title')}</h2>
-          <ul className="home-live-classes">
-            {liveClasses.map((liveClass) => (
-              <li key={liveClass.id}>
-                <span>{liveClass.title}</span>{' '}
-                <time dateTime={liveClass.startsAt}>{liveClass.startsAt}</time>{' '}
-                {liveClass.window !== 'later' && (
-                  <span>{t(`liveClasses.window.${liveClass.window}`)}</span>
-                )}{' '}
-                {liveClass.link !== null && (
-                  <a href={liveClass.link} target="_blank" rel="noopener noreferrer">
-                    {t('liveClasses.join')}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
+          <NextIntlClientProvider locale="en" messages={{ home: messages.home }}>
+            <ul className="home-live-classes">
+              {liveClasses.map((liveClass) => (
+                <li key={liveClass.id}>
+                  <span>{liveClass.title}</span>{' '}
+                  <time dateTime={liveClass.startsAt}>{liveClass.startsAt}</time>{' '}
+                  {liveClass.window !== 'later' && (
+                    <span>{t(`liveClasses.window.${liveClass.window}`)}</span>
+                  )}{' '}
+                  {liveClass.link !== null && (
+                    <a href={liveClass.link} target="_blank" rel="noopener noreferrer">
+                      {t('liveClasses.join')}
+                    </a>
+                  )}
+                  <AskQuestionForm liveClassId={liveClass.id} />
+                </li>
+              ))}
+            </ul>
+          </NextIntlClientProvider>
         </>
       )}
     </AppShell>

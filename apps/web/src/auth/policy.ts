@@ -52,6 +52,14 @@ export const ROUTE_POLICY: readonly PolicyRow[] = [
   { pattern: '/api/me/memory/*', methods: ['DELETE'], access: ['student'] },
   { pattern: '/api/studio/**', methods: ['GET', 'POST', 'PUT', 'DELETE'], access: ['teacher'] },
   { pattern: '/api/staff/**', methods: ['GET', 'POST'], access: ['staff'] },
+  // 11.2b: a student feeds the teacher's pre-class question queue for one of their own upcoming,
+  // entitled classes (`classQuestions.submit`, 11.2a); same clearance as `/api/sessions`.
+  {
+    pattern: '/api/live-classes/*/questions',
+    methods: ['POST'],
+    access: ['student'],
+    clearance: 'agent',
+  },
 ];
 
 /** Path segments, or null for a path we refuse to match (empty or dot segments, encoded slashes). */

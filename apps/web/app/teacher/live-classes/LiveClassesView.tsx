@@ -7,15 +7,24 @@
 import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import type { ErrorCode } from '@edmate/contracts';
-import type { TeacherLiveClassRow } from '@edmate/db';
+import type { TeacherLiveClassRow, TeacherQuestionGroup, TopicQuestionGroup } from '@edmate/db';
 import { scheduleLiveClass, type ScheduleLiveClassResult } from '../../../src/studio/liveClasses/scheduleLiveClassAction';
 import type { LiveClassesPackage } from '../../../src/studio/liveClasses/loadLiveClasses';
 
 export interface LiveClassesViewProps {
   classes: TeacherLiveClassRow[];
   packages: LiveClassesPackage[];
+  /** The student-fed pre-class queue, grouped by topic (task 11.2b). */
+  studentQueue?: TopicQuestionGroup[];
+  /** The teacher's whole open ask-the-teacher queue (5.10/8.9), shown as-is (lead answer Q2). */
+  askQueue?: TeacherQuestionGroup[];
   /** Tests inject a fake; defaults to Phase B's route. */
   scheduleLiveClass?: typeof scheduleLiveClass;
+}
+
+/** `oldestAt` is an ISO timestamp; shown as a plain date (English-only pilot, no locale lookup). */
+function formatDate(iso: string): string {
+  return iso.slice(0, 10);
 }
 
 const ERROR_KEYS = ['validation', 'not_found'] as const;
@@ -33,6 +42,8 @@ function toIsoWithOffset(localValue: string): string | null {
 export function LiveClassesView({
   classes: initialClasses,
   packages,
+  studentQueue = [],
+  askQueue = [],
   scheduleLiveClass: doSchedule = scheduleLiveClass,
 }: LiveClassesViewProps) {
   const t = useTranslations('liveClassesStudio');
@@ -152,6 +163,39 @@ export function LiveClassesView({
           ))}
         </ul>
       )}
+      <section aria-labelledby="student-queue-title">
+        <h2 id="student-queue-title">{t('studentQueue.title')}</h2>
+        {studentQueue.length === 0 ? (
+          <p>{t('studentQueue.empty')}</p>
+        ) : (
+          <ul aria-label={t('studentQueue.title')}>
+            {studentQueue.map((g) => (
+              <li key={g.groupId}>
+                <p>{t('studentQueue.since', { count: g.count, date: formatDate(g.oldestAt) })}</p>
+                {/* Student text only, never HTML: a rendered `{g.sample}` is plain React text --
+                    no raw-HTML render, no markdown-to-HTML pass (11.2a review, LOW; see
+                    src/chat/no-raw-html.test.ts for the banned-API sweep this file is under). */}
+                <p>{g.sample}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section aria-labelledby="ask-queue-title">
+        <h2 id="ask-queue-title">{t('askQueue.title')}</h2>
+        {askQueue.length === 0 ? (
+          <p>{t('askQueue.empty')}</p>
+        ) : (
+          <ul aria-label={t('askQueue.title')}>
+            {askQueue.map((g) => (
+              <li key={g.groupId}>
+                <p>{t('studentQueue.since', { count: g.count, date: formatDate(g.oldestAt) })}</p>
+                <p>{g.questions[0]?.text}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
