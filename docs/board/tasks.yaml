@@ -2347,8 +2347,9 @@ tasks:
     newline; the migration is additive; the db tests pass
   deps:
   - '5.10'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/5.10b-teacher-questions-locking
+  model: plan:lead build:sonnet
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
