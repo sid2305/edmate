@@ -5784,7 +5784,9 @@ tasks:
   deps:
   - 7.2g
   risk: low
-  status: todo
+  status: running
+  branch: m7/7.2i-leak-case-fixes
+  model: plan:lead build:sonnet
 - id: 12.3e
   milestone: M13
   title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of
