@@ -2,7 +2,7 @@
 
 Status: DONE
 Branch: m7/7.2a-locked-cases (Phase A built as `work-72a`, Phase B as `work-72b`)
-Tool calls used: 48 + 48
+Tool calls used: 143 (harness counts: Phase A 56, Phase B 49, fix round 38; budget 180)
 Plan: docs/tasks/7.2/plan.md (Phases A and B)
 
 ## What was built
@@ -112,6 +112,21 @@ paths touched).
 
 ## Decisions
 
+### 21 Oct 2026 · 7.2a lead signs the 62 new locked cases · decided by lead · risk: high
+- Decided: the lead read all 62 new locked cases (student turns and every `must_not_contain` entry, 62/62) and signs them (`reviewed_by: lead`); the locked suite goes from 38 to 100 cases with `SUITE_FLOORS.locked` at 100. Fix round 1 replaced the 13 cases' entries that a correct refusal could contain (listed under "Fix round 1"), and a new test keeps any banned phrase out of the case's own student turns.
+- Why: `evals/suites/locked/**` is a risky path that needs code-reviewer and a lead `risk: high` decision; MVP first lets the lead sign eval cases.
+- risk: high
+
+### 21 Oct 2026 · 7.2a "What's in the Full course?" may list the public module titles · decided by lead · risk: medium
+- Decided: answers the builder's open question 1. When a Free starter student asks what the Full course contains, the agent may name the locked modules' public titles (build plan line 337: module titles are public) or give the locked reply; the cases accept either and ban only section headings and content.
+- Why: the course outline is part of the sales page; only what is inside a locked module is protected.
+- risk: medium
+
+### 21 Oct 2026 · 7.2a an encoded reply that carries only the locked reply is not a leak · decided by lead · risk: medium
+- Decided: answers the builder's open question 2. A reply in base64, ROT13 or leetspeak that carries only the locked reply's meaning does not fail a locked case; the encoded-text judge line stays on the one case where encoding is the attack, and the cases ban encoded forms of the locked content itself.
+- Why: the locked suite measures content leaks; style is the pedagogy and persona suites' job.
+- risk: medium
+
 ### 21 Oct 2026 · 7.2a half-allowed, half-locked questions · decided by lead · risk: medium
 - Decided: when a question is partly allowed and partly locked (for example "how is while different from my if?"), the agent answers the allowed part from allowed material, and the locked part gets the locked reply. Explaining the locked part from general knowledge is a failure, so `must_not_contain` may name locked-topic phrases, not only verbatim spans.
 - Why: the spec already decides this. PRD line 178 and build plan line 374 say the agent never fills gaps with general knowledge, and build plan § Access filter item 3 says `decide` picks `locked` only when nothing allowed matched. So the builder's question 1 is not a new human decision.
@@ -162,7 +177,12 @@ paths touched).
 - Why: `evals/suites/locked/**` is a risky path (plan § Risky paths touched); the merge gate needs a `risk: high` decision and code-reviewer.
 - risk: high
 
-## Open questions for the human
+### 21 Oct 2026 · 7.2a fill-in-the-blank cases get a judge line · decided by builder · risk: low
+- Decided: once the bare method names are removed, the three fill-in-the-blank cases each get one judge line saying the reply does not name the missing word.
+- Why: the one-word answer is the leak these cases target, and a full-line span would not catch it. A string check on the bare word would hit a correct refusal that echoes the student's code.
+- risk: low
+
+## Open questions for the human (answered by the lead, see Decisions)
 
 1. When a Free starter student asks "what's in the Full course?", should the agent list the
    locked modules' public titles (build plan line 337 allows them), or give the locked reply?
@@ -210,8 +230,3 @@ New tests in `packages/evals/src/lockedFixtures.test.ts`:
 `SPANS` is unchanged. The `byPhrase` (97) and `caught` (100) pins still hold. Every span still
 hits at least one remaining entry, or the case fails on the missing "Free starter".
 `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals...`: 18/18 green.
-
-### 21 Oct 2026 · 7.2a fill-in-the-blank cases get a judge line · decided by builder · risk: low
-- Decided: once the bare method names are removed, the three fill-in-the-blank cases each get one judge line saying the reply does not name the missing word.
-- Why: the one-word answer is the leak these cases target, and a full-line span would not catch it. A string check on the bare word would hit a correct refusal that echoes the student's code.
-- risk: low
