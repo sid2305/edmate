@@ -2570,14 +2570,16 @@ tasks:
   model: null
 - id: 7.6a
   milestone: M7
-  title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep records a per-(model, suite) failure and still writes summary.json; empty-suite detection by a typed loader error, not message text; drop the cost non-null assertion; reject --models with --fixtures/--report; drop the as string[] cast in isBlockReply; a never-add-a-key comment on the live-models schema'
+  title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
+    records a per-(model, suite) failure and still writes summary.json; empty-suite detection by a typed loader error, not message text; drop the cost non-null assertion; reject --models with --fixtures/--report;
+    drop the as string[] cast in isBlockReply; a never-add-a-key comment on the live-models schema'
   accept: A live-models.yaml with one anthropic and one openai-compatible entry sweeps both under scripted gateways, one failing pair still yields summary.json, and the 7.6 tests still pass.
   deps:
   - '7.6'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.6a-sweep-followups
+  model: plan:lead build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
