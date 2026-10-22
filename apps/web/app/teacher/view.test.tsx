@@ -104,4 +104,20 @@ describe('TeacherView', () => {
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
+
+  it('shows the changed-since-publish note when the prop is true, with no axe violations (8.7k)', async () => {
+    const { container } = render(await TeacherView({ changedSincePublish: true }));
+    expect(
+      screen.getByText("You've made changes since your last publish."),
+    ).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('shows no note by default, with no axe violations', async () => {
+    const { container } = render(await TeacherView());
+    expect(
+      screen.queryByText("You've made changes since your last publish."),
+    ).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
 });

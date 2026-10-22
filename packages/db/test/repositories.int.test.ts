@@ -3250,6 +3250,20 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) => r.publish.latestRun({ teacherId: rid }),
     owners: (x: { judgeModel: string } | null) => (x ? markers(x.judgeModel) : []),
   },
+  'publish.changedSinceLastPublish': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: async (r, scope, t) => {
+      await seedChangedSincePublish(t);
+      return { changed: await r.publish.changedSinceLastPublish(scope), t: scope.teacherId };
+    },
+    random: async (r, _scope, rid) => ({
+      changed: await r.publish.changedSinceLastPublish({ teacherId: rid }),
+      t: rid,
+    }),
+    owners: (x: { changed: boolean; t: string }) => (x.changed ? [teacherOfId(x.t)] : []),
+  },
   'publish.failedCases': {
     scope: 'teacher',
     op: 'read',
@@ -3559,6 +3573,37 @@ async function insertRun(t: Teacher, id: string, status: string): Promise<void> 
     ],
   );
 }
+/**
+ * Task 8.7k: a published run whose basis matches nothing the teacher currently has (a style card
+ * id no row has, an empty package map, a huge material revision), dated ten years out so it is
+ * always the newest published run regardless of other cases' real goLive calls -- a positive
+ * control that `changedSinceLastPublish` reads `true` for t, never for the other teacher.
+ */
+async function seedChangedSincePublish(t: Teacher): Promise<void> {
+  await raw.query(
+    `insert into eval_runs
+       (id, teacher_id, agent_version_id, agent_id, suite, model, status, changes, basis, published_at)
+     values ($1, $2, $3, $4, 'gate', $5, 'passed', '{first_publish}', $6, now() + interval '10 years')
+     on conflict (id) do nothing`,
+    [
+      `run_cspub_${t.toLowerCase()}`,
+      teacherId(t),
+      `av_${t.toLowerCase()}`,
+      ids.agent(t),
+      `judge-[${t}]`,
+      JSON.stringify({
+        agentVersion: 1,
+        courseId: ids.course(t),
+        styleCardId: 'sty_cspub_missing',
+        promptPackVersion: 'cspub-mismatch',
+        modelPolicy: agentConfig(t).modelPolicy,
+        materialRevision: 999999,
+        packageVersions: {},
+      }),
+    ],
+  );
+}
+
 /** Ends t's open runs (raw), so a positive control can start or insert a fresh one. */
 async function closeOpenRuns(t: Teacher): Promise<void> {
   await raw.query(

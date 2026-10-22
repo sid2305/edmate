@@ -2,7 +2,9 @@
 // in-memory storage stands in for S3 and a scripted embedder stands in for the model gateway (rule
 // 4: no real model, S3 or network calls). Covers: enqueue -> process -> ready with chunks that a
 // scoped search finds; an unsupported/corrupt file -> failed with a fixed reason; a replace racing
-// a still-running job for the old file; a job for a document already deleted.
+// a still-running job for the old file; a job for a document already deleted. Task 8.2e adds web
+// links: ready, refused, not HTML, and a site failing every attempt (failed, and the URL is gone
+// from Redis), through the real fetcher with a fake resolver and transport, or a recorded page.
 //
 // Locally:
 //   docker compose -f docker/compose.yaml -f packages/db/test/compose.port.yaml \
@@ -10,7 +12,15 @@
 // CI provides both services. Without them the suite skips locally and fails in CI.
 import { randomBytes } from 'node:crypto';
 import { migrateDatabase, openDatabase, type Repositories } from '@edmate/db';
-import { createIngestQueue, enqueueIngest, type IngestJob } from '@edmate/queue';
+import { createWebFetcher, type WebFetcher } from '@edmate/ingest';
+import { stubWebFetcher } from '@edmate/ingest/testing';
+import {
+  createIngestQueue,
+  enqueueIngest,
+  INGEST_QUEUE,
+  type IngestJob,
+  type JobQueue,
+} from '@edmate/queue';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import pg from 'pg';
@@ -198,7 +208,10 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
 
   it('enqueue -> process: a document reaches ready with chunks a scoped search finds', async () => {
     const storage = fakeStorage();
-    const { id, storageKey } = await createDocument(db.repos, `ingest/${randomBytes(4).toString('hex')}.md`);
+    const { id, storageKey } = await createDocument(
+      db.repos,
+      `ingest/${randomBytes(4).toString('hex')}.md`,
+    );
     storage.put(storageKey, md('# Ready canary\n\nINGEST-INT-CANARY-ready content.'));
     await db.repos.documents.updateStatus(scope, id, 'processing');
 
@@ -293,7 +306,10 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
 
   it('an unsupported or corrupt file fails with a fixed reason', async () => {
     const storage = fakeStorage();
-    const { id, storageKey } = await createDocument(db.repos, `ingest/${randomBytes(4).toString('hex')}.md`);
+    const { id, storageKey } = await createDocument(
+      db.repos,
+      `ingest/${randomBytes(4).toString('hex')}.md`,
+    );
     // Zero bytes: parseDocument's own validation rejects an empty document before any parsing.
     storage.put(storageKey, md(''));
     await db.repos.documents.updateStatus(scope, id, 'processing');
@@ -403,7 +419,10 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
 
   it('a job for a deleted document is a no-op', async () => {
     const storage = fakeStorage();
-    const { id, storageKey } = await createDocument(db.repos, `ingest/${randomBytes(4).toString('hex')}.md`);
+    const { id, storageKey } = await createDocument(
+      db.repos,
+      `ingest/${randomBytes(4).toString('hex')}.md`,
+    );
     storage.put(storageKey, md('# Gone\n\nnever read.'));
     await db.repos.documents.updateStatus(scope, id, 'processing');
     await db.repos.documents.delete(scope, id);
@@ -439,5 +458,157 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
       await worker.close();
       await queue.close();
     }
+  });
+
+  // ---- web links (task 8.2e, ADR-0014) -------------------------------------------------------
+
+  const LEAK = 'leak-marker-qz';
+  const linkKey = (): string =>
+    `teachers/${scope.teacherId}/documents/x/${randomBytes(4).toString('hex')}.link`;
+
+  /** The real fetcher, with a fake resolver and a scripted transport (no socket, rule 4). */
+  function scriptedFetcher(reply: { status: number; type: string; body: string }) {
+    let calls = 0;
+    const fetcher = createWebFetcher({
+      allowedHosts: 'any-public',
+      resolveHost: () => Promise.resolve(['93.184.216.34']),
+      transport: () => {
+        calls += 1;
+        const bytes = new TextEncoder().encode(reply.body);
+        return Promise.resolve({
+          status: reply.status,
+          header: (name: string) => (name === 'content-type' ? reply.type : undefined),
+          body: (async function* () {
+            await Promise.resolve();
+            yield bytes;
+          })(),
+          cancel: () => undefined,
+        });
+      },
+    });
+    return { fetcher, calls: () => calls };
+  }
+
+  /** Every value under this suite's Redis prefix, as one string (to look for the URL). */
+  async function redisDump(): Promise<string> {
+    const out: string[] = [];
+    for (const key of await connection.keys(`${prefix}:*`)) {
+      const type = await connection.type(key);
+      if (type === 'string') out.push((await connection.get(key)) ?? '');
+      else if (type === 'hash') out.push(JSON.stringify(await connection.hgetall(key)));
+      else if (type === 'list') out.push(JSON.stringify(await connection.lrange(key, 0, -1)));
+      else if (type === 'zset') out.push(JSON.stringify(await connection.zrange(key, '0', '-1')));
+      else if (type === 'set') out.push(JSON.stringify(await connection.smembers(key)));
+      else if (type === 'stream') out.push(JSON.stringify(await connection.xrange(key, '-', '+')));
+    }
+    return out.join('\n');
+  }
+
+  async function runWebJob(
+    url: string,
+    webFetcher: WebFetcher,
+    opts: { attempts?: number } = {},
+  ): Promise<{ id: string; lines: LogLine[] }> {
+    const { id, storageKey } = await createDocument(db.repos, linkKey());
+    await db.repos.documents.updateStatus(scope, id, 'processing');
+    const lines: LogLine[] = [];
+    const queue = createIngestQueue(connection, { prefix });
+    const counts = new Queue(INGEST_QUEUE, { connection, prefix });
+    const worker = createIngestWorker({
+      connection,
+      deps: { repos: db.repos, storage: fakeStorage(), gateway: fakeGateway(), webFetcher },
+      deadLetter,
+      log: (l) => lines.push(l),
+      prefix,
+      autorun: true,
+    });
+    // enqueueIngest's own options, with fewer and faster retries so the suite stays quick.
+    const fast: JobQueue = {
+      add: (name, data, o) =>
+        queue.add(name, data, {
+          ...o,
+          ...(opts.attempts === undefined
+            ? {}
+            : { attempts: opts.attempts, backoff: { type: 'fixed', delay: 10 } }),
+        }),
+    };
+    try {
+      await enqueueIngest(
+        fast,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'web', url } satisfies IngestJob,
+        storageKey,
+      );
+      await until(
+        () => db.repos.documents.get(scope, id),
+        (r) => r?.status === 'ready' || r?.status === 'failed',
+      );
+      // Let the failed handler finish (dead-letter copy, removeOnFail) before looking at Redis.
+      await until(
+        () => counts.getJobCounts('active', 'waiting', 'delayed'),
+        (c) => (c.active ?? 0) + (c.waiting ?? 0) + (c.delayed ?? 0) === 0,
+      );
+    } finally {
+      await worker.close();
+      await counts.close();
+      await queue.close();
+    }
+    return { id, lines };
+  }
+
+  it('a web link reaches ready, and a scoped search finds its chunks', async () => {
+    const url = `https://lessons.example.org/unit/1?key=${LEAK}`;
+    const fetcher = stubWebFetcher({
+      [url]:
+        '<html><head><title>T</title></head><body><h1>Web canary</h1><p>INGEST-INT-CANARY-web page text.</p></body></html>',
+    });
+    const { id, lines } = await runWebJob(url, fetcher);
+    expect((await db.repos.documents.get(scope, id))?.status).toBe('ready');
+    expect(fetcher.requests).toEqual([url]);
+    const hits = await until(
+      () =>
+        db.repos.retrieval.search(scope, {
+          q: 'INGEST-INT-CANARY-web',
+          allowedModuleIds: ['mod_ing_01'],
+          k: 10,
+        }),
+      (hs) => hs.length > 0,
+    );
+    expect(hits.some((h) => h.documentId === id)).toBe(true);
+    expect(JSON.stringify(lines)).not.toContain(LEAK);
+  });
+
+  it('a refused address fails as forbidden, with nothing fetched', async () => {
+    const s = scriptedFetcher({ status: 200, type: 'text/html', body: '<p>x</p>' });
+    const { id } = await runWebJob(`https://10.0.0.1/a?key=${LEAK}`, s.fetcher);
+    const row = await db.repos.documents.get(scope, id);
+    expect([row?.status, row?.failureReason]).toEqual(['failed', 'forbidden']);
+    expect(s.calls()).toBe(0);
+    expect(await chunkCount(id)).toBe(0);
+  });
+
+  it('a page that is not HTML fails as unsupported', async () => {
+    const s = scriptedFetcher({ status: 200, type: 'application/pdf', body: '%PDF-1.7' });
+    const { id } = await runWebJob(`https://lessons.example.org/a.pdf?key=${LEAK}`, s.fetcher);
+    const row = await db.repos.documents.get(scope, id);
+    expect([row?.status, row?.failureReason]).toEqual(['failed', 'unsupported']);
+  });
+
+  it('a site that fails on every attempt ends failed/provider_error, and no copy of the URL stays in Redis', async () => {
+    const s = scriptedFetcher({ status: 503, type: 'text/html', body: 'down' });
+    const { id, lines } = await runWebJob(`https://lessons.example.org/b?key=${LEAK}`, s.fetcher, {
+      attempts: 2,
+    });
+    const row = await db.repos.documents.get(scope, id);
+    expect([row?.status, row?.failureReason]).toEqual(['failed', 'provider_error']);
+    expect(s.calls()).toBe(2);
+    const dead = await until(
+      async () => (await deadLetter.getJobs(['waiting'])).map((j) => j.data as { refs?: object }),
+      (ds) => ds.some((d) => JSON.stringify(d).includes(id)),
+    );
+    expect(JSON.stringify(dead)).not.toContain(LEAK);
+    expect(JSON.stringify(dead)).not.toContain('lessons.example.org');
+    // The failed job itself is gone (removeOnFail), so its payload's URL is not in Redis at all.
+    expect(await redisDump()).not.toContain(LEAK);
+    expect(JSON.stringify(lines)).not.toContain(LEAK);
   });
 });

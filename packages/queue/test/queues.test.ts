@@ -91,6 +91,39 @@ describe('IngestJobSchema', () => {
   });
 });
 
+describe('IngestJobSchema: web links (task 8.2e)', () => {
+  const base = { teacherId: 'tch_1', documentId: 'doc_1' };
+  const url = 'https://lessons.example.org/unit/1?key=abc';
+
+  it('a web job carries its https URL', () => {
+    expect(IngestJobSchema.safeParse({ ...base, fileKind: 'web', url }).success).toBe(true);
+  });
+
+  it('a web job without a URL, or with a mime type, is refused', () => {
+    expect(IngestJobSchema.safeParse({ ...base, fileKind: 'web' }).success).toBe(false);
+    expect(
+      IngestJobSchema.safeParse({ ...base, fileKind: 'web', url, mimeType: 'video/mp4' }).success,
+    ).toBe(false);
+  });
+
+  it('a file job with a URL is refused', () => {
+    expect(IngestJobSchema.safeParse({ ...base, fileKind: 'pdf', url }).success).toBe(false);
+    expect(
+      IngestJobSchema.safeParse({ ...base, fileKind: 'video', mimeType: 'video/mp4', url }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['plain http', 'http://lessons.example.org/a'],
+    ['not a URL', 'https://'],
+    ['free text', 'lessons.example.org/a'],
+    ['over 2048 characters', `https://lessons.example.org/${'a'.repeat(2048)}`],
+    ['an empty string', ''],
+  ])('a web job with %s is refused', (_label, bad) => {
+    expect(IngestJobSchema.safeParse({ ...base, fileKind: 'web', url: bad }).success).toBe(false);
+  });
+});
+
 describe('jobId.ingest', () => {
   it('is stable per document id and storage key', () => {
     expect(jobId.ingest('doc_1', 'ingest/a.pdf')).toBe(jobId.ingest('doc_1', 'ingest/a.pdf'));
@@ -154,6 +187,37 @@ describe('createIngestQueue / enqueueIngest', () => {
     );
     const ids = add.mock.calls.map((c) => (c[2] as { jobId?: string }).jobId);
     expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  it('a web job carries the URL and is removed from Redis when it fails for the last time', async () => {
+    const add = vi.fn(async (_name: string, _data: unknown, _opts: object) => undefined);
+    const url = 'https://lessons.example.org/unit/1?key=abc';
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'web', url },
+      'teachers/tch_1/documents/doc_1/u.link',
+    );
+    const [, data, opts] = add.mock.calls[0] as unknown as [
+      string,
+      unknown,
+      { jobId?: string; removeOnFail?: unknown; removeOnComplete?: unknown; attempts?: number },
+    ];
+    expect(data).toEqual({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'web', url });
+    expect(opts.jobId).toBe(jobId.ingest('doc_1', 'teachers/tch_1/documents/doc_1/u.link'));
+    expect(opts.removeOnFail).toBe(true);
+    expect(opts.removeOnComplete).toBe(true);
+    expect(opts.attempts).toBe(5);
+  });
+
+  it('a file job keeps its failed copy for the usual time', async () => {
+    const add = vi.fn(async (_name: string, _data: unknown, _opts: object) => undefined);
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },
+      'ingest/a.pdf',
+    );
+    const opts = add.mock.calls[0]?.[2] as { removeOnFail?: unknown };
+    expect(opts.removeOnFail).toEqual({ age: 7 * 24 * 60 * 60, count: 1_000 });
   });
 
   it('refuses a malformed job before calling add', async () => {

@@ -143,7 +143,9 @@ export function createIngestQueue(
  * enqueuing, named by the caller — the job payload itself carries no `storageKey`; see
  * `IngestJobSchema`'s doc comment) so a retry of the *same* file replaces the still-queued
  * attempt, while a replace (a new `storageKey` for the same document) gets its own job id rather
- * than reusing one a still-active old job might hold.
+ * than reusing one a still-active old job might hold. A web job's payload holds the teacher's
+ * URL, which can carry a share token, so it is removed from Redis on its final failure instead of
+ * sitting in the failed set (ADR-0014 Decision 9); the document row keeps the failure reason.
  */
 export async function enqueueIngest(
   queue: JobQueue,
@@ -154,6 +156,9 @@ export async function enqueueIngest(
   await queue.add(
     JOB.ingestProcess,
     data,
-    jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
+    {
+      ...jobOptions(jobId.ingest(data.documentId, storageKey), JOB.ingestProcess),
+      ...(data.fileKind === 'web' ? { removeOnFail: true } : {}),
+    },
   );
 }

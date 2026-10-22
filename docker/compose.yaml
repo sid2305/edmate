@@ -143,6 +143,8 @@ services:
       # Local stack: index uploads for full-text search only (chat retrieval is full text, 9.4), so
       # no OpenAI key is needed. `openai` turns embeddings and transcription back on (task 9.0, D3).
       EDMATE_INGEST_EMBEDDINGS: ${EDMATE_INGEST_EMBEDDINGS:-off}
+      # Web links (task 8.2e, ADR-0014): `*` = any public https site; empty refuses every link.
+      EDMATE_WEB_LINK_HOSTS: ${EDMATE_WEB_LINK_HOSTS-*}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

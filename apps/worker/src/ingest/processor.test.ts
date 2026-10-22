@@ -2,7 +2,7 @@
 // package's deterministic `hashedEmbedder`, the transcriber and storage are in-memory fakes.
 import type { DocumentRow } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
-import { MAX_DOCUMENT_BYTES } from '@edmate/ingest';
+import { IngestError, MAX_DOCUMENT_BYTES } from '@edmate/ingest';
 import { hashedEmbedder } from '@edmate/ingest/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { PermanentJobError } from '../commit/processors.js';
@@ -134,8 +134,9 @@ function offGateway(): IngestGateway {
   return {};
 }
 
+/** A first attempt of five, like the real queue's RETRY: a retryable failure is not final. */
 function job(data: unknown, name = 'ingest.process'): IngestJobLike {
-  return { id: 'j1', name, data };
+  return { id: 'j1', name, data, attemptsMade: 0, opts: { attempts: 5 } };
 }
 
 const lines: LogLine[] = [];
@@ -477,5 +478,224 @@ describe('ingestProcessor', () => {
     await expect(
       ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' })),
     ).rejects.toBeInstanceOf(PermanentJobError);
+  });
+});
+
+// ---- web links and the last attempt (task 8.2e, ADR-0014) --------------------------------------
+
+const LINK_KEY = 'teachers/tch_1/documents/doc_1/u1.link';
+const LEAK = 'leak-marker-qz';
+const URL_OK = `https://lessons.example.org/unit/1?key=${LEAK}`;
+
+function webJob(url: string, attempt?: { made: number; of: number }): IngestJobLike {
+  return {
+    id: 'j1',
+    name: 'ingest.process',
+    data: { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'web', url },
+    attemptsMade: attempt?.made ?? 0,
+    opts: { attempts: attempt?.of ?? 5 },
+  };
+}
+
+/** Storage a web job must never read: a link has no stored object. */
+function noStorage(): StorageClient {
+  return {
+    getObjectBytes: () => Promise.reject(new Error('a web job read storage')),
+    getSignedDownloadUrl: () => Promise.reject(new Error('a web job signed a URL')),
+    deleteObject: () => Promise.resolve(),
+  };
+}
+
+function fetcherOf(fetchPage: (url: string) => Promise<{ html: string }>) {
+  const spy = vi.fn(fetchPage);
+  return { webFetcher: { fetchPage: spy }, fetchPage: spy };
+}
+
+const PAGE_HTML =
+  '<html><head><title>T</title></head><body><h1>Fractions</h1><p>Halves and quarters.</p></body></html>';
+
+async function permanent(p: Promise<unknown>): Promise<PermanentJobError> {
+  const err = await p.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  expect(err).toBeInstanceOf(PermanentJobError);
+  const e = err as PermanentJobError;
+  expect(e.message).not.toContain(LEAK);
+  expect(e.message).not.toContain('lessons.example.org');
+  return e;
+}
+
+function webDeps(
+  mem: ReturnType<typeof memoryRepos>,
+  webFetcher?: IngestProcessorDeps['webFetcher'],
+): IngestProcessorDeps {
+  return {
+    repos: mem.repos,
+    storage: noStorage(),
+    gateway: gateway(),
+    ...(webFetcher === undefined ? {} : { webFetcher }),
+  };
+}
+
+describe('ingestProcessor: web links', () => {
+  it('fetches the page, indexes it and marks it ready, without the URL in any log line', async () => {
+    lines.length = 0;
+    const mem = memoryRepos(row({ storageKey: LINK_KEY, sourceTitle: 'lessons.example.org' }));
+    const f = fetcherOf(() => Promise.resolve({ html: PAGE_HTML }));
+    await expect(ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK))).resolves.toBe(
+      'ready',
+    );
+    expect(f.fetchPage).toHaveBeenCalledWith(URL_OK);
+    expect(mem.getRow()?.status).toBe('ready');
+    expect(mem.calls).toContain('insertMany');
+    expect(JSON.stringify(lines)).not.toContain(LEAK);
+    expect(JSON.stringify(lines)).not.toContain('/unit/');
+  });
+
+  it.each([
+    ['a private address', 'https://127.0.0.1/a', 'forbidden'],
+    ['an internal name', 'https://intranet.local/a', 'forbidden'],
+    ['a YouTube link', 'https://www.youtube.com/watch?v=abc', 'unsupported'],
+  ])('%s fails as %s with nothing fetched', async (_label, url, code) => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() => Promise.resolve({ html: PAGE_HTML }));
+    const e = await permanent(ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(url)));
+    expect(e.message).toBe(`ingest.process: ${code}`);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe(code);
+    expect(f.fetchPage).not.toHaveBeenCalled();
+    expect(mem.calls).not.toContain('insertMany');
+  });
+
+  it('a payload the queue schema refuses (plain http) is permanent, with nothing fetched', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() => Promise.resolve({ html: PAGE_HTML }));
+    await permanent(
+      ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob('http://lessons.example.org/a')),
+    );
+    expect(f.fetchPage).not.toHaveBeenCalled();
+  });
+
+  it('no web fetcher configured: the link fails as unsupported', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    await permanent(ingestProcessor(webDeps(mem), log)(webJob(URL_OK)));
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('unsupported');
+  });
+
+  it('a refused link whose row was deleted meanwhile is a stale skip', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    mem.setRow(null);
+    mem.setRow(row({ storageKey: LINK_KEY, status: 'ready' }));
+    // ready -> failed is refused by the fake lifecycle (as by the repo): not_found.
+    await expect(
+      ingestProcessor(webDeps(mem), log)(webJob('https://127.0.0.1/a')),
+    ).resolves.toBe('stale_skipped');
+  });
+
+  it('a non-retryable fetch failure marks the link failed with its code', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() =>
+      Promise.reject(new IngestError('unsupported', false, 'the web link is not an HTML page')),
+    );
+    await permanent(ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK)));
+    expect(mem.getRow()?.failureReason).toBe('unsupported');
+  });
+
+  it('a retryable failure before the last attempt is rethrown and the link stays processing', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() =>
+      Promise.reject(new IngestError('provider_error', true, 'the site failed (HTTP 503)')),
+    );
+    await expect(
+      ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK, { made: 3, of: 5 })),
+    ).rejects.toBeInstanceOf(IngestError);
+    expect(mem.getRow()?.status).toBe('processing');
+  });
+
+  it.each([
+    ['provider_error', new IngestError('provider_error', true, 'the site failed (HTTP 503)')],
+    ['rate_limited', new IngestError('rate_limited', true, 'the site rate limited (HTTP 429)')],
+    ['provider_error', new Error(`socket hang up ${URL_OK}`)],
+  ])('on the last attempt a retryable failure marks the link failed/%s', async (code, error) => {
+    lines.length = 0;
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() => Promise.reject(error));
+    const e = await permanent(
+      ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK, { made: 4, of: 5 })),
+    );
+    expect(e.message).toBe(`ingest.process: ${code}`);
+    expect(e.cause).toBeUndefined();
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe(code);
+    expect(JSON.stringify(lines)).not.toContain(LEAK);
+  });
+
+  it('a replace during the fetch is a stale skip', async () => {
+    const mem = memoryRepos(row({ storageKey: LINK_KEY }));
+    const f = fetcherOf(() => {
+      mem.setRow(row({ storageKey: 'teachers/tch_1/documents/doc_1/u2.link' }));
+      return Promise.resolve({ html: PAGE_HTML });
+    });
+    await expect(ingestProcessor(webDeps(mem, f.webFetcher), log)(webJob(URL_OK))).resolves.toBe(
+      'stale_skipped',
+    );
+    expect(mem.calls).not.toContain('insertMany');
+  });
+});
+
+describe('ingestProcessor: the last attempt for file jobs', () => {
+  function fileJob(attempt?: { made: number; of: number }): IngestJobLike {
+    return {
+      id: 'j1',
+      name: 'ingest.process',
+      data: { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' },
+      ...(attempt === undefined
+        ? {}
+        : { attemptsMade: attempt.made, opts: { attempts: attempt.of } }),
+    };
+  }
+
+  it('an unexpected failure on the last attempt marks the document failed/provider_error', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage(),
+      gateway: gateway(),
+    };
+    const e = await permanent(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 })));
+    expect(e.message).toBe('ingest.process: provider_error');
+    expect(mem.getRow()?.failureReason).toBe('provider_error');
+  });
+
+  it('a job with no attempt count is a single attempt, so its failure is final', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage(),
+      gateway: gateway(),
+    };
+    await permanent(ingestProcessor(deps, log)(fileJob()));
+    expect(mem.getRow()?.status).toBe('failed');
+  });
+
+  it('a db outage on the last attempt is rethrown as-is (the row cannot be written)', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: {
+        ...mem.repos,
+        documents: {
+          ...mem.repos.documents,
+          updateStatus: () =>
+            Promise.reject(new RepositoryError('failed', 'documents.updateStatus')),
+        },
+      } as never,
+      storage: fakeStorage(),
+      gateway: gateway(),
+    };
+    await expect(ingestProcessor(deps, log)(fileJob({ made: 4, of: 5 }))).rejects.toBeInstanceOf(
+      RepositoryError,
+    );
   });
 });

@@ -5,7 +5,9 @@ import { getTranslations } from 'next-intl/server';
 import { AppShell } from '../../src/ui/AppShell';
 import { signOutAndRedirect } from './actions';
 
-export async function TeacherView() {
+export async function TeacherView({
+  changedSincePublish = false,
+}: { changedSincePublish?: boolean } = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('teacher');
   const publish = await getTranslations('publish');
@@ -29,6 +31,7 @@ export async function TeacherView() {
     >
       <h1>{t('title')}</h1>
       <p>{t('placeholder')}</p>
+      {changedSincePublish ? <p role="status">{publish('changedNote')}</p> : null}
     </AppShell>
   );
 }

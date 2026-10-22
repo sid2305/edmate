@@ -4618,9 +4618,29 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: running
+  status: done
   branch: m8/8.7k-changed-since-publish
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 92
+    tokens_in: 274
+    tokens_out: 30111
+    cache_read_tokens: 7461435
+    wall_time_seconds: 3718
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
@@ -4752,9 +4772,31 @@ tasks:
   deps:
   - 8.2d
   risk: high
-  status: running
+  status: done
   branch: m8/8.2e-web-link-job
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:opus
+  metrics:
+    tool_calls: 309
+    tokens_in: 1012
+    tokens_out: 48240
+    cache_read_tokens: 36814745
+    wall_time_seconds: 121661
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 17
+      by_severity:
+        MEDIUM: 3
+        LOW: 14
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 11
+        wontfix: 1
+    human_questions: 0
 - id: 8.2f
   milestone: M8
   title: Add a web link in the upload centre; YouTube links refused with fixed words (8.2b Phase C)
@@ -4762,8 +4804,9 @@ tasks:
   deps:
   - 8.2e
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.2f-web-link-ui
+  model: plan:sonnet build:sonnet
 - id: 8.2c
   milestone: M8
   title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
@@ -4824,9 +4867,9 @@ tasks:
   deps:
   - '11.1'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m11/11.2a-class-questions-repo
+  model: plan:sonnet build:sonnet
 - id: 11.2b
   milestone: M11
   title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B)
@@ -4864,6 +4907,131 @@ tasks:
   deps:
   - 12.5a
   risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2a
+  milestone: M12
+  title: 'Reports repository: a student files a report on a chat reply, staff list and review it (12.2 Phase A)'
+  accept: per docs/tasks/12.2/plan.md Phase A and Lead answers; db typecheck, lint and test green.
+  deps:
+  - '12.1'
+  risk: high
+  status: running
+  branch: m12/12.2a-reports-repo
+  model: plan:opus build:opus
+- id: 12.2b
+  milestone: M12
+  title: 'Takedowns repository: retrieval, material and module lists skip taken-down documents at once; an agent takedown suspends it (12.2 Phase B)'
+  accept: per docs/tasks/12.2/plan.md Phase B and Lead answers; db typecheck, lint and test green.
+  deps:
+  - 12.2a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2c
+  milestone: M12
+  title: Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)
+  accept: per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 12.2a
+  status: todo
+  branch: null
+  model: null
+- id: 12.2d
+  milestone: M12
+  title: Staff reports and takedowns API (12.2 Phase D)
+  accept: per docs/tasks/12.2/plan.md Phase D and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 12.2b
+  - 12.2c
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2e
+  milestone: M12
+  title: /staff/reports page that re-reads the queue every 60 s (12.2 Phase E)
+  accept: per docs/tasks/12.2/plan.md Phase E and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 12.2d
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.2f
+  milestone: M13
+  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents'
+  accept: each follow-up has a test; touched packages green.
+  deps:
+  - 12.2e
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.3a
+  milestone: M12
+  title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
+  accept: per docs/tasks/12.3/plan.md Phase A and Lead answers; content typecheck, lint and test green.
+  deps:
+  - '12.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.3b
+  milestone: M12
+  title: Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)
+  accept: per docs/tasks/12.3/plan.md Phase B and Lead answers; db typecheck, lint and test green.
+  deps:
+  - 12.3a
+  - 12.2b
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.3c
+  milestone: M12
+  title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
+  accept: per docs/tasks/12.3/plan.md Phase C and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 12.3b
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.3d
+  milestone: M13
+  title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
+  accept: per the humans answer; touched packages green.
+  deps:
+  - 12.3c
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 9.6i
+  milestone: M9
+  title: '9.6h security re-check follow-ups (before the pilot): changePackage applies the alarm-paused-free check like start (paid then change to free must not get round it), with a test; the web start
+    route maps the alarm refusal to its own fixed words (check findLive on invalid) instead of ''you already have a package'', with a route test; the refusal re-read keeps the verified and live joins (not_found,
+    not invalid); the alarm marker when nothing was paused; an actorRole-only forged-row test for resume; restore teacher verification in a finally in the 9.6h tests; note for 10.3: resume''s created_at
+    tie-break adds no order. From the 9.6d review: apps/web/src/subscriptions/change.ts logs the error name on the 500 path; the plan page fails closed when packageVersions.getById misses (no fallback to
+    the internal version id), with a test. Until M10, a paid package starts with no payment and is never alarm-paused, so the free-tier block can be bypassed by starting a paid package; 10.x closes that'
+  accept: each MEDIUM has a failing-then-passing test; db and web typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 9.6h
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.5d
+  milestone: M13
+  title: 'Safety alerts follow-ups: listForStaff sort index and acknowledged_by FK index (12.5a review)'
+  accept: per docs/tasks/12.5a/review.md deferred findings; db typecheck, lint and test green.
+  deps:
+  - 12.5a
+  risk: low
   status: todo
   branch: null
   model: null
