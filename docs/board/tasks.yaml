@@ -3180,9 +3180,9 @@ tasks:
   deps:
   - 7.2c
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2g-leak-followups
+  model: plan:lead build:sonnet review:sonnet
 - id: 8.3c
   milestone: M13
   title: '8.3a review follow-ups: an outline edit that merges away a studied topic moves its evidence_events to the surviving topic instead of being refused; batch replaceOutline''s per-module and per-topic
