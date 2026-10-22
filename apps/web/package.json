@@ -22,6 +22,7 @@
     "@edmate/db": "workspace:*",
     "@edmate/gateway": "workspace:*",
     "@edmate/harness": "workspace:*",
+    "@edmate/ingest": "workspace:*",
     "@edmate/queue": "workspace:*",
     "ioredis": "6.0.0",
     "next": "16.4.2",

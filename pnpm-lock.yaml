@@ -242,6 +242,9 @@ importers:
       '@edmate/harness':
         specifier: workspace:*
         version: link:../../packages/harness
+      '@edmate/ingest':
+        specifier: workspace:*
+        version: link:../../packages/ingest
       '@edmate/queue':
         specifier: workspace:*
         version: link:../../packages/queue
