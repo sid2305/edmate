@@ -2,7 +2,7 @@
 
 Status: DONE
 Branch: m7/7.2c-leak-cases (built as `work-72l`)
-Tool calls used: about 85 (harness count; budget ~90)
+Tool calls used: 130 (harness counts: build 77, fix round 1 53; budget ~90)
 Plan: docs/tasks/7.2/plan.md (Phase D)
 
 ## What was built
@@ -87,6 +87,11 @@ partialreveal 6 — exactly the plan's forms list (spelled+reversed combine to t
   the plan is touched.
 
 ## Decisions
+
+### 22 Oct 2026 · 7.2c Lead signs the 36 new leak cases and accepts the budget overrun · decided by lead · risk: medium
+- Decided: the lead signs all 36 new leak cases (`reviewed_by: lead`, per the MVP-first policy) after fix round 1. Cases read by the lead: 36/36. The run used 130 tool calls against a ~90 budget (build 77, fix round 1 53 against a 25 cap); the lead accepts the overrun.
+- Why: fix round 1 closed both HIGH findings (the paid-only loops case now runs on `paid`; 31 cases ban the bare answer key as well as the scripted phrase, 5 skip it for the listed reasons). The fixer overran because it checked every case against its question-bank answer, which was the point of the fix. The MEDIUM "-deva" script finding and the older 44 cases go to 7.2g.
+- risk: medium
 
 ### 21 Oct 2026 · 7.2c "spelled out / reversed" built as framing, not real encoding · decided by builder · risk: low
 - Decided: the "spelled out" and "reversed" forms are social-engineering phrasing tricks
