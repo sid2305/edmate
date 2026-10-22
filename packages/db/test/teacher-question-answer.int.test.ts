@@ -339,6 +339,88 @@ describe.skipIf(!up)(`teacherQuestions grouping and answer on Postgres${up ? '' 
     });
   });
 
+  describe('dismiss', () => {
+    it('closes the named row only; other group members stay open and still answerable', async () => {
+      const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+      const store2 = teacherQuestionStoreFor(repos, { studentId: stu2, teacherId: tA });
+      const q1 = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `DISMISS-CANARY-A-${uid('q')}: why does ice melt faster in salt water?`,
+        similarIds: [],
+      });
+      const q2 = await store2.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu2,
+        text: `DISMISS-CANARY-A-${uid('q')}: why does ice melt faster when salt is added to water?`,
+        similarIds: [],
+      });
+      expect(await groupOf(q1.id)).toBe(await groupOf(q2.id));
+
+      await repos.teacherQuestions.dismiss({ teacherId: tA }, q1.id);
+      expect(await statusOf(q1.id)).toBe('dismissed');
+      expect(await statusOf(q2.id)).toBe('open');
+
+      const result = await repos.teacherQuestions.answer(
+        { teacherId: tA },
+        { questionId: q2.id, moduleId: moduleA, answer: 'Salt lowers the freezing point.' },
+      );
+      expect(result.answered).toBe(1);
+      expect(await statusOf(q2.id)).toBe('answered');
+    });
+
+    it("another teacher's, a missing, or an already-closed question is not_found and writes nothing", async () => {
+      const storeB = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: teacherId('B') });
+      const qb = await storeB.open({
+        teacherId: teacherId('B'),
+        agentId: agentConfig('B').id,
+        studentId: stu1,
+        text: `DISMISS-CANARY-OTHER-${uid('q')}: why do bubbles form in boiling water?`,
+        similarIds: [],
+      });
+      expect(await kind(repos.teacherQuestions.dismiss({ teacherId: tA }, qb.id))).toBe(
+        'not_found',
+      );
+      expect(await statusOf(qb.id)).toBe('open');
+
+      expect(
+        await kind(repos.teacherQuestions.dismiss({ teacherId: tA }, 'missing_question')),
+      ).toBe('not_found');
+
+      const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+      const qAnswered = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `DISMISS-CANARY-ANSWERED-${uid('q')}: why does a kite need wind to fly?`,
+        similarIds: [],
+      });
+      await repos.teacherQuestions.answer(
+        { teacherId: tA },
+        { questionId: qAnswered.id, moduleId: moduleA, answer: 'Wind provides lift.' },
+      );
+      expect(
+        await kind(repos.teacherQuestions.dismiss({ teacherId: tA }, qAnswered.id)),
+      ).toBe('not_found');
+      expect(await statusOf(qAnswered.id)).toBe('answered');
+
+      const qDismissed = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `DISMISS-CANARY-REPLAY-${uid('q')}: why do leaves fall in autumn?`,
+        similarIds: [],
+      });
+      await repos.teacherQuestions.dismiss({ teacherId: tA }, qDismissed.id);
+      expect(
+        await kind(repos.teacherQuestions.dismiss({ teacherId: tA }, qDismissed.id)),
+      ).toBe('not_found');
+      expect(await statusOf(qDismissed.id)).toBe('dismissed');
+    });
+  });
+
   describe('listGroupsForTeacher', () => {
     it('groups the biggest first, then oldest, and never selects a student id', async () => {
       const groups = await repos.teacherQuestions.listGroupsForTeacher(
