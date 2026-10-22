@@ -4327,7 +4327,9 @@ tasks:
   deps:
   - 9.6c
   risk: medium
-  status: todo
+  status: running
+  branch: m9/9.6d-plan-page
+  model: plan:opus build:sonnet
 - id: 9.6e
   milestone: M9
   title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
