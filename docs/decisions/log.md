@@ -10,6 +10,34 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.5b Mock interview carries onto a plain Composer message; feedback and practice never do · decided by builder · risk: low
+- Decided: `submit`'s carry-along rule tags a plain `message` turn with `skill: 'mock_interview'`
+  while that skill is active (an interview answer is typed in the ordinary Composer, per the
+  plan — there is no dedicated answer form), but a plain message never carries `practice` or
+  `feedback` along. `activeSkill`'s reset effect keeps `mock_interview` across a turn with no
+  skill cards (since it never emits one, Q2) and only `stopMockInterview` clears it.
+- Why: matches the plan's stated shape exactly (practice/feedback have their own trigger per
+  turn; mock interview's answer is an ordinary typed message) without reusing the 9.5a bug this
+  task's own lessons.md entry warns about — this keeps the same "every state that tags outgoing
+  turns has a stated reset point, with a test for the turn after it" rule, just with a different
+  reset trigger (Stop, not the next plain message) because mock interview's whole point is that
+  typing stays in-skill until the student presses Stop.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5b Reused the WIP commit from the cut-off builder as-is · decided by builder · risk: low
+- Decided: reviewed the uncommitted WIP commit (`2287846`) line-by-line against the Phase B plan
+  and the 9.5a review's two HIGHs before accepting it; made no further code changes since it
+  already matched the plan (feedback one-shot tag, mock-interview carry/reset, CSS, and the
+  e2e cases were all present) and passed the full gate on the first run.
+- Why: avoids throwing away correct work just because the prior builder was cut off mid-note;
+  the gate (typecheck/lint/test, secret scan) is the objective check, and it was green before
+  and after the `origin/main` merge.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.3c add the verified join to packageVersions.liveForAgent and subscriptions.start · decided by lead · risk: high
 - Decided: `packageVersions.liveForAgent` and `subscriptions.start` both require
   `teacherProfiles.verificationStatus = 'verified'` (an inner join), so a pending or rejected
