@@ -4492,6 +4492,23 @@ tasks:
   - 9.6b
   risk: low
   status: todo
+- id: 11.3a
+  milestone: M11
+  title: Weekly insights repository in packages/db, minimum 5 distinct students per group (11.3 Phase A)
+  accept: per docs/tasks/11.3/plan.md Phase A and Lead answers; db typecheck, lint and test green.
+  deps:
+  - '8.1'
+  risk: high
+  status: todo
+  branch: null
+- id: 11.3b
+  milestone: M11
+  title: Weekly insights worker job, Monday 07:00 in the US pack timezone (11.3 Phase B)
+  accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
+  deps:
+  - 11.3a
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
