@@ -33,16 +33,18 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
 
   const status = profile?.verificationStatus ?? 'pending';
   const bannerKey =
-    status === 'verified' ? 'statusVerified' : status === 'rejected' ? 'statusRejected' : 'statusPending';
+    status === 'verified'
+      ? 'statusVerified'
+      : status === 'rejected'
+        ? 'statusRejected'
+        : 'statusPending';
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     const languages = parseLanguages(languagesText);
-    const body = profile
-      ? { subject, bio, languages }
-      : { slug, subject, bio, languages };
+    const body = profile ? { subject, bio, languages } : { slug, subject, bio, languages };
     try {
       const res = await fetch('/api/studio/profile', {
         method: profile ? 'PUT' : 'POST',
@@ -66,13 +68,10 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
   return (
     <form onSubmit={(e) => void onSubmit(e)}>
       <p role="status">{t(bannerKey)}</p>
-      {error ? (
-        <p role="alert">{error}</p>
-      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
       {profile ? (
         <p>
-          <span id="onboarding-slug-label">{t('slugLabel')}</span>{' '}
-          <span>{profile.slug}</span>
+          <span id="onboarding-slug-label">{t('slugLabel')}</span> <span>{profile.slug}</span>
         </p>
       ) : (
         <p>
@@ -91,8 +90,10 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
         <input
           id="onboarding-subject"
           value={subject}
+          aria-describedby={profile ? 'onboarding-subject-hint' : undefined}
           onChange={(e) => setSubject(e.target.value)}
         />
+        {profile ? <span id="onboarding-subject-hint">{t('subjectHint')}</span> : null}
       </p>
       <p>
         <label htmlFor="onboarding-bio">{t('bioLabel')}</label>

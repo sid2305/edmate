@@ -230,6 +230,66 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
   });
 
+  // Task 8.1c (B-30): a subject change sends a verified teacher back to pending, in the same
+  // UPDATE statement; bio, languages and a same-value subject leave the status alone.
+  describe('update: a subject change resets verification', () => {
+    beforeEach(async () => {
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Maths' });
+      await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
+      await repos.teacherProfiles.setVerification(B, { status: 'verified', by: STAFF });
+    });
+
+    it('a verified teacher who changes subject is pending again; nobody else changes', async () => {
+      const row = await repos.teacherProfiles.update(A, { subject: 'Physics' });
+      expect(row).toMatchObject({ subject: 'Physics', verificationStatus: 'pending' });
+      expect(await statusOf(teacherId('A'))).toBe('pending');
+      expect(await statusOf(teacherId('B'))).toBe('verified');
+      expect(await failure(repos.teacherProfiles.assertVerifiedForPublish(A))).toEqual({
+        kind: 'scope',
+        method: 'teacherProfiles.assertVerifiedForPublish',
+      });
+    });
+
+    it('a subject change together with a bio edit still resets', async () => {
+      const row = await repos.teacherProfiles.update(A, { subject: 'Physics', bio: 'New bio' });
+      expect(row).toMatchObject({
+        subject: 'Physics',
+        bio: 'New bio',
+        verificationStatus: 'pending',
+      });
+    });
+
+    it('a rejected teacher who changes subject goes back to pending', async () => {
+      await repos.teacherProfiles.setVerification(A, { status: 'rejected', by: STAFF });
+      const row = await repos.teacherProfiles.update(A, { subject: 'Physics' });
+      expect(row.verificationStatus).toBe('pending');
+    });
+
+    it.each([
+      ['a bio-only edit', { bio: 'I teach maths.' }],
+      ['a languages-only edit', { languages: ['en', 'pt-BR'] }],
+      ['a same-value subject edit', { subject: 'Maths' }],
+      ['a same-value subject with surrounding spaces', { subject: '  Maths  ' }],
+      ['a same-value subject with a bio edit', { subject: 'Maths', bio: 'Updated' }],
+    ])('%s leaves a verified teacher verified', async (_label, patch) => {
+      const row = await repos.teacherProfiles.update(A, patch);
+      expect(row.verificationStatus).toBe('verified');
+      expect(row.subject).toBe('Maths');
+      expect(await statusOf(teacherId('A'))).toBe('verified');
+      await expect(repos.teacherProfiles.assertVerifiedForPublish(A)).resolves.toBeUndefined();
+    });
+
+    it('a pending teacher who changes subject stays pending', async () => {
+      await raw.query(
+        `update teacher_profiles set verification_status = 'pending' where user_id = $1`,
+        [teacherId('A')],
+      );
+      const row = await repos.teacherProfiles.update(A, { subject: 'Physics' });
+      expect(row.verificationStatus).toBe('pending');
+    });
+  });
+
   describe('listPendingForStaff (staff only)', () => {
     it.each([
       ['the teacher themself', () => teacherId('A')],
@@ -299,7 +359,10 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       // Created newest-first, then dated so ids[0] is the oldest: the queue must follow
       // created_at, not insertion order.
       for (const tid of [...ids].reverse()) {
-        await repos.teacherProfiles.create({ teacherId: tid }, { slug: tid.replaceAll('_', '-'), subject: 'Maths' });
+        await repos.teacherProfiles.create(
+          { teacherId: tid },
+          { slug: tid.replaceAll('_', '-'), subject: 'Maths' },
+        );
       }
       await raw.query(
         `update teacher_profiles t
