@@ -3230,6 +3230,26 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.5c
+  milestone: M13
+  title: '8.5a review LOWs: composite packages (teacher_id, agent_id) index if a bulk path reads listForAgent; listForAgent refuses over AGENT_PACKAGES_MAX (or paginates) instead of truncating, with a test; drop the double teacherNoteParts call in corrections.record'
+  accept: the three LOWs in docs/tasks/8.5a/review.md are fixed or closed with a reason.
+  deps:
+  - 8.5a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.3d
+  milestone: M13
+  title: '8.3b review follow-ups: outline generate reads module chunks with Promise.all instead of one by one; outline.ts reuses the db package''s OutlineInputSchema instead of re-declaring it (drop the cast)'
+  accept: the MEDIUM and LOW in docs/tasks/8.3b/review.md are fixed.
+  deps:
+  - 8.3b
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
