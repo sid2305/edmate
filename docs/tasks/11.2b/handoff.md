@@ -38,6 +38,24 @@ a regression from this task. `route-coverage.test.ts` and `src/chat/no-raw-html.
 banned-API sweep over `app/teacher/**`) are both part of the passing set.
 `python3 .githooks/secret-scan.py --all`: clean (exit 0).
 
+## Fix round (22 Oct 2026)
+
+Security review HIGH: `AskQuestionForm` (`'use client'`, `useTranslations('home')`) rendered
+inside `HomeView`'s live-classes list with no `NextIntlClientProvider` ancestor — next-intl v4
+throws ("No intl context found") in that case, so `/home` crashed for every signed-in student with
+an upcoming live class. Added `apps/web/app/home/view.intl.test.tsx` — renders the real `HomeView`
+with the real (unmocked) `AskQuestionForm` via a plain `render()` (no `renderIntl`/
+`NextIntlClientProvider` of its own); test
+"renders a live class with its ask-a-question form without crashing for lack of intl context"
+failed red (`Failed to call useTranslations because the context from NextIntlClientProvider was
+not found`) before the fix, passes after. Fix: `view.tsx` now wraps the live-classes `<ul>` (and
+its per-class `AskQuestionForm`) in `<NextIntlClientProvider locale="en" messages={{ home:
+messages.home }}>`, the same pattern `apps/web/app/teacher/live-classes/page.tsx` uses for
+`LiveClassesView`, but placed in `view.tsx` itself (not `page.tsx`) since `HomeView` is rendered
+directly in tests. Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` all 10
+tasks green; `python3 .githooks/secret-scan.py --all` clean. Change confined to
+`apps/web/app/home/**` (`view.tsx`, new `view.intl.test.tsx`).
+
 ## Decisions
 
 ### 22 Oct 2026 · 11.2b new ROUTE_POLICY row · decided by builder · risk: high
