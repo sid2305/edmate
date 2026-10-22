@@ -1927,9 +1927,9 @@ tasks:
   - '7.4'
   - M3
   - M4
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/7.8-teaching-scorecard
+  model: plan:sonnet build:sonnet
 - id: '8.1'
   milestone: M8
   title: 'Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1)'
