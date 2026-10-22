@@ -10,6 +10,45 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3c builder ran far over its brief budget · decided by lead · risk: low
+- Decided: accept 210 tool calls against the brief's 70 (1.2 × 70 = 84). The lead told the builder to wrap up at 206 calls.
+- Why: the work is in scope and all three reviewers approve with no findings. Most of the extra calls went on repeated full web gate runs while waiting on background test runs; future briefs for apps/web say to run the gate once in the foreground.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.3c routes now requiring the rights declaration · decided by builder · risk: medium
+- Decided: `rightsDeclared: z.literal(true)` is now required (not merely accepted) on three
+  studio routes: `POST /api/studio/documents` (upload-create), the web-link add route under
+  the same documents collection, and `POST /api/studio/documents/:id/replace`. A missing or
+  `false` value returns the pre-existing 400 validation response and nothing is written,
+  replaced or enqueued.
+- Why: 12.3b made the field an optional repository input; the plan for 12.3c calls for every
+  studio route that calls a `documents` method taking `rightsDeclared` to require it, so a
+  teacher cannot upload, replace or link material without confirming they hold the rights.
+- risk: medium — a validation-logic change on three write paths in the teacher upload
+  centre; covered by one new 400 test per route plus updated fixtures on every existing
+  test, and the full `@edmate/web` gate is green.
+
+---
+
+### 22 Oct 2026 · 12.3c public rights page shows a neutral placeholder, no new ADR · decided by builder · risk: low
+- Decided: `/legal/rights` is a plain, anonymous-accessible server component (same shell as
+  `/teachers`); it reads the US pack's `compliance.grievance` field and shows a neutral
+  fallback sentence ("A grievance contact for this market has not yet been published.")
+  whenever that field is pending or blank, in every market, for the length of the pilot.
+  The repeat-infringer note names no number or threshold. The page writes no real contact,
+  helpline, name or email anywhere in code, content or test fixtures.
+- Why: task 12.3's lead answer (Q1) says the public page shows a neutral placeholder while
+  `compliance.grievance` is pending; the checkbox copy itself needed no separate human
+  sign-off gate (Q4). No `/api/**` route, `apps/web/src/auth` file or `packages/**` file was
+  touched, so no ADR applies.
+- risk: low — content-only addition to a public page; `app/legal` was added to the existing
+  `src/chat/no-raw-html.test.ts` scan (extends an existing check, not a new one) and the page
+  has an axe test.
+
+---
+
 ### 22 Oct 2026 · 11.4a builder ran over the Phase A budget · decided by lead · risk: low
 - Decided: accept 83 tool calls against Phase A's ~60 in docs/tasks/11.4/plan.md (1.2 × 60 = 72).
 - Why: the extra calls went on the post-migrate foreign-key validation (migrate.ts and its test, which the plan did not list) and the db integration runs against a disposable Postgres; the work stays in scope and all four reviewers approve.

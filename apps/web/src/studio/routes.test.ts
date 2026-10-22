@@ -148,6 +148,7 @@ const NEW_PDF = {
   sourceTitle: 'Algebra notes',
   contentType: PDF,
   byteSize: 1000,
+  rightsDeclared: true,
 };
 
 /** Asha creates a document and "uploads" its bytes to the memory bucket. */
@@ -258,6 +259,8 @@ describe('POST /api/studio/documents (create)', () => {
     ['a fractional size', { byteSize: 1.5 }],
     ['a missing title', { sourceTitle: '' }],
     ['a bad module id', { moduleId: '../m' }],
+    ['a missing rights declaration', { rightsDeclared: undefined }],
+    ['a false rights declaration', { rightsDeclared: false }],
   ])('refuses %s (400)', async (_name, over) => {
     const s = setup();
     const res = await s.h.create(req('POST', '/x', { ...NEW_PDF, ...over }), ctx(ASHA));
@@ -320,7 +323,7 @@ const LINK_URL = 'https://example.org/lesson-one';
 describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('creates a processing row under a .link key, enqueues the job, and titles it from the host', async () => {
     const s = setup();
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     expect(res.status).toBe(202);
     const body = await json(res);
     expect(body).toEqual({ documentId: 'doc_1', status: 'processing' });
@@ -343,7 +346,7 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('uses a given title over the host default', async () => {
     const s = setup();
     await s.h.addLink(
-      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, sourceTitle: 'Week 1 reading' }),
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, sourceTitle: 'Week 1 reading', rightsDeclared: true }),
       ctx(ASHA),
     );
     expect(s.rows.get('doc_1')!.sourceTitle).toBe('Week 1 reading');
@@ -371,7 +374,7 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('refuses a YouTube link with its own fixed words, 400, nothing written', async () => {
     const s = setup();
     const res = await s.h.addLink(
-      req('POST', '/x', { moduleId: 'm_asha', url: 'https://www.youtube.com/watch?v=x' }),
+      req('POST', '/x', { moduleId: 'm_asha', url: 'https://www.youtube.com/watch?v=x', rightsDeclared: true }),
       ctx(ASHA),
     );
     expect(res.status).toBe(400);
@@ -383,10 +386,23 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
 
   it("answers another teacher's module as not_found, writes and enqueues nothing", async () => {
     const s = setup();
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     expect(res.status).toBe(404);
     expect(s.rows.size).toBe(0);
     expect(s.enqueued).toEqual([]);
+  });
+
+  it('refuses a missing or false rights declaration (400), nothing written', async () => {
+    const s = setup();
+    const missing = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    expect(missing.status).toBe(400);
+    expect((await json(missing)).error?.code).toBe('validation');
+    const declaredFalse = await s.h.addLink(
+      req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: false }),
+      ctx(ASHA),
+    );
+    expect(declaredFalse.status).toBe(400);
+    expect(s.rows.size).toBe(0);
   });
 
   it('refuses a client-sent teacherId, storageKey or fileKind (strict body)', async () => {
@@ -409,7 +425,7 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
     s.backend.enqueue = vi.fn(async () => {
       throw new TypeError('redis down');
     });
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     expect(res.status).toBe(503);
     expect(s.rows.get('doc_1')).toMatchObject({ status: 'failed', failureReason: 'enqueue_failed' });
   });
@@ -417,10 +433,10 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it('is rate-limited per teacher: the 21st link in the window is 429, nothing written', async () => {
     const s = setup();
     for (let i = 0; i < 20; i += 1) {
-      const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+      const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
       expect(res.status).toBe(202);
     }
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     expect(res.status).toBe(429);
     expect((await json(res)).error?.code).toBe('rate_limited');
     expect(s.rows.size).toBe(20);
@@ -429,16 +445,16 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
   it("doesn't share a rate-limit bucket between teachers", async () => {
     const s = setup();
     for (let i = 0; i < 20; i += 1) {
-      await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+      await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     }
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL }), ctx(BEN));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_ben', url: LINK_URL, rightsDeclared: true }), ctx(BEN));
     expect(res.status).toBe(202);
   });
 
   it('a rate-limit store error fails closed: 503, nothing written, no URL logged', async () => {
     const s = setup();
     s.backend.linkRateLimit = failingLinkRateLimiter(new RangeError('redis unreachable'));
-    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    const res = await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     expect(res.status).toBe(503);
     expect((await json(res)).error?.code).toBe('provider_error');
     expect(s.rows.size).toBe(0);
@@ -450,7 +466,7 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
 
   it('the list view never includes the URL or the storage key', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     const res = await s.h.list(req('GET', '/x'), ctx(ASHA));
     const body = await json(res);
     const text = JSON.stringify(body);
@@ -721,7 +737,7 @@ describe('DELETE /api/studio/documents/:id', () => {
 
   it('a link row deletes no S3 object (there is none)', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     const res = await s.h.remove(req('DELETE', '/x'), ctx(ASHA, { id: 'doc_1' }));
     expect(res.status).toBe(204);
     expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
@@ -736,7 +752,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const oldKey = row.storageKey!;
     row.status = 'ready';
     const res = await s.h.replace(
-      req('POST', '/x', { contentType: 'audio/wav', byteSize: 2000 }),
+      req('POST', '/x', { contentType: 'audio/wav', byteSize: 2000, rightsDeclared: true }),
       ctx(ASHA, { id: documentId }),
     );
     expect(res.status).toBe(200);
@@ -757,7 +773,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const { documentId, row } = await uploaded(s);
     const before = row.storageKey;
     const res = await s.h.replace(
-      req('POST', '/x', { contentType: PDF, byteSize: 10 }),
+      req('POST', '/x', { contentType: PDF, byteSize: 10, rightsDeclared: true }),
       ctx(BEN, { id: documentId }),
     );
     expect(res.status).toBe(404);
@@ -771,12 +787,12 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const { documentId } = await uploaded(s);
     const c = ctx(ASHA, { id: documentId });
     expect(
-      (await s.h.replace(req('POST', '/x', { contentType: 'text/html', byteSize: 1 }), c)).status,
+      (await s.h.replace(req('POST', '/x', { contentType: 'text/html', byteSize: 1, rightsDeclared: true }), c)).status,
     ).toBe(400);
     expect(
       (
         await s.h.replace(
-          req('POST', '/x', { contentType: PDF, byteSize: MAX_DOCUMENT_UPLOAD_BYTES + 1 }),
+          req('POST', '/x', { contentType: PDF, byteSize: MAX_DOCUMENT_UPLOAD_BYTES + 1, rightsDeclared: true }),
           c,
         )
       ).status,
@@ -787,7 +803,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
           req(
             'POST',
             '/x',
-            { contentType: PDF, byteSize: 1 },
+            { contentType: PDF, byteSize: 1, rightsDeclared: true },
             { 'content-length': String(MAX_BODY_BYTES + 1) },
           ),
           ctx(ASHA, { id: documentId }),
@@ -797,11 +813,28 @@ describe('POST /api/studio/documents/:id/replace', () => {
     expect(
       (
         await s.h.replace(
-          req('POST', '/x', { contentType: PDF, byteSize: 1 }),
+          req('POST', '/x', { contentType: PDF, byteSize: 1, rightsDeclared: true }),
           ctx(ASHA, { id: '' }),
         )
       ).status,
     ).toBe(400);
+  });
+
+  it('refuses a missing or false rights declaration (400), nothing replaced', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    const before = row.storageKey;
+    const missing = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 1 }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(missing.status).toBe(400);
+    const declaredFalse = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 1, rightsDeclared: false }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(declaredFalse.status).toBe(400);
+    expect(row.storageKey).toBe(before);
   });
 
   it('a signing failure commits nothing: the row and the old file stay as they were', async () => {
@@ -811,7 +844,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const before = { ...row };
     vi.mocked(s.backend.storage.createUploadUrl).mockRejectedValueOnce(new TypeError('boom'));
     const res = await s.h.replace(
-      req('POST', '/x', { contentType: PDF, byteSize: 10 }),
+      req('POST', '/x', { contentType: PDF, byteSize: 10, rightsDeclared: true }),
       ctx(ASHA, { id: documentId }),
     );
     expect(res.status).toBe(500);
@@ -824,7 +857,7 @@ describe('POST /api/studio/documents/:id/replace', () => {
     const { documentId, row } = await uploaded(s);
     delete row.storageKey;
     await s.h.replace(
-      req('POST', '/x', { contentType: PDF, byteSize: 1 }),
+      req('POST', '/x', { contentType: PDF, byteSize: 1, rightsDeclared: true }),
       ctx(ASHA, { id: documentId }),
     );
     expect(s.backend.storage.deleteObject).not.toHaveBeenCalled();
@@ -832,9 +865,9 @@ describe('POST /api/studio/documents/:id/replace', () => {
 
   it('refuses to replace a link: delete it and add it again instead', async () => {
     const s = setup();
-    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL }), ctx(ASHA));
+    await s.h.addLink(req('POST', '/x', { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true }), ctx(ASHA));
     const res = await s.h.replace(
-      req('POST', '/x', { contentType: PDF, byteSize: 1 }),
+      req('POST', '/x', { contentType: PDF, byteSize: 1, rightsDeclared: true }),
       ctx(ASHA, { id: 'doc_1' }),
     );
     expect(res.status).toBe(400);
@@ -965,7 +998,7 @@ describe('through the real guard and ROUTE_POLICY', () => {
 
   it('addLink: anonymous 401, student/staff 403, cross-origin 403; a teacher succeeds', async () => {
     const g = guarded();
-    const body = { moduleId: 'm_asha', url: LINK_URL };
+    const body = { moduleId: 'm_asha', url: LINK_URL, rightsDeclared: true };
     expect((await g.addLink(call('POST', '/api/studio/links', null, body))).status).toBe(401);
     expect((await g.addLink(call('POST', '/api/studio/links', 'student', body))).status).toBe(403);
     expect((await g.addLink(call('POST', '/api/studio/links', 'staff', body))).status).toBe(403);

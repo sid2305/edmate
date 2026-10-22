@@ -220,6 +220,8 @@
   "uploads": {
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
+    "rightsLabel": "I confirm I hold the rights to upload this material.",
+    "rightsHint": "Required before you can upload a file, replace one or add a link.",
     "chooseFile": "Upload a file",
     "acceptHint": "PDF, Word, PowerPoint, Markdown or a caption file (.vtt/.srt) up to 20 MB; audio or video up to 500 MB.",
     "youtubeHint": "Have a YouTube video? In YouTube Studio, download its captions (.vtt or .srt) and upload that file here.",
@@ -750,5 +752,12 @@
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the agent list. Try again."
     }
+  },
+  "legal": {
+    "title": "Rights and takedowns",
+    "footerLink": "Rights and takedowns",
+    "grievanceLabel": "Grievance contact: {contact}",
+    "grievanceFallback": "A grievance contact for this market has not yet been published.",
+    "repeatInfringerNote": "Repeated upheld takedowns can end a teacher's account on Edmate."
   }
 }
