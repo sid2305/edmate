@@ -65,6 +65,7 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
   the at-most estimate stays under 25%, and logs the numbers as a decision").
 - Why: the plan's own example numbers ($29, 20/day) would show the cost warning on a freshly
   created default package, which the lead's answer rules out.
+- risk: low
 
 ### 22 Oct 2026 · 8.6d "Full course"'s unlisted fields: `finalAnswers: 'allowed'`, `lockedReply: 'generic'` · decided by builder · risk: low
 - Decided: the plan's Phase D file list gives "Full course" its price, skills, ceiling, daily
@@ -75,6 +76,7 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
 - Why: both fields are required by `PackageConfigSchema`; a default had to be chosen for the
   preset to be a valid package. The human can change either later; no behaviour depends on this
   pairing yet (publish is 8.7).
+- risk: low
 
 ### 22 Oct 2026 · 8.6d en.json uses a new `packageBuilder` namespace, not `packages` · decided by builder · risk: low
 - Decided: `apps/web/messages/en.json` already has a top-level `packages` key for the student's
@@ -83,6 +85,7 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
   `packageBuilder` instead and left the existing `packages` namespace untouched.
 - Why: reusing `packages` would either silently clash with the student page's existing keys or
   require renaming that page's namespace, which is out of this phase's files.
+- risk: low
 
 ### 22 Oct 2026 · 8.6d No `packagesClient.ts`; `PackagesView.tsx` calls `fetch` directly · decided by builder · risk: low
 - Decided: unlike `uploadClient.ts` (8.2) and `styleCardClient.ts` (8.4b), this phase's plan lists
@@ -92,6 +95,12 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
   erased at compile time, same pattern already used by `OnboardingForm.tsx` for `@edmate/db`).
 - Why: follows "only the plan's Phase D files" literally; adding an extra file was not needed for
   the tests to pass.
+- risk: low
+
+### 22 Oct 2026 · 8.6d Merge before the timed two-package walkthrough · decided by lead · risk: medium
+- Decided: 8.6d merges without the manual timed walkthrough ("two packages in under 15 minutes") that Phase D's exit conditions ask for. The walkthrough runs on the dev stack in board task 8.6g, together with the 9.2b walkthrough.
+- Why: the human's focus is a testable product fast; the page's behaviour is covered by unit and axe tests, and the timing check needs the compose stack, which builders don't bring up. The code-reviewer raised this as HIGH; it is deferred, not waived.
+- risk: medium
 
 ## Left to do
 
@@ -102,7 +111,7 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
 - No CSS file was added for `/teacher/packages` (the plan's Phase D file list doesn't include one,
   unlike uploads/style-card's own `.css` files); the page renders with plain semantic HTML only.
 
-Tool calls used: 65
+Tool calls used: 127
 
 ## Fix round
 
