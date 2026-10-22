@@ -1,13 +1,8 @@
 // Media schemas for the Transcriber port (ADR-0005).
 import { z } from 'zod';
-import { count } from './formats.js';
+import { count, httpsUrl } from './formats.js';
 import { LangSchema } from './shared.js';
 
-/**
- * `https://host[:port]` then an optional path, query or fragment: lower-case scheme, no userinfo,
- * no whitespace or backslash in the authority, nothing around the URL (fix round 1).
- */
-const HTTPS_URL = /^https:\/\/[^\s/?#@\\]+(?:[/?#]\S*)?$/;
 /** A top-level type, `/` and a non-empty RFC 6838 subtype, without parameters. */
 const MEDIA_MIME = /^(?:audio|video)\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
 
@@ -19,11 +14,7 @@ const MEDIA_MIME = /^(?:audio|video)\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
  * another host, and refuses everything when the list is empty (ADR-0005).
  */
 export const TranscribeInputSchema = z.strictObject({
-  // The shape check runs first: `z.url` trims its input, so on its own it would accept " https://…".
-  url: z
-    .string()
-    .regex(HTTPS_URL, 'https://host/path, no userinfo')
-    .pipe(z.url({ protocol: /^https$/ })),
+  url: httpsUrl(),
   mimeType: z.string().regex(MEDIA_MIME, 'audio/<subtype> or video/<subtype>'),
   languageHint: LangSchema.exactOptional(),
 });

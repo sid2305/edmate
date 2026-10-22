@@ -10,4 +10,5 @@ export * from './turn.js';
 export * from './safety.js';
 export * from './trace.js';
 export * from './media.js';
+export * from './payments.js';
 export type * from './ports.js';
