@@ -3711,6 +3711,14 @@ tasks:
   - 8.7e
   risk: medium
   status: todo
+- id: 8.9d
+  milestone: M13
+  title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes'
+  accept: tests use NextRequest; each RepositoryError kind has a mapped status and a test; web typecheck, lint and test green.
+  deps:
+  - 8.9b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
