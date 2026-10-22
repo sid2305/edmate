@@ -76,4 +76,4 @@ of scope for this handoff.
 
 Status: DONE
 
-Tool calls used: ~45
+Tool calls used: 148 (harness count; the builder reported about 45)
