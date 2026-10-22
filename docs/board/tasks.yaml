@@ -5302,9 +5302,9 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4b-publish-regulated-block
+  model: plan:opus build:opus review:sonnet
 - id: 12.4c
   milestone: M12
   title: Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)
