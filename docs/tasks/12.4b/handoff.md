@@ -46,7 +46,9 @@ of RepositoryError`, and the subject-copy assertions).
   - (e) changing the subject clears the approval: refused again until re-approved, then the version
     carries the new subject.
 - Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/worker`
-  with `TEST_DATABASE_URL` → see the gate result below.
+  with `TEST_DATABASE_URL` (after merging origin/main) → `Tasks: 32 successful, 32 total`;
+  db coverage `publish.ts 100 | 98.82 | 100 | 100` (the uncovered branch is the existing
+  `open.changes ?? []`). Worker Redis int tests skip locally, as before.
 - `python3 .githooks/secret-scan.py --all` → clean.
 
 ## Decisions
@@ -78,4 +80,4 @@ None. No migration, schema, contracts or other apps/ source edits.
 ## Left to do
 Nothing for 12.4b. Phase C (12.4c staff API) and D (12.4d staff page, teacher refusal text) remain.
 
-Tool calls used: 28
+Tool calls used: 38
