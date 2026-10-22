@@ -170,7 +170,7 @@ export async function runCase(evalCase: EvalCase, opts: RunOptions): Promise<Cas
 }
 
 /** Like runCase, but an error fails just this case, keeping the turns that finished. */
-async function runCaseSafely(evalCase: EvalCase, opts: RunOptions): Promise<CaseResult> {
+export async function runCaseSafely(evalCase: EvalCase, opts: RunOptions): Promise<CaseResult> {
   const turns: TurnResult[] = [];
   try {
     await runTurns(evalCase, opts, turns);
