@@ -237,8 +237,8 @@ export function PackagesView() {
   );
 
   // Unmount guard (LOW, 8.6d review): the page can navigate away before a slow GET resolves;
-  // a `setState` after that warns in dev and does nothing useful in production, so every setter
-  // in `refresh()` checks this ref first.
+  // a `setState` after that does nothing useful (and in some React versions warns in dev), so
+  // every setter in `refresh()` checks this ref first.
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
@@ -247,7 +247,9 @@ export function PackagesView() {
       const res = await fetch(BASE, { method: 'GET', cache: 'no-store' });
       if (!mountedRef.current) return;
       if (!res.ok) {
-        setBanner(errorKey((await errorInfo(res)).code));
+        const info = await errorInfo(res);
+        if (!mountedRef.current) return;
+        setBanner(errorKey(info.code));
         return;
       }
       const raw = await res.json();

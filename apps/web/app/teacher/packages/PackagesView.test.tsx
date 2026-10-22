@@ -3,12 +3,36 @@
 // 4, as UploadsView.test.tsx), no database, no model. Written red before PackagesView.tsx.
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type * as ReactModule from 'react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../../test/intl';
 import { PackagesView } from './PackagesView';
 
+// Counts every `useState` setter call across the file's renders (fix round, 22 Oct 2026, ts
+// HIGH): React 18+ silently drops a setState call on an unmounted function component -- no
+// console warning either way -- so the unmount-guard tests below cannot observe the guard via
+// console.error or the DOM. Wrapping `useState`'s setter is the only way to see whether
+// `refresh()` called a setter after `mountedRef.current` went false.
+let stateSetterCalls = 0;
+vi.mock('react', async (importOriginal) => {
+  const actual = await importOriginal<typeof ReactModule>();
+  const useState = (<S,>(initial: S | (() => S)) => {
+    const [value, setValue] = actual.useState(initial);
+    const tracked = (next: S | ((prev: S) => S)) => {
+      stateSetterCalls += 1;
+      setValue(next);
+    };
+    return [value, tracked] as [S, typeof tracked];
+  }) as typeof actual.useState;
+  return { ...actual, useState };
+});
+
 beforeAll(() => {
   expect.extend(toHaveNoViolations);
+});
+
+beforeEach(() => {
+  stateSetterCalls = 0;
 });
 
 const MODULES = [
@@ -35,6 +59,16 @@ const err = (status: number, code: string, extra: Record<string, unknown> = {}):
   status,
   body: { error: { code, message: 'x', retryable: false }, ...extra },
 });
+
+/** Flushes several microtask + macrotask ticks: `Response#json()` takes more hops than a plain
+ * `await` chain assumes, so a fixed `await Promise.resolve()` count is unreliable for the
+ * unmount-guard tests below (verified: 2 ticks missed the state update even with the guard
+ * removed). */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 10; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
 
 /** A scripted studio packages API: `get` is the current GET reply; `next` queues POST/PUT replies. */
 function api(get: GetBody) {
@@ -287,6 +321,22 @@ describe('PackagesView', () => {
     );
   });
 
+  // Code-only 409 (no `reason`), so this exercises `ERROR_KEYS`'s own `limit_reached` entry via
+  // `errorKey()`'s fallback -- the test above passes through the pre-existing `reason` ===
+  // 'package_limit' branch instead and would still pass if `limit_reached` were removed from
+  // ERROR_KEYS (cr+ts MEDIUM, fix round 22 Oct 2026).
+  it('a 409 limit_reached on save with no reason still shows the package-limit message', async () => {
+    const s = api(getBody([]));
+    renderIntl(<PackagesView />);
+    await screen.findByText('New package');
+    fireEvent.click(screen.getByRole('button', { name: 'Free starter' }));
+    s.next('POST /api/studio/packages', err(409, 'limit_reached'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create package' }));
+    await waitFor(() =>
+      expect(screen.getAllByText(/most packages allowed/).length).toBeGreaterThan(0),
+    );
+  });
+
   it('ignores an out-of-range helpCeiling select value instead of casting it', async () => {
     api(getBody([]));
     renderIntl(<PackagesView />);
@@ -301,6 +351,9 @@ describe('PackagesView', () => {
   });
 
   it('does not update state after the view unmounts mid-fetch', async () => {
+    // React 18+ silently drops a setState call on an unmounted function component -- no
+    // console.error either way (ts HIGH, fix round 22 Oct 2026) -- so this asserts the tracked
+    // `useState` setter call count instead of a dev warning that never fires.
     let resolveGet!: (r: Response) => void;
     vi.stubGlobal(
       'fetch',
@@ -313,15 +366,31 @@ describe('PackagesView', () => {
     );
     const { unmount } = renderIntl(<PackagesView />);
     unmount();
-    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const callsAtUnmount = stateSetterCalls;
     resolveGet(json({ status: 200, body: getBody([]) }));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining('Cannot update a component'),
-      expect.anything(),
-    );
-    warnSpy.mockRestore();
+    await flush();
+    expect(stateSetterCalls).toBe(callsAtUnmount);
+  });
+
+  it('does not update state after the view unmounts while parsing a non-2xx GET body', async () => {
+    // Reproduces the cr MEDIUM gap: the GET succeeds (so the first `mountedRef` check right
+    // after `fetch()` passes while still mounted), but the response body is still being parsed
+    // inside `errorInfo()` when the view unmounts, before `setBanner` would run.
+    let resolveJson!: (body: unknown) => void;
+    const pendingBody = new Promise((resolve) => {
+      resolveJson = resolve;
+    });
+    const fakeRes = { ok: false, json: () => pendingBody } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(fakeRes)));
+    const { unmount } = renderIntl(<PackagesView />);
+    // Let `await fetch(...)` resolve and `refresh()` reach the pending `await res.json()` inside
+    // `errorInfo()`, while still mounted.
+    await flush();
+    unmount();
+    const callsAtUnmount = stateSetterCalls;
+    resolveJson({ error: { code: 'provider_error', message: 'x', retryable: false } });
+    await flush();
+    expect(stateSetterCalls).toBe(callsAtUnmount);
   });
 
   it('a malformed save body shows the error banner and does not change the list', async () => {

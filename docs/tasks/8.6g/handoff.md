@@ -98,6 +98,48 @@ timestamps are recorded in this handoff for that reason — see Left to do.
   read the `[8.6g walkthrough]` lines from the next CI `e2e` job run, and record the numbers here
   or in a short follow-up note.
 
+## Fix round (22 Oct 2026)
+
+Fixes `86g-cr.md`/`86g-ts.md` review findings, scoped to `PackagesView.tsx`/`.test.tsx`.
+
+1. **cr MEDIUM — `refresh()`'s non-2xx branch re-checks `mountedRef` after the body parses.**
+   `errorInfo(res)` does its own `await res.json()`; added a second `mountedRef.current` check
+   between that await and `setBanner`. New test "does not update state after the view unmounts
+   while parsing a non-2xx GET body" uses a fake `Response`-like object whose `json()` returns a
+   controlled pending promise, unmounts while that promise is still pending (after the GET itself
+   resolved, so the fix is exercised, not the earlier guard), then resolves it. Fail-then-pass:
+   with the new re-check removed, the test failed (`stateSetterCalls` rose by 1 after unmount);
+   restored, it passes.
+2. **ts HIGH — rewrote both unmount tests to assert an observable effect, not a React 19
+   `console.error` call that never fires.** Added a `vi.mock('react', ...)` in the test file that
+   wraps `useState`'s setter to increment a module-level `stateSetterCalls` counter, so every
+   `setPackages`/`setBanner`/etc. call is countable regardless of whether React's own fiber logic
+   treats a post-unmount `setState` as a no-op. Both tests now snapshot the counter right after
+   `unmount()` and assert it is unchanged once the pending fetch/json resolves. Also added a
+   `flush()` helper (10 `setTimeout(0)` ticks) after finding 2 bare `await Promise.resolve()`
+   ticks were not always enough for a real `Response#json()` to settle, which silently gave a
+   false pass. Fail-then-pass, verified twice: (a) removing every `if (!mountedRef.current)
+   return;` in `refresh()` made both tests fail (`stateSetterCalls` rose by 6 and by 1); restoring
+   them passed. (b) removing only the new re-check from fix 1 made just the non-2xx test fail,
+   leaving the 200-path test passing (it isn't the path that re-check guards); restoring it
+   passed both.
+3. **cr+ts MEDIUM — added a 409 `limit_reached` test with no `reason`.** The existing 409 test
+   sends `reason: 'package_limit'` alongside the code, so it passes via the pre-existing
+   `REASON_KEYS`/`reason` branch and never touches the new `ERROR_KEYS` entry. New test "a 409
+   limit_reached on save with no reason still shows the package-limit message" omits `reason`
+   entirely, forcing `errorKey()`'s code-only fallback. Fail-then-pass: removing `'limit_reached'`
+   from `ERROR_KEYS` failed the new test (banner never showed the "most packages allowed" text)
+   while the original reason-based test still passed unchanged, confirming the new test is the
+   one that actually covers the `ERROR_KEYS` fix.
+4. **ts LOW — fixed the `mountedRef` comment.** No longer claims a dev warning that React 19
+   doesn't emit; now says a post-unmount `setState` "does nothing useful (and in some React
+   versions warns in dev)".
+
+Did not touch the walkthrough item (left for the lead to record from CI, per the brief).
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → 10/10 tasks successful.
+`python3 .githooks/secret-scan.py --all` → clean.
+
 Status: DONE
 
-Tool calls used: 32
+Tool calls used: 32 (plus 25 in this fix round)
