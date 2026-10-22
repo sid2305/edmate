@@ -3082,9 +3082,9 @@ tasks:
   - 8.3a
   - 9.0a
   risk: normal
-  status: todo
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m8/8.3b-outline-api
+  model: plan:sonnet build:sonnet
 - id: 7.2g
   milestone: M7
   title: 'Leak-suite follow-ups from 7.2c: rewrite the 4 new "-deva" cases (mcq-range-step, authority-dict-update, pressure-sum-loop, partialreveal-mod-remainder) in Devanagari script, as the older -deva
@@ -3157,7 +3157,7 @@ tasks:
   deps:
   - '9.4'
   risk: normal
-  status: running
+  status: review
   branch: m9/9.0d-sse-test-flake
   model: build:sonnet
 - id: 9.4c
