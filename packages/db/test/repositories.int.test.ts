@@ -20,7 +20,9 @@ import {
   type AuditEntryInput,
   type AuditRow,
   chunkId,
+  type CourseRow,
   createRepositories,
+  type Outline,
   openDatabase,
   REDACTED,
   RepositoryError,
@@ -207,6 +209,37 @@ const ownerOfRow = async (table: 'documents' | 'chunks', id: string) =>
  * teacher per scenario, created once in `beforeAll` — a cross-scope `attempt`/`mismatches`
  * closure only calls `answer`, never also opens or mutates a question, so it writes nothing
  * when it fails closed (the whole-database snapshot check covers the entire closure). */
+/**
+ * Task 8.3: `actor` rewrites `target`'s module 1: renames it, keeps the seeded topic (it has
+ * student evidence) linked to `link`, and adds one fresh topic with no links.
+ */
+function outlineEdit(actor: Teacher, target: Teacher, link = chunkId(isoDoc(target), 0)) {
+  return {
+    modules: [
+      {
+        id: ids.module(target, 1),
+        title: `[${actor}] module 1`,
+        order: 0,
+        topics: [
+          { id: ids.topic(target), title: `[${actor}] topic`, order: 0, chunkIds: [link] },
+          { title: `[${actor}] new topic ${++counter}`, order: 1, chunkIds: [] },
+        ],
+      },
+    ],
+  };
+}
+/** Owner markers of an outline: course id, module and topic titles, linked source titles. */
+const outlineOwners = (o: Outline) => [
+  o.courseId.slice(4).toUpperCase(),
+  ...o.modules.flatMap((m) => [
+    ...markers(m.title),
+    ...m.topics.flatMap((t) => [
+      ...markers(t.title),
+      ...t.chunkIds.flatMap((c) => markers(c.sourceTitle)),
+    ]),
+  ]),
+];
+
 const answerTarget: Partial<Record<Teacher, string>> = {};
 const answerEmpty: Partial<Record<Teacher, string>> = {};
 const answerDismissed: Partial<Record<Teacher, string>> = {};
@@ -615,6 +648,100 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) => r.modules.ids({ teacherId: rid }),
     // mod_a1 -> A
     owners: (xs: string[]) => xs.map((m) => m.slice(4, 5).toUpperCase()),
+  },
+  // Task 8.3: the studio outline. Reads are scoped selects; replaceOutline locks the named modules
+  // and topics (all the scope's, else not_found) and checks every chunk id in the link insert.
+  'courses.get': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.courses.get(scope),
+    random: (r, _scope, rid) => r.courses.get({ teacherId: rid }),
+    owners: (c: CourseRow | null) => (c ? markers(c.title) : []),
+  },
+  'courses.ensureDefault': {
+    scope: 'teacher',
+    op: 'write',
+    // Untargeted: the scope's own course (seeded), so the call is a no-op returning it.
+    owns: () => true,
+    attempt: (r, scope) => r.courses.ensureDefault(scope),
+    verify: async (r, actor, res) => {
+      expect((res as CourseRow).id).toBe(ids.course(actor));
+      expect(await r.modules.ids(tScope(actor))).toEqual([ids.module(actor, 1), ids.module(actor, 2)]);
+    },
+    mismatches: () => [
+      ['a scope id that is not a user', (r) => r.courses.ensureDefault({ teacherId: 'tch_ghost' }), 'not_found'],
+    ],
+  },
+  'outline.getOutline': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.outline.getOutline(scope),
+    random: (r, _scope, rid) => r.outline.getOutline({ teacherId: rid }),
+    owners: (o: Outline | null) => (o ? outlineOwners(o) : []),
+  },
+  'outline.replaceOutline': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) => r.outline.replaceOutline(scope, outlineEdit(actor, target)),
+    verify: async (r, actor, res) => {
+      expect((res as { outlineVersion: number }).outlineVersion).toBeGreaterThan(1);
+      const mine = await r.outline.getOutline(tScope(actor));
+      const m1 = mine?.modules.find((m) => m.id === ids.module(actor, 1));
+      expect(m1?.title).toBe(`[${actor}] module 1`);
+      expect(m1?.topics.map((t) => t.chunkIds.map((c) => c.chunkId))).toEqual([
+        [chunkId(isoDoc(actor), 0)],
+        [],
+      ]);
+      expect(new Set(outlineOwners(mine!))).toEqual(new Set([actor]));
+      const theirs = await r.outline.getOutline(tScope(otherTeacher(actor)));
+      expect(outlineOwners(theirs!)).not.toContain(actor);
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's chunk id",
+        (r) =>
+          r.outline.replaceOutline(tScope(a), outlineEdit(a, a, chunkId(isoDoc(otherTeacher(a)), 0))),
+        'invalid',
+      ],
+      [
+        "another teacher's topic id under the scope's module",
+        (r) =>
+          r.outline.replaceOutline(tScope(a), {
+            modules: [
+              {
+                id: ids.module(a, 1),
+                title: `[${a}] module 1`,
+                order: 0,
+                topics: [
+                  { id: ids.topic(a), title: `[${a}] topic`, order: 0, chunkIds: [] },
+                  { id: ids.topic(otherTeacher(a)), title: 'x', order: 1, chunkIds: [] },
+                ],
+              },
+            ],
+          }),
+        'not_found',
+      ],
+      [
+        'a teacherId key in the input',
+        (r) =>
+          r.outline.replaceOutline(tScope(a), {
+            ...outlineEdit(a, a),
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+    ],
+  },
+  'chunks.listForModule': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.chunks.listForModule(scope, ids.module(t, 1)),
+    random: (r, scope, rid) => r.chunks.listForModule(scope, rid),
+    owners: (cs: { text: string; sourceTitle: string }[]) =>
+      cs.flatMap((c) => [...markers(c.text), ...markers(c.sourceTitle)]),
   },
   'styleCards.get': {
     scope: 'teacher',
@@ -2453,6 +2580,9 @@ describe.skipIf(!up)(
         await repos.chunks.insertMany(tScope(t), isoDoc(t), [
           { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
         ]);
+        // Task 8.3: chunks.listForModule reads ready documents only.
+        await repos.documents.updateStatus(tScope(t), isoDoc(t), 'processing');
+        await repos.documents.updateStatus(tScope(t), isoDoc(t), 'ready');
         await repos.documents.create(tScope(t), {
           id: keyDoc(t),
           moduleId: ids.module(t, 1),
