@@ -10,6 +10,66 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.5e the correction form picks from the teacher's outline modules · decided by builder · risk: low
+- Decided: the page loads the modules for the correction form with `outline.getOutline` in the teacher's scope (id and title); with no outline the form says to add a module first and cannot be saved.
+- Why: the plan asked for a module select without naming a source; `modules.ids` gives ids only, and the outline is the teacher's own module list with titles (one course per teacher in the MVP).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.5e the question in the correction form is editable · decided by builder · risk: low
+- Decided: the question is pre-filled with the preceding student message but the teacher may edit it; the agent's answer is shown read-only and sent unchanged as `badAnswer`.
+- Why: a hint request's shown text ("Can I have a hint?") is a poor question for a teacher note; the bad answer must stay what the agent actually said.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6c Error codes stay the contract's; a `reason` field names the case · decided by builder · risk: low
+- Decided: the lead's codes `package_limit`, `style_card_required`, `internal` are sent as a top-level
+  `reason` next to the contract's `error` body; `error.code` stays an `ErrorCode` (`limit_reached`,
+  `validation`, `provider_error`).
+- Why: `ErrorCode` is a contracts enum; adding codes needs an ADR. The client keys on `reason`.
+
+---
+
+### 22 Oct 2026 · 8.6c The estimate's share of price is a whole percent, rounded up · decided by builder · risk: low
+- Decided: `shareOfPrice` = ceil(max / price × 100); the warning shows above 25.
+- Why: integers only (plan); rounding up never hides a warning.
+
+---
+
+### 22 Oct 2026 · 8.6c GET bootstraps the default course like the outline page · decided by builder · risk: low
+- Decided: `GET /api/studio/packages` calls `courses.ensureDefault` so the module list is never empty.
+- Why: a package needs at least one module; same behaviour as 8.3's outline GET (lead answer Q1).
+
+---
+
+### 22 Oct 2026 · 8.6c Cap is checked before any write; a repo `invalid` on create also means the cap · decided by builder · risk: low
+- Decided: POST counts `listForTeacher` first (≥ 20 → 409 before `ensureDraft`); a repo `invalid` from
+  `packages.create` is also 409 `package_limit` (the body already passed a stricter schema than the repo's).
+- Why: the repo reports the cap as `invalid`; the pre-check makes "nothing written" hold.
+
+---
+
+### 22 Oct 2026 · 8.6c Trial only on a paid package; repo `failed` is 503 · decided by builder · risk: low
+- Decided: `trialDays > 0` on a free package is 400; `trialDays: 0` on a free package is dropped. A
+  repo `failed` error is 503 `unavailable` (logged by kind); `integrity` is 409 `conflict`.
+- Why: Q4 says trials are for paid packages only; `failed` is a database outage, not a bug.
+
+---
+
+### 22 Oct 2026 · 8.6c A failed backend build is not cached · decided by builder · risk: low
+- Decided: `createPackagesRuntime` memoises success only; a failure (no signed set, unpriced model) is logged by code and retried on the next request.
+- Why: signing a prompt-pack set or fixing prices should not need a restart. An unpriced model is 503, never a $0 estimate.
+
+---
+
+### 22 Oct 2026 · 8.6c `PACKAGE_LIMITS` lives in costEstimate.ts · decided by builder · risk: low
+- Decided: the Q4–Q6 numbers are one frozen table in `costEstimate.ts` (the only pure, client-importable file in the Phase C list), used by the API schema and for Phase D's form.
+- Why: one source of truth without adding a file outside the plan's list.
+
+---
+
 ### 22 Oct 2026 · 8.8a Lead accepts the newest-first trace listing in the teacher repository · decided by lead · risk: high
 - Decided: merge the change to packages/db/src/repositories/turn-traces.ts (`listForTeacherSince` orders newest-first, caps, then reverses), reviewed by code-reviewer, typescript-reviewer and security-reviewer.
 - Why: capped reads returned the oldest window, so insights showed stale health; the teacher-isolation join and selected columns are unchanged (security-reviewer confirmed), and an integration test pins the newest-two result.

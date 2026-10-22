@@ -2062,9 +2062,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.5b
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: phases:8.5a,8.5b,8.5e
 - id: '8.6'
   milestone: M8
   title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
@@ -3506,7 +3506,8 @@ tasks:
   milestone: M13
   title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version
     locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers; 8.6c: Promise.all for the independent reads in
-    packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields'
+    packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields; the draftOf comment notes it relies on PackageDraft
+    being PackageConfigSchema.omit'
   accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
   deps:
   - 8.6b
@@ -3553,9 +3554,31 @@ tasks:
   deps:
   - 8.6b
   risk: medium
-  status: running
+  status: done
   branch: m8/8.6c-packages-api
-  model: plan:opus build:opus
+  model: plan:opus build:opus fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 158
+    tokens_out: 6363
+    cache_read_tokens: 3236693
+    wall_time_seconds: 2910
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 8.6d
   milestone: M8
   title: '8.6 Phase D: apps/web package builder page, presets and the timed walkthrough (plan docs/tasks/8.6/plan.md)'
@@ -3563,9 +3586,9 @@ tasks:
   deps:
   - 8.6c
   risk: medium
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.6d-package-builder
+  model: plan:opus build:sonnet
 - id: 8.8b
   milestone: M8
   title: 'Studio insights page (8.8 Phase B, apps/web UI): health and top question groups'
@@ -3582,9 +3605,9 @@ tasks:
   deps:
   - 8.9a
   risk: low
-  status: running
+  status: done
   branch: m8/8.9b-questions-api
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.9c
   milestone: M8
   title: Teacher questions page (8.9 Phase C, apps/web UI)
@@ -3633,9 +3656,29 @@ tasks:
   deps:
   - 8.5b
   risk: low
-  status: running
+  status: done
   branch: m8/8.5e-test-chat-ui
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 112
+    tokens_out: 691
+    cache_read_tokens: 1747684
+    wall_time_seconds: 128
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.5a
   milestone: M9
   title: 'Practice screen (9.5 Phase A, apps/web): skill input kinds, ChatView activeSkill, PracticeCard'
@@ -3710,6 +3753,14 @@ tasks:
   deps:
   - 8.7e
   risk: medium
+  status: todo
+- id: 8.9d
+  milestone: M13
+  title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes'
+  accept: tests use NextRequest; each RepositoryError kind has a mapped status and a test; web typecheck, lint and test green.
+  deps:
+  - 8.9b
+  risk: low
   status: todo
 - id: 9.4c
   milestone: M13
