@@ -358,6 +358,19 @@
       "generic": "Something went wrong. Please try again."
     }
   },
+  "discovery": {
+    "title": "Find a teacher",
+    "findTeacherNav": "Find a teacher",
+    "signInNav": "Sign in",
+    "homeNav": "Home",
+    "searchLabel": "Search by subject or topic",
+    "searchButton": "Search",
+    "freeBadge": "Free package",
+    "emptyState": "No teachers found",
+    "nextLabel": "Next",
+    "prevLabel": "Previous",
+    "rateLimited": "Too many searches. Try again in a minute."
+  },
   "questionsInbox": {
     "title": "Questions inbox",
     "intro": "Students asked these questions and your agent couldn't answer. Pick a module and send one answer to every student who asked.",
