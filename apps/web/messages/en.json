@@ -22,6 +22,7 @@
     "placeholder": "Teacher studio — coming soon.",
     "nav": "Studio",
     "uploadsLink": "Uploads",
+    "outlineLink": "Outline",
     "onboardingLink": "Your profile"
   },
   "onboarding": {
@@ -155,6 +156,41 @@
       "validation": "The file couldn't be read.",
       "provider_error": "Processing failed. Try again, or replace the file.",
       "other": "Processing failed. Replace the file to try again."
+    }
+  },
+  "outline": {
+    "title": "Outline",
+    "intro": "Build your course outline from what you've uploaded, then rename, reorder, merge or split topics.",
+    "loading": "Loading your outline…",
+    "empty": "No modules yet — upload files first, or Generate once you have.",
+    "noTopics": "No topics yet in this module.",
+    "moduleTitleLabel": "Module title",
+    "topicTitleLabel": "Topic title",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveUpLabel": "Move {title} up",
+    "moveDownLabel": "Move {title} down",
+    "selectForMerge": "Select {title} to merge",
+    "mergeSelected": "Merge selected topics",
+    "sources": "Sources",
+    "sourcesEmpty": "No linked sources yet.",
+    "selectForSplit": "Move {sourceTitle} to a new topic",
+    "newTopicTitleLabel": "New topic title",
+    "newTopicTitlePlaceholder": "New topic title",
+    "split": "Split selected into a new topic",
+    "generate": "Generate from uploads",
+    "generateConfirmBody": "This replaces your current outline with a new one and loses any unsaved edits.",
+    "generateConfirm": "Yes, generate",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saved": "Saved — version {version}.",
+    "errors": {
+      "validation": "Check the outline and try again.",
+      "not_found": "That outline was not found.",
+      "unauthorized": "Please sign in again.",
+      "forbidden": "You can't manage the outline here.",
+      "rate_limited": "Too many requests. Wait a moment, then try again.",
+      "provider_error": "Something went wrong. Please try again."
     }
   },
   "packages": {

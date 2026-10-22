@@ -36,6 +36,15 @@ describe('TeacherView', () => {
     );
   });
 
+  it('links to the outline editor from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Outline' })).toHaveAttribute(
+      'href',
+      '/teacher/outline',
+    );
+  });
+
   it('links to the onboarding form from the main nav', async () => {
     render(await TeacherView());
     const nav = screen.getByRole('navigation', { name: 'Main' });
