@@ -1,6 +1,6 @@
 // A local node:http server on 127.0.0.1 for the web-link transport tests (task 8.2d). Tests never
-// touch the real internet; a local TLS server would need a committed private key, so the
-// transport's injected `request` is node:http's against this server.
+// touch the real internet. The TLS path has its own test (pinnedTransport.tls.test.ts, a throwaway
+// certificate made at test time); everywhere else the injected `request` is node:http's here.
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { RequestFn } from '../src/webLink/pinnedTransport.js';

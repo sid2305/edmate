@@ -25,11 +25,11 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 2. **Refused addresses.** Only public unicast passes.
    - IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, and 224/4 and everything above it.
    - Metadata services are covered by these ranges: 169.254.169.254 (AWS, GCP, Azure), 100.100.100.200 (Alibaba), 192.0.0.192 (Oracle), fd00:ec2::254 (AWS IPv6, inside fc00::/7), and `metadata.google.internal` (name denylist).
-   - IPv6: only 2000::/3 passes, minus Teredo 2001::/32, benchmarking 2001:2::/48, ORCHID 2001:10::/28 and 2001:20::/28, documentation 2001:db8::/32 and 6to4 2002::/16. So ::, ::1, fe80::/10, fc00::/7, ff00::/8, NAT64 64:ff9b::/96 and 64:ff9b:1::/48, 100::/64 and the ::/96 compatible form are all refused.
+   - IPv6: only 2000::/3 passes, minus Teredo 2001::/32, benchmarking 2001:2::/48, ORCHID 2001:10::/28 and 2001:20::/28, documentation 2001:db8::/32 and 3fff::/20 (RFC 9637, added in 8.2e), and 6to4 2002::/16. So ::, ::1, fe80::/10, fc00::/7, ff00::/8, NAT64 64:ff9b::/96 and 64:ff9b:1::/48, 100::/64 and the ::/96 compatible form are all refused.
    - IPv4 inside IPv6 (`::ffff:a.b.c.d`, dotted or hex) is judged as its IPv4 address.
    - WHATWG URL parsing turns other IPv4 spellings into dotted form before the check (decimal `2130706433`, hex `0x7f.1`, octal, short forms).
    - A name that resolves to any non-public address is refused, even if its other answers are public.
-   - Names refused before any DNS lookup (after stripping a trailing dot): `localhost`, `*.localhost`, `*.local`, `*.internal`, `*.home.arpa` and any single-label name.
+   - Names refused before any DNS lookup (after stripping every trailing dot, so `localhost..` is refused too): `localhost`, `*.localhost`, `*.local`, `*.internal`, `*.home.arpa` and any single-label name.
 3. **https on port 443 only.** `http:` is refused. An explicit port other than 443 is refused, so links can't be used to scan ports. A user name or password in the URL is refused. The URL is at most 2048 characters.
 4. **Redirects.** They are followed by hand, at most 3. Every hop goes through rules 1 to 3 again: look up again, check again, pin again. A redirect from https to http, or one with no `Location`, fails.
 5. **Size.** A page is capped at 5 MB, counted on decompressed bytes.
@@ -73,7 +73,7 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
   The deploy guide should add a network egress rule as a second layer: the worker reaches only public port 443, plus its own database, Redis and object storage. Tracked as board task 8.2g, before the pilot.
 - Some sites will fail with a fixed reason: pages that need cookies or JavaScript, sites that block bots, http-only sites, other ports, and non-HTML pages.
 - Only the first checked address is tried, with no fallback to another address. A host whose first address is down fails, and it may fail again on retry.
-- The system DNS lookup (`dns.lookup`) can't be cancelled. When the 15 s deadline wins, the fetch gives up, but the lookup keeps a libuv thread busy until the resolver times out. Many slow-DNS links could tie up the worker's small thread pool. A cancellable resolver is a follow-up in 8.2e.
+- Names are resolved with a `dns.promises.Resolver` (A and AAAA queries, its own timeout), not `dns.lookup`, and the resolver is cancelled when the deadline wins, so a slow-DNS link never holds a libuv thread past the deadline (8.2e). It skips `/etc/hosts` and search-domain expansion. A name with no answer and a name that answers with a non-public address get the same refusal and words, so a teacher can't probe which internal names exist; a transient DNS failure (SERVFAIL, timeout) is retryable.
 - A failed link can't be retried in place. The teacher deletes it and adds it again (lead answer Q3).
 - Tests never touch the real internet (rule 4): a fake resolver and fake transport in `packages/ingest`, and a local `node:http` server on 127.0.0.1 for the worker transport.
 - Changing a range, a mode, a limit or the YouTube rule takes an ADR that amends or supersedes this one.
