@@ -56,6 +56,11 @@ All three 9.4b review findings closed in `apps/web/src/chat/renderReply.tsx`.
 
 ## Decisions
 
+### 22 Oct 2026 · 9.4c ran over budget · decided by lead · risk: low
+- Decided: accept 110 tool calls against the lead briefs' 40 + 35. The fix round had to prove the percent-encoded bidi case through the real react-markdown renderer, which took more calls than the brief allowed.
+- Why: the extra calls bought the HIGH fix and real-renderer tests; nothing was left unfinished.
+- risk: low
+
 ### 22 Oct 2026 · 9.4c price-range exclusion rule · decided by builder · risk: low
 
 - Decided: exclude a `$...$` span from `protectMath`'s maths treatment only when the character
@@ -115,4 +120,4 @@ Three findings closed, same file scope (`renderReply.tsx`, its test file, this h
 Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → `Tasks: 10 successful,
 10 total`. `python3 .githooks/secret-scan.py --all` → clean.
 
-## Tool calls used: 19
+Tool calls used: 110 (harness count: builder 48 + fixer 62; the agents reported 19 + about 30)
