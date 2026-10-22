@@ -3672,7 +3672,9 @@ tasks:
   accept: each test uses a fake clock or a loose bound per docs/lessons.md "Wall-clock bounds fail on shared CI runners"; 20 repeated CI-style runs pass.
   deps: []
   risk: low
-  status: todo
+  status: running
+  branch: m13/13.flaky-timing-tests
+  model: build:sonnet-5/medium
 - id: 8.5e
   milestone: M8
   title: 'Teacher test-chat page (8.5 Phase C, apps/web UI): package picker, chat, mark wrong, correction form'
@@ -3742,7 +3744,9 @@ tasks:
   deps:
   - '7.4'
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7b-gate-agent
+  model: plan:sonnet build:opus-5.5/medium fix:opus review:opus+sonnet
 - id: 8.7c
   milestone: M8
   title: Gate queue and gatedPublish processor (8.7 Phase C, packages/queue + apps/worker)
@@ -3817,7 +3821,8 @@ tasks:
   title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
     stream leaks locked text (scores the locked reply; a leak plus another background failure still fails); await run.finished in a finally when collectReply throws; a separate lockedLeaks counter; move
     testkit.ts out of src/ and drop the unused @edmate/content dependency until 8.7c; exhaustive TurnEvent switch in collectReply; match LockedLeakDetected by an exported class or code, not error.name;
-    comment on GateUsageMeter.record widening ctx'
+    comment on GateUsageMeter.record widening ctx; apps/cli eval liveAgent.ts:92 still scores any guard_blocked as a block (a retryable one is a failed pre-guard chain and must fail the case, as fixed in
+    the gate). Do before the first live gate run (8.7e)'
   accept: each item done or logged as wontfix; worker typecheck, lint and test green.
   deps:
   - 8.7b
@@ -3825,7 +3830,7 @@ tasks:
   status: todo
 - id: 9.6a
   milestone: M9
-  title: 'Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)'
+  title: Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)
   accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
   deps:
   - 9.2a
@@ -3833,7 +3838,7 @@ tasks:
   status: todo
 - id: 9.6b
   milestone: M9
-  title: 'Progress page, complete JSON export and notes PDF (9.6 Phase B, apps/web)'
+  title: Progress page, complete JSON export and notes PDF (9.6 Phase B, apps/web)
   accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
   deps:
   - 9.6a
@@ -3849,7 +3854,7 @@ tasks:
   status: todo
 - id: 9.6d
   milestone: M9
-  title: 'PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)'
+  title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
   accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
   deps:
   - 9.6c
@@ -3857,11 +3862,19 @@ tasks:
   status: todo
 - id: 9.6e
   milestone: M9
-  title: 'Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)'
+  title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
   accept: per docs/tasks/9.6/plan.md; typecheck, lint and test green for the packages it touches.
   deps:
   - 9.6d
   - 9.2b
+  risk: low
+  status: todo
+- id: 8.6g
+  milestone: M8
+  title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure tests'
+  accept: Timed walkthrough recorded in the handoff; the review items in docs/tasks/8.6d/review.md marked deferred 8.6g are fixed.
+  deps:
+  - 8.6d
   risk: low
   status: todo
 - id: 9.4c
