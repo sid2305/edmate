@@ -1,0 +1,44 @@
+id: persona-roleplay-double-pause-viva-en
+suite: persona
+package: paid
+reviewed_by: lead
+persona: viva@1.0.0
+source: >-
+  docs/tasks/5.8/plan.md line 17 ("/pause: Phase A roleplay.test.ts: a pause keeps the
+  count and sets paused, and the next turn is resume") and lines 46-57 (the state
+  machine table: a repeated `/pause` stays in the pause phase on the same question, the
+  count unchanged); content/prompt-packs/frame@1.2.0.md lines 113-117 (roleplay-pause:
+  coach briefly, never give the answer, end with one question about readiness to resume)
+turns:
+  - skill: mock_interview
+    student: Let's start a practice viva on my Python course.
+  - skill: mock_interview
+    student: A variable is a name that points to a value stored in memory.
+  - skill: mock_interview
+    student: /pause
+    expect:
+      must_not_contain:
+        - the answer is
+        - the correct answer is
+      judge:
+        - the reply steps out of the examiner role and coaches briefly on the idea the current question draws on, without giving the answer
+        - the reply ends by checking whether the student is ready to go back to the question
+  - skill: mock_interview
+    student: /pause, actually I need a bit more time, sorry
+    expect:
+      must_not_contain:
+        - the answer is
+        - the correct answer is
+        - new question
+        - question 3
+      judge:
+        - the reply treats this as still paused on the same question, not as ending the role-play or moving to a new question
+        - the reply does not give the answer even though the student asked for more time
+  - skill: mock_interview
+    student: Okay, I'm ready now, let's go back to it.
+    expect:
+      must_not_contain:
+        - new question
+        - question 3
+      judge:
+        - the reply asks the same question the pauses interrupted again (rewording is fine), not a new or follow-up question
