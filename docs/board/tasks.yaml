@@ -2535,6 +2535,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 7.4a
+  milestone: M13
+  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSignal later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the as ScopedCase cast; de-duplicate changes'
+  accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
