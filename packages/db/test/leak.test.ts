@@ -129,6 +129,10 @@ describe('driver errors are scrubbed', () => {
           }),
       ],
       ['publish.latestRun', () => repos.publish.latestRun(tscope)],
+      [
+        'publish.changedSinceLastPublish',
+        () => repos.publish.changedSinceLastPublish(tscope),
+      ],
       ['publish.failedCases', () => repos.publish.failedCases(tscope, 'run_leak_1')],
       ['publish.publicScorecard', () => repos.publish.publicScorecard({ agentId: 'agt_leak_1' })],
       [

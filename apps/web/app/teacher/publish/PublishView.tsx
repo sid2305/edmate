@@ -148,6 +148,7 @@ function RunDetails({ run }: { run: PublishRun }) {
   return (
     <section aria-label={t('title')}>
       <StatusLine run={run} />
+      {run.changedSincePublish ? <p role="status">{t('changedNote')}</p> : null}
       {changes.length === 0 ? null : (
         <>
           <p>{t('changesLabel')}</p>

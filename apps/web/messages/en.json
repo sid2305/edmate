@@ -473,6 +473,7 @@
     "publishAgainButton": "Publish again",
     "starting": "Starting…",
     "idle": "Your agent has not been published yet.",
+    "changedNote": "You've made changes since your last publish.",
     "running": "The quality gate is checking your agent. This can take a while; this page updates by itself.",
     "passed": "Your agent is live.",
     "failed": "Your agent was not published: some checks did not pass. Nothing changed for your students.",
