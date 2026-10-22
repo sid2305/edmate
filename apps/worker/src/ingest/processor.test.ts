@@ -129,6 +129,11 @@ function gateway(transcriber?: IngestGateway['transcriber']): IngestGateway {
   };
 }
 
+/** Task 9.0 D3: EDMATE_INGEST_EMBEDDINGS=off -- no embedder, no transcriber. */
+function offGateway(): IngestGateway {
+  return {};
+}
+
 function job(data: unknown, name = 'ingest.process'): IngestJobLike {
   return { id: 'j1', name, data };
 }
@@ -152,6 +157,57 @@ describe('ingestProcessor', () => {
     expect(outcome).toBe('ready');
     expect(mem.getRow()?.status).toBe('ready');
     expect(mem.calls).toContain('insertMany');
+  });
+
+  it('EDMATE_INGEST_EMBEDDINGS=off: a markdown document reaches ready with chunks and no embed call', async () => {
+    const mem = memoryRepos(row());
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1': markdownBytes() }),
+      gateway: offGateway(),
+    };
+    const outcome = await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'markdown' }),
+    );
+    expect(outcome).toBe('ready');
+    expect(mem.getRow()?.status).toBe('ready');
+    expect(mem.calls).toContain('insertMany');
+    expect(mem.calls).not.toContain('setEmbeddings');
+  });
+
+  it('EDMATE_INGEST_EMBEDDINGS=off: a video job fails as unsupported with nothing written', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.mp4' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage(),
+      gateway: offGateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(
+        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'video', mimeType: 'video/mp4' }),
+      ),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('unsupported');
+    expect(mem.calls).not.toContain('insertMany');
+    expect(mem.calls).not.toContain('insertManyIfStorageKey');
+  });
+
+  it('EDMATE_INGEST_EMBEDDINGS=off: an audio job fails as unsupported with nothing written', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.mp3' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage(),
+      gateway: offGateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(
+        job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'audio', mimeType: 'audio/mpeg' }),
+      ),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('unsupported');
+    expect(mem.calls).not.toContain('insertMany');
   });
 
   it('transcribes a video document through a signed URL', async () => {
