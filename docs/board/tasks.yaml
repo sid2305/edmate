@@ -4200,6 +4200,14 @@ tasks:
   - 9.5b
   risk: low
   status: todo
+- id: 8.7j
+  milestone: M13
+  title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate step), and caseResults asserts a non-empty changes list before treating a run as style-only; tests for both'
+  accept: no `as GateResult` cast remains; a test shows a missing gate result ends the run error; an empty changes list throws instead of scoping as style-only.
+  deps:
+  - 8.7c
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
