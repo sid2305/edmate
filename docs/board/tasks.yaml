@@ -4699,9 +4699,30 @@ tasks:
   deps:
   - 9.7a
   risk: low
-  status: running
+  status: done
   branch: m9/9.7c-e2e-local-guard
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 63
+    tokens_in: 212
+    tokens_out: 672
+    cache_read_tokens: 2858617
+    wall_time_seconds: 1666
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        CRITICAL: 1
+        HIGH: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.5c
   milestone: M13
   title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts
@@ -5357,9 +5378,29 @@ tasks:
   deps:
   - 12.2d
   risk: high
-  status: running
+  status: done
   branch: m12/12.2e-staff-reports-page
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet+opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 12
+      by_severity:
+        MEDIUM: 4
+        LOW: 8
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 12
+        wontfix: 0
+    human_questions: 0
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
@@ -5973,9 +6014,29 @@ tasks:
   - 8.2l
   - 12.3c
   risk: medium
-  status: running
+  status: done
   branch: m11/11.4b-recording-api
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 11.4c
   milestone: M11
   title: Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)
@@ -6014,9 +6075,27 @@ tasks:
   - 12.3c
   - 11.4a
   risk: high
-  status: running
+  status: done
   branch: m12/12.3f-rights-required
-  model: plan:lead build:opus
+  model: plan:lead build:opus review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.4g
   milestone: M13
   title: '12.4f review LOW: apps/web/app/staff/agents/view.tsx onSetApproval''s post-action reload replaces the whole fresh agent record, not only approvedAt, approvedBy and regulatedSubject'
@@ -6035,7 +6114,8 @@ tasks:
   status: todo
 - id: 11.4f
   milestone: M13
-  title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an options object instead of a positional boolean (apps/web/src/studio/files.ts:41)'
+  title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an
+    options object instead of a positional boolean (apps/web/src/studio/files.ts:41)'
   accept: a test fails if the message is chosen by size; web typecheck, lint and test green.
   deps:
   - 11.4b

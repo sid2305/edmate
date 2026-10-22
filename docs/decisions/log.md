@@ -10,6 +10,86 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3f rightsDeclared is required on documents create and replace · decided by builder · risk: high
+- Decided: `documents.create` and `documents.startReplace` in `packages/db/src/repositories/chunks.ts` take `rightsDeclared: true` as a required key (typecheck error if missing, `invalid` at runtime), and always stamp `rights_declared_at = now()`. Teacher notes (`insertTeacherNote`) keep no declaration: they are the teacher's own typed answers, not an upload. Risky path (`packages/db/src/repositories/**`): needs security-reviewer and database-reviewer.
+- Why: 12.3b Left to do and the 12.3f accept line; apps/web already sends the declaration on all three calls, so the repo can now refuse an undeclared upload, link or replace.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.4b builder ran over the Phase B budget · decided by lead · risk: low
+- Decided: accept 78 tool calls against a 50-call brief budget.
+- Why: three reviewers found no CRITICAL, HIGH or blocking issue; re-running would cost more than it saves.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4b unsplittable media (m4a/mp4/webm) capped at 24 MB at upload · decided by builder · risk: medium
+- Decided: `audio/mp4`, `video/mp4` and `video/webm` now cap at `MAX_UNSPLIT_MEDIA_BYTES`, equal to
+  `@edmate/gateway`'s `WHISPER_MAX_UPLOAD_BYTES` (24 MB), refused at `create` with a fixed message
+  pointing to MP3 or a transcript file. `audio/mpeg` and `audio/wav` keep the 500 MB media cap.
+  Only transcript-kind uploads (captions, audio, video) may carry `liveClassId`; a plain document
+  with `liveClassId` is refused 400 before anything is written.
+- Why: plan Phase B (Q3) and lead answers; the worker's Whisper transcriber has no chunker for
+  anything but WAV/MP3, so an oversized M4A/MP4/WebM uploads today and fails minutes later as
+  `input_too_large`. Refusing it up front saves the wasted upload and points to a working path. A
+  real ffmpeg-chunker fix is board task 11.4d (M13; needs an ADR).
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 11.4b no new en.json key; the recording-too-large message reaches the teacher through the response body, not a translation key · decided by builder · risk: low
+- Decided: `apps/web/messages/en.json` is not edited in this phase. The upload centre
+  (`UploadsView.tsx`) keys error words off the server's fixed error code, not its message text, and
+  the new case still returns the existing `input_too_large` code -- only the message differs, and
+  that page doesn't show it. Phase C's `RecordingUpload` form is expected to show the server's
+  `message` field directly (the `addLink` precedent), so the fixed English text added to
+  `routes.ts`'s `MSG.mediaTooLarge` reaches the teacher there without touching the shared,
+  append-only translation file in this phase.
+- Why: the plan's instruction was conditional ("only if ... the client maps the 413 to a key");
+  the condition doesn't hold today, and leaving the shared file untouched avoids a merge collision
+  with any other builder editing it in parallel.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2e staff reports page security review · decided by builder · risk: high
+- Decided: `apps/web/app/staff/**` is treated as a risky path (the plan notes it is not yet a
+  glob in merge-gate's risk-paths.txt, pending 12.1c); this PR needs `security-reviewer` to
+  confirm the staff-only guard (`requireRole` before any read), that the reported text renders as
+  React text nodes only (`renderReply`, never raw HTML), that every destructive action (Dismiss,
+  both takedown kinds) requires its own confirm click before the network call, and that the
+  reporter's identity (id, name, email) never reaches this page (12.2a's row shape already
+  excludes it; this page and its tests never introduce a path that would add it back).
+- Why: this is the console staff use to censor content and close reports; a missing confirm step
+  or a guard regression would let a misclick or a non-staff session change live material, and a
+  rendering mistake on the reported text would reopen the XSS surface the chat's own `renderReply`
+  closed.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.7c ran over its brief budget · decided by lead · risk: low
+- Decided: accept 71 tool calls (build 49, fix round 22) against the brief's 35 (1.2 × 35 = 42).
+- Why: the fix round closed a CRITICAL guard bypass the security-reviewer found; the work stays in scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.7c guard refuses host overrides in the query string · decided by builder · risk: low
+- Decided: `assertLocalDatabaseUrl` now also rejects any `TEST_DATABASE_URL` whose query string
+  carries a `host` or `hostaddr` key (case-insensitively), and compares the authority hostname
+  case-insensitively, before falling back to the existing localhost/127.0.0.1/::1 allowlist.
+- Why: security-reviewer found that pg / pg-connection-string (used by `@edmate/db` and the
+  spawned `migrate.js`/`seed.js`) honour a `?host=`/`?hostaddr=` query parameter that overrides the
+  authority host for the actual connection, so `postgres://localhost:5432/edmate?host=prod-db.example.com`
+  passed the old hostname-only check but would connect to `prod-db.example.com`. Rejecting the
+  override keys outright (rather than parsing with pg-connection-string) keeps the guard pure, adds
+  no dependency, and fails closed.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.3c builder ran far over its brief budget · decided by lead · risk: low
 - Decided: accept 210 tool calls against the brief's 70 (1.2 × 70 = 84). The lead told the builder to wrap up at 206 calls.
 - Why: the work is in scope and all three reviewers approve with no findings. Most of the extra calls went on repeated full web gate runs while waiting on background test runs; future briefs for apps/web say to run the gate once in the foreground.
