@@ -8,8 +8,10 @@ import type { Principal } from '../auth/guard';
 import {
   chatAgentCandidates,
   homeChatLinks,
+  homePausedLinks,
   homeStartLinks,
   liveChatAgents,
+  pausedAgents,
   startableAgents,
   type LiveChatDeps,
 } from './liveChats';
@@ -91,6 +93,53 @@ describe('homeChatLinks', () => {
   it('returns the live ones', async () => {
     const d = deps({ 'stu_1:tch_a': 'active' });
     expect(await homeChatLinks(() => d, STUDENT, ['agt_a', 'agt_b'], { error: vi.fn() })).toEqual(['agt_a']);
+  });
+});
+
+describe('pausedAgents (task 9.6e)', () => {
+  it('offers a plan link only for a paused subscription', async () => {
+    const d = deps({ 'stu_1:tch_a': 'paused', 'stu_1:tch_b': 'active', 'stu_1:tch_c': 'ended' });
+    expect(await pausedAgents(d, STUDENT, ['agt_a', 'agt_b', 'agt_c', 'agt_draft'])).toEqual(['agt_a']);
+  });
+
+  it.each(['trial', 'active', 'past_due', 'ended'])(
+    'a %s subscription has no paused link',
+    async (status) => {
+      const d = deps({ 'stu_1:tch_a': status });
+      expect(await pausedAgents(d, STUDENT, ['agt_a'])).toEqual([]);
+    },
+  );
+
+  it('no subscription has no paused link', async () => {
+    expect(await pausedAgents(deps({}), STUDENT, ['agt_a'])).toEqual([]);
+  });
+});
+
+describe('homePausedLinks', () => {
+  it('a database failure gives no links and logs the error name only', async () => {
+    const log = { error: vi.fn() };
+    const links = await homePausedLinks(
+      () => {
+        throw new RangeError('connection details that must not be logged');
+      },
+      STUDENT,
+      ['agt_a'],
+      log,
+    );
+    expect(links).toEqual([]);
+    expect(log.error).toHaveBeenCalledWith('home.paused_links_failed', { error: 'RangeError' });
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain('connection details');
+  });
+
+  it('no candidates opens nothing', async () => {
+    const open = vi.fn();
+    expect(await homePausedLinks(open, STUDENT, [], { error: vi.fn() })).toEqual([]);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('returns the paused ones', async () => {
+    const d = deps({ 'stu_1:tch_a': 'paused' });
+    expect(await homePausedLinks(() => d, STUDENT, ['agt_a', 'agt_b'], { error: vi.fn() })).toEqual(['agt_a']);
   });
 });
 
