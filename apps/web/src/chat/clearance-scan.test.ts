@@ -34,11 +34,16 @@ export function clearanceProblem(text: string): string | null {
 // asks for the default clearance ('age') on purpose -- it is not the chat itself.
 const MEMORY_PAGE = join('app', 'learn', '[agentId]', 'memory', 'page.tsx');
 
+// Task 9.6 Phase B: the same exception for the same reason -- a student's own progress page and
+// exports, reachable even with a parent's consent outstanding. Not the chat itself.
+const PROGRESS_PAGE = join('app', 'learn', '[agentId]', 'progress', 'page.tsx');
+
 describe('clearance scan (app/learn/**, src/chat/**)', () => {
   it('every guarded file asks for clearance: agent', () => {
     const files = ROOTS.flatMap((r) => filesUnder(join(WEB, r)))
       .filter((f) => f !== SELF)
-      .filter((f) => !f.endsWith(MEMORY_PAGE));
+      .filter((f) => !f.endsWith(MEMORY_PAGE))
+      .filter((f) => !f.endsWith(PROGRESS_PAGE));
     expect(files.some((f) => f.includes(join('app', 'learn')))).toBe(true);
     const problems = files.flatMap((f) => {
       const p = clearanceProblem(readFileSync(f, 'utf8'));

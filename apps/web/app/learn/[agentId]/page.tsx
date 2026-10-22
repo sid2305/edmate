@@ -33,6 +33,7 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
   const home = await getTranslations('home');
   const chat = await getTranslations('chat');
   const memory = await getTranslations('memory');
+  const progress = await getTranslations('progress');
   return (
     <AppShell
       brand={shell('brand')}
@@ -41,6 +42,8 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
         { href: '/home', label: home('nav') },
         // 6.5: the student's own view, export and reset of what the agent remembers.
         { href: `/learn/${encodeURIComponent(data.agentId)}/memory`, label: memory('navLink') },
+        // 9.6: the progress page, with links to the complete JSON export and notes PDF.
+        { href: `/learn/${encodeURIComponent(data.agentId)}/progress`, label: progress('navLink') },
       ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
