@@ -24,6 +24,23 @@ export const GUARD_FOLDERS = [
 
 export const MIN_CASES_PER_GUARD = 30;
 
+/** The platform suites the build plan's Evals table sizes (accuracy is per agent, 7.3). */
+export type FlooredSuite = 'leak' | 'locked' | 'safety' | 'persona' | 'pedagogy' | 'advice';
+
+/**
+ * Task 7.2's count ratchet: each suite must hold at least this many cases. Set to the counts on
+ * main when 7.2 started; each 7.2 phase raises its suite's floor to its new count, so a case
+ * deleted by mistake fails `suites.test.ts`. The last phase leaves these equal to the targets.
+ */
+export const SUITE_FLOORS: Readonly<Record<FlooredSuite, number>> = {
+  leak: 44,
+  locked: 38,
+  safety: 214,
+  persona: 42,
+  pedagogy: 1,
+  advice: 37,
+};
+
 export interface SuiteRules {
   /** Folders (relative to the root, `/`-separated) that must each hold at least `minCases`. */
   guardFolders: readonly string[];
@@ -85,6 +102,43 @@ function caseRuleProblems(file: string, c: EvalCase, rules: SuiteRules): string[
 }
 
 /**
+ * A student turn as the duplicate check compares it: NFKC, lower case, punctuation dropped,
+ * whitespace collapsed and trimmed.
+ */
+export function normaliseTurn(text: string): string {
+  return text.normalize('NFKC').toLowerCase().replace(/\p{P}/gu, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Two cases in one suite (top folder) whose whole normalised student-turn sequence is equal. */
+function duplicateTurnProblems(cases: readonly LoadedCase[]): string[] {
+  const problems: string[] = [];
+  const firstFileByKey = new Map<string, string>();
+  for (const { file, evalCase } of cases) {
+    const suite = file.split('/')[0] as string;
+    const key = [suite, ...evalCase.turns.map((t) => normaliseTurn(t.student))].join('\u0000');
+    const earlier = firstFileByKey.get(key);
+    if (earlier === undefined) firstFileByKey.set(key, file);
+    else problems.push(`${file}: same student turns as ${earlier}`);
+  }
+  return problems;
+}
+
+/** One line per suite whose case count (cases under its top folder) is below its floor. */
+export function floorProblems(
+  cases: readonly LoadedCase[],
+  floors: Readonly<Record<string, number>>,
+): string[] {
+  return Object.entries(floors)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([suite, floor]) => {
+      const count = cases.filter((c) => c.file.startsWith(`${suite}/`)).length;
+      return count < floor
+        ? [`${suite}: ${String(count)} cases, below its floor of ${String(floor)}`]
+        : [];
+    });
+}
+
+/**
  * Loads every suite under `root` and checks it against `rules`. Load errors (bad YAML, a case
  * that fails the schema, a duplicate id inside one suite) are reported per suite, not thrown,
  * so one broken file doesn't hide the rest.
@@ -120,6 +174,7 @@ export function validateSuites(root: string, rules: SuiteRules): SuiteReport {
     if (earlier === undefined) firstFileById.set(evalCase.id, file);
     else problems.push(`${file}: duplicate case id "${evalCase.id}" (also in ${earlier})`);
   }
+  problems.push(...duplicateTurnProblems(cases));
 
   const guardCounts: Record<string, number> = {};
   const unseeded: string[] = [];
