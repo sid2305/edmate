@@ -65,9 +65,21 @@ ci.yml`, `Student/teacher e2e (scripted turns)` step) picks it up and runs it th
 step/total timestamps in the job log (`console.log`, prefixed `[8.6g walkthrough]`). No step
 timestamps are recorded in this handoff for that reason — see Left to do.
 
+### CI walkthrough record (lead, 22 Oct 2026)
+From CI e2e run 39852020790 on PR #214 (the spec passed):
+- start: 21:00:50.633Z (+0 ms)
+- signed in as teacher: +64 ms
+- opened /teacher/packages: +1535 ms
+- first package created (Free starter): +3041 ms
+- second package created (Full course): +3212 ms
+- both packages visible: +3221 ms
+- total: 3221 ms (3.2 s)
+
+This is machine speed: it shows two packages can be made from the presets in four clicks per package with no extra steps. A human teacher's time, reading and filling in a name, is not measured here; the 15-minute target is checked with a real teacher in the pilot try-it run.
+
 ## Decisions
 ### 22 Oct 2026 · 8.6g builder and fixer ran over budget · decided by lead · risk: low
-- Decided: accept 124 tool calls against a 50-call build budget (build 76, fix round 48 against 25).
+- Decided: accept 151 tool calls against a 50-call build budget (build 76, fix round 48 against 25, CI selector fix 27 against 25).
 - Why: the extra calls went to static checks of the e2e spec and to proving each new test fails without its fix; the work is correct and verified, so re-running would cost more.
 - risk: low
 
@@ -147,7 +159,7 @@ Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → 10/
 
 Status: DONE
 
-Tool calls used: 124 (harness count: build 76, fix round 48; the agents reported 32 and 25)
+Tool calls used: 151 (harness count: build 76, fix round 48, CI fix 27; the agents reported 32, 25 and not stated)
 
 ## CI fix (22 Oct 2026)
 
