@@ -4957,7 +4957,7 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 11.2b
   milestone: M11
-  title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B)
+  title: 'Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with a test'
   accept: per docs/tasks/11.2/plan.md Phase B and Lead answers; web typecheck, lint and test green.
   deps:
   - 11.2a
@@ -5221,6 +5221,16 @@ tasks:
   accept: each follow-up has a test where code changes; touched packages green.
   deps:
   - 8.2h
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 11.2c
+  milestone: M13
+  title: '11.2a review LOW: a composite index on class_questions (live_class_id, created_at, id) for the teacher queue scan once volumes grow'
+  accept: additive migration; db typecheck, lint and test green.
+  deps:
+  - 11.2a
   risk: high
   status: todo
   branch: null
