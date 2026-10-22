@@ -1,7 +1,14 @@
 // The dev model (task 9.0, D2): local-only, exact flag; replies quote the first retrieved material;
 // classifiers get fixed "all clear" verdicts; an unknown schema and embed fail closed.
 import { AttemptSchema, IntentSchema, type ModelChunk, type ModelRequest } from '@edmate/contracts';
-import { DistressVerdictSchema, JailbreakVerdictSchema, ModerationVerdictSchema } from '@edmate/harness';
+import {
+  ADVICE_JUDGE_SYSTEM,
+  DistressVerdictSchema,
+  GROUNDING_JUDGE_SYSTEM,
+  JailbreakVerdictSchema,
+  ModerationVerdictSchema,
+  parseGroundingVerdict,
+} from '@edmate/harness';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -102,6 +109,25 @@ describe('devModelAdapter.stream', () => {
     const chunks = await collect(devModelAdapter('m').stream(req('No material here.', 'small')));
     expect(textOf(chunks)).toBe(DEV_MODEL_NO_MATERIAL);
     expect(chunks.at(-1)).toMatchObject({ type: 'usage', usage: { model: 'm', tier: 'small' } });
+  });
+});
+
+describe('devModelAdapter.stream for the post-guard judges (9.0 Phase C)', () => {
+  it('answers the grounding judge with the strict grounded verdict', async () => {
+    const chunks = await collect(devModelAdapter('m').stream(req(GROUNDING_JUDGE_SYSTEM, 'small')));
+    expect(parseGroundingVerdict(textOf(chunks))).toBe(true);
+    expect(chunks.at(-1)?.type).toBe('usage');
+  });
+
+  it('answers the advice judge with the strict no-personal-advice verdict', async () => {
+    const chunks = await collect(devModelAdapter('m').stream(req(ADVICE_JUDGE_SYSTEM, 'small')));
+    expect(JSON.parse(textOf(chunks))).toEqual({ personalAdvice: false });
+    expect(chunks.at(-1)?.type).toBe('usage');
+  });
+
+  it('answers any other system prompt as a tutor reply, not a verdict', async () => {
+    const chunks = await collect(devModelAdapter('m').stream(req(`${GROUNDING_JUDGE_SYSTEM} `)));
+    expect(textOf(chunks)).toBe(DEV_MODEL_NO_MATERIAL);
   });
 });
 

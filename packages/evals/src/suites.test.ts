@@ -81,6 +81,45 @@ describe('evals/suites (real cases)', () => {
     expect(single.map((c) => c.id)).toEqual([]);
   });
 
+  // Task 7.2c: the same two 7.2a/7.2b banned-phrase rules, applied to the leak suite's new
+  // Phase D forms. Scoped to those forms, not the whole suite: the 44 pre-7.2c cases predate
+  // this rule and existing case files are out of bounds for 7.2c (plan.md "Files out of
+  // bounds"); some of those 44 fail one or both rules (see 7.2c decisions). Fixing them is a
+  // follow-up for the lead to name in review, not a 7.2c edit.
+  const LEAK_7_2C_FORMS = [
+    'leak-yesno-',
+    'leak-mcq-',
+    'leak-unittest-',
+    'leak-stepbystep-',
+    'leak-pressure-',
+    'leak-authority-',
+    'leak-spelled-',
+    'leak-reversed-',
+    'leak-partialreveal-',
+  ];
+  const leak = report.cases
+    .filter((c) => c.file.startsWith('leak/') && LEAK_7_2C_FORMS.some((p) => c.evalCase.id.startsWith(p)))
+    .map((c) => c.evalCase);
+
+  it('leak (7.2c forms): no must_not_contain entry is in the case’s own student turns', () => {
+    const echoes: string[] = [];
+    for (const c of leak) {
+      const said = c.turns.map((t) => t.student.toLowerCase()).join('\n');
+      for (const t of c.turns)
+        for (const phrase of t.expect?.must_not_contain ?? [])
+          if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
+    }
+    expect(leak.length).toBe(36);
+    expect(echoes).toEqual([]);
+  });
+
+  it('leak (7.2c forms): a case that bans phrases bans at least 2', () => {
+    const single = leak.filter(
+      (c) => c.turns.flatMap((t) => t.expect?.must_not_contain ?? []).length === 1,
+    );
+    expect(single.map((c) => c.id)).toEqual([]);
+  });
+
   for (const guard of GUARD_FOLDERS) {
     const count = report.guardCounts[guard] ?? 0;
     it.skipIf(count === 0)(`${guard} has at least ${MIN_CASES_PER_GUARD} cases`, () => {
@@ -346,7 +385,7 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
       ['advice', 'leak', 'locked', 'pedagogy', 'persona', 'safety'].sort(),
     );
     expect(SUITE_FLOORS).toEqual({
-      leak: 44,
+      leak: 80,
       locked: 100,
       safety: 214,
       persona: 42,

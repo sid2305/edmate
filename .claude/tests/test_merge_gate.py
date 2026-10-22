@@ -651,6 +651,79 @@ class BudgetCheck(GateCase):
         self.assertEqual(code, 1, out)
         self.assertIn("could be parsed", out)
 
+    def test_heading_form_budget_line_parses(self):
+        plan = "# plan\n## Budget: 30 tool calls\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_after_real_statement_uses_first_line(self):
+        plan = "# plan\n## Budget\nAbout 40 tool calls.\n\n6.2 took 55 calls, but this one differs.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(50))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 40", out)
+
+    def test_decoy_before_real_budget_line_wins(self):
+        plan = "# plan\n## Budget\nLike 6.2 (55 calls) this is similar.\nBudget: 30 tool calls\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_before_no_budget_line_uses_first_line(self):
+        plan = "# plan\n## Budget\nLike 6.2 (55 calls) this is similar.\nSome other text without more numbers.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(70))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 55", out)
+
+    def test_decoy_heading_before_real_section_in_fence_ignored(self):
+        plan = (
+            "# plan\n"
+            "Example from the merge gate's docstring:\n"
+            "```\n"
+            "## Budget: 999 tool calls\n"
+            "```\n"
+            "## Budget\nBudget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_inside_fence_within_section_ignored(self):
+        plan = (
+            "# plan\n## Budget\n"
+            "```\n"
+            "Budget: 999 tool calls\n"
+            "```\n"
+            "Budget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_decoy_plain_budget_line_before_section_ignored(self):
+        plan = (
+            "# plan\n"
+            "Budget: 999 tool calls (9.8, for comparison)\n"
+            "## Budget\nBudget: 30 tool calls\n"
+        )
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("cap 30", out)
+
+    def test_first_line_no_number_later_prose_number_unparseable(self):
+        plan = "# plan\n## Budget\nSmall task, well within limits.\nSee 6.2 which took 55 calls for comparison.\n"
+        self.make({"apps/cli.ts": "x\n", "docs/tasks/9.9/plan.md": plan}, handoff=self.handoff(40))
+        code, out = self.gate()
+        self.assertEqual(code, 1, out)
+        self.assertIn("could be parsed", out)
+
 
 class Wontfix(GateCase):
     REVIEW = review() + "- [LOW] [wontfix] apps/cli.ts:12 — long function, see decision log.\n"
@@ -696,3 +769,137 @@ class Wontfix(GateCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _load_gate():
+    import importlib.util
+    path = os.path.join(os.path.dirname(__file__), "..", "skills", "merge-gate", "merge_gate.py")
+    spec = importlib.util.spec_from_file_location("merge_gate_under_test", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class FenceParseTest(unittest.TestCase):
+    """Fix round 2: an unclosed or mismatched code fence must never silently switch a check off."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_unclosed_fence_hiding_budget_section_is_unparseable(self):
+        cap = self.g.budget_cap("# plan\n```\nstray unclosed fence\n## Budget\nBudget: 30 tool calls\n")
+        self.assertIs(cap, self.g.UNPARSEABLE)
+
+    def test_unclosed_tilde_fence_hiding_budget_line_is_unparseable(self):
+        cap = self.g.budget_cap("# plan\n~~~\nstray\nBudget: 30 tool calls\n")
+        self.assertIs(cap, self.g.UNPARSEABLE)
+
+    def test_unclosed_fence_with_no_budget_at_all_is_silent_skip(self):
+        self.assertIsNone(self.g.budget_cap("# plan\n```\nstray unclosed fence\nno cap here\n"))
+
+    def test_unclosed_fence_after_readable_budget_section_keeps_cap(self):
+        self.assertEqual(self.g.budget_cap("# plan\n## Budget\nBudget: 30 tool calls\n## Notes\n```\nstray\n"), 30)
+
+    def test_mismatched_marker_does_not_close_fence(self):
+        # ``` is not closed by ~~~, so the decoy stays fenced and the real cap wins.
+        plan = "# plan\n```\n~~~\n## Budget: 999 tool calls\n```\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_mismatched_tilde_marker_does_not_close_fence(self):
+        plan = "# plan\n~~~\n```\nBudget: 999 tool calls\n~~~\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_shorter_marker_does_not_close_longer_fence(self):
+        plan = "# plan\n````\n```\n## Budget: 999 tool calls\n````\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_info_string_line_does_not_close_fence(self):
+        plan = "# plan\n```\n```md\n## Budget: 999 tool calls\n```\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_closed_fences_still_work(self):
+        plan = "# plan\n```ts\nBudget: 999 tool calls\n```\n~~~\nx\n~~~\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_reviewers_mismatched_marker_cannot_fake_reviewer(self):
+        # Before the fix, ~~~ "closed" the ``` fence and the fenced decoy line counted as real.
+        review = "# r\n```\n~~~\nReviewers: code-reviewer, security-reviewer\n```\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_reviewers_unclosed_fence_fails_closed(self):
+        review = "# r\n```\nstray\nReviewers: code-reviewer\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_reviewers_after_closed_fence_found(self):
+        review = "# r\n~~~\nReviewers: fake\n~~~\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+
+class IndentedDecoyTest(unittest.TestCase):
+    """Fix round 3: a line indented 4+ columns (a tab counts as 4) is a CommonMark indented code
+    block, so it never counts as the live Budget/Reviewers line."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_indented_budget_decoy_ignored(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n    Budget: 999 tool calls\nBudget: 30 tool calls\n"), 30)
+
+    def test_indented_reviewers_decoy_ignored(self):
+        review = "## Section\n    Reviewers: fake-reviewer\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+    def test_tab_indented_decoys_ignored(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n\tBudget: 999 tool calls\nBudget: 30 tool calls\n"), 30)
+        self.assertIsNone(self.g.budget_cap("# p\n\t- Budget: 999 tool calls\n"))
+        review = "# r\n\tReviewers: fake-reviewer\nReviewers: code-reviewer\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer"})
+
+    def test_whitespace_after_short_indent_cannot_sneak_past(self):
+        # 3 spaces then a tab is still 4+ columns of indentation.
+        self.assertIsNone(self.g.reviewer_names("# r\n   \tReviewers: fake-reviewer\n"))
+        self.assertIsNone(self.g.budget_cap("# p\n  \t  Budget: 999 tool calls\n"))
+
+    def test_list_nested_real_lines_still_count(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n- Limits:\n  - Budget: 30 tool calls\n"), 30)
+        self.assertEqual(self.g.reviewer_names("# r\n1. Round 1\n  Reviewers: code-reviewer\n"), {"code-reviewer"})
+        self.assertEqual(self.g.reviewer_names("# r\n   - Reviewers: architect\n"), {"architect"})
+
+
+class HtmlCommentDecoyTest(unittest.TestCase):
+    """Fix round 4: GitHub never renders an HTML comment <!-- ... -->, but the parser used to
+    read right through it, so a decoy Budget/Reviewers line hidden inside one would silently win."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_decoy_budget_inside_comment_ignored(self):
+        plan = "## Budget\n<!-- Budget: 999 tool calls -->\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_decoy_reviewers_inside_comment_ignored(self):
+        review = "<!-- Reviewers: fake-reviewer -->\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+    def test_multiline_comment_decoy_ignored(self):
+        plan = "## Budget\n<!--\nBudget: 999 tool calls\n-->\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_unclosed_comment_hiding_budget_section_is_unparseable(self):
+        plan = "# plan\n<!--\nstray unclosed comment\n## Budget\nBudget: 30 tool calls\n"
+        self.assertIs(self.g.budget_cap(plan), self.g.UNPARSEABLE)
+
+    def test_unclosed_comment_hiding_reviewers_fails_closed(self):
+        review = "# r\n<!--\nstray\nReviewers: code-reviewer\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_real_budget_line_after_comment_still_counts(self):
+        plan = "<!-- decoy -->\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_real_reviewers_line_after_closed_comment_found(self):
+        review = "<!-- Reviewers: fake -->\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})

@@ -35,6 +35,7 @@ export {
   styleCards,
   teacherEvalCases,
   teacherMaterialRevisions,
+  topicChunks,
   topics,
 } from './content.js';
 export { agents, agentVersions, packages, packageVersions } from './agents.js';

@@ -171,16 +171,27 @@ describe('package surface', () => {
 describe('repositories source', () => {
   const dir = fileURLToPath(new URL('../src/repositories', import.meta.url));
 
-  it('has no raw SQL strings and no deletes outside chunks.ts and learner.ts (8.2, 6.5)', () => {
+  it('has no raw SQL strings and no deletes outside chunks.ts, learner.ts and outline.ts (8.2, 6.5, 8.3)', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.ts'));
     expect(files.length).toBeGreaterThan(5);
     for (const f of files) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(src.includes('sql.raw('), `${f} uses sql.raw(`).toBe(false);
       expect(/\bdelete\s+from\b/i.test(src), `${f} deletes in SQL text`).toBe(false);
-      if (f !== 'chunks.ts' && f !== 'learner.ts') {
+      if (f !== 'chunks.ts' && f !== 'learner.ts' && f !== 'outline.ts') {
         expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
       }
+    }
+  });
+
+  it("outline.ts deletes only the scope's own topics and topic links, scoped in the same statement (8.3)", () => {
+    const src = readFileSync(join(dir, 'outline.ts'), 'utf8');
+    const deletes = [...src.matchAll(/\.delete\((\w+)\)([\s\S]*?);/g)];
+    expect(deletes.map((m) => m[1]).sort()).toEqual(['topicChunks', 'topics']);
+    for (const [, table, rest] of deletes) {
+      expect(rest, `${table} delete`).toMatch(
+        new RegExp(`^\\s*\\.where\\(\\s*and\\([\\s\\S]*eq\\(${table}\\.teacherId, teacherId\\)`),
+      );
     }
   });
 
