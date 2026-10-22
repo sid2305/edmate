@@ -3586,9 +3586,31 @@ tasks:
   deps:
   - 8.6c
   risk: medium
-  status: running
+  status: done
   branch: m8/8.6d-package-builder
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet fix:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 29
+    tokens_in: 92
+    tokens_out: 898
+    cache_read_tokens: 1348072
+    wall_time_seconds: 94
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        HIGH: 3
+        MEDIUM: 2
+        LOW: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 8.8b
   milestone: M8
   title: 'Studio insights page (8.8 Phase B, apps/web UI): health and top question groups'
@@ -3708,7 +3730,7 @@ tasks:
   - 9.2b
   risk: low
   status: todo
-- id: 13.flaky
+- id: '13.7'
   milestone: M13
   title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
     ms bound (PR #148)'
@@ -3716,7 +3738,7 @@ tasks:
   deps: []
   risk: low
   status: running
-  branch: m13/13.flaky-timing-tests
+  branch: m13/13.7-timing-tests
   model: build:sonnet-5/medium
 - id: 8.5e
   milestone: M8
@@ -3755,7 +3777,9 @@ tasks:
   deps:
   - '9.4'
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.5a-practice-screen
+  model: plan:sonnet build:sonnet-5/medium
 - id: 9.5b
   milestone: M9
   title: Feedback submission and mock-interview screens (9.5 Phase B, apps/web)
@@ -3863,7 +3887,8 @@ tasks:
   milestone: M13
   title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
     instead of `as never`; batched pattern for generated-column migrations on large tables; one lateral join instead of repeated correlated subqueries in discovery.ts; comment that teacherBySlug''s full
-    bio is intentional'
+    bio is intentional; 9.2b review: discovery rate limiter sets INCR and expiry atomically (Lua defineCommand like packages/queue turnLimits) and has explicit connect/command timeouts; /teachers maps a
+    RepositoryError scope from discovery.search to an empty result and pins searchParams bounds to the repository''s own (shared export or test); nav for a staff principal'
   accept: each item done or logged as wontfix; db typecheck, lint and test green.
   deps:
   - 9.2a
@@ -3896,7 +3921,9 @@ tasks:
   deps:
   - 8.7b
   risk: medium
-  status: todo
+  status: running
+  branch: m8/8.7f-gate-followups
+  model: plan:lead build:sonnet-5/medium
 - id: 9.6a
   milestone: M9
   title: Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)
@@ -3947,6 +3974,26 @@ tasks:
   - 8.6d
   risk: low
   status: todo
+- id: 9.7a
+  milestone: M9
+  title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
+  accept: per docs/tasks/9.7/plan.md Phase A; green in CI with the scripted gateway.
+  deps:
+  - '9.4'
+  risk: high
+  status: running
+  branch: m9/9.7a-e2e-full-flow
+  model: plan:opus build:sonnet
+- id: 9.7b
+  milestone: M9
+  title: '9.7 Phase B: add the discover and upgrade-to-unlocked stages to the full-flow spec (plan docs/tasks/9.7/plan.md)'
+  accept: per docs/tasks/9.7/plan.md Phase B; the whole flow is green in CI.
+  deps:
+  - 9.7a
+  - 9.2c
+  - 9.6b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -3988,7 +4035,6 @@ tasks:
   - '8.9'
   - '9.3'
   - '9.4'
-  - '9.5'
   status: todo
   branch: null
   model: null
