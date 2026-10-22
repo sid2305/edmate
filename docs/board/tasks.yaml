@@ -6033,6 +6033,16 @@ tasks:
   - 11.4a
   risk: low
   status: todo
+- id: 11.4f
+  milestone: M13
+  title: '11.4b review follow-ups: UploadType carries a splittable flag and newFile picks the 413 message from it, not from maxBytes equal to 24 MB (apps/web/src/studio/routes.ts:208); media() takes an options object instead of a positional boolean (apps/web/src/studio/files.ts:41)'
+  accept: a test fails if the message is chosen by size; web typecheck, lint and test green.
+  deps:
+  - 11.4b
+  risk: low
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
