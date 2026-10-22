@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.8b Lead leaves a redundant type annotation in apps/web/app/teacher/insights/page.tsx · decided by lead · risk: low
+- Decided: the typescript-reviewer's LOW about a redundant explicit type annotation in apps/web/app/teacher/insights/page.tsx is wontfix.
+- Why: it is stylistic only and the inferred type is identical; MEDIUM/LOW findings don't hold a merge.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.8b "Overall p50/p95 latency" means the generate and firstToken steps, not a step breakdown · decided by builder · risk: low
+- Decided: the health block shows `health.stepLatencyMs.generate` (full reply latency) and
+  `health.stepLatencyMs.firstToken` as "Reply latency" and "First token", and nothing else from
+  `stepLatencyMs` (the other 9 pipeline steps are not shown).
+- Why: `HealthMetrics` has no single "overall turn" step — `stepLatencyMs` is keyed per
+  `trace.steps[].name` (admit, entitle, preGuard, route, escalate, buildContext, decide, generate,
+  postGuard, meter, commit) plus the derived `firstToken` entry; `generate` is the step that
+  produces the student-visible reply, so it is the one that matches "reply latency" in 8.8's
+  accept-shaping text, and the plan's own Q4 recommendation says to keep this first page short
+  rather than breaking down every pipeline step.
+- risk: low — a one-line follow-up to add more steps to the page if a reviewer wants the full
+  breakdown; `HealthMetrics.stepLatencyMs` already has the data.
+
+---
+
+### 22 Oct 2026 · 8.8b Group dates are shown as a plain ISO date slice, no locale formatting · decided by builder · risk: low
+- Decided: `oldestAt` (an ISO timestamp) is rendered as `oldestAt.slice(0, 10)` (`YYYY-MM-DD`),
+  not `toLocaleDateString()`.
+- Why: English-only pilot, no locale-pack timezone lookup on this page (that's 11.3's own
+  "Monday 07:00 in the locale pack's timezone" requirement, not this read-only page); a plain ISO
+  slice is deterministic in tests and avoids a server/client locale mismatch since this is a pure
+  server component with no hydration.
+
+---
+
 ### 22 Oct 2026 · 8.5e the correction form picks from the teacher's outline modules · decided by builder · risk: low
 - Decided: the page loads the modules for the correction form with `outline.getOutline` in the teacher's scope (id and title); with no outline the form says to add a module first and cannot be saved.
 - Why: the plan asked for a module select without naming a source; `modules.ids` gives ids only, and the outline is the teacher's own module list with titles (one course per teacher in the MVP).
