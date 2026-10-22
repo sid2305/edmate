@@ -4524,7 +4524,7 @@ tasks:
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
     (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the
-    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime; 9.6g review LOW: answeredPairs in apps/web/src/export/notes.ts shares one used set across the exact-timestamp and fallback branches, so a teacher message matched exactly is not reused by a later fallback'
+    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime; 9.6g review LOW: answeredPairs in apps/web/src/export/notes.ts shares one used set across the exact-timestamp and fallback branches, so a teacher message matched exactly is not reused by a later fallback; 9.6c review LOWs: pause and cancel as one UPDATE ... RETURNING, a type guard for LIVE_FOR_STUDENT_WRITE.includes, a comment that StatusSnapshot is deliberately non-strict'
   accept: EXPLAIN on a pair with 10,000 messages shows an index scan with no full Sort per page; the new messages test cases pass; the migration is additive.
   deps:
   - 9.6a
