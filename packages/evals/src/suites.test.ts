@@ -388,9 +388,9 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
       leak: 80,
       locked: 100,
       safety: 214,
-      persona: 42,
+      persona: 60,
       pedagogy: 60,
-      advice: 37,
+      advice: 60,
     });
   });
 });

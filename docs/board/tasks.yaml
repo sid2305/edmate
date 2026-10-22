@@ -2035,9 +2035,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.3b
-  status: todo
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases:8.3a-c
 - id: '8.4'
   milestone: M8
   title: Style interview (incl. common mistakes) and style card editor
@@ -2049,9 +2049,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.4a
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: phases:8.4a-b
 - id: '8.5'
   milestone: M8
   title: Test chat as a student per package; mark and correct answers
@@ -2090,7 +2090,7 @@ tasks:
   - '7.4'
   - '7.8'
   - '8.6'
-  status: planning
+  status: todo
   branch: null
   model: null
 - id: '8.8'
@@ -2863,9 +2863,30 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: running
+  status: done
   branch: m7/7.2e-advice-persona-cases
-  model: plan:sonnet build:sonnet
+  model: build:sonnet fix:sonnet review:sonnet+lead
+  metrics:
+    tool_calls: 32
+    tokens_in: 126
+    tokens_out: 558
+    cache_read_tokens: 2350904
+    wall_time_seconds: 3085
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 7.2f
   milestone: M13
   title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
@@ -3219,9 +3240,31 @@ tasks:
   deps:
   - 8.5a
   risk: normal
-  status: running
+  status: done
   branch: m8/8.5b-test-chat-api
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus+sonnet
+  metrics:
+    tool_calls: 66
+    tokens_in: 220
+    tokens_out: 3514
+    cache_read_tokens: 4430381
+    wall_time_seconds: 316
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 1
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 9.0c
   milestone: M13
   title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool
@@ -3435,13 +3478,35 @@ tasks:
   accept: insights.test.ts covers volume, error and guard rates, p50/p95 latency and the top question groups with fakes; no student id in the output; web typecheck, lint and test green.
   deps: []
   risk: low
-  status: running
+  status: done
   branch: m8/8.8a-insights-data
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 36
+    tokens_in: 130
+    tokens_out: 767
+    cache_read_tokens: 1347155
+    wall_time_seconds: 1051
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.6f
   milestone: M13
   title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version
-    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
+    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers; 8.6c: Promise.all for the independent reads in
+    packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields'
   accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
   deps:
   - 8.6b
@@ -3554,6 +3619,106 @@ tasks:
   - 9.2b
   risk: low
   status: todo
+- id: 13.flaky
+  milestone: M13
+  title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count'
+  accept: each test uses a fake clock or a loose bound per docs/lessons.md "Wall-clock bounds fail on shared CI runners"; 20 repeated CI-style runs pass.
+  deps: []
+  risk: low
+  status: todo
+- id: 8.5e
+  milestone: M8
+  title: 'Teacher test-chat page (8.5 Phase C, apps/web UI): package picker, chat, mark wrong, correction form'
+  accept: per docs/tasks/8.5/plan.md Phase C; web typecheck, lint and test green.
+  deps:
+  - 8.5b
+  risk: low
+  status: running
+  branch: m8/8.5e-test-chat-ui
+  model: plan:opus build:opus
+- id: 9.5a
+  milestone: M9
+  title: 'Practice screen (9.5 Phase A, apps/web): skill input kinds, ChatView activeSkill, PracticeCard'
+  accept: per docs/tasks/9.5/plan.md Phase A; web typecheck, lint, test and the practice e2e case green.
+  deps:
+  - '9.4'
+  risk: low
+  status: todo
+- id: 9.5b
+  milestone: M9
+  title: Feedback submission and mock-interview screens (9.5 Phase B, apps/web)
+  accept: per docs/tasks/9.5/plan.md Phase B; web typecheck, lint, test and both e2e cases green.
+  deps:
+  - 9.5a
+  risk: low
+  status: todo
+- id: 13.skillpresent
+  milestone: M13
+  title: 'Harness: wire feedback (5.7) and mock-interview (5.8) present() hooks so they emit structured skill events (interview progress), then show them in 9.5 screens'
+  accept: registry appends the feedback and role-play tools; skill events carry progress; code-reviewer on the pedagogy path; harness and web tests green.
+  deps:
+  - 9.5b
+  risk: high
+  status: todo
+- id: 8.7a
+  milestone: M8
+  title: Publish repository and eval_runs migration (8.7 Phase A, packages/db)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.2a
+  risk: high
+  status: todo
+- id: 8.7b
+  milestone: M8
+  title: Gate agent and gate-input assembly (8.7 Phase B, apps/worker)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - '7.4'
+  risk: low
+  status: todo
+- id: 8.7c
+  milestone: M8
+  title: Gate queue and gatedPublish processor (8.7 Phase C, packages/queue + apps/worker)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7a
+  - 8.7b
+  risk: low
+  status: todo
+- id: 8.7d
+  milestone: M8
+  title: Publish API and /teacher/publish page (8.7 Phase D, apps/web)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7c
+  - 8.6c
+  risk: low
+  status: todo
+- id: 8.7e
+  milestone: M8
+  title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7d
+  - 9.2c
+  risk: low
+  status: todo
+- id: 13.regate
+  milestone: M13
+  title: Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7e
+  risk: medium
+  status: todo
+- id: 8.9d
+  milestone: M13
+  title: '8.9b review follow-ups: questions routes.test.ts builds a real NextRequest instead of casting a Request; map scope/integrity/failed repository kinds explicitly in the studio routes'
+  accept: tests use NextRequest; each RepositoryError kind has a mapped status and a test; web typecheck, lint and test green.
+  deps:
+  - 8.9b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -3571,7 +3736,7 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: planning
+  status: todo
   branch: null
   model: null
 - id: '9.6'
