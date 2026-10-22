@@ -7,7 +7,7 @@
 import { SkillSchema } from '@edmate/contracts';
 import type { PackageDraft } from '@edmate/db';
 import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import type { PackageView } from '../../../src/studio/packages';
 import { costWarning, monthlyEstimate, PACKAGE_LIMITS, type MonthlyEstimate } from '../../../src/studio/costEstimate';
@@ -34,11 +34,21 @@ const ERROR_KEYS = [
   'unauthorized',
   'forbidden',
   'rate_limited',
+  'limit_reached',
   'provider_error',
 ] as const;
 type ErrorKey = (typeof ERROR_KEYS)[number];
 const REASON_KEYS = ['style_card_required', 'package_limit', 'conflict'] as const;
 type ReasonKey = (typeof REASON_KEYS)[number];
+
+const HELP_CEILINGS = [1, 2, 3, 4] as const;
+type HelpCeiling = (typeof HELP_CEILINGS)[number];
+/** Allow-list narrowing (MEDIUM, 8.6d review): a `<select>`'s value is always a string, and
+ * `Number(...)` can produce anything (NaN, 0, 5); never trust an `as` cast on it. Falls back to
+ * the current ceiling when the value is out of range. */
+function isHelpCeiling(n: number): n is HelpCeiling {
+  return (HELP_CEILINGS as readonly number[]).includes(n);
+}
 
 type FinalAnswers = 'never' | 'after_attempt' | 'allowed';
 type LockedReply = 'name_package' | 'generic';
@@ -49,7 +59,7 @@ interface FormState {
   name: string;
   moduleIds: string[];
   skills: OfferedSkill[];
-  helpCeiling: 1 | 2 | 3 | 4;
+  helpCeiling: HelpCeiling;
   finalAnswers: FinalAnswers;
   dailyMessageLimit: number;
   liveClassesPerMonth: number;
@@ -226,15 +236,22 @@ export function PackagesView() {
     null,
   );
 
+  // Unmount guard (LOW, 8.6d review): the page can navigate away before a slow GET resolves;
+  // a `setState` after that warns in dev and does nothing useful in production, so every setter
+  // in `refresh()` checks this ref first.
+  const mountedRef = useRef(true);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(BASE, { method: 'GET', cache: 'no-store' });
+      if (!mountedRef.current) return;
       if (!res.ok) {
         setBanner(errorKey((await errorInfo(res)).code));
         return;
       }
       const raw = await res.json();
+      if (!mountedRef.current) return;
       const parsed = GetBodySchema.safeParse(raw);
       if (!parsed.success) {
         setBanner('provider_error');
@@ -247,14 +264,18 @@ export function PackagesView() {
       setPerTurnMicroUsd(body.perTurnMicroUsd);
       setBanner(null);
     } catch {
-      setBanner('provider_error');
+      if (mountedRef.current) setBanner('provider_error');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     void refresh();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [refresh]);
 
   const applyPreset = (preset: (moduleIds: readonly string[]) => FormState) => {
@@ -431,9 +452,10 @@ export function PackagesView() {
               <select
                 id="pkg-help-ceiling"
                 value={form.helpCeiling}
-                onChange={(e) =>
-                  setForm({ ...form, helpCeiling: Number(e.target.value) as 1 | 2 | 3 | 4 })
-                }
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (isHelpCeiling(n)) setForm({ ...form, helpCeiling: n });
+                }}
               >
                 {[1, 2, 3, 4].map((n) => (
                   <option key={n} value={n}>

@@ -253,6 +253,77 @@ describe('PackagesView', () => {
     expect(screen.queryByText('New package')).toBeNull();
   });
 
+  it('a non-2xx GET shows the mapped error banner', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(err(503, 'provider_error'))),
+    );
+    renderIntl(<PackagesView />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong|Try again/i);
+    expect(screen.queryByText('New package')).toBeNull();
+  });
+
+  it('a GET that throws shows the error banner', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
+    renderIntl(<PackagesView />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong|Try again/i);
+    expect(screen.queryByText('New package')).toBeNull();
+  });
+
+  it('a 409 limit_reached on save shows the package-limit message', async () => {
+    const s = api(getBody([]));
+    renderIntl(<PackagesView />);
+    await screen.findByText('New package');
+    fireEvent.click(screen.getByRole('button', { name: 'Free starter' }));
+    s.next('POST /api/studio/packages', err(409, 'limit_reached', { reason: 'package_limit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create package' }));
+    await waitFor(() =>
+      expect(screen.getAllByText(/most packages allowed/).length).toBeGreaterThan(0),
+    );
+  });
+
+  it('ignores an out-of-range helpCeiling select value instead of casting it', async () => {
+    api(getBody([]));
+    renderIntl(<PackagesView />);
+    await screen.findByText('New package');
+    fireEvent.click(screen.getByRole('button', { name: 'Free starter' }));
+    const select = screen.getByLabelText('Help ceiling') as HTMLSelectElement;
+    expect(select.value).toBe('2');
+    // The select only ever renders options 1-4, so simulate a value outside that range the way a
+    // stray DOM event or a future markup bug could still produce one.
+    fireEvent.change(select, { target: { value: '9' } });
+    expect(select.value).toBe('2');
+  });
+
+  it('does not update state after the view unmounts mid-fetch', async () => {
+    let resolveGet!: (r: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveGet = resolve;
+          }),
+      ),
+    );
+    const { unmount } = renderIntl(<PackagesView />);
+    unmount();
+    const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    resolveGet(json({ status: 200, body: getBody([]) }));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Cannot update a component'),
+      expect.anything(),
+    );
+    warnSpy.mockRestore();
+  });
+
   it('a malformed save body shows the error banner and does not change the list', async () => {
     const s = api(getBody([]));
     renderIntl(<PackagesView />);
