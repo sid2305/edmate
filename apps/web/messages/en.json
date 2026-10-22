@@ -659,6 +659,35 @@
     "askQueue": {
       "title": "Unanswered ask-the-teacher questions",
       "empty": "No unanswered questions right now."
+    },
+    "recording": {
+      "add": "Add recording",
+      "addLabel": "Add a recording to {title}",
+      "close": "Close",
+      "formLabel": "Add a recording",
+      "listLabel": "Recordings: {title}",
+      "fileLabel": "Recording or transcript",
+      "fileHint": "A caption or transcript file (.vtt or .srt) is fastest. MP3 and WAV audio also work; M4A, MP4 and WebM up to 24 MB.",
+      "moduleLabel": "Module",
+      "chooseModule": "Choose a module",
+      "noModules": "The packages on this class have no modules yet, so a recording has nowhere to go. Add modules to a package first.",
+      "sourceTitleLabel": "Title students see when it is cited",
+      "defaultTitle": "Live class: {title}, {date}",
+      "rightsLabel": "I confirm I hold the rights to upload this material.",
+      "consentLabel": "Everyone heard in this recording agreed to it being used to teach, or I removed their parts.",
+      "consentHint": "Best: upload your own transcript with students' names removed.",
+      "submit": "Upload recording",
+      "uploading": "Uploading…",
+      "progress": "Uploading: {percent}%",
+      "added": "The recording is uploaded. It will be ready to search in a few minutes.",
+      "errors": {
+        "unsupported_type": "That file type can't be used for a recording. Use a caption or transcript file (.vtt or .srt), MP3, WAV, M4A, MP4 or WebM.",
+        "media_too_large": "Videos and M4A audio over 24 MB can't be transcribed yet. Upload the audio as MP3, or the class transcript (.vtt or .srt).",
+        "title": "Give the recording a title of up to 500 characters.",
+        "not_found": "This class or module was not found. Reload and try again.",
+        "upload_failed": "The upload didn't finish. Check your connection, then try again.",
+        "generic": "Something went wrong. Try again."
+      }
     }
   },
   "report": {
@@ -757,7 +786,7 @@
     "nav": "Reports",
     "title": "Reports and takedowns",
     "intro": "Open reports on agent and teacher replies, oldest first. A takedown removes material from retrieval at once and can be lifted.",
-    "openCount": "{count} open reports",
+    "openCount": "{count, plural, one {# open report} other {# open reports}}",
     "reload": "Reload",
     "reloading": "Reloading…",
     "pollError": "Could not refresh the queue. Showing the last list.",
@@ -773,10 +802,14 @@
       "agent": "Agent"
     },
     "lift": "Lift",
+    "liftAriaLabel": "Lift takedown on {targetId}",
     "working": "Working…",
     "noTeacherSlug": "No teacher profile",
     "whenLabel": "Reported",
     "teacherLabel": "Teacher",
+    "takedownTargetLabel": "Target",
+    "takedownCategoryLabel": "Category",
+    "takedownWhenLabel": "Since",
     "messageGone": "This message is no longer available.",
     "citedDocumentsLabel": "Cited documents",
     "alreadyTakenDown": "Taken down",
@@ -784,6 +817,7 @@
     "dismiss": "Dismiss",
     "takedownAgent": "Take down this agent",
     "confirmText": "This can't be undone from here. Confirm?",
+    "confirmTextTakedown": "Takes it out of retrieval now; you can lift it below. Confirm?",
     "confirmYes": "Yes, confirm",
     "confirmCancel": "Cancel",
     "category": {
@@ -796,7 +830,7 @@
     "errors": {
       "forbidden": "You can't do that: your staff access may have changed.",
       "not_found": "That was not found. Reload the list.",
-      "validation": "Check the note (up to 500 characters) and try again.",
+      "validation": "This was already actioned or is no longer open. Reload the list.",
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the reports console. Try again."
     }

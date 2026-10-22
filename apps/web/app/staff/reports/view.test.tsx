@@ -186,7 +186,7 @@ describe('StaffReportsView', () => {
   it.each([
     ['forbidden', "You can't do that: your staff access may have changed."],
     ['not_found', 'That was not found. Reload the list.'],
-    ['validation', 'Check the note (up to 500 characters) and try again.'],
+    ['validation', 'This was already actioned or is no longer open. Reload the list.'],
     ['provider_error', 'Something went wrong. Try again.'],
   ] as const)('an error reply (%s) keeps the row and re-enables the button', async (code, message) => {
     const reviewReport = vi.fn(async () => ({ ok: false as const, code }));
@@ -214,9 +214,182 @@ describe('StaffReportsView', () => {
       <StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN]} liftTakedown={liftTakedown} />,
     );
     expect(screen.getByText('Document')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Lift' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lift takedown on doc_1' }));
     await waitFor(() => expect(screen.queryByText('Document')).toBeNull());
     expect(liftTakedown).toHaveBeenCalledWith({ takedownId: 'tkd_1' });
+  });
+
+  it('a takedown row shows its target, category and when, and Lift names its target', () => {
+    renderIntl(<StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN]} />);
+    expect(screen.getByText('doc_1')).toBeInTheDocument();
+    expect(screen.getByText('Copyright')).toBeInTheDocument();
+    expect(screen.getByText('Oct 22, 2026, 12:00 AM')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lift takedown on doc_1' })).toBeInTheDocument();
+  });
+
+  it("two takedowns of the same kind for the same teacher get distinct Lift names (the review's ambiguity bug)", () => {
+    const second = takedown({ id: 'tkd_2', targetId: 'doc_2' });
+    renderIntl(
+      <StaffReportsView initialReports={[]} initialTakedowns={[TAKEDOWN, second]} />,
+    );
+    expect(screen.getByRole('button', { name: 'Lift takedown on doc_1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lift takedown on doc_2' })).toBeInTheDocument();
+  });
+
+  it('the agent takedown button hides when that agent already has an active takedown', () => {
+    const agentTakedown = takedown({ id: 'tkd_agent', kind: 'agent', targetId: 'agt_1' });
+    renderIntl(
+      <StaffReportsView initialReports={[REPORT]} initialTakedowns={[agentTakedown]} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Take down this agent' })).toBeNull();
+  });
+
+  it('the takedown confirm text differs from the dismiss confirm text', () => {
+    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Take down this agent' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "Takes it out of retrieval now; you can lift it below. Confirm?",
+    );
+  });
+
+  it('reports the reported text as plain text: an embedded markdown link never becomes a live link', () => {
+    const withLink = report({
+      id: 'rp_link',
+      message: {
+        role: 'agent',
+        text: 'See [this site](https://evil.test) for more.',
+        createdAt: '2026-10-22T00:00:00.000Z',
+      },
+    });
+    renderIntl(<StaffReportsView initialReports={[withLink]} initialTakedowns={[]} />);
+    expect(
+      screen.getByText('See [this site](https://evil.test) for more.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it("a 400 on an action says it was already actioned or no longer open", async () => {
+    const reviewReport = vi.fn(async () => ({ ok: false as const, code: 'validation' as const }));
+    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} reviewReport={reviewReport} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('This was already actioned or is no longer open. Reload the list.'),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('a stale poll in flight when an action succeeds does not bring the dismissed report back', async () => {
+    let resolvePoll: ((v: { ok: true; reports: ReportView[] }) => void) | null = null;
+    const loadReports = vi.fn(
+      () =>
+        new Promise<{ ok: true; reports: ReportView[] }>((resolve) => {
+          resolvePoll = resolve;
+        }),
+    );
+    const reviewReport = vi.fn(async () => ({ ok: true as const, id: 'rp_1' }));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        loadReports={loadReports}
+        loadTakedowns={okTakedowns}
+        reviewReport={reviewReport}
+        pollMs={5}
+      />,
+    );
+    // Let the poll start (and go in flight) before the action begins.
+    await waitFor(() => expect(loadReports).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
+    await waitFor(() => expect(screen.queryByRole('listitem')).toBeNull());
+    // The stale poll (still carrying the now-dismissed report) resolves after the action.
+    resolvePoll!({ ok: true, reports: [REPORT] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('a poll clears only a stale loadFailed error, never an action error', async () => {
+    const reviewReport = vi.fn(async () => ({ ok: false as const, code: 'provider_error' as const }));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        reviewReport={reviewReport}
+        loadReports={okReports}
+        loadTakedowns={okTakedowns}
+        pollMs={5}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, confirm' }));
+    await waitFor(() => expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByText('Something went wrong. Try again.')).toBeInTheDocument();
+  });
+
+  it('a rejecting loader is caught: refresh never throws an unhandled rejection', async () => {
+    const loadReports = vi.fn(async () => {
+      throw new Error('network boom');
+    });
+    renderIntl(
+      <StaffReportsView
+        initialReports={null}
+        initialTakedowns={null}
+        loadReports={loadReports}
+        loadTakedowns={okTakedowns}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() =>
+      expect(screen.getByText('Could not load the reports console. Try again.')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled();
+  });
+
+  it('announces a single open report in the singular, with no stray count in the fallback view', () => {
+    renderIntl(<StaffReportsView initialReports={[REPORT]} initialTakedowns={[]} />);
+    const region = document.querySelector('[aria-live="polite"]');
+    expect(region).toHaveTextContent('1 open report');
+    expect(region).not.toHaveTextContent('1 open reports');
+  });
+
+  it('the fallback view (failed initial read) shows no open-report count at all', () => {
+    renderIntl(<StaffReportsView initialReports={null} initialTakedowns={null} />);
+    expect(document.querySelector('[aria-live="polite"]')).toBeNull();
+  });
+
+  it('stops polling on unmount: no loader call lands after the component is gone', async () => {
+    const loadReports = vi.fn(okReports);
+    const { unmount } = renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        loadReports={loadReports}
+        loadTakedowns={okTakedowns}
+        pollMs={5}
+      />,
+    );
+    unmount();
+    loadReports.mockClear();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(loadReports).not.toHaveBeenCalled();
+  });
+
+  it('a never-settling poll never overlaps itself: a far slower loader than pollMs is called exactly once', async () => {
+    const loadReports = vi.fn(() => new Promise<never>(() => undefined));
+    renderIntl(
+      <StaffReportsView
+        initialReports={[REPORT]}
+        initialTakedowns={[]}
+        loadReports={loadReports}
+        loadTakedowns={okTakedowns}
+        pollMs={5}
+      />,
+    );
+    await new Promise((r) => setTimeout(r, 40));
+    expect(loadReports).toHaveBeenCalledTimes(1);
   });
 
   it('manual reload: loads the latest lists and clears a previous error', async () => {
