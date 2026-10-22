@@ -8,7 +8,7 @@ import messages from '../../../messages/en.json';
 
 const state = vi.hoisted(() => ({ requireRole: vi.fn() }));
 
-vi.mock('../../../src/auth', () => ({ requireRole: state.requireRole }));
+vi.mock('../../../src/auth', () => ({ requireRole: state.requireRole, TEACHER_PATH: '/teacher' }));
 vi.mock('../actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: keyof typeof messages) => {

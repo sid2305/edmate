@@ -28,6 +28,9 @@ vi.mock('../../../src/auth', () => ({
       publish: { publicScorecard: state.publicScorecard },
     },
   }),
+  HOME_PATH: '/home',
+  SIGN_IN_PATH: '/sign-in',
+  TEACHER_PATH: '/teacher',
 }));
 vi.mock('../../home/actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next/navigation', () => ({ notFound: state.notFound }));

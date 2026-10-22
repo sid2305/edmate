@@ -10,7 +10,12 @@ const { currentPrincipal, redirect } = vi.hoisted(() => ({
     throw new Error(`REDIRECT ${url}`);
   }),
 }));
-vi.mock('../src/auth', () => ({ currentPrincipal, SIGN_IN_PATH: '/sign-in' }));
+vi.mock('../src/auth', () => ({
+  currentPrincipal,
+  HOME_PATH: '/home',
+  SIGN_IN_PATH: '/sign-in',
+  TEACHER_PATH: '/teacher',
+}));
 vi.mock('next/navigation', () => ({ redirect }));
 
 async function dispatch() {

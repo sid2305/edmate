@@ -24,6 +24,7 @@ vi.mock('../../../src/auth', () => ({
       teacherQuestions: { listGroupsForTeacher: state.listGroupsForTeacher },
     },
   }),
+  TEACHER_PATH: '/teacher',
 }));
 vi.mock('../actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next-intl/server', () => ({

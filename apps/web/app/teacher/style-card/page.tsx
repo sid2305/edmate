@@ -3,7 +3,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { requireRole, serverDatabase, TEACHER_PATH } from '../../../src/auth';
 import { AppShell } from '../../../src/ui/AppShell';
 import { signOutAndRedirect } from '../actions';
 import { StyleCardView } from './StyleCardView';
@@ -22,7 +22,7 @@ export default async function StyleCardPage() {
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: teacher('nav') },
+        { href: TEACHER_PATH, label: teacher('nav') },
         { href: '/teacher/uploads', label: teacher('uploadsLink') },
         { href: '/teacher/onboarding', label: teacher('onboardingLink') },
         { href: '/teacher/style-card', label: teacher('styleCardLink') },
