@@ -4104,7 +4104,9 @@ tasks:
   deps:
   - 12.1a
   risk: high
-  status: todo
+  status: running
+  branch: m12/12.1b-staff-console
+  model: plan:sonnet build:opus
 - id: 8.7f
   milestone: M8
   title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
