@@ -6146,6 +6146,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 11.4g
+  milestone: M11
+  title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the 5 s poll is capped by attempts or elapsed time (LiveClassesView.tsx:115), same fix in the upload centre (UploadsView.tsx isActive); RecordingUpload skips state updates and onRecording after unmount (RecordingUpload.tsx:107-158)'
+  accept: tests fail without the failed row, the poll cap and the unmount guard; web typecheck, lint and test green.
+  deps:
+  - 11.4c
+  risk: low
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
