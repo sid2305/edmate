@@ -313,15 +313,49 @@ describe('forged teacher-note marker (3.11d)', () => {
     expect(breakFenceRuns('a &amp;lt;&lt;&lt; b')).toBe('a &amp;lt;&lt;&lt; b');
   });
 
+  /**
+   * Best-of-3 wall-clock time (ms) for `fn()`. Taking the minimum of several
+   * runs filters out one-off scheduler noise without needing a tight
+   * absolute bound (see docs/lessons.md: no tight timings).
+   */
+  function bestOf3(fn: () => void): number {
+    let best = Infinity;
+    for (let i = 0; i < 3; i += 1) {
+      const start = Date.now();
+      fn();
+      best = Math.min(best, Date.now() - start);
+    }
+    return best;
+  }
+
+  /**
+   * A ratio check that catches quadratic/exponential blow-up on hostile
+   * input without pinning a tight wall-clock bound: linear work gives a
+   * 4n/n ratio of about 4; quadratic gives about 16. We allow up to 10 so a
+   * slow or loaded CI runner doesn't fail on noise alone, while a true
+   * quadratic (or worse) regression still trips it. A very loose gross
+   * bound on the 4n run guards against a genuine hang.
+   */
+  function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
+    const n = 20_000;
+    const small = bestOf3(() => run(buildInput(n)));
+    const large = bestOf3(() => run(buildInput(4 * n)));
+    expect(large).toBeLessThan(15_000);
+    // Guard against a zero-duration small run making the ratio meaningless
+    // (e.g. on a very fast machine); floor it at 1ms.
+    const ratio = large / Math.max(small, 1);
+    expect(ratio).toBeLessThan(10);
+  }
+
   it('runs in linear time on long hostile input', () => {
-    const fences = `${'<\u200B'.repeat(20_000)}${'&lt;'.repeat(20_000)}${'<<x'.repeat(20_000)}`;
-    const t1 = Date.now();
-    breakFenceRuns(fences);
-    expect(Date.now() - t1).toBeLessThan(2_000);
-    const hostile = `${'platform '.repeat(20_000)}${'P\u200B'.repeat(20_000)}${'&#'.repeat(20_000)}`;
-    const t0 = Date.now();
-    neutraliseForgedLabel(hostile, label);
-    expect(Date.now() - t0).toBeLessThan(2_000);
+    expectLinear(
+      (n) => `${'<\u200B'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`,
+      (input) => breakFenceRuns(input)
+    );
+    expectLinear(
+      (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
+      (input) => neutraliseForgedLabel(input, label)
+    );
   });
 });
 
