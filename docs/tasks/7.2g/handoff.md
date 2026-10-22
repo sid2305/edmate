@@ -129,6 +129,6 @@ Closed the two follow-ups 7.2c deferred (see `docs/tasks/7.2c/handoff.md` and `r
 ## Left to do
 None for this task's scope. No further leak-suite follow-ups are outstanding from 7.2c.
 
-## Status: DONE
+Status: DONE
 
 Tool calls used: 134 (harness count; the builder reported 71)
