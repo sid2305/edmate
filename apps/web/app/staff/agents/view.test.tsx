@@ -150,6 +150,22 @@ describe('StaffAgentsView', () => {
     expect(screen.getByRole('listitem')).toBeInTheDocument();
   });
 
+  it('reload resyncs a row to the fresh server subject/approval instead of keeping stale local state', async () => {
+    const CHANGED = agent({
+      agentId: 'agt_flagged',
+      regulatedSubject: 'law',
+      approvedAt: '2026-10-22T09:00:00.000Z',
+      approvedBy: 'stf_2',
+    });
+    const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [CHANGED] }));
+    renderIntl(<StaffAgentsView initial={[FLAGGED]} loadAgents={loadAgents} />);
+    expect(screen.getByLabelText('Regulated subject')).toHaveValue('health');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(screen.getByLabelText('Regulated subject')).toHaveValue('law'));
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
   it('a null initial (the server read failed) is the fallback view, recoverable with Reload', async () => {
     const loadAgents = vi.fn(async () => ({ ok: true as const, agents: [UNFLAGGED] }));
     renderIntl(<StaffAgentsView initial={null} loadAgents={loadAgents} />);

@@ -137,7 +137,7 @@ export function StaffAgentsView({
         <ul className="staff-agents-list" aria-label={t('listLabel')}>
           {agents.map((agent) => (
             <AgentRow
-              key={agent.agentId}
+              key={`${agent.agentId}:${agent.regulatedSubject ?? ''}:${agent.approvedAt ?? ''}`}
               agent={agent}
               pending={busy !== null && busy.kind !== 'reload' && busy.agentId === agent.agentId ? busy.kind : null}
               disabled={busy !== null}

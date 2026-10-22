@@ -91,3 +91,27 @@ see Decisions).
 Status: DONE
 
 Tool calls used: 112
+
+## Fix round (22 Oct 2026)
+
+- Fixed code-reviewer HIGH (same root cause as typescript-reviewer MEDIUM): `AgentRow` was keyed
+  in `view.tsx` by `agent.agentId` alone, so its local `subject` `useState` never resynced after a
+  Reload picked up another staff member's change to `regulatedSubject`/`approvedAt` for the same
+  agent — the select kept showing stale data and `dirty` was computed against the new prop, so
+  Save could silently POST the stale value and clear the fresh approval.
+- Fix: changed the `<AgentRow>` key in `apps/web/app/staff/agents/view.tsx` from `agent.agentId`
+  to `` `${agent.agentId}:${agent.regulatedSubject ?? ''}:${agent.approvedAt ?? ''}` ``, so React
+  remounts the row (and its local state) whenever the server's subject or approval changes,
+  instead of reusing a stale component instance. No change to `agent-row.tsx` logic was needed.
+- Test: added `reload resyncs a row to the fresh server subject/approval instead of keeping stale
+  local state` in `apps/web/app/staff/agents/view.test.tsx` — load with subject `health`/unapproved,
+  reload returns subject `law`/approved by another staff id for the same `agentId`; asserts the
+  select now shows `law`, Save stays disabled (not dirty), and the row shows a Revoke action.
+  Confirmed it fails on the unfixed key (`agent.agentId` alone, timeout waiting for value `law`)
+  and passes with the fix.
+- The focus MEDIUM and the LOWs (agent-row.tsx:72-86 focus-loss on confirm toggle; the `as
+  SubjectOption` cast; optimistic `approvedBy` guess in view.tsx) are left as-is, per brief.
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks green.
+  `python3 .githooks/secret-scan.py --all` — clean.
+
+Fix tool calls used: 15
