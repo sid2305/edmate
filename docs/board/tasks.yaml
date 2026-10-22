@@ -5329,6 +5329,34 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.2j
+  milestone: M8
+  title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
+  accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
+  deps:
+  - 8.2f
+  status: todo
+  branch: null
+  model: null
+- id: 8.2k
+  milestone: M8
+  title: Caption files ingested by the worker and searchable (8.2c Phase B)
+  accept: per docs/tasks/8.2c/plan.md Phase B and Lead answers; queue and worker typecheck, lint and test green.
+  deps:
+  - 8.2j
+  status: todo
+  branch: null
+  model: null
+- id: 8.2l
+  milestone: M8
+  title: Upload centre accepts caption files, YouTube refusal points to them, ADR-0014 amended (8.2c Phase C)
+  accept: per docs/tasks/8.2c/plan.md Phase C and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 8.2k
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
