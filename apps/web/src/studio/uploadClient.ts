@@ -8,6 +8,8 @@ export interface DocumentView {
   moduleId: string;
   kind: string;
   sourceTitle: string;
+  /** Task 8.2f: whether this row is an uploaded file or a web link. */
+  source: 'file' | 'link';
   status: 'uploading' | 'processing' | 'ready' | 'failed';
   failureReason?: string;
   createdAt: string;
@@ -20,7 +22,13 @@ export interface UploadTicket {
   uploadHeaders: Record<string, string>;
 }
 
-export type ApiResult<T> = { ok: true; value: T } | { ok: false; status: number; code: string };
+export type ApiResult<T> =
+  | { ok: true; value: T }
+  // `message` is one of the server's own fixed strings (ADR-0014, routes.ts): never user input,
+  // so it is safe to show as-is. Most callers key off `code`; the add-link form (task 8.2f) shows
+  // `message` directly, since a generic `validation` code hides several distinct fixed reasons
+  // (bad shape, an internal address, YouTube).
+  | { ok: false; status: number; code: string; message?: string };
 
 /** The allowed upload types, in the server's order. */
 export const CLIENT_UPLOAD_TYPES: readonly { contentType: string; ext: string }[] = [
@@ -62,13 +70,17 @@ export function contentTypeFor(file: File): string | null {
 const BASE = '/api/studio/documents';
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
-async function errorCode(res: Response): Promise<string> {
+async function errorDetail(res: Response): Promise<{ code: string; message?: string }> {
   try {
-    const body = (await res.json()) as { error?: { code?: unknown } };
+    const body = (await res.json()) as { error?: { code?: unknown; message?: unknown } };
     const code = body.error?.code;
-    return typeof code === 'string' ? code : 'provider_error';
+    const message = body.error?.message;
+    return {
+      code: typeof code === 'string' ? code : 'provider_error',
+      ...(typeof message === 'string' ? { message } : {}),
+    };
   } catch {
-    return 'provider_error';
+    return { code: 'provider_error' };
   }
 }
 
@@ -83,7 +95,7 @@ async function call<T>(
   } catch {
     return { ok: false, status: 0, code: 'provider_error' };
   }
-  if (!res.ok) return { ok: false, status: res.status, code: await errorCode(res) };
+  if (!res.ok) return { ok: false, status: res.status, ...(await errorDetail(res)) };
   return { ok: true, value: await read(res) };
 }
 
@@ -106,6 +118,21 @@ export function createDocument(input: {
     BASE,
     { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) },
     asJson<UploadTicket>,
+  );
+}
+
+const LINKS_URL = '/api/studio/links';
+
+/** Task 8.2f: adds a web link. The server checks and normalises the URL; the title is optional. */
+export function addLink(input: {
+  moduleId: string;
+  url: string;
+  sourceTitle?: string;
+}): Promise<ApiResult<{ documentId: string; status: string }>> {
+  return call(
+    LINKS_URL,
+    { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) },
+    asJson<{ documentId: string; status: string }>,
   );
 }
 

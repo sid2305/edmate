@@ -200,6 +200,10 @@
     "cancel": "Cancel",
     "retry": "Try again",
     "retryLabel": "Try again: {title}",
+    "linkUrl": "Add a web link",
+    "linkUrlPlaceholder": "https://example.com/article",
+    "linkTitle": "Title (optional)",
+    "addLink": "Add link",
     "errors": {
       "unsupported_type": "That file type can't be uploaded. Use PDF, Word, PowerPoint, Markdown, audio or video.",
       "input_too_large": "That file is too big. Documents can be up to 20 MB, audio and video up to 500 MB.",
@@ -217,6 +221,7 @@
       "input_too_large": "The file is too big.",
       "unsupported_type": "The file isn't the type it said it was.",
       "unsupported": "This file can't be read. Try saving it again, or as a PDF.",
+      "forbidden": "That link can't be read: it isn't a public site.",
       "enqueue_failed": "Processing couldn't start.",
       "validation": "The file couldn't be read.",
       "provider_error": "Processing failed. Try again, or replace the file.",

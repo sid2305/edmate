@@ -3,9 +3,10 @@
 // a status list that polls about every 4 s while any file is uploading or processing, replace and
 // delete. Every string is from messages/en.json; titles render as text, never as markup.
 import { useTranslations } from 'next-intl';
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   ACCEPT,
+  addLink,
   completeDocument,
   contentTypeFor,
   createDocument,
@@ -36,6 +37,7 @@ const REASON_KEYS = [
   'input_too_large',
   'unsupported_type',
   'unsupported',
+  'forbidden',
   'enqueue_failed',
   'validation',
   'provider_error',
@@ -74,6 +76,10 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const [local, setLocal] = useState<Record<string, Local>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
   const [moduleId, setModuleId] = useState(moduleIds[0] ?? '');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkBannerError, setLinkBannerError] = useState<string | null>(null);
   const replaceTarget = useRef<string | null>(null);
   const replacePicker = useRef<HTMLInputElement>(null);
 
@@ -158,6 +164,32 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
     await refresh();
   };
 
+  const onAddLink = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const url = linkUrl.trim();
+    if (!url || linkBusy) return;
+    setLinkBusy(true);
+    setLinkBannerError(null);
+    try {
+      const result = await addLink({
+        moduleId,
+        url,
+        ...(linkTitle.trim() ? { sourceTitle: linkTitle.trim() } : {}),
+      });
+      if (!result.ok) {
+        setLinkBannerError(result.message ?? t(`errors.${errorKey(result)}`));
+        return;
+      }
+      setLinkUrl('');
+      setLinkTitle('');
+      await refresh();
+    } catch {
+      setLinkBannerError(t('errors.provider_error'));
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
   const statusText = (d: DocumentView): string => {
     const progress = local[d.id]?.progress;
     if (d.status === 'uploading' && progress !== undefined && !local[d.id]?.error) {
@@ -202,6 +234,36 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
               {t('acceptHint')}
             </span>
           </p>
+          <form className="uploads-link-form" onSubmit={(e) => void onAddLink(e)}>
+            <p className="uploads-field">
+              <label htmlFor="uploads-link-url">{t('linkUrl')}</label>
+              <input
+                id="uploads-link-url"
+                type="url"
+                inputMode="url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder={t('linkUrlPlaceholder')}
+              />
+            </p>
+            <p className="uploads-field">
+              <label htmlFor="uploads-link-title">{t('linkTitle')}</label>
+              <input
+                id="uploads-link-title"
+                type="text"
+                value={linkTitle}
+                onChange={(e) => setLinkTitle(e.target.value)}
+              />
+            </p>
+            <button type="submit" disabled={linkBusy || linkUrl.trim() === ''}>
+              {t('addLink')}
+            </button>
+            {linkBannerError ? (
+              <p role="alert" className="uploads-error">
+                {linkBannerError}
+              </p>
+            ) : null}
+          </form>
         </div>
       )}
       <input
@@ -226,9 +288,11 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
         <ul className="uploads-list" aria-label={t('listLabel')}>
           {docs.map((d) => {
             const mine = local[d.id];
+            const isLink = d.source === 'link';
+            // A link has no bucket upload to retry or replace: it is deleted and added again.
             const canRetry =
-              mine?.retry === true ||
-              (d.status === 'failed' && d.failureReason === 'enqueue_failed');
+              !isLink &&
+              (mine?.retry === true || (d.status === 'failed' && d.failureReason === 'enqueue_failed'));
             return (
               <li key={d.id} className="uploads-row">
                 <span className="uploads-title">{d.sourceTitle}</span>
@@ -264,16 +328,18 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
                         {t('retry')}
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      aria-label={t('replaceLabel', { title: d.sourceTitle })}
-                      onClick={() => {
-                        replaceTarget.current = d.id;
-                        replacePicker.current?.click();
-                      }}
-                    >
-                      {t('replace')}
-                    </button>
+                    {isLink ? null : (
+                      <button
+                        type="button"
+                        aria-label={t('replaceLabel', { title: d.sourceTitle })}
+                        onClick={() => {
+                          replaceTarget.current = d.id;
+                          replacePicker.current?.click();
+                        }}
+                      >
+                        {t('replace')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       aria-label={t('deleteLabel', { title: d.sourceTitle })}
