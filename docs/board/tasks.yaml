@@ -4432,7 +4432,9 @@ tasks:
   - 9.2c
   - 9.6d
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.7b-e2e-discover-upgrade
+  model: plan:sonnet build:opus review:sonnet
 - id: 8.7g
   milestone: M13
   title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain
@@ -5125,9 +5127,9 @@ tasks:
   accept: per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
   - 12.2a
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2c-report-button
+  model: plan:opus build:sonnet review:sonnet
 - id: 12.2d
   milestone: M12
   title: Staff reports and takedowns API (12.2 Phase D)
@@ -5312,9 +5314,9 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4c-staff-agents-api
+  model: plan:opus build:opus review:sonnet
 - id: 12.4d
   milestone: M12
   title: Staff page /staff/agents and the teacher's publish refusal text (12.4 Phase D)
@@ -5395,9 +5397,9 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
   deps:
   - 8.2f
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2j-caption-parse
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.2k
   milestone: M8
   title: Caption files ingested by the worker and searchable (8.2c Phase B)
@@ -5414,6 +5416,23 @@ tasks:
   deps:
   - 8.2k
   risk: high
+  status: todo
+  branch: null
+  model: null
+- id: '0.23'
+  milestone: M7
+  title: 'CI node job runs out of its 20-minute limit now that the Playwright e2e runs in it (#188 cancelled twice at "Install Playwright browsers", 22 Oct 2026): move the e2e into its own job (or raise timeout-minutes) and cache the Playwright browsers'
+  accept: the node job and the e2e job each finish well inside their limits on a full PR run; .github/workflows/ci.yml reviewed by security-reviewer
+  deps: []
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 3.11g
+  milestone: M13
+  title: 'Flaky timing bound in packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (2048 ms vs a 2000 ms bound on a CI runner, #191, 22 Oct 2026): use a loose gross-regression bound or a ratio check (lessons: no tight timings)'
+  accept: the test checks linearity without a tight wall-clock bound; harness test green
+  deps: []
   status: todo
   branch: null
   model: null
