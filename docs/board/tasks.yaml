@@ -3501,6 +3501,59 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.8b
+  milestone: M8
+  title: 'Studio insights page (8.8 Phase B, apps/web UI): health and top question groups'
+  accept: per docs/tasks/8.8/plan.md Phase B; web typecheck, lint and test green.
+  deps:
+  - 8.8a
+  - 8.3c
+  risk: low
+  status: todo
+- id: 8.9b
+  milestone: M8
+  title: 'Teacher questions API (8.9 Phase B, apps/web): list, answer and dismiss routes'
+  accept: per docs/tasks/8.9/plan.md Phase B; teacher-scoped, strict bodies, no question text in logs; web typecheck, lint and test green.
+  deps:
+  - 8.9a
+  risk: low
+  status: running
+  branch: m8/8.9b-questions-api
+  model: plan:opus build:sonnet
+- id: 8.9c
+  milestone: M8
+  title: 'Teacher questions page (8.9 Phase C, apps/web UI)'
+  accept: per docs/tasks/8.9/plan.md Phase C; web typecheck, lint and test green.
+  deps:
+  - 8.9b
+  risk: low
+  status: todo
+- id: 9.2a
+  milestone: M9
+  title: 'Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)'
+  accept: per docs/tasks/9.2/plan.md Phase A; only verified teachers with live agents and packages are reachable; leak tests cover the new methods; db typecheck, lint and test green.
+  deps:
+  - 8.6b
+  risk: high
+  status: running
+  branch: m9/9.2a-discovery-repo
+  model: plan:opus build:sonnet
+- id: 9.2b
+  milestone: M9
+  title: 'Teachers search page /teachers (9.2 Phase B, apps/web)'
+  accept: per docs/tasks/9.2/plan.md Phase B; web typecheck, lint and test green.
+  deps:
+  - 9.2a
+  risk: low
+  status: todo
+- id: 9.2c
+  milestone: M9
+  title: 'Teacher profile page /teachers/[slug] (9.2 Phase C, apps/web)'
+  accept: per docs/tasks/9.2/plan.md Phase C; web typecheck, lint and test green.
+  deps:
+  - 9.2b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
