@@ -2147,8 +2147,9 @@ tasks:
   accept: a failed principal lookup leaves a log line; route paths come from one constant each.
   deps:
   - '9.1'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.1b-auth-paths-followups
+  model: plan:lead build:sonnet
 - id: '9.0'
   milestone: M9
   title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff
@@ -5427,7 +5428,8 @@ tasks:
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
     12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
-    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for
+    a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
