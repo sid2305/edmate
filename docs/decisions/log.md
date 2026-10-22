@@ -10,6 +10,36 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2d ADR-0014 accepted; review MEDIUM and LOW findings go to 8.2e · decided by lead · risk: high
+- Decided: ADR-0014 is Accepted, after architect, security-reviewer and typescript-reviewer (all opus) approved with no CRITICAL or HIGH findings. The lead made the ADR wording fixes (no SNI for IP literals, headers dropped after decompressing, x-gzip, 8.2g named, uncancellable DNS noted). The code MEDIUM and LOW findings are fixed in 8.2e before the fetcher runs on the production path: the timer crash in pinnedTransport, the orphaned promise in untilAborted, the exported redactUrl, repeated trailing dots, the cancellable resolver, explicit rejectUnauthorized, one DNS error message, 3fff::/20, retryable DNS errors and the cancel error mask.
+- Why: nothing calls the fetcher in production until 8.2e, so no finding is reachable today, and 8.2e works in the same files.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.2d Web-link egress policy: pinned address per hop, ADR-0014 · decided by builder · risk: high
+- Decided: The web fetcher resolves each hop once, inside the 15 s deadline. Every answer must be public, and the transport connects only to the first answer (`node:https` with a pinned `lookup`, `agent: false`, `autoSelectFamily: false`, SNI from the host name and none for an IP literal, certificate checks on). Further rules:
+  - https on port 443 only, with no userinfo and at most 2048 characters;
+  - a denylist of internal names (trailing dot stripped);
+  - at most 3 redirects, each checked again;
+  - HTML only, a 5 MB cap counted on decompressed bytes, and a fixed header list;
+  - three allow-list modes: unset refuses everything, `*` allows any public host, or a list of exact hosts;
+  - YouTube is refused as `unsupported`;
+  - robots.txt isn't checked.
+
+  ADR-0014 is written from the architect's draft with Decision 9 updated to the lead answers.
+- Why: closes the DNS-rebinding gap between check and connect before anything in production calls the fetcher; ADR-0005 set the precedent of recording egress policy as an ADR.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.2d Allow-list entries are bare host names only · decided by builder · risk: low
+- Decided: `EDMATE_WEB_LINK_HOSTS` entries with a port, a path, a `*` wildcard or an empty item fail at startup with the code `web_link_hosts_invalid`. The error never includes the value.
+- Why: only port 443 is allowed, and an entry that could never match would silently refuse every link with no sign of why.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 11.1a new `liveClasses` repository on a risky path · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/live-classes.ts` is a new repository on the risky path
   `packages/db/src/repositories/**`. It follows the existing repository rules exactly (scope
