@@ -149,4 +149,4 @@ docker compose -f docker/compose.yaml exec postgres psql -U edmate -d edmate \
 - No nav link to `/staff` from other pages (reached by direct URL, like 8.9's inbox before its link).
 
 Status: DONE
-Tool calls used: 78
+Tool calls used: 93 (harness count; the builder reported 78)
