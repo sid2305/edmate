@@ -4057,7 +4057,9 @@ tasks:
   - 8.7d
   - 9.2c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7e-public-scorecard
+  model: plan:opus build:sonnet
 - id: 13.regate
   milestone: M13
   title: Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)
@@ -4433,6 +4435,14 @@ tasks:
   deps:
   - 8.7h
   risk: high
+  status: todo
+- id: 9.6g
+  milestone: M9
+  title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher answer to its question by timestamp only (link by question or message id); routes.ts drops the double cast for the real cursor type; toWinAnsi strips 0x80-0x9F; fromError logs the error name on 500'
+  accept: a pdf test asserts the bullet byte is 0x95; a notes test with two questions answered close together pairs each with its own answer; no `as unknown as` in routes.ts.
+  deps:
+  - 9.6b
+  risk: low
   status: todo
 - id: 9.4c
   milestone: M13
