@@ -4645,6 +4645,14 @@ tasks:
   - 8.2f
   status: todo
   branch: null
+- id: 9.6h
+  milestone: M9
+  title: '9.6c security review follow-ups (packages/db subscriptions.ts, before the pilot): cancel then start can''t get round a cost-alarm pause (start refuses a free package while the teacher''s free tier is alarm-paused, or cancel keeps the alarm state); resume trusts only a pause_student audit row written by this student (actor and actorRole); changePackage requires a verified teacher like start (9.3c); LOWs: cancel then start doesn''t reset the trial, changePackage to a package with no trial ends the trial, resume orders audit rows by id-safe order, and the live-version check notes the same unlocked-publish gap as start'
+  accept: each MEDIUM has a failing-then-passing integration test; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 9.6c
+  risk: risky
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
