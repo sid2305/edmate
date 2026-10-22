@@ -17,6 +17,7 @@ import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
 import { retrievalRepo } from './retrieval.js';
+import { safetyAlertsRepo } from './safety-alerts.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
@@ -77,6 +78,7 @@ export function createRepositories(db: Db) {
     publish: guardAll('publish', publishRepo(db)),
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
+    safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
   };
 }
 
@@ -266,3 +268,11 @@ export {
   type TeacherLiveClassRow,
   type UpcomingLiveClass,
 } from './live-classes.js';
+export {
+  SAFETY_ALERT_ACK_ACTION,
+  SAFETY_ALERT_LIST_MAX_LIMIT,
+  SAFETY_ALERT_NOTE_MAX_LENGTH,
+  type SafetyAlertAckInput,
+  type SafetyAlertListOptions,
+  type SafetyAlertRow,
+} from './safety-alerts.js';

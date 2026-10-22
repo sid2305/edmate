@@ -200,6 +200,17 @@ const ISO_VEC = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) => (i === 0 
 /** Task 8.1: each teacher's profile slug, and the staff user who verifies them. */
 const profileSlug = (t: Teacher) => `teacher-${t.toLowerCase()}`;
 const ISO_STAFF = 'stf_iso';
+/** Task 12.5a: an alert naming `actor`'s student and teacher but `target`'s session. */
+const isoAlert = (actor: Pair, target: Pair) => ({
+  id: uid('alr_iso'),
+  level: 'critical' as const,
+  kind: 'distress' as const,
+  studentId: studentId(studentOf(actor)),
+  teacherId: teacherId(teacherOf(actor)),
+  sessionId: ids.session(target),
+  excerptRedacted: `[${actor}] synthetic excerpt`,
+  createdAt: '2026-10-22T10:00:00.000Z',
+});
 const chunkOwners = (cs: Chunk[]) =>
   cs.flatMap((c) => [...markers(c.text), teacherOfId(c.teacherId)]);
 /** Task 8.2: a document of `target`'s that `actor` tries to delete (each pair used once). */
@@ -2852,6 +2863,96 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, scope, rid) => r.safetyEvents.listForSession(scope, rid),
     owners: (rows: { studentId: string; teacherId: string }[]) =>
       rows.map((x) => pairOfIds(x.studentId, x.teacherId)),
+  },
+  // Task 12.5a: safety alerts carry their own student x teacher x session (the worker is the
+  // writer, staff the reader), so these are checked like the public cases: every write through
+  // another pair's session is not_found, and only a staff user reads or acknowledges.
+  'safetyAlerts.record': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const p of PAIRS) {
+        for (const target of PAIRS) {
+          const alert = isoAlert(p, target);
+          if (p === target) {
+            expect(await r.safetyAlerts.record(alert)).toEqual({ written: true });
+          } else {
+            await expectFailsClosed(() => r.safetyAlerts.record(alert), ['not_found'], `${p}->${target}`);
+          }
+          cases += 1;
+        }
+      }
+      return cases;
+    },
+  },
+  'safetyAlerts.markEscalated': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const p of PAIRS) {
+        for (const target of PAIRS) {
+          const alert = isoAlert(p, target);
+          if (p === target) {
+            expect(await r.safetyAlerts.markEscalated(alert, 0)).toEqual({ round: 1 });
+          } else {
+            await expectFailsClosed(
+              () => r.safetyAlerts.markEscalated(alert, 0),
+              ['not_found'],
+              `${p}->${target}`,
+            );
+          }
+          cases += 1;
+        }
+      }
+      return cases;
+    },
+  },
+  'safetyAlerts.isAcknowledged': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      expect(await r.safetyAlerts.isAcknowledged(uid('alr_iso_missing'))).toBe(false);
+      return 1;
+    },
+  },
+  'safetyAlerts.listForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(
+          r.safetyAlerts.listForStaff(by, { status: 'all', limit: 50 }),
+        ).rejects.toMatchObject({ kind: 'scope' });
+        cases += 1;
+      }
+      await r.safetyAlerts.listForStaff(ISO_STAFF, { status: 'all', limit: 50 });
+      return cases + 1;
+    },
+  },
+  'safetyAlerts.acknowledge': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const alert = isoAlert('1A', '1A');
+      await r.safetyAlerts.record(alert);
+      let cases = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expectFailsClosed(
+          () => r.safetyAlerts.acknowledge(by, { alertId: alert.id }),
+          ['scope'],
+          `${by} acknowledging`,
+        );
+        cases += 1;
+      }
+      expect(await r.safetyAlerts.isAcknowledged(alert.id)).toBe(false);
+      expect(await r.safetyAlerts.acknowledge(ISO_STAFF, { alertId: alert.id })).toEqual({
+        acknowledged: true,
+      });
+      return cases + 1;
+    },
   },
   // Task 5.10: grouping, answering, and the student's own notifications.
   'teacherQuestions.listGroupsForTeacher': {

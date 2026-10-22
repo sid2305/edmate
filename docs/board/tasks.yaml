@@ -2876,9 +2876,9 @@ tasks:
   deps:
   - 7.2a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2d-safety-cases
+  model: plan:sonnet build:sonnet
 - id: 7.2e
   milestone: M7
   title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
@@ -4330,9 +4330,29 @@ tasks:
   deps:
   - 9.6c
   risk: medium
-  status: running
+  status: done
   branch: m9/9.6d-plan-page
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 114
+    tokens_out: 483
+    cache_read_tokens: 2990296
+    wall_time_seconds: 336
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.6e
   milestone: M9
   title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
@@ -4812,10 +4832,10 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 8.2c
   milestone: M8
-  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
-    8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots,
-    a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the
-    real one, a real https test, and fake timers in the deadline tests; from the 8.2e security review: a per-teacher limit on adding links, so one teacher can''t fill the ingest queue'
+  title: 'YouTube material per B-47 (human, 22 Oct 2026): the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube; also fixes the 8.2d review findings first
+    (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots, a cancellable resolver, explicit
+    rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the real one, a real https test, and
+    fake timers in the deadline tests; from the 8.2e security review: a per-teacher limit on adding links, so one teacher can''t fill the ingest queue'
   accept: per the B-47 answer.
   deps:
   - 8.2f
@@ -4862,7 +4882,9 @@ tasks:
   deps:
   - 8.2e
   risk: risky
-  status: todo
+  status: running
+  branch: m8/8.2h-web-link-followups
+  model: plan:sonnet build:opus
 - id: 11.2a
   milestone: M11
   title: Class questions repository and clustering in packages/db (11.2 Phase A)
@@ -4890,9 +4912,30 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.5a-safety-alerts-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 148
+    tokens_out: 1453
+    cache_read_tokens: 3327594
+    wall_time_seconds: 557
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.5b
   milestone: M12
   title: Alert worker stores alerts, marks escalation and reads acks from the DB (12.5 Phase B)
@@ -5074,6 +5117,17 @@ tasks:
   accept: per docs/tasks/12.4/plan.md Phase D and Lead answers; typecheck, lint and test green.
   deps:
   - 12.4c
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 9.3e
+  milestone: M13
+  title: 'A safety-reason rejection of a teacher cuts their students'' access at once (B-46, human 22 Oct 2026): before the pilot opens to strangers; until then existing students keep access until their
+    plan ends'
+  accept: after a staff rejection with a safety reason, the rejected teacher's agents refuse new turns for every student, and a test proves it; other rejection reasons still block only new starts.
+  deps:
+  - 9.3c
   risk: high
   status: todo
   branch: null
