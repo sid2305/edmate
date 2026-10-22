@@ -2,7 +2,10 @@
 
 Status: DONE
 
-Tool calls used: 18 + 14
+Tool calls used: 18 + 14 + 9
+
+## Fix round 1
+Fixed scorecard.ts:71 `changes` validation: replaced the cast-away `z.array(z.string()) as unknown as z.ZodType<...>` with `z.array(z.enum(CHANGE_KINDS))` (imported from `./gateScope.js`), so `ScorecardSchema` now rejects unknown change kinds. Added a test showing `ScorecardSchema.parse` rejects a bogus change kind and accepts a real `buildScorecard` output. `turbo run typecheck lint test --filter=@edmate/evals...` green (1125 tests passed, 100% coverage on scorecard.ts).
 
 ## What was built
 

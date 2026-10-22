@@ -7,7 +7,7 @@ import { CITED, markerJudge, OK_MARK, scriptedAgent } from './gate.testkit.js';
 import type { EvalAgent, EvalAgentReply, EvalTurnInput } from './agent.js';
 import { runQualityGate, type GateGroupResult, type GateResult, type GateStats } from './qualityGate.js';
 import { memoryRecorder } from './recorder.js';
-import { buildScorecard, SCORECARD_GROUPS, type Scorecard } from './scorecard.js';
+import { buildScorecard, SCORECARD_GROUPS, ScorecardSchema, type Scorecard } from './scorecard.js';
 
 const EMPTY_STATS: GateStats = {
   cases: 0,
@@ -162,6 +162,25 @@ describe('buildScorecard: synthetic gate result', () => {
     const gate = fakeGate([]);
     const card = buildScorecard(gate);
     expect(card.categories.map((c) => c.key)).toEqual(Object.keys(SCORECARD_GROUPS));
+  });
+});
+
+describe('ScorecardSchema', () => {
+  it('rejects a changes entry that is not a known change kind', () => {
+    const bogus = {
+      pass: true,
+      changes: ['bogus'],
+      categories: [],
+    };
+    expect(() => ScorecardSchema.parse(bogus)).toThrow();
+  });
+
+  it('accepts a real buildScorecard output', () => {
+    const gate = fakeGate([
+      { origin: 'platform', group: 'accuracy', total: 1, passed: 1, minPercent: 99, pass: true },
+    ]);
+    const card = buildScorecard(gate);
+    expect(() => ScorecardSchema.parse(card)).not.toThrow();
   });
 });
 

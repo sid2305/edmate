@@ -10,6 +10,7 @@
 // A category whose group has no row at all in the gate run (out of scope for that change kind)
 // is `measured: false` -- never a fabricated pass or fail for a question the run didn't ask.
 import { z } from 'zod';
+import { CHANGE_KINDS } from './gateScope.js';
 import type { GateGroup, GateOrigin } from './gateScope.js';
 import type { GateGroupResult, GateResult } from './qualityGate.js';
 
@@ -68,7 +69,7 @@ const ScorecardCategorySchema = z.object({
 
 export const ScorecardSchema: z.ZodType<Scorecard> = z.object({
   pass: z.boolean(),
-  changes: z.array(z.string()) as unknown as z.ZodType<Scorecard['changes']>,
+  changes: z.array(z.enum(CHANGE_KINDS)),
   categories: z.array(ScorecardCategorySchema),
 });
 
