@@ -55,8 +55,18 @@ with no `TEST_DATABASE_URL` set (the default in CI/local runs without a containe
   risk to introduce fresh.
 - risk: low
 
+### 22 Oct 2026 · 12.5c budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (156 harness-counted calls against a budget of 90); no re-run.
+- Why: the build is complete, its gate is green and the security review found nothing to fix; the extra calls were test iteration on the polling view, not scope growth.
+- risk: low
+
+### 22 Oct 2026 · 12.5c no server rate limit on staff alerts · decided by lead · risk: low
+- Decided: won't fix the LOW finding on apps/web/app/api/staff/alerts/route.ts (no server-side rate limit) in this task.
+- Why: the route is staff-only, returns at most 50 rows and matches the existing staff verification routes; a shared rate limit for staff routes belongs in its own task if pilot traffic shows a need.
+- risk: low
+
 ## Left to do
 Nothing outstanding for this phase.
 
 Status: DONE
-Tool calls used: 64
+Tool calls used: 156 (harness count; the builder reported 64)
