@@ -61,4 +61,4 @@ are `strictObject`/`discriminatedUnion`, so an extra `by` key (or any unknown ke
   agents page) build their UI against these routes next.
 
 Status: DONE
-Tool calls used: 14 (this resumed segment; see prior session summary for the full build)
+Tool calls used: 121 (harness count; the builder reported 14 for its last segment after a context compaction)
