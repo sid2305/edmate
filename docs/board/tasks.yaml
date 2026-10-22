@@ -2115,9 +2115,9 @@ tasks:
   - '5.10'
   - '5.2'
   - '8.1'
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: lead closeout
 - id: '9.1'
   milestone: M9
   title: App shell, mobile-first layouts (360 px up), next-intl, auth
@@ -3637,9 +3637,28 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: running
+  status: done
   branch: m8/8.9c-questions-inbox
   model: plan:sonnet build:sonnet-5/medium review:sonnet x2
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.2a
   milestone: M9
   title: Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)

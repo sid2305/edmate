@@ -10,6 +10,27 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
+- Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
+- Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Send answer uses the group's first remaining question id · decided by builder · risk: low
+- Decided: "Send answer" posts the id of the group's first remaining question; the teacher never picks an id.
+- Why: per 5.10's repository, any member id answers the whole group, so the effect is the same whichever id is sent.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.9c Merged 8.8b's nav link and en.json namespace additively · decided by builder · risk: low
+- Decided: kept 8.8b's `insights` nav link and `en.json` namespace; `questionsLink` and `questionsInbox` land after `insights`.
+- Why: the plan's shared-file rule says keep both sides.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7b Lead accepts that non-English agents fail gate cases during the pilot · decided by lead · risk: medium
 - Decided: under builder decisions 6 and 7, a PilotLanguageClamped background report fails a gate case, so an agent with non-English languages cannot pass the gate until the English-only pilot policy changes. A retryable guard_blocked (failed pre-guard chain) also fails the case after the fix round.
 - Why: the pilot is English-only (human decision); a gate that passed with background failures, or counted a failed guard chain as a block, would overstate safety.
