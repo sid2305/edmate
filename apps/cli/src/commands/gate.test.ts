@@ -289,6 +289,82 @@ describe('edmate gate', () => {
     });
   });
 
+  describe('--deadline-ms (task 7.4c)', () => {
+    it('rejects a non-numeric value', async () => {
+      const { io, err } = capture();
+      const code = await runGateCommand(
+        ['demo', '--change', 'style_card', '--deadline-ms', 'soon'],
+        io,
+        { cwd: '/tmp' },
+      );
+      expect(code).toBe(1);
+      expect(err.join('')).toContain('--deadline-ms must be a positive integer');
+    });
+
+    it('rejects a non-positive value', async () => {
+      const { io, err } = capture();
+      const code = await runGateCommand(
+        ['demo', '--change', 'style_card', '--deadline-ms', '0'],
+        io,
+        { cwd: '/tmp' },
+      );
+      expect(code).toBe(1);
+      expect(err.join('')).toContain('--deadline-ms must be a positive integer');
+    });
+
+    it('threads a generous override through to a passing run', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
+      try {
+        writeSyntheticSuite(join(tmp, 'suites'));
+        for (const id of caseIds) writeFixture(join(tmp, 'fixtures'), id, true);
+        const { io, out } = capture();
+        const code = await runGateCommand(
+          [
+            'demo',
+            '--change',
+            'style_card',
+            '--fixtures',
+            join(tmp, 'fixtures'),
+            '--deadline-ms',
+            '900000',
+          ],
+          io,
+          { cwd: tmp, suitesDir: join(tmp, 'suites') },
+        );
+        expect(code).toBe(0);
+        expect(out.join('')).toContain('platform:persona 30/30 pass');
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('a deliberately tiny override trips the deadline and fails the gate', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
+      try {
+        writeSyntheticSuite(join(tmp, 'suites'));
+        for (const id of caseIds) writeFixture(join(tmp, 'fixtures'), id, true);
+        const { io, out } = capture();
+        const code = await runGateCommand(
+          [
+            'demo',
+            '--change',
+            'style_card',
+            '--fixtures',
+            join(tmp, 'fixtures'),
+            '--deadline-ms',
+            '1',
+          ],
+          io,
+          { cwd: tmp, suitesDir: join(tmp, 'suites') },
+        );
+        expect(code).toBe(1);
+        expect(out.join('')).toContain('FAIL');
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('full-scope change on the real suites (blocker B-40: no thresholds yet)', () => {
     it('names the suites and groups that have no decided threshold, instead of guessing', async () => {
       const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));

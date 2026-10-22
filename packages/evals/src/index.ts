@@ -76,6 +76,8 @@ export {
 } from './gateAdapters.js';
 export {
   CHANGE_KINDS,
+  defaultGateDeadlineMs,
+  FULL_SCOPE_GATE_DEADLINE_MS,
   GATE_THRESHOLDS,
   GateScopeError,
   groupOf,

@@ -1,7 +1,7 @@
 // Task 7.4: the quality gate on a small synthetic world (scripted agent, scripted judge).
 import { describe, expect, it, vi } from 'vitest';
 import { CITED, markerJudge, OK_MARK, scriptedAgent } from './gate.testkit.js';
-import { GateScopeError } from './gateScope.js';
+import { FULL_SCOPE_GATE_DEADLINE_MS, GateScopeError } from './gateScope.js';
 import type { PerAgentSuiteInput } from './perAgentSuite.js';
 import {
   ASSUMED_CALL_SECONDS,
@@ -290,6 +290,95 @@ describe('runQualityGate', () => {
     const r = await runQualityGate(gateInput());
     expect(JSON.parse(JSON.stringify(r))).toEqual(r);
     expect(r.changes).toEqual(['material']);
+  });
+
+  it('task 7.4c: a full-scope gate gets the 120-minute default, not the 15-minute one', async () => {
+    let clock = 0;
+    const agent = scriptedAgent(() => {
+      clock += 8 * 60_000; // each reply "takes" eight minutes
+      return { text: `right ${OK_MARK}`, ...CITED };
+    });
+    // 10 cases x 8 minutes = an ~80-minute critical path: under 120 min, over 15 min.
+    const r = await runQualityGate(
+      gateInput({
+        changes: ['first_publish'],
+        platformCases: [],
+        perAgent: world(10),
+        agentFor: () => agent,
+        concurrency: 1,
+        now: () => clock,
+      }),
+    );
+    expect(agent.calls).toHaveLength(10);
+    expect(r.stats).toMatchObject({
+      notRun: 0,
+      deadlinePassed: false,
+      deadlineMs: FULL_SCOPE_GATE_DEADLINE_MS,
+    });
+  });
+
+  it('task 7.4c: the same ~80-minute run trips the 15-minute default under a material-only scope', async () => {
+    let clock = 0;
+    const agent = scriptedAgent(() => {
+      clock += 8 * 60_000;
+      return { text: `right ${OK_MARK}`, ...CITED };
+    });
+    const r = await runQualityGate(
+      gateInput({
+        changes: ['material'],
+        perAgent: world(10),
+        agentFor: () => agent,
+        concurrency: 1,
+        now: () => clock,
+      }),
+    );
+    expect(agent.calls).toHaveLength(2);
+    expect(r.stats).toMatchObject({ notRun: 8, deadlinePassed: true, deadlineMs: GATE_DEADLINE_MS });
+    expect(r.pass).toBe(false);
+    expect(r.results.some((x) => x.error === DEADLINE_NOT_RUN)).toBe(true);
+  });
+
+  it('task 7.4c: an explicit deadlineMs on a full-scope input overrides the default both ways', async () => {
+    let clock = 0;
+    const tinyDeadlineAgent = scriptedAgent(() => {
+      clock += 8 * 60_000;
+      return { text: `right ${OK_MARK}`, ...CITED };
+    });
+    const shorter = await runQualityGate(
+      gateInput({
+        changes: ['first_publish'],
+        platformCases: [],
+        perAgent: world(10),
+        agentFor: () => tinyDeadlineAgent,
+        concurrency: 1,
+        now: () => clock,
+        deadlineMs: 5 * 60_000, // shorter than the 120-min full-scope default
+      }),
+    );
+    expect(tinyDeadlineAgent.calls).toHaveLength(1);
+    expect(shorter.stats).toMatchObject({ notRun: 9, deadlinePassed: true, deadlineMs: 5 * 60_000 });
+
+    clock = 0;
+    const generousDeadlineAgent = scriptedAgent(() => {
+      clock += 8 * 60_000;
+      return { text: `right ${OK_MARK}`, ...CITED };
+    });
+    const longer = await runQualityGate(
+      gateInput({
+        changes: ['material'], // the 15-min default would trip this run; the override doesn't
+        perAgent: world(10),
+        agentFor: () => generousDeadlineAgent,
+        concurrency: 1,
+        now: () => clock,
+        deadlineMs: 200 * 60_000, // longer than both the 15-min and 120-min defaults
+      }),
+    );
+    expect(generousDeadlineAgent.calls).toHaveLength(10);
+    expect(longer.stats).toMatchObject({
+      notRun: 0,
+      deadlinePassed: false,
+      deadlineMs: 200 * 60_000,
+    });
   });
 });
 

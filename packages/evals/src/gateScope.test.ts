@@ -1,6 +1,8 @@
 // Task 7.4: which cases a quality gate runs for each kind of change.
 import { describe, expect, it } from 'vitest';
 import {
+  defaultGateDeadlineMs,
+  FULL_SCOPE_GATE_DEADLINE_MS,
   GATE_THRESHOLDS,
   GateScopeError,
   groupOf,
@@ -174,6 +176,38 @@ describe('selectGateCases', () => {
     const withFeedback = [...PLATFORM, evalCase('fb-1', 'feedback')];
     expect(() => scope(['first_publish'], { platformCases: withFeedback })).toThrow(GateScopeError);
     expect(scope(['style_card'], { platformCases: withFeedback }).cases).toHaveLength(30);
+  });
+});
+
+describe('defaultGateDeadlineMs', () => {
+  it('is 15 minutes for material / packages / style_card alone or unioned with only each other', () => {
+    for (const changes of [
+      ['material'],
+      ['packages'],
+      ['style_card'],
+      ['material', 'packages'],
+      ['packages', 'style_card'],
+      ['material', 'packages', 'style_card'],
+    ] as ChangeKind[][]) {
+      expect(defaultGateDeadlineMs(changes)).toBe(15 * 60_000);
+    }
+  });
+
+  it('is 120 minutes for a full-scope change, alone or unioned with anything', () => {
+    expect(FULL_SCOPE_GATE_DEADLINE_MS).toBe(2 * 60 * 60_000);
+    for (const changes of [
+      ['first_publish'],
+      ['prompt_pack_bump'],
+      ['material', 'first_publish'],
+      ['packages', 'style_card', 'prompt_pack_bump'],
+    ] as ChangeKind[][]) {
+      expect(defaultGateDeadlineMs(changes)).toBe(FULL_SCOPE_GATE_DEADLINE_MS);
+    }
+  });
+
+  it('throws on an empty or unknown change set, same as selectGateCases', () => {
+    expect(() => defaultGateDeadlineMs([])).toThrow(GateScopeError);
+    expect(() => defaultGateDeadlineMs(['nonsense' as ChangeKind])).toThrow(/unknown change kind/);
   });
 });
 
