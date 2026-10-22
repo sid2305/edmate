@@ -448,6 +448,8 @@ describe('practiceCarriedKey: a skipped item key, guarded one more turn (5.6c, A
     expect(parseSessionHelp({ ...VALID, practiceCarriedKey: [7] })).toEqual(DEFAULT);
     expect(loadSessionHelp({ ...VALID, practiceCarriedKey: [7] }).unreadable).toBe(true);
     expect(parseSessionHelp({ ...VALID, practiceCarriedKey: undefined })).toEqual(DEFAULT);
+    expect(parseSessionHelp({ ...VALID, practiceCarriedKey: [''] })).toEqual(DEFAULT);
+    expect(loadSessionHelp({ ...VALID, practiceCarriedKey: [''] }).unreadable).toBe(true);
     // As many entries as answerKey may hold: the JSON caps bound it, not an entry count.
     const many = Array.from({ length: 65 }, (_, i) => `k${i}`);
     expect(

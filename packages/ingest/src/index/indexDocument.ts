@@ -59,9 +59,12 @@ export interface IndexDocumentResult {
   readonly embeddedChunks: number;
 }
 
-/** A leading BOM is stripped so it never lands in the shape check's first line. */
+/**
+ * A leading BOM never lands in the shape check's first line: `TextDecoder`'s default
+ * (`ignoreBOM: false`) already strips a UTF-8 BOM, so no extra replace is needed here (5.6d).
+ */
 function decodeRawText(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes).replace(/^\uFEFF/, '');
+  return new TextDecoder().decode(bytes);
 }
 
 function storeFailed(): IngestError {
