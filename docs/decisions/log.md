@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7d the web pins the judge from EDMATE_JUDGE_MODEL without importing @edmate/evals · decided by builder · risk: low
+- Decided: `publishRuntime.ts` reads `EDMATE_JUDGE_MODEL` itself, parsed the same way as `resolveJudgeModel`, and stores `<provider>:<model>` as the run's judge. The worker accepts that form. If the variable is missing or malformed, POST answers 503 and the reason `judge_model` is logged.
+- Why: the worker refuses a run pinned to a different judge, so the web must pin the same one. Adding `@edmate/evals` to the web bundle for five lines of parsing is not worth it.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d a failed enqueue ends the run error (enqueue_failed) · decided by builder · risk: low
+- Decided: if the gate job can't be queued after `startRun`, the handler calls `finishRun(error, { groups: [], errorCode: 'enqueue_failed' })` and answers 503. If that `finishRun` also fails, the failure is logged and the run waits for the stale rule.
+- Why: no silent failures. Without this, a Redis blip would block the next publish (`gate_running`) for up to 2 h 15 min.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d publish reasons ride a top-level `reason`, as in 8.6c · decided by builder · risk: low
+- Decided: `error.code` stays a contract `ErrorCode` (`forbidden`, `validation`, `not_found`, `provider_error`, `input_too_large`). The publish case is a top-level `reason` (see the table above), and the page keys its copy on it.
+- Why: there is no new `ErrorCode` without an ADR, and this is the same pattern as 8.6c.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d the publish pins reuse the packages runtime · decided by builder · risk: low
+- Decided: the newest signed prompt-pack set and `MODEL_MIX.paid` come from calling 8.6c's `createPackagesRuntime`, read-only, not from a copy. The style card is the newest one, the course comes from `courses.ensureDefault`, and the agent is the one on the teacher's packages. No packages means 409 `no_packages`; no style card means 409 `style_card_required`, both before `startRun`.
+- Why: one place pins the agent, and 8.6c's files stay untouched. Side effect: a mix that can't be priced also blocks publishing (503), the same as on the packages page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d the page polls every 5 s while a run is open · decided by builder · risk: low
+- Decided: `/teacher/publish` polls GET every 5 s while the run is `queued` or `running`, one request at a time. A failed poll keeps the last run and shows "could not be refreshed just now". Polling stops when the run finishes or the page closes.
+- Why: a gate can run up to 2 h; 5 s is cheap and feels live.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7d review: the pick() narrowing cast stays · decided by lead · risk: low
+- Decided: the `(v as K)` cast in PublishView.tsx pick() is kept (wontfix); 8.7d's other MEDIUM and LOW review findings go to board task 8.7l.
+- Why: the cast follows an `.includes()` check against the same literal list, which is the usual way to narrow in TypeScript; nothing in the deferred findings blocks a teacher from publishing.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.1a Staff-only join of users for name/email in listPendingForStaff · decided by builder · risk: high
 - Decided: `teacherProfiles.listPendingForStaff` is the one repository method that selects
   `users.name` and `users.email` (never `phone`), gated by checking the caller's own role is

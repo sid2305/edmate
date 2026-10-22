@@ -4025,9 +4025,30 @@ tasks:
   - 8.7c
   - 8.6c
   risk: low
-  status: running
+  status: done
   branch: m8/8.7d-publish-page
-  model: plan:opus build:opus
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 56
+    tokens_in: 182
+    tokens_out: 354
+    cache_read_tokens: 2860258
+    wall_time_seconds: 165
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 1
+    human_questions: 0
 - id: 8.7e
   milestone: M8
   title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
@@ -4036,7 +4057,9 @@ tasks:
   - 8.7d
   - 9.2c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7e-public-scorecard
+  model: plan:opus build:sonnet
 - id: 13.regate
   milestone: M13
   title: Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)
@@ -4104,7 +4127,9 @@ tasks:
   deps:
   - 12.1a
   risk: high
-  status: todo
+  status: running
+  branch: m12/12.1b-staff-console
+  model: plan:sonnet build:opus
 - id: 8.7f
   milestone: M8
   title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
@@ -4187,7 +4212,9 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: todo
+  status: running
+  branch: m9/9.6c-plan-changes
+  model: plan:sonnet build:sonnet
 - id: 9.6d
   milestone: M9
   title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
@@ -4253,7 +4280,7 @@ tasks:
   deps:
   - 9.7a
   - 9.2c
-  - 9.6b
+  - 9.6d
   risk: low
   status: todo
 - id: 8.7g
@@ -4410,6 +4437,15 @@ tasks:
   deps:
   - 8.7h
   risk: high
+  status: todo
+- id: 9.6g
+  milestone: M9
+  title: '9.6b review follow-ups: the notes PDF bullet (U+2022) is added after the WinAnsi clamp and prints as a stray quote mark (map it to WinAnsi 0x95 and count its width); answeredPairs matches a teacher
+    answer to its question by timestamp only (link by question or message id); routes.ts drops the double cast for the real cursor type; toWinAnsi strips 0x80-0x9F; fromError logs the error name on 500'
+  accept: a pdf test asserts the bullet byte is 0x95; a notes test with two questions answered close together pairs each with its own answer; no `as unknown as` in routes.ts.
+  deps:
+  - 9.6b
+  risk: low
   status: todo
 - id: 9.4c
   milestone: M13
