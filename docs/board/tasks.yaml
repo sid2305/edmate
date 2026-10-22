@@ -2090,7 +2090,7 @@ tasks:
   - '7.4'
   - '7.8'
   - '8.6'
-  status: planning
+  status: todo
   branch: null
   model: null
 - id: '8.8'
@@ -3624,7 +3624,7 @@ tasks:
   status: todo
 - id: 9.5b
   milestone: M9
-  title: 'Feedback submission and mock-interview screens (9.5 Phase B, apps/web)'
+  title: Feedback submission and mock-interview screens (9.5 Phase B, apps/web)
   accept: per docs/tasks/9.5/plan.md Phase B; web typecheck, lint, test and both e2e cases green.
   deps:
   - 9.5a
@@ -3637,6 +3637,57 @@ tasks:
   deps:
   - 9.5b
   risk: high
+  status: todo
+- id: 8.7a
+  milestone: M8
+  title: 'Publish repository and eval_runs migration (8.7 Phase A, packages/db)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 9.2a
+  risk: high
+  status: todo
+- id: 8.7b
+  milestone: M8
+  title: 'Gate agent and gate-input assembly (8.7 Phase B, apps/worker)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - '7.4'
+  risk: low
+  status: todo
+- id: 8.7c
+  milestone: M8
+  title: 'Gate queue and gatedPublish processor (8.7 Phase C, packages/queue + apps/worker)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7a
+  - 8.7b
+  risk: low
+  status: todo
+- id: 8.7d
+  milestone: M8
+  title: 'Publish API and /teacher/publish page (8.7 Phase D, apps/web)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7c
+  - 8.6c
+  risk: low
+  status: todo
+- id: 8.7e
+  milestone: M8
+  title: 'Stored scorecard on the public teacher page (8.7 Phase E, apps/web)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7d
+  - 9.2c
+  risk: low
+  status: todo
+- id: 13.regate
+  milestone: M13
+  title: 'Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)'
+  accept: per docs/tasks/8.7/plan.md; typecheck, lint and test green for the packages it touches.
+  deps:
+  - 8.7e
+  risk: medium
   status: todo
 - id: 9.4c
   milestone: M13
@@ -3655,7 +3706,7 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: planning
+  status: todo
   branch: null
   model: null
 - id: '9.6'
