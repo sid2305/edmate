@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveClassRecording, TeacherLiveClassRow } from '@edmate/db';
 import type { ApiResult, DocumentView } from '../../../src/studio/uploadClient';
 import { renderIntl } from '../../../test/intl';
-import { LiveClassesView } from './LiveClassesView';
+import { LiveClassesView, RECORDING_POLL_MAX_MS, RECORDING_POLL_MS } from './LiveClassesView';
 
 const PACKAGES = [{ packageId: 'pkg_1', name: 'Grade 8 Math', moduleIds: ['mod_1'] }];
 
@@ -404,6 +404,32 @@ describe('LiveClassesView', () => {
       await waitFor(() => expect(screen.getByText('Failed')).toBeInTheDocument());
       expect(screen.getByText('The file is too big.')).toBeInTheDocument();
       expect(screen.queryByText('Unrelated notes')).toBeNull();
+    });
+
+    it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const listDocuments = vi.fn(
+        async (): Promise<ListResult> => ({ ok: true, value: [view({ status: 'processing' })] }),
+      );
+      renderIntl(
+        <LiveClassesView
+          classes={[PAST]}
+          packages={PKGS}
+          now={NOW}
+          recordings={[rec({ status: 'processing' })]}
+          listDocuments={listDocuments}
+        />,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MAX_MS + RECORDING_POLL_MS);
+      });
+      const callsAtCap = listDocuments.mock.calls.length;
+      expect(callsAtCap).toBeGreaterThan(0);
+      await waitFor(() => expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MS * 5);
+      });
+      expect(listDocuments).toHaveBeenCalledTimes(callsAtCap);
     });
 
     it('a new upload appears under its class with its status', async () => {

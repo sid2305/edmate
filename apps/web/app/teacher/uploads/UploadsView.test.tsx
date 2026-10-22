@@ -7,7 +7,7 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../../test/intl';
 import type { DocumentView, PutFile } from '../../../src/studio/uploadClient';
-import { UploadsView } from './UploadsView';
+import { POLL_MAX_MS, POLL_MS, UploadsView } from './UploadsView';
 
 beforeAll(() => {
   expect.extend(toHaveNoViolations);
@@ -274,6 +274,26 @@ describe('UploadsView', () => {
       await vi.advanceTimersByTimeAsync(12_000);
     });
     expect(lists()).toBe(before + 1);
+  });
+
+  it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const s = api([doc({ status: 'processing' })]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    expect(await screen.findByText('Processing')).toBeInTheDocument();
+    const lists = () => s.calls.filter((c) => c.method === 'GET').length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MAX_MS + POLL_MS);
+    });
+    const callsAtCap = lists();
+    expect(callsAtCap).toBeGreaterThan(0);
+    expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    });
+    expect(lists()).toBe(callsAtCap);
   });
 
   it('replaces a file through the hidden picker, then completes it', async () => {

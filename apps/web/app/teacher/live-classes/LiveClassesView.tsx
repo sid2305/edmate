@@ -41,6 +41,11 @@ export interface LiveClassesViewProps {
 /** 11.4c: how often the class rows re-read recording statuses while one is pending. */
 export const RECORDING_POLL_MS = 5000;
 
+/** 11.4g (code/typescript-reviewer, MEDIUM): a stuck "uploading"/"processing" row (e.g. the
+ * server's own processing step wedges) must not poll forever while the page stays open; stop
+ * after about 10 minutes per page visit and tell the teacher to check back later. */
+export const RECORDING_POLL_MAX_MS = 10 * 60 * 1000;
+
 /** The poll's payload, checked before use; a bad one keeps the last good view (lessons). */
 const PollSchema = z.array(
   z.object({
@@ -107,16 +112,25 @@ export function LiveClassesView({
   const tu = useTranslations('uploads');
   const [recordings, setRecordings] = useState(initialRecordings);
   const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   const pending = recordings.some(isPending);
 
   // 11.4c: while a shown recording is uploading or processing, re-read statuses every 5 s. Stops
   // when none is pending and on unmount. A failed or malformed read keeps the last good view and
   // the next tick tries again; one read at a time.
+  // 11.4g: also stops after RECORDING_POLL_MAX_MS (a new pending recording restarts the clock).
   useEffect(() => {
     if (!pending) return undefined;
+    setPollTimedOut(false);
     let alive = true;
     let inFlight = false;
+    const startedAt = Date.now();
     const timer = setInterval(() => {
+      if (Date.now() - startedAt >= RECORDING_POLL_MAX_MS) {
+        clearInterval(timer);
+        if (alive) setPollTimedOut(true);
+        return;
+      }
       if (inFlight) return;
       inFlight = true;
       void (async () => {
@@ -221,6 +235,7 @@ export function LiveClassesView({
           <li key={r.documentId}>
             <span>{r.sourceTitle}</span> <span>{tu(`status.${r.status}`)}</span>
             {r.status === 'failed' ? <span> {tu(`reasons.${reasonKey(r.failureReason)}`)}</span> : null}
+            {isPending(r) && pollTimedOut ? <span> {tu('pollTimeout')}</span> : null}
           </li>
         ))}
       </ul>

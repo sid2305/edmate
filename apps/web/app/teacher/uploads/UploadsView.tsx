@@ -23,6 +23,11 @@ import {
 /** How often the list refreshes while a file is uploading or processing. */
 export const POLL_MS = 4000;
 
+/** 11.4g (code/typescript-reviewer, MEDIUM): a stuck "uploading"/"processing" row must not poll
+ * forever while the page stays open; stop after about 10 minutes per page visit (same cap and
+ * message as LiveClassesView's recording poll). */
+export const POLL_MAX_MS = 10 * 60 * 1000;
+
 const ERROR_KEYS = [
   'unsupported_type',
   'input_too_large',
@@ -75,6 +80,10 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const [banner, setBanner] = useState<ErrorKey | null>(null);
   const [local, setLocal] = useState<Record<string, Local>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  // 11.4g: set the first time anything is active; cleared once nothing is, so a later upload
+  // starts a fresh 10-minute window.
+  const pollStartedAt = useRef<number | null>(null);
   const [moduleId, setModuleId] = useState(moduleIds[0] ?? '');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
@@ -100,9 +109,19 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
     void refresh();
   }, [refresh]);
 
-  // One refresh POLL_MS after every list change while anything is still moving.
+  // One refresh POLL_MS after every list change while anything is still moving. 11.4g: stops
+  // after POLL_MAX_MS of continuous activity so a stuck row doesn't poll forever.
   useEffect(() => {
-    if (!docs?.some(isActive)) return;
+    if (!docs?.some(isActive)) {
+      pollStartedAt.current = null;
+      setPollTimedOut(false);
+      return undefined;
+    }
+    if (pollStartedAt.current === null) pollStartedAt.current = Date.now();
+    if (Date.now() - pollStartedAt.current >= POLL_MAX_MS) {
+      setPollTimedOut(true);
+      return undefined;
+    }
     const timer = setTimeout(() => void refresh(), POLL_MS);
     return () => clearTimeout(timer);
   }, [docs, refresh]);
@@ -313,6 +332,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
           {t(`errors.${banner}`)}
         </p>
       ) : null}
+      {pollTimedOut ? <p className="uploads-notice">{t('pollTimeout')}</p> : null}
       {docs === null ? (
         <p>{t('loading')}</p>
       ) : docs.length === 0 ? (

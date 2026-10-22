@@ -205,7 +205,7 @@ describe('RecordingUpload', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Server fixed words.'));
   });
 
-  it('a failed PUT shows an error, skips complete and re-enables the form', async () => {
+  it('a failed PUT shows an error, skips complete, reports the row as failed and re-enables the form', async () => {
     const { completeDocument, onRecording } = setup({
       putFile: vi.fn(async () => Promise.reject(new Error('upload failed'))),
     });
@@ -213,18 +213,20 @@ describe('RecordingUpload', () => {
     fireEvent.click(submit());
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/upload didn't finish/));
     expect(completeDocument).not.toHaveBeenCalled();
-    expect(onRecording).toHaveBeenCalledTimes(1);
+    expect(onRecording).toHaveBeenCalledTimes(2);
+    expect(onRecording).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed' }));
     expect(screen.getByLabelText('Recording or transcript')).toBeEnabled();
   });
 
-  it('a refused complete shows an error and keeps the row as uploading', async () => {
+  it('a refused complete shows an error and reports the row as failed', async () => {
     const { onRecording } = setup({
       completeDocument: vi.fn(async () => ({ ok: false as const, status: 500, code: 'enqueue_failed' })),
     });
     fill();
     fireEvent.click(submit());
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong'));
-    expect(onRecording).toHaveBeenCalledTimes(1);
+    expect(onRecording).toHaveBeenCalledTimes(2);
+    expect(onRecording).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed' }));
   });
 
   it('a malformed complete reply falls back to processing', async () => {
@@ -238,6 +240,28 @@ describe('RecordingUpload', () => {
     fireEvent.click(submit());
     await waitFor(() => expect(onRecording).toHaveBeenCalledTimes(2));
     expect(onRecording).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'processing' }));
+  });
+
+  it('skips state updates and onRecording once unmounted mid-upload (11.4g)', async () => {
+    const resolvePut: { fn: (() => void) | null } = { fn: null };
+    const putFile = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePut.fn = () => resolve();
+        }),
+    );
+    const { unmount, onRecording } = setup({ putFile });
+    fill();
+    fireEvent.click(submit());
+    await waitFor(() => expect(putFile).toHaveBeenCalled());
+    expect(onRecording).toHaveBeenCalledTimes(1);
+    unmount();
+    resolvePut.fn?.();
+    // Let the pending microtasks (the rest of the async chain) settle; no further onRecording
+    // call, and no React "update on an unmounted component" console error.
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onRecording).toHaveBeenCalledTimes(1);
   });
 
   it('lists only the given modules', () => {

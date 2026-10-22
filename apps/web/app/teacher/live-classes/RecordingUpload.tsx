@@ -7,7 +7,7 @@
 // Lessons ("UI state and server replies"): one busy flag, every call in try/catch/finally, every
 // server payload through `safeParse` with a fallback, and the form resets after success and failure.
 import { useTranslations } from 'next-intl';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { z } from 'zod';
 import type { LiveClassRecording } from '@edmate/db';
 import {
@@ -76,6 +76,15 @@ export function RecordingUpload({
   const [progress, setProgress] = useState<number | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [added, setAdded] = useState(false);
+  // 11.4g (code/typescript-reviewer, LOW): the create→PUT→complete chain can outlive the
+  // component (the teacher collapses "Add recording" mid-upload); this guard skips every state
+  // update and the parent `onRecording` call once unmounted.
+  const alive = useRef(true);
+  useEffect(() => {
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   if (moduleIds.length === 0) return <p>{t('noModules')}</p>;
 
@@ -112,6 +121,9 @@ export function RecordingUpload({
     setFailure(null);
     setBusy(true);
     let stage: 'create' | 'put' | 'complete' = 'create';
+    // 11.4g (typescript-reviewer, MEDIUM): once the row is created, a failed PUT or complete
+    // also reports it as `failed` (not left `uploading`), so LiveClassesView's poll can end.
+    let currentRow: LiveClassRecording | null = null;
     try {
       const created = await createDocument({
         moduleId,
@@ -121,6 +133,7 @@ export function RecordingUpload({
         rightsDeclared: true,
         liveClassId: liveClass.id,
       });
+      if (!alive.current) return;
       if (!created.ok) {
         setFailure(
           created.message !== undefined
@@ -140,23 +153,31 @@ export function RecordingUpload({
         sourceTitle: title,
         status: 'uploading',
       };
+      currentRow = row;
       onRecording(row);
       stage = 'put';
       await putFile(ticket.data.uploadUrl, ticket.data.uploadHeaders, file, setProgress);
+      if (!alive.current) return;
       stage = 'complete';
       const done = await completeDocument(ticket.data.documentId);
+      if (!alive.current) return;
       if (!done.ok) {
         setFailure({ key: 'generic' });
+        onRecording({ ...row, status: 'failed' });
         return;
       }
       const parsed = CompleteSchema.safeParse(done.value);
       onRecording({ ...row, status: parsed.success ? parsed.data.status : 'processing' });
       setAdded(true);
     } catch {
+      if (!alive.current) return;
       setFailure({ key: stage === 'put' ? 'upload_failed' : 'generic' });
+      if (currentRow && stage !== 'create') onRecording({ ...currentRow, status: 'failed' });
     } finally {
-      setBusy(false);
-      reset();
+      if (alive.current) {
+        setBusy(false);
+        reset();
+      }
     }
   };
 

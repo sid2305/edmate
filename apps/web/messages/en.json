@@ -247,6 +247,7 @@
     "cancel": "Cancel",
     "retry": "Try again",
     "retryLabel": "Try again: {title}",
+    "pollTimeout": "Still processing. Check back later.",
     "linkUrl": "Add a web link",
     "linkUrlPlaceholder": "https://example.com/article",
     "linkTitle": "Title (optional)",
