@@ -275,6 +275,13 @@ const liveClassFor: Partial<Record<Teacher, string>> = {};
 /** Far enough out that no window label ever flips mid-run; still a valid future `startsAt`. */
 const LIVE_CLASS_STARTS_AT = '2030-01-01T00:00:00Z';
 
+// Task 11.3a: weekly insights fixtures (seeded in beforeAll inside INSIGHTS_WEEK).
+const INSIGHTS_WEEK = '2026-10-05';
+const INSIGHTS_AT = '2026-10-07T10:00:00.000Z';
+const insightsUnhelpful: Partial<Record<Teacher, number>> = {};
+const insightsGroupOwner = (g: { groupId: string }) =>
+  g.groupId === 'g_ins_A' ? 'A' : g.groupId === 'g_ins_B' ? 'B' : `leak:${g.groupId}`;
+
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
   // and bump the material revision in the same transaction (the snapshot covers that table).
@@ -2766,6 +2773,79 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (groups: { questions: { text: string }[] }[]) =>
       groups.flatMap((g) => g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair)))),
   },
+  // Task 11.3a: weekly insights. Each teacher has its own students past the 5-student floor
+  // (seeded in beforeAll); groups are attributed by groupId, a count through insightsUnhelpful.
+  'insights.weeklyTopQuestions': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.weeklyTopQuestions(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.weeklyTopQuestions({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
+  },
+  'insights.openQuestionGroups': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.openQuestionGroups(scope),
+    random: (r, _scope, rid) => r.insights.openQuestionGroups({ teacherId: rid }),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
+  },
+  'insights.stickingTopics': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.stickingTopics(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.stickingTopics({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (ts: { topicId: string; title: string }[]) =>
+      ts.flatMap((t) => [
+        ...markers(t.title),
+        t.topicId === ids.topic('A') ? 'A' : t.topicId === ids.topic('B') ? 'B' : '?',
+      ]),
+  },
+  'insights.unhelpfulAnswerCount': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.unhelpfulAnswerCount(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.unhelpfulAnswerCount({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (n: number | null) =>
+      n === null ? [] : [TEACHERS.find((t) => insightsUnhelpful[t] === n) ?? `leak:${n}`],
+  },
+  'insights.getWeek': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.getWeek(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.getWeek({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (w: { payload: { topQuestions: { groupId: string }[] } } | null) =>
+      w ? w.payload.topQuestions.map(insightsGroupOwner) : [],
+  },
+  'insights.computeAndSaveWeek': {
+    scope: 'teacher',
+    op: 'write',
+    // Untargeted: the week is always computed from and saved for the scope's own teacher.
+    owns: () => true,
+    attempt: (r, scope) => r.insights.computeAndSaveWeek(scope, INSIGHTS_WEEK),
+    verify: async (r, actor, res) => {
+      const saved = res as {
+        payload: { topQuestions: { groupId: string }[]; unhelpfulAnswers: number | null };
+      };
+      expect(saved.payload.topQuestions.map(insightsGroupOwner)).toEqual([actor]);
+      expect(saved.payload.unhelpfulAnswers).toBe(insightsUnhelpful[actor]);
+      for (const t of TEACHERS) {
+        const w = await r.insights.getWeek(tScope(t), INSIGHTS_WEEK);
+        expect(w?.payload.topQuestions.map(insightsGroupOwner), `${t}'s week`).toEqual([t]);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a week that is not a Monday',
+        (r) => r.insights.computeAndSaveWeek(tScope(a), '2026-10-06'),
+        'invalid',
+      ],
+    ],
+  },
   'teacherQuestions.answer': {
     scope: 'teacher',
     op: 'write',
@@ -3524,6 +3604,63 @@ describe.skipIf(!up)(
           [`er_iso_${t.toLowerCase()}`, isoRun(t), JSON.stringify(isoResult(t, 'iso').details)],
         );
       }
+      // Task 11.3a: past the insights floor for each teacher inside INSIGHTS_WEEK (A: 5 students,
+      // B: 6, B with more unhelpful turns so the two counts differ). Distinct question text, so
+      // 5.10's lexical grouping never joins these rows to the answer/dismiss fixtures.
+      for (const [t, n, turns] of [
+        ['A', 5, 1],
+        ['B', 6, 3],
+      ] as const) {
+        for (let i = 1; i <= n; i++) {
+          const st = `stu_ins${i}`;
+          if (t === 'A' || i > 5) {
+            await raw.query(
+              `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,
+              [st],
+            );
+          }
+          const ses = `ses_ins${i}_${t.toLowerCase()}`;
+          await raw.query(
+            `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+             values ($1, $2, $3, $4, 1, $5, 1)`,
+            [ses, st, teacherId(t), ids.agent(t), ids.pkg(t)],
+          );
+          await raw.query(
+            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, group_id, created_at)
+             values ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              `tq_ins${i}_${t}`,
+              teacherId(t),
+              ids.agent(t),
+              st,
+              `[9${t}] zqxv weekly fixture`,
+              `g_ins_${t}`,
+              INSIGHTS_AT,
+            ],
+          );
+          await raw.query(
+            `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source, ts)
+             values ($1, $2, $3, $4, false, 'check', $5)`,
+            [`ev_ins${i}_${t}`, st, teacherId(t), ids.topic(t), INSIGHTS_AT],
+          );
+          for (let k = 0; k < turns; k++) {
+            await raw.query(
+              `insert into turn_traces (id, session_id, steps, model, input_tokens, output_tokens,
+                 cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage, created_at)
+               values ($1, $2, '[]', '', 0, 0, 0, $1, 1, 1, 'on_task', 'ask_teacher', '[]', '[]', $3)`,
+              [`tt_ins${i}_${t}_${k}`, ses, INSIGHTS_AT],
+            );
+          }
+        }
+      }
+      for (const t of TEACHERS) {
+        insightsUnhelpful[t] = (await repos.insights.unhelpfulAnswerCount(
+          tScope(t),
+          INSIGHTS_WEEK,
+        ))!;
+        await repos.insights.computeAndSaveWeek(tScope(t), INSIGHTS_WEEK);
+      }
+      expect(insightsUnhelpful.A).not.toBe(insightsUnhelpful.B);
       for (const t of TEACHERS) {
         savePkg[t] = (
           await repos.packages.create(tScope(t), { agentId: ids.agent(t), draft: pkgDraft(t) })
