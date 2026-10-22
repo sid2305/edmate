@@ -6,6 +6,7 @@ import { auditRepo } from './audit.js';
 import { chunksRepo, documentsRepo } from './chunks.js';
 import { correctionsRepo } from './corrections.js';
 import { discoveryRepo } from './discovery.js';
+import { insightsRepo } from './insights.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
@@ -73,6 +74,7 @@ export function createRepositories(db: Db) {
     courses: guardAll('courses', coursesRepo(db)),
     outline: guardAll('outline', outlineRepo(db)),
     publish: guardAll('publish', publishRepo(db)),
+    insights: guardAll('insights', insightsRepo(db)),
   };
 }
 
@@ -98,10 +100,7 @@ export {
   type TeacherQuestionGroup,
 } from './teacher-questions.js';
 export { TEACHER_EVAL_CASES_MAX, type TeacherEvalCaseRow } from './teacher-eval-cases.js';
-export {
-  NOTIFICATIONS_MAX_LIMIT,
-  type NotificationRow,
-} from './notifications.js';
+export { NOTIFICATIONS_MAX_LIMIT, type NotificationRow } from './notifications.js';
 export type {
   TeacherProfileCreate,
   TeacherProfileUpdate,
@@ -243,3 +242,13 @@ export {
   type SearchInput,
 } from './retrieval.js';
 export { REDACTED, REDACT_MAX_DEPTH, redactPersonalData } from './redact-json.js';
+export {
+  INSIGHTS_MIN_STUDENTS,
+  INSIGHTS_SAMPLE_MAX_LENGTH,
+  INSIGHTS_TOP_N,
+  type InsightQuestionGroup,
+  type InsightsWeek,
+  type StickingTopic,
+  type WeeklyInsightsPayload,
+  WeeklyInsightsPayloadSchema,
+} from './insights.js';
