@@ -4964,9 +4964,9 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.5b-alert-worker-acks
+  model: plan:opus build:sonnet review:sonnet
 - id: 12.5c
   milestone: M12
   title: Staff alert inbox at /staff/alerts with acknowledgement (12.5 Phase C)
@@ -5029,7 +5029,8 @@ tasks:
   model: null
 - id: 12.2f
   milestone: M13
-  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the 12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
+  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
+    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -5089,9 +5090,9 @@ tasks:
   deps:
   - 9.6h
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.6i-subscription-recheck
+  model: plan:lead build:opus review:sonnet
 - id: 12.5d
   milestone: M13
   title: 'Safety alerts follow-ups: listForStaff sort index and acknowledged_by FK index (12.5a review)'
@@ -5155,7 +5156,9 @@ tasks:
   model: null
 - id: 8.2i
   milestone: M13
-  title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h review MEDIUM, replaces the re-read check); the pinned transport sends the Host header as bareHostName like SNI (LOW); document the all-transient-failure path in packages/ingest address.ts (LOW); ADR-0014 Decision 6 wording: 2 s per query x 2 tries, WEB_INGEST_ATTEMPTS = 2, FAMILY_GRACE_MS 500 ms, SNI and the `..` refusal (LOW; docs/adr needs its reviewers)'
+  title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
+    review MEDIUM, replaces the re-read check); the pinned transport sends the Host header as bareHostName like SNI (LOW); document the all-transient-failure path in packages/ingest address.ts (LOW); ADR-0014
+    Decision 6 wording: 2 s per query x 2 tries, WEB_INGEST_ATTEMPTS = 2, FAMILY_GRACE_MS 500 ms, SNI and the `..` refusal (LOW; docs/adr needs its reviewers)'
   accept: each follow-up has a test where code changes; touched packages green.
   deps:
   - 8.2h
