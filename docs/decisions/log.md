@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.5a A malformed/legacy skill payload falls back to the generic SkillCard · decided by builder · risk: low
+- Decided: `ChatView` only renders `PracticeCard` when a `skill: 'practice'` event's payload has
+  the exact shape `practice.next_item` produces (string `id`/`prompt`, a known `kind`, level
+  1-3); anything else (including the pre-existing `ChatView.test.tsx` fixture payload `{q: ...}`)
+  renders the generic `SkillCard`, unchanged.
+- Why: keeps the dedicated card strictly tied to the real tool output per the plan ("the real
+  `practice.next_item` output shape... renders"), without a schema import from
+  `packages/harness`, and avoids a crash or blank card on a payload that doesn't match (fail
+  closed to the existing, harmless fallback) rather than trusting `unknown` at render time.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a activeSkill updates only on a final turn, not per streamed skill event · decided by builder · risk: low
+- Decided: `activeSkill` is set from `turn.skills.at(-1)` only once a turn reaches `status ===
+  'final'` (a `useEffect` on `[active, turn]`), not as each `skill` event streams in.
+- Why: the composer/hint button/launcher are already disabled while a turn streams, so no
+  submit can race ahead of the final skill name; waiting for `final` keeps the effect simple
+  (one state transition per turn, matching the reducer's own "nothing changes after done" rule)
+  rather than re-deriving it from in-flight events.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.5a The active skill carries only onto hints and answer checks, and clears after a turn with no skill cards · decided by builder · risk: low
+- Decided: `activeSkill` is reset to null when a final turn has no skill cards. It is carried
+  onto a `hint_request` or `check_answer` that names no skill of its own, never onto a plain
+  `message`.
+- Why: a typed message after a practice item is the student leaving practice, so tagging it
+  `skill: 'practice'` would silently keep every later turn on the practice ladder
+  (typescript-reviewer HIGH). A hint during practice still needs the tag.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7f persona always fails the case · decided by builder · risk: low
 - Decided: when `input.persona` is defined, the gate always throws (fails that case loudly)
   rather than trying to honor it for a `kind: 'skill_action'` start turn only. `TurnInput` has no

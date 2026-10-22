@@ -3818,9 +3818,28 @@ tasks:
   deps:
   - '9.4'
   risk: low
-  status: running
+  status: done
   branch: m9/9.5a-practice-screen
-  model: plan:sonnet build:sonnet-5/medium
+  model: plan:sonnet build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.5b
   milestone: M9
   title: Feedback submission and mock-interview screens (9.5 Phase B, apps/web)
