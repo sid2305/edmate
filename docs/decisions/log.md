@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.0b With embeddings off, retrieval runs on full text only · decided by builder · risk: medium
+- Decided: `EDMATE_INGEST_EMBEDDINGS=off` stores chunks with no embedding. Retrieval still finds them through its full-text signal (the vector signal skips null embeddings). Video and audio fail as `unsupported` because there is no transcriber.
+- Why: the try-it stack must run without an OpenAI key (9.0 plan D3). Relevance is lower without vectors, but chat still quotes the teacher's material. The switch is explicit and logged, never a silent fallback when a key is missing.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0b An unknown EDMATE_INGEST_EMBEDDINGS value disables ingest · decided by builder · risk: low
+- Decided: any value other than unset, `openai` or `off` fails closed. The ingest worker is disabled with an error log that names the variable but not its value.
+- Why: a typo must not quietly fall back to either mode.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0a The dev model's local-only check is a string check on AUTH_URL · decided by lead · risk: medium
+- Decided: accept the dev-model guard as built. `EDMATE_DEV_MODEL=scripted` runs only when AUTH_URL is plain http on localhost, 127.0.0.1 or [::1], and fails closed with a 503 otherwise. The security review found no bypass (case, IPv6, trailing dot, userinfo, https, look-alike hosts).
+- Why: the human needs a local stack to test tomorrow. Turning the dev model on in a public deploy would take two separate mistakes (a public host left with a localhost AUTH_URL, plus the flag set), and that setup would also break sign-in redirects. Deploy hardening (1.4d) will drop the local defaults.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0a Dev model `EDMATE_DEV_MODEL=scripted`, local only · decided by builder · risk: medium
+- Decided: The plan's D2. The scripted provider adapter is honoured only when the value is exactly `scripted` and `AUTH_URL` is `http:` on `localhost`, `127.0.0.1` or `[::1]` with no userinfo. Any other value, or any other or unset `AUTH_URL`, fails the runtime closed (`EDMATE_DEV_MODEL`, 503, with the reason code only in the log). It replaces only `factories.anthropic`. Replies start `[dev model]` and quote the first retrieved material. Classifiers get fixed all-clear verdicts, and unknown schemas and `embed` throw. Compose leaves it off by default.
+- Why: The compose image runs with `NODE_ENV=production`, so the guard can't depend on `NODE_ENV`. A builder needs a chat turn end to end with no key, and the router, guards, pricing and commit should stay real.
+- risk: medium. It stands in for the safety classifiers, so a security reviewer should read the guard.
+
+---
+
+### 22 Oct 2026 · 9.0a Compose defaults for the local stack · decided by builder · risk: low
+- Decided: The plan's D4. On `web`: `EDMATE_MARKET` defaults to `US`, `EDMATE_CHAT_AGENTS` to `demo-agent`, and `EDMATE_ANTHROPIC_API_KEY` has no default. On `worker`: `EDMATE_OPENAI_API_KEY` has no default.
+- Why: Without them the production-mode image answers 503 (`EDMATE_MARKET`, `provider_key`) and `/home` shows no chat. US is the first region.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0a Compose sets `EDMATE_INGEST_EMBEDDINGS` to `off` for the worker · decided by builder · risk: medium
+- Decided: The plan's D3, compose line only. The worker gets `EDMATE_INGEST_EMBEDDINGS: ${EDMATE_INGEST_EMBEDDINGS:-off}`, and `env.example` documents it. The worker behaviour is Phase B (9.0b).
+- Why: Chat retrieval is full text today (9.4), so the local stack needs only one key. It is an explicit setting, never a silent fallback.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0a `turn-backend` test helper takes a whole-gateway override · decided by builder · risk: low
+- Decided: When `memoryBackend({ gateway })` is given a gateway, that gateway replaces both the scripted gateway and the judge wrappers.
+- Why: That way the dev adapter has to satisfy every real classifier and judge schema in a real `defaultSteps` turn.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · Default model mix per tier (B-42, task 8.6) · decided by you · risk: high
 Decided: Sonnet (claude-sonnet-5) answers every teaching reply, free and paid packages alike. Haiku 4.5 runs the router, guards and classifiers on every tier. One config table holds the mix so a live run can change it later.
 Why: Free-package replies are a student's first impression of a teacher's agent; pilot volume is tiny, so the cost difference is cents. Free replies can drop to Haiku once the cost report (7.6) has real numbers.
