@@ -3790,6 +3790,14 @@ tasks:
   - 12.1a
   risk: high
   status: todo
+- id: 8.7f
+  milestone: M8
+  title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted stream leaks locked text (scores the locked reply; a leak plus another background failure still fails); await run.finished in a finally when collectReply throws; a separate lockedLeaks counter; move testkit.ts out of src/ and drop the unused @edmate/content dependency until 8.7c; exhaustive TurnEvent switch in collectReply; match LockedLeakDetected by an exported class or code, not error.name; comment on GateUsageMeter.record widening ctx'
+  accept: each item done or logged as wontfix; worker typecheck, lint and test green.
+  deps:
+  - 8.7b
+  risk: medium
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
