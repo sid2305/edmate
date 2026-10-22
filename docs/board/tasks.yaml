@@ -3358,9 +3358,9 @@ tasks:
   deps:
   - '9.0'
   risk: normal
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m13/9.0c-warm-db-pool
+  model: plan:sonnet build:sonnet
 - id: 9.0d
   milestone: M9
   title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
