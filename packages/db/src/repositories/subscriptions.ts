@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { Entitlement } from '@edmate/contracts';
-import { and, asc, eq, gte, inArray, ne, notExists, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, ne, notExists, notInArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { auditLog, packageVersions, subscriptions, teacherProfiles } from '../schema/index.js';
+import {
+  agents,
+  auditLog,
+  packages,
+  packageVersions,
+  subscriptions,
+  teacherProfiles,
+} from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
@@ -65,6 +72,99 @@ const StartOptions = z.strictObject({
 /** Statuses a pause leaves alone: already paused (staff or alarm), or ended for good. */
 const NOT_LIVE = ['paused', 'ended'] as const;
 
+/** The statuses `changePackage` and `pause` act on; `paused` and `ended` are `invalid`. */
+const LIVE_FOR_STUDENT_WRITE = ['trial', 'active', 'past_due'] as const;
+
+/** `subscriptions.changePackage`'s input (task 9.6 Phase C; no payment, so no proration). */
+export interface ChangePackageInput {
+  subscriptionId: string;
+  packageVersionId: string;
+}
+const ChangePackageOptions = z.strictObject({
+  subscriptionId: IdSchema,
+  packageVersionId: IdSchema,
+});
+
+/** `subscriptions.pause`, `resume` and `cancel` all take just the subscription to act on. */
+export interface SubscriptionIdInput {
+  subscriptionId: string;
+}
+const SubscriptionIdOptions = z.strictObject({ subscriptionId: IdSchema });
+
+/** The audit action `changePackage` writes. */
+export const CHANGE_PACKAGE_ACTION = 'subscription.change_package';
+/** The audit action a student's own `pause` writes (distinct from `COST_ALARM_PAUSE_ACTION`). */
+export const STUDENT_PAUSE_ACTION = 'subscription.pause_student';
+/** The audit action `resume` writes. */
+export const STUDENT_RESUME_ACTION = 'subscription.resume_student';
+/** The audit action `cancel` writes. */
+export const STUDENT_CANCEL_ACTION = 'subscription.cancel_student';
+
+/** The shape every `changePackage`/`pause`/`resume`/`cancel` audit row's `before`/`after` is. */
+const StatusSnapshot = z.object({
+  status: z.enum(['trial', 'active', 'past_due', 'paused', 'ended']),
+  packageVersionId: IdSchema,
+});
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/**
+ * Lock order for every write in this file that takes more than one lock: **the subscription row
+ * first**, `for update`, exactly as `start`'s insert-select locks `teacherProfiles` before it
+ * writes — one table, locked once, before any other read in the same transaction. The four
+ * student plan-change methods below (`changePackage`, `pause`, `resume`, `cancel`) never lock
+ * `packages`, `package_versions` or `agents` (they only read those, for a live-version/live-agent
+ * membership check that can't itself be raced into a bad write): every write here takes at most
+ * the subscriptions row's lock, always first, so none of these methods — nor `start` nor
+ * `pauseFreeForTeacher` above — can deadlock against each other (see "Two writers that lock the
+ * same rows in different orders deadlock", docs/lessons.md).
+ */
+async function lockLive(
+  tx: Tx,
+  studentId: string,
+  teacherId: string,
+  subscriptionId: string,
+  method: string,
+): Promise<{ id: string; studentId: string; teacherId: string } & LiveSubscription> {
+  const [row] = await tx
+    .select({
+      id: subscriptions.id,
+      status: subscriptions.status,
+      packageVersionId: subscriptions.packageVersionId,
+      periodEnd: subscriptions.periodEnd,
+    })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.id, subscriptionId),
+        eq(subscriptions.studentId, studentId),
+        eq(subscriptions.teacherId, teacherId),
+      ),
+    )
+    .for('update', { of: subscriptions });
+  if (!row) throw new RepositoryError('not_found', method);
+  return { ...row, periodEnd: iso(row.periodEnd), studentId, teacherId };
+}
+
+/** Writes the one audit row every plan-change method leaves behind (status + package version). */
+async function writeChangeAudit(
+  tx: Tx,
+  method: string,
+  action: string,
+  live: { id: string; studentId: string; teacherId: string },
+  before: { status: Entitlement['status']; packageVersionId: string },
+  after: { status: Entitlement['status']; packageVersionId: string },
+): Promise<void> {
+  await insertAuditEntry(tx, method, live.teacherId, live.studentId, {
+    actor: live.studentId,
+    actorRole: 'student',
+    action,
+    target: `subscription:${live.id}`,
+    before,
+    after,
+  });
+}
+
 export function subscriptionsRepo(db: Db) {
   return {
     /** The scope's subscription that has not ended (at most one per student x teacher), or null. */
@@ -96,7 +196,10 @@ export function subscriptionsRepo(db: Db) {
      * `packageVersionId` names a `package_versions` row of this teacher (else `not_found` — a
      * stray or another teacher's id never writes), and only when that teacher is currently
      * verified (task 9.3c: a teacher rejected after publishing can't be started by typing the
-     * URL) — the same `not_found` a non-live package already uses. One `INSERT ... SELECT …
+     * URL) — the same `not_found` a non-live package already uses. Task 9.3b/9.6: the version
+     * must also be its package's **live** version, of a **live** agent (a draft or old version,
+     * or a suspended agent's package, is `not_found` — the same check `changePackage` makes
+     * below, so a URL built from an old offer never starts anything). One `INSERT ... SELECT …
      * FOR SHARE` statement (already this method's whole transaction): the `teacherProfiles` row
      * is read FOR SHARE as part of the very statement that writes the subscription, so a
      * verification change can only land strictly before or after it, never mid-write.
@@ -124,6 +227,11 @@ export function subscriptionsRepo(db: Db) {
                 eq(teacherProfiles.userId, packageVersions.teacherId),
                 eq(teacherProfiles.verificationStatus, 'verified'),
               )}
+              inner join ${packages} on ${and(
+                eq(packages.id, packageVersions.packageId),
+                eq(packages.liveVersion, packageVersions.version),
+              )}
+              inner join ${agents} on ${and(eq(agents.id, packages.agentId), eq(agents.status, 'live'))}
               where ${and(
                 eq(packageVersions.id, i.packageVersionId),
                 eq(packageVersions.teacherId, teacherId),
@@ -225,6 +333,204 @@ export function subscriptionsRepo(db: Db) {
             paused.push({ subscriptionId: d.id, packageId: d.packageId, previousStatus });
           }
           return paused;
+        }),
+      );
+    },
+
+    /**
+     * Switches the scope's live subscription to another package version of the **same agent**
+     * (task 9.6 Phase C; checkout and proration are 10.8/10.3). The target must be the **live**
+     * version (`packages.live_version`) of a package of this teacher and this agent, and that
+     * agent must be `live` — a draft or old version, another teacher's version, or a suspended
+     * agent's package is `not_found`, same as `start`. The current subscription must be `trial`,
+     * `active` or `past_due` (`paused`/`ended` is `invalid`); the same version as now is also
+     * `invalid` (nothing to change). `status` and `period_end` are kept: there is no payment yet,
+     * so neither proration nor a new billing period exists (9.6's Q1 = (a), until 10.3).
+     */
+    async changePackage(
+      scope: StudentScope,
+      input: ChangePackageInput,
+    ): Promise<LiveSubscription> {
+      const method = 'subscriptions.changePackage';
+      const { studentId, teacherId } = studentScope(scope, method);
+      const i = parseArg(ChangePackageOptions, input, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
+          if (!LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])) {
+            throw new RepositoryError('invalid', method);
+          }
+          if (live.packageVersionId === i.packageVersionId) {
+            throw new RepositoryError('invalid', method);
+          }
+          const [current] = await tx
+            .select({ agentId: packages.agentId })
+            .from(packageVersions)
+            .innerJoin(packages, eq(packages.id, packageVersions.packageId))
+            .where(eq(packageVersions.id, live.packageVersionId));
+          // Integrity, not not_found: the subscription's own current version must exist. The FK
+          // on subscriptions.package_version_id (via package_versions.package_id -> packages)
+          // makes this unreachable in practice; kept so a future FK relaxation fails closed.
+          /* v8 ignore next -- see above */
+          if (!current) throw new RepositoryError('integrity', method);
+
+          const [target] = await tx
+            .select({ id: packageVersions.id })
+            .from(packageVersions)
+            .innerJoin(
+              packages,
+              and(
+                eq(packages.id, packageVersions.packageId),
+                eq(packages.liveVersion, packageVersions.version),
+                eq(packages.agentId, current.agentId),
+              ),
+            )
+            .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
+            .where(
+              and(
+                eq(packageVersions.id, i.packageVersionId),
+                eq(packageVersions.teacherId, live.teacherId),
+              ),
+            );
+          if (!target) throw new RepositoryError('not_found', method);
+
+          await tx
+            .update(subscriptions)
+            .set({ packageVersionId: i.packageVersionId })
+            .where(eq(subscriptions.id, live.id));
+          await writeChangeAudit(
+            tx,
+            method,
+            CHANGE_PACKAGE_ACTION,
+            live,
+            { status: live.status, packageVersionId: live.packageVersionId },
+            { status: live.status, packageVersionId: i.packageVersionId },
+          );
+          return { id: live.id, packageVersionId: i.packageVersionId, status: live.status, periodEnd: live.periodEnd };
+        }),
+      );
+    },
+
+    /**
+     * A student pausing their own subscription (task 9.6 Phase C; the cost alarm's own pause is
+     * `pauseFreeForTeacher` above, audited separately so `resume` can tell them apart). `trial`,
+     * `active` or `past_due` become `paused`; already `paused` (by the student, the cost alarm or
+     * any future staff action) or `ended` is `invalid`.
+     */
+    async pause(scope: StudentScope, input: SubscriptionIdInput): Promise<LiveSubscription> {
+      const method = 'subscriptions.pause';
+      const { studentId, teacherId } = studentScope(scope, method);
+      const i = parseArg(SubscriptionIdOptions, input, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
+          if (!LIVE_FOR_STUDENT_WRITE.includes(live.status as (typeof LIVE_FOR_STUDENT_WRITE)[number])) {
+            throw new RepositoryError('invalid', method);
+          }
+          await tx
+            .update(subscriptions)
+            .set({ status: 'paused' })
+            .where(eq(subscriptions.id, live.id));
+          await writeChangeAudit(
+            tx,
+            method,
+            STUDENT_PAUSE_ACTION,
+            live,
+            { status: live.status, packageVersionId: live.packageVersionId },
+            { status: 'paused', packageVersionId: live.packageVersionId },
+          );
+          return { id: live.id, packageVersionId: live.packageVersionId, status: 'paused', periodEnd: live.periodEnd };
+        }),
+      );
+    },
+
+    /**
+     * Undoes the student's own pause (task 9.6 Phase C, Q6): only a pause this student made
+     * (`STUDENT_PAUSE_ACTION`) can be undone by them. The cost alarm's pause, any future staff
+     * pause, or a paused row with no audit row at all, is `invalid` — the plan page shows a
+     * fixed "paused by Edmate" text for those instead of a resume button. Not currently `paused`
+     * is also `invalid`. Resume restores the status the latest own-pause audit row's `before`
+     * names; `period_end` never moves (no payment yet).
+     */
+    async resume(scope: StudentScope, input: SubscriptionIdInput): Promise<LiveSubscription> {
+      const method = 'subscriptions.resume';
+      const { studentId, teacherId } = studentScope(scope, method);
+      const i = parseArg(SubscriptionIdOptions, input, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
+          if (live.status !== 'paused') throw new RepositoryError('invalid', method);
+
+          const [lastPause] = await tx
+            .select({ action: auditLog.action, before: auditLog.before })
+            .from(auditLog)
+            .where(
+              and(
+                eq(auditLog.target, `subscription:${live.id}`),
+                eq(auditLog.teacherId, live.teacherId),
+                eq(auditLog.studentId, live.studentId),
+              ),
+            )
+            .orderBy(desc(auditLog.ts), desc(auditLog.id))
+            .limit(1);
+          if (!lastPause || lastPause.action !== STUDENT_PAUSE_ACTION) {
+            throw new RepositoryError('invalid', method);
+          }
+          const parsed = StatusSnapshot.safeParse(lastPause.before);
+          if (!parsed.success) throw new RepositoryError('integrity', method);
+          const restored = parsed.data.status;
+          if (restored === 'paused' || restored === 'ended') {
+            throw new RepositoryError('integrity', method);
+          }
+
+          await tx
+            .update(subscriptions)
+            .set({ status: restored })
+            .where(eq(subscriptions.id, live.id));
+          await writeChangeAudit(
+            tx,
+            method,
+            STUDENT_RESUME_ACTION,
+            live,
+            { status: 'paused', packageVersionId: live.packageVersionId },
+            { status: restored, packageVersionId: live.packageVersionId },
+          );
+          return { id: live.id, packageVersionId: live.packageVersionId, status: restored, periodEnd: live.periodEnd };
+        }),
+      );
+    },
+
+    /**
+     * Cancels the scope's live subscription (task 9.6 Phase C): any live status (`trial`,
+     * `active`, `past_due` or `paused`) becomes `ended` at once (9.6's Q1 = (a); 10.3 moves this
+     * to period end once a provider exists). `ended` already is `invalid`. After it, `findLive`
+     * is `null` and `start` succeeds again for the pair.
+     */
+    async cancel(scope: StudentScope, input: SubscriptionIdInput): Promise<LiveSubscription> {
+      const method = 'subscriptions.cancel';
+      const { studentId, teacherId } = studentScope(scope, method);
+      const i = parseArg(SubscriptionIdOptions, input, method);
+
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const live = await lockLive(tx, studentId, teacherId, i.subscriptionId, method);
+          if (live.status === 'ended') throw new RepositoryError('invalid', method);
+          await tx
+            .update(subscriptions)
+            .set({ status: 'ended' })
+            .where(eq(subscriptions.id, live.id));
+          await writeChangeAudit(
+            tx,
+            method,
+            STUDENT_CANCEL_ACTION,
+            live,
+            { status: live.status, packageVersionId: live.packageVersionId },
+            { status: 'ended', packageVersionId: live.packageVersionId },
+          );
+          return { id: live.id, packageVersionId: live.packageVersionId, status: 'ended', periodEnd: live.periodEnd };
         }),
       );
     },
