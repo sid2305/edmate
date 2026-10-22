@@ -2074,7 +2074,7 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   needs_decision:
   - default-model-mix
   branch: null
@@ -2115,7 +2115,7 @@ tasks:
   - '5.10'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '9.1'
@@ -3115,9 +3115,29 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: running
+  status: done
   branch: m8/8.4a-style-card-api
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 54
+    tokens_in: 200
+    tokens_out: 761
+    cache_read_tokens: 2674217
+    wall_time_seconds: 90
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.5a
   milestone: M8
   title: '8.5 Phase A: packages/db corrections repository, agentVersions.latest, packageVersions.listForAgent (plan docs/tasks/8.5/plan.md)'
@@ -3125,9 +3145,9 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: review
+  branch: m8/8.5a-corrections-db
+  model: plan:opus build:opus
 - id: 8.5b
   milestone: M8
   title: '8.5 Phase B: apps/web test-chat composition and API routes (plan docs/tasks/8.5/plan.md)'
@@ -3157,9 +3177,59 @@ tasks:
   deps:
   - '9.4'
   risk: normal
-  status: review
+  status: done
   branch: m9/9.0d-sse-test-flake
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 40
+    tokens_out: 389
+    cache_read_tokens: 394242
+    wall_time_seconds: 59
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
+- id: 8.4c
+  milestone: M13
+  title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card
+    interview answers and saved card text before they reach the drafter or a turn prompt'
+  accept: studio drafting writes usage-ledger rows under a teacher scope; a test shows override phrases are removed from a saved card's prompt text.
+  deps:
+  - 8.4a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.6a
+  milestone: M8
+  title: '8.6 Phase A: packages/gateway model-mix table (B-42), Sonnet 5 price and per-turn cost estimate (plan docs/tasks/8.6/plan.md)'
+  accept: 8.6 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: normal
+  status: running
+  branch: m8/8.6a-model-mix
+  model: plan:opus build:opus
+- id: 8.6b
+  milestone: M8
+  title: '8.6 Phase B: packages/db agents.ensureDraft and the packages repository (plan docs/tasks/8.6/plan.md)'
+  accept: 8.6 plan Phase B exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

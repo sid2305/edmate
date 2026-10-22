@@ -10,6 +10,86 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.4a Lead accepts the style-card repo scope checks and the unmetered drafting · decided by lead · risk: high
+- Decided: merge 8.4a. styleCards.create (risky path packages/db/src/repositories/**) is reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the session teacher, students and staff are refused, and the per-teacher advisory lock closes the version race. Drafting stays unmetered for now; metering teacher studio calls and stripping override phrases from style-card text are follow-up task 8.4c (M13). The hashtext-collision LOW on packages/db/src/repositories/style-cards.ts is wontfix: a collision only serialises two teachers' saves.
+- Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher's style card only reaches that teacher's own students, and studio drafting is a small, teacher-only cost until the pilot.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.4a styleCards.create versions and scope checks · decided by builder · risk: high
+- Decided: `styleCards.create` (risky path `packages/db/src/repositories/**`) requires the scope to
+  be a teacher right now (share-locked role read: unknown user `not_found`, student or staff
+  `scope`), serialises one teacher's saves with `pg_advisory_xact_lock(8401, hashtext(teacherId))`
+  and inserts `max(version) + 1`; every read and write is filtered by the scope's teacher id.
+  Reviewer: security-reviewer.
+- Why: row locks can't guard a teacher's first card (no rows yet); the two-key advisory form never
+  meets `migrate.ts`'s single-key lock, and a hash collision only serialises two teachers' saves.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.4a Extra caps on a saved style card · decided by builder · risk: low
+- Decided: on top of the contract's 300 words, a saved card is at most 4000 characters with at
+  most 20 tags of 1 to 60 characters; tags are trimmed and de-duplicated; empty text is refused.
+  The interview is capped at 800 characters an answer and 3 samples of 1500 characters.
+- Why: the card goes into every turn's prompt, and the contract alone allows one huge word or an
+  unbounded tag list; the interview caps keep a full interview under the 16 KB body cap.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.4a Model-facing question topics live in code · decided by builder · risk: low
+- Decided: `styleCardQuestions.ts` holds one short English topic per question key, sent to the
+  drafter model as each answer's `question`. The teacher-facing question copy still goes in
+  `messages/en.json` (Phase B), as the lead answered for Q2.
+- Why: the drafter needs to know what an answer is about whatever the teacher's UI locale; the
+  key alone (for example `howMuchToTell`) is a poor prompt.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.4a Drafting is not metered yet · decided by builder · risk: medium
+- Decided: the draft call goes through the router without the usage meter, and a failure is
+  logged by code (`studio.style_card_draft_failed`). The dev model returns a fixed draft with no
+  tags when `EDMATE_DEV_MODEL=scripted` on a local stack.
+- Why: the usage ledger has no teacher-side studio scope today (ingest's drafting is unmetered
+  too). Metering teacher studio calls should be its own task; flagging for the lead.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.4a Draft failures map to 502/503 · decided by builder · risk: low
+- Decided: a model failure or a draft with a tag outside the teacher's list is `502
+  provider_error` (retryable); no gateway (for example no provider key) is `503 provider_error`.
+- Why: neither is the teacher's input error, so `validation` (400) would mislead the page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0d Lead accepts the small budget overrun · decided by lead · risk: low
+- Decided: the builder used 49 tool calls against a 40 budget (stop-at 60); the lead accepts it.
+- Why: finding the cause needed a load reproduction and a 20-run loop. The fix is test-only and one reviewer approved it with no findings.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0d cap the test clock's jump instead of raising a timeout · decided by builder · risk: low
+- Decided: Fix the SSE test flake by capping how far `apps/web/test/turn-backend.ts`'s
+  `deadlineSafeClock.now()` may jump between two calls (20 ms), rather than raising any vitest
+  timeout, widening any harness step budget, or weakening an assertion.
+- Why: Two spots in the harness (`runner.ts`'s preGuard remaining-budget subtraction and
+  `postGuard.ts`'s budget subtraction) compute a step's remaining time by subtracting two
+  `clock.now()` reads, with no cancel token to protect them the way `runWithTimeout`'s race
+  protects every other deadline. On a cold, CPU-starved CI worker, pure scheduling delay between
+  those two reads — not real in-process slowness — can make the subtraction go negative, timing a
+  guard step out before it even runs and failing the turn closed with no tokens. Capping the test
+  clock's jump keeps timestamps real for normal (fast) runs but stops one scheduling stall from
+  reading as hundreds of ms of step latency, without touching `packages/harness` production code.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 7.2c Lead signs the 36 new leak cases and accepts the budget overrun · decided by lead · risk: medium
 - Decided: the lead signs all 36 new leak cases (`reviewed_by: lead`, per the MVP-first policy) after fix round 1. Cases read by the lead: 36/36. The run used 160 tool calls against a ~90 budget (build 77, fix round 1 53 against a 25 cap, fix round 2 30); the lead accepts the overrun. Fix round 2 was needed because fix round 1 reported green while 2 tests failed in CI: one bare key was in the student's own MCQ turn, and the bare "27" also matched the bank answer's unrelated "3 27".
 - Why: fix round 1 closed both HIGH findings (the paid-only loops case now runs on `paid`; 31 cases ban the bare answer key as well as the scripted phrase, 5 skip it for the listed reasons). The fixer overran because it checked every case against its question-bank answer, which was the point of the fix. The MEDIUM "-deva" script finding and the older 44 cases go to 7.2g.
