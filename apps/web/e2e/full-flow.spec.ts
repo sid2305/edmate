@@ -12,12 +12,14 @@
 //
 // Next dev compiles each route on its first visit; on a loaded CI/dev box that first compile can
 // outlast a plain click/fill, which would otherwise race hydration (the server-rendered control
-// is visible, and actionable, before React attaches its listeners). Every interaction that
-// depends on a just-navigated page's own JS is therefore wrapped in `expect(...).toPass(...)`,
-// retrying the whole fill/click + assert pair rather than trusting the first attempt.
+// is visible, and actionable, before React attaches its listeners, so an early click is a no-op).
+// `postOnce` therefore retries only until the action's own POST has left the browser, never after:
+// the turns route hands out single-use fixtures in a fixed order and the Start button posts a real
+// subscription, so a second POST would desync the flow. Each outcome is then awaited on its own
+// with Playwright's expect timeout -- the action is never repeated.
 import type { TurnEvent } from '@edmate/contracts';
 import { openDatabase } from '@edmate/db';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page, type Request } from '@playwright/test';
 import {
   DEMO_AGENT,
   DEMO_TEACHER,
@@ -39,24 +41,41 @@ const PAID_PACKAGE_NAME = 'Full course';
 const UNCOVERED_QUESTION_TEXT = 'Why does Python indentation matter so much?';
 const TEACHER_ANSWER_TEXT = 'Indentation is how Python knows which lines belong to which block.';
 
-/** Sends one chat message, retrying the fill/click pair until `expectation` passes (see the
- * file header: a just-navigated page's hydration can still be in flight). */
-async function sendMessageUntil(page: Page, text: string, expectation: () => Promise<void>): Promise<void> {
-  const box = page.getByLabel('Your message');
-  const send = page.getByRole('button', { name: 'Send' });
-  await expect(async () => {
-    await box.fill(text);
-    await send.click();
-    await expectation();
-  }).toPass({ timeout: 30_000 });
+const STEP_TIMEOUT = 30_000;
+
+/** Runs `act` (a fill and/or click) until a POST whose path matches `path` is sent, then stops: an
+ * attempt before hydration sends nothing (or natively reloads the form, clearing any fill) and is
+ * retried whole; once the POST is out, `act` is never run again (file header). A fill clears the
+ * box first: a pre-hydration fill leaves the DOM value equal to the text, and React ignores an
+ * input event that doesn't change the value, so a same-value refill would leave its state empty. */
+async function postOnce(page: Page, path: RegExp, act: () => Promise<void>): Promise<void> {
+  let sent = false;
+  const onRequest = (request: Request): void => {
+    if (request.method() === 'POST' && path.test(new URL(request.url()).pathname)) sent = true;
+  };
+  page.on('request', onRequest);
+  try {
+    await expect(async () => {
+      if (sent) return;
+      await act();
+      await expect.poll(() => sent, { timeout: 2_000 }).toBe(true);
+    }).toPass({ timeout: STEP_TIMEOUT });
+  } finally {
+    page.off('request', onRequest);
+  }
 }
 
-/** Clicks `locator`, retrying until `expectation` passes (see the file header). */
-async function clickUntil(locator: Locator, expectation: () => Promise<void>): Promise<void> {
-  await expect(async () => {
-    await locator.click();
-    await expectation();
-  }).toPass({ timeout: 30_000 });
+/** A send's first POST: `/api/sessions` (opening the session, first message only) or the turn. */
+const SEND_PATH = /^\/api\/sessions(\/[^/]+\/turns)?$/;
+
+/** Sends one chat message exactly once (one POST to the turns route, one fixture consumed). */
+async function sendMessage(page: Page, text: string): Promise<void> {
+  await postOnce(page, SEND_PATH, async () => {
+    const box = page.getByLabel('Your message');
+    await box.fill('');
+    await box.fill(text);
+    await page.getByRole('button', { name: 'Send' }).click();
+  });
 }
 
 test('discover-less full flow: subscribe (free) -> learn -> locked -> uncovered question -> teacher answer', async ({
@@ -102,31 +121,28 @@ test('discover-less full flow: subscribe (free) -> learn -> locked -> uncovered 
       await studentPage.goto('/packages/demo-agent');
       const freeCard = studentPage.getByRole('listitem').filter({ hasText: 'Free starter' });
       await expect(freeCard.getByRole('button', { name: 'Start' })).toBeVisible();
-      await clickUntil(freeCard.getByRole('button', { name: 'Start' }), () =>
-        expect(studentPage).toHaveURL(/\/learn\/demo-agent(\?.*)?$/, { timeout: 3_000 }),
-      );
-      await expect(studentPage.getByLabel('Your message')).toBeVisible();
+      const start = freeCard.getByRole('button', { name: 'Start' });
+      await postOnce(studentPage, /^\/api\/subscriptions$/, () => start.click());
+      await expect(studentPage).toHaveURL(/\/learn\/demo-agent(\?.*)?$/, { timeout: STEP_TIMEOUT });
+      await expect(studentPage.getByLabel('Your message')).toBeVisible({ timeout: STEP_TIMEOUT });
     });
 
     await test.step('learn: a normal reply streams in', async () => {
       const thread = studentPage.locator('ol[aria-live="polite"]');
-      await sendMessageUntil(studentPage, 'Hi tutor', () =>
-        expect(thread).toContainText('Hello! Ready to learn.', { timeout: 3_000 }),
-      );
+      await sendMessage(studentPage, 'Hi tutor');
+      await expect(thread).toContainText('Hello! Ready to learn.', { timeout: STEP_TIMEOUT });
     });
 
     await test.step('a locked topic shows the locked notice', async () => {
       const notice = studentPage.getByText(`This is part of ${PAID_PACKAGE_NAME}.`);
-      await sendMessageUntil(studentPage, 'Can you teach me the advanced topic?', () =>
-        expect(notice).toBeVisible({ timeout: 3_000 }),
-      );
+      await sendMessage(studentPage, 'Can you teach me the advanced topic?');
+      await expect(notice).toBeVisible({ timeout: STEP_TIMEOUT });
     });
 
     await test.step('an uncovered question is sent to the teacher', async () => {
       const notice = studentPage.getByText("Sent to your teacher. They'll answer in a live class or here.");
-      await sendMessageUntil(studentPage, UNCOVERED_QUESTION_TEXT, () =>
-        expect(notice).toBeVisible({ timeout: 3_000 }),
-      );
+      await sendMessage(studentPage, UNCOVERED_QUESTION_TEXT);
+      await expect(notice).toBeVisible({ timeout: STEP_TIMEOUT });
     });
 
     await test.step('the teacher sees and answers the question', async () => {
@@ -134,11 +150,13 @@ test('discover-less full flow: subscribe (free) -> learn -> locked -> uncovered 
       await teacherPage.goto('/teacher/questions');
       await expect(teacherPage.getByText(UNCOVERED_QUESTION_TEXT)).toBeVisible();
       const answered = teacherPage.getByText('Answer sent to every student who asked.');
-      await expect(async () => {
-        await teacherPage.getByLabel('Your answer').fill(TEACHER_ANSWER_TEXT);
+      await postOnce(teacherPage, /^\/api\/studio\/questions\/answer$/, async () => {
+        const box = teacherPage.getByLabel('Your answer');
+        await box.fill('');
+        await box.fill(TEACHER_ANSWER_TEXT);
         await teacherPage.getByRole('button', { name: 'Send answer' }).click();
-        await expect(answered).toBeVisible({ timeout: 3_000 });
-      }).toPass({ timeout: 30_000 });
+      });
+      await expect(answered).toBeVisible({ timeout: STEP_TIMEOUT });
     });
 
     await test.step("the student reloads and sees the teacher's answer", async () => {

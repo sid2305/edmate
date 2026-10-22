@@ -44,6 +44,31 @@ Not yet proven green in GitHub Actions itself (no Actions run was triggered from
 CI job change is added and locally verified against the same Postgres-only footprint the `node`
 job already has.
 
+## Fix round
+Code-reviewer HIGH (retry re-sends a message) and its sibling, all in `apps/web/e2e/full-flow.spec.ts`:
+- `sendMessageUntil` and `clickUntil` are gone. A new `postOnce(page, path, act)` runs the fill/click
+  until that action's own POST has left the browser (a `page.on('request')` flag), and never again
+  after. A click before hydration sends nothing and is retried. A click after it is never repeated,
+  so each chat message uses exactly one `mockTurns` fixture and Start posts `/api/subscriptions`
+  once. Each outcome (URL, reply text, notice) is then awaited on its own with a 30 s expect
+  timeout, with no retry around it.
+- The same pattern also covered the teacher's "Send answer" (a real POST), so it now uses `postOnce` too.
+- Found while fixing: a fill before hydration leaves the DOM value equal to the text. React then
+  ignores the same-value refill and its state stays empty, so Send did nothing on a cold
+  `next dev`. Each fill now clears the box first.
+- `fixtures.ts` is unchanged; no fixed sleeps.
+
+e2e evidence (throwaway compose Postgres on 55432, fresh data dir; each run starts a cold `next dev`):
+```
+corepack pnpm --filter @edmate/web e2e full-flow.spec.ts   # x3 in a row
+run 1  ✓ full-flow.spec.ts › discover-less full flow ... (14.7s)  1 passed
+run 2  ✓ full-flow.spec.ts › discover-less full flow ... (13.6s)  1 passed
+run 3  ✓ full-flow.spec.ts › discover-less full flow ... (10.4s)  1 passed
+corepack pnpm --filter @edmate/web e2e                      # 12 passed (22.9s)
+```
+Note: the spec relies on a clean test DB. Each failed run leaves its seeded question open, and a
+later run's `getByText(question)` then fails strict mode. CI always starts with a fresh database.
+
 ## Decisions
 
 ### 22 Oct 2026 · 9.7a CI runs the Playwright e2e suite in the node job · decided by builder · risk: high
@@ -95,4 +120,4 @@ job already has.
   tsx`) and 9.6 (subscription upgrade), per the plan's build order.
 
 Status: DONE
-Tool calls used: 33
+Tool calls used: 72
