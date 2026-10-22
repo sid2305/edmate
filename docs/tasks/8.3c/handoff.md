@@ -3,7 +3,7 @@
 Status: DONE
 - **Branch:** `m8/8.3c-outline-editor` (local `work-83c`)
 - **Worktree:** `.claude/worktrees/agent-a6a06a41ee562f034`
-Tool calls used: 80 (harness counts: build 49, fix round 1 31)
+Tool calls used: 100 (harness counts: build 49, fix round 1 31, merge with main 20)
 - **Scope:** `apps/web` only (`apps/web/app/teacher/outline/**`, `apps/web/app/teacher/view.tsx`
   (+test), `apps/web/messages/en.json`). No `packages/contracts`, `.claude/`, `.github/` or
   `apps/web/src/auth/**` change.
@@ -121,7 +121,7 @@ Tests: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` —
 successful (OutlineView.test.tsx 12 tests, outlineClient.test.ts passing, full web suite green).
 `python3 .githooks/secret-scan.py --all` — clean.
 
-Tool calls used: 19
+Fix round tool calls (self-reported): 19
 
 Merge with main (after 8.4b): en.json conflict resolved by keeping both namespaces.
-Merge tool calls: 13
+Merge tool calls: 20 (harness count)
