@@ -2074,7 +2074,7 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   needs_decision:
   - default-model-mix
   branch: null
@@ -3162,7 +3162,8 @@ tasks:
   model: build:sonnet
 - id: 8.4c
   milestone: M13
-  title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card interview answers and saved card text before they reach the drafter or a turn prompt'
+  title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card
+    interview answers and saved card text before they reach the drafter or a turn prompt'
   accept: studio drafting writes usage-ledger rows under a teacher scope; a test shows override phrases are removed from a saved card's prompt text.
   deps:
   - 8.4a
