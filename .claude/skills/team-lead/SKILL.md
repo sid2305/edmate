@@ -15,10 +15,11 @@ You are the team lead: the main Claude session in `~/edmate`. You hold the end-t
 
 1. `python3 .claude/skills/board/board.py next` lists ready tasks and tasks waiting on a decision.
 2. If a task needs a decision, ask the human (AskUserQuestion, with the options and recommendation from the board). Then run `board.py decide <key> "<answer>"` and add a decision-log entry.
-3. Choose up to **3 tasks in parallel** (builders are **1 Opus + 1 Sonnet** running at once), and only if they touch different packages. The hooks never ask, so any task can run in the background; risky paths are checked at merge time.
+3. Run builders as **1 Opus + 2 Sonnet at once** (human decision 22 Oct 2026, trial until 24 Oct 2026, task 0.22 reviews it). Two builds may share a package: the rule is **no shared files**. Before starting a build, compare its plan's "files touched" list with every running build's list; if the two lists share a file, a migration number or a barrel export, serialize the later one or have the planner split it. Only two tasks that both edit the same file wait for each other, not two tasks that both live in `apps/web`. The hooks never ask, so any task can run in the background; risky paths are checked at merge time.
+4. **Keep two plans ready ahead of the builders.** While builders run, plan the next two tasks in queue order so a freed slot starts a build at once instead of waiting on a planner. Plans are cheap; an idle builder slot is not.
 
 ## 2. Choose the model (token efficiency)
-Builders run as **at most 1 Opus and 1 Sonnet at once** (the human's decision, 19 Oct 2026): pass `model` explicitly when starting `tdd-guide` or `build-error-resolver` — opus for safety-heavy, contracts or multi-package work, sonnet for small, mechanical or well-specified tasks and most fix rounds. Effort stays as pinned in the agent files (`effort: medium`); it can't be changed per call, so if a coding task seems to need more depth, ask the human rather than changing the file. The other agents have cheap defaults; override those per job with the Agent tool's `model` parameter only when the task needs more. Record what ran with `board.py set <id> <status> --model "plan:sonnet build:opus-5.5/medium review:sonnet"`.
+Builders run as **at most 1 Opus and 2 Sonnet at once** (the human's decision, 22 Oct 2026; was 1 + 1 from 19 Oct): pass `model` explicitly when starting `tdd-guide` or `build-error-resolver` — opus for safety-heavy, contracts or multi-package work, sonnet for small, mechanical or well-specified tasks and most fix rounds. Effort stays as pinned in the agent files (`effort: medium`); it can't be changed per call, so if a coding task seems to need more depth, ask the human rather than changing the file. The other agents have cheap defaults; override those per job with the Agent tool's `model` parameter only when the task needs more. Record what ran with `board.py set <id> <status> --model "plan:sonnet build:opus-5.5/medium review:sonnet"`.
 
 | Agent | Default | Use **opus** when | Use **haiku** when |
 | --- | --- | --- | --- |
@@ -39,7 +40,7 @@ Each agent's known limitations, typical misses, average cost per run and last-re
 **Token budget** (task 0.15). Every model call re-sends the agent's whole conversation, so usage grows with context size × number of calls. A measurement on 19 Oct 2026 found 72% of all usage was re-reading context: builders ran 100–300 calls and grew to 400–630k tokens, and the lead averaged 434k tokens per call. Calls over 200k tokens of context were 60% of usage. Reviewers and planners were cheap (14% together).
 - **Small builds.** The planner splits big tasks into phases; start a **fresh builder per phase** with the plan path and the previous phase's handoff. When a builder returns `Status: PARTIAL`, start a fresh builder for the "Left to do" list. Don't push one agent past about 150 tool calls.
 - **Fix rounds go to a fresh agent** with a short brief: the findings to fix (severity, file:line, the reviewer's fix), the paths of `plan.md`, `handoff.md` and `review.md`, and the worktree. For findings on safety paths (guardrails, distress, PII, locked content, prompt packs), the brief also includes the path of the full `review.md`/`safety-review.md` (or the reviewer's full findings), and the fixer must read it, not just the one-line summary. Continue the original builder with SendMessage only if it finished in under about 60 calls. A fresh fixer starts at about 10k tokens, while a finished builder carries 300k+ into every call.
-- **1 Opus + 1 Sonnet at once** (the human's rule). Reviewers and planners can run alongside them.
+- **1 Opus + 2 Sonnet at once** (the human's rule, 22 Oct 2026). Reviewers and planners can run alongside them.
 - **Short returns.** Ask every agent for a return of 15 lines or fewer: verdict, findings, paths. Details go in files (`handoff.md`, `review.md`). Each completion notice lands in your context.
 - **Keep your own context small.** The board, the task folders, `blockers.md` and the decision log hold all state, so you lose nothing by compacting. After each merge batch, or once your context passes about 200k tokens, finish the batch, then compact (`.claude/settings.json` sets `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to 200k, so this happens on its own) or tell the human it's a good moment to `/compact` or start a fresh lead session. Don't re-read large files you already know; use `board.py status` and `grep` rather than printing whole files.
 - Run only the reviewers the diff needs: no `database-reviewer` without DB changes, no `rag-pipeline-reviewer` without retrieval changes.
@@ -83,7 +84,7 @@ branch is created, not only after the build: until the pilot gate (13.3) the lea
 ## 5. Never
 - Write feature code, merge with a failing gate, or merge risky work without its required reviewers and a `risk: high` decision.
 - List a reviewer in `review.md` that did not run, or add the old `human-approved` label (a hook blocks it).
-- Let two parallel builders edit the same package.
+- Let two parallel builders edit the same file, migration number or barrel export (the same package is fine when the plans' file lists don't overlap).
 - End your turn with agents still running and their results unread. Collect, integrate, then report.
 
 ## End-of-session report (to the human, in plain words)

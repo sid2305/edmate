@@ -10,6 +10,13 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · Builders: 1 Opus + 2 Sonnet, no-shared-files rule, two plans ready ahead · decided by you · risk: high
+Decided: Builders run as 1 Opus + 2 Sonnet at once (was 1 + 1). Two builds may share a package as long as their plans' file lists, migration numbers and barrel exports don't overlap; the lead checks the lists before starting a build. The lead keeps the next two tasks planned while builders run. Trial until 24 Oct 2026; task 0.22 compares merges per day, idle time, HIGH findings and fix rounds, and recommends keep, revert or adjust.
+Why: "One builder per package" serialized every apps/web task (9.0, all of M8 and M9) for weeks. Sonnet is about 14% of spend and its tasks hold up in review, so a second Sonnet fits the subscription; a second Opus does not. A freed slot waited 10–20 minutes on a plan.
+Alternatives: a second Opus slot (rejected: slots weren't the bottleneck, Opus is most of the spend); a Sonnet "review integrator" agent (deferred until the agent registry, 0.18, is in use).
+Reversible: Yes, three lines in the team-lead skill; 0.22 decides on 24 Oct 2026.
+
+
 ### 22 Oct 2026 · 9.0b With embeddings off, retrieval runs on full text only · decided by builder · risk: medium
 - Decided: `EDMATE_INGEST_EMBEDDINGS=off` stores chunks with no embedding. Retrieval still finds them through its full-text signal (the vector signal skips null embeddings). Video and audio fail as `unsupported` because there is no transcriber.
 - Why: the try-it stack must run without an OpenAI key (9.0 plan D3). Relevance is lower without vectors, but chat still quotes the teacher's material. The switch is explicit and logged, never a silent fallback when a key is missing.

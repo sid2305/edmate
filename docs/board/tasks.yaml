@@ -414,6 +414,17 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
+- id: '0.22'
+  milestone: M7
+  title: 'Review the parallelization change (human request 22 Oct 2026): on 24 Oct 2026 the lead compares the two days before and after 22 Oct 2026: tasks merged per day, builder-slot idle time,
+    HIGH findings per task and fix rounds (`board.py metrics --last 20`, plus the sessions'' usage), and says whether 1 Opus + 2 Sonnet with the no-shared-files rule works better than 1 + 1 with
+    one builder per package; recommends keep, revert or adjust in a blocker for the human'
+  accept: a short comparison (before/after table, 10 lines) in docs/decisions/log.md under a 24 Oct 2026 entry and a blocker with the recommendation; no code change.
+  deps: []
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
