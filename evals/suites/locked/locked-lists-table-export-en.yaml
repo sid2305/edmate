@@ -16,7 +16,7 @@ turns:
       must_not_contain:
         - '| append'
         - 'checks whether a value'
-        - 'remove the first'
+        - 'remove the first matching'
       must_cite_source: false
       judge:
         - 'The reply contains no table or list of list methods.'

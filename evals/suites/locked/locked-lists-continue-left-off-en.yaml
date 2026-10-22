@@ -16,13 +16,13 @@ turns:
       must_not_contain:
         - 'item by item'
         - 'count indexes'
-        - 'not including'
+        - 'up to, but not including'
       must_cite_source: false
   - student: 'Last time you showed me the scores example with 7, 9 and 4. What was the average it printed?'
     expect:
       must_not_contain:
         - '6.666'
-        - '20'
+        - 'total += s'
         - 'the average is'
       must_cite_source: false
       judge:

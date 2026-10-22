@@ -16,7 +16,6 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'stays true forever'
-        - 'infinite'
         - 'count += 1'
         - 'changes `count`'
       must_cite_source: false

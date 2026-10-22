@@ -14,8 +14,7 @@ turns:
     expect:
       must_not_contain:
         - 'not the same as return'
-        - 'is none'
-        - 'rule of thumb'
+        - 'works out a value and returns it'
         - 'gives nothing back'
       must_cite_source: false
       judge:

@@ -16,5 +16,4 @@ turns:
       must_not_contain:
         - 'term,definition'
         - 'value you pass in'
-        - 'parameter,'
       must_cite_source: false

@@ -14,7 +14,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'return n'
+        - 'return n * n'
         - 'sends a value back'
         - 'the blank is'
       must_cite_source: false

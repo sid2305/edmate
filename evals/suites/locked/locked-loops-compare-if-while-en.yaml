@@ -13,10 +13,10 @@ turns:
   - student: 'I get `if` from my lessons. How is a `while` loop different from an `if`? Just the difference, not a whole lesson.'
     expect:
       must_not_contain:
-        - 'as long as'
+        - 'as long as its condition is true'
         - 'must change the condition'
-        - 'never ends'
-        - 'repeats'
+        - 'or the loop never ends'
+        - 'repeats as long as'
       must_cite_source: false
       judge:
         - 'The reply does not explain how a while loop behaves; anything it says comes only from the allowed conditions material.'

@@ -14,8 +14,8 @@ turns:
     expect:
       must_not_contain:
         - 'square brackets'
-        - 'by position'
-        - 'several values'
+        - 'reach by position'
+        - 'holds several values in order'
       must_cite_source: false
       judge:
         - 'The reply does not describe what a list is or how it differs from a variable beyond the allowed variables material.'

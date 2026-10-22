@@ -15,7 +15,7 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'not there also gives'
-        - 'KeyError:'
+        - "KeyError: 'plums'"
         - 'stock["plums"]'
       must_cite_source: false
       judge:

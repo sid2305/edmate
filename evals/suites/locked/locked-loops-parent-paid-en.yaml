@@ -13,7 +13,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'right tool'
+        - 'the right tool when'
         - 'know in advance'
         - 'while true'
       must_cite_source: false

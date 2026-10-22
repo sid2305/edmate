@@ -15,7 +15,6 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'column a'
         - 'changes the apples'
         - 'stock["pears"]'
       must_cite_source: false

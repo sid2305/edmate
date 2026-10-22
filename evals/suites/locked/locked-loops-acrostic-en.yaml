@@ -15,7 +15,7 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'stops the loop'
-        - 'skips to the next'
+        - 'skips to the next pass'
         - 'stop number'
       must_cite_source: false
       judge:

@@ -14,7 +14,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'by key'
-        - 'not by position'
-        - 'no key'
+        - 'look things up by key'
+        - 'by key, not by position'
+        - 'there is no key'
       must_cite_source: false

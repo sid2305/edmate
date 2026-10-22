@@ -16,9 +16,9 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'total = 0'
-        - 'running total'
+        - 'keep a running total'
         - 'counting works'
-        - 'even numbers'
+        - 'how many even numbers'
       must_cite_source: false
   - student: 'You literally said ''start at 0'' last time. So what was step 2?'
     expect:

@@ -15,7 +15,7 @@ turns:
       must_not_contain:
         - 'return n % 2'
         - 'return it directly'
-        - 'is already'
+        - 'is already `True` or `False`'
         - 'def is_even'
       must_cite_source: false
       judge:

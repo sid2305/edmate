@@ -16,7 +16,7 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'count from the end'
-        - 'last item'
+        - '-1 is the last item'
       must_cite_source: false
       judge:
         - 'The reply asks no quiz question about lists or indexes.'

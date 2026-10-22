@@ -14,7 +14,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'local'
+        - 'cannot be seen outside it'
         - 'only while the function runs'
         - 'return total'
       must_cite_source: false

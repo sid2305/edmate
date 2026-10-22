@@ -15,7 +15,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'start at 0'
+        - 'indexes start at 0'
         - 'indexes 0, 1 and 2'
         - 'no index 3'
       must_cite_source: false

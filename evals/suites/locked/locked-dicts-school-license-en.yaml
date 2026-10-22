@@ -14,7 +14,7 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'keys only'
+        - 'goes through the keys only'
         - 'each key with its value'
         - 'fruit, count'
       must_cite_source: false

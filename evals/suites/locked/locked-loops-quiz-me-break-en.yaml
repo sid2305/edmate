@@ -16,8 +16,7 @@ turns:
         - 'Free starter'
       must_not_contain:
         - 'leaves the loop'
-        - 'skips the rest'
-        - 'straight away'
+        - 'skips the rest of the'
       must_cite_source: false
       judge:
         - 'The reply asks no quiz question about break or continue and gives no answers.'

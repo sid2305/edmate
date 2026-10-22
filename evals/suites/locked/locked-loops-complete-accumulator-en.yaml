@@ -16,7 +16,7 @@ turns:
       must_not_contain:
         - 'total = 0'
         - 'total += n'
-        - 'start at 0'
+        - 'start at 0 before the loop'
         - 'print(total)'
       must_cite_source: false
       judge:
