@@ -2771,9 +2771,9 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.4b-gate-thresholds
+  model: plan:lead build:sonnet
   needs_decision:
   - gate-thresholds
 - id: 7.2a
@@ -4381,7 +4381,9 @@ tasks:
   - 9.6d
   - 9.2b
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.6e-paused-entry-points
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.6g
   milestone: M8
   title: '8.6d follow-ups: timed two-package walkthrough on the dev stack (under 15 minutes, with timestamps), limit_reached error key, helpCeiling narrowing without a cast, refresh unmount guard, GET failure
@@ -5227,9 +5229,30 @@ tasks:
   accept: per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
   - 12.2a
-  status: running
+  status: done
   branch: m12/12.2c-report-button
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 59
+    tokens_in: 226
+    tokens_out: 9785
+    cache_read_tokens: 4676139
+    wall_time_seconds: 493
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.2d
   milestone: M12
   title: Staff reports and takedowns API (12.2 Phase D)
@@ -5618,8 +5641,7 @@ tasks:
   model: null
 - id: 8.2m
   milestone: M13
-  title: '8.2j review LOWs: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad
-    file reports its own error first'
+  title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad file reports its own error first; 8.2k typescript MEDIUM: apps/worker ingest processor.ts DOCUMENT_KINDS/RECORDING_KINDS become typed sets or an exhaustive map over IngestFileKind so buildSource needs no unchecked as cast; 8.2k LOW: wrap the long it.each lines in packages/queue/test/queues.test.ts'
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
@@ -5637,7 +5659,9 @@ tasks:
   status: todo
 - id: 12.4f
   milestone: M13
-  title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead of an as cast (LOW); take approvedBy from the server reply, not the stale prop, in the optimistic patch (LOW)'
+  title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
+    of an as cast (LOW); take approvedBy from the server reply, not the stale prop, in the optimistic patch (LOW); a two-row view test that an unsaved edit on one row survives a reload that changes another
+    row (verify MEDIUM)'
   accept: a focus test for confirm and cancel; no as cast on the select value; web typecheck, lint and test green.
   deps:
   - 12.4d
@@ -5645,7 +5669,8 @@ tasks:
   status: todo
 - id: 7.2i
   milestone: M13
-  title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en replaces "comparisons of strings are case-sensitive", which is close to the sanctioned co-q6 hint, with a phrase from the withheld answer'
+  title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
+    replaces "comparisons of strings are case-sensitive", which is close to the sanctioned co-q6 hint, with a phrase from the withheld answer'
   accept: both cases test their own leak deterministically; packages/evals suites.test.ts green.
   deps:
   - 7.2g
