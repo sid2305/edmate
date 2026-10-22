@@ -3986,7 +3986,9 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: todo
+  status: running
+  branch: m12/12.1a-staff-queue
+  model: plan:sonnet build:sonnet
 - id: 12.1b
   milestone: M12
   title: Staff console page and verification routes in apps/web (12.1 Phase B)
