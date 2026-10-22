@@ -1,9 +1,10 @@
 # Handoff: 8.4a Style card repo and studio API (Phase A of docs/tasks/8.4/plan.md)
 
-- Status: DONE
+Status: DONE
+
 - Branch: `m8/8.4a-style-card-api` (built on local branch `work-84a`)
 - Worktree: `.claude/worktrees/agent-a9442f7743852adb9`
-- Tool calls used: 52
+- Tool calls used: 81 (harness count; the builder's own count was 52)
 
 ## What changed
 - `packages/db/src/repositories/style-cards.ts` (risky path): new `create(scope, { text, mistakeTags })`
@@ -53,6 +54,11 @@
   package).
 
 ## Decisions
+### 22 Oct 2026 · 8.4a Lead accepts the style-card repo scope checks and the unmetered drafting · decided by lead · risk: high
+- Decided: merge 8.4a. styleCards.create (risky path packages/db/src/repositories/**) is reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the session teacher, students and staff are refused, and the per-teacher advisory lock closes the version race. Drafting stays unmetered for now; metering teacher studio calls and stripping override phrases from style-card text are follow-up task 8.4c (M13).
+- Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher's style card only reaches that teacher's own students, and studio drafting is a small, teacher-only cost until the pilot.
+- risk: high
+
 ### 22 Oct 2026 · 8.4a styleCards.create versions and scope checks · decided by builder · risk: high
 - Decided: `styleCards.create` (risky path `packages/db/src/repositories/**`) requires the scope to
   be a teacher right now (share-locked role read: unknown user `not_found`, student or staff
