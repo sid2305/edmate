@@ -4677,7 +4677,9 @@ tasks:
   deps:
   - 9.7a
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.7c-e2e-local-guard
+  model: plan:lead build:sonnet
 - id: 9.5c
   milestone: M13
   title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts
