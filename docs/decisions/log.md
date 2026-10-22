@@ -10,6 +10,39 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.2c Report button renders on both the thread-pushed reply and the live final turn · decided by builder · risk: low
+- Decided: `ReportButton` is shown both when a finished turn becomes a thread item (on the next
+  submit) and on the still-current final turn shown separately before that (same `TurnExtras`
+  block, lines ~256-262 of ChatView.tsx), each time the turn's `messageId` is not null.
+- Why: the plan's "finished turns with a messageId" covers both states; without the second spot a
+  student could not report the very last reply until they sent another message, which would make
+  the "reaches staff fast" acceptance path depend on an unrelated user action.
+- risk: low (chat/ChatView.tsx, not a risky path; no server behaviour change, UI only).
+
+---
+
+### 22 Oct 2026 · 12.2c REPORT_CATEGORIES is duplicated in the client bundle, not imported from @edmate/db · decided by builder · risk: low
+- Decided: `apps/web/src/chat/reportMessage.ts` defines its own `REPORT_CATEGORIES` tuple
+  (identical values to `packages/db/src/repositories/map.ts`) instead of importing the value from
+  `@edmate/db`.
+- Why: `ReportButton`/`reportMessage.ts` run in the browser (`'use client'` tree); `@edmate/db` is
+  a server-only package (pg driver, schema). A type-only import is erased at build time and would
+  be safe, but importing the actual array value risks pulling the whole db package into the client
+  bundle. The server-side route (`handlers.ts`) still imports the real `ReportCategorySchema` from
+  `@edmate/db` for validation, so the two lists can drift only if a category is added without
+  updating this file; a future task should cross-check them (e.g. a shared-constant or contracts
+  export) rather than leave the duplication silent.
+- risk: low (apps/web/src/chat/**, not a risky path).
+
+---
+
+### 22 Oct 2026 · 12.2c tool-call budget overrun accepted · decided by lead · risk: low
+- Decided: accept 127 build calls and 61 fix calls against the brief's 70 for this phase. The plan's whole-task cap of 350 still holds.
+- Why: the phase added a new route, a client and a ChatView change with axe and remount tests. The reviewers found one HIGH, and one fix round closed it. Splitting the work further would have cost more than it saved.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.7b The discover search is typed and submitted in one in-page step · decided by builder · risk: low
 - Decided: the search step sets the real search input's value and calls `form.requestSubmit` with
   the real Search button in one `evaluate`. It is wrapped in `navigateUntil`, which retries only

@@ -5229,9 +5229,30 @@ tasks:
   accept: per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
   - 12.2a
-  status: running
+  status: done
   branch: m12/12.2c-report-button
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 59
+    tokens_in: 226
+    tokens_out: 9785
+    cache_read_tokens: 4676139
+    wall_time_seconds: 493
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.2d
   milestone: M12
   title: Staff reports and takedowns API (12.2 Phase D)
