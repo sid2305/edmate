@@ -291,6 +291,14 @@ const notifTarget: Partial<Record<Pair, string>> = {};
 const liveClassFor: Partial<Record<Teacher, string>> = {};
 /** Far enough out that no window label ever flips mid-run; still a valid future `startsAt`. */
 const LIVE_CLASS_STARTS_AT = '2030-01-01T00:00:00Z';
+/** Task 11.2a: deliberately unrelated wording per pair, so the isolation grid's own class
+ * questions (`CASES['classQuestions.submit']`) never lexically cluster into each other. */
+const CLASS_Q_TEXT: Record<Pair, string> = {
+  '1A': 'Why do plants need sunlight to grow their leaves',
+  '2A': 'How do magnets attract certain kinds of metal',
+  '1B': 'What causes rainbows to appear after it rains',
+  '2B': 'Why does ice float instead of sinking in water',
+};
 
 // Task 11.3a: weekly insights fixtures (seeded in beforeAll inside INSIGHTS_WEEK).
 const INSIGHTS_WEEK = '2026-10-05';
@@ -3596,6 +3604,54 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) =>
       r.liveClasses.listUpcomingForStudent({ studentId: rid, teacherId: rid }),
     owners: (xs: { title: string }[]) => xs.flatMap((x) => markers(x.title)),
+  },
+  // Task 11.2a: the pre-class student feed. Each pair's own teacher already has a dedicated
+  // live class (`liveClassFor`, fixture above) attached to the package the pair's own
+  // (unmodified) seeded subscription already entitles it to -- no subscription swap needed.
+  // Ownership is at the teacher level (the table has no student id): a student may submit to
+  // any of their own teacher's classes, so `owns` is teacher-equality, not pair-equality.
+  'classQuestions.submit': {
+    scope: 'student',
+    op: 'write',
+    owns: (actor, target) => teacherOf(actor) === teacherOf(target),
+    attempt: (r, scope, actor, target) =>
+      r.classQuestions.submit(scope, {
+        liveClassId: liveClassFor[teacherOf(target)]!,
+        // Deliberately unrelated wording per pair, so this grid's own fixtures never cluster
+        // into each other under `listQueueForTeacher`'s lexical grouping (tested on its own
+        // merits in question-similarity.test.ts and class-questions.int.test.ts).
+        text: `[${actor}] ${CLASS_Q_TEXT[actor]} (${++counter})`,
+      }),
+    verify: async (r, actor, result) => {
+      const { id } = result as { id: string };
+      expect(typeof id).toBe('string');
+      for (const t of TEACHERS) {
+        const groups = await r.classQuestions.listQueueForTeacher(tScope(t));
+        const found = groups.some((g) => markers(g.sample).includes(actor));
+        expect(found, `${t} seeing ${actor}'s class question`).toBe(t === teacherOf(actor));
+      }
+    },
+    mismatches: (a) => [
+      [
+        'an empty (after trim) text',
+        (r) => r.classQuestions.submit(sScope(a), { liveClassId: liveClassFor[teacherOf(a)]!, text: '   ' }),
+        'invalid',
+      ],
+      [
+        'a live class id that does not exist',
+        (r) => r.classQuestions.submit(sScope(a), { liveClassId: 'cls_nowhere', text: `[${a}] x` }),
+        'not_found',
+      ],
+    ],
+  },
+  'classQuestions.listQueueForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.classQuestions.listQueueForTeacher(scope),
+    random: (r, _scope, rid) => r.classQuestions.listQueueForTeacher({ teacherId: rid }),
+    owners: (groups: { sample: string }[]) =>
+      groups.flatMap((g) => markers(g.sample).map((m) => teacherOf(m as Pair))),
   },
   // Task 12.2a: a student reports an agent reply in their own session only; the queue and the
   // review are staff-only (checked by role, like teacherProfiles.listPendingForStaff).

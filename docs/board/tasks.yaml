@@ -2876,9 +2876,29 @@ tasks:
   deps:
   - 7.2a
   risk: risky
-  status: running
+  status: done
   branch: m7/7.2d-safety-cases
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 26
+    tokens_in: 92
+    tokens_out: 3236
+    cache_read_tokens: 3206355
+    wall_time_seconds: 371
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 1
 - id: 7.2e
   milestone: M7
   title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
@@ -4878,7 +4898,7 @@ tasks:
   accept: per the B-47 answer.
   deps:
   - 8.2f
-  status: todo
+  status: planning
   branch: null
 - id: 8.2g
   milestone: M13
@@ -4973,9 +4993,30 @@ tasks:
   deps:
   - '11.1'
   risk: high
-  status: running
+  status: done
   branch: m11/11.2a-class-questions-repo
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 80
+    tokens_in: 270
+    tokens_out: 5386
+    cache_read_tokens: 4145350
+    wall_time_seconds: 5317
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 11.2b
   milestone: M11
   title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with
@@ -4984,9 +5025,9 @@ tasks:
   deps:
   - 11.2a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m11/11.2b-question-queue-ui
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.5a
   milestone: M12
   title: safety_alerts table and repository with an audited staff ack (12.5 Phase A)
@@ -5075,9 +5116,9 @@ tasks:
   deps:
   - 12.2a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2b-takedowns-repo
+  model: plan:opus build:opus review:sonnet
 - id: 12.2c
   milestone: M12
   title: Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)
@@ -5126,9 +5167,9 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3a-rights-declaration
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.3b
   milestone: M12
   title: Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)
@@ -5264,6 +5305,54 @@ tasks:
   accept: harness guard test for the new rule; the safety suite gains the vapes case; harness and evals green; safety-reviewer runs (guard change).
   deps:
   - 7.2d
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4e
+  milestone: M13
+  title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
+  accept: per docs/tasks/12.4a/review.md deferred finding; db typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 12.5e
+  milestone: M13
+  title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
+  accept: per docs/tasks/12.5b/review.md deferred finding; worker typecheck, lint and test green.
+  deps:
+  - 12.5b
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.2j
+  milestone: M8
+  title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
+  accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
+  deps:
+  - 8.2f
+  status: todo
+  branch: null
+  model: null
+- id: 8.2k
+  milestone: M8
+  title: Caption files ingested by the worker and searchable (8.2c Phase B)
+  accept: per docs/tasks/8.2c/plan.md Phase B and Lead answers; queue and worker typecheck, lint and test green.
+  deps:
+  - 8.2j
+  status: todo
+  branch: null
+  model: null
+- id: 8.2l
+  milestone: M8
+  title: Upload centre accepts caption files, YouTube refusal points to them, ADR-0014 amended (8.2c Phase C)
+  accept: per docs/tasks/8.2c/plan.md Phase C and Lead answers; web typecheck, lint and test green.
+  deps:
+  - 8.2k
   risk: high
   status: todo
   branch: null
