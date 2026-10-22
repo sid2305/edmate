@@ -49,6 +49,11 @@ lines. `python3 .githooks/secret-scan.py --all` → clean (no output).
   committed placeholder with no legal text.
 - risk: high
 
+### 22 Oct 2026 · 12.3a two review LOWs in packages/content/src/rightsDeclaration.ts left as is · decided by lead · risk: low
+- Decided: packages/content/src/rightsDeclaration.ts keeps the plain Error for a missing file and the existsSync-then-read order (typescript-reviewer LOWs, wontfix).
+- Why: both match privacyNotices.ts on purpose; the file is a committed local file, and Phase C's page catches errors broadly.
+- risk: low
+
 ## Left to do
 Nothing for Phase A. Phase B (`packages/db`: `rightsDeclared` input, `rightsDeclaredAt` read,
 `takedowns.countUpheld`) and Phase C (`apps/web`: studio checkbox, public `/legal/rights` page)
