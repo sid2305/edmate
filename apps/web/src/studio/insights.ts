@@ -62,7 +62,7 @@ export async function loadInsights(
   return {
     windowDays: INSIGHTS_WINDOW_DAYS,
     health: computeHealthMetrics(traces),
-    capped: traces.length === TEACHER_TRACES_MAX_LIMIT,
+    capped: traces.length >= TEACHER_TRACES_MAX_LIMIT,
     topQuestionGroups: groups.map(toQuestionGroup),
   };
 }
