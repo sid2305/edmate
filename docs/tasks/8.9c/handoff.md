@@ -1,7 +1,7 @@
 # Task 8.9c handoff: teacher questions inbox UI (8.9 Phase C)
 
 Status: DONE
-Tool calls used: 46
+Tool calls used: 83
 
 - Branch: `m8/8.9c-questions-inbox` (built on local branch `work-89c`)
 - Worktree: `.claude/worktrees/agent-af0107ccc94738b81`
@@ -72,16 +72,20 @@ branch / 96.15% funcs / 100% lines (the two new files, `loadQuestions.ts` and
 
 ## Decisions
 
-- Decided: "Dismiss" is per individual question row inside a group's card, not a single
-  whole-card action -- the plan's Phase A fixed dismiss as single-row only (plan Q1), so a card
-  that showed one "Dismiss" button for a multi-member group would be ambiguous about which
-  wording it closed. Listing every member's text with its own Dismiss button makes the
-  single-row behaviour visible and matches the exit walkthrough ("dismiss another").
-- Decided: "Send answer" posts using the group's first remaining question's id (any member's id
-  answers the whole group per 5.10's repository) -- the UI never asks the teacher to pick which
-  id, since the group-wide effect is identical regardless of which member id is sent.
-- Decided: merged 8.8b's `insights` nav link and `en.json` namespace additively, per the plan's
-  "keep both sides" instruction; `questionsLink`/`questionsInbox` land after `insights`.
+### 22 Oct 2026 · 8.9c Dismiss is per question row, not per group card · decided by builder · risk: low
+- Decided: "Dismiss" is a per-row button inside a group's card, not a single whole-card action.
+- Why: plan Q1 made dismiss single-row only, so one "Dismiss" button on a multi-member group would be ambiguous about which wording it closed; per-row buttons make the behaviour visible and match the exit walkthrough ("dismiss another").
+- risk: low
+
+### 22 Oct 2026 · 8.9c Send answer uses the group's first remaining question id · decided by builder · risk: low
+- Decided: "Send answer" posts the id of the group's first remaining question; the teacher never picks an id.
+- Why: per 5.10's repository, any member id answers the whole group, so the effect is the same whichever id is sent.
+- risk: low
+
+### 22 Oct 2026 · 8.9c Merged 8.8b's nav link and en.json namespace additively · decided by builder · risk: low
+- Decided: kept 8.8b's `insights` nav link and `en.json` namespace; `questionsLink` and `questionsInbox` land after `insights`.
+- Why: the plan's shared-file rule says keep both sides.
+- risk: low
 
 ## Left to do
 
