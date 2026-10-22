@@ -10,6 +10,120 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.4 merge: scoped teacher eval-case read path reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.4, including `packages/db` `teacherEvalCases.listForTeacher` (a risky path), reviewed by security-reviewer and code-reviewer (the group's required reviewers) plus typescript-reviewer; all approved with no CRITICAL or HIGH. MEDIUM and LOW findings go to 7.4a; the undecided feedback and revision thresholds (blocker B-40) go to 7.4b, and until then a first_publish or prompt_pack_bump gate fails closed with a clear error.
+- Why: the gate already blocks a bad agent and publishes a good one; the open thresholds only keep the full scope failing closed, which is the safe direction.
+- risk: high
+
+---
+
+### Pedagogy and grounding thresholds are provisional pass-rate proxies
+- Decided: pedagogy passes at a pass rate of 80% or more until the runner can score a 1-5 mean. Grounding is held to 99% and runs only on a first publish or a prompt-pack bump. Lead's Q2 answer, 21 Oct 2026; 7.2 or 7.6 revisits it once scored runs exist.
+- Why: the runner scores pass/fail, not a mean, and the build plan's table has no grounding row.
+- risk: medium
+
+---
+
+### The "< 15 minutes" proof is a simulated critical path, backed by a deadline that fails closed
+- Decided: estimatedSeconds = (ceil(total calls / 4) + the most calls in one case) × 8 s, with one call per turn and one per judge statement. At run time, a 15-minute deadline stops new cases from starting, marks every unstarted case `not run: gate deadline passed`, and fails the gate even when the thresholds would tolerate the misses. The 8 s and 4-way constants are provisional until 7.6 and 7.7 measure real p95 (lead Q6).
+- Why: wall clock means nothing under a scripted gateway, and lessons.md says never to gate CI on timings.
+- risk: medium
+
+---
+
+### gatedPublish is the only publish path offered
+- Decided: `gatedPublish` calls publish only when `gate.pass === true` (a truthy non-boolean does not count), and a gate that throws never publishes. 8.7 must publish through it.
+- Why: "Blocks publish on failure" has to hold structurally, not by convention.
+- risk: medium
+
+---
+
+### Empty, unknown or duplicate inputs fail closed
+- Decided: an expected group with zero cases fails as `empty_group`. An unknown suite, an unknown change kind, an empty change set, a duplicate case id or a style pool under 30 throws `GateScopeError`. A case that throws counts as failed.
+- Why: a check that silently skips looks like a pass (lessons.md).
+- risk: low
+
+---
+
+### The per-agent locked group is required only when some package locks a module
+- Decided: the gate expects a non-empty `agent:locked` group only if some package leaves out a module that the teacher's material covers. With such a module, 7.3's generator always makes at least three locked cases.
+- Why: a teacher whose packages all cover every module has nothing to lock. Requiring the group anyway would block every publish for that teacher with `empty_group`.
+- risk: medium
+
+---
+
+### Near-miss distress cases count in the 100% distress group
+- Decided: every `safety` case whose id starts with `safety-distress-` goes into `safety-distress` (100%). That includes the 9 `safety-distress-nearmiss-*` cases, following the plan's prefix rule literally.
+- Why: it is the stricter reading. If the lead wants near-misses held to the 99% safety rate instead, it is a one-line change.
+- risk: low
+
+---
+
+### A material change runs per-agent locked cases only
+- Decided: a material change does not run the platform locked suite; that suite runs only on a first publish or a prompt-pack bump (lead's Q1 answer).
+- Why: the platform locked cases are written against the demo teacher's modules.
+- risk: low
+
+---
+
+### 7.4 teacherEvalCases.listForTeacher (repositories, risky path)
+- Decided: a new read-only repository method returns only the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`), filtered by `teacher_id` with parameterised Drizzle SQL after `teacherScope` validation, ordered `created_at, id`, wrapped by `guardAll`, and covered by the isolation grid plus its own int test.
+- Why: 8.7 needs the teacher's answers and corrections as per-agent accuracy cases for the gate (7.3 Lead answer Q3); the method is in `packages/db/src/repositories/**`, a risky path.
+- risk: high
+
+---
+
+### The CLI gate never offers --record and routes replay through the already-reviewed stand-ins
+- Decided: `edmate gate` has no `--record` flag at all (not just a default), so there is no path
+  through its own arguments to a live call; it always builds `fileRecorder(dir, 'replay')`
+  (or a test-injected `Recorder`) and hands `runQualityGate` the existing `unwiredAgent` /
+  `replayJudgeGateway` from `eval.ts`. Replay mode never invokes either (the recorder returns the
+  fixture without calling `fn`), so this is structurally offline, not just offline by convention.
+- Why: the lead's Phase C note says the gate command must stay offline even though `edmate eval`'s
+  default agent went live in 7.6; reusing `eval.ts`'s own stand-ins keeps that guarantee in one
+  place instead of a second copy.
+- risk: low
+
+---
+
+### A full-scope CLI run reports every undecided threshold/group at once, not just the first
+- Decided: before calling `runQualityGate`, `edmate gate` walks `platformCases` once itself
+  (`fullScopeGaps`) and, for a `first_publish`/`prompt_pack_bump` change, lists every suite with
+  no gate threshold and every threshold group with zero platform cases in one error, exit 1. It
+  never edits `GATE_THRESHOLDS` or narrows scope to dodge the gap.
+- Why: `selectGateCases` throws on the first unknown-suite case it meets while building the full
+  scope, which would have named only one of today's two gaps (`feedback` vs. `revision`) and said
+  nothing about the empty `accuracy` group; blocker B-40 needs the whole picture to decide
+  thresholds from, not a single symptom.
+- risk: medium
+
+---
+
+### The demo content adapter drops the two synthetic teacher-answer rows for the CLI
+- Decided: `apps/cli/src/commands/gate/demoInput.ts` copies 7.3's test adapter but leaves out its
+  two synthetic `teacher_eval_cases`-shaped rows (`APPROVED_DRAFT_ROWS` in the evals testkit).
+- Why: those rows exist only to exercise `generatePerAgentSuite`'s `teacher-answer` provenance in
+  tests; the CLI has no real `teacherEvalCases.listForTeacher` wiring yet (8.7's job), and shipping
+  synthetic rows that look like real teacher answers in production code risked being mistaken for
+  real data later. Per-agent accuracy cases from `question-bank`/`qa-recall` are unaffected.
+- risk: low
+
+---
+
+### Over 10 000 teacher eval cases throws instead of truncating
+- Decided: `TEACHER_EVAL_CASES_MAX = 10_000`; the query fetches one extra row and throws `RepositoryError('invalid')` if it exists. No paging and no `truncated` flag.
+- Why: the gate must never run a silently cut suite (lessons.md: a check that skips looks like a pass); a teacher near the cap needs a later board task for sampling or paging, not a quiet partial read.
+- risk: medium
+
+---
+
+### The row shape leaves out teacher id, chunk id and question id
+- Decided: `TeacherEvalCaseRow` carries only what `answerableFromTeacherEvalCases` needs; `teacherId`, `chunkId`, `teacherQuestionId` and timestamps stay in the db.
+- Why: least data out of the repository; the scope already names the teacher.
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 7.6a merge: guardrails cast removal reviewed and merged · decided by lead · risk: high
 - Decided: merge 7.6a with its one-line `packages/harness/src/guardrails/blockReplies.ts` change (an unnecessary cast removed, no behaviour change), reviewed by code-reviewer (the group's required reviewer during the MVP phase) and typescript-reviewer; both approved with no CRITICAL, HIGH or MEDIUM.
 - Why: a risky path needs its required reviewers and a risk: high entry.

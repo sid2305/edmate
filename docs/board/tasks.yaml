@@ -6,6 +6,14 @@
 # risk: risky = you approve the PR (human-approved label) before the lead merges; expert = named human reviewer for content/eval cases.
 # priority: P1 = not needed for the pilot. model: models used, recorded by the team lead.
 decisions:
+  gate-thresholds:
+    status: open
+    question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and whether the distress near-miss cases are held to 100% or the 99% safety rate'
+    options:
+    - feedback 70%, revision 80%, platform accuracy covered by per-agent accuracy, near-miss at 99% (all provisional until 7.2)
+    - feedback and revision both 80%, the rest as above
+    - other numbers
+    recommendation: the first option
   licence:
     status: decided
     question: Code licence
@@ -1806,9 +1814,31 @@ tasks:
   - '7.3'
   - M3
   - M4
-  status: running
+  status: done
   branch: m7/7.4-quality-gate
-  model: plan:opus build:opus
+  model: plan:opus build:opus x2 build:sonnet review:sonnet x4 review:opus
+  metrics:
+    tool_calls: 267
+    tokens_in: 860
+    tokens_out: 86757
+    cache_read_tokens: 25751703
+    wall_time_seconds: 9162
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 0
+    findings:
+      total: 10
+      by_severity:
+        MEDIUM: 3
+        LOW: 7
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 10
+        wontfix: 0
+    human_questions: 3
 - id: '7.5'
   milestone: M7
   title: CI merge gates on fixtures
@@ -2151,7 +2181,8 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams
+    SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2516,7 +2547,8 @@ tasks:
   model: null
 - id: 7.3b
   milestone: M13
-  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.; NoCasesFoundError uses displayPath(dir) like CaseLoadError (7.6a review LOW)'
+  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.;
+    NoCasesFoundError uses displayPath(dir) like CaseLoadError (7.6a review LOW)'
   accept: The evals package's error classes share one style and the 7.3 tests still pass.
   deps:
   - '7.3'
@@ -2560,7 +2592,7 @@ tasks:
   milestone: M13
   title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSignal
     later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the
-    as ScopedCase cast; de-duplicate changes'
+    as ScopedCase cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared demo-content adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now'
   accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
   deps:
   - '7.4'
@@ -2600,6 +2632,18 @@ tasks:
         deferred: 1
         wontfix: 1
     human_questions: 0
+- id: 7.4b
+  milestone: M7
+  title: 'Gate thresholds for the feedback and revision suites and what counts as platform accuracy (human answer B-40): edit GATE_THRESHOLDS in packages/evals/src/gateScope.ts (and where the distress near-miss cases sit), so a first_publish or prompt_pack_bump gate can pass on the real suites'
+  accept: edmate gate demo --change first_publish no longer fails on missing thresholds or empty groups, and the 7.4 tests are updated to the decided numbers.
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+  needs_decision:
+  - gate-thresholds
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
