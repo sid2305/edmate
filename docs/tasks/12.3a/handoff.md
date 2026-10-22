@@ -55,4 +55,4 @@ Nothing for Phase A. Phase B (`packages/db`: `rightsDeclared` input, `rightsDecl
 are separate board tasks (12.3b, 12.3c) per the plan's "Lead answers" section.
 
 Status: DONE
-Tool calls used: 17
+Tool calls used: 34 (harness count; the builder reported 17 in the handoff and 22 on return)
