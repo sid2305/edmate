@@ -10,6 +10,26 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 11.1c window label shown unless `later` · decided by builder · risk: low
+- Decided: the view renders the window label for `reminder_24h`/`reminder_1h`/`starting_soon`
+  only; `later` has no label text (no `home.liveClasses.window.later` key was added).
+- Why: the plan's "How it will be shown" explicitly describes "a class far out shows
+  `later`/no label" — i.e. `later` is a non-label state, so no translated string is needed for it.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.1c live-class lookup lives inline in page.tsx, not a new module · decided by builder · risk: low
+- Decided: the per-teacher lookup (`homeLiveClasses`) is a local function inside
+  `apps/web/app/home/page.tsx` rather than a new file under `apps/web/src/chat/` or similar.
+- Why: the plan's file list for Phase C names only `page.tsx`, `view.tsx`, `en.json` and their
+  tests; `repos.liveClasses.listUpcomingForStudent` is scoped per (student, teacher) pair (same
+  shape as `subscriptions.findLive`), so resolving each candidate's owning teacher and deduping is
+  needed, but adding a new shared module would go beyond the listed files.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 11.1b A route-level https-and-length check sits in front of the repository's own URL validation · decided by builder · risk: low
 - Decided: `apps/web/src/studio/liveClasses/routes.ts`'s `CreateSchema` accepts any non-empty
   `link` string up to 2048 characters, then a separate check rejects anything not starting

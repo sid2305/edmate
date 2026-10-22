@@ -4499,9 +4499,29 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: running
+  status: done
   branch: m11/11.1c-home-live-classes
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 35
+    tokens_in: 126
+    tokens_out: 669
+    cache_read_tokens: 1803787
+    wall_time_seconds: 137
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 11.1d
   milestone: M13
   title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b); 11.1a review: cap the meeting link length in CreateInputSchema and decide https only;
