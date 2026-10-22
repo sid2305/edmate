@@ -19,6 +19,7 @@ import { publishRepo } from './publish.js';
 import { reportsRepo } from './reports.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyAlertsRepo } from './safety-alerts.js';
+import { takedownsRepo } from './takedowns.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
@@ -81,6 +82,7 @@ export function createRepositories(db: Db) {
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
     reports: guardAll('reports', reportsRepo(db)),
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
+    takedowns: guardAll('takedowns', takedownsRepo(db)),
   };
 }
 
@@ -106,10 +108,7 @@ export {
   type TeacherQuestionGroup,
 } from './teacher-questions.js';
 export { TEACHER_EVAL_CASES_MAX, type TeacherEvalCaseRow } from './teacher-eval-cases.js';
-export {
-  NOTIFICATIONS_MAX_LIMIT,
-  type NotificationRow,
-} from './notifications.js';
+export { NOTIFICATIONS_MAX_LIMIT, type NotificationRow } from './notifications.js';
 export type {
   TeacherProfileCreate,
   TeacherProfileUpdate,
@@ -290,3 +289,13 @@ export {
   type SafetyAlertListOptions,
   type SafetyAlertRow,
 } from './safety-alerts.js';
+export {
+  notTakenDown,
+  type StaffTakedownRow,
+  TAKEDOWN_KINDS,
+  TAKEDOWN_NOTE_MAX,
+  type TakedownCreateInput,
+  type TakedownKind,
+  type TakedownLiftInput,
+  TAKEDOWNS_ACTIVE_MAX_LIMIT,
+} from './takedowns.js';

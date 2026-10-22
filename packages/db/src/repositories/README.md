@@ -479,6 +479,28 @@ alert row FOR UPDATE): an alert already acknowledged returns `acknowledged: fals
 nothing; otherwise the ack fields and one `safety_alert.ack` audit row (the note as its reason,
 at most 500 characters, never the excerpt) commit together.
 
+## Takedowns (task 12.2b)
+
+Staff take down one teacher document (`document:<id>`) or a whole agent (`agent:<id>`) and lift
+it again (`takedowns.ts`; the `takedowns` table is from 0001, no migration).
+
+- `create(by, { kind, targetId, category, reportId?, note? })`, `lift(by, takedownId, { note? })`
+  and `listActiveForStaff(by)` are staff-only (`lockRole`; anyone else is `scope`). Create and
+  lift are audited (`takedown.create`, `takedown.lift`) and append to `staff_actions`.
+- One active takedown per target (a second is `invalid`), serialised by the target row's lock.
+  A linked `reportId` must be an open report about the same teacher; it is set `actioned` with a
+  `report.review` audit row.
+- A document takedown is a filter, not a delete: `notTakenDown(column)` is the only place the
+  predicate is written. It is in `retrieval.ts`'s one scope fragment (full text, vector and term
+  stats, so `search` and `probe`), in `retrieval.material` (leakCheck's locked index) and in
+  `chunks.listForModule` (the outline drafter). Create and lift bump the material revision, so
+  leakCheck rebuilds. The predicate probes `takedowns_target_idx`.
+- An agent takedown sets the agent `suspended` (every student-facing read requires `live`;
+  publish refuses it). A lift sets `live` when it has a live version, else `draft`.
+- Lock order: staff role row (`FOR SHARE`), the target row (`FOR UPDATE`), the takedown row,
+  then the report. publish takes advisory, profile, agent, run; the agent is the only shared
+  row, so there is no cycle (two-connection test against `publish.goLive`).
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

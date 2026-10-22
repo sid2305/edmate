@@ -445,3 +445,27 @@ export type StaffReportRow = z.infer<typeof StaffReportRowSchema>;
 export function toStaffReportRow(value: unknown, method: string): StaffReportRow {
   return checked(StaffReportRowSchema, value, method);
 }
+
+/** What a staff takedown removes (task 12.2b): one teacher document, or a whole agent. */
+export const TAKEDOWN_KINDS = ['document', 'agent'] as const;
+export const TakedownKindSchema = z.enum(TAKEDOWN_KINDS);
+export type TakedownKind = z.infer<typeof TakedownKindSchema>;
+
+const StaffTakedownRowSchema = z.strictObject({
+  id: z.string().min(1),
+  kind: TakedownKindSchema,
+  targetId: z.string().min(1),
+  /** The document's or agent's teacher; null only if the target row is gone. */
+  teacherId: z.string().min(1).nullable(),
+  /** The teacher's public slug; null when the teacher has no profile. */
+  teacherSlug: z.string().min(1).nullable(),
+  category: ReportCategorySchema,
+  createdAt: z.string().min(1),
+});
+
+/** One active takedown as staff see it (task 12.2b). */
+export type StaffTakedownRow = z.infer<typeof StaffTakedownRowSchema>;
+
+export function toStaffTakedownRow(value: unknown, method: string): StaffTakedownRow {
+  return checked(StaffTakedownRowSchema, value, method);
+}

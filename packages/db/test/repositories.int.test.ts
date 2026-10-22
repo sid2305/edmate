@@ -350,7 +350,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
   'documents.updateStatus': {
     scope: 'teacher',
     op: 'write',
-    attempt: (r, scope, _actor, target) => r.documents.updateStatus(scope, repDoc(target), 'processing'),
+    attempt: (r, scope, _actor, target) =>
+      r.documents.updateStatus(scope, repDoc(target), 'processing'),
     verify: async (r, actor) => {
       for (const t of TEACHERS) {
         const row = await r.documents.get(tScope(t), repDoc(actor));
@@ -385,7 +386,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'teacher',
     op: 'write',
     attempt: (r, scope, actor, target) =>
-      r.documents.startReplace(scope, repDoc(target), { storageKey: `[${actor}] key ${++counter}` }),
+      r.documents.startReplace(scope, repDoc(target), {
+        storageKey: `[${actor}] key ${++counter}`,
+      }),
     verify: async (r, actor) => {
       const row = await r.documents.get(tScope(actor), repDoc(actor));
       expect(row?.status).toBe('uploading');
@@ -780,9 +783,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         n += 1;
       }
       // Both teachers stay verified (their default state since beforeAll, task 9.3c).
-      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
-        teacherId('A'),
-      ]);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
+        [teacherId('A')],
+      );
       return n;
     },
   },
@@ -798,7 +802,16 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       const got = await r.discovery.teacherBySlug({ slug: profileSlug('A') });
       expect(got?.slug).toBe(profileSlug('A'));
       expect(Object.keys(got ?? {}).sort()).toEqual(
-        ['agentIds', 'bio', 'displayName', 'hasFree', 'languages', 'packageCount', 'slug', 'subject'].sort(),
+        [
+          'agentIds',
+          'bio',
+          'displayName',
+          'hasFree',
+          'languages',
+          'packageCount',
+          'slug',
+          'subject',
+        ].sort(),
       );
       n += 1;
       // B pushed back to pending (from its default-verified state): its slug resolves to
@@ -827,9 +840,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       });
       n += 1;
       // A stays verified (its default state since beforeAll, task 9.3c).
-      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = $1`, [
-        teacherId('A'),
-      ]);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = $1`,
+        [teacherId('A')],
+      );
       return n;
     },
   },
@@ -860,10 +874,17 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     attempt: (r, scope) => r.courses.ensureDefault(scope),
     verify: async (r, actor, res) => {
       expect((res as CourseRow).id).toBe(ids.course(actor));
-      expect(await r.modules.ids(tScope(actor))).toEqual([ids.module(actor, 1), ids.module(actor, 2)]);
+      expect(await r.modules.ids(tScope(actor))).toEqual([
+        ids.module(actor, 1),
+        ids.module(actor, 2),
+      ]);
     },
     mismatches: () => [
-      ['a scope id that is not a user', (r) => r.courses.ensureDefault({ teacherId: 'tch_ghost' }), 'not_found'],
+      [
+        'a scope id that is not a user',
+        (r) => r.courses.ensureDefault({ teacherId: 'tch_ghost' }),
+        'not_found',
+      ],
     ],
   },
   'outline.getOutline': {
@@ -877,7 +898,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
   'outline.replaceOutline': {
     scope: 'teacher',
     op: 'write',
-    attempt: (r, scope, actor, target) => r.outline.replaceOutline(scope, outlineEdit(actor, target)),
+    attempt: (r, scope, actor, target) =>
+      r.outline.replaceOutline(scope, outlineEdit(actor, target)),
     verify: async (r, actor, res) => {
       expect((res as { outlineVersion: number }).outlineVersion).toBeGreaterThan(1);
       const mine = await r.outline.getOutline(tScope(actor));
@@ -895,7 +917,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       [
         "another teacher's chunk id",
         (r) =>
-          r.outline.replaceOutline(tScope(a), outlineEdit(a, a, chunkId(isoDoc(otherTeacher(a)), 0))),
+          r.outline.replaceOutline(
+            tScope(a),
+            outlineEdit(a, a, chunkId(isoDoc(otherTeacher(a)), 0)),
+          ),
         'invalid',
       ],
       [
@@ -1400,7 +1425,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           expect(row, `${p} reads ${actor}'s session`).toBeNull();
         }
         const summary = (await r.learnerProfiles.get(sScope(p)))?.lastSummary;
-        expect(summary, `${p}'s summary`).toBe(p === actor ? `[${actor}] wrap-up` : `[${p}] last time`);
+        expect(summary, `${p}'s summary`).toBe(
+          p === actor ? `[${actor}] wrap-up` : `[${p}] last time`,
+        );
       }
       // Put the summary back to the seed's own value, same as endOnPackageChange's own case.
       await raw.query(
@@ -1421,7 +1448,14 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
       [
         'a summary over the word limit',
-        (r) => r.sessions.end(sScope(a), endable2(a), Array(LIMITS.lastSummaryMaxWords + 1).fill('w').join(' ')),
+        (r) =>
+          r.sessions.end(
+            sScope(a),
+            endable2(a),
+            Array(LIMITS.lastSummaryMaxWords + 1)
+              .fill('w')
+              .join(' '),
+          ),
         'invalid',
       ],
     ],
@@ -1775,7 +1809,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       await onlyPairSees(
         (sc) => r.learnerProfiles.get(sc),
         actor,
-        (x) => (x as LearnerProfile | null)?.mistakes.some((m) => m.tag === tag && m.lastSeen === lastSeen) ?? false,
+        (x) =>
+          (x as LearnerProfile | null)?.mistakes.some(
+            (m) => m.tag === tag && m.lastSeen === lastSeen,
+          ) ?? false,
       );
     },
   },
@@ -1938,7 +1975,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return [
         [
           "another teacher's topic",
-          (r) => r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, topicId: ids.topic(other) }]),
+          (r) =>
+            r.evidenceEvents.appendAndFold(sScope(a), [{ ...good, topicId: ids.topic(other) }]),
           'scope',
         ],
         [
@@ -2160,7 +2198,8 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     scope: 'student',
     op: 'write',
     attempt: async (r, scope, actor, target) => {
-      if (actor === target) await r.subscriptions.pause(scope, { subscriptionId: ids.subscription(actor) });
+      if (actor === target)
+        await r.subscriptions.pause(scope, { subscriptionId: ids.subscription(actor) });
       return r.subscriptions.resume(scope, { subscriptionId: ids.subscription(target) });
     },
     verify: async (r, actor, res) => {
@@ -2883,7 +2922,11 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
           if (p === target) {
             expect(await r.safetyAlerts.record(alert)).toEqual({ written: true });
           } else {
-            await expectFailsClosed(() => r.safetyAlerts.record(alert), ['not_found'], `${p}->${target}`);
+            await expectFailsClosed(
+              () => r.safetyAlerts.record(alert),
+              ['not_found'],
+              `${p}->${target}`,
+            );
           }
           cases += 1;
         }
@@ -2968,7 +3011,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, _scope, rid) =>
       r.teacherQuestions.listGroupsForTeacher({ teacherId: rid }, { limit: 100 }),
     owners: (groups: { questions: { text: string }[] }[]) =>
-      groups.flatMap((g) => g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair)))),
+      groups.flatMap((g) =>
+        g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair))),
+      ),
   },
   // Task 11.3a: weekly insights. Each teacher has its own students past the 5-student floor
   // (seeded in beforeAll); groups are attributed by groupId, a count through insightsUnhelpful.
@@ -3048,7 +3093,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     op: 'write',
     attempt: async (r, scope, actor, target) => {
       const qid =
-        actor === target ? await openedQuestion(r, `1${actor}` as Pair, 'primary') : answerTarget[target]!;
+        actor === target
+          ? await openedQuestion(r, `1${actor}` as Pair, 'primary')
+          : answerTarget[target]!;
       return r.teacherQuestions.answer(scope, {
         questionId: qid,
         moduleId: ids.module(target, 1),
@@ -3173,10 +3220,13 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     targeted: false,
     call: (r, scope) => r.notifications.listForStudent(scope, { unreadOnly: false, limit: 50 }),
     random: (r, _scope, rid) =>
-      r.notifications.listForStudent({ studentId: rid, teacherId: rid }, {
-        unreadOnly: false,
-        limit: 50,
-      }),
+      r.notifications.listForStudent(
+        { studentId: rid, teacherId: rid },
+        {
+          unreadOnly: false,
+          limit: 50,
+        },
+      ),
     owners: (rows: { questionText: string }[]) => rows.flatMap((x) => markers(x.questionText)),
   },
   'notifications.markRead': {
@@ -3504,7 +3554,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     // dedicated fixtures below (real rows, correctly theirs), whose titles carry a pair tag for
     // `listUpcomingForStudent`'s case instead — not a second owner of this teacher-scoped read.
     owners: (xs: { title: string }[]) =>
-      xs.flatMap((x) => markers(x.title)).filter((m): m is Teacher => (TEACHERS as readonly string[]).includes(m)),
+      xs
+        .flatMap((x) => markers(x.title))
+        .filter((m): m is Teacher => (TEACHERS as readonly string[]).includes(m)),
   },
   'liveClasses.listUpcomingForStudent': {
     scope: 'student',
@@ -3521,8 +3573,9 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         `select package_version_id from subscriptions where student_id = $1 and teacher_id = $2`,
         [scope.studentId, scope.teacherId],
       );
-      const originalPackageVersionId = (before.rows[0] as { package_version_id: string } | undefined)
-        ?.package_version_id;
+      const originalPackageVersionId = (
+        before.rows[0] as { package_version_id: string } | undefined
+      )?.package_version_id;
       await raw.query(
         `update subscriptions set package_version_id = $1
          where student_id = $2 and teacher_id = $3 and status <> 'ended'`,
@@ -3642,6 +3695,63 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       );
       expect((await r.reports.listOpenForStaff(ISO_STAFF)).map((x) => x.id)).not.toContain(id);
       return 5;
+    },
+  },
+  // Task 12.2b: takedowns are staff-only (checked by role); no teacher or student scope can take
+  // anything down, lift a takedown or list them. Each check lifts what it took down, so the seed's
+  // agents end live.
+  'takedowns.create': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const input = {
+        kind: 'agent' as const,
+        targetId: ids.agent('B'),
+        category: 'other' as const,
+      };
+      for (const by of [teacherId('A'), teacherId('B'), studentId('1'), 'stf_ghost']) {
+        await expect(r.takedowns.create(by, input)).rejects.toMatchObject({ kind: 'scope' });
+      }
+      expect(await r.agents.owner({ agentId: ids.agent('B') })).toEqual({
+        teacherId: teacherId('B'),
+      });
+      const { id } = await r.takedowns.create(ISO_STAFF, input);
+      expect(await r.agents.owner({ agentId: ids.agent('B') })).toBeNull();
+      await r.takedowns.lift(ISO_STAFF, id, {});
+      expect(await r.agents.owner({ agentId: ids.agent('B') })).toEqual({
+        teacherId: teacherId('B'),
+      });
+      return 5;
+    },
+  },
+  'takedowns.lift': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      const { id } = await r.takedowns.create(ISO_STAFF, {
+        kind: 'agent',
+        targetId: ids.agent('A'),
+        category: 'other',
+      });
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(r.takedowns.lift(by, id, {})).rejects.toMatchObject({ kind: 'scope' });
+      }
+      await expect(r.takedowns.lift(ISO_STAFF, id, {})).resolves.toEqual({ id, status: 'lifted' });
+      expect(await r.agents.owner({ agentId: ids.agent('A') })).toEqual({
+        teacherId: teacherId('A'),
+      });
+      return 4;
+    },
+  },
+  'takedowns.listActiveForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      for (const by of [teacherId('A'), studentId('2'), 'stf_ghost']) {
+        await expect(r.takedowns.listActiveForStaff(by)).rejects.toMatchObject({ kind: 'scope' });
+      }
+      expect(Array.isArray(await r.takedowns.listActiveForStaff(ISO_STAFF))).toBe(true);
+      return 4;
     },
   },
 };
@@ -4178,26 +4288,39 @@ describe.skipIf(!up)(
       await raw.query(
         `insert into package_versions (id, teacher_id, package_id, version, config) values
            ('pv_93c', 'tch_93c', 'pkg_93c', 1, $1)`,
-        [JSON.stringify({ ...packageConfig('A', 1, []), id: 'pkg_93c', agentId: 'agt_93c', teacherId: 'tch_93c' })],
+        [
+          JSON.stringify({
+            ...packageConfig('A', 1, []),
+            id: 'pkg_93c',
+            agentId: 'agt_93c',
+            teacherId: 'tch_93c',
+          }),
+        ],
       );
 
       expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
 
-      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`,
+      );
       expect(await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' })).toEqual([]);
 
-      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`,
+      );
       const live = await repos.packageVersions.liveForAgent({ agentId: 'agt_93c' });
       expect(live.map((p) => p.packageVersionId)).toEqual(['pv_93c']);
     });
 
-    it('subscriptions.start refuses a rejected teacher\'s package, writing nothing; a verified one still starts', async () => {
+    it("subscriptions.start refuses a rejected teacher's package, writing nothing; a verified one still starts", async () => {
       await raw.query(
         `insert into users (id, name, locale, market, role) values ($1, '93c student', 'en', 'test', 'student')`,
         ['stu_93c'],
       );
       const scope = { studentId: 'stu_93c', teacherId: 'tch_93c' };
-      await raw.query(`update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'rejected' where user_id = 'tch_93c'`,
+      );
       const before = await snapshot();
       await expect(
         repos.subscriptions.start(scope, {
@@ -4207,14 +4330,20 @@ describe.skipIf(!up)(
         }),
       ).rejects.toMatchObject({ kind: 'not_found' });
       expect(await snapshot()).toBe(before);
-      expect(await rawCount(`select count(*)::int as n from subscriptions where student_id = $1`, [
-        'stu_93c',
-      ])).toBe(0);
       expect(
-        await rawCount(`select count(*)::int as n from audit_log where student_id = $1`, ['stu_93c']),
+        await rawCount(`select count(*)::int as n from subscriptions where student_id = $1`, [
+          'stu_93c',
+        ]),
+      ).toBe(0);
+      expect(
+        await rawCount(`select count(*)::int as n from audit_log where student_id = $1`, [
+          'stu_93c',
+        ]),
       ).toBe(0);
 
-      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`);
+      await raw.query(
+        `update teacher_profiles set verification_status = 'verified' where user_id = 'tch_93c'`,
+      );
       const started = await repos.subscriptions.start(scope, {
         packageVersionId: 'pv_93c',
         status: 'active',
@@ -4274,19 +4403,28 @@ describe.skipIf(!up)(
         // whole throwaway database is dropped in the outer afterAll).
       });
 
-      it('changePackage: not_found for a draft version, an old version, another teacher\'s version and a suspended agent\'s version', async () => {
+      it("changePackage: not_found for a draft version, an old version, another teacher's version and a suspended agent's version", async () => {
         await expect(
-          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: PV1_V2,
+          }),
         ).rejects.toMatchObject({ kind: 'not_found' }); // v2 is still a draft (live_version = 1)
 
         // v1 is "old" once v2 becomes live; the subscription itself must point elsewhere for
         // this to be a live-version check rather than the same-version-as-now check.
-        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV2, SUB]);
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [
+          PV2,
+          SUB,
+        ]);
         await raw.query(`update packages set live_version = 2 where id = $1`, [PKG1]);
         await expect(
           repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1 }),
         ).rejects.toMatchObject({ kind: 'not_found' }); // v1 is now the old version
-        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV1, SUB]);
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [
+          PV1,
+          SUB,
+        ]);
         await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
 
         await expect(
@@ -4298,7 +4436,10 @@ describe.skipIf(!up)(
 
         await raw.query(`update agents set status = 'draft' where id = $1`, [AGENT]);
         await expect(
-          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: PV1_V2,
+          }),
         ).rejects.toMatchObject({ kind: 'not_found' }); // the agent is suspended
         await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
         await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
@@ -4321,7 +4462,10 @@ describe.skipIf(!up)(
           [`subscription:${SUB}`, CHANGE_PACKAGE_ACTION],
         );
         expect(audit.rows).toEqual([
-          { before: { status: 'active', packageVersionId: PV1 }, after: { status: 'active', packageVersionId: PV2 } },
+          {
+            before: { status: 'active', packageVersionId: PV1 },
+            after: { status: 'active', packageVersionId: PV2 },
+          },
         ]);
 
         // The same version as now is invalid; nothing else changes.
@@ -4333,7 +4477,10 @@ describe.skipIf(!up)(
       it('changePackage and pause: paused or ended is invalid', async () => {
         await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
         await expect(
-          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: PV1_V2,
+          }),
         ).rejects.toMatchObject({ kind: 'invalid' });
         await expect(
           repos.subscriptions.pause(scope, { subscriptionId: SUB }),
@@ -4341,7 +4488,10 @@ describe.skipIf(!up)(
 
         await raw.query(`update subscriptions set status = 'ended' where id = $1`, [SUB]);
         await expect(
-          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: PV1_V2,
+          }),
         ).rejects.toMatchObject({ kind: 'invalid' });
         await expect(
           repos.subscriptions.pause(scope, { subscriptionId: SUB }),
@@ -4350,7 +4500,7 @@ describe.skipIf(!up)(
         await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
       });
 
-      it('resume: refuses a cost-alarm pause, a pause with no audit row, and a non-student pause; restores the student\'s own pause', async () => {
+      it("resume: refuses a cost-alarm pause, a pause with no audit row, and a non-student pause; restores the student's own pause", async () => {
         const paused = await repos.subscriptions.pause(scope, { subscriptionId: SUB });
         expect(paused.status).toBe('paused');
 
@@ -4413,7 +4563,10 @@ describe.skipIf(!up)(
           `select action from audit_log where target = $1 order by ts`,
           [`subscription:${SUB}`],
         );
-        expect(actions.rows.map((r) => r.action)).toEqual([STUDENT_PAUSE_ACTION, STUDENT_RESUME_ACTION]);
+        expect(actions.rows.map((r) => r.action)).toEqual([
+          STUDENT_PAUSE_ACTION,
+          STUDENT_RESUME_ACTION,
+        ]);
       });
 
       it('cancel: any live status ends it; findLive is null and start works again; ended already is invalid', async () => {
@@ -4439,7 +4592,7 @@ describe.skipIf(!up)(
         expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: restarted.id });
       });
 
-      it('start (9.6c/9.3b): refuses a non-live version and a suspended agent\'s version', async () => {
+      it("start (9.6c/9.3b): refuses a non-live version and a suspended agent's version", async () => {
         await raw.query(`update subscriptions set status = 'ended' where student_id = $1`, [S]);
         await expect(
           repos.subscriptions.start(scope, {
@@ -4504,10 +4657,19 @@ describe.skipIf(!up)(
       const PV_PAID_TRIAL = 'pv_96h_paid_trial'; // paid, trialDays 14
       const PV_NO_TRIAL = 'pv_96h_no_trial'; // paid, no trialDays
       const PERIOD_END = '2027-06-01T00:00:00Z';
-      const STUDENTS = ['stu_96h_a', 'stu_96h_b', 'stu_96h_c', 'stu_96h_d', 'stu_96h_e', 'stu_96h_f'];
+      const STUDENTS = [
+        'stu_96h_a',
+        'stu_96h_b',
+        'stu_96h_c',
+        'stu_96h_d',
+        'stu_96h_e',
+        'stu_96h_f',
+      ];
       const sc = (studentId: string) => ({ studentId, teacherId: T });
       const now = new Date();
-      const MONTH_START = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+      const MONTH_START = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      ).toISOString();
 
       beforeAll(async () => {
         await raw.query(
@@ -4543,21 +4705,39 @@ describe.skipIf(!up)(
         );
       });
 
-      it('changePackage (MEDIUM): a teacher rejected after publishing can\'t be switched to, like start (9.3c)', async () => {
+      it("changePackage (MEDIUM): a teacher rejected after publishing can't be switched to, like start (9.3c)", async () => {
         const s = sc('stu_96h_a');
-        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'active', periodEnd: PERIOD_END });
-        await raw.query(`update teacher_profiles set verification_status = 'rejected' where id = 'tp_96h'`);
+        const sub = await repos.subscriptions.start(s, {
+          packageVersionId: PV_PAID_TRIAL,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
+        await raw.query(
+          `update teacher_profiles set verification_status = 'rejected' where id = 'tp_96h'`,
+        );
         await expect(
-          repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL }),
+          repos.subscriptions.changePackage(s, {
+            subscriptionId: sub.id,
+            packageVersionId: PV_NO_TRIAL,
+          }),
         ).rejects.toMatchObject({ kind: 'not_found' });
-        await raw.query(`update teacher_profiles set verification_status = 'verified' where id = 'tp_96h'`);
-        const changed = await repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL });
+        await raw.query(
+          `update teacher_profiles set verification_status = 'verified' where id = 'tp_96h'`,
+        );
+        const changed = await repos.subscriptions.changePackage(s, {
+          subscriptionId: sub.id,
+          packageVersionId: PV_NO_TRIAL,
+        });
         expect(changed.packageVersionId).toBe(PV_NO_TRIAL);
       });
 
-      it('resume (MEDIUM): only a pause_student row by this same student counts; staff, system or another student\'s row is invalid', async () => {
+      it("resume (MEDIUM): only a pause_student row by this same student counts; staff, system or another student's row is invalid", async () => {
         const s = sc('stu_96h_b');
-        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'active', periodEnd: PERIOD_END });
+        const sub = await repos.subscriptions.start(s, {
+          packageVersionId: PV_PAID_TRIAL,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
         await repos.subscriptions.pause(s, { subscriptionId: sub.id });
         const forged = [
           ['al_96h_staff', 'staff_96h', 'staff'],
@@ -4570,16 +4750,24 @@ describe.skipIf(!up)(
              values ($1, $2, $3, $4, $5, $6, $7, '{"status":"active","packageVersionId":"${PV_PAID_TRIAL}"}', '{"status":"paused","packageVersionId":"${PV_PAID_TRIAL}"}', now() + interval '1 hour')`,
             [id, actor, role, STUDENT_PAUSE_ACTION, `subscription:${sub.id}`, T, 'stu_96h_b'],
           );
-          await expect(repos.subscriptions.resume(s, { subscriptionId: sub.id })).rejects.toMatchObject({ kind: 'invalid' });
+          await expect(
+            repos.subscriptions.resume(s, { subscriptionId: sub.id }),
+          ).rejects.toMatchObject({ kind: 'invalid' });
           await raw.query(`delete from audit_log where id = $1`, [id]);
         }
         // With the forged rows gone, the student's own pause is the latest again.
-        expect(await repos.subscriptions.resume(s, { subscriptionId: sub.id })).toMatchObject({ status: 'active' });
+        expect(await repos.subscriptions.resume(s, { subscriptionId: sub.id })).toMatchObject({
+          status: 'active',
+        });
       });
 
       it('resume (LOW): two latest rows with the same timestamp are ambiguous, so resume fails closed', async () => {
         const s = sc('stu_96h_c');
-        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'active', periodEnd: PERIOD_END });
+        const sub = await repos.subscriptions.start(s, {
+          packageVersionId: PV_PAID_TRIAL,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
         await repos.subscriptions.pause(s, { subscriptionId: sub.id });
         // A staff row with exactly the student pause's ts and created_at, and an id
         // that sorts before it: an id tie-break would have picked the student's row.
@@ -4589,41 +4777,73 @@ describe.skipIf(!up)(
              from audit_log where target = $1 and action = $2`,
           [`subscription:${sub.id}`, STUDENT_PAUSE_ACTION],
         );
-        await expect(repos.subscriptions.resume(s, { subscriptionId: sub.id })).rejects.toMatchObject({ kind: 'invalid' });
+        await expect(
+          repos.subscriptions.resume(s, { subscriptionId: sub.id }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
       });
 
       it('changePackage (LOW): a trial switched to a package with no trial becomes active; to a package with a trial it stays trial', async () => {
         const s = sc('stu_96h_d');
-        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'trial', periodEnd: PERIOD_END });
+        const sub = await repos.subscriptions.start(s, {
+          packageVersionId: PV_FREE,
+          status: 'trial',
+          periodEnd: PERIOD_END,
+        });
         expect(sub.status).toBe('trial');
-        const toTrial = await repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_PAID_TRIAL });
+        const toTrial = await repos.subscriptions.changePackage(s, {
+          subscriptionId: sub.id,
+          packageVersionId: PV_PAID_TRIAL,
+        });
         expect(toTrial.status).toBe('trial');
-        const toNoTrial = await repos.subscriptions.changePackage(s, { subscriptionId: sub.id, packageVersionId: PV_NO_TRIAL });
+        const toNoTrial = await repos.subscriptions.changePackage(s, {
+          subscriptionId: sub.id,
+          packageVersionId: PV_NO_TRIAL,
+        });
         expect(toNoTrial.status).toBe('active');
         expect(Date.parse(toNoTrial.periodEnd)).toBe(Date.parse(sub.periodEnd)); // period_end kept
-        expect(await repos.subscriptions.findLive(s)).toMatchObject({ status: 'active', packageVersionId: PV_NO_TRIAL });
+        expect(await repos.subscriptions.findLive(s)).toMatchObject({
+          status: 'active',
+          packageVersionId: PV_NO_TRIAL,
+        });
         const audit = await raw.query<{ after: unknown }>(
           `select after from audit_log where target = $1 and action = $2 and after->>'packageVersionId' = $3`,
           [`subscription:${sub.id}`, CHANGE_PACKAGE_ACTION, PV_NO_TRIAL],
         );
-        expect(audit.rows).toEqual([{ after: { status: 'active', packageVersionId: PV_NO_TRIAL } }]);
+        expect(audit.rows).toEqual([
+          { after: { status: 'active', packageVersionId: PV_NO_TRIAL } },
+        ]);
       });
 
       it('start (LOW): cancel then start does not give the pair a second trial', async () => {
         const s = sc('stu_96h_e');
-        const first = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'trial', periodEnd: PERIOD_END });
+        const first = await repos.subscriptions.start(s, {
+          packageVersionId: PV_PAID_TRIAL,
+          status: 'trial',
+          periodEnd: PERIOD_END,
+        });
         expect(first.status).toBe('trial');
         await repos.subscriptions.cancel(s, { subscriptionId: first.id });
-        const second = await repos.subscriptions.start(s, { packageVersionId: PV_PAID_TRIAL, status: 'trial', periodEnd: PERIOD_END });
+        const second = await repos.subscriptions.start(s, {
+          packageVersionId: PV_PAID_TRIAL,
+          status: 'trial',
+          periodEnd: PERIOD_END,
+        });
         expect(second.status).toBe('active');
-        expect(await repos.subscriptions.findLive(s)).toMatchObject({ id: second.id, status: 'active' });
+        expect(await repos.subscriptions.findLive(s)).toMatchObject({
+          id: second.id,
+          status: 'active',
+        });
       });
 
       // Runs last in this block: the alarm pause blocks every free start of this teacher for the
       // rest of the month.
       it('start (MEDIUM): cost-alarm pause -> cancel -> start of a free package is invalid for the rest of the month; a paid package still starts', async () => {
         const s = sc('stu_96h_f');
-        const sub = await repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END });
+        const sub = await repos.subscriptions.start(s, {
+          packageVersionId: PV_FREE,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
         const paused = await repos.subscriptions.pauseFreeForTeacher(
           { teacherId: T },
           { monthStart: MONTH_START, reason: '96h test alarm' },
@@ -4631,23 +4851,39 @@ describe.skipIf(!up)(
         expect(paused.map((p) => p.subscriptionId)).toContain(sub.id);
         await repos.subscriptions.cancel(s, { subscriptionId: sub.id });
         await expect(
-          repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
+          repos.subscriptions.start(s, {
+            packageVersionId: PV_FREE,
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
         ).rejects.toMatchObject({ kind: 'invalid' });
         expect(await repos.subscriptions.findLive(s)).toBeNull();
         // Another student of the same teacher can't take the free package this month either.
         await raw.query(`update subscriptions set status = 'ended' where student_id = 'stu_96h_a'`);
         await expect(
-          repos.subscriptions.start(sc('stu_96h_a'), { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
+          repos.subscriptions.start(sc('stu_96h_a'), {
+            packageVersionId: PV_FREE,
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
         ).rejects.toMatchObject({ kind: 'invalid' });
         // A paid package isn't the alarm's business.
-        const paid = await repos.subscriptions.start(s, { packageVersionId: PV_NO_TRIAL, status: 'active', periodEnd: PERIOD_END });
+        const paid = await repos.subscriptions.start(s, {
+          packageVersionId: PV_NO_TRIAL,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
         expect(paid.status).toBe('active');
         // An alarm row from an earlier month doesn't block.
         await raw.query(
           `update audit_log set ts = $1::timestamptz - interval '1 day' where teacher_id = $2 and action = 'subscription.pause_cost_alarm'`,
           [MONTH_START, T],
         );
-        const free = await repos.subscriptions.start(sc('stu_96h_a'), { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END });
+        const free = await repos.subscriptions.start(sc('stu_96h_a'), {
+          packageVersionId: PV_FREE,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
         expect(free.packageVersionId).toBe(PV_FREE);
       });
     });
@@ -4715,8 +4951,14 @@ describe.skipIf(!up)(
       const scope = (studentId: string) => ({ studentId, teacherId: 'tch_11a' });
       for (const status of ['trial', 'active'] as const) {
         const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus(status)));
-        expect(rows.map((r) => r.id), status).toEqual([future.id]);
-        expect(rows.map((r) => r.id), status).not.toContain(pastId);
+        expect(
+          rows.map((r) => r.id),
+          status,
+        ).toEqual([future.id]);
+        expect(
+          rows.map((r) => r.id),
+          status,
+        ).not.toContain(pastId);
       }
       for (const status of ['past_due', 'paused', 'ended'] as const) {
         expect(
@@ -4724,16 +4966,22 @@ describe.skipIf(!up)(
           status,
         ).toEqual([]);
       }
-      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_wrong_pkg'))).toEqual([]);
+      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_wrong_pkg'))).toEqual(
+        [],
+      );
       expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_no_sub'))).toEqual([]);
 
       // `options.now` overrides the clock (deterministic tests only): every window label.
       const startsAt = new Date(LIVE_CLASS_STARTS_AT);
-      const minsBefore = (mins: number) => new Date(startsAt.getTime() - mins * 60_000).toISOString();
+      const minsBefore = (mins: number) =>
+        new Date(startsAt.getTime() - mins * 60_000).toISOString();
       const windowAt = async (now: string) => {
-        const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus('trial')), {
-          now,
-        });
+        const rows = await repos.liveClasses.listUpcomingForStudent(
+          scope(studentOfStatus('trial')),
+          {
+            now,
+          },
+        );
         return rows.find((r) => r.id === future.id)?.window;
       };
       expect(await windowAt(minsBefore(3))).toBe('starting_soon');
@@ -4832,7 +5080,10 @@ describe.skipIf(!up)(
       let after: { createdAt: string; id: string } | undefined;
       const seen: string[] = [];
       for (let guard = 0; guard < 10; guard += 1) {
-        const page = await repos.sessions.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        const page = await repos.sessions.listForStudent(sc, {
+          ...(after ? { after } : {}),
+          limit: 2,
+        });
         seen.push(...page.items.map((s) => s.id));
         if (page.next === null) break;
         after = page.next;
@@ -4842,7 +5093,16 @@ describe.skipIf(!up)(
 
       const [row] = (await repos.sessions.listForStudent(sc, { limit: 2 })).items;
       expect(row && Object.keys(row).sort()).toEqual(
-        ['agentId', 'agentVersion', 'createdAt', 'endedAt', 'id', 'packageId', 'packageVersion', 'summary'].sort(),
+        [
+          'agentId',
+          'agentVersion',
+          'createdAt',
+          'endedAt',
+          'id',
+          'packageId',
+          'packageVersion',
+          'summary',
+        ].sort(),
       );
 
       const last = await repos.sessions.listForStudent(sc, { limit: 500 });
@@ -4889,7 +5149,10 @@ describe.skipIf(!up)(
       let after: { createdAt: string; id: string } | undefined;
       const seen: { id: string; sessionId: string }[] = [];
       for (let guard = 0; guard < 10; guard += 1) {
-        const page = await repos.messages.listForStudent(sc, { ...(after ? { after } : {}), limit: 2 });
+        const page = await repos.messages.listForStudent(sc, {
+          ...(after ? { after } : {}),
+          limit: 2,
+        });
         seen.push(...page.items.map((m) => ({ id: m.id, sessionId: m.sessionId })));
         if (page.next === null) break;
         after = page.next;
