@@ -2,7 +2,13 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['app/**/*.test.ts', 'app/**/*.test.tsx', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: [
+      'app/**/*.test.ts',
+      'app/**/*.test.tsx',
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'e2e/**/*.test.ts',
+    ],
     // No real network: global fetch rejects, and sign-in env is cleared (rule 4).
     setupFiles: ['test/setup.ts'],
     // Node by default (unchanged for the existing `.test.ts` suites; src/auth/**'s 100%-coverage
