@@ -251,6 +251,9 @@ same problem. Re-added a `"you should <verb>"` marker phrase alongside the new b
 each of those three `bad` strings, confirmed against the real regex with a short Node snippet
 before re-running the suite.
 
+Fix round 2: two more echo phrases replaced (school discipline, LLC form).
+Tool calls used: 17
+
 ### Evidence
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals...` → 18/18 tasks green,
   1308/1308 tests passed (clean `--force` run, no cache).
