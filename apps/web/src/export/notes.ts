@@ -15,10 +15,19 @@ function moduleStateCount(topics: Progress['modules'][number]['topics']) {
 
 /**
  * `teacherQuestions.listForStudent` never carries the answer's text (the contract has no such
- * field -- `answer()` writes it as a role `'teacher'` chat message instead, task 5.10). This pairs
- * each answered question with the first not-yet-used teacher-role message at or after its
- * `answeredAt`/`createdAt`, across every exported session (one at a time, oldest first): a
- * reasonable match given the schema, not a guaranteed exact one (decision, 22 Oct 2026).
+ * field -- `teacherQuestions.answer` writes it as a role `'teacher'` chat message instead, task
+ * 5.10), and neither side carries the other's id (no `questionId` on `Message`, no message id on
+ * `TeacherQuestion`): there is no id link to pair by without a `packages/contracts`/`packages/db`
+ * change (out of scope here -- would need an ADR). This pairs by the one field both sides already
+ * share exactly: `teacherQuestions.answer`'s single transaction writes a question's `answeredAt`
+ * and (for each distinct student it closes a question for) a teacher message's `createdAt` from
+ * the very same `now()`, so they are byte-for-byte equal, not merely close. A `teacherQuestions
+ * .answer` call can also close more than one of this student's questions at once (a grouped
+ * answer) while writing only one teacher message for them -- every such question shares that
+ * exact timestamp and all of them pair to that one message, instead of only the first (9.6g; the
+ * 9.6b decision below is superseded by this one). A question whose exact timestamp has no
+ * teacher-role message (should not happen given the schema, kept for a malformed row) falls back
+ * to the nearest not-yet-used message at or after it.
  */
 function answeredPairs(
   questions: ExportJson['teacherQuestions'],
@@ -31,13 +40,18 @@ function answeredPairs(
   const answered = [...questions]
     .filter((q) => q.status === 'answered')
     .sort((a, b) => (a.answeredAt ?? a.createdAt).localeCompare(b.answeredAt ?? b.createdAt));
-  const used = new Set<number>();
+  const usedByFallback = new Set<number>();
   const pairs: Array<{ question: string; answer: string }> = [];
   for (const q of answered) {
     const at = q.answeredAt ?? q.createdAt;
-    const idx = teacherMessages.findIndex((m, i) => !used.has(i) && m.createdAt >= at);
+    const exactIdx = teacherMessages.findIndex((m) => m.createdAt === at);
+    if (exactIdx !== -1) {
+      pairs.push({ question: q.text, answer: teacherMessages[exactIdx]!.text });
+      continue;
+    }
+    const idx = teacherMessages.findIndex((m, i) => !usedByFallback.has(i) && m.createdAt >= at);
     if (idx === -1) continue;
-    used.add(idx);
+    usedByFallback.add(idx);
     pairs.push({ question: q.text, answer: teacherMessages[idx]!.text });
   }
   return pairs;

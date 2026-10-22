@@ -2,7 +2,7 @@
 import { parsePdf } from '@edmate/ingest';
 import { RepositoryError } from '@edmate/db';
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Principal, RoleContext } from '../auth/guard';
 import type { ExportBackend } from './buildExport';
 import { createExportHandlers } from './routes';
@@ -75,6 +75,16 @@ describe('GET /api/me/export/:agentId (json)', () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: { message: string } };
     expect(body.error.message).not.toMatch(/sessions\.listForStudent/);
+  });
+
+  it('logs the error name (never its message) on the 500 path', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const backend = fakeBackend({ fail: true });
+    const { json } = createExportHandlers(backend);
+    await json(req('agt_1'), ctxFor(STUDENT, 'agt_1'));
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('RepositoryError'));
+    expect(spy.mock.calls.flat().join(' ')).not.toMatch(/sessions\.listForStudent/);
+    spy.mockRestore();
   });
 });
 
