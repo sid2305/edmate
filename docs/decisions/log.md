@@ -10,6 +10,28 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 11.1a new `liveClasses` repository on a risky path · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/live-classes.ts` is a new repository on the risky path
+  `packages/db/src/repositories/**`. It follows the existing repository rules exactly (scope
+  validated first, ownership checked inside the write's own transaction, audit row written,
+  driver errors scrubbed by `guardAll`), reviewed against `packages.ts`/`audit.ts`'s established
+  shapes.
+- Why: any new file under `packages/db/src/repositories/**` is risky-path by the merge gate's
+  rules; this one owns a new data-access surface (a teacher's live classes and a student's
+  entitlement to them), so a reviewer should confirm the isolation guarantees before merge.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.1a live-class reminders are in-app only for now (B-45) · decided by lead · risk: medium
+- Decided: live class reminders are in-app, pull-based only for now — no email/SMS, no background
+  job.
+- Why: keeps Phase A inside `packages/db` only, with no new dependency on `packages/queue` or
+  `apps/worker`, matching the lead's current-focus priority of a testable product fast.
+- risk: medium
+
+---
+
 ### 22 Oct 2026 · 8.7e the loader reads the first agent id only · decided by builder · risk: low
 - Decided: `teacherScorecard` calls `publicScorecard` with `teacher.agentIds[0]`, not every agent
   id the page lists packages for.

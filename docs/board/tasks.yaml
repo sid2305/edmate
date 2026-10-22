@@ -4414,9 +4414,30 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: running
+  status: done
   branch: m11/11.1a-live-classes-repo
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 49
+    tokens_in: 166
+    tokens_out: 853
+    cache_read_tokens: 2999616
+    wall_time_seconds: 196
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.1b
   milestone: M11
   title: 'Teacher studio live classes: schedule with an external link, attach packages, list (11.1 Phase B, apps/web; plan docs/tasks/11.1/plan.md)'
