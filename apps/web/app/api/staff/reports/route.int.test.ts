@@ -102,7 +102,13 @@ describe.skipIf(!DB_URL)('staff reports and takedowns over a real Postgres', () 
 
     await db.repos.documents.create(
       { teacherId: DEMO.teacher },
-      { id: docId, moduleId: DEMO.module, kind: 'material', sourceTitle: `Int notes ${tag}` },
+      {
+        id: docId,
+        moduleId: DEMO.module,
+        kind: 'material',
+        sourceTitle: `Int notes ${tag}`,
+        rightsDeclared: true,
+      },
     );
     await db.repos.chunks.insertMany({ teacherId: DEMO.teacher }, docId, [
       { ord: 0, text: DOC_TEXT, locator: 'p1' },

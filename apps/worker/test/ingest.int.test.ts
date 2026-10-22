@@ -155,6 +155,7 @@ async function createDocument(
     kind: 'material',
     sourceTitle: `${id} title`,
     storageKey,
+    rightsDeclared: true,
   });
   return { id, storageKey };
 }
@@ -436,6 +437,7 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
 
         const { previousStorageKey } = await db.repos.documents.startReplace(scope, id, {
           storageKey: newKey,
+          rightsDeclared: true,
         });
         expect(previousStorageKey).toBe(oldKey);
 

@@ -67,7 +67,7 @@ async function addDoc(
   texts: string[],
   ready = true,
 ) {
-  await repos.documents.create(scope, { id, moduleId, kind: 'material', sourceTitle: `${id}.pdf` });
+  await repos.documents.create(scope, { id, moduleId, kind: 'material', sourceTitle: `${id}.pdf`, rightsDeclared: true });
   await repos.chunks.insertMany(
     scope,
     id,
@@ -165,7 +165,7 @@ describe.skipIf(!up)(`studio outline on Postgres${up ? '' : ` (${SKIP_REASON})`}
 
     it('is invalid past MODULE_CHUNKS_MAX, never a cut list', async () => {
       const big = ids.module('B', 2);
-      await repos.documents.create(B, { id: 'doc_big', moduleId: big, kind: 'material', sourceTitle: 'big' });
+      await repos.documents.create(B, { id: 'doc_big', moduleId: big, kind: 'material', sourceTitle: 'big', rightsDeclared: true });
       for (let from = 0; from <= MODULE_CHUNKS_MAX; from += 500) {
         const n = Math.min(500, MODULE_CHUNKS_MAX + 1 - from);
         await repos.chunks.insertMany(

@@ -75,6 +75,7 @@ async function loadWorld(world: readonly Chunk[]): Promise<void> {
       moduleId: first.moduleId,
       kind: first.kind,
       sourceTitle: first.source.title,
+      rightsDeclared: true,
     });
     await repos.chunks.insertMany(
       scope,
@@ -270,6 +271,7 @@ describe.skipIf(!up)(`leakCheck on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
         moduleId: LOCKED,
         kind: 'material',
         sourceTitle: 'New',
+        rightsDeclared: true,
       });
       expect(await r.leakCheck([fresh], SCOPE)).toEqual({ hit: false });
       await repos.chunks.insertMany(scope, 'doc_leak_new', [
@@ -283,6 +285,7 @@ describe.skipIf(!up)(`leakCheck on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
         moduleId: OPEN,
         kind: 'material',
         sourceTitle: 'Open 2',
+        rightsDeclared: true,
       });
       await repos.chunks.insertMany(scope, 'doc_leak_open2', [
         { ord: 0, text: fresh, locator: 'p1' },

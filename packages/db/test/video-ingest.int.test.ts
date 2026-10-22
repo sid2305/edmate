@@ -69,6 +69,7 @@ describe.skipIf(!up)('video ingestion: 60-minute fixture is searchable within th
       moduleId: MODULE,
       kind: 'material',
       sourceTitle: 'Live class: quadratic equations',
+      rightsDeclared: true,
     });
   });
 
