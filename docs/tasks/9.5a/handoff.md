@@ -135,4 +135,4 @@ Fix-round tool calls used: 17
   `main` per the plan's build order.
 
 Status: DONE
-Tool calls used: 44
+Tool calls used: 115 (harness: build 87, fix round 28)
