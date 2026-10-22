@@ -2228,7 +2228,7 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 0.21 review follow-ups for apps/web test/turn-backend.ts
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 9.0b review LOW: apps/worker gateway.test.ts asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web test/turn-backend.ts
     deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for both sleep branches'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
@@ -2763,7 +2763,7 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: running
+  status: review
   branch: m7/7.2c-leak-cases
   model: plan:sonnet build:sonnet
 - id: 7.2d
@@ -2917,7 +2917,7 @@ tasks:
   deps:
   - '8.2'
   risk: normal
-  status: running
+  status: review
   branch: m9/9.0b-worker-ingest
   model: plan:opus build:sonnet
 - id: 8.3a
