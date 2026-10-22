@@ -56,6 +56,11 @@ restored (not left as a committed revert — the repo state here is the fixed, p
 None for this task's scope.
 
 ## Decisions
+### 22 Oct 2026 · 11.4g ran over budget · decided by lead · risk: low
+- Decided: accept 234 tool calls (88 build + 146 fix round) against a 60-call budget; the result is small (three views and their tests) and both reviewers approved after re-verifying.
+- Why: the Sonnet agents under-reported their calls by about 2 to 4 times and didn't stop at the brief's limit; the lead raises this in the 0.22 review rather than redoing the work.
+- risk: low
+
 
 ### 22 Oct 2026 · 11.4g no new failureReason key for the client-reported failed row · decided by builder · risk: low
 - Decided: a client-side `failed` row from a PUT/complete failure gets `status: 'failed'` but no
@@ -126,4 +131,4 @@ lint, and `vitest run --coverage` all green, including the three new/updated tes
 `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks passed.
 `python3 .githooks/secret-scan.py --all` — clean (no output).
 
-Tool calls used: 48 + 34 (fix round)
+Tool calls used: 234 (harness count: builder 88 + fixer 146; the agents reported 48 + 34)
