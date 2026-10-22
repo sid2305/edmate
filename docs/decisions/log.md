@@ -10,6 +10,43 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.8a Lead accepts the newest-first trace listing in the teacher repository · decided by lead · risk: high
+- Decided: merge the change to packages/db/src/repositories/turn-traces.ts (`listForTeacherSince` orders newest-first, caps, then reverses), reviewed by code-reviewer, typescript-reviewer and security-reviewer.
+- Why: capped reads returned the oldest window, so insights showed stale health; the teacher-isolation join and selected columns are unchanged (security-reviewer confirmed), and an integration test pins the newest-two result.
+- risk: high (risky path: packages/db/src/repositories/**)
+
+---
+
+### 22 Oct 2026 · 8.8a sample text is the group's oldest question, not newest or first-inserted · decided by builder · risk: low
+- Decided: `InsightsQuestionGroup.sample` is `group.questions[0]?.text ?? ''`, and
+  `listGroupsForTeacher` already returns each group's `questions` oldest-first (its own repo
+  comment and sort). So "sample" here means the oldest open question in the group.
+- Why: the plan says "sample = the group's first question's text" without saying which ordering
+  counts as "first"; the repo's own output is already ordered oldest-first, so taking index 0
+  needed no extra sort and matches "oldest-first" being the one order 5.10's own docs commit to.
+- risk: low — a one-line follow-up to switch to newest-first if a reviewer disagrees.
+
+---
+
+### 22 Oct 2026 · 8.8a The teacher trace listing returns the newest traces when capped · decided by builder · risk: medium
+- Decided: `turnTraces.listForTeacherSince` (packages/db) now orders by `createdAt desc, id desc`,
+  takes `limit`, then reverses the page in memory before returning it, so callers still see
+  oldest-first output but the page is the *newest* `limit` rows, not the oldest. JSDoc updated to
+  say "the newest `limit` traces ... returned oldest first". `apps/web/src/studio/insights.ts`'s
+  `capped` now reads `traces.length >= TEACHER_TRACES_MAX_LIMIT` (was `===`, a defensive `>=`
+  since the cap is enforced by the repo's own `Limit` schema, not by this call site).
+- Why: typescript-reviewer (HIGH) found the previous ascending-order-then-limit read returned the
+  *oldest* 200 traces once a teacher passed 200 turns in the 7-day window, while
+  `insights.ts`'s comment and the studio UI both say "most recent" — a pilot teacher would see
+  stale health. Only one real implementation of this repo method exists (Postgres); there is no
+  in-memory/fixture copy to also fix.
+- risk: medium — this is the first edit to `packages/db` inside task 8.8 (otherwise an
+  `apps/web`-only task); it changes a public repo method's query shape and page composition, so a
+  reviewer should re-check the isolation/ordering tests in
+  `packages/db/test/trace-sink.int.test.ts` and `repositories.int.test.ts`.
+
+---
+
 ### 22 Oct 2026 · 8.5b Preview writes to the teacher's own inbox until 8.5d · decided by lead · risk: medium
 - Decided: the test-chat API merges with preview turns reusing the student write ports. A preview question the agent can't answer goes to the teacher's own Ask-the-teacher inbox, and profile, evidence and safety-event rows are written for the teacher as both sides. Follow-up 8.5d gives preview its own no-op question, profile and evidence ports (safety events stay recorded) before the pilot.
 - Why: the code reviewer's MEDIUM in apps/web/src/studio/testChat/deps.ts. It is visible only to the teacher who ran the preview and leaks nothing across teachers, so it doesn't block a testable studio; the fix needs its own small task.
