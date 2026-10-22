@@ -8,6 +8,7 @@ import { correctionsRepo } from './corrections.js';
 import { discoveryRepo } from './discovery.js';
 import { insightsRepo } from './insights.js';
 import { evidenceEventsRepo, learnerProfilesRepo } from './learner.js';
+import { liveClassesRepo } from './live-classes.js';
 import { messagesRepo } from './messages.js';
 import { modulesRepo } from './modules.js';
 import { notificationsRepo } from './notifications.js';
@@ -75,6 +76,7 @@ export function createRepositories(db: Db) {
     outline: guardAll('outline', outlineRepo(db)),
     publish: guardAll('publish', publishRepo(db)),
     insights: guardAll('insights', insightsRepo(db)),
+    liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
   };
 }
 
@@ -254,3 +256,13 @@ export {
   type WeeklyInsightsPayload,
   WeeklyInsightsPayloadSchema,
 } from './insights.js';
+export {
+  type CreateLiveClassInput,
+  LIVE_CLASS_PACKAGE_IDS_MAX,
+  LIVE_CLASS_PACKAGE_IDS_MIN,
+  LIVE_CLASS_TITLE_MAX_LENGTH,
+  type ListUpcomingOptions,
+  type LiveClassWindow,
+  type TeacherLiveClassRow,
+  type UpcomingLiveClass,
+} from './live-classes.js';
