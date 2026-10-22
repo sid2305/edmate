@@ -6301,7 +6301,7 @@ tasks:
   milestone: M10
   title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B); 10.1a review LOWs: one shared
     input check every adapter calls (idempotency key, https returnUrl) tested in the suite; refund with amount omitted (full refund) is tested or made explicit; a PaymentsErrorCode union pinned to the ADR
-    §7 list; the suite tests a retry after a timeout and that clearScheduled clears a scheduled resume'
+    §7 list; the suite tests a retry after a timeout and that clearScheduled clears a scheduled resume; refund JSDoc says it checks existing refunds first, and the timeout-retry test covers refund; clearScheduled with nothing scheduled returns the current snapshot; offer name also refuses lone surrogates, private-use and Hangul filler, with a ZWJ-emoji case'
   accept: the contract suite passes on the fake and on a second fake provider with no caller change; payments tests green.
   deps:
   - 10.1a
@@ -6323,7 +6323,7 @@ tasks:
   model: null
 - id: '10.2'
   milestone: M10
-  title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
+  title: 'Signed, idempotent, order-independent webhooks → subscriptions → entitlements (10.1a review: queue the whole PaymentEvent or re-check the provider per fact; compare occurredAt as instants)'
   accept: replayed and out-of-order webhooks end in the correct state.
   deps:
   - '10.1'
@@ -6596,7 +6596,7 @@ tasks:
   model: null
 - id: '10.8'
   milestone: M10
-  title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3)'
+  title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'
