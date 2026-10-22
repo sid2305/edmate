@@ -2437,6 +2437,32 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ),
     owners: (passed: string[]) => passed,
   },
+  // Task 12.1a: the staff verification queue -- no teacher or student scope at all (only
+  // `agents.owner`'s kind of case), checked by role instead. The previous case leaves exactly one
+  // teacher verified and the rest pending, so this only asserts shape and the staff/non-staff
+  // split, not an exact pending set (brittle against test order).
+  'teacherProfiles.listPendingForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
+        await expect(r.teacherProfiles.listPendingForStaff(by)).rejects.toMatchObject({
+          kind: 'scope',
+        });
+        n += 1;
+      }
+      const rows = await r.teacherProfiles.listPendingForStaff(ISO_STAFF);
+      for (const row of rows) {
+        expect(row.verificationStatus, 'only pending rows').toBe('pending');
+        expect(Object.keys(row).sort()).toEqual(
+          ['email', 'id', 'name', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
+        );
+      }
+      n += 1;
+      return n;
+    },
+  },
   'audit.appendForStudent': {
     scope: 'student',
     op: 'write',

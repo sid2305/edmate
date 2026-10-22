@@ -291,6 +291,51 @@ export function toTeacherProfile(
   );
 }
 
+const TeacherVerificationQueueRowSchema = z.strictObject({
+  id: z.string().min(1),
+  teacherId: z.string().min(1),
+  slug: z.string().min(1),
+  subject: z.string().min(1),
+  verificationStatus: z.enum(['pending', 'verified', 'rejected']),
+  /** The declared name and email staff use to check identity (task 12.1a: staff-only). */
+  name: z.string().min(1),
+  email: z.string().min(1).nullable(),
+});
+
+/**
+ * A pending teacher_profiles row joined to its user, as only a staff queue sees it (task 12.1a).
+ * No contract type exists for it (same precedent as AuditRow). Unlike TeacherProfileRow, this
+ * carries `name` and `email` -- staff-only, never returned to a teacher or a public read.
+ */
+export type TeacherVerificationQueueRow = z.infer<typeof TeacherVerificationQueueRowSchema>;
+
+export function toTeacherVerificationQueueRow(
+  row: {
+    id: string;
+    userId: string;
+    slug: string;
+    subject: string;
+    verificationStatus: string;
+    name: string;
+    email: string | null;
+  },
+  method: string,
+): TeacherVerificationQueueRow {
+  return checked(
+    TeacherVerificationQueueRowSchema,
+    {
+      id: row.id,
+      teacherId: row.userId,
+      slug: row.slug,
+      subject: row.subject,
+      verificationStatus: row.verificationStatus,
+      name: row.name,
+      email: row.email,
+    },
+    method,
+  );
+}
+
 // Task 8.3: the studio outline. No contract type exists for it (same precedent as DocumentRow);
 // `@edmate/ingest`'s OutlineDraft is the drafter's output, not the stored shape.
 const CourseRowSchema = z.strictObject({
