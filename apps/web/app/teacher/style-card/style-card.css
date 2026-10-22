@@ -1,0 +1,27 @@
+/* Task 8.4b: the style card studio. Plain CSS on the 9.1 base, mobile-first (360px): every field
+   stacks; the save button keeps a 44px touch target. */
+
+.style-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.style-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.style-card-field textarea {
+  min-height: 4rem;
+}
+
+.style-card-error {
+  color: #a4161a;
+}
+
+.style-card button {
+  min-height: 44px;
+}

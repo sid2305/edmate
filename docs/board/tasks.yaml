@@ -3321,9 +3321,30 @@ tasks:
   deps:
   - 8.4a
   risk: medium
-  status: review
+  status: done
   branch: m8/8.4b-style-card-page
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 76
+    tokens_out: 424
+    cache_read_tokens: 883361
+    wall_time_seconds: 79
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.6e
   milestone: M13
   title: '8.6a follow-ups (review LOW): DeepReadonly type for MODEL_MIX; named error class for the per-turn cost RangeErrors'
@@ -3361,6 +3382,17 @@ tasks:
   deps:
   - 8.6b
   risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.5d
+  milestone: M13
+  title: '8.5b review follow-ups: preview turns get no-op question, profile and evidence ports (an escalation in a preview never lands in the teacher''s own inbox); export readJson and configuredMarket from src/turn
+    instead of copying them; one route test through testChatDepsFor that checks the usage ledger source teacher_preview; postCorrection uses the teacherScope() helper; per-field max on correction text'
+  accept: a preview turn that escalates writes no teacher_questions row; the MEDIUM and LOWs in docs/tasks/8.5b/review.md are fixed or closed with a reason.
+  deps:
+  - 8.5b
+  risk: medium
   status: todo
   branch: null
   model: null
