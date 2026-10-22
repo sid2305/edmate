@@ -4449,7 +4449,9 @@ tasks:
 - id: 12.1c
   milestone: M13
   title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
-    WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users; 12.1b review LOWs: decide whether the staff POST may change an already verified or rejected teacher (revoke) or only a pending one, and test it; add apps/web/app/staff/** to the security-reviewer risk group; the real-Postgres route test cleans up its staff user and rows in the shared CI database; MAX_REASON_CHARS comes from one shared constant; list() maps the integrity error kind explicitly'
+    WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users; 12.1b review LOWs: decide whether the staff POST may
+    change an already verified or rejected teacher (revoke) or only a pending one, and test it; add apps/web/app/staff/** to the security-reviewer risk group; the real-Postgres route test cleans up its
+    staff user and rows in the shared CI database; MAX_REASON_CHARS comes from one shared constant; list() maps the integrity error kind explicitly'
   accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
   deps:
   - 12.1a
@@ -4499,8 +4501,9 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.3a-insights-repo
+  model: plan:sonnet build:opus-5.5/medium
 - id: 11.3b
   milestone: M11
   title: Weekly insights worker job, Monday 07:00 in the US pack timezone (11.3 Phase B)
