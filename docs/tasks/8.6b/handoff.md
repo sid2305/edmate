@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.6b-packages-repo` (built on local branch `work-86b`)
 - Worktree: `.claude/worktrees/agent-a574f8ca5b6318e24`
-- Tool calls used: 68
+- Tool calls used: 92 (harness count; the builder's own count was 68)
 
 ## What changed
 
@@ -85,6 +85,11 @@ Phase C maps `scope`/`not_found` to 404 and `invalid` to 400 (or 409 for the cap
   values).
 
 ## Decisions
+### 22 Oct 2026 · 8.6b Lead accepts the agent bootstrap and packages repository scope checks · decided by lead · risk: high
+- Decided: merge 8.6b. agents.ensureDraft and packages.create, saveVersion and listForTeacher (risky path packages/db/src/repositories/**) are reviewed by code-reviewer (opus), typescript-reviewer, security-reviewer and database-reviewer, all APPROVE: every query is filtered by the signed-in teacher, foreign ids are not_found or scope with nothing written, drafts are strict so client-set ids are invalid, the advisory locks and the package row lock serialise the one-agent rule, the 20-package cap and version numbers, and the isolation grid covers all four methods. The builder's deviations (saveVersion takes agentId, the cap enforced in create, course and style card checked on every call, the package id kept out of the audit `after`) are accepted. The MEDIUM (no concurrent test for the cap) and the LOWs (the cap shares the `invalid` error kind; shared module check and locking with package-versions.ts; modelPolicy typed z.unknown in agents.ts; the audit redactor treats digit-led UUIDs as phone numbers) are deferred to 8.6f (M13). Phase C reads agentId from ensureDraft or the listForTeacher row, never from the request body, and checks the cap before create to return 409.
+- Why: all four reviewers approve with nothing above MEDIUM, and the deferred items are test depth and tidy-ups, not leaks.
+- risk: high
+
 
 ### 22 Oct 2026 · 8.6b Teacher scope checks in the agent and package repositories · decided by builder · risk: high
 - Decided: every new query filters by the scope's `teacher_id`. `agents.ensureDraft` key-share-locks the course and style card by id and teacher (else `not_found`) before returning or creating the agent, builds `teacherId` from the scope and parses the strict input and the full config before any SQL. `packages.create` checks the agent by id and teacher, `packages.saveVersion` row-locks the package by id, teacher and agent (else `not_found`), and both key-share-check every module by id and teacher (else `scope`). Drafts are strict, so a client-set `teacherId`, `agentId`, `id` or `version` is `invalid`. Only `packages.name` is ever updated. Callers: the teacher studio API (Phase C) with the signed-in teacher's own scope; no student or public caller.
