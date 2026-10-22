@@ -2691,9 +2691,30 @@ tasks:
   deps:
   - '7.1'
   risk: risky
-  status: review
+  status: done
   branch: m7/7.2a-locked-cases
-  model: plan:opus build:opus
+  model: plan:sonnet build:opus review:sonnet fix:opus
+  metrics:
+    tool_calls: 164
+    tokens_in: 522
+    tokens_out: 13816
+    cache_read_tokens: 16451421
+    wall_time_seconds: 1901
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 7.2b
   milestone: M7
   title: '7.2 Phase C: pedagogy suite 1 to 60 cases (plan docs/tasks/7.2/plan.md)'
@@ -2701,9 +2722,9 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2b-pedagogy-cases
+  model: plan:sonnet build:opus
 - id: 7.2c
   milestone: M7
   title: '7.2 Phase D: leak suite 44 to 80 cases (plan docs/tasks/7.2/plan.md)'

@@ -10,6 +10,104 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.2a lead signs the 62 new locked cases · decided by lead · risk: high
+- Decided: the lead read all 62 new locked cases (student turns and every `must_not_contain` entry, 62/62) and signs them (`reviewed_by: lead`); the locked suite goes from 38 to 100 cases with `SUITE_FLOORS.locked` at 100. Fix round 1 replaced the 13 cases' entries that a correct refusal could contain (listed under "Fix round 1"), and a new test keeps any banned phrase out of the case's own student turns.
+- Why: `evals/suites/locked/**` is a risky path that needs code-reviewer and a lead `risk: high` decision; MVP first lets the lead sign eval cases.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.2a "What's in the Full course?" may list the public module titles · decided by lead · risk: medium
+- Decided: answers the builder's open question 1. When a Free starter student asks what the Full course contains, the agent may name the locked modules' public titles (build plan line 337: module titles are public) or give the locked reply; the cases accept either and ban only section headings and content.
+- Why: the course outline is part of the sales page; only what is inside a locked module is protected.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a an encoded reply that carries only the locked reply is not a leak · decided by lead · risk: medium
+- Decided: answers the builder's open question 2. A reply in base64, ROT13 or leetspeak that carries only the locked reply's meaning does not fail a locked case; the encoded-text judge line stays on the one case where encoding is the attack, and the cases ban encoded forms of the locked content itself.
+- Why: the locked suite measures content leaks; style is the pedagogy and persona suites' job.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a half-allowed, half-locked questions · decided by lead · risk: medium
+- Decided: when a question is partly allowed and partly locked (for example "how is while different from my if?"), the agent answers the allowed part from allowed material, and the locked part gets the locked reply. Explaining the locked part from general knowledge is a failure, so `must_not_contain` may name locked-topic phrases, not only verbatim spans.
+- Why: the spec already decides this. PRD line 178 and build plan line 374 say the agent never fills gaps with general knowledge, and build plan § Access filter item 3 says `decide` picks `locked` only when nothing allowed matched. So the builder's question 1 is not a new human decision.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a no short or generic banned phrases · decided by lead · risk: medium
+- Decided: the cases the lead signs may not have a `must_not_contain` entry that is a bare number, a single common word or a phrase a correct refusal could contain ('20', 'local', 'default', 'width', 'repeats', 'as long as', 'infinite', 'last item', 'by position', 'is none'). Phase B lengthens each one into a distinctive span of the locked explanation, or drops it when the case has other entries, and applies the same rule to its own 30 cases.
+- Why: the live gate allows 0 locked leaks, so a false hit on a correct locked reply (a price such as "$20", or "as long as you have the Full package") would block publish for no reason. This answers the builder's question 2.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Duplicate check compares the whole turn sequence · decided by builder · risk: low
+- Decided: Two cases are flagged when their whole normalised student-turn sequence is equal within one top-level suite folder. Normalising means NFKC, lower case, `\p{P}` dropped and whitespace collapsed. Emoji and other symbols are kept. One shared turn inside two different multi-turn cases is allowed.
+- Why: The plan says "whose normalised student turns are identical". Flagging any single shared turn would also hit legitimate multi-turn cases that share a short follow-up such as "just say yes or no".
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Floors checked by a pure floorProblems function and pinned exactly · decided by builder · risk: low
+- Decided: `floorProblems(cases, floors)` is exported from `suites.ts` and tested on synthetic trees. The real-tree test asserts it returns no problems. A second test pins `SUITE_FLOORS` to exact values, so each phase must edit both the floor and the pin.
+- Why: The floor rule can be tested without the real tree, and lowering a floor by mistake then fails a test.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Compare cases do not require the locked reply text · decided by builder · risk: medium
+- Decided: The four "compare an allowed topic with a locked one" cases check only `must_not_contain` (locked-side phrases) plus a judge line. They do not require `must_contain: Free starter`. Every other new first turn requires "Free starter".
+- Why: Build plan line 336 picks `locked` only when allowed retrieval finds nothing above threshold. A question that is half about allowed material (if, variables, conditions) may correctly get a partial answer from the allowed side instead of the locked reply. The spec does not say which, so the cases test only the thing that is certain: no locked content.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Prettier reflowed one existing line in lockedFixtures.test.ts · decided by builder · risk: low
+- Decided: The `html tags inside words` variant line was reformatted by `prettier --write`. The behaviour is unchanged.
+- Why: The file was already off-format there, and formatting the whole file kept the new `SPANS` block consistent.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Phase B banned phrases also skip the student's own words · decided by builder · risk: low
+- Decided: Beyond the lead's list, a `must_not_contain` entry was also dropped or lengthened when it repeats the student's own wording ('column a', 'infinite') or matches common English by accident ('return n' matches "return now", 'straight away'). Phase B's own cases follow the same rule (for example, 'while loops' was removed from the syllabus case, and the friend-screenshot case bans 'lift off!' because the student never names that example).
+- Why: a correct locked reply may echo the student's question ("quizzes on infinite loops are not in your package"), and that is not a leak.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a "What's in the Full course" cases do not require the locked reply · decided by builder · risk: medium
+- Decided: the two paid-package contents cases (locked-full-course-contents-en, locked-full-course-topics-hi-latin) check only that no section heading or content from the locked modules appears, plus a judge line that allows the public module titles. They do not require "Free starter". The three outline cases about one module's headings, syllabus or key points do require it.
+- Why: build plan line 337 makes module and package titles public, so a reply that lists the Full course's module titles is not a leak, while section headings are chunk text. The spec does not say whether the agent should list the titles or give the locked reply (open question 1).
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Multi-turn drift cases put no check on the allowed first turn · decided by builder · risk: low
+- Decided: in the six drift cases, the first (allowed) turn has no `expect`, so it only builds the conversation; checks start on the turn that drifts into a locked module.
+- Why: the fixture test leaks one locked span per expect turn and expects the locked reply, which would be wrong for an allowed turn. The allowed reply is pedagogy's to check, not the locked suite's.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a 62 locked cases signed for the suite · decided by builder · risk: high
+- Decided: the locked suite grows from 38 to 100 cases (32 Phase A, 30 Phase B, all `reviewed_by: lead`), with `SUITE_FLOORS.locked` at 100. The lead logs its own `risk: high` decision with the count it read and signed.
+- Why: `evals/suites/locked/**` is a risky path (plan § Risky paths touched); the merge gate needs a `risk: high` decision and code-reviewer.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.2a fill-in-the-blank cases get a judge line · decided by builder · risk: low
+- Decided: once the bare method names are removed, the three fill-in-the-blank cases each get one judge line saying the reply does not name the missing word.
+- Why: the one-word answer is the leak these cases target, and a full-line span would not catch it. A string check on the bare word would hit a correct refusal that echoes the student's code.
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 7.4c budget overrun accepted · decided by lead · risk: low
 - Decided: the build used 46 tool calls against a 30-call budget (1.53×); accepted without a fix round.
 - Why: one phase, tests-first across two packages, 26/26 turbo tasks green, both reviewers approve with LOWs only; the overrun is the test setup for the deadline cases, not rework.
