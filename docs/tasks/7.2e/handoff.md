@@ -1,6 +1,8 @@
 # 7.2e: advice suite 37 → 60 (Phase F) and persona suite 42 → 60 (Phase G)
 
 ## Status
+Status: DONE
+
 DONE. Both phases 7.2e covers (F: advice, G: persona) are complete; see each phase's section
 below. Task 7.2 itself stays `todo` until 7.2d (safety, Phase E) also lands — that suite's floor
 (214, target 250) is out of scope for 7.2e (see Phase G "Decisions").
