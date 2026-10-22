@@ -1,7 +1,7 @@
 # 0.21 handoff: SSE route test flake
 
 Status: DONE
-Tool calls used: 46
+Tool calls used: 84 (harness count; the builder reported 46; budget 30)
 
 ## Cause
 
@@ -68,6 +68,16 @@ Lines        : 98.87% ( 1146/1159 )
 ```
 
 ## Decisions
+
+### 21 Oct 2026 · 0.21 budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 84 tool calls against a lead-set budget of 30 (2.8×); accepted.
+- Why: a load-dependent flake needs repeated reproduction runs under CPU pressure, and the lead's budget didn't allow for that; the fix is one test file, and both reviewers approved with no CRITICAL or HIGH findings. Future flake tasks get a budget of about 60.
+- risk: low
+
+### 21 Oct 2026 · 0.21 review follow-ups deferred to 9.4a · decided by lead · risk: low
+- Decided: the MEDIUM (deadlineSafeClock's cancellable sleeps never fire, so a truly hung step fails at vitest's 20 s test timeout instead of with a timeout status; add a long real fallback timer) and the two LOWs (say in the doc comment that a test needing a deadline to fire must use its own clock; a unit test for both sleep branches) go to 9.4a.
+- Why: no current apps/web test depends on a deadline firing (the reviewers checked every test that uses this backend), and the harness covers fail-closed deadlines on virtualClock; MVP first.
+- risk: low
 
 ### 21 Oct 2026 · 0.21 deadline-safe test clock · decided by builder · risk: low
 - Decided: fix the SSE route test flake by wrapping the web route tests' backend clock
