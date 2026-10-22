@@ -2237,10 +2237,29 @@ tasks:
   accept: a verified teacher who changes subject is pending again; a bio-only edit leaves verified; covered by a db integration test.
   deps:
   - 8.1a
-  status: running
+  status: done
   branch: m8/8.1c-subject-reverify
   risk: risky
-  model: build:opus-5.5/medium
+  model: build:opus-5.5/medium review:sonnet
+  metrics:
+    tool_calls: 56
+    tokens_in: 166
+    tokens_out: 16735
+    cache_read_tokens: 2377984
+    wall_time_seconds: 14696
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2b
   milestone: M8
   title: 'Web-link and YouTube uploads in the upload centre (deferred from 8.2 by the human, B-31): the worker fetches a teacher-given URL or YouTube transcript behind an allow-listed, SSRF-safe fetcher,
@@ -4396,7 +4415,8 @@ tasks:
   status: todo
 - id: 11.1d
   milestone: M13
-  title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b); 11.1a review: cap the meeting link length in CreateInputSchema and decide https only; listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads'
+  title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b); 11.1a review: cap the meeting link length in CreateInputSchema and decide https only;
+    listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads'
   accept: a teacher can edit or cancel a class, with tests.
   deps:
   - 11.1b
