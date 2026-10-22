@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7a publish repository: verified-teacher check and go-live in one transaction · decided by builder · risk: high
+- Decided: `goLive` runs in one transaction: teacher profile `verified` read `FOR SHARE`, the run row `FOR UPDATE` (id + teacher_id + suite gate; must be `running`), the agent `FOR UPDATE` (refused if suspended), then agent live + live_version, each basis package's live_version, one `agent.publish` and one `package.publish` audit row each, and the run marked `passed` with `published_at`. `startRun` takes a per-teacher advisory lock (namespace 8701) and the same `FOR SHARE` verified check. The teacher id comes only from the scope.
+- Why: a teacher whose verification is revoked, or an agent suspended, while the gate runs must never go live; one transaction means no half-published state.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.7a refusals carry a reason through PublishRefusedError · decided by builder · risk: low
+- Decided: a `RepositoryError` subclass `PublishRefusedError` adds `reason` (`no_packages`, `suspended`, `nothing_to_publish`, `gate_running`); the kind stays `invalid` or `integrity`.
+- Why: the studio must show why a publish was refused; no contracts change needed.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a db mirrors the evals types locally · decided by builder · risk: low
+- Decided: strict zod mirrors of the scorecard, summary, case details, group names and deadlines live in `publish.ts`; db does not import `@edmate/evals`.
+- Why: db must not depend on evals; Phase C should check the mirrors match when it wires them.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a a stale run is measured from updated_at · decided by builder · risk: medium
+- Decided: an open run is stale after its deadline (2 h for first_publish or prompt_pack_bump, else 15 min) plus 15 min grace since its last `updated_at`; `startRun` then closes it as `error` with `errorCode: 'stale'` and starts a new one.
+- Why: a crashed worker must not block publishing forever, while a slow but live run keeps its slot.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7a change kinds from the last published basis · decided by builder · risk: medium
+- Decided: change kinds compare the new basis with the last passed run's basis (canonical JSON); a course change counts as `material`; nothing changed on a live agent is refused `nothing_to_publish`; nothing changed on an agent that is not live (for example unpublished) runs as `first_publish`.
+- Why: gives the gate the narrowest correct scope while never blocking a teacher whose agent is offline.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7a migration 0021, judge model in the model column · decided by builder · risk: low
+- Decided: migration number 0021 (next free), additive nullable columns; the judge model pin is stored in the existing `eval_runs.model` column.
+- Why: no rewrite of existing eval rows; offline eval runs (no agent_id/status) are ignored by the publish reads.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a own test database container · decided by builder · risk: low
+- Decided: ran the int suites against my own `pgvector/pgvector:0.8.1-pg16` container on 127.0.0.1:55487, removed after the build.
+- Why: nothing listened on the shared port and other sessions' containers must not be touched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7a one lock order for publish writes · decided by builder · risk: low
+- Decided: startRun and goLive both lock in this order: the per-teacher advisory lock (8701), the teacher profile FOR SHARE, the agent FOR UPDATE, then the run FOR UPDATE. goLive reads the run's agent id without a lock first (agent_id is never updated), then rechecks it under the run lock. markRunning, recordResults and finishRun lock the run row only.
+- Why: goLive locked the run before the agent, the reverse of startRun. A Publish re-click during goLive deadlocked (40P01), and the passed gate could be lost (database-reviewer, CRITICAL).
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.5a A malformed/legacy skill payload falls back to the generic SkillCard · decided by builder · risk: low
 - Decided: `ChatView` only renders `PracticeCard` when a `skill: 'practice'` event's payload has
   the exact shape `practice.next_item` produces (string `id`/`prompt`, a known `kind`, level
