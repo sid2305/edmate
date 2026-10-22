@@ -10,6 +10,53 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.1b Staff role boundary for the verification API and the new risk-paths line · decided by builder · risk: high
+- Decided: `/api/staff/verifications` GET/POST are `withRole(['staff'])` only (signed-out 401,
+  student and teacher 403, cross-site POST 403); the acting staff id is only ever the session
+  principal, the POST body is a strict object (a `by` or any unknown key is 400), and the existing
+  `setVerification` stays the only write path (its staff re-check, not-self rule and
+  `teacher.verify` audit row are unchanged; not-self surfaces as a fixed 403 `forbidden`).
+  `apps/web/app/api/staff/**` is added to `risk-paths.txt` under `# reviewers: security-reviewer`
+  (one line, lead answer Q4; no architect sign-off needed).
+- Why: this is the first staff-auth route and it changes who may publish; the plan and lead
+  treat the staff boundary and the `.claude/**` edit as risky.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.1b Handlers live next to route.ts, not in src/ · decided by builder · risk: low
+- Decided: the injectable handler factory is `apps/web/app/api/staff/verifications/handlers.ts`
+  (a file the plan didn't list), not `src/staff/…`.
+- Why: Next route files may only export handlers, so the factory needs its own module; keeping it
+  under `app/api/staff/` puts it under the new security-reviewer risk glob, which a `src/` file
+  would escape.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1b Real-Postgres route test gated on an explicit TEST_DATABASE_URL · decided by builder · risk: medium
+- Decided: `route.int.test.ts` runs the real handlers, guard and repositories against
+  `TEST_DATABASE_URL` only when it is set (no default URL, so a local run never touches the dev
+  compose database); unset it logs a SKIPPED line, and under `CI=true` it fails instead. It migrates
+  that database (idempotent, locked) and writes only fresh random ids/emails, leaving both test
+  teachers `rejected` so nothing pending or discoverable is left for the e2e run sharing CI's
+  database.
+- Why: the acceptance needs proof that approve/reject is audited and unverified teachers stay
+  unpublished, which a memory fake alone can't give; apps/web has no `pg` dependency to create a
+  throwaway database, and adding one was out of scope.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.1b GET maps invalid/not_found to 403 and the console runs one action at a time · decided by builder · risk: low
+- Decided: on GET, a repository `invalid`/`not_found` (only possible when the session's own id is
+  not a staff user) is 403 `forbidden`, like `scope`. In the console, any in-flight action disables
+  every approve/reject/reload button until it settles.
+- Why: neither case is the caller's input error; one action at a time avoids racing list updates.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.6b answered-question pairing in the notes PDF · decided by builder · risk: low
 - Decided: `notesDocument()` pairs each `answered` `TeacherQuestion` with the next unused
   `role: 'teacher'` chat message whose `createdAt` is on or after the question's `answeredAt`

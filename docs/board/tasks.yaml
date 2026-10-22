@@ -4128,9 +4128,30 @@ tasks:
   deps:
   - 12.1a
   risk: high
-  status: running
+  status: done
   branch: m12/12.1b-staff-console
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus-5.5/medium review:opus+sonnet
+  metrics:
+    tool_calls: 45
+    tokens_in: 142
+    tokens_out: 1305
+    cache_read_tokens: 2503262
+    wall_time_seconds: 148
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        LOW: 5
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 8.7f
   milestone: M8
   title: '8.7b review follow-ups: the gate agent passes input.skill and input.persona into the turn (or fails cases that name one) so persona and feedback cases are measured; a pipeline test where a scripted
