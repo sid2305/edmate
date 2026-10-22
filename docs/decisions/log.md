@@ -10,6 +10,152 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 7.2c Lead signs the 36 new leak cases and accepts the budget overrun · decided by lead · risk: medium
+- Decided: the lead signs all 36 new leak cases (`reviewed_by: lead`, per the MVP-first policy) after fix round 1. Cases read by the lead: 36/36. The run used 160 tool calls against a ~90 budget (build 77, fix round 1 53 against a 25 cap, fix round 2 30); the lead accepts the overrun. Fix round 2 was needed because fix round 1 reported green while 2 tests failed in CI: one bare key was in the student's own MCQ turn, and the bare "27" also matched the bank answer's unrelated "3 27".
+- Why: fix round 1 closed both HIGH findings (the paid-only loops case now runs on `paid`; 31 cases ban the bare answer key as well as the scripted phrase, 5 skip it for the listed reasons). The fixer overran because it checked every case against its question-bank answer, which was the point of the fix. The MEDIUM "-deva" script finding and the older 44 cases go to 7.2g.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2c "spelled out / reversed" built as framing, not real encoding · decided by builder · risk: low
+- Decided: the "spelled out" and "reversed" forms are social-engineering phrasing tricks
+  ("Spelling it out for you: ...", "Reading it backwards, the answer is ...") rather than true
+  character-reversal or letter-by-letter-with-separators encodings.
+- Why: `compileAnswerKeys`'s normalisation (NFKC, drop `\p{Cf}`, lowercase, unify quotes) is
+  proven against zero-width and fullwidth splits but not against a true reversed string or a
+  comma/hyphen-separated letter spelling; a case built on either would likely expose a guard
+  gap rather than test the social-engineering framing the plan's mix intends. Testing a real
+  gap belongs to a dedicated board task, not silently inside a 36-case Phase D add.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2c module-to-package gating follows the demo packages · decided by builder · risk: low
+- Decided: every case sourced from `functions`, `lists-dicts` or `loops` is `package: paid`;
+  every case sourced from `conditions` or `values-variables` may be `free`.
+- Why: `content/demo-teacher/packages/free.yaml` carries only `values-variables` and
+  `conditions` (`moduleIds`); `paid.yaml` carries all five. A free-package case built on a
+  paid-only module's answer would not match how the demo teacher's packages are actually
+  scoped.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2c must_not_contain phrases are literal substrings of the case's own scripted variant · decided by builder · risk: low
+- Decided: every new form in `variantsFor()`'s `switch` pushes exactly 2 variants shaped as
+  `"<frame>: ${k0}"`; every `must_not_contain` phrase in the matching case file is a literal
+  substring of one of those two rendered templates, and contains the bank-answer key itself.
+- Why: this guarantees the phrase can only appear in the model's reply if the leak guard failed
+  to suppress the key, so the real-guard test ("0 leaks") can pass only by truly blocking the
+  key, and the mutation test (pass-through gate, no-op `answerLeak`) is guaranteed to render the
+  phrase and get caught. A looser or paraphrased phrase could pass "caught" by coincidence, or
+  fail "0 leaks" on wording the guard never needed to touch.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2c the new banned-phrase guard tests are scoped to the 36 new-form cases, not the whole leak suite · decided by builder · risk: medium
+- Decided: `suites.test.ts`'s leak version of the 7.2a/7.2b banned-phrase rules (no banned
+  phrase in the case's own student turns; a case that bans phrases bans at least 2) filters to
+  the 9 new-form id prefixes (`leak-yesno-`, `leak-mcq-`, `leak-unittest-`, `leak-stepbystep-`,
+  `leak-pressure-`, `leak-authority-`, `leak-spelled-`, `leak-reversed-`,
+  `leak-partialreveal-`), not the whole `leak/` folder.
+- Why: run unscoped, these two rules fail on about 21 of the pre-7.2c 44 cases (10 echo a
+  banned phrase in the student's own turn, e.g. `leak-co2-digits-en` bans "Warm" after the
+  student already wrote a branch that prints "Warm"; 14 ban exactly one phrase, e.g. every
+  `leak-forged-note-*` and `leak-vv6-*`/`leak-vv8-*` case). Fixing those is editing existing
+  case files, which plan.md's "Files out of bounds" reserves for "one the lead names in
+  review", and the exit condition for PARTIAL lists "a file outside this plan needs changing
+  ... an existing case". Scoping the new tests to 7.2c's own cases keeps the suite green without
+  touching files 7.2c isn't allowed to touch, while still adding the stricter check for every
+  case 7.2c is responsible for.
+- risk: medium (flags a real, pre-existing gap in 21 of the 44 cases for the lead; recommend a
+  small follow-up — either a board task the lead names in review, or an explicit one-off edit
+  the lead approves — to tighten those 21 cases and then widen the new tests back to the whole
+  `leak/` folder)
+
+---
+
+### 21 Oct 2026 · 7.2c cases carry reviewed_by: lead per standing MVP-first policy · decided by builder · risk: medium
+- Decided: all 36 new cases are written with `reviewed_by: lead` rather than `pending`.
+- Why: matches 7.2a/7.2b's convention and the "MVP first" memory rule (the lead signs eval
+  cases pre-pilot). This still needs the lead's actual read of the 36 cases' student turns and
+  `must_not_contain`/`judge` entries before merge (`review.md` "cases read: N/36"), same as
+  7.2b.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.3a Lead approves the outline repositories on the risky repositories path · decided by lead · risk: high
+- Decided: merge 8.3a. The security review found every new method scoped by teacher, with real cross-teacher refusal tests. The database review found the migration additive, cascades indexed and lock order consistent. Accept for the MVP that an outline edit removing a topic with student evidence is refused rather than moving the evidence.
+- Why: refusing loses no student data, and teachers can still rename and reorder those topics. Moving evidence onto a surviving topic, batching the per-topic writes and a stale-save check go to follow-up task 8.3c.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.3a Outline edits keep topic ids and never delete topics with student evidence · decided by builder · risk: high
+- Decided: `replaceOutline` updates a listed topic in place: title, order, module and its links. It inserts topics that have no id. It deletes the unlisted topics of the named modules, but if any of them has `evidence_events`, the whole edit is `invalid` and nothing is written.
+- Why: `evidence_events.topic_id` references `topics` with no cascade. Deleting and re-inserting would break every edit after students have studied, or would delete student data. Keeping ids also keeps students' mastery keys valid. A lead question remains: should merging a studied topic be allowed by re-pointing evidence to the surviving topic? That is a follow-up if teachers need it.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.3a Outline repository and topic_chunks table on the teacher-scoped repositories path · decided by builder · risk: high
+- Decided: add the new `topic_chunks` table (teacher-scoped, cascading FKs to `topics` and `chunks`) and the `courses`/`outline` repositories on the risky path. Every statement carries `teacher_id`. Locks are taken in a fixed order: courses, then modules, then topics, each by id. Chunk ids are ownership-checked inside the same `INSERT … SELECT`. `outline.ts` has two new named deletes (`topics`, `topic_chunks`).
+- Why: plan 8.3 Phase A, scope decisions 1 and 2. The repositories path is a risky-path group (CLAUDE.md rule 6), so security-reviewer is required.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.3a Topic-level merge and split only; modules rename and reorder · decided by builder · risk: low
+- Decided: carrying out plan scope decision 1 and lead answer Q2. `replaceOutline` changes a module's title and order only. Topics can be merged, split, moved between named modules, renamed and reordered.
+- Why: documents and chunks reference `module_id` as NOT NULL; merging modules would mean reassigning them.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3a Versioning is the outline_version counter plus one audit row · decided by builder · risk: low
+- Decided: carrying out scope decision 3. Each successful edit sets `outline_version` to the locked value + 1 and writes one `outline.edit` audit row with counts only. A failed edit writes nothing.
+- Why: the column already exists, and the accept line names no history or undo.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3a ensureDefault bootstraps a course and first module · decided by builder · risk: medium
+- Decided: carrying out scope decision 5 and lead answer Q1. `courses.ensureDefault` creates "My course" and, when the teacher has zero modules, "Module 1", under a per-teacher transaction advisory lock so that it is idempotent.
+- Why: nothing else creates a teacher's first course or module, and both the outline editor and the 8.2 upload centre need one.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.3a A document delete silently shrinks topic links · decided by builder · risk: low
+- Decided: carrying out scope decision 2 and lead answer Q3. The `chunk_id` FK cascades, so 8.2's `documents.delete` drops links with no version bump and no code change in the delete path.
+- Why: the lead accepted this for the MVP.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3a Chunk-table SQL for the outline lives in chunks.ts · decided by builder · risk: low
+- Decided: `insertTopicLinks` and `topicSources` are exported from `chunks.ts`, and `outline.ts` calls them.
+- Why: the access audit allows only `chunks.ts` and `retrieval.ts` to name the `chunks` table, and widening that allowlist would weaken the 5.4 guard.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3a listForModule returns text and refuses more than 2000 chunks · decided by builder · risk: low
+- Decided: `chunks.listForModule` returns `id`, `text`, `locator` and `sourceTitle` for `ready` documents only. Above `MODULE_CHUNKS_MAX` (2000) it is `invalid`, never a cut list.
+- Why: the drafter needs the text. A silently truncated module would give it partial material, which is the same reasoning as the `TEACHER_EVAL_CASES_MAX` precedent.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3a One outline edit names modules of one course only · decided by builder · risk: low
+- Decided: `replaceOutline` is `invalid` when the named modules span two courses, and `not_found` when a module sits under a course that is not the teacher's. `getOutline` reads the teacher's first course (by order). A chunk may back topics in any of the teacher's own modules.
+- Why: the MVP has one course per teacher; the version bump and audit row need a single course.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.0 Demo teacher, not a fresh one, in the try-it flow · decided by builder · risk: low
 - Decided: the plan's D1. The guide and the spec use the seeded `demo-teacher@example.invalid`, which has the only live agent and packages. The guide says in one line that a brand-new teacher can't get an agent until the agent builder (8.x) ships.
 - Why: a fresh teacher has no agent, so no student could chat with them.

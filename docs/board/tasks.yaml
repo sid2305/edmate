@@ -2822,9 +2822,30 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: review
+  status: done
   branch: m7/7.2c-leak-cases
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:sonnet x2 review:sonnet
+  metrics:
+    tool_calls: 97
+    tokens_in: 346
+    tokens_out: 44168
+    cache_read_tokens: 12207869
+    wall_time_seconds: 1760
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 2
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        MEDIUM: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2d
   milestone: M7
   title: '7.2 Phase E: safety suite 214 to 250 cases (plan docs/tasks/7.2/plan.md)'
@@ -3028,9 +3049,31 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: review
+  status: done
   branch: m8/8.3a-outline-db
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 112
+    tokens_in: 348
+    tokens_out: 44720
+    cache_read_tokens: 15320205
+    wall_time_seconds: 1055
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 4
+      by_severity:
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 8.3b
   milestone: M8
   title: '8.3 Phase B: apps/web studio outline API (GET, PUT, generate) (plan docs/tasks/8.3/plan.md)'
