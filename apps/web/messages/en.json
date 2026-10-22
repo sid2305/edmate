@@ -564,5 +564,23 @@
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the verification queue. Try again."
     }
+  },
+  "liveClassesStudio": {
+    "title": "Live classes",
+    "intro": "Schedule a live class with an external join link, and attach it to one or more of your packages.",
+    "titleLabel": "Title",
+    "linkLabel": "Join link (https://…)",
+    "startsAtLabel": "Start time",
+    "packagesLabel": "Attach to packages",
+    "scheduleButton": "Schedule class",
+    "scheduling": "Scheduling…",
+    "scheduled": "The class is scheduled.",
+    "empty": "No live classes scheduled yet.",
+    "joinLink": "Join link",
+    "errors": {
+      "validation": "Check the title, link, start time and packages, and try again.",
+      "not_found": "One of those packages was not found. Reload and try again.",
+      "generic": "Something went wrong. Try again."
+    }
   }
 }
