@@ -106,4 +106,4 @@ scheduled class (11.1d, M13); a real email/SMS reminder once a vendor decision w
 
 Status: DONE
 
-Tool calls used: 34
+Tool calls used: 62 (harness count; the builder reported 34)
