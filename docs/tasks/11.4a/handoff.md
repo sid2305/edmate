@@ -4,7 +4,7 @@ Status: DONE
 Branch: m11/11.4a-recording-link (local `work-114a`)
 Worktree: .claude/worktrees/agent-ade7a5191c37bc067
 Plan: docs/tasks/11.4/plan.md, "Phase A"
-Tool calls used: 56
+Tool calls used: 83 (harness count; the builder reported 56)
 
 ## Summary
 - Migration `0024_document_live_class`: `documents.live_class_id text` (nullable, no backfill), FK to `live_classes(id) ON DELETE SET NULL` added `NOT VALID` and validated by a new post-migrate step (`src/migrate.ts` `POST_MIGRATE_STEPS`, the 0009/0023 pattern), and the partial index `documents_live_class_id_idx … WHERE live_class_id IS NOT NULL`. Additive only: nothing dropped, deleted or rewritten.
@@ -32,6 +32,11 @@ Written red first (9 failing in documents.int, migration test failing on the mis
 - `src/migrate.ts` and `test/migrate.test.ts` are touched (not listed in the plan) because the plan's "NOT VALID then VALIDATE" is done by the repo's post-migrate step, not inside the migration file (drizzle runs migrations in one transaction).
 
 ## Decisions
+### 22 Oct 2026 · 11.4a builder ran over the Phase A budget · decided by lead · risk: low
+- Decided: accept 83 tool calls against Phase A's ~60 in docs/tasks/11.4/plan.md (1.2 × 60 = 72).
+- Why: the extra calls went on the post-migrate foreign-key validation (migrate.ts and its test, which the plan did not list) and the db integration runs against a disposable Postgres; the work stays in scope and all four reviewers approve.
+- risk: low
+
 
 ### 22 Oct 2026 · 11.4a documents.create links only an own started live class; new listRecordingsForTeacher · decided by builder · risk: high
 - Decided: `documents.create` accepts `liveClassId` only for one of the scope's own classes with `starts_at <= now()`, checked in the same `INSERT … SELECT` as the module. Another teacher's class, a future class and a missing class all give `not_found` and write nothing, so class ids can't be probed. `liveClasses.listRecordingsForTeacher` reads only the scope's documents joined to the scope's own classes (`teacher_id` on both sides), so no cross-teacher read is possible. Risky path `packages/db/src/repositories/**`; required reviewer: security-reviewer. Recommended: database-reviewer, code-reviewer, typescript-reviewer.
