@@ -1,0 +1,33 @@
+// Task 8.6a: the default model mix per tier (decision B-42).
+import { ModelPolicySchema } from '@edmate/contracts';
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_MODEL_POLICY, MODEL_MIX } from '../../src/router/index.js';
+
+describe('MODEL_MIX (B-42)', () => {
+  it.each(['free', 'paid'] as const)('%s: Haiku 4.5 on the small tier, Sonnet 5 on main', (t) => {
+    expect(MODEL_MIX[t]).toEqual({
+      tiers: {
+        small: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+        main: { provider: 'anthropic', model: 'claude-sonnet-5' },
+      },
+    });
+    expect(ModelPolicySchema.parse(MODEL_MIX[t])).toEqual(MODEL_MIX[t]);
+  });
+
+  it('names exactly the free and paid package tiers', () => {
+    expect(Object.keys(MODEL_MIX).sort()).toEqual(['free', 'paid']);
+  });
+
+  it('is frozen all the way down, so no caller can change the mix at runtime', () => {
+    expect(Object.isFrozen(MODEL_MIX)).toBe(true);
+    for (const policy of Object.values(MODEL_MIX)) {
+      expect(Object.isFrozen(policy)).toBe(true);
+      expect(Object.isFrozen(policy.tiers)).toBe(true);
+      for (const route of Object.values(policy.tiers)) expect(Object.isFrozen(route)).toBe(true);
+    }
+  });
+
+  it('DEFAULT_MODEL_POLICY is the paid mix', () => {
+    expect(DEFAULT_MODEL_POLICY).toBe(MODEL_MIX.paid);
+  });
+});

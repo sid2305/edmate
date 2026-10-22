@@ -26,6 +26,11 @@ describe('package exports', () => {
         'loadBundledPrices',
         'parsePriceTable',
         'PriceTableError',
+        // Task 8.6a: the model mix and the per-turn cost estimate.
+        'MODEL_MIX',
+        'TURN_TOKEN_ASSUMPTIONS',
+        'turnCostMicroUsd',
+        'UnpricedModelError',
         // Task 2.7: transcription and the platform embedding model.
         'createWhisperTranscriber',
         'DEFAULT_MAX_DOWNLOAD_BYTES',
