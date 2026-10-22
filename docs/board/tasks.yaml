@@ -5029,7 +5029,7 @@ tasks:
   model: null
 - id: 12.2f
   milestone: M13
-  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents'
+  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the 12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
