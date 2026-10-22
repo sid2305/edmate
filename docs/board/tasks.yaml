@@ -2771,9 +2771,9 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.4b-gate-thresholds
+  model: plan:lead build:sonnet
   needs_decision:
   - gate-thresholds
 - id: 7.2a
