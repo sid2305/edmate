@@ -5357,9 +5357,9 @@ tasks:
   deps:
   - 12.2d
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2e-staff-reports-page
+  model: plan:opus build:sonnet
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
@@ -5929,7 +5929,7 @@ tasks:
 - id: 12.4g
   milestone: M13
   title: '12.4f review LOW: apps/web/app/staff/agents/view.tsx onSetApproval''s post-action reload replaces the whole fresh agent record, not only approvedAt, approvedBy and regulatedSubject'
-  accept: 'A test shows status, liveVersion and teacherSlug come from the reload after approve or revoke.'
+  accept: A test shows status, liveVersion and teacherSlug come from the reload after approve or revoke.
   deps:
   - 12.4f
   risk: low
