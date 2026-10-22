@@ -4432,7 +4432,9 @@ tasks:
   - 9.2c
   - 9.6d
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.7b-e2e-discover-upgrade
+  model: plan:sonnet build:opus review:sonnet
 - id: 8.7g
   milestone: M13
   title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain
