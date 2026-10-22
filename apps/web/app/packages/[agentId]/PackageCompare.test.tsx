@@ -126,14 +126,23 @@ describe('PackageCompare', () => {
   });
 
   // Task 9.3b: `Intl.NumberFormat` picks each currency's own fraction digits, never hardcoded --
-  // 2 for USD (seen in the first test above), 0 for JPY.
+  // 2 for USD (seen in the first test above), 0 for JPY, 3 for KWD.
   it('formats a zero-decimal currency (JPY) with no fraction digits', () => {
     const JPY_PAID: PackageOffer = {
       ...PAID,
       pricePerMonth: { amountMinor: 2000, currency: 'JPY' },
     };
     renderIntl(<PackageCompare agentId="agt_demo" packages={[JPY_PAID]} />);
-    expect(screen.getByText('¥20')).toBeInTheDocument();
+    expect(screen.getByText('¥2,000')).toBeInTheDocument();
+  });
+
+  it('formats a three-decimal currency (KWD) scaled by 1000, not 100', () => {
+    const KWD_PAID: PackageOffer = {
+      ...PAID,
+      pricePerMonth: { amountMinor: 19990, currency: 'KWD' },
+    };
+    renderIntl(<PackageCompare agentId="agt_demo" packages={[KWD_PAID]} />);
+    expect(screen.getByText('KWD 19.990')).toBeInTheDocument();
   });
 
   it('has no accessibility violations', async () => {

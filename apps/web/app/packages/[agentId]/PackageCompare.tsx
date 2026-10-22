@@ -17,10 +17,13 @@ interface ErrorBody {
 }
 
 /** `pricePerMonth` formatted currency-neutral (no hardcoded `$`; the pilot is US-only for now).
- * `Intl.NumberFormat` picks each currency's own fraction digits (e.g. 2 for USD, 0 for JPY) --
- * never hardcoded here (task 9.3b). */
+ * `amountMinor` is scaled by the currency's own fraction digits -- 2 for USD, 0 for JPY, 3 for
+ * KWD -- read from `Intl.NumberFormat`'s own resolved options, never a hardcoded `/ 100` (task
+ * 9.3b fix round; same approach as apps/web/src/discovery/format.ts). */
 function formatPrice(amountMinor: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amountMinor / 100);
+  const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency });
+  const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+  return formatter.format(amountMinor / 10 ** digits);
 }
 
 /** An error's name only (never its message, which may quote ids or content) -- task 9.3b. */

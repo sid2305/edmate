@@ -352,6 +352,7 @@
   "packages": {
     "title": "Choose a package",
     "alreadySubscribed": "You already have a package with this teacher.",
+    "staleVersion": "This plan has changed. Reload the page to see the current plans.",
     "continueToChat": "Continue to chat",
     "pausedNotice": "Your plan with this teacher is paused.",
     "managePlan": "Manage plan",

@@ -3,7 +3,7 @@
 // client-given `version` or `packageVersionId`: the body is only `{ agentId, packageId }`, and the
 // package version is looked up server-side from the agent's own live packages.
 import type { LivePackage, Repositories, StudentScope } from '@edmate/db';
-import { RepositoryError, ScrubbedDbError } from '@edmate/db';
+import { RepositoryError, ScrubbedDbError, STALE_PACKAGE_VERSION_REASON } from '@edmate/db';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { serverDatabase } from '../auth';
@@ -37,6 +37,7 @@ const MSG = {
   notFound: 'That package was not found.',
   alreadySubscribed: 'You already have a package with this teacher.',
   freePaused: "This teacher's free plan is paused for now. Try again next month or choose another package.",
+  staleVersion: 'This plan has changed. Reload the page to see the current plans.',
   failed: 'Something went wrong. Try again.',
 } as const;
 
@@ -106,22 +107,31 @@ function startParams(pkg: LivePackage, now: Date): { status: 'trial' | 'active';
 
 /**
  * Task 9.6i: `start` is `invalid` either when the pair already has a live subscription (the
- * unique index) or when the teacher's free tier is cost-alarm paused this month. `findLive`
- * tells them apart: no live row means the alarm refusal, with its own fixed words. A `findLive`
- * failure goes through `fromError` (never a guessed message).
+ * unique index), when the teacher's free tier is cost-alarm paused this month, or (task 9.3b)
+ * when the package version the route looked up was superseded by a publish race between the
+ * lookup and the write. The stale-version case carries its own marker on the thrown error's
+ * cause, so it is checked first -- never guessed from the absence of a live row, which would
+ * otherwise show the student the alarm-paused message for an ordinary publish race. Only when
+ * the marker is absent does `findLive` tell the remaining two apart: no live row means the alarm
+ * refusal. A `findLive` failure goes through `fromError` (never a guessed message).
  */
 async function explainInvalid(
+  error: RepositoryError,
   repos: ReturnType<StartBackend['repos']>,
   scope: StudentScope,
   log: ServerLog,
 ): Promise<Response> {
+  const cause = error.cause instanceof ScrubbedDbError ? error.cause : null;
+  if (cause !== null && cause.constraint === STALE_PACKAGE_VERSION_REASON) {
+    return apiError('validation', MSG.staleVersion, 400);
+  }
   try {
     const live = await repos.subscriptions.findLive(scope);
     return live === null
       ? apiError('validation', MSG.freePaused, 409)
       : apiError('validation', MSG.alreadySubscribed, 409);
-  } catch (error) {
-    return fromError(error, log);
+  } catch (err) {
+    return fromError(err, log);
   }
 }
 
@@ -154,7 +164,7 @@ export function createSubscriptionHandlers(backend: StartBackend): { start: Hand
       return ok({ subscription }, 201);
     } catch (error) {
       if (error instanceof RepositoryError && error.kind === 'invalid' && scope !== null) {
-        return explainInvalid(repos, scope, log);
+        return explainInvalid(error, repos, scope, log);
       }
       return fromError(error, log);
     }

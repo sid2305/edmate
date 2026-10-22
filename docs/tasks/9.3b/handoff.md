@@ -65,6 +65,24 @@ None — all seven items implemented and tested.
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/web... --filter=@edmate/db...`: `@edmate/db` (typecheck/lint/test, including integration tests against a disposable `edmate-test-93b` Postgres container, now removed) — 26/26 tasks pass, full coverage on changed files. `@edmate/web` — typecheck and lint pass; `test` had 19 failing assertions across 6 unrelated files (`app/api/staff/*/route.test.ts`, `app/api/live-classes/[id]/questions/route.test.ts`), all `Error: Test timed out in 5000ms` under heavy concurrent-build system load — confirmed unrelated and flaky by re-running `app/api/staff/agents/route.test.ts` alone (47/47 pass in 4.6s). All files touched by this task (`src/chat/liveChats.test.ts`, `app/home/page.test.tsx`, `app/packages/[agentId]/PackageCompare.test.tsx`, `app/packages/[agentId]/page.test.tsx`, `src/subscriptions/start.test.ts`) pass individually.
 - `python3 .githooks/secret-scan.py --all`: clean.
 
+## Fix round (22 Oct 2026)
+
+Fixed both review HIGHs from the fix brief; one round, same branch.
+
+1. HIGH — stale-version refusal told apart from the alarm-paused refusal. `packages/db/src/repositories/subscriptions.ts`'s `start` now attaches a fixed-reason `ScrubbedDbError` cause (`STALE_PACKAGE_VERSION_REASON = 'subscriptions_stale_package_version'`, no ids/content) only on the stale-version `invalid` throw, not on the alarm-paused `invalid` throw (which stays cause-less). `apps/web/src/subscriptions/start.ts`'s `explainInvalid` now takes the thrown `RepositoryError` itself and checks that marker *before* calling `findLive`: a match returns a new 400 with `MSG.staleVersion` ("This plan has changed. Reload the page to see the current plans."); only when the marker is absent does the existing `findLive`-based alarm-paused/already-subscribed guess run. Added the `packages.staleVersion` key to `apps/web/messages/en.json` (append).
+   - Tests: `apps/web/src/subscriptions/start.test.ts` — new `'task 9.3b: a stale-version refusal is its own message, not the alarm-paused guess'` (route-level, through `handlers.start`, not `fromError` directly): asserts 400 + the new message, asserts the alarm-paused text is absent, and asserts `findLive` is never called for this case. The existing `'task 9.6i: an invalid start with no live subscription is the alarm refusal...'` test still passes unchanged, confirming the alarm-paused path (no marker) is untouched. `packages/db/test/repositories.int.test.ts` — the existing `'start (9.3b): a stale (superseded) version is invalid; ...'` test now also asserts `cause: expect.objectContaining({ constraint: STALE_PACKAGE_VERSION_REASON })` on the stale-version throw, and asserts `cause` is `undefined` on the alarm-paused throw for the live free version.
+2. HIGH — `PackageCompare.tsx`'s `formatPrice` no longer divides by a hardcoded 100. It now reads `Intl.NumberFormat(...).resolvedOptions().maximumFractionDigits` and scales by `10 ** digits`, the same approach as `apps/web/src/discovery/format.ts`.
+   - Tests: `apps/web/app/packages/[agentId]/PackageCompare.test.tsx` — fixed `'formats a zero-decimal currency (JPY) with no fraction digits'` to expect `¥2,000` (was wrongly `¥20`); added `'formats a three-decimal currency (KWD) scaled by 1000, not 100'` expecting `KWD 19.990`.
+
+### Decisions
+
+None — both fixes follow the brief's named approach directly (reuse `errors.ts`'s cause-attachment pattern; reuse `discovery/format.ts`'s fraction-digit scaling), no new judgment calls.
+
+### Gate (fix round)
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --filter=@edmate/db`: 13/13 tasks pass (exit 0). `@edmate/db` test: 27 passed, 47 skipped (no local Postgres) — `680 passed | 765 skipped`. `@edmate/web` affected files re-run directly: `src/subscriptions/start.test.ts` 18/18 passed; `app/packages/[agentId]/` suite 19/19 passed (2 files).
+- `python3 .githooks/secret-scan.py --all`: clean.
+
 Status: DONE
 
 Tool calls used: 105

@@ -207,6 +207,28 @@ describe('createSubscriptionHandlers', () => {
     });
   });
 
+  it('task 9.3b: a stale-version refusal is its own message, not the alarm-paused guess', async () => {
+    const { repos, calls } = fakeRepos({
+      start: () => {
+        throw new RepositoryError('invalid', 'subscriptions.start', {
+          cause: new ScrubbedDbError(undefined, 'subscriptions_stale_package_version'),
+        });
+      },
+      findLive: async () => null,
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_free' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(400);
+    const text = JSON.stringify(await res.json());
+    expect(text).toContain('This plan has changed. Reload the page to see the current plans.');
+    expect(text).not.toContain("free plan is paused");
+    // The marker is checked before any findLive call -- no guess needed.
+    expect(calls.find((c) => c.method === 'findLive')).toBeUndefined();
+  });
+
   it('task 9.6i: a findLive failure while explaining an invalid start is a 500, not a guess', async () => {
     const { repos } = fakeRepos({
       start: () => {

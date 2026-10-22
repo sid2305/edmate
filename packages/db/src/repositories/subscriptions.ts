@@ -12,7 +12,7 @@ import {
   teacherProfiles,
 } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
-import { RepositoryError, translateWrite } from './errors.js';
+import { RepositoryError, ScrubbedDbError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { iso } from './map.js';
 import {
@@ -36,6 +36,13 @@ export interface LiveSubscription {
 export const COST_ALARM_ACTOR = 'system_cost_alarm';
 /** The audit action of a cost-alarm pause; also the marker that keeps a pause to once a month. */
 export const COST_ALARM_PAUSE_ACTION = 'subscription.pause_cost_alarm';
+/**
+ * Task 9.3b: `start`'s stale-version refusal (a package version superseded by a publish race)
+ * is told apart from the cost-alarm pause by attaching this fixed reason as the thrown error's
+ * cause -- the same way `translateWrite` attaches a unique-violation constraint -- never ids or
+ * content.
+ */
+export const STALE_PACKAGE_VERSION_REASON = 'subscriptions_stale_package_version';
 
 export interface PauseFreeOptions {
   /** The start of the alarm's month (UTC ISO). A subscription it paused since then is skipped. */
@@ -349,8 +356,14 @@ export function subscriptionsRepo(db: Db) {
           // also `invalid` -- a conflict the caller can recover from by re-reading the live
           // version, not a true 404.
           const target = await liveTarget(db, teacherId, i.packageVersionId);
-          const invalid = target?.alarmPaused || (target === null && (await staleVersion(db, teacherId, i.packageVersionId)));
-          throw new RepositoryError(invalid ? 'invalid' : 'not_found', method);
+          if (target?.alarmPaused) throw new RepositoryError('invalid', method);
+          const stale = target === null && (await staleVersion(db, teacherId, i.packageVersionId));
+          if (stale) {
+            throw new RepositoryError('invalid', method, {
+              cause: new ScrubbedDbError(undefined, STALE_PACKAGE_VERSION_REASON),
+            });
+          }
+          throw new RepositoryError('not_found', method);
         }
         return { id, packageVersionId: i.packageVersionId, status, periodEnd: i.periodEnd };
       });
