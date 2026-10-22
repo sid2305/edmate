@@ -9,7 +9,7 @@
 // stderr and skips; with CI=true it fails instead. Every row it writes uses fresh random ids and
 // emails, and the agent ends unflagged, so nothing it leaves behind is flagged or approved.
 import { randomBytes } from 'node:crypto';
-import { demoAgentConfig } from '@edmate/contracts/fixtures';
+import { demoAgentConfig, demoPackageFree } from '@edmate/contracts/fixtures';
 import { migrateDatabase, openDatabase, type RegulatedAgentRow } from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -34,6 +34,8 @@ describe.skipIf(!DB_URL)('staff regulated-subject flag over a real Postgres', ()
   let staffId = '';
   let teacherId = '';
   let agentId = '';
+  let courseId = '';
+  let styleCardId = '';
 
   async function user(name: string, role: 'staff' | 'teacher'): Promise<string> {
     const created = await db.identity.createStudent({
@@ -51,8 +53,14 @@ describe.skipIf(!DB_URL)('staff regulated-subject flag over a real Postgres', ()
     staffId = await user('staff', 'staff');
     teacherId = await user('asha', 'teacher');
     await db.repos.teacherProfiles.create({ teacherId }, { slug: `asha-${tag}`, subject: 'Math' });
+    await db.repos.teacherProfiles.setVerification(
+      { teacherId },
+      { status: 'verified', by: staffId, reason: 'int test setup' },
+    );
     const course = await db.repos.courses.ensureDefault({ teacherId });
     const card = await db.repos.styleCards.create({ teacherId }, { text: '[int] card', mistakeTags: [] });
+    courseId = course.id;
+    styleCardId = card.id;
     ({ agentId } = await db.repos.agents.ensureDraft(
       { teacherId },
       {
@@ -62,6 +70,25 @@ describe.skipIf(!DB_URL)('staff regulated-subject flag over a real Postgres', ()
         modelPolicy: demoAgentConfig.modelPolicy,
       },
     ));
+    const outline = await db.repos.outline.getOutline({ teacherId });
+    const moduleId = outline!.modules[0]!.id;
+    await db.repos.packages.create(
+      { teacherId },
+      {
+        agentId,
+        draft: {
+          name: 'Int package',
+          moduleIds: [moduleId],
+          skills: demoPackageFree.skills,
+          helpCeiling: demoPackageFree.helpCeiling,
+          finalAnswers: demoPackageFree.finalAnswers,
+          dailyMessageLimit: demoPackageFree.dailyMessageLimit,
+          liveClassesPerMonth: demoPackageFree.liveClassesPerMonth,
+          pricePerMonth: demoPackageFree.pricePerMonth,
+          lockedReply: demoPackageFree.lockedReply,
+        },
+      },
+    );
     who.staff = { userId: staffId, role: 'staff' };
     who.teacher = { userId: teacherId, role: 'teacher' };
   }, 120_000);
@@ -190,5 +217,25 @@ describe.skipIf(!DB_URL)('staff regulated-subject flag over a real Postgres', ()
     expect(res.status).toBe(200);
     expect(await mine()).toMatchObject({ regulatedSubject: 'law', approvedAt: null, approvedBy: null });
     expect(await flagRows()).toHaveLength(3);
+  });
+
+  it('a flagged, unapproved agent refuses publish.startRun; approving lets it start (12.4b)', async () => {
+    const pins = {
+      agentId,
+      courseId,
+      styleCardId,
+      promptPackVersion: demoAgentConfig.promptPackVersion,
+      modelPolicy: demoAgentConfig.modelPolicy,
+      judgeModel: 'judge-test',
+    };
+    // Flagged above (subject: 'law'), still unapproved at this point.
+    await expect(db.repos.publish.startRun({ teacherId }, pins)).rejects.toMatchObject({
+      kind: 'invalid',
+      reason: 'regulated_unapproved',
+    });
+    const res = await routes().POST(call('POST', 'staff', { action: 'approval', agentId, approved: true }));
+    expect(res.status).toBe(200);
+    const run = await db.repos.publish.startRun({ teacherId }, pins);
+    expect(run.id).toEqual(expect.any(String));
   });
 });

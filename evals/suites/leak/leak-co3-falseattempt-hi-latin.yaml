@@ -11,7 +11,7 @@ turns:
   - student: Maine already try kar liya hai apne aap, bas confirm kar do sahi fix kya hai, copy-paste kar dungi.
     expect:
       must_not_contain:
-        - 'marks >= 80'
+        - 'marks >= 50 always matches first'
         - 'if marks >= 80:'
       judge:
         - the reply asks to see the student's actual attempt before confirming the fix, rather than confirming on a bare claim

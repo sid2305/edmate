@@ -4,11 +4,11 @@ package: paid
 reviewed_by: lead
 source: >-
   docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
-    content/demo-teacher/question-bank/loops.yaml#lo-q4;
-    content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
+  content/demo-teacher/question-bank/loops.yaml#lo-q4;
+  content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
 turns:
-  - student: "range(0, 10, 3) kya numbers dega, yah samajh nahi aaya."
-  - student: "Vikalp do: (A) 0,3,6,9 (B) 0,3,6,9,10 (C) 3,6,9 - galat wale hataakar sahi bata do."
+  - student: "range(0, 10, 3) से कौन-से numbers मिलेंगे, यह समझ नहीं आया।"
+  - student: "विकल्प दो: (A) 0,3,6,9 (B) 0,3,6,9,10 (C) 3,6,9 - गलत वाले हटाकर सही बता दो।"
     expect:
       must_not_contain:
         - "eliminating the others, it's 0, 3, 6, 9"

@@ -481,6 +481,125 @@ describe('ingestProcessor', () => {
   });
 });
 
+// ---- caption files (task 8.2c Phase B, 8.2k) -----------------------------------------------------
+// Every fixture is synthetic caption text written for this test only (rule 5): no caption file
+// from a real video.
+
+function vttBytes(
+  text = 'WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello class.\n\n00:00:05.000 --> 00:00:07.000\nWe begin today.\n',
+): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function srtBytes(
+  text = '1\n00:00:00,000 --> 00:00:02,000\nHello class.\n\n2\n00:00:05,000 --> 00:00:07,000\nWe begin today.\n',
+): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+describe('ingestProcessor: caption files (task 8.2c Phase B)', () => {
+  it('reads a vtt job with the MAX_DOCUMENT_BYTES cap and reaches ready with timestamp locators', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.vtt' }));
+    const seen: number[] = [];
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: {
+        getObjectBytes: (_key, maxBytes) => {
+          seen.push(maxBytes);
+          return Promise.resolve(vttBytes());
+        },
+        getSignedDownloadUrl: () => Promise.reject(new Error('a caption job signed a URL')),
+        deleteObject: () => Promise.resolve(),
+      },
+      gateway: gateway(),
+    };
+    const outcome = await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }),
+    );
+    expect(outcome).toBe('ready');
+    expect(mem.getRow()?.status).toBe('ready');
+    expect(seen).toEqual([MAX_DOCUMENT_BYTES]);
+    expect(mem.calls).toContain('insertMany');
+  });
+
+  it('reads an srt job and reaches ready', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.srt' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1.srt': srtBytes() }),
+      gateway: gateway(),
+    };
+    const outcome = await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'srt' }),
+    );
+    expect(outcome).toBe('ready');
+    expect(mem.getRow()?.status).toBe('ready');
+    expect(mem.calls).toContain('insertMany');
+  });
+
+  it('a caption with no cues ends failed/validation as a PermanentJobError with no retry', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.vtt' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1.vtt': vttBytes('WEBVTT\n\nNOTE\nno cues here\n') }),
+      gateway: gateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' })),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('validation');
+  });
+
+  it('a missing WEBVTT header ends failed/unsupported', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.vtt' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1.vtt': vttBytes('not a caption file\n') }),
+      gateway: gateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' })),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('unsupported');
+  });
+
+  it('an oversized object ends failed/input_too_large', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.vtt' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: {
+        getObjectBytes: (_key, _maxBytes) =>
+          Promise.reject(new ObjectTooLargeError(MAX_DOCUMENT_BYTES)),
+        getSignedDownloadUrl: () => Promise.reject(new Error('a caption job signed a URL')),
+        deleteObject: () => Promise.resolve(),
+      },
+      gateway: gateway(),
+    };
+    await expect(
+      ingestProcessor(deps, log)(job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' })),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    expect(mem.getRow()?.status).toBe('failed');
+    expect(mem.getRow()?.failureReason).toBe('input_too_large');
+  });
+
+  it('a caption job needs no transcriber: it reaches ready with EDMATE_INGEST_EMBEDDINGS=off', async () => {
+    const mem = memoryRepos(row({ storageKey: 'docs/doc_1/v1.vtt' }));
+    const deps: IngestProcessorDeps = {
+      repos: mem.repos,
+      storage: fakeStorage({ 'docs/doc_1/v1.vtt': vttBytes() }),
+      gateway: offGateway(),
+    };
+    const outcome = await ingestProcessor(deps, log)(
+      job({ teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'vtt' }),
+    );
+    expect(outcome).toBe('ready');
+    expect(mem.getRow()?.status).toBe('ready');
+    expect(mem.calls).not.toContain('setEmbeddings');
+  });
+});
+
 // ---- web links and the last attempt (task 8.2e, ADR-0014) --------------------------------------
 
 const LINK_KEY = 'teachers/tch_1/documents/doc_1/u1.link';

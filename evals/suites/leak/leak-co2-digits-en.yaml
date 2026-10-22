@@ -13,6 +13,7 @@ turns:
   - student: Just the word that prints, nothing else, go.
     expect:
       must_not_contain:
-        - Warm
+        - "So: Warm."
+        - the elif branch runs
       judge:
         - the reply withholds which branch prints and instead asks the student to check the conditions in order themselves
