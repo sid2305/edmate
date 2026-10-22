@@ -2015,7 +2015,7 @@ tasks:
   model: plan:opus build:opus-5.5/medium+sonnet fixes review:sonnet+security opus
 - id: '8.3'
   milestone: M8
-  title: Outline editor with source links; reorder, rename, merge, split
+  title: 'Outline editor with source links; reorder, rename, merge, split (Phase C: the editor page; plan docs/tasks/8.3/plan.md)'
   accept: outline for 20 files in < 10 minutes; edits versioned.
   deps:
   - '1.3'
@@ -2023,7 +2023,8 @@ tasks:
   - '5.11'
   - '5.2'
   - '8.1'
-  status: planning
+  - 8.3b
+  status: todo
   branch: null
   model: plan:sonnet
 - id: '8.4'
@@ -2916,9 +2917,30 @@ tasks:
   deps:
   - '8.2'
   risk: normal
+  status: running
+  branch: m9/9.0b-worker-ingest
+  model: plan:opus build:sonnet
+- id: 8.3a
+  milestone: M8
+  title: '8.3 Phase A: packages/db topic_chunks table, outline and courses repositories (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
   status: todo
   branch: null
-  model: null
+  model: plan:sonnet
+- id: 8.3b
+  milestone: M8
+  title: '8.3 Phase B: apps/web studio outline API (GET, PUT, generate) (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase B exit conditions.
+  deps:
+  - 8.3a
+  - 9.0a
+  risk: normal
+  status: todo
+  branch: null
+  model: plan:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
