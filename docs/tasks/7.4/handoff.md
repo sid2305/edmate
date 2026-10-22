@@ -1,13 +1,15 @@
-# Task 7.4 handoff: quality gate, Phases A (gate library) and B (db read)
+# Task 7.4 handoff: quality gate (Phases A, B, C)
 
-Status: PARTIAL
+Status: DONE
 
-- Branch: `m7/7.4-quality-gate` (Phase A pushed from local `work-74`, Phase B from `work-74b`)
-- Worktrees: Phase A `.claude/worktrees/agent-af82ddb99249b28f2`, Phase B `.claude/worktrees/agent-a21e8795a34aa58bf`
-- Tool calls used: 80 (Phase A 45, Phase B 35)
-- State after Phase B: the gate works in memory on the demo teacher, both acceptance criteria are
-  proven in tests, and `teacherEvalCases.listForTeacher` gives 8.7 the teacher's own rows to feed
-  `answerableFromTeacherEvalCases`. There is no CLI yet (Phase C, after 7.6).
+- Branch: `m7/7.4-quality-gate` (Phase A pushed from local `work-74`, Phase B from `work-74b`,
+  Phase C from `work-74c`)
+- Worktrees: Phase A `.claude/worktrees/agent-af82ddb99249b28f2`, Phase B
+  `.claude/worktrees/agent-a21e8795a34aa58bf`, Phase C `.claude/worktrees/agent-ac11128b087ed888e`
+- Tool calls used: 125 (Phase A 45, Phase B 35, Phase C 45)
+- State after Phase C: `edmate gate demo --change <kind>` gives CLI parity for the quality gate,
+  fully offline (replay fixtures only, no `--record`, no live model call). Phases A and B are
+  unchanged below.
 
 ## Phase B: `teacherEvalCases.listForTeacher` (`packages/db` only)
 
@@ -97,16 +99,59 @@ Phase B deviations: none. The over-cap test inserts cap rows with one `generate_
 - The per-agent `locked` group is expected (so it fails with `empty_group` when it has no cases) only when some package
   leaves out a course module. See Decisions.
 
+## Phase C: `edmate gate demo --change <kind>` (`apps/cli` only)
+
+`edmate gate demo --change <kind> [--change <kind>...] [--fixtures <dir>] [--seed <s>] [--report
+<file>]`: CLI parity for `runQualityGate`, fully offline. The command always builds its recorder
+in `'replay'` mode (there is no `--record` flag here at all, so it is impossible to pass through);
+a missing fixture fails its case (`MissingFixtureError`) and so the gate (`fail closed`). The
+agent and judge gateway handed to `runQualityGate` are `unwiredAgent` / `replayJudgeGateway`
+(both already in `eval.ts`) — in replay mode the recorder never calls either, since every reply
+and verdict comes from its fixture, so this is provably no live call, not just an untested one.
+
+Evidence: `corepack pnpm turbo run typecheck lint test --filter=@edmate/cli... --filter=@edmate/evals...`
+```
+Tasks:    26 successful, 26 total
+```
+`apps/cli` coverage (`gate.ts` 100% stmts/funcs/lines, 83.33% branch; `gate/demoInput.ts` 100%
+all four): `Statements 96% | Branches 86.16% | Functions 95.23% | Lines 97.16%` (whole package).
+`python3 .githooks/secret-scan.py --all` → exit 0 (no output).
+
+Changes:
+- `apps/cli/src/commands/gate.ts` (new): arg parsing, the blocker-B-40 full-scope precheck
+  (`fullScopeGaps`, below), wiring into `runQualityGate`, the per-group summary, `--report`.
+- `apps/cli/src/commands/gate/demoInput.ts` (new): `loadDemoPerAgentInput`, a src copy of 7.3's
+  test adapter (`demoSuiteInput.testkit.ts`) minus its two synthetic teacher-answer rows (the CLI
+  has no `teacherEvalCases.listForTeacher` wiring yet; that is 8.7's job).
+- `apps/cli/src/cli.ts` (edit): `gate` case and USAGE line.
+- `apps/cli/src/commands/gate.test.ts` (new): argument errors (missing agent id, non-"demo" agent,
+  missing/unknown `--change`, unknown flag, help); a style-card scope run end to end against a
+  synthetic 30-case suite and hand-written fixtures (pass, one judge fixture failing, one fixture
+  missing entirely — all exit 1 without any live call); `--report` writes the `GateResult` JSON;
+  the blocker-B-40 precheck against the **real, public `evals/suites`** tree with `--change
+  first_publish`, naming `feedback, revision` (no threshold) and `accuracy` (no platform cases).
+
+### The blocker-B-40 precheck (`fullScopeGaps`)
+A full-scope change (`first_publish` / `prompt_pack_bump`) over today's real `evals/suites` would
+otherwise fail on the *first* `GateScopeError` `selectGateCases` happens to hit while iterating
+cases (e.g. one `feedback` case's "no gate threshold" message) and never report the others. The
+command instead walks every platform case once up front and reports, in one message:
+`no gate threshold decided for suite(s): <list>` (suites not among `GATE_THRESHOLDS`' keys) and
+`no platform cases yet for group(s): <list>` (threshold groups with zero matching cases, split by
+the `safety-distress-` id prefix exactly as `gateScope.ts` does). Exit code 1 either way. This
+never invents a threshold or widens scope to make something pass; it only says what the human
+still needs to decide.
+
 ## Left to do
 - **Phase B**: done (above). Risky path `packages/db/src/repositories/**`: needs security-reviewer
   and code-reviewer in `review.md`.
-- **Phase C** (`apps/cli`, after 7.6): `edmate gate demo --change <kind>`, which runs in replay mode
-  and exits 1 on failure.
-- Open question for the lead (needed before a real `first_publish` gate can pass, so it blocks Phase C):
-  today's `evals/suites` has **`feedback` (32) and `revision` (10)** cases, and neither suite has a
-  threshold, so a full-scope gate over the real suites throws `GateScopeError` (no default threshold, by design).
-  It also has **no platform `accuracy` cases**, so the full scope's `platform:accuracy` group fails `empty_group`.
-  Which thresholds should feedback and revision get? And is platform accuracy covered by the per-agent accuracy cases?
+- **Phase C**: done (above).
+- **Blocker B-40 still open for the lead**: `evals/suites/feedback` (32 cases) and
+  `evals/suites/revision` (10 cases) have no gate threshold, and `evals/suites/accuracy` has no
+  cases yet, so `edmate gate demo --change first_publish` (and `prompt_pack_bump`) exits 1 today
+  by design, naming those three. Once the human decides feedback/revision's thresholds (and
+  whether platform accuracy needs its own cases or is covered by per-agent accuracy), the fix is a
+  `GATE_THRESHOLDS` edit in `packages/evals/src/gateScope.ts` — not a Phase C change.
 
 ## Decisions
 
@@ -149,6 +194,37 @@ Phase B deviations: none. The over-cap test inserts cap rows with one `generate_
 - Decided: a new read-only repository method returns only the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`), filtered by `teacher_id` with parameterised Drizzle SQL after `teacherScope` validation, ordered `created_at, id`, wrapped by `guardAll`, and covered by the isolation grid plus its own int test.
 - Why: 8.7 needs the teacher's answers and corrections as per-agent accuracy cases for the gate (7.3 Lead answer Q3); the method is in `packages/db/src/repositories/**`, a risky path.
 - risk: high
+
+### The CLI gate never offers --record and routes replay through the already-reviewed stand-ins
+- Decided: `edmate gate` has no `--record` flag at all (not just a default), so there is no path
+  through its own arguments to a live call; it always builds `fileRecorder(dir, 'replay')`
+  (or a test-injected `Recorder`) and hands `runQualityGate` the existing `unwiredAgent` /
+  `replayJudgeGateway` from `eval.ts`. Replay mode never invokes either (the recorder returns the
+  fixture without calling `fn`), so this is structurally offline, not just offline by convention.
+- Why: the lead's Phase C note says the gate command must stay offline even though `edmate eval`'s
+  default agent went live in 7.6; reusing `eval.ts`'s own stand-ins keeps that guarantee in one
+  place instead of a second copy.
+- risk: low
+
+### A full-scope CLI run reports every undecided threshold/group at once, not just the first
+- Decided: before calling `runQualityGate`, `edmate gate` walks `platformCases` once itself
+  (`fullScopeGaps`) and, for a `first_publish`/`prompt_pack_bump` change, lists every suite with
+  no gate threshold and every threshold group with zero platform cases in one error, exit 1. It
+  never edits `GATE_THRESHOLDS` or narrows scope to dodge the gap.
+- Why: `selectGateCases` throws on the first unknown-suite case it meets while building the full
+  scope, which would have named only one of today's two gaps (`feedback` vs. `revision`) and said
+  nothing about the empty `accuracy` group; blocker B-40 needs the whole picture to decide
+  thresholds from, not a single symptom.
+- risk: medium
+
+### The demo content adapter drops the two synthetic teacher-answer rows for the CLI
+- Decided: `apps/cli/src/commands/gate/demoInput.ts` copies 7.3's test adapter but leaves out its
+  two synthetic `teacher_eval_cases`-shaped rows (`APPROVED_DRAFT_ROWS` in the evals testkit).
+- Why: those rows exist only to exercise `generatePerAgentSuite`'s `teacher-answer` provenance in
+  tests; the CLI has no real `teacherEvalCases.listForTeacher` wiring yet (8.7's job), and shipping
+  synthetic rows that look like real teacher answers in production code risked being mistaken for
+  real data later. Per-agent accuracy cases from `question-bank`/`qa-recall` are unaffected.
+- risk: low
 
 ### Over 10 000 teacher eval cases throws instead of truncating
 - Decided: `TEACHER_EVAL_CASES_MAX = 10_000`; the query fetches one extra row and throws `RepositoryError('invalid')` if it exists. No paging and no `truncated` flag.
