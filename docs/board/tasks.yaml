@@ -4526,7 +4526,9 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7k-changed-since-publish
+  model: plan:sonnet build:sonnet
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
@@ -4556,7 +4558,7 @@ tasks:
   risk: low
   status: running
   branch: m9/9.6g-export-fixes
-  model: build:sonnet
+  model: build:sonnet review:sonnet
 - id: 11.3a
   milestone: M11
   title: Weekly insights repository in packages/db, minimum 5 distinct students per group (11.3 Phase A)
