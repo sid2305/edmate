@@ -84,9 +84,14 @@ Built `docs/tasks/9.6/plan.md` Phase E: every subscription state now has an entr
   behaviour; it is left green, not altered.
 - risk: low
 
+### 22 Oct 2026 · 9.6e tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 67 tool calls against the brief's budget of 50.
+- Why: the extra calls went on page tests, an axe check and a merge of main; both reviews approved with no blocking findings.
+- risk: low
+
 ## Left to do
 None -- Phase E's scope (home + compare-page entry points for paused and active plans) is
 complete.
 
 Status: DONE
-Tool calls used: 38
+Tool calls used: 67 (harness count; the builder reported 38)
