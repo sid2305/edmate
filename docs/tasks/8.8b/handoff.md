@@ -58,6 +58,11 @@ Evidence:
 
 ## Decisions
 
+### 22 Oct 2026 · 8.8b Lead leaves a redundant type annotation in apps/web/app/teacher/insights/page.tsx · decided by lead · risk: low
+- Decided: the typescript-reviewer's LOW about a redundant explicit type annotation in apps/web/app/teacher/insights/page.tsx is wontfix.
+- Why: it is stylistic only and the inferred type is identical; MEDIUM/LOW findings don't hold a merge.
+- risk: low
+
 ### 22 Oct 2026 · 8.8b "Overall p50/p95 latency" means the generate and firstToken steps, not a step breakdown · decided by builder · risk: low
 - Decided: the health block shows `health.stepLatencyMs.generate` (full reply latency) and
   `health.stepLatencyMs.firstToken` as "Reply latency" and "First token", and nothing else from
