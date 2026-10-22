@@ -2151,7 +2151,7 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2516,7 +2516,7 @@ tasks:
   model: null
 - id: 7.3b
   milestone: M13
-  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.'
+  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.; NoCasesFoundError uses displayPath(dir) like CaseLoadError (7.6a review LOW)'
   accept: The evals package's error classes share one style and the 7.3 tests still pass.
   deps:
   - '7.3'
@@ -2577,9 +2577,29 @@ tasks:
   deps:
   - '7.6'
   risk: normal
-  status: running
+  status: done
   branch: m7/7.6a-sweep-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 102
+    tokens_in: 332
+    tokens_out: 24569
+    cache_read_tokens: 9054277
+    wall_time_seconds: 644
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

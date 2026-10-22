@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.6a merge: guardrails cast removal reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6a with its one-line `packages/harness/src/guardrails/blockReplies.ts` change (an unnecessary cast removed, no behaviour change), reviewed by code-reviewer (the group's required reviewer during the MVP phase) and typescript-reviewer; both approved with no CRITICAL, HIGH or MEDIUM.
+- Why: a risky path needs its required reviewers and a risk: high entry.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.6a wontfix: apps/cli/src/commands/eval.ts per-pair error messages · decided by lead
+- Decided: keep writing `Error.message` from a failed (model, suite) pair to stderr and the gitignored summary.json, as code-reviewer's LOW noted.
+- Why: it is the same surface as the file's existing error handling, and errors that could carry key material are key-safe by their own class invariant; no fix needed.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.6a budget: 73 tool calls against 60 · decided by lead
+- Decided: accept the overrun (1.22×, the handoff's ~55 was the builder's estimate).
+- Why: all seven deferred findings and the second provider landed in one green run.
+- risk: low
+
+---
+
+### `createChatGateway`'s openai-compatible factory takes `baseURL` as a per-call option, not a second env var
+- Decided: the live sweep threads each `live-models.yaml` entry's own `baseURL` field (already in
+  the 7.6 schema) through `liveAgentFor`/`ChatDepsOptions`/`createChatGateway`'s new `opts.baseURL`
+  parameter, rather than reading a single global env var the way `judgeGateway.ts`'s
+  `EDMATE_JUDGE_BASE_URL` does for the one pinned judge model.
+- Why: the judge is one fixed model per run, so one env var is enough; the sweep can list several
+  `openai-compatible` candidates with different endpoints in the same `live-models.yaml` file, and
+  each entry already carries its own `baseURL` (validated in 7.6) — reading it from the file keeps
+  one source of truth instead of adding a second, parallel env-var convention.
+- risk: low
+
+---
+
+### A failed (model, suite) pair's summary row has only `error` set, never zeroed-out numbers
+- Decided: `SweepSummaryRow` is a union — `{ model, suite, passed, total, cost }` on success, or
+  `{ model, suite, error }` on failure — rather than always shipping `passed`/`total`/`cost` with
+  placeholder zeros plus an optional `error`.
+- Why: a reader of `summary.json` (a human, or a future dashboard) must never mistake a crashed
+  pair for a pair that ran and scored zero; the union makes that ambiguity a type error instead of
+  a convention to remember.
+- risk: low
+
+---
+
+### `loadSweepCases`'s typed-error catch narrows to `NoCasesFoundError` specifically, not `CaseLoadError`
+- Decided: only `NoCasesFoundError` (no files at all) is treated as "zero cases, not an error";
+  `CaseLoadError` (a bad file inside a non-empty directory) still propagates and fails that pair.
+- Why: the plan's rule is specifically about an empty suite directory (`evals/suites/pedagogy`'s
+  `.gitkeep`-only case); a malformed case file is a real authoring mistake that the 7.6a resilience
+  item (point 2) now surfaces per-pair instead of aborting the whole sweep, never silently as zero
+  cases.
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 7.6 merge: guardrails export reviewed and merged · decided by lead · risk: high
 - Decided: merge 7.6 with its `packages/harness/src/guardrails/**` change (a new `isBlockReply` export over the existing `BLOCK_REPLIES`; no guard logic changed), reviewed by code-reviewer (the group's required reviewer during the MVP phase), plus typescript-reviewer and security-reviewer. All three approved with no CRITICAL or HIGH; MEDIUM and LOW findings go to 7.6a.
 - Why: a risky path needs its required reviewers and a risk: high entry; the change is a read-only membership check.
