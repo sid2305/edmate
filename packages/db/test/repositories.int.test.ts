@@ -18,6 +18,12 @@ import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
 import {
+  CHANGE_PACKAGE_ACTION,
+  STUDENT_CANCEL_ACTION,
+  STUDENT_PAUSE_ACTION,
+  STUDENT_RESUME_ACTION,
+} from '../src/repositories/subscriptions.js';
+import {
   type AuditEntryInput,
   type AuditRow,
   chunkId,
@@ -647,7 +653,11 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       let n = 0;
       for (const t of TEACHERS) {
         const got = await r.packageVersions.liveForAgent({ agentId: ids.agent(t) });
-        expect(got.map((p) => p.packageVersionId)).toEqual([ids.packageVersion(t)]);
+        // Task 9.6c: the seed now gives every teacher a second, live package of the same agent.
+        expect(got.map((p) => p.packageVersionId)).toEqual([
+          ids.packageVersion(t),
+          ids.packageVersion2(t),
+        ]);
         expect(got[0]?.offer.packageId).toBe(ids.pkg(t));
         expect(got[0]?.offer.name).toBe(`[${t}] package`);
         // Public projection only: never the teacher's internal config (9.3 fix round 1).
@@ -2069,6 +2079,87 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'invalid',
       ],
     ],
+  },
+  // Task 9.6c: the four student plan-change methods. None takes a target id beyond the
+  // subscription itself (always the scope's own, `ids.subscription(actor)`), so the default
+  // `owns: actor === target` is exactly right: a mismatched scope can't resolve another pair's
+  // subscription id (lockLive filters on id AND studentId AND teacherId), which is `not_found`.
+  // Every positive control restores the pair's row (and deletes the audit rows it wrote) so later
+  // cases, and the rest of the suite, see the original seed.
+  'subscriptions.changePackage': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.changePackage(scope, {
+        subscriptionId: ids.subscription(target),
+        packageVersionId: ids.packageVersion2(teacherOf(target)),
+      }),
+    verify: async (r, actor, res) => {
+      const row = res as { id: string; packageVersionId: string };
+      expect(row.packageVersionId).toBe(ids.packageVersion2(teacherOf(actor)));
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({
+        packageVersionId: ids.packageVersion2(teacherOf(actor)),
+      });
+      await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [
+        ids.packageVersion(teacherOf(actor)),
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.change_package',
+      ]);
+    },
+  },
+  'subscriptions.pause': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.pause(scope, { subscriptionId: ids.subscription(target) }),
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('paused');
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({ status: 'paused' });
+      await raw.query(`update subscriptions set status = 'active' where id = $1`, [
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.pause_student',
+      ]);
+    },
+  },
+  'subscriptions.resume': {
+    scope: 'student',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) await r.subscriptions.pause(scope, { subscriptionId: ids.subscription(actor) });
+      return r.subscriptions.resume(scope, { subscriptionId: ids.subscription(target) });
+    },
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('active');
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({ status: 'active' });
+      await raw.query(`delete from audit_log where target = $1 and action in ($2, $3)`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.pause_student',
+        'subscription.resume_student',
+      ]);
+    },
+  },
+  'subscriptions.cancel': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.cancel(scope, { subscriptionId: ids.subscription(target) }),
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('ended');
+      expect(await r.subscriptions.findLive(sScope(actor))).toBeNull();
+      await raw.query(`update subscriptions set status = 'active' where id = $1`, [
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.cancel_student',
+      ]);
+    },
   },
   'teacherQuestions.open': {
     scope: 'student',
@@ -3576,6 +3667,276 @@ describe.skipIf(!up)(
       });
       expect(started.packageVersionId).toBe('pv_93c');
       expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: started.id });
+    });
+
+    describe('task 9.6c: plan-change methods', () => {
+      // A fixture of its own (one teacher, one agent, two packages so there is a real live
+      // version of a *different* package to switch to), self-contained like the 9.3c fixture
+      // above: nothing here is shared with the A/B grid.
+      const T = 'tch_96c';
+      const S = 'stu_96c';
+      const AGENT = 'agt_96c';
+      const PKG1 = 'pkg_96c_1';
+      const PKG2 = 'pkg_96c_2';
+      const PV1 = 'pv_96c_1'; // pkg_96c_1 v1 (live until a test bumps it)
+      const PV1_V2 = 'pv_96c_1_v2'; // pkg_96c_1 v2 (draft, becomes live when bumped)
+      const PV2 = 'pv_96c_2'; // pkg_96c_2 v1, live: the switch target
+      const SUB = 'sub_96c';
+      const PERIOD_END = '2027-06-01T00:00:00Z';
+      const scope = { studentId: S, teacherId: T };
+
+      beforeAll(async () => {
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, '96c teacher', 'en', 'test', 'teacher'), ($2, '96c student', 'en', 'test', 'student')`,
+          [T, S],
+        );
+        await raw.query(
+          `insert into teacher_profiles (id, user_id, slug, subject, verification_status) values ('tp_96c', $1, 'teacher-96c', '96c subject', 'verified')`,
+          [T],
+        );
+        await raw.query(
+          `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`,
+          [AGENT, T],
+        );
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name, live_version) values ($1, $2, $3, '96c pkg 1', 1), ($4, $2, $3, '96c pkg 2', 1)`,
+          [PKG1, T, AGENT, PKG2],
+        );
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config) values
+             ($1, $2, $3, 1, '{}'::jsonb), ($4, $2, $3, 2, '{}'::jsonb), ($5, $2, $6, 1, '{}'::jsonb)`,
+          [PV1, T, PKG1, PV1_V2, PV2, PKG2],
+        );
+        await raw.query(
+          `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end) values ($1, $2, $3, $4, 'active', $5)`,
+          [SUB, S, T, PV1, PERIOD_END],
+        );
+      });
+
+      afterAll(async () => {
+        // Nothing else in the suite reads this fixture; the schema cascades the rest on its own
+        // tables, but audit_log and subscriptions have no FK to clean up explicitly here (the
+        // whole throwaway database is dropped in the outer afterAll).
+      });
+
+      it('changePackage: not_found for a draft version, an old version, another teacher\'s version and a suspended agent\'s version', async () => {
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // v2 is still a draft (live_version = 1)
+
+        // v1 is "old" once v2 becomes live; the subscription itself must point elsewhere for
+        // this to be a live-version check rather than the same-version-as-now check.
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV2, SUB]);
+        await raw.query(`update packages set live_version = 2 where id = $1`, [PKG1]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // v1 is now the old version
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV1, SUB]);
+        await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
+
+        await expect(
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: ids.packageVersion('A'), // another teacher's live version
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+
+        await raw.query(`update agents set status = 'draft' where id = $1`, [AGENT]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // the agent is suspended
+        await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
+        await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
+      });
+
+      it('changePackage: succeeds to the live version of a different package of the same agent, keeping status and period_end, and audits it', async () => {
+        const before = await repos.subscriptions.findLive(scope);
+        const result = await repos.subscriptions.changePackage(scope, {
+          subscriptionId: SUB,
+          packageVersionId: PV2,
+        });
+        expect(result).toEqual({
+          id: SUB,
+          packageVersionId: PV2,
+          status: before!.status,
+          periodEnd: before!.periodEnd,
+        });
+        const audit = await raw.query<{ before: unknown; after: unknown }>(
+          `select before, after from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, CHANGE_PACKAGE_ACTION],
+        );
+        expect(audit.rows).toEqual([
+          { before: { status: 'active', packageVersionId: PV1 }, after: { status: 'active', packageVersionId: PV2 } },
+        ]);
+
+        // The same version as now is invalid; nothing else changes.
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+      });
+
+      it('changePackage and pause: paused or ended is invalid', async () => {
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        await expect(
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' }); // already paused
+
+        await raw.query(`update subscriptions set status = 'ended' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        await expect(
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+      });
+
+      it('resume: refuses a cost-alarm pause, a pause with no audit row, and a non-student pause; restores the student\'s own pause', async () => {
+        const paused = await repos.subscriptions.pause(scope, { subscriptionId: SUB });
+        expect(paused.status).toBe('paused');
+
+        // Someone else's pause landed later (a future staff action, or the cost alarm): resume
+        // must look at the *latest* row, not just "any own pause ever happened".
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_cost_alarm', 'system_cost_alarm', 'system', $1, $2, $3, $4, '{"status":"active","packageVersionId":"${PV2}"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          ['subscription.pause_cost_alarm', `subscription:${SUB}`, T, S],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // No audit row at all for this subscription.
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // Not paused.
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // A corrupted pause audit row whose recorded "before" status is itself paused or ended
+        // (should never happen, but resume must not restore into a dead-end state).
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_corrupt_pause', $1, 'student', $2, $3, $4, $1, '{"status":"ended","packageVersionId":"${PV2}"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          [S, STUDENT_PAUSE_ACTION, `subscription:${SUB}`, T],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'integrity' });
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+
+        // A pause audit row whose "before" doesn't even parse as a status snapshot.
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_malformed_pause', $1, 'student', $2, $3, $4, $1, '{"status":"bogus"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          [S, STUDENT_PAUSE_ACTION, `subscription:${SUB}`, T],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'integrity' });
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+
+        // The student's own pause: resume restores it, auditing both actions.
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await repos.subscriptions.pause(scope, { subscriptionId: SUB });
+        const resumed = await repos.subscriptions.resume(scope, { subscriptionId: SUB });
+        expect(resumed).toMatchObject({ status: 'active', packageVersionId: PV2 });
+        const actions = await raw.query<{ action: string }>(
+          `select action from audit_log where target = $1 order by ts`,
+          [`subscription:${SUB}`],
+        );
+        expect(actions.rows.map((r) => r.action)).toEqual([STUDENT_PAUSE_ACTION, STUDENT_RESUME_ACTION]);
+      });
+
+      it('cancel: any live status ends it; findLive is null and start works again; ended already is invalid', async () => {
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        const cancelled = await repos.subscriptions.cancel(scope, { subscriptionId: SUB });
+        expect(cancelled.status).toBe('ended');
+        expect(await repos.subscriptions.findLive(scope)).toBeNull();
+        const audit = await raw.query<{ action: string }>(
+          `select action from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, STUDENT_CANCEL_ACTION],
+        );
+        expect(audit.rows).toHaveLength(1);
+
+        await expect(
+          repos.subscriptions.cancel(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        const restarted = await repos.subscriptions.start(scope, {
+          packageVersionId: PV2,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
+        expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: restarted.id });
+      });
+
+      it('start (9.6c/9.3b): refuses a non-live version and a suspended agent\'s version', async () => {
+        await raw.query(`update subscriptions set status = 'ended' where student_id = $1`, [S]);
+        await expect(
+          repos.subscriptions.start(scope, {
+            packageVersionId: PV1_V2, // draft, never made live
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+
+        await raw.query(`update agents set status = 'draft' where id = $1`, [AGENT]);
+        await expect(
+          repos.subscriptions.start(scope, {
+            packageVersionId: PV1,
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+        await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
+
+        const started = await repos.subscriptions.start(scope, {
+          packageVersionId: PV1,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
+        expect(started.packageVersionId).toBe(PV1);
+      });
+
+      it('two parallel pause calls on the same subscription: one succeeds, one is invalid, one audit row', async () => {
+        // Earlier tests in this block may have ended SUB and started a different live
+        // subscription for this (student, teacher) pair; only one row may be non-ended per pair
+        // (subscriptions_one_live_per_pair_key), so clear the way before reactivating SUB.
+        await raw.query(
+          `update subscriptions set status = 'ended' where student_id = $1 and teacher_id = $2 and id != $3 and status != 'ended'`,
+          [S, T, SUB],
+        );
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        const results = await Promise.allSettled([
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ]);
+        const fulfilled = results.filter((r) => r.status === 'fulfilled');
+        const rejected = results.filter((r) => r.status === 'rejected');
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ kind: 'invalid' });
+        const n = await rawCount(
+          `select count(*)::int as n from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, STUDENT_PAUSE_ACTION],
+        );
+        expect(n).toBe(1);
+      });
     });
 
     it('listForTeacher never returns studentId', async () => {

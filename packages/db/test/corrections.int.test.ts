@@ -265,6 +265,9 @@ describe.skipIf(!up)(`corrections repository on Postgres${up ? '' : ` (${SKIP_RE
       const got = await repos.packageVersions.listForAgent(own, agentId);
       expect(got).toEqual([
         { packageId: 'pkg_a_new', name: '[A] newer' },
+        // Task 9.6c: the seed now also gives every teacher a second, live package of the same
+        // agent (changePackage's switch target), inserted right after the first.
+        { packageId: ids.pkg2('A'), name: '[A] package 2' },
         { packageId: ids.pkg('A'), name: '[A] package' },
       ]);
     }, 15_000);

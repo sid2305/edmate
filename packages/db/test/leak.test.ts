@@ -65,6 +65,17 @@ describe('driver errors are scrubbed', () => {
             periodEnd: '2027-01-01T00:00:00Z',
           }),
       ],
+      [
+        'subscriptions.changePackage',
+        () =>
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: 'sub_leak_1',
+            packageVersionId: 'pv_leak_1',
+          }),
+      ],
+      ['subscriptions.pause', () => repos.subscriptions.pause(scope, { subscriptionId: 'sub_leak_1' })],
+      ['subscriptions.resume', () => repos.subscriptions.resume(scope, { subscriptionId: 'sub_leak_1' })],
+      ['subscriptions.cancel', () => repos.subscriptions.cancel(scope, { subscriptionId: 'sub_leak_1' })],
       ['packageVersions.liveForAgent', () => repos.packageVersions.liveForAgent({ agentId: 'agt_x' })],
       ['discovery.search', () => repos.discovery.search({ q: 'private words here' })],
       ['discovery.teacherBySlug', () => repos.discovery.teacherBySlug({ slug: 'tch-leak-9' })],
