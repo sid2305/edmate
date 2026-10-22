@@ -4454,9 +4454,31 @@ tasks:
   deps:
   - 8.6d
   risk: low
-  status: running
+  status: done
   branch: m8/8.6g-package-builder-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet+opus
+  metrics:
+    tool_calls: 20
+    tokens_in: 78
+    tokens_out: 432
+    cache_read_tokens: 904915
+    wall_time_seconds: 143
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 3
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 6
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7a
   milestone: M9
   title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
