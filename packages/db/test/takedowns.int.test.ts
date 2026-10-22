@@ -633,6 +633,58 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
     });
   });
 
+  // Task 12.3b: repeat-infringer counting. Count only: nothing reads it to enforce yet (12.3d).
+  describe("countUpheld counts a teacher's active copyright takedowns", () => {
+    const B = { teacherId: teacherId('B') };
+    const down = (kind: 'document' | 'agent', targetId: string, category = 'copyright') =>
+      repos.takedowns.create(STAFF, { kind, targetId, category } as never);
+
+    it("counts active copyright takedowns on the teacher's own documents and agents only", async () => {
+      expect(await repos.takedowns.countUpheld(A)).toBe(0);
+      expect(await repos.takedowns.countUpheld(B)).toBe(0);
+      await down('document', DOC);
+      await down('agent', ids.agent('A'));
+      // Not copyright: not counted.
+      await down('document', KEEP, 'harmful');
+      // Lifted: reversed, not counted.
+      const lifted = await down('document', NOTE_DOC);
+      await repos.takedowns.lift(STAFF, lifted.id, {});
+      // Another teacher's.
+      await down('agent', ids.agent('B'));
+      expect(await repos.takedowns.countUpheld(A)).toBe(2);
+      expect(await repos.takedowns.countUpheld(B)).toBe(1);
+      expect(await repos.takedowns.countUpheld({ teacherId: 'tch_nobody' })).toBe(0);
+    });
+
+    it('a target or status 12.2 never writes is not counted', async () => {
+      await raw.query(
+        `insert into takedowns (id, target, reason, status) values
+         ('tkd_raw_1', $1, 'copyright', 'active'),
+         ('tkd_raw_2', 'document:' || $2, 'copyright', 'upheld'),
+         ('tkd_raw_3', 'document:' || $2, 'copyright', 'open')`,
+        [`teacher:${teacherId('A')}`, DOC],
+      );
+      expect(await repos.takedowns.countUpheld(A)).toBe(0);
+    });
+
+    it('still counts after the teacher deletes the taken-down document', async () => {
+      const gone = 'doc_td_gone';
+      await material(gone, OPEN, 'osmosis moves water across a membrane toward salt');
+      await down('document', gone);
+      expect(await repos.takedowns.countUpheld(A)).toBe(1);
+      await repos.documents.delete(A, gone);
+      expect(await count('select count(*) from documents where id = $1', [gone])).toBe(0);
+      expect(await repos.takedowns.countUpheld(A)).toBe(1);
+      expect(await repos.takedowns.countUpheld(B)).toBe(0);
+    });
+
+    it('a malformed scope is scope, before any SQL', async () => {
+      for (const bad of [null, {}, { teacherId: '' }, { teacherId: 'tch_a', extra: 1 }, 'tch_a']) {
+        expect((await failure(repos.takedowns.countUpheld(bad as never))).kind).toBe('scope');
+      }
+    });
+  });
+
   describe('lock order: takedown and publish.goLive on one agent never deadlock', () => {
     for (const first of ['goLive', 'takedown'] as const) {
       it(`${first} queued first: both finish and the agent ends suspended`, async () => {

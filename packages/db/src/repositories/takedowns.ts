@@ -22,6 +22,9 @@
 // role row, a document, a takedown or a report, so the only row both take is the agent, and
 // neither holds anything the other wants while waiting on it: no cycle. The two-connection test
 // in test/takedowns.int.test.ts forces both queue orders against publish.goLive.
+//
+// Repeat infringers (task 12.3b): `countUpheld` is a read only, with no caller and no threshold
+// yet (enforcement is 12.3d, next to B-12's strike policy). It takes no lock.
 import { and, desc, eq, getTableName, or, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
@@ -29,6 +32,7 @@ import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
 import {
   agents,
+  auditLog,
   documents,
   messages,
   reports,
@@ -48,7 +52,7 @@ import {
   TakedownKindSchema,
   toStaffTakedownRow,
 } from './map.js';
-import { IdSchema, parseArg } from './scope.js';
+import { IdSchema, parseArg, type TeacherScope, teacherScope } from './scope.js';
 
 export { TAKEDOWN_KINDS, type StaffTakedownRow, type TakedownKind };
 
@@ -320,6 +324,33 @@ export function takedownsRepo(db: Db) {
           return { id, status: 'lifted' as const };
         }),
       );
+    },
+
+    /**
+     * Task 12.3b: how many of the scope's teacher's documents and agents have an active takedown
+     * for `copyright` (a lifted one was reversed and does not count). The owner is the target's
+     * teacher now or the teacher named on the takedown's own `takedown.create` audit row, so a
+     * teacher who deletes a taken-down document keeps the count. Count only: nothing reads it to
+     * enforce anything yet.
+     */
+    async countUpheld(scope: TeacherScope): Promise<number> {
+      const method = 'takedowns.countUpheld';
+      const { teacherId } = teacherScope(scope, method);
+      const ownDocument = sql`exists (select 1 from ${documents} where ${takedowns.target} = 'document:' || ${documents.id} and ${documents.teacherId} = ${teacherId})`;
+      const ownAgent = sql`exists (select 1 from ${agents} where ${takedowns.target} = 'agent:' || ${agents.id} and ${agents.teacherId} = ${teacherId})`;
+      const audited = sql`exists (select 1 from ${auditLog} where ${auditLog.teacherId} = ${teacherId} and ${auditLog.action} = 'takedown.create' and ${auditLog.target} = ${takedowns.target} and ${auditLog.after} ->> 'takedown' = ${takedowns.id})`;
+      const [row] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(takedowns)
+        .where(
+          and(
+            eq(takedowns.status, 'active'),
+            eq(takedowns.reason, 'copyright'),
+            or(ownDocument, ownAgent, audited),
+          ),
+        );
+      /* v8 ignore next -- count(*) always returns one row */
+      return row?.n ?? 0;
     },
 
     /**

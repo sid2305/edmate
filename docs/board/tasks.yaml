@@ -4677,7 +4677,9 @@ tasks:
   deps:
   - 9.7a
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.7c-e2e-local-guard
+  model: plan:lead build:sonnet
 - id: 9.5c
   milestone: M13
   title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts
@@ -5319,7 +5321,7 @@ tasks:
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
-    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
+    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -5365,9 +5367,29 @@ tasks:
   - 12.3a
   - 12.2b
   risk: high
-  status: running
+  status: done
   branch: m12/12.3b-rights-declaration-db
   model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 49
+    tokens_in: 170
+    tokens_out: 919
+    cache_read_tokens: 2787788
+    wall_time_seconds: 108
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.3c
   milestone: M12
   title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
@@ -5762,7 +5784,9 @@ tasks:
   deps:
   - 7.2g
   risk: low
-  status: todo
+  status: running
+  branch: m7/7.2i-leak-case-fixes
+  model: plan:lead build:sonnet
 - id: 12.3e
   milestone: M13
   title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of
@@ -5781,8 +5805,9 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.4a-recording-link
+  model: plan:opus build:opus
 - id: 11.4b
   milestone: M11
   title: Studio API for class recordings, and media the worker can't split refused at upload (11.4 Phase B)
@@ -5810,6 +5835,17 @@ tasks:
   deps:
   - 11.4b
   risk: high
+  status: todo
+  branch: null
+- id: 8.2n
+  milestone: M13
+  title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
+    a complete-route test for .srt; drop the HTMLInputElement cast in UploadsView.test.tsx; replace updates documents.kind when the file kind changes (a PDF replaced by a .vtt stays material); the needs-transcription
+    rule moves onto UploadType (a transcribe field) instead of routes.ts'
+  accept: web typecheck, lint and test green; the refusal test fails if the words revert.
+  deps:
+  - 8.2l
+  risk: low
   status: todo
   branch: null
 - id: 9.4c
@@ -5982,7 +6018,7 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: planning
+  status: running
   priority: P1
   branch: null
   model: plan:opus
