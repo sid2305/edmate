@@ -1,6 +1,11 @@
 # Handoff: 9.7c — e2e local-DB guard
 
 ## Decisions
+### 22 Oct 2026 · 9.7c ran over its brief budget · decided by lead · risk: low
+- Decided: accept 71 tool calls (build 49, fix round 22) against the brief's 35 (1.2 × 35 = 42).
+- Why: the fix round closed a CRITICAL guard bypass the security-reviewer found; the work stays in scope.
+- risk: low
+
 ### 22 Oct 2026 · 9.7c guard refuses host overrides in the query string · decided by builder · risk: low
 - Decided: `assertLocalDatabaseUrl` now also rejects any `TEST_DATABASE_URL` whose query string
   carries a `host` or `hostaddr` key (case-insensitively), and compares the authority hostname
@@ -88,4 +93,4 @@
 None for this task's scope.
 
 Status: DONE
-Tool calls used: 20
+Tool calls used: 71 (harness count: build 49, fix round 22; the agents reported 32 and 20)
