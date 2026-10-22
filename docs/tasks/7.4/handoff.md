@@ -1,12 +1,48 @@
-# Task 7.4 handoff: quality gate, Phase A (gate library)
+# Task 7.4 handoff: quality gate, Phases A (gate library) and B (db read)
 
 Status: PARTIAL
 
-- Branch: `m7/7.4-quality-gate` (pushed from local `work-74`)
-- Worktree: `.claude/worktrees/agent-af82ddb99249b28f2`
-- Tool calls used: 36
-- State after this phase: the gate works in memory on the demo teacher, and both acceptance
-  criteria are proven in tests. Nothing reads the db yet (Phase B), and there is no CLI yet (Phase C).
+- Branch: `m7/7.4-quality-gate` (Phase A pushed from local `work-74`, Phase B from `work-74b`)
+- Worktrees: Phase A `.claude/worktrees/agent-af82ddb99249b28f2`, Phase B `.claude/worktrees/agent-a21e8795a34aa58bf`
+- Tool calls used: 80 (Phase A 45, Phase B 35)
+- State after Phase B: the gate works in memory on the demo teacher, both acceptance criteria are
+  proven in tests, and `teacherEvalCases.listForTeacher` gives 8.7 the teacher's own rows to feed
+  `answerableFromTeacherEvalCases`. There is no CLI yet (Phase C, after 7.6).
+
+## Phase B: `teacherEvalCases.listForTeacher` (`packages/db` only)
+
+Evidence (a local pgvector 16 container; `TEST_DATABASE_URL` pointed at it, so no int test skipped for lack of a db):
+
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/db...`
+```
+@edmate/db:test:  ✓ test/teacher-eval-cases.int.test.ts (4 tests)
+@edmate/db:test:  Test Files  54 passed (54)
+@edmate/db:test:       Tests  910 passed | 4 skipped (914)
+@edmate/db:test: All files          |    99.9 |    97.73 |   99.81 |   99.94 |
+ Tasks:    26 successful, 26 total
+```
+Isolation grid (`repositories.int.test.ts`): `teacherEvalCases.listForTeacher  teacher read  cases=22 leaks=0`.
+`python3 .githooks/secret-scan.py --all` → exit 0.
+
+Changes:
+- `packages/db/src/repositories/teacher-eval-cases.ts` (new): `teacherEvalCasesRepo(db).listForTeacher(scope)`,
+  `TEACHER_EVAL_CASES_MAX = 10_000`, `TeacherEvalCaseRow` (`id, moduleId, question, answer, origin`).
+  `teacherScope` is parsed before any SQL; a single Drizzle select (parameterised) filtered by
+  `teacher_id = scope.teacherId`, ordered `created_at, id`, `limit MAX + 1`; an extra row throws
+  `RepositoryError('invalid')`.
+- `packages/db/src/repositories/index.ts`: registered under `guardAll('teacherEvalCases', …)`; exports
+  `TEACHER_EVAL_CASES_MAX` and `TeacherEvalCaseRow`.
+- `packages/db/src/repositories/README.md`: one paragraph under "Ask the teacher (task 5.10)".
+- `packages/db/test/repositories.int.test.ts`: the `CASES` entry (actor-only read; owners from the
+  `[T]` markers in question/answer and the module id's teacher letter; 20 random ids see nothing).
+- `packages/db/test/teacher-eval-cases.int.test.ts` (new): empty list; own rows only and in
+  `(created_at, id)` order with an id tie-break; row shape has no teacher or chunk id; teacher B never
+  sees `[A]` and vice versa; malformed scopes (incl. a quote-injection string and an extra key) are
+  `scope` with a message naming only method and kind; exactly 10 000 rows returned, 10 001 is `invalid`,
+  and teacher A is unaffected.
+
+Phase B deviations: none. The over-cap test inserts cap rows with one `generate_series` statement
+(no test seam in src). `packages/evals` and `apps/cli` untouched.
 
 ## Acceptance evidence
 
@@ -62,8 +98,8 @@ Status: PARTIAL
   leaves out a course module. See Decisions.
 
 ## Left to do
-- **Phase B** (`packages/db`, risky path): `teacherEvalCases.listForTeacher` with the 10 000-row cap,
-  an isolation int test, the README, and the `CASES` entry. Needs security-reviewer and a `risk: high` decision.
+- **Phase B**: done (above). Risky path `packages/db/src/repositories/**`: needs security-reviewer
+  and code-reviewer in `review.md`.
 - **Phase C** (`apps/cli`, after 7.6): `edmate gate demo --change <kind>`, which runs in replay mode
   and exits 1 on failure.
 - Open question for the lead (needed before a real `first_publish` gate can pass, so it blocks Phase C):
@@ -107,4 +143,19 @@ Status: PARTIAL
 ### A material change runs per-agent locked cases only
 - Decided: a material change does not run the platform locked suite; that suite runs only on a first publish or a prompt-pack bump (lead's Q1 answer).
 - Why: the platform locked cases are written against the demo teacher's modules.
+- risk: low
+
+### 7.4 teacherEvalCases.listForTeacher (repositories, risky path)
+- Decided: a new read-only repository method returns only the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`), filtered by `teacher_id` with parameterised Drizzle SQL after `teacherScope` validation, ordered `created_at, id`, wrapped by `guardAll`, and covered by the isolation grid plus its own int test.
+- Why: 8.7 needs the teacher's answers and corrections as per-agent accuracy cases for the gate (7.3 Lead answer Q3); the method is in `packages/db/src/repositories/**`, a risky path.
+- risk: high
+
+### Over 10 000 teacher eval cases throws instead of truncating
+- Decided: `TEACHER_EVAL_CASES_MAX = 10_000`; the query fetches one extra row and throws `RepositoryError('invalid')` if it exists. No paging and no `truncated` flag.
+- Why: the gate must never run a silently cut suite (lessons.md: a check that skips looks like a pass); a teacher near the cap needs a later board task for sampling or paging, not a quiet partial read.
+- risk: medium
+
+### The row shape leaves out teacher id, chunk id and question id
+- Decided: `TeacherEvalCaseRow` carries only what `answerableFromTeacherEvalCases` needs; `teacherId`, `chunkId`, `teacherQuestionId` and timestamps stay in the db.
+- Why: least data out of the repository; the scope already names the teacher.
 - risk: low

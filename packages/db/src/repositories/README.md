@@ -219,6 +219,12 @@ so the note, the question's status and the student delivery commit together.
 additive tables from migration 0018; `teacher_questions.group_id` (unused since 0001) is backfilled
 to each row's own id so every question starts as its own group once Phase C's grouping lands.
 
+**`teacherEvalCases.listForTeacher(scope)`** (task 7.4, `teacher-eval-cases.ts`, read-only) returns
+the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`; no teacher or
+chunk id), ordered `created_at, id`, for the quality gate's per-agent accuracy cases. More than
+`TEACHER_EVAL_CASES_MAX` (10 000) rows is `invalid`, never a truncated list: a cut suite would let
+a publish pass on cases it never ran.
+
 **Grouping (Phase C, § Ask the teacher 2, Q1).** `teacherQuestions.open` lexically groups a new
 question with that teacher's and that agent's own other **open** questions, inside its own
 transaction: `question-similarity.ts`'s `questionSimilarity` (Jaccard over `retrieval.ts`'s

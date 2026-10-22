@@ -426,6 +426,21 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 7.4: read path for the rows chunks.addTeacherNote just wrote (its positive control writes
+  // `[actor]` rows for each teacher, so every actor has its own rows by now).
+  'teacherEvalCases.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.teacherEvalCases.listForTeacher(scope),
+    random: (r, _scope, rid) => r.teacherEvalCases.listForTeacher({ teacherId: rid }),
+    owners: (rows: { question: string; answer: string; moduleId: string }[]) =>
+      rows.flatMap((c) => [
+        ...markers(c.question),
+        ...markers(c.answer),
+        c.moduleId.slice(4, 5).toUpperCase(),
+      ]),
+  },
   'retrieval.search': {
     scope: 'teacher',
     op: 'read',
