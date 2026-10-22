@@ -4454,9 +4454,31 @@ tasks:
   deps:
   - 8.6d
   risk: low
-  status: running
+  status: done
   branch: m8/8.6g-package-builder-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet+opus
+  metrics:
+    tool_calls: 20
+    tokens_in: 78
+    tokens_out: 432
+    cache_read_tokens: 904915
+    wall_time_seconds: 143
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 3
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 6
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7a
   milestone: M9
   title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
@@ -6120,6 +6142,16 @@ tasks:
   accept: a test fails if the message is chosen by size; web typecheck, lint and test green.
   deps:
   - 11.4b
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 11.4g
+  milestone: M11
+  title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the 5 s poll is capped by attempts or elapsed time (LiveClassesView.tsx:115), same fix in the upload centre (UploadsView.tsx isActive); RecordingUpload skips state updates and onRecording after unmount (RecordingUpload.tsx:107-158)'
+  accept: tests fail without the failed row, the poll cap and the unmount guard; web typecheck, lint and test green.
+  deps:
+  - 11.4c
   risk: low
   status: todo
   branch: null

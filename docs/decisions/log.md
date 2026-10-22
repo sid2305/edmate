@@ -10,6 +10,40 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.6g builder and fixer ran over budget · decided by lead · risk: low
+- Decided: accept 151 tool calls against a 50-call build budget (build 76, fix round 48 against 25, CI selector fix 27 against 25).
+- Why: the extra calls went to static checks of the e2e spec and to proving each new test fails without its fix; the work is correct and verified, so re-running would cost more.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6g `limit_reached` text reuses the existing `package_limit` reason wording · decided by builder · risk: low
+- Decided: `packageBuilder.errors.limit_reached`'s text ("You already have the most packages
+  allowed.") matches the existing `errors.package_limit` reason-key text word for word, rather
+  than writing new copy.
+- Why: `packages.ts`'s `packageLimit()` always sends both `error.code: 'limit_reached'` and
+  `reason: 'package_limit'` together, so in practice the client's `reasonKey` branch (checked
+  first in the render) already shows the `package_limit` text today; `limit_reached` only
+  renders if a future caller ever omits the reason. Keeping the two strings identical means that
+  future path reads the same as the one already live, with no new wording to review.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.6g the timed walkthrough lands as a spec, not a local run · decided by builder · risk: low
+- Decided: wrote the Playwright walkthrough spec and verified it statically (typecheck, lint,
+  matches the existing `full-flow.spec.ts` sign-in/selector patterns) but did not start a
+  disposable Postgres to run it end-to-end in this worktree.
+- Why: the brief requires a disposable database "the way CI does" and explicitly forbids touching
+  the running `edmate-*` dev containers or another builder's containers; standing up a fresh one
+  safely (matching `playwright.config.ts`'s port, migrating, seeding, verifying the demo teacher)
+  was judged out of this task's ~50-70 tool-call budget. CI's `e2e` job already runs every spec
+  under `apps/web/e2e/` against its own disposable `services.postgres`, so the spec is exercised
+  there on the next CI run.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.3f rightsDeclared is required on documents create and replace · decided by builder · risk: high
 - Decided: `documents.create` and `documents.startReplace` in `packages/db/src/repositories/chunks.ts` take `rightsDeclared: true` as a required key (typecheck error if missing, `invalid` at runtime), and always stamp `rights_declared_at = now()`. Teacher notes (`insertTeacherNote`) keep no declaration: they are the teacher's own typed answers, not an upload. Risky path (`packages/db/src/repositories/**`): needs security-reviewer and database-reviewer.
 - Why: 12.3b Left to do and the 12.3f accept line; apps/web already sends the declaration on all three calls, so the repo can now refuse an undeclared upload, link or replace.

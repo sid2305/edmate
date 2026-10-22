@@ -423,6 +423,7 @@
       "unauthorized": "Please sign in again.",
       "forbidden": "You can't manage packages here.",
       "rate_limited": "Too many requests. Wait a moment, then try again.",
+      "limit_reached": "You already have the most packages allowed.",
       "provider_error": "Something went wrong. Please try again.",
       "style_card_required": "Set up your style card before you make a package.",
       "package_limit": "You already have the most packages allowed.",
