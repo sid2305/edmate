@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (architect draft, 22 Oct 2026, with the lead's answers of 22 Oct 2026 applied). Task 8.2b Phase A (board 8.2d).
+Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer and typescript-reviewer). Task 8.2b Phase A (board 8.2d).
 
 ## Date
 
@@ -21,7 +21,7 @@ Proposed (architect draft, 22 Oct 2026, with the lead's answers of 22 Oct 2026 a
    - Each hop looks the host up once and gets every address. The hop is refused if any address is not public. Otherwise one checked address (the first) is pinned.
    - A transport port (`PinnedTransport`) gets the URL and the pinned address and connects to exactly that address, with no second lookup. In production it is `node:https.request` with a `lookup` that always returns the pinned address (both the single-address and the `all: true` forms), `autoSelectFamily: false` and `agent: false`.
    - TLS SNI and the certificate check use the URL's host name. Certificate checks are never turned off.
-   - An IP-literal host is checked as written and connected to directly.
+   - An IP-literal host is checked as written and connected to directly. It sends no SNI (RFC 6066 forbids an IP address there); the certificate is still checked.
 2. **Refused addresses.** Only public unicast passes.
    - IPv4: 0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.0.2/24, 192.168/16, 198.18/15, 198.51.100/24, 203.0.113/24, and 224/4 and everything above it.
    - Metadata services are covered by these ranges: 169.254.169.254 (AWS, GCP, Azure), 100.100.100.200 (Alibaba), 192.0.0.192 (Oracle), fd00:ec2::254 (AWS IPv6, inside fc00::/7), and `metadata.google.internal` (name denylist).
@@ -33,7 +33,7 @@ Proposed (architect draft, 22 Oct 2026, with the lead's answers of 22 Oct 2026 a
 3. **https on port 443 only.** `http:` is refused. An explicit port other than 443 is refused, so links can't be used to scan ports. A user name or password in the URL is refused. The URL is at most 2048 characters.
 4. **Redirects.** They are followed by hand, at most 3. Every hop goes through rules 1 to 3 again: look up again, check again, pin again. A redirect from https to http, or one with no `Location`, fails.
 5. **Size.** A page is capped at 5 MB, counted on decompressed bytes.
-   - The request asks for `accept-encoding: identity`. If the server compresses anyway (gzip, deflate, br), the transport decompresses it as a stream with `node:zlib`, and the cap counts the output, so a compression bomb stops at 5 MB.
+   - The request asks for `accept-encoding: identity`. If the server compresses anyway (gzip, deflate, br), the transport decompresses it as a stream with `node:zlib`, and the cap counts the output, so a compression bomb stops at 5 MB. `x-gzip` is treated as gzip. After decompressing, the transport drops `content-length` and `content-encoding`, so the fetcher's size and early-end checks see only the decompressed body.
    - Any other encoding is refused.
    - A declared `content-length` over the cap is refused before the body is read.
    - The 20 MB cap for uploaded files is unchanged.
@@ -70,9 +70,10 @@ Proposed (architect draft, 22 Oct 2026, with the lead's answers of 22 Oct 2026 a
   - the operator's own public endpoints are reachable like any other public site;
   - a self-hoster whose internal network uses public IP space is not protected by the range check.
 
-  The deploy guide (M12) should add a network egress rule as a second layer: the worker reaches only public port 443, plus its own database, Redis and object storage.
+  The deploy guide should add a network egress rule as a second layer: the worker reaches only public port 443, plus its own database, Redis and object storage. Tracked as board task 8.2g, before the pilot.
 - Some sites will fail with a fixed reason: pages that need cookies or JavaScript, sites that block bots, http-only sites, other ports, and non-HTML pages.
 - Only the first checked address is tried, with no fallback to another address. A host whose first address is down fails, and it may fail again on retry.
+- The system DNS lookup (`dns.lookup`) can't be cancelled. When the 15 s deadline wins, the fetch gives up, but the lookup keeps a libuv thread busy until the resolver times out. Many slow-DNS links could tie up the worker's small thread pool. A cancellable resolver is a follow-up in 8.2e.
 - A failed link can't be retried in place. The teacher deletes it and adds it again (lead answer Q3).
 - Tests never touch the real internet (rule 4): a fake resolver and fake transport in `packages/ingest`, and a local `node:http` server on 127.0.0.1 for the worker transport.
 - Changing a range, a mode, a limit or the YouTube rule takes an ADR that amends or supersedes this one.

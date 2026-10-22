@@ -76,6 +76,11 @@ Evidence:
 - `docker/env.example` isn't touched. Nothing reads the env var until 8.2e, which documents it with the compose change.
 
 ## Decisions
+### 22 Oct 2026 · 8.2d ADR-0014 accepted; review MEDIUM and LOW findings go to 8.2e · decided by lead · risk: high
+- Decided: ADR-0014 is Accepted, after architect, security-reviewer and typescript-reviewer (all opus) approved with no CRITICAL or HIGH findings. The lead made the ADR wording fixes (no SNI for IP literals, headers dropped after decompressing, x-gzip, 8.2g named, uncancellable DNS noted). The code MEDIUM and LOW findings are fixed in 8.2e before the fetcher runs on the production path: the timer crash in pinnedTransport, the orphaned promise in untilAborted, the exported redactUrl, repeated trailing dots, the cancellable resolver, explicit rejectUnauthorized, one DNS error message, 3fff::/20, retryable DNS errors and the cancel error mask.
+- Why: nothing calls the fetcher in production until 8.2e, so no finding is reachable today, and 8.2e works in the same files.
+- risk: high
+
 ### 22 Oct 2026 · 8.2d Web-link egress policy: pinned address per hop, ADR-0014 · decided by builder · risk: high
 - Decided: The web fetcher resolves each hop once, inside the 15 s deadline. Every answer must be public, and the transport connects only to the first answer (`node:https` with a pinned `lookup`, `agent: false`, `autoSelectFamily: false`, SNI from the host name and none for an IP literal, certificate checks on). Further rules:
   - https on port 443 only, with no userinfo and at most 2048 characters;
@@ -103,4 +108,4 @@ Evidence:
 - Document `EDMATE_WEB_LINK_HOSTS` in `docker/env.example` and `docker/compose.yaml` (`*` for dev).
 - For 8.2f: use `checkWebLinkUrl(...).displayTitle` (host only) as the default title.
 
-Tool calls used: 38
+Tool calls used: 55 (harness count; the builder reported 38)
