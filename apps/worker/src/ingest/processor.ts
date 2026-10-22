@@ -14,6 +14,10 @@
 // "nothing written" as a normal (empty) result and checking the flag afterwards survives that.
 // No status write follows a stale drop: the job that owns the new `storageKey` gets to set it.
 //
+// Task 8.2c (Phase B, 8.2k) adds `vtt`/`srt`: a teacher-exported YouTube caption file. It is read
+// from storage like any other document file (DOCUMENT_KINDS), with no transcriber needed, so a
+// caption job reaches `ready` even when EDMATE_INGEST_EMBEDDINGS=off leaves no `gateway.transcriber`.
+//
 // Task 8.2e adds two things:
 // - `web` jobs (a teacher's web link, ADR-0014). The URL is in the job payload only; the row's
 //   `storageKey` is a `.link` token with no stored object. The link is re-checked here
@@ -74,7 +78,7 @@ export interface IngestProcessorDeps {
 /** How long a video/audio signed GET URL stays valid: long enough for Whisper to fetch it. */
 export const SIGNED_URL_TTL_SECONDS = 600;
 
-const DOCUMENT_KINDS = new Set(['pdf', 'docx', 'pptx', 'markdown']);
+const DOCUMENT_KINDS = new Set(['pdf', 'docx', 'pptx', 'markdown', 'vtt', 'srt']);
 const RECORDING_KINDS = new Set(['video', 'audio']);
 
 /** A RepositoryError a retry can't fix becomes a PermanentJobError; `failed` (db down) retries. */
@@ -144,7 +148,7 @@ async function buildSource(
   storage: StorageClient,
   storageKey: string,
   sourceTitle: string,
-  fileKind: 'pdf' | 'docx' | 'pptx' | 'markdown' | 'video' | 'audio',
+  fileKind: 'pdf' | 'docx' | 'pptx' | 'markdown' | 'video' | 'audio' | 'vtt' | 'srt',
   mimeType: string | undefined,
 ): Promise<DocumentInput | VideoSource> {
   if (DOCUMENT_KINDS.has(fileKind)) {
@@ -158,7 +162,11 @@ async function buildSource(
       }
       throw error;
     }
-    return { kind: fileKind as 'pdf' | 'docx' | 'pptx' | 'markdown', bytes, sourceTitle };
+    return {
+      kind: fileKind as 'pdf' | 'docx' | 'pptx' | 'markdown' | 'vtt' | 'srt',
+      bytes,
+      sourceTitle,
+    };
   }
   // fileKind is 'video' | 'audio'; the schema requires mimeType to be set exactly then.
   const url = await storage.getSignedDownloadUrl(storageKey, SIGNED_URL_TTL_SECONDS);

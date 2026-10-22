@@ -62,6 +62,44 @@ export async function homeChatLinks(
 }
 
 /**
+ * Task 9.6e: which agents /home offers a "paused" plan link for -- the complement of both
+ * `liveChatAgents` and `startableAgents`: a paused subscription with this teacher. A paused
+ * subscription keeps its own chat (human answer B-49), so this list is additional, not instead
+ * of the chat link's set, and links to the plan page (`/learn/<id>/plan`), not chat.
+ */
+export async function pausedAgents(
+  deps: LiveChatDeps,
+  principal: Principal,
+  candidates: readonly string[],
+): Promise<string[]> {
+  const out: string[] = [];
+  for (const agentId of candidates) {
+    const owner = await deps.agents.owner({ agentId });
+    if (owner === null) continue;
+    const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
+    const sub = await deps.subscriptions.findLive(scope);
+    if (sub !== null && sub.status === 'paused') out.push(agentId);
+  }
+  return out;
+}
+
+/** The /home "paused" links; a failure shows none and logs the error name only. */
+export async function homePausedLinks(
+  open: () => LiveChatDeps,
+  principal: Principal,
+  candidates: readonly string[],
+  log: ServerLog,
+): Promise<string[]> {
+  if (candidates.length === 0) return [];
+  try {
+    return await pausedAgents(open(), principal, candidates);
+  } catch (error) {
+    log.error('home.paused_links_failed', { error: errorName(error) });
+    return [];
+  }
+}
+
+/**
  * Task 9.3 Phase C: which agents /home offers a "start a package" link for -- the same candidate
  * list as the chat links, but the complement: a live agent the student has never subscribed to,
  * or whose subscription has ended. A *paused* subscription is neither a chat link nor a start

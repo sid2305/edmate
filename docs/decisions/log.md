@@ -10,6 +10,93 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3b countUpheld reads takedowns for the teacher's own content (risky path, security-reviewer) · decided by builder · risk: high
+- Decided: `takedowns.countUpheld(scope)` in `packages/db/src/repositories/takedowns.ts` counts active `copyright` takedowns on the teacher's own documents or agents, teacher-scoped and read only, with no lock and no caller yet; `documents.create` / `startReplace` in `chunks.ts` now stamp or clear `rights_declared_at`. Reviewer required: security-reviewer.
+- Why: the 12.3 plan's lead answers (12.2's literals, count only); `packages/db/src/repositories/**` is a risky path.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.3b the takedown's audit row also proves ownership · decided by builder · risk: medium
+- Decided: a takedown counts for a teacher when its target is theirs now or when its own `takedown.create` audit row (same target, `after.takedown` = the takedown id) names them, so deleting a taken-down document does not clear the count.
+- Why: `documents.delete` removes the document row, so a join on the target alone would let a teacher erase a strike; the audit row is written in the same transaction as the takedown and is never deleted. No migration needed.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.3b rightsDeclared is optional until 12.3c · decided by lead · risk: low
+- Decided: `documents.create` / `startReplace` accept `rightsDeclared: true` as optional: true stamps `rights_declared_at = now()`; absent leaves it null on create and clears it on replace; `false` is `invalid`. 12.3c makes it required for create, web link and replace together, with the routes.
+- Why: requiring it now would break three production routes in `apps/web/src/studio/routes.ts`; web links will need the declaration too (lead answer, option 2).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e placeholder condition widens to all three lists · decided by builder · risk: low
+- Decided: `/home`'s empty-state placeholder (`t('placeholder')`) now shows only when `chats`,
+  `startable` and `paused` are all empty, rather than just the first two.
+- Why: the plan's Phase E tests say "the placeholder shows only when all three lists are empty",
+  so a student with only a paused plan (no active chat, nothing startable) must see the Paused
+  list instead of the "come back soon" placeholder.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e separate labels for the paused-page link vs. the active-page link · decided by builder · risk: low
+- Decided: the compare page uses `packages.managePlan` ("Manage plan") for the paused branch and
+  `packages.changePlan` ("Change plan") for the active branch, rather than one shared label.
+- Why: both link to the same `/learn/<id>/plan` route, but the two states call for different
+  wording -- a paused plan is being managed (resumed, cancelled), an active one is being changed
+  (upgrade/downgrade). Keeping them distinct also matches /home's own `pausedLink` ("Manage
+  plan") label for the paused list, so the same state always reads the same way across the app.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e `liveChatAgents`'s existing paused exclusion is left as is · decided by builder · risk: low
+- Decided: `liveChatAgents` (the function behind `homeChatLinks`, which decides the /home chat
+  list) still excludes `paused` from its `NOT_LIVE` set, so a paused subscription gets no chat
+  link there; the new paused list is additional, built from a separate `pausedAgents` function.
+- Why: human answer B-49 ("a paused subscription keeps its old chat") is about an already-open
+  chat *session* continuing to work, not about `/home` offering a fresh chat link for a paused
+  plan -- `entitle` already refuses turns on a paused subscription
+  (`packages/harness/src/access/entitlement.ts`, out of this phase's bounds), so a chat link
+  here would only lead to a dead end. The Phase E brief and plan only ask for a *new* paused
+  entry point (the plan page), not a change to the existing chat-link set, and the pre-existing
+  `liveChats.test.ts` case ("paused is neither chat nor start -- 9.6") already pins this
+  behaviour; it is left green, not altered.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6e tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 67 tool calls against the brief's budget of 50.
+- Why: the extra calls went on page tests, an axe check and a merge of main; both reviews approved with no blocking findings.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.2k vtt/srt are file kinds with file-job retries and no mimeType · decided by builder · risk: low
+- Decided: `IngestFileKindSchema` gains `'vtt' | 'srt'`; the schema's existing `mimeType`/`url`
+  refines (which key off `fileKind === 'video' | 'audio'` and `fileKind === 'web'` respectively)
+  already refuse both fields on a caption job with no further change, and `enqueueIngest`'s existing
+  `data.fileKind === 'web'` branch already left every other kind, captions included, on the default
+  `RETRY` (5 attempts) options.
+- Why: matches the plan (docs/tasks/8.2c/plan.md, Phase B) exactly: "Either one with a `mimeType` or
+  a `url` is refused" and "A caption job keeps the file-job attempts (5), not
+  `WEB_INGEST_ATTEMPTS`" were both already true of the existing code once the enum included the new
+  kinds, so no logic beyond the enum and its comment was needed.
+- risk: low (an additive enum value plus tests; no change to the refuse/accept logic, no change to
+  `failWith` or retry semantics for any existing kind).
+
+---
+
+### 22 Oct 2026 · 8.2k tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 79 tool calls against the brief's budget of 60.
+- Why: the extra calls went on the throwaway Postgres and Redis integration run and a merge of main; the diff is small and both reviews approved.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.4d risky paths touched · decided by builder · risk: high
 - Decided: this PR touches `apps/web/app/staff/**` and `apps/web/app/api/staff/**` (new
   `staff/agents` page and client; `staff/page.tsx` nav edit). Per the plan, `security-reviewer`
