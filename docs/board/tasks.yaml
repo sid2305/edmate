@@ -5372,6 +5372,19 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.2g
+  milestone: M12
+  title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no
+    longer open", and the agent takedown button hides when that agent is already taken down; takedown rows show target, category and date, and each Lift has an aria-label naming its target; reported text
+    renders as plain text with no live links (test with an embedded markdown link); tests for poll clearInterval on unmount and the no-overlap guard; refresh catches a rejecting loader; ICU plural and no
+    count in the fallback view; a separate takedown confirm text; drop the agentId cast; reuse REPORT_CATEGORIES; a poll clears only loadFailed; format createdAt'
+  accept: each item has a test that fails without it; web typecheck, lint and test green.
+  deps:
+  - 12.2e
+  risk: medium
+  status: todo
+  branch: null
+  model: null
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
@@ -5840,9 +5853,28 @@ tasks:
   deps:
   - 12.4d
   risk: low
-  status: running
+  status: done
   branch: m12/12.4f-staff-agents-polish
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2i
   milestone: M13
   title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
@@ -5851,9 +5883,29 @@ tasks:
   deps:
   - 7.2g
   risk: low
-  status: running
+  status: done
   branch: m7/7.2i-leak-case-fixes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 46
+    tokens_out: 160
+    cache_read_tokens: 658473
+    wall_time_seconds: 93
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        HIGH: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.3e
   milestone: M13
   title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of
@@ -5872,9 +5924,28 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: running
+  status: done
   branch: m11/11.4a-recording-link
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet+opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 11.4b
   milestone: M11
   title: Studio API for class recordings, and media the worker can't split refused at upload (11.4 Phase B)
@@ -5937,7 +6008,7 @@ tasks:
 - id: 11.4e
   milestone: M13
   title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
-  accept: 'Both tests fail with the cap or the join check removed and pass with them in place.'
+  accept: Both tests fail with the cap or the join check removed and pass with them in place.
   deps:
   - 11.4a
   risk: low

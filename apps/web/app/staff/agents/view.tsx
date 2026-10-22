@@ -6,7 +6,7 @@
 // (lessons: "UI state and server replies: trust neither, reset everything").
 import type { ErrorCode } from '@edmate/contracts';
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AgentRow } from './agent-row';
 import {
   loadAgents as defaultLoadAgents,
@@ -54,6 +54,18 @@ export function StaffAgentsView({
   const replace = (agentId: string, patch: Partial<AgentView>) =>
     setAgents((list) => (list ?? []).map((a) => (a.agentId === agentId ? { ...a, ...patch } : a)));
 
+  // Keyboard focus after a confirmed Approve/Revoke: an approval can change the row's key
+  // (approvedAt/regulatedSubject), remounting `AgentRow` and losing any local ref. Restore focus
+  // here instead, by the action button's stable DOM id, once this agent's action is no longer busy.
+  const focusAfterSettle = useRef<string | null>(null);
+  useEffect(() => {
+    const agentId = focusAfterSettle.current;
+    if (agentId !== null && !(busy !== null && busy.kind !== 'reload' && busy.agentId === agentId)) {
+      document.getElementById(`agent-action-${agentId}`)?.focus();
+      focusAfterSettle.current = null;
+    }
+  }, [busy]);
+
   const onSetSubject = async (agent: AgentView, subject: 'investing' | 'health' | 'law' | null) => {
     setError(null);
     setNotice(false);
@@ -76,6 +88,7 @@ export function StaffAgentsView({
   const onSetApproval = async (agent: AgentView, approved: boolean) => {
     setError(null);
     setNotice(false);
+    focusAfterSettle.current = agent.agentId;
     setBusy({ kind: 'approval', agentId: agent.agentId });
     try {
       const result = await setApproval({ agentId: agent.agentId, approved });
@@ -83,10 +96,24 @@ export function StaffAgentsView({
         setError(errorKey(result.code));
         return;
       }
-      replace(agent.agentId, {
-        approvedAt: approved ? new Date().toISOString() : null,
-        approvedBy: approved ? agent.approvedBy : null,
-      });
+      // The POST reply carries no approvedBy (never trust the pre-action prop: it's the
+      // previous approver, or stale after another staff member's change). Reload to read the
+      // real value from the server; if that reload itself fails, fall back to a conservative
+      // guess that never claims a `by`.
+      const fresh = await loadAgents();
+      const freshAgent = fresh.ok ? fresh.agents.find((a) => a.agentId === agent.agentId) : undefined;
+      if (freshAgent) {
+        replace(agent.agentId, {
+          approvedAt: freshAgent.approvedAt,
+          approvedBy: freshAgent.approvedBy,
+          regulatedSubject: freshAgent.regulatedSubject,
+        });
+      } else {
+        replace(agent.agentId, {
+          approvedAt: approved ? new Date().toISOString() : null,
+          approvedBy: null,
+        });
+      }
       setNotice(true);
     } catch {
       setError('generic');
