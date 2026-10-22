@@ -173,6 +173,43 @@
       "not_started": "not started"
     }
   },
+  "plan": {
+    "title": "Your plan",
+    "navLink": "Plan",
+    "noPaymentNotice": "While Edmate is free to try, changes take effect right away.",
+    "currentTitle": "Your current package",
+    "periodEnd": "Renews or ends {date}",
+    "status": {
+      "trial": "Trial",
+      "active": "Active",
+      "past_due": "Past due",
+      "paused": "Paused"
+    },
+    "otherPackagesTitle": "Other packages with this teacher",
+    "actions": {
+      "upgrade": "Upgrade",
+      "downgrade": "Downgrade",
+      "switch": "Switch"
+    },
+    "changing": "Changing…",
+    "manageTitle": "Manage your plan",
+    "pauseButton": "Pause",
+    "pausing": "Pausing…",
+    "resumeButton": "Resume",
+    "resuming": "Resuming…",
+    "pausedByEdmate": "This plan was paused by Edmate and can't be resumed here.",
+    "cancelTitle": "Cancel your plan",
+    "cancelButton": "Cancel",
+    "cancelConfirmIntro": "Cancelling ends your access to this teacher's agent. Download your notes and progress first if you want to keep them.",
+    "exportJsonLink": "Download the complete JSON export",
+    "exportPdfLink": "Download your notes (PDF)",
+    "cancelConfirmButton": "Yes, cancel my plan",
+    "cancelling": "Cancelling…",
+    "cancelKeepButton": "Keep my plan",
+    "noSubscription": "You don't have a package with this teacher yet.",
+    "choosePackageLink": "Choose a package",
+    "actionError": "Something went wrong. Try again."
+  },
   "uploads": {
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
