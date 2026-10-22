@@ -10,6 +10,29 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.0d Lead accepts the small budget overrun · decided by lead · risk: low
+- Decided: the builder used 49 tool calls against a 40 budget (stop-at 60); the lead accepts it.
+- Why: finding the cause needed a load reproduction and a 20-run loop. The fix is test-only and one reviewer approved it with no findings.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0d cap the test clock's jump instead of raising a timeout · decided by builder · risk: low
+- Decided: Fix the SSE test flake by capping how far `apps/web/test/turn-backend.ts`'s
+  `deadlineSafeClock.now()` may jump between two calls (20 ms), rather than raising any vitest
+  timeout, widening any harness step budget, or weakening an assertion.
+- Why: Two spots in the harness (`runner.ts`'s preGuard remaining-budget subtraction and
+  `postGuard.ts`'s budget subtraction) compute a step's remaining time by subtracting two
+  `clock.now()` reads, with no cancel token to protect them the way `runWithTimeout`'s race
+  protects every other deadline. On a cold, CPU-starved CI worker, pure scheduling delay between
+  those two reads — not real in-process slowness — can make the subtraction go negative, timing a
+  guard step out before it even runs and failing the turn closed with no tokens. Capping the test
+  clock's jump keeps timestamps real for normal (fast) runs but stops one scheduling stall from
+  reading as hundreds of ms of step latency, without touching `packages/harness` production code.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 7.2c Lead signs the 36 new leak cases and accepts the budget overrun · decided by lead · risk: medium
 - Decided: the lead signs all 36 new leak cases (`reviewed_by: lead`, per the MVP-first policy) after fix round 1. Cases read by the lead: 36/36. The run used 160 tool calls against a ~90 budget (build 77, fix round 1 53 against a 25 cap, fix round 2 30); the lead accepts the overrun. Fix round 2 was needed because fix round 1 reported green while 2 tests failed in CI: one bare key was in the student's own MCQ turn, and the bare "27" also matched the bank answer's unrelated "3 27".
 - Why: fix round 1 closed both HIGH findings (the paid-only loops case now runs on `paid`; 31 cases ban the bare answer key as well as the scripted phrase, 5 skip it for the listed reasons). The fixer overran because it checked every case against its question-bank answer, which was the point of the fix. The MEDIUM "-deva" script finding and the older 44 cases go to 7.2g.

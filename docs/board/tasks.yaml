@@ -3157,9 +3157,28 @@ tasks:
   deps:
   - '9.4'
   risk: normal
-  status: review
+  status: done
   branch: m9/9.0d-sse-test-flake
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 40
+    tokens_out: 389
+    cache_read_tokens: 394242
+    wall_time_seconds: 59
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.4c
   milestone: M13
   title: '8.4a follow-ups (review LOW): meter teacher studio model calls (style-card drafting, ingest drafting) with a teacher-side usage scope; strip role-play and rule-override phrases from style-card
