@@ -3008,6 +3008,17 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.3c
+  milestone: M13
+  title: '8.3a review follow-ups: an outline edit that merges away a studied topic moves its evidence_events to the surviving topic instead of being refused; batch replaceOutline''s per-module and per-topic
+    writes (jsonb_to_recordset); expected outlineVersion on save so a stale save is refused; teacher-deletion handling for topic_chunks.teacher_id; note the advisory-lock hash collision'
+  accept: the follow-ups are done, with tests.
+  deps:
+  - 8.3a
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
