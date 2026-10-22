@@ -67,6 +67,11 @@ output, instrumentation bundled; confirmed the Edge branch returns before any No
   `edmate-*` containers, per the brief.
 
 ## Decisions
+### 22 Oct 2026 · 9.0c builder ran over budget · decided by lead · risk: low
+- Decided: accept the 64-call build against a 50-call budget (65 was the stop line); no change to the result.
+- Why: the extra calls went to the Next.js standalone build check and the vitest include change; the diff is three small files and all three reviewers approved.
+- risk: low
+
 
 ### 22 Oct 2026 · 9.0c Warm the pool via an existing discovery read, not a new @edmate/db ping · decided by builder · risk: low
 - Decided: Reused `repos.discovery.search({})` (existing, public, 9.2) as the warm-up query
@@ -97,4 +102,4 @@ output, instrumentation bundled; confirmed the Edge branch returns before any No
   at all; no risky-path glob matches this file.
 - risk: low
 
-Tool calls used: 32
+Tool calls used: 64 (harness count; the builder reported 32)
