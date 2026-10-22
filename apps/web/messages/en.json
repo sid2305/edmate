@@ -22,7 +22,8 @@
     "placeholder": "Teacher studio — coming soon.",
     "nav": "Studio",
     "uploadsLink": "Uploads",
-    "onboardingLink": "Your profile"
+    "onboardingLink": "Your profile",
+    "styleCardLink": "Teaching style"
   },
   "onboarding": {
     "title": "Your profile",
@@ -155,6 +156,45 @@
       "validation": "The file couldn't be read.",
       "provider_error": "Processing failed. Try again, or replace the file.",
       "other": "Processing failed. Replace the file to try again."
+    }
+  },
+  "styleCard": {
+    "title": "Your teaching style",
+    "intro": "Tell the agent how you teach. It uses this on every reply to your students.",
+    "interviewTitle": "Style interview",
+    "interviewHint": "Answer any that fit; leave the rest blank.",
+    "questions": {
+      "tone": "What tone do you use with students?",
+      "examples": "What kind of examples do you like to use?",
+      "strictness": "How strict are you about method, working and notation?",
+      "warnings": "What do you warn students about most often?",
+      "phrasing": "Words or phrasing you always use, or always avoid?",
+      "stuckStudent": "What do you do when a student is stuck?",
+      "howMuchToTell": "How much do you tell versus ask the student to work out?",
+      "favoritePhrase": "A phrase you're known for?",
+      "pacing": "How fast do you move, and when do you slow down?",
+      "wrapUp": "How do you end an explanation or check understanding?"
+    },
+    "mistakesLabel": "Common mistakes",
+    "mistakesHint": "One per line.",
+    "sampleLabel": "Sample explanation {n}",
+    "draftButton": "Generate draft",
+    "drafting": "Drafting…",
+    "editTitle": "Preview and edit",
+    "noCard": "No style card yet. Generate a draft below, or write one directly.",
+    "currentVersion": "Current version: {version}",
+    "textLabel": "Style card text",
+    "tagsLabel": "Mistake tags",
+    "tagsHint": "Comma-separated.",
+    "saveButton": "Save",
+    "saving": "Saving…",
+    "errors": {
+      "validation": "Check the text and try again.",
+      "input_too_large": "That's too long. Please shorten it.",
+      "forbidden": "This style card is not yours to edit.",
+      "not_found": "That style card was not found.",
+      "unauthorized": "Please sign in again.",
+      "provider_error": "Something went wrong. Please try again."
     }
   },
   "packages": {
