@@ -26,12 +26,18 @@ export interface GateSideEffects {
   safetyEvents: number;
   teacherQuestions: number;
   traces: number;
-  /** Background reports the runner logged (all but guard detections fail their case; agent.ts). */
+  /** Every background report the runner logged, whatever its kind (`log.backgroundFailure`).
+   * agent.ts fails the case on all but a `LockedLeakDetected` one (counted separately below). */
   backgroundFailures: number;
+  /** `LockedLeakDetected` background reports: the locked-stream guard withheld text and the
+   * reply was replaced. Still counted in `backgroundFailures` too (every report is logged
+   * there); this is the one agent.ts never fails a case over, surfaced on its own for a run
+   * summary. */
+  lockedLeaks: number;
 }
 
 export function gateSideEffects(): GateSideEffects {
-  return { alerts: 0, safetyEvents: 0, teacherQuestions: 0, traces: 0, backgroundFailures: 0 };
+  return { alerts: 0, safetyEvents: 0, teacherQuestions: 0, traces: 0, backgroundFailures: 0, lockedLeaks: 0 };
 }
 
 export interface GateUsageTotals {
@@ -49,6 +55,11 @@ export interface GateUsageTotals {
  * two `record` contexts differ, and the gate ignores both: it only sums).
  */
 export interface GateUsageMeter {
+  /**
+   * `ctx` is `unknown` only so this shape fits both callers' own, unrelated context types (the
+   * pipeline's `UsageMeter` and the metered router's `MeterSink`, see the type's own doc comment
+   * above); the gate ignores `ctx` either way, it never widens or narrows it (8.7b review LOW).
+   */
   record(u: Usage, ctx?: unknown): Promise<void>;
   recordUnmetered(u: UnmeteredUsage): Promise<void>;
   totals(): GateUsageTotals;

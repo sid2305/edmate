@@ -20,6 +20,7 @@ import {
   defaultSteps,
   hasDistressKeyword,
   isBlockReply,
+  LockedLeakDetected,
   runTurn,
   type Clock,
   type FallbackReplies,
@@ -28,6 +29,7 @@ import {
   type PipelineDeps,
   type PriceUsage,
   type PromptPackLibrary,
+  type TurnRunResult,
 } from '@edmate/harness';
 import { gateTurnConfigStore } from './configStore.js';
 import type { GateBasis } from './input.js';
@@ -109,7 +111,19 @@ export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<Ev
         else if (event.code === 'guard_blocked') failed = 'guard_blocked (pre-guard failed, retryable)';
         else failed = event.code;
         break;
+      // Structured events the gate doesn't score: a hint rung, a locked notice (the reply text
+      // already names it), an opened teacher question (no_access/locked handles the case) or a
+      // skill payload (practice items, interview state), plus `done` (usage goes through
+      // `GateUsageMeter`, not this reply). Exhaustive over `TurnEvent.type`, so a new event kind
+      // fails typecheck here instead of silently falling through (8.7b review MEDIUM).
+      case 'hint_rung':
+      case 'locked':
+      case 'teacher_question':
+      case 'skill':
+      case 'done':
+        break;
       default:
+        event satisfies never;
         break;
     }
   }
@@ -124,7 +138,7 @@ export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<Ev
 
 /** A background report that records a guard withholding text, not a failed record. */
 export function isGuardDetection(error: unknown): boolean {
-  return error instanceof Error && error.name === 'LockedLeakDetected';
+  return error instanceof LockedLeakDetected;
 }
 
 /** The gate agent for one pinned candidate package. */
@@ -144,6 +158,16 @@ export function createGateAgent(deps: GateAgentDeps, basis: GateBasis, pkg: Pack
   });
   return {
     async reply(input: EvalTurnInput): Promise<EvalAgentReply> {
+      // A case naming a persona (3.11e): `TurnInput` has no persona field, only `skill` and a
+      // `skill_action` start's `skillPayload`, and the gate runs one fresh session per `reply`
+      // call (no help state carried between turns of the same case), so a persona turn can never
+      // be started or resumed here. Fail the case loudly instead of silently running it as a
+      // plain message (8.7b review MEDIUM; lessons: a silent skip looks like a pass).
+      if (input.persona !== undefined) {
+        throw new Error(
+          `gate: case ${input.caseId} turn ${input.turnIndex} names persona ${JSON.stringify(input.persona)}, but the gate can't start or resume a persona turn (no TurnInput field for it, and no help state across turns)`,
+        );
+      }
       // One case turn = one fresh session in memory; nothing is kept after the reply.
       const ports = gateCasePorts(deps.effects);
       const sessionId = `gate_${randomUUID()}`;
@@ -196,16 +220,29 @@ export function createGateAgent(deps: GateAgentDeps, basis: GateBasis, pkg: Pack
           text: input.student,
           lang: 'en',
           clientTs: new Date().toISOString(),
+          // The turn's skill (3.11e): the pipeline reads this straight off `TurnInput.skill`
+          // (`selectSkill`), so a feedback or other named-skill case is scored in that skill,
+          // not as a plain message (8.7b review MEDIUM).
+          ...(input.skill === undefined ? {} : { skill: input.skill }),
         },
         { deps: pipeline, steps: defaultSteps },
       );
-      const reply = await collectReply(run.events);
-      const finished = await run.finished;
+      let reply: EvalAgentReply;
+      let finished!: TurnRunResult;
+      try {
+        reply = await collectReply(run.events);
+      } finally {
+        // `run.finished` never rejects (runner.ts), but `collectReply` can throw mid-stream (an
+        // `error` event); await it anyway so the turn's background work is always drained, never
+        // left pending when the case fails early (8.7b review LOW).
+        finished = await run.finished;
+      }
       // A background failure (meter, trace, alert delivery, a runner bug) fails the case: its
       // usage or its record may be missing, so the case cannot count as passed. (The runner's
       // `log.backgroundFailure` already counted each one in `effects`.)
       // One exception: `LockedLeakDetected` is the locked-stream guard doing its job (the locked
       // text was withheld and the reply replaced); the reply itself is what the case scores.
+      deps.effects.lockedLeaks += finished.background.filter((b) => isGuardDetection(b.error)).length;
       const failures = finished.background.filter((b) => !isGuardDetection(b.error));
       if (failures.length > 0) {
         const tasks = [...new Set(failures.map((b) => b.task))].join(',');

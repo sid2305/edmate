@@ -68,12 +68,19 @@ async function seedPriorTurns(
  * *final reply text* via `isBlockReply`, not from the event stream: `true` when the finished
  * text is exactly one of those fixed replies, `false` otherwise. The `error: guard_blocked`
  * event is still honoured first (a block with no code, the runner's generic fallback) in case it
- * ever fires; it is never overridden by the text check below. */
+ * ever fires; it is never overridden by the text check below.
+ *
+ * A `guard_blocked` event itself splits two ways (pipeline/policies.ts, same fix as the gate's
+ * `collectReply`, apps/worker/src/gate/agent.ts, 8.7b fix round): a guard that decided to block
+ * (`PRE_GUARD_BLOCKED`, `retryable: false`) is a real block, but a pre-guard chain that failed
+ * (`PRE_GUARD_FAILED`, `retryable: true`: classifier outage, timeout, bad output) never got a
+ * verdict, so the case fails instead of scoring it blocked. */
 async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgentReply> {
   let text = '';
   let sources: SourceRef[] | undefined;
   let blocked: boolean | undefined;
   let escalated: boolean | undefined;
+  let failed: string | undefined;
   for await (const event of events) {
     switch (event.type) {
       case 'token':
@@ -89,12 +96,16 @@ async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgent
         if (event.level === 'alert') escalated = true;
         break;
       case 'error':
-        if (event.code === 'guard_blocked') blocked = true;
+        if (event.code === 'guard_blocked' && !event.retryable) blocked = true;
+        else if (event.code === 'guard_blocked') {
+          failed = 'guard_blocked (pre-guard failed, retryable)';
+        }
         break;
       default:
         break;
     }
   }
+  if (failed !== undefined) throw new Error(`live eval turn failed: ${failed}`);
   return {
     text,
     ...(sources === undefined ? {} : { sources }),
