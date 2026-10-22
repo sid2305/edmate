@@ -12,6 +12,7 @@ import type { Translate } from '../../../src/discovery/format';
 import { publicNav } from '../../../src/discovery/nav';
 import { PackageList } from '../../../src/discovery/PackageList';
 import { ScorecardPanel } from '../../../src/discovery/ScorecardPanel';
+import { toPublicScorecard, type PublicScorecard } from '../../../src/discovery/scorecard';
 import { AppShell } from '../../../src/ui/AppShell';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,28 @@ function validSlug(slug: string): boolean {
 const teacherBySlug = cache(async (slug: string) =>
   serverDatabase().repos.discovery.teacherBySlug({ slug }),
 );
+
+/**
+ * The stored scorecard for the teacher's (one, MVP) live agent, as the public projection. A
+ * missing agent, a draft agent, or no passed gate run all come back `null` from
+ * `publicScorecard` itself (it joins on `agents.status = 'live'` and a verified teacher), so the
+ * page never special-cases them. A read failure never 500s the page: it logs only the error name
+ * and renders "no published scorecard yet" (plan Phase E).
+ */
+async function teacherScorecard(
+  repos: ReturnType<typeof serverDatabase>['repos'],
+  agentIds: string[],
+): Promise<PublicScorecard | null> {
+  const agentId = agentIds[0];
+  if (agentId === undefined) return null;
+  try {
+    const stored = await repos.publish.publicScorecard({ agentId });
+    return stored === null ? null : toPublicScorecard(stored);
+  } catch (err) {
+    console.error('teacher_page.scorecard_read_failed', err instanceof Error ? err.name : 'unknown');
+    return null;
+  }
+}
 
 function describe(bio: string): string {
   const flat = bio.replace(/\s+/g, ' ').trim();
@@ -72,6 +95,7 @@ export default async function TeacherPage({ params }: TeacherPageProps) {
     })),
   );
   const agents = offers.filter((a) => a.packages.length > 0);
+  const scorecard = await teacherScorecard(repos, teacher.agentIds);
 
   const shell = await getTranslations('shell');
   const discovery = await getTranslations('discovery');
@@ -111,8 +135,7 @@ export default async function TeacherPage({ params }: TeacherPageProps) {
           ))
         )}
       </section>
-      {/* No stored scorecard until 8.7 (plan Q1): the honest "no published scorecard yet" state. */}
-      <ScorecardPanel scorecard={null} t={t} />
+      <ScorecardPanel scorecard={scorecard} t={t} />
     </AppShell>
   );
 }

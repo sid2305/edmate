@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   currentPrincipal: vi.fn(),
   teacherBySlug: vi.fn(),
   liveForAgent: vi.fn(),
+  publicScorecard: vi.fn(),
   requireRole: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error('NEXT_NOT_FOUND');
@@ -24,6 +25,7 @@ vi.mock('../../../src/auth', () => ({
     repos: {
       discovery: { teacherBySlug: state.teacherBySlug },
       packageVersions: { liveForAgent: state.liveForAgent },
+      publish: { publicScorecard: state.publicScorecard },
     },
   }),
 }));
@@ -82,11 +84,21 @@ beforeAll(() => {
   expect.extend(toHaveNoViolations);
 });
 
+const STORED_SCORECARD = {
+  publishedAt: '2026-10-01T00:00:00.000Z',
+  categories: [
+    { key: 'hints_before_answers', measured: true, total: 10, passed: 9, percent: 90, pass: true, byOrigin: [] },
+    { key: 'locked_content', measured: true, total: 5, passed: 5, percent: 100, pass: true, byOrigin: [] },
+    { key: 'accuracy', measured: false, total: 0, passed: 0, percent: null, pass: false, byOrigin: [] },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   state.currentPrincipal.mockResolvedValue(null);
   state.teacherBySlug.mockResolvedValue(TEACHER);
   state.liveForAgent.mockImplementation(async ({ agentId }: { agentId: string }) => OFFERS[agentId] ?? []);
+  state.publicScorecard.mockResolvedValue(null);
 });
 
 function page(slug = 'ada-lovelace') {
@@ -146,10 +158,38 @@ describe('/teachers/[slug] page', () => {
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/packages/agent-1']);
   });
 
-  it('shows the "no published scorecard yet" panel (no stored scorecard until 8.7)', async () => {
+  it('shows the "no published scorecard yet" panel when publicScorecard returns null', async () => {
     render(await page());
+    expect(state.publicScorecard).toHaveBeenCalledWith({ agentId: 'agent-1' });
     expect(screen.getByRole('heading', { name: 'Teaching scorecard' })).toBeInTheDocument();
     expect(screen.getByText('No published scorecard yet.')).toBeInTheDocument();
+  });
+
+  it('shows the stored scorecard through toPublicScorecard when publicScorecard returns one', async () => {
+    state.publicScorecard.mockResolvedValue(STORED_SCORECARD);
+    render(await page());
+    expect(screen.getByText('90% of checks passed')).toBeInTheDocument();
+    expect(screen.getByText('100% of checks passed')).toBeInTheDocument();
+    expect(screen.getByText('Not measured yet')).toBeInTheDocument();
+    expect(screen.queryByText('No published scorecard yet.')).not.toBeInTheDocument();
+  });
+
+  it('never renders a scorecard for a draft (not live) agent -- publicScorecard returns null', async () => {
+    // publicScorecard itself filters on agents.status = 'live'; a draft agent's run never
+    // qualifies, so the repository returns null and the loader shows "no scorecard yet".
+    state.publicScorecard.mockResolvedValue(null);
+    render(await page());
+    expect(screen.getByText('No published scorecard yet.')).toBeInTheDocument();
+  });
+
+  it('shows no scorecard (not a 500) when the scorecard read fails, logging only the error name', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    state.publicScorecard.mockRejectedValue(new Error('scorecard query failed: secret detail'));
+    render(await page());
+    expect(screen.getByText('No published scorecard yet.')).toBeInTheDocument();
+    const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+    expect(logged).not.toContain('secret detail');
+    errorSpy.mockRestore();
   });
 
   it('propagates a repository error instead of rendering a partial page', async () => {
