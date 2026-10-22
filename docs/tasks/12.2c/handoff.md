@@ -82,13 +82,18 @@ that message after a successful send and shows "Thanks, our team will review thi
   export) rather than leave the duplication silent.
 - risk: low (apps/web/src/chat/**, not a risky path).
 
+### 22 Oct 2026 · 12.2c tool-call budget overrun accepted · decided by lead · risk: low
+- Decided: accept 127 build calls and 61 fix calls against the brief's 70 for this phase. The plan's whole-task cap of 350 still holds.
+- Why: the phase added a new route, a client and a ChatView change with axe and remount tests. The reviewers found one HIGH, and one fix round closed it. Splitting the work further would have cost more than it saved.
+- risk: low
+
 ## Left to do
 None for this phase. Follow-ups already tracked in the parent plan (12.2 Q7 teacher badge, 12.2f
 trust-inbox paging) are unaffected by this slice.
 
 Status: DONE
 
-Tool calls used: 75
+Tool calls used: 127 (harness count; the builder reported 75)
 
 ## Fix round (22 Oct 2026)
 
@@ -123,4 +128,4 @@ Review findings (`findings`, HIGH + LOW) fixed; nothing else touched.
 Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks green
 (typecheck, lint, test). `python3 .githooks/secret-scan.py --all` — clean, no output.
 
-Fix tool calls used: 26
+Fix tool calls used: 61 (harness count; the fixer reported 26)
