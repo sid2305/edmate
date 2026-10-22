@@ -2286,7 +2286,7 @@ tasks:
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
     both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
-    cause'
+    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -4295,9 +4295,31 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: running
+  status: done
   branch: m9/9.6c-plan-changes
-  model: plan:sonnet build:sonnet
+  model: build:sonnet review:opus+sonnet
+  metrics:
+    tool_calls: 59
+    tokens_in: 188
+    tokens_out: 725
+    cache_read_tokens: 4241904
+    wall_time_seconds: 347
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 9
+      by_severity:
+        MEDIUM: 3
+        LOW: 6
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 9
+        wontfix: 0
+    human_questions: 2
 - id: 9.6d
   milestone: M9
   title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
@@ -4414,9 +4436,30 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: running
+  status: done
   branch: m11/11.1a-live-classes-repo
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 49
+    tokens_in: 166
+    tokens_out: 853
+    cache_read_tokens: 2999616
+    wall_time_seconds: 196
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.1b
   milestone: M11
   title: 'Teacher studio live classes: schedule with an external link, attach packages, list (11.1 Phase B, apps/web; plan docs/tasks/11.1/plan.md)'
@@ -4424,7 +4467,9 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: todo
+  status: running
+  branch: m11/11.1b-studio-live-classes
+  model: plan:sonnet build:sonnet
 - id: 11.1c
   milestone: M11
   title: Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)
@@ -4432,11 +4477,14 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: todo
+  status: running
+  branch: m11/11.1c-home-live-classes
+  model: plan:sonnet build:sonnet
 - id: 11.1d
   milestone: M13
   title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b); 11.1a review: cap the meeting link length in CreateInputSchema and decide https only;
-    listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads'
+    listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads; 11.1b review LOWs: per-class aria-label on the studio
+    join links, a test at the exact 2048-character link boundary'
   accept: a teacher can edit or cancel a class, with tests.
   deps:
   - 11.1b
@@ -4501,7 +4549,9 @@ tasks:
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
     (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the
-    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime'
+    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime; 9.6g review LOW: answeredPairs in apps/web/src/export/notes.ts
+    shares one used set across the exact-timestamp and fallback branches, so a teacher message matched exactly is not reused by a later fallback; 9.6c review LOWs: pause and cancel as one UPDATE ... RETURNING,
+    a type guard for LIVE_FOR_STUDENT_WRITE.includes, a comment that StatusSnapshot is deliberately non-strict'
   accept: EXPLAIN on a pair with 10,000 messages shows an index scan with no full Sort per page; the new messages test cases pass; the migration is additive.
   deps:
   - 9.6a
@@ -4526,7 +4576,9 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7k-changed-since-publish
+  model: plan:sonnet build:sonnet
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
@@ -4554,9 +4606,29 @@ tasks:
   deps:
   - 9.6b
   risk: low
-  status: running
+  status: done
   branch: m9/9.6g-export-fixes
-  model: build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 27
+    tokens_in: 84
+    tokens_out: 3100
+    cache_read_tokens: 1429424
+    wall_time_seconds: 168
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 11.3a
   milestone: M11
   title: Weekly insights repository in packages/db, minimum 5 distinct students per group (11.3 Phase A)
@@ -4564,9 +4636,31 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: running
+  status: done
   branch: m11/11.3a-insights-repo
-  model: plan:sonnet build:opus-5.5/medium
+  model: plan:sonnet build:sonnet fix:opus review:opus
+  metrics:
+    tool_calls: 37
+    tokens_in: 136
+    tokens_out: 1048
+    cache_read_tokens: 2800254
+    wall_time_seconds: 1747
+    models:
+    - claude-opus-5-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 9
+      by_severity:
+        HIGH: 1
+        MEDIUM: 4
+        LOW: 4
+      by_status:
+        fixed: 7
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 11.3b
   milestone: M11
   title: Weekly insights worker job, Monday 07:00 in the US pack timezone (11.3 Phase B)
@@ -4582,9 +4676,31 @@ tasks:
   deps:
   - '8.2'
   risk: high
-  status: running
+  status: done
   branch: m8/8.2d-pinned-fetcher
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 191
+    tokens_in: 598
+    tokens_out: 59689
+    cache_read_tokens: 19217999
+    wall_time_seconds: 120103
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 15
+      by_severity:
+        MEDIUM: 7
+        LOW: 8
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 11
+        wontfix: 0
+    human_questions: 1
 - id: 8.2e
   milestone: M8
   title: Web-link ingest job, processor and last-attempt failed status (8.2b Phase B)
@@ -4592,8 +4708,9 @@ tasks:
   deps:
   - 8.2d
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.2e-web-link-job
+  model: plan:sonnet build:opus
 - id: 8.2f
   milestone: M8
   title: Add a web link in the upload centre; YouTube links refused with fixed words (8.2b Phase C)
@@ -4605,7 +4722,10 @@ tasks:
   branch: null
 - id: 8.2c
   milestone: M8
-  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube)'
+  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
+    8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots,
+    a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the
+    real one, a real https test, and fake timers in the deadline tests'
   accept: per the B-47 answer.
   deps:
   - 8.2f
@@ -4620,6 +4740,26 @@ tasks:
   - 8.2f
   status: todo
   branch: null
+- id: 9.6h
+  milestone: M9
+  title: '9.6c security review follow-ups (packages/db subscriptions.ts, before the pilot): cancel then start can''t get round a cost-alarm pause (start refuses a free package while the teacher''s free
+    tier is alarm-paused, or cancel keeps the alarm state); resume trusts only a pause_student audit row written by this student (actor and actorRole); changePackage requires a verified teacher like start
+    (9.3c); LOWs: cancel then start doesn''t reset the trial, changePackage to a package with no trial ends the trial, resume orders audit rows by id-safe order, and the live-version check notes the same
+    unlocked-publish gap as start'
+  accept: each MEDIUM has a failing-then-passing integration test; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 9.6c
+  risk: risky
+  status: todo
+- id: 11.3c
+  milestone: M13
+  title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference
+    out one student (pin the test clock or move the NEXT_WEEK fixtures into the past); the handoff test count says 27, the run has 26'
+  accept: a test shows the current and a future week are refused; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 11.3a
+  risk: risky
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

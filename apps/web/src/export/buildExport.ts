@@ -9,13 +9,23 @@ import { EVIDENCE_LIST_MAX, QUESTIONS_MAX_LIMIT, type Outline, type StudentScope
 import type { AgentOwners } from '../turn/scope';
 import { buildProgress, type Progress } from '../progress/progress';
 
-/** A page cursor/row shape derived from `Repositories`, not re-declared: 9.6a's readers are
- * module-local exports of `packages/db/src/repositories/sessions.ts` (not re-exported through the
- * package barrel), so the exact types come from the methods' own inferred signatures instead. */
+/**
+ * The keyset page cursor `sessions.listForStudent`/`messages.listForStudent` use (9.6a's own
+ * `ExportCursor`, a module-local export of `packages/db/src/repositories/sessions.ts`, not
+ * re-exported through the package barrel). Restated field-for-field here so this port has a real
+ * type instead of `unknown` -- the repositories' own `ExportCursor` is structurally this same
+ * shape, so wiring them up needs no cast (9.6g; re-exporting the db package's own type would need
+ * a `packages/db` change, out of scope here).
+ */
+export interface ExportCursor {
+  createdAt: string;
+  id: string;
+}
+
 type ListFn<Row> = (
   scope: StudentScope,
-  options: { after?: unknown; limit: number },
-) => Promise<{ items: Row[]; next: unknown }>;
+  options: { after?: ExportCursor; limit: number },
+) => Promise<{ items: Row[]; next: ExportCursor | null }>;
 
 export interface ExportBackend {
   agents: AgentOwners;
@@ -95,7 +105,7 @@ const PAGE_CEILING = 200;
 
 async function pageAll<Row>(list: ListFn<Row>, scope: StudentScope): Promise<Row[]> {
   const items: Row[] = [];
-  let after: unknown;
+  let after: ExportCursor | undefined;
   for (let page = 0; page < PAGE_CEILING; page++) {
     const options = after === undefined ? { limit: PAGE_SIZE } : { after, limit: PAGE_SIZE };
     const res = await list(scope, options);

@@ -18,6 +18,12 @@ import { migrateDatabase } from '../src/migrate.js';
 import { createDb, type DbHandle } from '../src/internal.js';
 import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
 import {
+  CHANGE_PACKAGE_ACTION,
+  STUDENT_CANCEL_ACTION,
+  STUDENT_PAUSE_ACTION,
+  STUDENT_RESUME_ACTION,
+} from '../src/repositories/subscriptions.js';
+import {
   type AuditEntryInput,
   type AuditRow,
   chunkId,
@@ -268,6 +274,19 @@ const dismissReplay: Partial<Record<Teacher, string>> = {};
  * pair has at least one of its own readable notifications, and gives `notifications.markRead`'s
  * cross-scope attempt a fixed id to call against without writing anything new first. */
 const notifTarget: Partial<Record<Pair, string>> = {};
+/** Task 11.1a: one scheduled, far-future live class per teacher, attached to that teacher's own
+ * seeded package — gives `liveClasses.listForTeacher` / `listUpcomingForStudent` a fixed row to
+ * read without writing anything new first. */
+const liveClassFor: Partial<Record<Teacher, string>> = {};
+/** Far enough out that no window label ever flips mid-run; still a valid future `startsAt`. */
+const LIVE_CLASS_STARTS_AT = '2030-01-01T00:00:00Z';
+
+// Task 11.3a: weekly insights fixtures (seeded in beforeAll inside INSIGHTS_WEEK).
+const INSIGHTS_WEEK = '2026-10-05';
+const INSIGHTS_AT = '2026-10-07T10:00:00.000Z';
+const insightsUnhelpful: Partial<Record<Teacher, number>> = {};
+const insightsGroupOwner = (g: { groupId: string }) =>
+  g.groupId === 'g_ins_A' ? 'A' : g.groupId === 'g_ins_B' ? 'B' : `leak:${g.groupId}`;
 
 const CASES: Record<RepositoryMethod, IsolationCase> = {
   // Task 5.3: chunk writes and retrieval. Writes are ownership-checked inserts or a scoped update
@@ -647,7 +666,11 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       let n = 0;
       for (const t of TEACHERS) {
         const got = await r.packageVersions.liveForAgent({ agentId: ids.agent(t) });
-        expect(got.map((p) => p.packageVersionId)).toEqual([ids.packageVersion(t)]);
+        // Task 9.6c: the seed now gives every teacher a second, live package of the same agent.
+        expect(got.map((p) => p.packageVersionId)).toEqual([
+          ids.packageVersion(t),
+          ids.packageVersion2(t),
+        ]);
         expect(got[0]?.offer.packageId).toBe(ids.pkg(t));
         expect(got[0]?.offer.name).toBe(`[${t}] package`);
         // Public projection only: never the teacher's internal config (9.3 fix round 1).
@@ -2070,6 +2093,87 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 9.6c: the four student plan-change methods. None takes a target id beyond the
+  // subscription itself (always the scope's own, `ids.subscription(actor)`), so the default
+  // `owns: actor === target` is exactly right: a mismatched scope can't resolve another pair's
+  // subscription id (lockLive filters on id AND studentId AND teacherId), which is `not_found`.
+  // Every positive control restores the pair's row (and deletes the audit rows it wrote) so later
+  // cases, and the rest of the suite, see the original seed.
+  'subscriptions.changePackage': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.changePackage(scope, {
+        subscriptionId: ids.subscription(target),
+        packageVersionId: ids.packageVersion2(teacherOf(target)),
+      }),
+    verify: async (r, actor, res) => {
+      const row = res as { id: string; packageVersionId: string };
+      expect(row.packageVersionId).toBe(ids.packageVersion2(teacherOf(actor)));
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({
+        packageVersionId: ids.packageVersion2(teacherOf(actor)),
+      });
+      await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [
+        ids.packageVersion(teacherOf(actor)),
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.change_package',
+      ]);
+    },
+  },
+  'subscriptions.pause': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.pause(scope, { subscriptionId: ids.subscription(target) }),
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('paused');
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({ status: 'paused' });
+      await raw.query(`update subscriptions set status = 'active' where id = $1`, [
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.pause_student',
+      ]);
+    },
+  },
+  'subscriptions.resume': {
+    scope: 'student',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) await r.subscriptions.pause(scope, { subscriptionId: ids.subscription(actor) });
+      return r.subscriptions.resume(scope, { subscriptionId: ids.subscription(target) });
+    },
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('active');
+      expect(await r.subscriptions.findLive(sScope(actor))).toMatchObject({ status: 'active' });
+      await raw.query(`delete from audit_log where target = $1 and action in ($2, $3)`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.pause_student',
+        'subscription.resume_student',
+      ]);
+    },
+  },
+  'subscriptions.cancel': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.subscriptions.cancel(scope, { subscriptionId: ids.subscription(target) }),
+    verify: async (r, actor, res) => {
+      expect((res as { status: string }).status).toBe('ended');
+      expect(await r.subscriptions.findLive(sScope(actor))).toBeNull();
+      await raw.query(`update subscriptions set status = 'active' where id = $1`, [
+        ids.subscription(actor),
+      ]);
+      await raw.query(`delete from audit_log where target = $1 and action = $2`, [
+        `subscription:${ids.subscription(actor)}`,
+        'subscription.cancel_student',
+      ]);
+    },
+  },
   'teacherQuestions.open': {
     scope: 'student',
     op: 'write',
@@ -2760,6 +2864,79 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (groups: { questions: { text: string }[] }[]) =>
       groups.flatMap((g) => g.questions.flatMap((q) => markers(q.text).map((m) => teacherOf(m as Pair)))),
   },
+  // Task 11.3a: weekly insights. Each teacher has its own students past the 5-student floor
+  // (seeded in beforeAll); groups are attributed by groupId, a count through insightsUnhelpful.
+  'insights.weeklyTopQuestions': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.weeklyTopQuestions(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.weeklyTopQuestions({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
+  },
+  'insights.openQuestionGroups': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.openQuestionGroups(scope),
+    random: (r, _scope, rid) => r.insights.openQuestionGroups({ teacherId: rid }),
+    owners: (gs: { groupId: string }[]) => gs.map(insightsGroupOwner),
+  },
+  'insights.stickingTopics': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.stickingTopics(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.stickingTopics({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (ts: { topicId: string; title: string }[]) =>
+      ts.flatMap((t) => [
+        ...markers(t.title),
+        t.topicId === ids.topic('A') ? 'A' : t.topicId === ids.topic('B') ? 'B' : '?',
+      ]),
+  },
+  'insights.unhelpfulAnswerCount': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.unhelpfulAnswerCount(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.unhelpfulAnswerCount({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (n: number | null) =>
+      n === null ? [] : [TEACHERS.find((t) => insightsUnhelpful[t] === n) ?? `leak:${n}`],
+  },
+  'insights.getWeek': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.insights.getWeek(scope, INSIGHTS_WEEK),
+    random: (r, _scope, rid) => r.insights.getWeek({ teacherId: rid }, INSIGHTS_WEEK),
+    owners: (w: { payload: { topQuestions: { groupId: string }[] } } | null) =>
+      w ? w.payload.topQuestions.map(insightsGroupOwner) : [],
+  },
+  'insights.computeAndSaveWeek': {
+    scope: 'teacher',
+    op: 'write',
+    // Untargeted: the week is always computed from and saved for the scope's own teacher.
+    owns: () => true,
+    attempt: (r, scope) => r.insights.computeAndSaveWeek(scope, INSIGHTS_WEEK),
+    verify: async (r, actor, res) => {
+      const saved = res as {
+        payload: { topQuestions: { groupId: string }[]; unhelpfulAnswers: number | null };
+      };
+      expect(saved.payload.topQuestions.map(insightsGroupOwner)).toEqual([actor]);
+      expect(saved.payload.unhelpfulAnswers).toBe(insightsUnhelpful[actor]);
+      for (const t of TEACHERS) {
+        const w = await r.insights.getWeek(tScope(t), INSIGHTS_WEEK);
+        expect(w?.payload.topQuestions.map(insightsGroupOwner), `${t}'s week`).toEqual([t]);
+      }
+    },
+    mismatches: (a) => [
+      [
+        'a week that is not a Monday',
+        (r) => r.insights.computeAndSaveWeek(tScope(a), '2026-10-06'),
+        'invalid',
+      ],
+    ],
+  },
   'teacherQuestions.answer': {
     scope: 'teacher',
     op: 'write',
@@ -3149,6 +3326,118 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return n;
     },
   },
+  // Task 11.1a: a teacher's live classes, attached to packages, and the entitled student's own
+  // upcoming view (in-app only, decision B-45). `create` checks every package id is the scope's
+  // own before writing (same shape as `packages.ts`'s `checkModules`); `listUpcomingForStudent`'s
+  // broader scenarios (paused/past_due/ended, wrong package, a past class) have their own
+  // dedicated test below, since its entitlement is per package (shared by every subscriber of
+  // it), not per pair like every other student-scoped read here.
+  'liveClasses.create': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.liveClasses.create(scope, {
+        title: `[${target}] new live class ${++counter}`,
+        link: 'https://meet.example.com/new',
+        startsAt: LIVE_CLASS_STARTS_AT,
+        packageIds: [ids.pkg(target)],
+      }),
+    verify: async (r, actor, res) => {
+      const { id } = res as { id: string };
+      for (const t of TEACHERS) {
+        const list = await r.liveClasses.listForTeacher(tScope(t));
+        expect(
+          list.some((c) => c.id === id),
+          `${t} listing ${actor}'s new live class`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's package",
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad package`,
+            link: 'https://meet.example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(otherTeacher(a))],
+          }),
+        'not_found',
+      ],
+      [
+        'a non-http(s) link',
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad link`,
+            link: 'ftp://example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(a)],
+          }),
+        'invalid',
+      ],
+      [
+        'a startsAt in the past',
+        (r) =>
+          r.liveClasses.create(tScope(a), {
+            title: `[${a}] bad startsAt`,
+            link: 'https://meet.example.com/x',
+            startsAt: '2000-01-01T00:00:00Z',
+            packageIds: [ids.pkg(a)],
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'liveClasses.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.liveClasses.listForTeacher(scope),
+    random: (r, _scope, rid) => r.liveClasses.listForTeacher({ teacherId: rid }),
+    // Filtered to teacher-level tags: this teacher's own classes also include the per-pair
+    // dedicated fixtures below (real rows, correctly theirs), whose titles carry a pair tag for
+    // `listUpcomingForStudent`'s case instead — not a second owner of this teacher-scoped read.
+    owners: (xs: { title: string }[]) =>
+      xs.flatMap((x) => markers(x.title)).filter((m): m is Teacher => (TEACHERS as readonly string[]).includes(m)),
+  },
+  'liveClasses.listUpcomingForStudent': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    // Points this one pair's own subscription at its own dedicated package (fixture above) right
+    // before reading, so the row it gets back is exclusively its own — every other pair's read in
+    // this grid redirects only its own row, never another's (keyed by studentId + teacherId) — then
+    // restores it, so a later test that depends on the seed's original subscription state (for
+    // example "ended subscriptions are not live") still sees it.
+    call: async (r, scope) => {
+      const p = pairOfIds(scope.studentId, scope.teacherId);
+      const before = await raw.query(
+        `select package_version_id from subscriptions where student_id = $1 and teacher_id = $2`,
+        [scope.studentId, scope.teacherId],
+      );
+      const originalPackageVersionId = (before.rows[0] as { package_version_id: string } | undefined)
+        ?.package_version_id;
+      await raw.query(
+        `update subscriptions set package_version_id = $1
+         where student_id = $2 and teacher_id = $3 and status <> 'ended'`,
+        [`lcpv_${p.toLowerCase()}`, scope.studentId, scope.teacherId],
+      );
+      try {
+        return await r.liveClasses.listUpcomingForStudent(scope);
+      } finally {
+        if (originalPackageVersionId !== undefined) {
+          await raw.query(
+            `update subscriptions set package_version_id = $1
+             where student_id = $2 and teacher_id = $3 and status <> 'ended'`,
+            [originalPackageVersionId, scope.studentId, scope.teacherId],
+          );
+        }
+      }
+    },
+    random: (r, _scope, rid) =>
+      r.liveClasses.listUpcomingForStudent({ studentId: rid, teacherId: rid }),
+    owners: (xs: { title: string }[]) => xs.flatMap((x) => markers(x.title)),
+  },
 };
 
 /** Opens a fresh question under `pair`'s own scope (task 5.10 isolation cases). */
@@ -3451,10 +3740,116 @@ describe.skipIf(!up)(
           [`er_iso_${t.toLowerCase()}`, isoRun(t), JSON.stringify(isoResult(t, 'iso').details)],
         );
       }
+      // Task 11.3a: past the insights floor for each teacher inside INSIGHTS_WEEK (A: 5 students,
+      // B: 6, B with more unhelpful turns so the two counts differ). Distinct question text, so
+      // 5.10's lexical grouping never joins these rows to the answer/dismiss fixtures.
+      for (const [t, n, turns] of [
+        ['A', 5, 1],
+        ['B', 6, 3],
+      ] as const) {
+        for (let i = 1; i <= n; i++) {
+          const st = `stu_ins${i}`;
+          if (t === 'A' || i > 5) {
+            await raw.query(
+              `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,
+              [st],
+            );
+          }
+          const ses = `ses_ins${i}_${t.toLowerCase()}`;
+          await raw.query(
+            `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+             values ($1, $2, $3, $4, 1, $5, 1)`,
+            [ses, st, teacherId(t), ids.agent(t), ids.pkg(t)],
+          );
+          await raw.query(
+            `insert into teacher_questions (id, teacher_id, agent_id, student_id, text, group_id, created_at)
+             values ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              `tq_ins${i}_${t}`,
+              teacherId(t),
+              ids.agent(t),
+              st,
+              `[9${t}] zqxv weekly fixture`,
+              `g_ins_${t}`,
+              INSIGHTS_AT,
+            ],
+          );
+          await raw.query(
+            `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source, ts)
+             values ($1, $2, $3, $4, false, 'check', $5)`,
+            [`ev_ins${i}_${t}`, st, teacherId(t), ids.topic(t), INSIGHTS_AT],
+          );
+          for (let k = 0; k < turns; k++) {
+            await raw.query(
+              `insert into turn_traces (id, session_id, steps, model, input_tokens, output_tokens,
+                 cost_micro_usd, turn_id, agent_version, package_version, intent, move, guards, usage, created_at)
+               values ($1, $2, '[]', '', 0, 0, 0, $1, 1, 1, 'on_task', 'ask_teacher', '[]', '[]', $3)`,
+              [`tt_ins${i}_${t}_${k}`, ses, INSIGHTS_AT],
+            );
+          }
+        }
+      }
+      for (const t of TEACHERS) {
+        insightsUnhelpful[t] = (await repos.insights.unhelpfulAnswerCount(
+          tScope(t),
+          INSIGHTS_WEEK,
+        ))!;
+        await repos.insights.computeAndSaveWeek(tScope(t), INSIGHTS_WEEK);
+      }
+      expect(insightsUnhelpful.A).not.toBe(insightsUnhelpful.B);
       for (const t of TEACHERS) {
         savePkg[t] = (
           await repos.packages.create(tScope(t), { agentId: ids.agent(t), draft: pkgDraft(t) })
         ).packageId;
+      }
+      for (const t of TEACHERS) {
+        liveClassFor[t] = (
+          await repos.liveClasses.create(tScope(t), {
+            title: `[${t}] live class`,
+            link: 'https://meet.example.com/x',
+            startsAt: LIVE_CLASS_STARTS_AT,
+            packageIds: [ids.pkg(t)],
+          })
+        ).id;
+      }
+      // Task 11.1a: `listUpcomingForStudent`'s entitlement is per package, shared by every
+      // student subscribed to it — coarser than the "exclusively one pair" shape every other
+      // isolation case assumes. A dedicated package + live class per pair (not the shared teacher
+      // package above), so `CASES['liveClasses.listUpcomingForStudent']`'s `call` can point that
+      // one pair's own subscription at its own exclusive package just before reading (see there).
+      // Named without a `pkg_`/`[X]` marker and without a bracket name tag: other isolation cases
+      // (`packages.listForTeacher`, `packageVersions.listForAgent`) read every one of this
+      // teacher's packages too, and would otherwise read this fixture's pair tag as a second owner
+      // of a teacher-scoped row.
+      for (const p of PAIRS) {
+        const t = teacherOf(p);
+        const lc_ = p.toLowerCase();
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name) values ($1, $2, $3, $4)`,
+          [`lcpkg_${lc_}`, teacherId(t), ids.agent(t), `live pkg ${lc_}`],
+        );
+        const config = {
+          ...packageConfig(t, 1, []),
+          id: `lcpkg_${lc_}`,
+          name: `live pkg ${lc_}`,
+        };
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config)
+           values ($1, $2, $3, 1, $4::jsonb)`,
+          [`lcpv_${lc_}`, teacherId(t), `lcpkg_${lc_}`, JSON.stringify(config)],
+        );
+        await raw.query(
+          `insert into live_classes (id, teacher_id, package_ids, title, starts_at, link)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [
+            `cls_lc_${lc_}`,
+            teacherId(t),
+            [`lcpkg_${lc_}`],
+            `[${p}] live class`,
+            new Date(LIVE_CLASS_STARTS_AT),
+            'https://meet.example.com/x',
+          ],
+        );
       }
     });
 
@@ -3621,6 +4016,366 @@ describe.skipIf(!up)(
       });
       expect(started.packageVersionId).toBe('pv_93c');
       expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: started.id });
+    });
+
+    describe('task 9.6c: plan-change methods', () => {
+      // A fixture of its own (one teacher, one agent, two packages so there is a real live
+      // version of a *different* package to switch to), self-contained like the 9.3c fixture
+      // above: nothing here is shared with the A/B grid.
+      const T = 'tch_96c';
+      const S = 'stu_96c';
+      const AGENT = 'agt_96c';
+      const PKG1 = 'pkg_96c_1';
+      const PKG2 = 'pkg_96c_2';
+      const PV1 = 'pv_96c_1'; // pkg_96c_1 v1 (live until a test bumps it)
+      const PV1_V2 = 'pv_96c_1_v2'; // pkg_96c_1 v2 (draft, becomes live when bumped)
+      const PV2 = 'pv_96c_2'; // pkg_96c_2 v1, live: the switch target
+      const SUB = 'sub_96c';
+      const PERIOD_END = '2027-06-01T00:00:00Z';
+      const scope = { studentId: S, teacherId: T };
+
+      beforeAll(async () => {
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, '96c teacher', 'en', 'test', 'teacher'), ($2, '96c student', 'en', 'test', 'student')`,
+          [T, S],
+        );
+        await raw.query(
+          `insert into teacher_profiles (id, user_id, slug, subject, verification_status) values ('tp_96c', $1, 'teacher-96c', '96c subject', 'verified')`,
+          [T],
+        );
+        await raw.query(
+          `insert into agents (id, teacher_id, status, live_version) values ($1, $2, 'live', 1)`,
+          [AGENT, T],
+        );
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name, live_version) values ($1, $2, $3, '96c pkg 1', 1), ($4, $2, $3, '96c pkg 2', 1)`,
+          [PKG1, T, AGENT, PKG2],
+        );
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config) values
+             ($1, $2, $3, 1, '{}'::jsonb), ($4, $2, $3, 2, '{}'::jsonb), ($5, $2, $6, 1, '{}'::jsonb)`,
+          [PV1, T, PKG1, PV1_V2, PV2, PKG2],
+        );
+        await raw.query(
+          `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end) values ($1, $2, $3, $4, 'active', $5)`,
+          [SUB, S, T, PV1, PERIOD_END],
+        );
+      });
+
+      afterAll(async () => {
+        // Nothing else in the suite reads this fixture; the schema cascades the rest on its own
+        // tables, but audit_log and subscriptions have no FK to clean up explicitly here (the
+        // whole throwaway database is dropped in the outer afterAll).
+      });
+
+      it('changePackage: not_found for a draft version, an old version, another teacher\'s version and a suspended agent\'s version', async () => {
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // v2 is still a draft (live_version = 1)
+
+        // v1 is "old" once v2 becomes live; the subscription itself must point elsewhere for
+        // this to be a live-version check rather than the same-version-as-now check.
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV2, SUB]);
+        await raw.query(`update packages set live_version = 2 where id = $1`, [PKG1]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // v1 is now the old version
+        await raw.query(`update subscriptions set package_version_id = $1 where id = $2`, [PV1, SUB]);
+        await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
+
+        await expect(
+          repos.subscriptions.changePackage(scope, {
+            subscriptionId: SUB,
+            packageVersionId: ids.packageVersion('A'), // another teacher's live version
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+
+        await raw.query(`update agents set status = 'draft' where id = $1`, [AGENT]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'not_found' }); // the agent is suspended
+        await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
+        await raw.query(`update packages set live_version = 1 where id = $1`, [PKG1]);
+      });
+
+      it('changePackage: succeeds to the live version of a different package of the same agent, keeping status and period_end, and audits it', async () => {
+        const before = await repos.subscriptions.findLive(scope);
+        const result = await repos.subscriptions.changePackage(scope, {
+          subscriptionId: SUB,
+          packageVersionId: PV2,
+        });
+        expect(result).toEqual({
+          id: SUB,
+          packageVersionId: PV2,
+          status: before!.status,
+          periodEnd: before!.periodEnd,
+        });
+        const audit = await raw.query<{ before: unknown; after: unknown }>(
+          `select before, after from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, CHANGE_PACKAGE_ACTION],
+        );
+        expect(audit.rows).toEqual([
+          { before: { status: 'active', packageVersionId: PV1 }, after: { status: 'active', packageVersionId: PV2 } },
+        ]);
+
+        // The same version as now is invalid; nothing else changes.
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+      });
+
+      it('changePackage and pause: paused or ended is invalid', async () => {
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        await expect(
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' }); // already paused
+
+        await raw.query(`update subscriptions set status = 'ended' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.changePackage(scope, { subscriptionId: SUB, packageVersionId: PV1_V2 }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+        await expect(
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+      });
+
+      it('resume: refuses a cost-alarm pause, a pause with no audit row, and a non-student pause; restores the student\'s own pause', async () => {
+        const paused = await repos.subscriptions.pause(scope, { subscriptionId: SUB });
+        expect(paused.status).toBe('paused');
+
+        // Someone else's pause landed later (a future staff action, or the cost alarm): resume
+        // must look at the *latest* row, not just "any own pause ever happened".
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_cost_alarm', 'system_cost_alarm', 'system', $1, $2, $3, $4, '{"status":"active","packageVersionId":"${PV2}"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          ['subscription.pause_cost_alarm', `subscription:${SUB}`, T, S],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // No audit row at all for this subscription.
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // Not paused.
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        // A corrupted pause audit row whose recorded "before" status is itself paused or ended
+        // (should never happen, but resume must not restore into a dead-end state).
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_corrupt_pause', $1, 'student', $2, $3, $4, $1, '{"status":"ended","packageVersionId":"${PV2}"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          [S, STUDENT_PAUSE_ACTION, `subscription:${SUB}`, T],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'integrity' });
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+
+        // A pause audit row whose "before" doesn't even parse as a status snapshot.
+        await raw.query(`update subscriptions set status = 'paused' where id = $1`, [SUB]);
+        await raw.query(
+          `insert into audit_log (id, actor, actor_role, action, target, teacher_id, student_id, before, after, ts)
+           values ('al_96c_malformed_pause', $1, 'student', $2, $3, $4, $1, '{"status":"bogus"}', '{"status":"paused","packageVersionId":"${PV2}"}', now())`,
+          [S, STUDENT_PAUSE_ACTION, `subscription:${SUB}`, T],
+        );
+        await expect(
+          repos.subscriptions.resume(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'integrity' });
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+
+        // The student's own pause: resume restores it, auditing both actions.
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await repos.subscriptions.pause(scope, { subscriptionId: SUB });
+        const resumed = await repos.subscriptions.resume(scope, { subscriptionId: SUB });
+        expect(resumed).toMatchObject({ status: 'active', packageVersionId: PV2 });
+        const actions = await raw.query<{ action: string }>(
+          `select action from audit_log where target = $1 order by ts`,
+          [`subscription:${SUB}`],
+        );
+        expect(actions.rows.map((r) => r.action)).toEqual([STUDENT_PAUSE_ACTION, STUDENT_RESUME_ACTION]);
+      });
+
+      it('cancel: any live status ends it; findLive is null and start works again; ended already is invalid', async () => {
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        const cancelled = await repos.subscriptions.cancel(scope, { subscriptionId: SUB });
+        expect(cancelled.status).toBe('ended');
+        expect(await repos.subscriptions.findLive(scope)).toBeNull();
+        const audit = await raw.query<{ action: string }>(
+          `select action from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, STUDENT_CANCEL_ACTION],
+        );
+        expect(audit.rows).toHaveLength(1);
+
+        await expect(
+          repos.subscriptions.cancel(scope, { subscriptionId: SUB }),
+        ).rejects.toMatchObject({ kind: 'invalid' });
+
+        const restarted = await repos.subscriptions.start(scope, {
+          packageVersionId: PV2,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
+        expect(await repos.subscriptions.findLive(scope)).toMatchObject({ id: restarted.id });
+      });
+
+      it('start (9.6c/9.3b): refuses a non-live version and a suspended agent\'s version', async () => {
+        await raw.query(`update subscriptions set status = 'ended' where student_id = $1`, [S]);
+        await expect(
+          repos.subscriptions.start(scope, {
+            packageVersionId: PV1_V2, // draft, never made live
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+
+        await raw.query(`update agents set status = 'draft' where id = $1`, [AGENT]);
+        await expect(
+          repos.subscriptions.start(scope, {
+            packageVersionId: PV1,
+            status: 'active',
+            periodEnd: PERIOD_END,
+          }),
+        ).rejects.toMatchObject({ kind: 'not_found' });
+        await raw.query(`update agents set status = 'live' where id = $1`, [AGENT]);
+
+        const started = await repos.subscriptions.start(scope, {
+          packageVersionId: PV1,
+          status: 'active',
+          periodEnd: PERIOD_END,
+        });
+        expect(started.packageVersionId).toBe(PV1);
+      });
+
+      it('two parallel pause calls on the same subscription: one succeeds, one is invalid, one audit row', async () => {
+        // Earlier tests in this block may have ended SUB and started a different live
+        // subscription for this (student, teacher) pair; only one row may be non-ended per pair
+        // (subscriptions_one_live_per_pair_key), so clear the way before reactivating SUB.
+        await raw.query(
+          `update subscriptions set status = 'ended' where student_id = $1 and teacher_id = $2 and id != $3 and status != 'ended'`,
+          [S, T, SUB],
+        );
+        await raw.query(`update subscriptions set status = 'active' where id = $1`, [SUB]);
+        await raw.query(`delete from audit_log where target = $1`, [`subscription:${SUB}`]);
+        const results = await Promise.allSettled([
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+          repos.subscriptions.pause(scope, { subscriptionId: SUB }),
+        ]);
+        const fulfilled = results.filter((r) => r.status === 'fulfilled');
+        const rejected = results.filter((r) => r.status === 'rejected');
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ kind: 'invalid' });
+        const n = await rawCount(
+          `select count(*)::int as n from audit_log where target = $1 and action = $2`,
+          [`subscription:${SUB}`, STUDENT_PAUSE_ACTION],
+        );
+        expect(n).toBe(1);
+      });
+    });
+
+    // Task 11.1a: `listUpcomingForStudent`'s full acceptance grid (11.1's "Tests (Phase A)"),
+    // self-contained (not tch_a / tch_b, whose subscriptions this suite's other cases churn).
+    it('listUpcomingForStudent: only a live (trial/active) subscriber to an attached package sees a future class', async () => {
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, '11.1a teacher', 'en', 'test', 'teacher')`,
+        ['tch_11a'],
+      );
+      await raw.query(
+        `insert into agents (id, teacher_id, status, live_version) values ('agt_11a', 'tch_11a', 'live', 1)`,
+      );
+      await raw.query(
+        `insert into packages (id, teacher_id, agent_id, name) values
+           ('pkg_11a', 'tch_11a', 'agt_11a', '11a package'),
+           ('pkg_11a_other', 'tch_11a', 'agt_11a', '11a other package')`,
+      );
+      await raw.query(
+        `insert into package_versions (id, teacher_id, package_id, version, config) values
+           ('pv_11a', 'tch_11a', 'pkg_11a', 1, '{}'::jsonb),
+           ('pv_11a_other', 'tch_11a', 'pkg_11a_other', 1, '{}'::jsonb)`,
+      );
+      const future = await repos.liveClasses.create(
+        { teacherId: 'tch_11a' },
+        {
+          title: '11a future class',
+          link: 'https://meet.example.com/11a',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: ['pkg_11a'],
+        },
+      );
+      const pastId = 'cls_11a_past';
+      await raw.query(
+        `insert into live_classes (id, teacher_id, package_ids, title, starts_at, link)
+         values ($1, 'tch_11a', $2, '11a past class', $3, 'https://meet.example.com/11a-past')`,
+        [pastId, ['pkg_11a'], new Date('2000-01-01T00:00:00Z')],
+      );
+
+      const statuses = ['trial', 'active', 'past_due', 'paused', 'ended'] as const;
+      const studentOfStatus = (status: string) => `stu_11a_${status}`;
+      for (const status of statuses) {
+        const sid = studentOfStatus(status);
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,
+          [sid],
+        );
+        await raw.query(
+          `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+           values ($1, $2, 'tch_11a', 'pv_11a', $3, '2030-01-01T00:00:00Z')`,
+          [`sub_11a_${status}`, sid, status],
+        );
+      }
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values
+           ('stu_11a_wrong_pkg', 'wp', 'en', 'test', 'student'),
+           ('stu_11a_no_sub', 'ns', 'en', 'test', 'student')`,
+      );
+      await raw.query(
+        `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+         values ('sub_11a_wrong_pkg', 'stu_11a_wrong_pkg', 'tch_11a', 'pv_11a_other', 'active', '2030-01-01T00:00:00Z')`,
+      );
+
+      const scope = (studentId: string) => ({ studentId, teacherId: 'tch_11a' });
+      for (const status of ['trial', 'active'] as const) {
+        const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus(status)));
+        expect(rows.map((r) => r.id), status).toEqual([future.id]);
+        expect(rows.map((r) => r.id), status).not.toContain(pastId);
+      }
+      for (const status of ['past_due', 'paused', 'ended'] as const) {
+        expect(
+          await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus(status))),
+          status,
+        ).toEqual([]);
+      }
+      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_wrong_pkg'))).toEqual([]);
+      expect(await repos.liveClasses.listUpcomingForStudent(scope('stu_11a_no_sub'))).toEqual([]);
+
+      // `options.now` overrides the clock (deterministic tests only): every window label.
+      const startsAt = new Date(LIVE_CLASS_STARTS_AT);
+      const minsBefore = (mins: number) => new Date(startsAt.getTime() - mins * 60_000).toISOString();
+      const windowAt = async (now: string) => {
+        const rows = await repos.liveClasses.listUpcomingForStudent(scope(studentOfStatus('trial')), {
+          now,
+        });
+        return rows.find((r) => r.id === future.id)?.window;
+      };
+      expect(await windowAt(minsBefore(3))).toBe('starting_soon');
+      expect(await windowAt(minsBefore(30))).toBe('reminder_1h');
+      expect(await windowAt(minsBefore(10 * 60))).toBe('reminder_24h');
+      expect(await windowAt(minsBefore(48 * 60))).toBe('later');
     });
 
     it('listForTeacher never returns studentId', async () => {
