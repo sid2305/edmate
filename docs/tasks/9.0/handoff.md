@@ -3,7 +3,7 @@
 - **Status:** DONE
 - **Branch:** `m9/9.0-try-it` (built on local `work-90c`)
 - **Worktree:** `.claude/worktrees/agent-a926ddfdf88dd41f8`
-- **Tool calls used:** 80 (budget: 120 for Phase C)
+- **Tool calls used:** 99 (harness count; budget: 120 for Phase C)
 - Phases A and B are in `docs/tasks/9.0a/handoff.md` and `docs/tasks/9.0b/handoff.md`.
 - **The real-key chat was not run by the builder.** No real model key was used at any point. The
   human runs that step by following `docs/try-it.md` with their own key in `docker/.env`.
