@@ -49,3 +49,9 @@ Sources: docs/tasks/8.4b/review.md
 The 9.5a practice screen shipped two HIGH bugs in ChatView. `activeSkill` was set when a practice card arrived but never cleared, so every later plain message was tagged as practice. And the card's payload, which comes from the server as `unknown`, was cast to its type instead of checked. Lesson: every piece of chat state that tags outgoing turns needs a stated reset point, with a test for the turn after it; and a client reads every server event payload through a zod `safeParse`, falling back to a generic view when it fails. UI briefs for 9.5b, 9.6 and 9.7 say so up front.
 
 Sources: docs/tasks/9.5a/review.md
+
+## Two writers that lock the same rows in different orders deadlock
+
+In 8.7a, startRun locked the agent and then the open run, while goLive locked the run and then the agent. A re-click on Publish during a passed gate's goLive could deadlock, and Postgres would abort one side, losing the passed run. database-reviewer raised it as CRITICAL; the fix gave every publish write one order (advisory lock, profile, agent, run), with a two-connection test. Lesson: a repository with more than one locking write states its lock order in one place, and each new write follows it; 5.10b has the same class of bug in teacherQuestions.answer.
+
+Sources: docs/tasks/8.7a/review.md

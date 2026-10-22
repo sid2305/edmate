@@ -4034,7 +4034,7 @@ tasks:
   deps:
   - 9.2a
   risk: high
-  status: running
+  status: todo
   branch: m9/9.6a-export-readers
   model: plan:sonnet build:sonnet
 - id: 9.6b
