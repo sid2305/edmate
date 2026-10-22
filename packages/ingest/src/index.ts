@@ -26,7 +26,6 @@ export { systemResolveHost } from './fetch/address.js';
 export {
   createWebFetcher,
   normaliseAllowedHosts,
-  redactUrl,
   WEB_FETCH_HEADERS,
   WEB_PAGE_MAX_BYTES,
   type FetchedPage,

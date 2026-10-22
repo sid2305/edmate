@@ -133,7 +133,8 @@ describe('createPinnedTransport: the pin', () => {
       servername: 'teacher-site.test',
       headers: { ...WEB_FETCH_HEADERS },
     });
-    expect(options).not.toHaveProperty('rejectUnauthorized');
+    // Explicit, so NODE_TLS_REJECT_UNAUTHORIZED=0 in the worker env can't turn checks off.
+    expect(options?.rejectUnauthorized).toBe(true);
     const answered = vi.fn();
     options?.lookup?.('elsewhere.example', {}, answered);
     expect(answered).toHaveBeenCalledWith(null, PUBLIC_V4, 4);
@@ -283,6 +284,41 @@ describe('createPinnedTransport: failures', () => {
     setTimeout(() => controller.abort(), 20);
     const e = await rejection(p);
     expect(e.name).toBe('AbortError');
+  });
+
+  it('a request() that throws synchronously is a fixed error, and the timer never fires', async () => {
+    vi.useFakeTimers();
+    try {
+      const request: RequestFn = (u) => {
+        throw new TypeError(`bad request ${u.href}`);
+      };
+      const e = await rejection(createPinnedTransport({ request, timeoutMs: 50 })(req(1)));
+      expect(e.message).toBe('web link transport: the connection failed');
+      expect(e.name).toBe('Error');
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(100);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancel() mid-body closes the connection', async () => {
+    let closed: (() => void) | undefined;
+    const socketClosed = new Promise<void>((resolve) => {
+      closed = resolve;
+    });
+    server = await startServer((q, res) => {
+      q.socket.on('close', () => closed?.());
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.write('<p>first part</p>');
+      // The rest never comes: only the client closing ends this response.
+    });
+    const res = await createPinnedTransport({ request: httpRequest })(req(server.port));
+    const first = await res.body[Symbol.asyncIterator]().next();
+    expect(first.done).toBe(false);
+    await res.cancel();
+    await socketClosed;
+    await res.cancel();
   });
 
   it('a response that arrives after a failure is closed, not returned', async () => {

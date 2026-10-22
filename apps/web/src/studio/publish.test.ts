@@ -48,6 +48,7 @@ interface Opts {
   card?: StyleCard | null;
   latest?: GateRunRow | null;
   failed?: FailedCase[];
+  changed?: boolean;
   fail?: Partial<Record<string, unknown>>;
   enqueueFails?: boolean;
 }
@@ -96,6 +97,10 @@ function memoryBackend(opts: Opts = {}) {
         failedCases: async (scope, runId) => {
           await step('publish.failedCases', scope, runId);
           return opts.failed ?? [];
+        },
+        changedSinceLastPublish: async (scope) => {
+          await step('publish.changedSinceLastPublish', scope);
+          return opts.changed ?? false;
         },
       },
     },
@@ -309,8 +314,18 @@ describe('GET /api/studio/publish', () => {
       startedAt: '2026-10-22T10:00:00.000Z',
       finishedAt: null,
       publishedAt: null,
+      changedSincePublish: false,
     });
-    expect(calls.map((c) => c.method)).toEqual(['publish.latestRun']);
+    expect(calls.map((c) => c.method)).toEqual([
+      'publish.latestRun',
+      'publish.changedSinceLastPublish',
+    ]);
+  });
+
+  it('a changed-since-publish run round-trips the flag', async () => {
+    const { h } = handlers({ latest: run({ status: 'passed' }), changed: true });
+    const body = (await (await h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
+    expect(body.run.changedSincePublish).toBe(true);
   });
 
   it('a failed run lists its failed cases (teacher-scoped) and groups with reasons', async () => {
@@ -336,7 +351,7 @@ describe('GET /api/studio/publish', () => {
     expect(body.run.failedCases).toEqual([
       { caseId: 'acc-1', origin: 'agent', group: 'accuracy', suite: 'accuracy', failedChecks: ['expected_answer'], question: 'What is 2+2?' },
     ]);
-    expect(calls.at(-1)).toEqual({ method: 'publish.failedCases', scope: SCOPE, input: 'run_1' });
+    expect(calls).toContainEqual({ method: 'publish.failedCases', scope: SCOPE, input: 'run_1' });
   });
 
   it('an error run carries its code; a passed run its scorecard and published time', async () => {
@@ -356,7 +371,10 @@ describe('GET /api/studio/publish', () => {
     body = (await (await r.h.latest(get(), ctx)).json()) as { run: Record<string, unknown> };
     expect(body.run.scorecard).toEqual(scorecard);
     expect(body.run.publishedAt).toBe('2026-10-22T10:06:00.000Z');
-    expect(r.calls.map((c) => c.method)).toEqual(['publish.latestRun']);
+    expect(r.calls.map((c) => c.method)).toEqual([
+      'publish.latestRun',
+      'publish.changedSinceLastPublish',
+    ]);
   });
 
   it('repo errors map like POST: failed is 503, unknown is 500', async () => {

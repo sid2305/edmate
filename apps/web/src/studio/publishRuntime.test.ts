@@ -35,6 +35,7 @@ function fakeRepos(order: string[]) {
       finishRun: vi.fn(async () => void step('finishRun')),
       latestRun: async () => null,
       failedCases: async () => [],
+      changedSinceLastPublish: async () => false,
     },
   } as unknown as PublishBackend['repos'];
 }

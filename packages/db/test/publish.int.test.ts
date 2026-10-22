@@ -936,6 +936,65 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
     });
   });
 
+  describe('changedSinceLastPublish', () => {
+    /** +1 on the teacher's material revision, the same upsert `chunks.ts`' `bumpRevision` uses
+     * for every create, replace and delete, so a deleted upload counts as a change too. */
+    async function bumpMaterial(t: T): Promise<void> {
+      await raw.query(
+        `insert into teacher_material_revisions (id, teacher_id, revision)
+         values ($1, $2, 1)
+         on conflict (teacher_id) do update set revision = teacher_material_revisions.revision + 1`,
+        [`tmr_${t.teacherId}`, t.teacherId],
+      );
+    }
+
+    it('is false with no published run; true after each basis signal changes; false again once a republish picks them all up', async () => {
+      const t = await makeTeacher();
+      const other = await makeTeacher();
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(false);
+
+      await publish(t);
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(false);
+
+      // Style card edit: a new immutable row, a new id.
+      const card = await repos.styleCards.create(scope(t), { text: 'v2 card', mistakeTags: [] });
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(true);
+
+      // Outline edit: courses.updated_at moves past the last publish's published_at.
+      await raw.query(`update courses set updated_at = now() where id = $1`, [t.courseId]);
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(true);
+
+      // A new package version.
+      await addPackageVersion(t, 2);
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(true);
+
+      // A new upload (bumps teacher_material_revisions).
+      await bumpMaterial(t);
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(true);
+
+      // A deleted upload bumps the same counter (chunks.ts' documents.delete path; no new code).
+      await bumpMaterial(t);
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(true);
+
+      // A second goLive whose basis picks up every signal above resets the note.
+      await publish(t, { styleCardId: card.id });
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(false);
+
+      // Another teacher's edits never flip this teacher's flag (other never published, so its
+      // own flag stays false too: nothing to compare).
+      await repos.styleCards.create(scope(other), { text: 'other card', mistakeTags: [] });
+      expect(await repos.publish.changedSinceLastPublish(scope(t))).toBe(false);
+      expect(await repos.publish.changedSinceLastPublish(scope(other))).toBe(false);
+
+      expect(
+        (await failure(repos.publish.changedSinceLastPublish({ teacherId: 'bad id!' }))).kind,
+      ).toBe('scope');
+      expect(
+        (await failure(repos.publish.changedSinceLastPublish({ teacherId: '' }))).kind,
+      ).toBe('scope');
+    });
+  });
+
   describe('publicScorecard', () => {
     it('is null for a draft, suspended, unknown agent or an unverified teacher', async () => {
       const t = await makeTeacher();

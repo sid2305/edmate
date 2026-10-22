@@ -25,10 +25,15 @@ export const REFUSED_URLS: readonly (readonly [
   ['cloud metadata name', 'https://metadata.google.internal/a', 'internal_name'],
   ['a *.local name', 'https://printer.local/a', 'internal_name'],
   ['a *.local name with a trailing dot', 'https://printer.local./a', 'internal_name'],
+  ['localhost with two trailing dots', 'https://localhost../a', 'internal_name'],
+  ['a *.internal name with two trailing dots', 'https://x.internal../a', 'internal_name'],
+  ['a *.local name with three trailing dots', 'https://printer.local.../a', 'internal_name'],
   ['a *.home.arpa name', 'https://nas.home.arpa/a', 'internal_name'],
   ['a single-label name', 'https://intranet/a', 'internal_name'],
   ['127.0.0.1', 'https://127.0.0.1/a', 'private_address'],
   ['127.0.0.1 with a trailing dot', 'https://127.0.0.1./a', 'private_address'],
+  ['127.0.0.1 with two trailing dots', 'https://127.0.0.1../a', 'private_address'],
+  ['10.0.0.1 with three trailing dots', 'https://10.0.0.1.../a', 'private_address'],
   ['decimal 2130706433', 'https://2130706433/a', 'private_address'],
   ['hex 0x7f.1', 'https://0x7f.1/a', 'private_address'],
   ['octal 0177.0.0.1', 'https://0177.0.0.1/a', 'private_address'],
@@ -50,6 +55,7 @@ export const REFUSED_URLS: readonly (readonly [
   ['[64:ff9b::a00:1] (NAT64)', 'https://[64:ff9b::a00:1]/a', 'private_address'],
   ['[2002:7f00:1::] (6to4)', 'https://[2002:7f00:1::]/a', 'private_address'],
   ['[2001:10::1] (ORCHID)', 'https://[2001:10::1]/a', 'private_address'],
+  ['[3fff::1] (documentation, RFC 9637)', 'https://[3fff::1]/a', 'private_address'],
 ];
 
 export const YOUTUBE_URLS: readonly string[] = [
