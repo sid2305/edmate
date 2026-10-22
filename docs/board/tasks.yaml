@@ -5453,9 +5453,27 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: running
+  status: done
   branch: m12/12.3c-rights-checkbox
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.3d
   milestone: M13
   title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
