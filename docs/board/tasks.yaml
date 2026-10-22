@@ -5723,7 +5723,8 @@ tasks:
   status: todo
 - id: 12.3e
   milestone: M13
-  title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of a non-null assertion after expect not toBeNull'
+  title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of
+    a non-null assertion after expect not toBeNull'
   accept: packages/db typecheck, lint and test green; prettier --check clean on chunks.ts.
   deps:
   - 12.3b
@@ -5901,10 +5902,10 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: planning
   priority: P1
   branch: null
-  model: null
+  model: plan:opus
 - id: '12.1'
   milestone: M12
   title: Staff console with manual teacher verification
