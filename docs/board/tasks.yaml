@@ -3755,7 +3755,9 @@ tasks:
   deps:
   - '9.4'
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.5a-practice-screen
+  model: plan:sonnet build:sonnet-5/medium
 - id: 9.5b
   milestone: M9
   title: Feedback submission and mock-interview screens (9.5 Phase B, apps/web)
@@ -3863,7 +3865,7 @@ tasks:
   milestone: M13
   title: '9.2a review follow-ups: discovery index test asserts the index the real search statement uses (no enable_seqscan off), or a scale fixture where GIN takes over; cli.ts seed loop narrows per table
     instead of `as never`; batched pattern for generated-column migrations on large tables; one lateral join instead of repeated correlated subqueries in discovery.ts; comment that teacherBySlug''s full
-    bio is intentional'
+    bio is intentional; 9.2b review: discovery rate limiter sets INCR and expiry atomically (Lua defineCommand like packages/queue turnLimits) and has explicit connect/command timeouts; /teachers maps a RepositoryError scope from discovery.search to an empty result and pins searchParams bounds to the repository''s own (shared export or test); nav for a staff principal'
   accept: each item done or logged as wontfix; db typecheck, lint and test green.
   deps:
   - 9.2a
@@ -3896,7 +3898,9 @@ tasks:
   deps:
   - 8.7b
   risk: medium
-  status: todo
+  status: running
+  branch: m8/8.7f-gate-followups
+  model: plan:lead build:sonnet-5/medium
 - id: 9.6a
   milestone: M9
   title: Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)
@@ -3947,6 +3951,24 @@ tasks:
   - 8.6d
   risk: low
   status: todo
+- id: 9.7a
+  milestone: M9
+  title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
+  accept: per docs/tasks/9.7/plan.md Phase A; green in CI with the scripted gateway.
+  deps:
+  - '9.4'
+  risk: high
+  status: todo
+- id: 9.7b
+  milestone: M9
+  title: '9.7 Phase B: add the discover and upgrade-to-unlocked stages to the full-flow spec (plan docs/tasks/9.7/plan.md)'
+  accept: per docs/tasks/9.7/plan.md Phase B; the whole flow is green in CI.
+  deps:
+  - 9.7a
+  - 9.2c
+  - 9.6b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -3988,7 +4010,6 @@ tasks:
   - '8.9'
   - '9.3'
   - '9.4'
-  - '9.5'
   status: todo
   branch: null
   model: null
