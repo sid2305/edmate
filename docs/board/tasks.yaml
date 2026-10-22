@@ -3289,9 +3289,31 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: review
+  status: done
   branch: m8/8.6b-packages-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:opus+sonnet
+  metrics:
+    tool_calls: 56
+    tokens_in: 192
+    tokens_out: 1844
+    cache_read_tokens: 2995106
+    wall_time_seconds: 301
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 1
+        LOW: 5
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 1
+    human_questions: 0
 - id: 8.5c
   milestone: M13
   title: '8.5a review LOWs: composite packages (teacher_id, agent_id) index if a bulk path reads listForAgent; listForAgent refuses over AGENT_PACKAGES_MAX (or paginates) instead of truncating, with a test;
@@ -3362,9 +3384,29 @@ tasks:
   deps:
   - 8.5a
   risk: high
-  status: running
+  status: done
   branch: m8/8.9a-dismiss-question
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 114
+    tokens_out: 811
+    cache_read_tokens: 1077839
+    wall_time_seconds: 66
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 8.8a
   milestone: M8
   title: 'Insights data (8.8 Phase A): loadInsights aggregates 7-day turn health and the top 5 open-question groups for a teacher (apps/web, no UI)'

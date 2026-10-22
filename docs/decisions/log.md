@@ -10,6 +10,57 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.9a Lead accepts the dismiss repository method · decided by lead · risk: high
+- Decided: `teacherQuestions.dismiss` merges as one scoped UPDATE with no transaction, closing a single question and leaving its group open. It touches packages/db/src/repositories/teacher-questions.ts, a risky path for keeping each teacher's data apart.
+- Why: the security, database and TypeScript reviewers all approved it. Ownership is enforced in the SQL WHERE, so a guessed question id can't reach another teacher's row, and every refusal writes nothing. The one LOW, a concurrency test, joins the repository follow-ups in 8.6f.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.9a dismiss is a single scoped UPDATE, no transaction · decided by builder · risk: high
+- Decided: `dismiss` is one `UPDATE … WHERE id = $id AND teacher_id = $t AND status = 'open'
+  RETURNING id`, not a transaction — same shape as `notifications.markRead`, since there is only
+  one row to touch and nothing else to write (no note, no group-wide effect, no second statement
+  whose failure needs to roll back the first).
+- Why: this is a risky path (`packages/db/src/repositories/teacher-questions.ts`, the "access
+  filter / money / isolation" group in risk-paths.txt) and the plan's own open question 1 flagged
+  dismiss's scoping (single-row vs. group-wide) as needing a recorded decision. The lead's answer
+  (Q1: dismiss closes one question only) is followed exactly: the WHERE clause scopes by
+  `teacher_id` (never another teacher's row) and by `status = 'open'` (an already-closed row is
+  `not_found`, so a replayed dismiss or a race with `answer` can't silently succeed twice), and no
+  other table or column is touched.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.6b Lead accepts the agent bootstrap and packages repository scope checks · decided by lead · risk: high
+- Decided: merge 8.6b. agents.ensureDraft and packages.create, saveVersion and listForTeacher (risky path packages/db/src/repositories/**) are reviewed by code-reviewer (opus), typescript-reviewer, security-reviewer and database-reviewer, all APPROVE: every query is filtered by the signed-in teacher, foreign ids are not_found or scope with nothing written, drafts are strict so client-set ids are invalid, the advisory locks and the package row lock serialise the one-agent rule, the 20-package cap and version numbers, and the isolation grid covers all four methods. The builder's deviations (saveVersion takes agentId, the cap enforced in create, course and style card checked on every call, the package id kept out of the audit `after`) are accepted. The MEDIUM (no concurrent test for the cap) and the LOWs (the cap shares the `invalid` error kind; shared module check and locking with package-versions.ts; modelPolicy typed z.unknown in agents.ts; the audit redactor treats digit-led UUIDs as phone numbers) are deferred to 8.6f (M13). The early return in checkModules for an empty module list in packages/db/src/repositories/packages.ts is kept (wontfix): a zero-module package is valid by the contract. Phase C reads agentId from ensureDraft or the listForTeacher row, never from the request body, and checks the cap before create to return 409.
+- Why: all four reviewers approve with nothing above MEDIUM, and the deferred items are test depth and tidy-ups, not leaks.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.6b Teacher scope checks in the agent and package repositories · decided by builder · risk: high
+- Decided: every new query filters by the scope's `teacher_id`. `agents.ensureDraft` key-share-locks the course and style card by id and teacher (else `not_found`) before returning or creating the agent, builds `teacherId` from the scope and parses the strict input and the full config before any SQL. `packages.create` checks the agent by id and teacher, `packages.saveVersion` row-locks the package by id, teacher and agent (else `not_found`), and both key-share-check every module by id and teacher (else `scope`). Drafts are strict, so a client-set `teacherId`, `agentId`, `id` or `version` is `invalid`. Only `packages.name` is ever updated. Callers: the teacher studio API (Phase C) with the signed-in teacher's own scope; no student or public caller.
+- Why: teacher data isolation (README rule 3); a package must never unlock another teacher's modules or attach to another teacher's agent. The isolation grid covers all four methods.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.6b Package cap and versioning locks · decided by builder · risk: medium
+- Decided: `packages.create` takes a per-teacher advisory lock (namespace 8602) and refuses a 21st package (`invalid`); `saveVersion` serialises on a `FOR UPDATE` lock of the package row and writes max + 1; `ensureDraft` uses a per-teacher advisory lock (namespace 8601) so two concurrent calls make one agent. No migration.
+- Why: the cap (Q6) must hold under concurrent creates, and the list would otherwise hide packages past 20; the unique `(package_id, version)` index stays the backstop.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.6b Audit row keeps the package id in target only · decided by builder · risk: low
+- Decided: `package.save` audit rows store `target: package:<id>` and `after: { version }`.
+- Why: the audit redactor mangles digit-led UUIDs in `after`; `target` is stored as is. No price or names are logged.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.4b Style card client types stay local, not imported from contracts · decided by builder · risk: low
 - Decided: `styleCardClient.ts` defines its own `StyleCardView`/`StyleCardDraft` types instead of
   importing `StyleCard` from `@edmate/contracts`, matching `uploadClient.ts`'s `DocumentView`.
