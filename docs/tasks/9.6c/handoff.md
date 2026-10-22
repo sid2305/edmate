@@ -73,6 +73,11 @@ the run; never touched the running `edmate-*` stack containers from this session
 
 ## Decisions
 
+### 22 Oct 2026 · 9.6c security review MEDIUMs go to 9.6h before the pilot · decided by lead · risk: high
+- Decided: the three security MEDIUMs (cancel then start gets round a cost-alarm pause, resume trusts any pause_student row, changePackage skips the verified-teacher check) and the security LOWs are fixed in 9.6h (M9), not in this PR.
+- Why: no payment exists until M10, no app code writes a pause row for another actor, and the student UI for plan changes (9.6d) isn't built yet. So none is reachable in a way that costs money today, and the one-fix-round rule keeps this PR moving.
+- risk: high
+
 ### 22 Oct 2026 · 9.6c downgrade and cancel apply at once until 10.3 (B-44 open) · decided by lead · risk: high
 
 - Decided: `changePackage` and `cancel` both apply immediately — no `cancel_at_period_end`, no
@@ -134,4 +139,4 @@ None for this task's own scope. Open items for later tasks (not blocking this on
 
 Status: DONE
 
-Tool calls used: ~130
+Tool calls used: 165 (harness count; the builder reported ~140)
