@@ -2299,7 +2299,7 @@ tasks:
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
     both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
-    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound'
+    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound; 9.0c review LOW: instrumentation.test asserts register() returns undefined (pins it non-async)'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -6279,7 +6279,7 @@ tasks:
   model: plan:opus arch:opus build:opus
 - id: 10.1b
   milestone: M10
-  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B)'
+  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B); 10.1a review LOWs: one shared input check every adapter calls (idempotency key, https returnUrl) tested in the suite; refund with amount omitted (full refund) is tested or made explicit; a PaymentsErrorCode union pinned to the ADR §7 list; the suite tests a retry after a timeout and that clearScheduled clears a scheduled resume'
   accept: the contract suite passes on the fake and on a second fake provider with no caller change; payments tests green.
   deps:
   - 10.1a
