@@ -2035,9 +2035,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.3b
-  status: todo
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases:8.3a-c
 - id: '8.4'
   milestone: M8
   title: Style interview (incl. common mistakes) and style card editor
@@ -2049,9 +2049,9 @@ tasks:
   - '5.2'
   - '8.1'
   - 8.4a
-  status: planning
+  status: done
   branch: null
-  model: null
+  model: phases:8.4a-b
 - id: '8.5'
   milestone: M8
   title: Test chat as a student per package; mark and correct answers
@@ -3505,7 +3505,8 @@ tasks:
 - id: 8.6f
   milestone: M13
   title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a concurrent dismiss-vs-answer test (8.9a LOW); a distinct error kind for the package cap; share the module check and version
-    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers; 8.6c: Promise.all for the independent reads in packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields'
+    locking between packages.ts and package-versions.ts; ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers; 8.6c: Promise.all for the independent reads in
+    packages list, and a named cap discriminator instead of mapping every repo invalid to package_limit; document the studio error reason/link fields'
   accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
   deps:
   - 8.6b
