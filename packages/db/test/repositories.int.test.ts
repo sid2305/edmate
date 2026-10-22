@@ -459,6 +459,50 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 8.5: a test-chat correction: the note (via insertTeacherNote) plus a `corrections` row,
+  // both on the target's module only (the snapshot covers both tables on a failed attempt).
+  'corrections.record': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.corrections.record(scope, {
+        moduleId: ids.module(target, 1),
+        question: `[${actor}] isolation correction ${++counter}`,
+        badAnswer: `[${actor}] wrong answer`,
+        correctedAnswer: `[${actor}] corrected answer`,
+      }),
+    verify: async (r, actor, res) => {
+      const { correctionId, chunkId: noteChunkId } = res as {
+        correctionId: string;
+        chunkId: string;
+      };
+      expect(await ownerOfRow('chunks', noteChunkId)).toBe(teacherId(actor));
+      const row = await raw.query<{ t: string; m: string }>(
+        `select teacher_id as t, module_id as m from corrections where id = $1`,
+        [correctionId],
+      );
+      expect(row.rows[0]).toEqual({ t: teacherId(actor), m: ids.module(actor, 1) });
+      const found = await r.retrieval.search(tScope(actor), {
+        q: 'isolation correction',
+        allowedModuleIds: [ids.module(actor, 1)],
+        k: 50,
+      });
+      expect(found.map((c) => c.id)).toContain(noteChunkId);
+    },
+    mismatches: (a) => [
+      [
+        'an empty bad answer after trimming',
+        (r) =>
+          r.corrections.record(tScope(a), {
+            moduleId: ids.module(a, 1),
+            question: 'q',
+            badAnswer: '   ',
+            correctedAnswer: 'x',
+          }),
+        'invalid',
+      ],
+    ],
+  },
   // Task 7.4: read path for the rows chunks.addTeacherNote just wrote (its positive control writes
   // `[actor]` rows for each teacher, so every actor has its own rows by now).
   'teacherEvalCases.listForTeacher': {
@@ -769,6 +813,24 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     random: (r, scope, rid) => r.packageVersions.latest(scope, rid),
     owners: (c: { name: string; teacherId: string } | null) =>
       c ? [...markers(c.name), teacherOfId(c.teacherId)] : [],
+  },
+  'agentVersions.latest': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.agentVersions.latest(scope, ids.agent(t)),
+    random: (r, scope, rid) => r.agentVersions.latest(scope, rid),
+    owners: (c: { config: { teacherId: string } } | null) =>
+      c ? [teacherOfId(c.config.teacherId)] : [],
+  },
+  'packageVersions.listForAgent': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: true,
+    call: (r, scope, t) => r.packageVersions.listForAgent(scope, ids.agent(t)),
+    random: (r, scope, rid) => r.packageVersions.listForAgent(scope, rid),
+    owners: (rows: { packageId: string; name: string }[]) =>
+      rows.flatMap((p) => [p.packageId.slice(4).toUpperCase(), ...markers(p.name)]),
   },
   'agentVersions.get': {
     scope: 'teacher',
