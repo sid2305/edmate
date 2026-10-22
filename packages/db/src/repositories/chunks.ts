@@ -23,6 +23,7 @@ import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { type DocumentRow, type DocumentStatus, toDocumentRow } from './map.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
+import { notTakenDown } from './takedowns.js';
 
 /** Most chunks or embeddings one call writes (ingest batches below this). */
 export const CHUNK_WRITE_MAX = 500;
@@ -240,9 +241,7 @@ export async function insertTeacherNote(
   );
   if (written(res) !== 1) throw new RepositoryError('not_found', method);
   const noteChunkId = chunkId(docId, 0);
-  await insertChunkRows(tx, teacherId, docId, [
-    { id: noteChunkId, text, locator: source.locator },
-  ]);
+  await insertChunkRows(tx, teacherId, docId, [{ id: noteChunkId, text, locator: source.locator }]);
   await bumpRevision(tx, teacherId);
   const evalCaseId = randomUUID();
   await tx.insert(teacherEvalCases).values({
@@ -258,8 +257,8 @@ export async function insertTeacherNote(
   return { chunkId: noteChunkId, evalCaseId };
 }
 
-/** +1 on the teacher's material revision (row created at 1). */
-async function bumpRevision(tx: Tx, teacherId: string): Promise<void> {
+/** +1 on the teacher's material revision (row created at 1). Also used by takedowns (12.2b). */
+export async function bumpRevision(tx: Tx, teacherId: string): Promise<void> {
   await tx
     .insert(teacherMaterialRevisions)
     .values({ teacherId, revision: 1 })
@@ -458,9 +457,7 @@ async function lockDocument(
 
 /** Deletes every chunk of the scope's document `docId` (task 8.2, the only chunk delete). */
 async function removeChunks(tx: Tx, teacherId: string, docId: string): Promise<void> {
-  await tx
-    .delete(chunks)
-    .where(and(eq(chunks.documentId, docId), eq(chunks.teacherId, teacherId)));
+  await tx.delete(chunks).where(and(eq(chunks.documentId, docId), eq(chunks.teacherId, teacherId)));
 }
 
 const StorageKeyArgSchema = z.string().min(1).max(1024);
@@ -640,7 +637,13 @@ export function chunksRepo(db: Db) {
             eq(documents.status, 'ready'),
           ),
         )
-        .where(and(eq(chunks.teacherId, teacherId), eq(chunks.moduleId, modId)))
+        .where(
+          and(
+            eq(chunks.teacherId, teacherId),
+            eq(chunks.moduleId, modId),
+            notTakenDown(chunks.documentId),
+          ),
+        )
         .orderBy(asc(documents.createdAt), asc(documents.id), asc(chunks.id))
         .limit(MODULE_CHUNKS_MAX + 1);
       if (rows.length > MODULE_CHUNKS_MAX) throw new RepositoryError('invalid', method);

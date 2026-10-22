@@ -113,4 +113,77 @@ describe('LiveClassesView', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Try again.'));
     expect(button).not.toBeDisabled();
   });
+
+  // Task 11.2b: the pre-class question queue, grouped by topic, fed by students and by
+  // unanswered ask-the-teacher questions.
+  describe('question queues (task 11.2b)', () => {
+    it('shows the empty state for both queues when there are none', () => {
+      renderIntl(<LiveClassesView classes={[]} packages={PACKAGES} studentQueue={[]} askQueue={[]} />);
+      expect(screen.getByText('No pre-class questions yet.')).toBeInTheDocument();
+      expect(screen.getByText('No unanswered questions right now.')).toBeInTheDocument();
+    });
+
+    it('shows a student-fed topic group, grouped count and sample', () => {
+      renderIntl(
+        <LiveClassesView
+          classes={[]}
+          packages={PACKAGES}
+          studentQueue={[
+            {
+              groupId: 'g1',
+              count: 3,
+              oldestAt: '2026-10-20T00:00:00.000Z',
+              sample: 'What is a ratio?',
+              liveClassIds: ['lc_1', 'lc_2'],
+            },
+          ]}
+          askQueue={[]}
+        />,
+      );
+      expect(screen.getByText('3 asked near-identically since 2026-10-20')).toBeInTheDocument();
+      expect(screen.getByText('What is a ratio?')).toBeInTheDocument();
+    });
+
+    it('shows an ask-the-teacher group', () => {
+      renderIntl(
+        <LiveClassesView
+          classes={[]}
+          packages={PACKAGES}
+          studentQueue={[]}
+          askQueue={[
+            {
+              groupId: 'g2',
+              count: 2,
+              oldestAt: '2026-10-19T00:00:00.000Z',
+              questions: [{ id: 'q1', text: 'How do fractions work?', createdAt: '2026-10-19T00:00:00.000Z' }],
+            },
+          ]}
+        />,
+      );
+      expect(screen.getByText('2 asked near-identically since 2026-10-19')).toBeInTheDocument();
+      expect(screen.getByText('How do fractions work?')).toBeInTheDocument();
+    });
+
+    it('renders a student question as literal text, never HTML (11.2a review, LOW)', () => {
+      const hostile = '<img src=x onerror=alert(1)>';
+      renderIntl(
+        <LiveClassesView
+          classes={[]}
+          packages={PACKAGES}
+          studentQueue={[
+            {
+              groupId: 'g3',
+              count: 1,
+              oldestAt: '2026-10-20T00:00:00.000Z',
+              sample: hostile,
+              liveClassIds: ['lc_1'],
+            },
+          ]}
+          askQueue={[]}
+        />,
+      );
+      expect(screen.getByText(hostile)).toBeInTheDocument();
+      expect(document.querySelector('img')).toBeNull();
+    });
+  });
 });

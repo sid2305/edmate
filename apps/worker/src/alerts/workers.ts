@@ -16,7 +16,7 @@ import { onJobFailed } from '../commit/deadLetter.js';
 import { permanentToUnrecoverable } from '../commit/workers.js';
 import { describeError, type Log } from '../log.js';
 import { type AlertJob, type AlertJobOutcome, alertProcessor } from './processors.js';
-import type { AckStore, AlertNotifier } from './types.js';
+import type { AckStore, AlertNotifier, AlertStore } from './types.js';
 
 /** How often a job may stall (worker crash) and still be retried rather than failed. */
 export const ALERT_MAX_STALLED = 1_000;
@@ -24,7 +24,8 @@ export const ALERT_MAX_STALLED = 1_000;
 export interface AlertWorkerOptions {
   connection: ConnectionOptions;
   notifier: AlertNotifier;
-  ackStore: AckStore;
+  /** Persists the alert and its escalations, and reads the ack (12.5b). `dbAlertStore` in prod. */
+  store: AlertStore & AckStore;
   /** The alert queue (a producer on the same queue), for the next escalation check. */
   queue: JobQueue;
   deadLetter: JobQueue;
@@ -47,7 +48,7 @@ export function createAlertWorker(o: AlertWorkerOptions): Worker<unknown, AlertJ
   const process = permanentToUnrecoverable<AlertJob, AlertJobOutcome>(
     alertProcessor({
       notifier: o.notifier,
-      ackStore: o.ackStore,
+      store: o.store,
       queue: o.queue,
       escalateAfterMs: o.escalateAfterMs ?? ALERT_ESCALATION_MS,
       log: o.log,
