@@ -4188,6 +4188,14 @@ tasks:
   - 9.7a
   risk: low
   status: todo
+- id: 9.5c
+  milestone: M13
+  title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts against the compose stack once CI runs e2e'
+  accept: an a11y test finds the persona buttons inside a labelled group; skills.spec.ts passes in the CI e2e job.
+  deps:
+  - 9.5b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
