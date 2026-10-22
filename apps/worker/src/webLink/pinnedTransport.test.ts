@@ -140,9 +140,17 @@ describe('createPinnedTransport: the pin', () => {
     expect(answered).toHaveBeenCalledWith(null, PUBLIC_V4, 4);
   });
 
+  it('the SNI servername drops every trailing dot, as the host checks do (8.2h)', () => {
+    const options = pinnedRequestOptions(
+      req(443, { url: new URL('https://Teacher-Site.test../x'), address: PUBLIC_V4 }),
+    );
+    expect(options.servername).toBe('teacher-site.test');
+  });
+
   it('an IP-literal host gets no SNI servername', () => {
     for (const [host, address, family] of [
       [PUBLIC_V4, PUBLIC_V4, 4],
+      [`${PUBLIC_V4}..`, PUBLIC_V4, 4],
       ['[2606:4700:4700::1111]', '2606:4700:4700::1111', 6],
     ] as const) {
       const options = pinnedRequestOptions(

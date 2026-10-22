@@ -42,7 +42,24 @@ function dnsError(code: string): Error {
   return Object.assign(new Error(`query failed ${code}`), { code });
 }
 
-const { isPublicAddress, systemResolveHost } = await import('../../src/fetch/address.js');
+const { FAMILY_GRACE_MS, NO_SUCH_NAME, errorCode, isPublicAddress, systemResolveHost } =
+  await import('../../src/fetch/address.js');
+
+describe('NO_SUCH_NAME and errorCode', () => {
+  it('names the resolver codes that mean no address', () => {
+    expect([...NO_SUCH_NAME].sort()).toEqual(['ENODATA', 'ENONAME', 'ENOTFOUND']);
+  });
+
+  it.each([
+    [dnsError('ESERVFAIL'), 'ESERVFAIL'],
+    [{ code: 42 }, 'EUNKNOWN'],
+    [null, 'EUNKNOWN'],
+    [undefined, 'EUNKNOWN'],
+    ['boom', 'EUNKNOWN'],
+  ])('errorCode(%o) is %s', (input, code) => {
+    expect(errorCode(input)).toBe(code);
+  });
+});
 
 describe('isPublicAddress', () => {
   it.each([
@@ -141,7 +158,7 @@ describe('systemResolveHost', () => {
       '93.184.216.34',
       '2606:4700:4700::1111',
     ]);
-    expect(dnsState.options).toEqual([{ timeout: 5_000, tries: 2 }]);
+    expect(dnsState.options).toEqual([{ timeout: 2_000, tries: 2 }]);
   });
 
   it('one family with no records still returns the other', async () => {
@@ -174,6 +191,50 @@ describe('systemResolveHost', () => {
     expect(err).toMatchObject({ code: 'EUNKNOWN', message: 'dns: lookup failed' });
     dnsState.answers.set('AAAA odd.example', []);
     await expect(systemResolveHost('odd.example')).rejects.toMatchObject({ code: 'ENOTFOUND' });
+  });
+
+  it('queries with a short per-query limit: every retry fits well inside the 15 s fetch deadline', async () => {
+    dnsState.options.length = 0;
+    dnsState.answers.set('A t.example', ['93.184.216.34']);
+    dnsState.answers.set('AAAA t.example', ['2606:4700:4700::1111']);
+    await systemResolveHost('t.example');
+    const [opts] = dnsState.options as { timeout: number; tries: number }[];
+    // c-ares doubles the timeout on each retry: the total wait is timeout * (2^tries - 1).
+    expect(opts).toBeDefined();
+    expect((opts?.timeout ?? 0) * (2 ** (opts?.tries ?? 0) - 1)).toBeLessThanOrEqual(6_000);
+  });
+
+  it('does not wait for a dropped AAAA query once A has answered', async () => {
+    vi.useFakeTimers();
+    try {
+      dnsState.answers.set('A half.example', ['93.184.216.34']);
+      dnsState.answers.set('AAAA half.example', 'hang');
+      const p = systemResolveHost('half.example');
+      await vi.advanceTimersByTimeAsync(FAMILY_GRACE_MS);
+      await expect(p).resolves.toEqual(['93.184.216.34']);
+      expect(dnsState.cancels).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps waiting when the first family answered with nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      dnsState.answers.set('A late6.example', []);
+      dnsState.answers.set('AAAA late6.example', 'hang');
+      const p = systemResolveHost('late6.example');
+      let done = false;
+      void p.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      await vi.advanceTimersByTimeAsync(FAMILY_GRACE_MS * 3);
+      expect(done).toBe(false);
+      expect(dnsState.cancels).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('cancels the resolver when the signal aborts, and stops listening afterwards', async () => {
