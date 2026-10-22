@@ -1213,6 +1213,61 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       );
     },
   },
+  // Task 6.5: no target row named (the scope's own profile, sessions and evidence are always the
+  // target), so owns: () => true skips the cross-actor grid, same shape as applyMastery above.
+  // The positive control ends the pair's main seeded session and clears its profile and evidence;
+  // `verify` restores all three to the seed's own values so later cases and tests are unaffected
+  // (same "put it back" idiom sessions.end/endOnPackageChange already use above).
+  'learnerProfiles.reset': {
+    scope: 'student',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope) => r.learnerProfiles.reset(scope),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ reset: true });
+      const sc = sScope(actor);
+      const profile = await r.learnerProfiles.get(sc);
+      expect(profile).toMatchObject({ mastery: {}, mistakes: [] });
+      expect(profile && 'lastSummary' in profile).toBe(false);
+      const session = await r.sessions.get(sc, ids.session(actor));
+      expect(session?.endedAt).not.toBeNull();
+      for (const p of PAIRS) {
+        if (p === actor) continue;
+        const other = await r.learnerProfiles.get(sScope(p));
+        expect(other?.mastery, `${p}'s mastery after ${actor}'s reset`).not.toEqual({});
+      }
+      // Restore the seed's own values, so every case and test after this one sees the original
+      // fixture (same idiom sessions.end / endOnPackageChange already use).
+      const t = teacherOf(actor);
+      await raw.query(`update sessions set ended_at = null where id = $1`, [ids.session(actor)]);
+      await raw.query(
+        `update learner_profiles set mastery = $1::jsonb, mistakes = $2::jsonb, last_summary = $3
+         where student_id = $4 and teacher_id = $5`,
+        [
+          JSON.stringify({ [ids.topic(t)]: { p: 0.5, n: 2, updatedAt: '2026-10-17T10:00:00Z' } }),
+          JSON.stringify([{ tag: `[${actor}] sign`, count: 1, lastSeen: '2026-10-17T10:00:00Z' }]),
+          `[${actor}] last time`,
+          sc.studentId,
+          sc.teacherId,
+        ],
+      );
+      await raw.query(
+        `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source)
+         values (gen_random_uuid()::text, $1, $2, $3, true, 'check')`,
+        [sc.studentId, sc.teacherId, ids.topic(t)],
+      );
+    },
+  },
+  'evidenceEvents.list': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.evidenceEvents.list(scope, { limit: 100 }),
+    random: (r, _scope, rid) =>
+      r.evidenceEvents.list({ studentId: rid, teacherId: rid }, { limit: 100 }),
+    owners: (res: { events: EvidenceEvent[] }) =>
+      res.events.map((e) => pairOfIds(e.studentId, e.teacherId)),
+  },
   'evidenceEvents.append': {
     scope: 'student',
     op: 'write',
