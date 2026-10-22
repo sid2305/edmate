@@ -14,6 +14,7 @@ import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
 import { styleCardsRepo } from './style-cards.js';
 import { subscriptionsRepo } from './subscriptions.js';
+import { teacherEvalCasesRepo } from './teacher-eval-cases.js';
 import { teacherProfilesRepo } from './teacher-profiles.js';
 import { teacherQuestionsRepo } from './teacher-questions.js';
 import { turnTracesRepo } from './turn-traces.js';
@@ -44,6 +45,7 @@ export function createRepositories(db: Db) {
     styleCards: guardAll('styleCards', styleCardsRepo(db)),
     packageVersions: guardAll('packageVersions', packageVersionsRepo(db)),
     teacherQuestions: guardAll('teacherQuestions', teacherQuestionsRepo(db)),
+    teacherEvalCases: guardAll('teacherEvalCases', teacherEvalCasesRepo(db)),
     sessions: guardAll('sessions', sessionsRepo(db)),
     messages: guardAll('messages', messagesRepo(db)),
     turnTraces: guardAll('turnTraces', turnTracesRepo(db)),
@@ -81,6 +83,7 @@ export {
   type AnswerResult,
   type TeacherQuestionGroup,
 } from './teacher-questions.js';
+export { TEACHER_EVAL_CASES_MAX, type TeacherEvalCaseRow } from './teacher-eval-cases.js';
 export {
   NOTIFICATIONS_MAX_LIMIT,
   type NotificationRow,

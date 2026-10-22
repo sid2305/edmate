@@ -69,11 +69,47 @@ export {
   type OutOfCourseItem,
   type PerAgentSuiteInput,
 } from './perAgentSuite.js';
+export {
+  agentPackagesFromConfigs,
+  answerableFromTeacherEvalCases,
+  type TeacherEvalCaseLike,
+} from './gateAdapters.js';
+export {
+  CHANGE_KINDS,
+  GATE_THRESHOLDS,
+  GateScopeError,
+  groupOf,
+  sampleStyleCases,
+  selectGateCases,
+  STYLE_SAMPLE_SIZE,
+  type ChangeKind,
+  type ExpectedGroup,
+  type GateGroup,
+  type GateOrigin,
+  type GateScope,
+  type GateScopeInput,
+  type ScopedCase,
+} from './gateScope.js';
+export {
+  ASSUMED_CALL_SECONDS,
+  DEADLINE_NOT_RUN,
+  GATE_CONCURRENCY,
+  GATE_DEADLINE_MS,
+  gatedPublish,
+  gateStats,
+  groupVerdict,
+  runQualityGate,
+  type GateGroupResult,
+  type GateInput,
+  type GateResult,
+  type GateStats,
+} from './qualityGate.js';
 export { toJsonReport, toSummary, type JsonReport, type ReportCost } from './report.js';
 export { toHtmlReport } from './htmlReport.js';
 export {
   RecordedJudgeSchema,
   runCase,
+  runCaseSafely,
   runSuite,
   type CaseResult,
   type RunOptions,

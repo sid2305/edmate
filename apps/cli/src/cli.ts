@@ -3,6 +3,7 @@ import { runChatCommand } from './commands/chat.js';
 import { runContentCommand } from './commands/content.js';
 import { runEvalCommand } from './commands/eval.js';
 import { buildLiveEvalAgent } from './commands/eval/liveAgent.js';
+import { runGateCommand } from './commands/gate.js';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -13,6 +14,7 @@ const USAGE = `Usage: edmate <command>
 
 Commands:
   eval <dir>                run eval cases offline from recorded fixtures (see edmate eval --help)
+  gate demo --change <kind> run the quality gate offline, scoped by change (see edmate gate --help)
   content validate [dir]    check a content tree's files, licences and rules
                             (default dir: content/demo-teacher; see edmate content --help)
   chat                      an interactive session with the demo teacher's agent
@@ -66,6 +68,8 @@ export async function run(argv: readonly string[], io: CliIo = defaultIo): Promi
             ...(baseURL === undefined ? {} : { baseURL }),
           }),
       });
+    case 'gate':
+      return runGateCommand(rest, io, { cwd: process.cwd() });
     case 'content':
       return runContentCommand(rest, io, { cwd: process.cwd() });
     case 'chat':
