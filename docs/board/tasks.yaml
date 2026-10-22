@@ -4077,9 +4077,29 @@ tasks:
   - 8.7d
   - 9.2c
   risk: low
-  status: running
+  status: done
   branch: m8/8.7e-public-scorecard
-  model: plan:opus build:sonnet
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 15
+    tokens_in: 50
+    tokens_out: 111
+    cache_read_tokens: 538366
+    wall_time_seconds: 124
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 13.regate
   milestone: M13
   title: Re-run the quality gate automatically when the material of a published agent changes (8.7 Q10 follow-up)

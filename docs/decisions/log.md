@@ -10,6 +10,17 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7e the loader reads the first agent id only · decided by builder · risk: low
+- Decided: `teacherScorecard` calls `publicScorecard` with `teacher.agentIds[0]`, not every agent
+  id the page lists packages for.
+- Why: 8.7 and the MVP rules fix one agent per teacher; `agentIds` on the discovery row is a list
+  only because the packages section was written generically (9.2c). Reading just the first id
+  avoids a second, redundant call and keeps the scorecard tied to the agent whose packages the
+  page already shows first.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.1c Subject change resets verification in the same UPDATE · decided by builder · risk: high
 - Decided: `teacherProfiles.update` sets `verification_status` to `pending` inside the same `UPDATE` as the subject change, via a `CASE` on the row's old subject; no extra read, no new lock, so the repository's lock order is unchanged. Touches the risky path `packages/db/src/repositories/**`; reviewer: security-reviewer.
 - Why: human answer B-30; a single statement leaves no window for a concurrent `setVerification` to be overwritten or skipped.
