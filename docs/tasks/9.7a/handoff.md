@@ -120,4 +120,4 @@ later run's `getByText(question)` then fails strict mode. CI always starts with 
   tsx`) and 9.6 (subscription upgrade), per the plan's build order.
 
 Status: DONE
-Tool calls used: 72
+Tool calls used: 114 (harness: resumed build 54 + fix round 60; the cut-off first run is not counted)
