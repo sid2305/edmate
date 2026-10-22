@@ -2339,8 +2339,9 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.3b-home-followups
+  model: plan:lead build:sonnet
 - id: 0.16a
   milestone: M0
   title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
