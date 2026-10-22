@@ -2,7 +2,7 @@
 
 Status: DONE
 
-Tool calls used: 45
+Tool calls used: 73 (harness count)
 
 ## What was built
 
@@ -67,6 +67,16 @@ One-line change: `Object.values(BLOCK_REPLIES) as string[]` → `Object.values(B
 `blockReplies.test.ts`, unchanged — still passes). Per the plan, reviewers: code-reviewer.
 
 ## Decisions
+
+### 21 Oct 2026 · 7.6a merge: guardrails cast removal reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6a with its one-line `packages/harness/src/guardrails/blockReplies.ts` change (an unnecessary cast removed, no behaviour change), reviewed by code-reviewer (the group's required reviewer during the MVP phase) and typescript-reviewer; both approved with no CRITICAL, HIGH or MEDIUM.
+- Why: a risky path needs its required reviewers and a risk: high entry.
+- risk: high
+
+### 21 Oct 2026 · 7.6a budget: 73 tool calls against 60 · decided by lead
+- Decided: accept the overrun (1.22×, the handoff's ~55 was the builder's estimate).
+- Why: all seven deferred findings and the second provider landed in one green run.
+- risk: low
 
 ### `createChatGateway`'s openai-compatible factory takes `baseURL` as a per-call option, not a second env var
 - Decided: the live sweep threads each `live-models.yaml` entry's own `baseURL` field (already in
