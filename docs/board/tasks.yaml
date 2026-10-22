@@ -4336,6 +4336,14 @@ tasks:
   - 12.1a
   risk: high
   status: todo
+- id: 8.7k
+  milestone: M8
+  title: '8.7 lead answer Q10: the studio shows a "changed since last publish" note on /teacher/publish (and the studio home) when the style card, outline, packages or uploads changed after the latest published run, so the teacher knows to publish again (automatic re-gating stays 13.regate)'
+  accept: a teacher who edits after a publish sees the note; after a new publish it is gone; a component test for both, with jest-axe.
+  deps:
+  - 8.7d
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
