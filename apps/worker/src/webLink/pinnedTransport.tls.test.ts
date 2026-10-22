@@ -55,7 +55,7 @@ afterAll(() => {
 
 interface TlsServer {
   readonly port: number;
-  readonly sni: (string | false)[];
+  readonly sni: (string | false | null)[];
   connections(): number;
   requests(): number;
   close(): Promise<void>;
@@ -69,7 +69,7 @@ afterEach(async () => {
 });
 
 async function startTls(): Promise<TlsServer> {
-  const sni: (string | false)[] = [];
+  const sni: (string | false | null)[] = [];
   let connections = 0;
   let requests = 0;
   const s = https.createServer({ key, cert }, (_q, res) => {
