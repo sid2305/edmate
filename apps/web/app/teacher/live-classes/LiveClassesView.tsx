@@ -5,9 +5,17 @@
 // shows an error and re-enables the form (lessons: "a studio page that trusts a 200 response gets
 // stuck" -- the body read is wrapped in try/catch, and the busy flag always clears in `finally`).
 import { useTranslations } from 'next-intl';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { z } from 'zod';
 import type { ErrorCode } from '@edmate/contracts';
-import type { TeacherLiveClassRow, TeacherQuestionGroup, TopicQuestionGroup } from '@edmate/db';
+import type {
+  LiveClassRecording,
+  TeacherLiveClassRow,
+  TeacherQuestionGroup,
+  TopicQuestionGroup,
+} from '@edmate/db';
+import { listDocuments as defaultListDocuments } from '../../../src/studio/uploadClient';
+import { RecordingUpload, type RecordingUploadProps } from './RecordingUpload';
 import { scheduleLiveClass, type ScheduleLiveClassResult } from '../../../src/studio/liveClasses/scheduleLiveClassAction';
 import type { LiveClassesPackage } from '../../../src/studio/liveClasses/loadLiveClasses';
 
@@ -20,6 +28,51 @@ export interface LiveClassesViewProps {
   askQueue?: TeacherQuestionGroup[];
   /** Tests inject a fake; defaults to Phase B's route. */
   scheduleLiveClass?: typeof scheduleLiveClass;
+  /** 11.4c: the teacher's class recordings, shown under their own class. */
+  recordings?: LiveClassRecording[];
+  /** 11.4c: server time (ISO). A class with `startsAt <= now` can take a recording; none without it. */
+  now?: string;
+  /** 11.4c: the status poll's read; tests inject a fake (rule 4). */
+  listDocuments?: typeof defaultListDocuments;
+  /** 11.4c: the recording form's studio calls; tests inject fakes (rule 4). */
+  recordingClient?: Pick<RecordingUploadProps, 'createDocument' | 'putFile' | 'completeDocument'>;
+}
+
+/** 11.4c: how often the class rows re-read recording statuses while one is pending. */
+export const RECORDING_POLL_MS = 5000;
+
+/** The poll's payload, checked before use; a bad one keeps the last good view (lessons). */
+const PollSchema = z.array(
+  z.object({
+    id: z.string(),
+    status: z.enum(['uploading', 'processing', 'ready', 'failed']),
+    failureReason: z.string().optional(),
+  }),
+);
+
+/** The upload centre's failure-reason keys (`uploads.reasons.*`); anything else is `other`. */
+const REASON_KEYS = [
+  'input_too_large',
+  'unsupported_type',
+  'unsupported',
+  'forbidden',
+  'enqueue_failed',
+  'validation',
+  'provider_error',
+] as const;
+function reasonKey(reason: string | undefined): (typeof REASON_KEYS)[number] | 'other' {
+  return (REASON_KEYS as readonly string[]).includes(reason ?? '')
+    ? (reason as (typeof REASON_KEYS)[number])
+    : 'other';
+}
+
+const isPending = (r: LiveClassRecording) => r.status === 'uploading' || r.status === 'processing';
+
+/** Upserts a recording by document id (newest first when new). */
+function upsert(rows: LiveClassRecording[], row: LiveClassRecording): LiveClassRecording[] {
+  return rows.some((r) => r.documentId === row.documentId)
+    ? rows.map((r) => (r.documentId === row.documentId ? row : r))
+    : [row, ...rows];
 }
 
 /** `oldestAt` is an ISO timestamp; shown as a plain date (English-only pilot, no locale lookup). */
@@ -45,8 +98,68 @@ export function LiveClassesView({
   studentQueue = [],
   askQueue = [],
   scheduleLiveClass: doSchedule = scheduleLiveClass,
+  recordings: initialRecordings = [],
+  now,
+  listDocuments = defaultListDocuments,
+  recordingClient = {},
 }: LiveClassesViewProps) {
   const t = useTranslations('liveClassesStudio');
+  const tu = useTranslations('uploads');
+  const [recordings, setRecordings] = useState(initialRecordings);
+  const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const pending = recordings.some(isPending);
+
+  // 11.4c: while a shown recording is uploading or processing, re-read statuses every 5 s. Stops
+  // when none is pending and on unmount. A failed or malformed read keeps the last good view and
+  // the next tick tries again; one read at a time.
+  useEffect(() => {
+    if (!pending) return undefined;
+    let alive = true;
+    let inFlight = false;
+    const timer = setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
+      void (async () => {
+        try {
+          const result = await listDocuments();
+          if (!alive || !result.ok) return;
+          const parsed = PollSchema.safeParse(result.value);
+          if (!parsed.success) return;
+          const byId = new Map(parsed.data.map((d) => [d.id, d]));
+          setRecordings((rows) =>
+            rows.map((r) => {
+              const d = byId.get(r.documentId);
+              if (!d) return r;
+              return {
+                liveClassId: r.liveClassId,
+                documentId: r.documentId,
+                sourceTitle: r.sourceTitle,
+                status: d.status,
+                ...(d.status === 'failed' && d.failureReason !== undefined
+                  ? { failureReason: d.failureReason }
+                  : {}),
+              };
+            }),
+          );
+        } catch {
+          // An unreadable reply: keep the last good view; the next tick retries.
+        } finally {
+          inFlight = false;
+        }
+      })();
+    }, RECORDING_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [pending, listDocuments]);
+
+  /** The union of the class's attached packages' modules, in package order (Q4). */
+  const modulesFor = (c: TeacherLiveClassRow): string[] => [
+    ...new Set(packages.filter((p) => c.packageIds.includes(p.packageId)).flatMap((p) => p.moduleIds)),
+  ];
+  const hasStarted = (c: TeacherLiveClassRow) =>
+    now !== undefined && new Date(c.startsAt).getTime() <= new Date(now).getTime();
   const [classes, setClasses] = useState(initialClasses);
   const [title, setTitle] = useState('');
   const [link, setLink] = useState('');
@@ -97,6 +210,21 @@ export function LiveClassesView({
     } finally {
       setBusy(false);
     }
+  };
+
+  const renderRecordings = (c: TeacherLiveClassRow) => {
+    const rows = recordings.filter((r) => r.liveClassId === c.id);
+    if (rows.length === 0) return null;
+    return (
+      <ul aria-label={t('recording.listLabel', { title: c.title })}>
+        {rows.map((r) => (
+          <li key={r.documentId}>
+            <span>{r.sourceTitle}</span> <span>{tu(`status.${r.status}`)}</span>
+            {r.status === 'failed' ? <span> {tu(`reasons.${reasonKey(r.failureReason)}`)}</span> : null}
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   return (
@@ -159,6 +287,28 @@ export function LiveClassesView({
               <a href={c.link ?? undefined} target="_blank" rel="noopener noreferrer">
                 {t('joinLink')}
               </a>
+              {renderRecordings(c)}
+              {hasStarted(c) ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    aria-expanded={openClassId === c.id}
+                    aria-label={t('recording.addLabel', { title: c.title })}
+                    onClick={() => setOpenClassId((id) => (id === c.id ? null : c.id))}
+                  >
+                    {openClassId === c.id ? t('recording.close') : t('recording.add')}
+                  </button>
+                  {openClassId === c.id ? (
+                    <RecordingUpload
+                      liveClass={c}
+                      moduleIds={modulesFor(c)}
+                      onRecording={(row) => setRecordings((rows) => upsert(rows, row))}
+                      {...recordingClient}
+                    />
+                  ) : null}
+                </>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -67,6 +67,15 @@ decisions:
     - 'Global: a merchant of record'
     recommendation: Subscriptions + split payouts to teachers; compare fees
     answer: Razorpay in India (UPI AutoPay, Route split payouts); a merchant of record (e.g. Paddle or Lemon Squeezy) in the US for sales tax; both behind the one Payments port
+  mor-provider:
+    status: open
+    question: 'US merchant of record: Paddle or Lemon Squeezy, and has it accepted Edmate''s model in writing? (B-53)'
+    options:
+    - Paddle
+    - Lemon Squeezy
+    - Stripe Billing + Stripe Tax (fallback if refused)
+    recommendation: Paddle; get its written OK before 10.1 Phase C
+    answer: null
   revenue-share:
     status: open
     question: Edmate's revenue share and floor price per package
@@ -5447,9 +5456,28 @@ tasks:
   deps:
   - 12.2e
   risk: medium
-  status: running
+  status: done
   branch: m12/12.2g-staff-reports-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
@@ -6068,9 +6096,29 @@ tasks:
   deps:
   - 11.4b
   risk: medium
-  status: running
+  status: done
   branch: m11/11.4c-add-recording
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.4d
   milestone: M13
   title: 'ffmpeg chunker in the worker so MP4, WebM and M4A recordings of any length can be transcribed (needs an ADR: new system binary)'
@@ -6157,9 +6205,9 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m11/11.4g-recording-upload-followups
+  model: plan:lead build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -6211,13 +6259,45 @@ tasks:
   deps:
   - '2.4'
   - M1
-  status: planning
+  status: running
   needs_decision:
   - payment-provider
   - pilot-market
   risk: risky
   branch: null
   model: plan:opus
+- id: 10.1a
+  milestone: M10
+  title: Payments port, Zod schemas and ADR-0015 in packages/contracts (10.1 Phase A)
+  accept: ADR-0015 accepted after architect, security-reviewer and typescript-reviewer; contracts schemas, fixtures and spec-types match the ADR; contracts tests green.
+  deps:
+  - '10.1'
+  risk: risky
+  status: running
+  branch: m10/10.1a-payments-port
+  model: plan:opus arch:opus build:opus
+- id: 10.1b
+  milestone: M10
+  title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B)'
+  accept: the contract suite passes on the fake and on a second fake provider with no caller change; payments tests green.
+  deps:
+  - 10.1a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 10.1c
+  milestone: M10
+  title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
+  accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
+  deps:
+  - 10.1b
+  risk: risky
+  status: todo
+  needs_decision:
+  - mor-provider
+  branch: null
+  model: null
 - id: '10.2'
   milestone: M10
   title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
@@ -6330,10 +6410,10 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: running
+  status: done
   priority: P1
   branch: null
-  model: plan:opus
+  model: phases 11.4a+11.4b+11.4c
 - id: '12.1'
   milestone: M12
   title: Staff console with manual teacher verification
@@ -6352,10 +6432,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   risk: risky
   branch: null
-  model: plan:opus
+  model: phases 12.2a+12.2b+12.2c+12.2d+12.2e+12.2g
 - id: '12.3'
   milestone: M12
   title: Rights declaration per upload, repeat-infringer handling, grievance contact per market
