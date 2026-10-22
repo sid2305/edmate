@@ -2322,9 +2322,9 @@ tasks:
   branch: null
 - id: 9.3b
   milestone: M13
-  title: '9.3 review follow-ups: /home loads chat and start links in parallel (Promise.all); PackageCompare logs the error name on a network failure; fromError gets an exhaustiveness guard and maps only
+  title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and subscriptions.findLive); PackageCompare logs the error name on a network failure; fromError gets an exhaustiveness guard and maps only
     the unique-violation constraint to 409 already-subscribed; subscriptions.start accepts only the live package version (9.6/10.8); paused subscriptions get their own text on the compare page (9.6); price
-    formatting uses the currency''s own fraction digits'
+    formatting uses the currency''s own fraction digits; 9.6e LOWs: the startableAgents docstring in apps/web/src/chat/liveChats.ts no longer says resuming is out of scope; the compare-page test asserts the Change plan link for trial and past_due too'
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
