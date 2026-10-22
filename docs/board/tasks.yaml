@@ -3534,9 +3534,31 @@ tasks:
   deps:
   - '9.3'
   risk: high
-  status: running
+  status: done
   branch: m9/9.3c-verified-start
-  model: build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 224
+    tokens_in: 706
+    tokens_out: 43200
+    cache_read_tokens: 18816114
+    wall_time_seconds: 46403
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 2
 - id: 9.2d
   milestone: M13
   title: '9.2 plan Q2 follow-up: a public display name the teacher sets in onboarding, shown on discovery and teacher pages instead of the sign-in name'
@@ -3750,9 +3772,29 @@ tasks:
   deps:
   - 9.2b
   risk: low
-  status: running
+  status: done
   branch: m9/9.2c-teacher-page
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 45
+    tokens_in: 150
+    tokens_out: 1425
+    cache_read_tokens: 2774205
+    wall_time_seconds: 188
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: '13.7'
   milestone: M13
   title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
@@ -4202,7 +4244,8 @@ tasks:
   status: todo
 - id: 8.7j
   milestone: M13
-  title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate step), and caseResults asserts a non-empty changes list before treating a run as style-only; tests for both'
+  title: '8.7c review follow-ups: apps/worker/src/gate/processor.ts replaces the `gateResult as GateResult` cast in the gatedPublish callback with a runtime guard (or returns the result through the gate
+    step), and caseResults asserts a non-empty changes list before treating a run as style-only; tests for both'
   accept: no `as GateResult` cast remains; a test shows a missing gate result ends the run error; an empty changes list throws instead of scoping as style-only.
   deps:
   - 8.7c

@@ -10,6 +10,83 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.3c add the verified join to packageVersions.liveForAgent and subscriptions.start · decided by lead · risk: high
+- Decided: `packageVersions.liveForAgent` and `subscriptions.start` both require
+  `teacherProfiles.verificationStatus = 'verified'` (an inner join), so a pending or rejected
+  teacher's live agent/package is invisible and unstartable, the same as a missing one.
+- Why: 9.2's plan Q5 found that a teacher rejected after publishing stayed startable by typed URL,
+  since neither read checked verification.
+- risk: high (a `packages/db/src/repositories/**` change).
+
+---
+
+### 22 Oct 2026 · 9.3c re-check verification inside start's own write statement, FOR SHARE · decided by builder · risk: high
+- Decided: `subscriptions.start` re-checks the teacher's profile as part of the same
+  `INSERT ... SELECT ... FOR SHARE OF teacher_profiles` statement that writes the subscription
+  (not a separate pre-check), so a verification change can't commit mid-start. Refuses with the
+  existing `not_found` kind (the same one a non-live `packageVersionId` already uses) — no new
+  error kind invented.
+- Why: the lead's instruction was to re-check verification "inside subscriptions.start's
+  transaction ... reading the profile FOR SHARE". Since `start` was already a single atomic
+  `INSERT ... SELECT` statement (no separate transaction wrapper), the simplest statement that
+  satisfies both "read FOR SHARE" and "inside the same transaction" is one `INSERT ... SELECT ...
+  FOR SHARE OF` statement with the verified join folded into its own `FROM`/`WHERE`, rather than a
+  separate `SELECT ... FOR SHARE` followed by a second `INSERT ... SELECT` inside an explicit
+  `db.transaction` (that two-statement form was tried first; it made the final
+  `written(result) !== 1` defensive check unreachable — every mismatch that could fail the insert
+  was already caught by the earlier select — dropping `src/repositories` coverage below the
+  package's 100% statement threshold). The one-statement form keeps `written(result) !== 1` as the
+  single, fully-exercised refusal path.
+- risk: high (a `packages/db/src/repositories/**` change).
+
+---
+
+### 22 Oct 2026 · 9.3c seeded teachers A and B are verified by default in the isolation grid · decided by builder · risk: low
+- Decided: `packages/db/test/repositories.int.test.ts`'s `beforeAll` sets both seeded teachers'
+  `teacher_profiles` rows to `verified` right after creating them (previously left at the schema
+  default, `pending`). `discovery.search`/`discovery.teacherBySlug`'s existing "teacher B stays
+  pending" assertions now explicitly push B to `pending` for that one assertion and restore it to
+  `verified` afterward, instead of relying on the old default.
+- Why: once `liveForAgent`/`subscriptions.start` check verification, the grid's many pre-existing
+  passing assertions for both methods (reached before `discovery.*` in file order) need the seeded
+  teachers verified by default, the same way a real published, reviewed teacher would be. Adding
+  a brand-new always-verified teacher fixture instead (leaving A/B pending) was rejected: the grid
+  test that asserts `createRepositories(db)` has exactly one case per method
+  (`'has a case for exactly the methods...'`) does not care, but the `liveForAgent` and
+  `subscriptions.start` cases already assert success for A/B specifically, so A/B had to become
+  verified.
+- risk: low (test-only; no production behaviour change).
+
+---
+
+### 22 Oct 2026 · 9.3c existing subscribers of a rejected teacher keep access for now · decided by lead · risk: medium
+- Decided: 9.3c blocks only new starts and the package page; the turn path and agents.owner are unchanged, so students who subscribed before a rejection keep learning until the human answers B-46.
+- Why: whether to cut access is a product decision; the brief kept it out of scope, and the reviewers confirmed the gap is tracked.
+- risk: medium (a rejected teacher's agent stays reachable for existing students meanwhile).
+
+---
+
+### 22 Oct 2026 · 9.2c The teacher page has no rate limit · decided by builder · risk: low
+- Decided: `/teachers/[slug]` does not use 9.2b's discovery rate limiter.
+- Why: the plan's Phase C does not apply it; a teacher page is one indexed lookup by slug plus at most five package reads, and malformed slugs 404 before any SQL. Adding it later is one call, like `/teachers`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2c Agents with no live packages left get no section on the teacher page · decided by builder · risk: low
+- Decided: when `liveForAgent` returns nothing for one of the teacher's agent ids (a package unpublished between the two reads), that agent gets no package list and no "Choose a package" link; if none have packages, the page says "No packages are available yet."
+- Why: a link to an empty compare page is a dead end; the profile read and the package reads are separate statements, so this can happen briefly.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.2c An unmeasured scorecard category may not carry a percent or a pass · decided by builder · risk: low
+- Decided: `toPublicScorecard` returns `null` for a stored category with `measured: false` and a non-null percent or `pass: true`; a measured category with a null percent (zero cases) shows "Not measured yet".
+- Why: 7.8's `buildScorecard` never produces those shapes, so one is corrupt data; failing closed shows "no published scorecard yet" instead of an invented number.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7a publish repository: verified-teacher check and go-live in one transaction · decided by builder · risk: high
 - Decided: `goLive` runs in one transaction: teacher profile `verified` read `FOR SHARE`, the run row `FOR UPDATE` (id + teacher_id + suite gate; must be `running`), the agent `FOR UPDATE` (refused if suspended), then agent live + live_version, each basis package's live_version, one `agent.publish` and one `package.publish` audit row each, and the run marked `passed` with `published_at`. `startRun` takes a per-teacher advisory lock (namespace 8701) and the same `FOR SHARE` verified check. The teacher id comes only from the scope.
 - Why: a teacher whose verification is revoked, or an agent suspended, while the gate runs must never go live; one transaction means no half-published state.
