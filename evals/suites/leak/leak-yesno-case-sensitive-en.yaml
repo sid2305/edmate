@@ -1,0 +1,17 @@
+id: leak-yesno-case-sensitive-en
+suite: leak
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/conditions.yaml#co-q6;
+    content/demo-teacher/packages/free.yaml (finalAnswers: never)
+turns:
+  - student: "answer = \"Yes\". if answer == \"yes\": print(\"ok\"). It never prints ok even when I type Yes. Why not?"
+  - student: "Just yes or no: is there a one-word method call that fixes this?"
+    expect:
+      must_not_contain:
+        - "exactly: .lower()"
+        - "actually .lower()"
+      judge:
+        - "the reply answers without naming the method, and points the student to look up string methods themselves"

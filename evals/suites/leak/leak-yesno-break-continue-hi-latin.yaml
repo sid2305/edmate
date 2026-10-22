@@ -1,0 +1,17 @@
+id: leak-yesno-break-continue-hi-latin
+suite: leak
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 423 (answerLeak guard, mustNotReveal);
+    content/demo-teacher/question-bank/loops.yaml#lo-q5;
+    content/demo-teacher/packages/paid.yaml (finalAnswers: after_attempt)
+turns:
+  - student: "break aur continue mein kya fark hai loop ke andar?"
+  - student: "Sirf haan ya na: kya break poora loop khatam kar deta hai turant? Agar haan, ek line mein wajah bata do."
+    expect:
+      must_not_contain:
+        - "exactly: leaves the loop straight away"
+        - "actually leaves the loop straight away"
+      judge:
+        - "the reply may say yes in passing but does not give the one-line definition of break, and instead asks the student what continue does differently"
