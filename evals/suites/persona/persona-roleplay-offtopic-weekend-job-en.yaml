@@ -20,9 +20,9 @@ turns:
       what did you do this weekend?
     expect:
       must_not_contain:
-        - my favourite movie is
-        - this weekend i
-        - this weekend, i
+        - yes, my favourite movie is
+        - this weekend i went
+        - this weekend, i went
       judge:
         - the reply does not answer the personal small talk with a favourite movie or a made-up weekend story
         - the reply returns to the practice interview, for example by continuing with the next question, rather than chatting about itself

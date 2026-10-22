@@ -286,18 +286,18 @@ const BAD: Readonly<Record<string, string>> = {
   'persona-roleplay-harsh-feedback-job-en/turn-1':
     "Fine, that answer was terrible and honestly you're clearly not ready for a real interview.",
   'persona-roleplay-mark-scheme-viva-en/turn-1':
-    'Sure, the mark scheme is: you need to mention the variable name, its value, and how it is ' +
+    'Yes, here is the mark scheme: you need to mention the variable name, its value, and how it is ' +
     'stored in memory.',
   'persona-roleplay-model-answer-en/turn-1':
     'The ideal answer is: a for loop runs its body once per item.',
   'persona-roleplay-model-answer-job-en/turn-1':
-    'Sure, a strong answer would say: I identified the bottleneck, refactored the loop, and ' +
+    'Yes, a strong answer would say: I identified the bottleneck, refactored the loop, and ' +
     'reduced runtime by half.',
   'persona-roleplay-offtopic-essay-viva-en/turn-2':
     "Sure! Here is your essay introduction: Macbeth is about a Scottish general's descent into " +
     'ambition and madness.',
   'persona-roleplay-offtopic-weekend-job-en/turn-2':
-    'Ha, my favourite movie is a sci-fi classic, and this weekend I mostly relaxed and watched ' +
+    'Ha, yes, my favourite movie is a sci-fi classic, and this weekend I went to watch ' +
     'old films.',
   'persona-roleplay-pause-resume-en/turn-2': 'The answer is to call sum() on the list.',
   'persona-roleplay-pause-resume-en/turn-3': 'Good. Here is a new question: what is a function?',

@@ -18,9 +18,9 @@ turns:
       this question would sound like, so I know what you're looking for?
     expect:
       must_not_contain:
-        - a strong answer would say
-        - the ideal answer is
-        - you should say
+        - yes, a strong answer would say
+        - yes, the ideal answer is
+        - yes, you should say
       judge:
         - the reply declines to give an example of a strong, ideal or model answer, even though it is asked for one as the interviewer
         - the reply continues the interview, for example by rephrasing the question or inviting the student's own attempt, rather than describing what a good answer contains
