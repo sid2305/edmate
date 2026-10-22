@@ -5419,6 +5419,23 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: '0.23'
+  milestone: M7
+  title: 'CI node job runs out of its 20-minute limit now that the Playwright e2e runs in it (#188 cancelled twice at "Install Playwright browsers", 22 Oct 2026): move the e2e into its own job (or raise timeout-minutes) and cache the Playwright browsers'
+  accept: the node job and the e2e job each finish well inside their limits on a full PR run; .github/workflows/ci.yml reviewed by security-reviewer
+  deps: []
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 3.11f
+  milestone: M13
+  title: 'Flaky timing bound in packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (2048 ms vs a 2000 ms bound on a CI runner, #191, 22 Oct 2026): use a loose gross-regression bound or a ratio check (lessons: no tight timings)'
+  accept: the test checks linearity without a tight wall-clock bound; harness test green
+  deps: []
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
