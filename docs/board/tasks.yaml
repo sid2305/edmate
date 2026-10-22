@@ -5851,9 +5851,29 @@ tasks:
   deps:
   - 7.2g
   risk: low
-  status: running
+  status: done
   branch: m7/7.2i-leak-case-fixes
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 13
+    tokens_in: 46
+    tokens_out: 160
+    cache_read_tokens: 658473
+    wall_time_seconds: 93
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        HIGH: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.3e
   milestone: M13
   title: '12.3b review LOWs: the startReplace JSDoc in packages/db/src/repositories/chunks.ts gets its lost leading asterisk back (prettier --check); documents.int.test.ts narrows with a guard instead of
@@ -5937,7 +5957,7 @@ tasks:
 - id: 11.4e
   milestone: M13
   title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
-  accept: 'Both tests fail with the cap or the join check removed and pass with them in place.'
+  accept: Both tests fail with the cap or the join check removed and pass with them in place.
   deps:
   - 11.4a
   risk: low

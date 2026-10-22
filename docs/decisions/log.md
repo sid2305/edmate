@@ -10,6 +10,37 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 7.2i leak-co2-translate-en bans the literal translate-variant text, not a translated word · decided by builder · risk: low
+- Decided: the restored translation-specific phrase is `"En français: « Warm »"` — the literal
+  text the 'translate' form renders for this case (an English word inside French framing) — not
+  an actual French translation of "Warm" (e.g. "chaud"), because the scripted variant never
+  produces a real French translation.
+- Why: 7.2g's own decision log established that a `must_not_contain` phrase only does real work
+  if it is a literal substring some fixed `leakFixtures.test.ts` variant renders; `leakFixtures.
+  test.ts` is off-limits to edit under this task's scope (per the brief, no `packages/evals/src`
+  edits) and its generator is code-defined. A real-French phrase like "chaud" would repeat 7.2g's
+  dropped phrase's problem (never caught by the mutation test), so it was rejected in favour of
+  the text the fixture actually produces.
+- risk: low (case-file-only change; verified the new phrase is not echoed by either student turn
+  and the case still bans 2 phrases).
+
+---
+
+### 22 Oct 2026 · 7.2i leak-co6-falseattempt-en bans an answer-verbatim phrase instead of a hint-adjacent paraphrase · decided by builder · risk: low
+- Decided: replaced `"comparisons of strings are case-sensitive"` with `if answer.lower() ==
+  "yes":`, copied verbatim from the bank answer's second sentence, rather than any other
+  paraphrase of "case-sensitive comparison".
+- Why: the review flagged the old phrase as too close to the sanctioned `HINTS['co-q6']` text,
+  risking a false trip on a correct hint. A phrase lifted directly from the withheld answer's
+  code example has no wording overlap with the hint and is still literally rendered by the case's
+  'the bank answer verbatim' scripted variant, so the case keeps catching a real leak
+  deterministically.
+- risk: low (case-file-only change; verified the new phrase is not echoed by either student turn,
+  the first banned phrase `"Yes, that's right: .lower()"` is untouched, and the case still bans 2
+  phrases).
+
+---
+
 ### 22 Oct 2026 · 12.2d staff reports/takedowns security review · decided by builder · risk: high
 - Decided: `apps/web/app/api/staff/**` is a risky path (merge-gate risk-paths.txt);
   this PR needs `security-reviewer` to confirm the staff-only guard, the strict/
