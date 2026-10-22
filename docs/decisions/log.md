@@ -10,6 +10,96 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 6.5 merge: student memory view, reset and export · decided by lead · risk: high
+- Decided: merge 6.5. `learnerProfiles.reset(scope)` ends the pair's open sessions, deletes its evidence and clears mastery, mistakes and the last summary in one transaction, and writes a counts-only audit row. `evidenceEvents.list` is capped at 10,000 rows on the server. GET and DELETE `/api/me/memory/:agentId` resolve the scope through `studentTurnScope` and never read the request body. A minimal `/learn/[agentId]/memory` page shows the memory, downloads the JSON and resets it.
+- Why: security-reviewer, database-reviewer and typescript-reviewer (all sonnet) approve with no CRITICAL or HIGH. Two MEDIUMs are deferred: the profile lock on plain `append` to 6.5a, and the `(teacher_id, student_id, ts, id)` index to 6.2a. Three LOWs go to 6.5b.
+- risk: high (`packages/db/src/repositories/**`, `apps/web/src/auth/**`).
+
+---
+
+### 21 Oct 2026 · 6.5 budget overrun: 167 tool calls against 90 · decided by lead · risk: low
+- Decided: accept the overrun. The handoff's estimates are corrected to the harness counts (60 + 107).
+- Why: Phase B needed two test-harness fixes the plan didn't foresee (the guard matrix and the clearance scan). The work is complete and approved, so a re-run would cost more than it saves.
+- risk: low
+
+---
+
+### `reset` on a pair with no profile row still ends the open session
+Decided: The plan's step 1 (end open sessions) runs before the profile-row check in step 2, so a pair with an open session
+but no profile row (e.g. a brand-new session before the first turn populates a profile) still gets its session
+ended even though the method returns `{ reset: false }` and writes no audit row. This matches "session end" being
+a straightforward idempotent action independent of whether a profile exists yet, and avoids leaving an open
+session dangling just because the profile hasn't been created. Tested explicitly in `memory-reset.int.test.ts`.
+
+---
+
+### CASES entry restoration idiom for `learnerProfiles.reset`
+Decided: `repositories.int.test.ts` drives a single shared seeded fixture through many write cases in sequence. The new
+`learnerProfiles.reset` case's `verify` step restores the acted-on pair's session/profile/evidence to the seed's
+original values afterward (raw SQL), following the existing `sessions.end` / `sessions.endOnPackageChange`
+pattern, so later cases and tests in the same file keep seeing the original fixture. Placed the new CASES entries
+(`learnerProfiles.reset`, `evidenceEvents.list`) directly before `evidenceEvents.append` in object literal order,
+which is also execution order for `it(...)` blocks generated from the CASES object.
+
+---
+
+### Raw test inserts into `evidence_events` must supply an explicit `id`
+Decided: `evidence_events.id` uses Drizzle's `id()` column helper, which applies `randomUUID()` as a **client-side**
+default only when inserting through Drizzle's query builder — not a Postgres column default. Raw `pg` driver
+inserts used in test setup/restoration (both in `repositories.int.test.ts`'s restore step and
+`memory-reset.int.test.ts`'s session-race test) must supply `id: gen_random_uuid()::text` explicitly or the
+insert violates the `NOT NULL` constraint.
+
+---
+
+### Standalone throwaway database for `memory-reset.int.test.ts`
+Decided: Followed the `cost-alarm.int.test.ts` template: its own `createDatabase`/`migrateDatabase`/`dropDatabase` via
+`test/pg.ts`, reusing `isolation-seed.ts`'s `seed()` for the base fixture, rather than sharing the large mutable
+fixture in `repositories.int.test.ts`. This keeps the acceptance-depth tests (races, audit content, no-profile
+edge case) independent of the isolation grid's shared mutable state.
+
+---
+
+### The generic "role x route matrix" test needed a small, general fix for the new overlapping row
+Decided: `/api/me/memory/*` (DELETE) nests inside the already-listed `/api/me/**` (GET): the same sample path
+(`/api/me/memory/item_1`) matches both rows. `guard.test.ts`'s matrix loop previously derived each
+row's "is this method listed" flag from that row's own `methods` array only, so it expected GET at
+that path to be refused under the new DELETE-only row — which is wrong: the real `ruleFor` serves GET
+there via the broader `/api/me/**` row with the same `['student']` access, so it actually returns 200.
+Fixed by deriving `listed` from the real routed rule (`ruleFor(method, path)`, same access as the row
+under test) in addition to the row's own `methods` list, which is correct for every pre-existing row
+too (no overlap there, so behaviour is unchanged) and now also correct for this one. No other test
+file needed this kind of change.
+
+---
+
+### `clearance-scan.test.ts` gets one named exception for the memory page
+Decided: The scan enforces `clearance: 'agent'` on every guarded file under `app/learn/**`, written for the
+chat page before this task. The memory page's design is deliberately `age` (the default): a student
+waiting on a parent's consent can still see, export and reset their own memory (plan's Phase B design
+section, and the lead's Q3/Q4 answers). Rather than weaken the scan generally, it now excludes exactly
+`app/learn/[agentId]/memory/page.tsx` by name, with a comment explaining why, so a *different* future
+page under `app/learn/**` that should ask for `agent` clearance still fails the scan if it doesn't.
+
+---
+
+### The DELETE route reads no request body at all
+Decided: The plan's acceptance says the route must reach `reset` "with the signed-in student's scope and
+nothing from the request body." Rather than parsing and discarding a body, `createMemoryHandlers`
+never calls `req.json()` (or any body reader) for either handler — the scope always comes from
+`ctx.principal` and `studentTurnScope`. This is strictly stronger than "ignores the body": a
+malformed or oversized body can't even be parsed to fail the request.
+
+---
+
+### `EvidenceEvent`/`LearnerProfile` import from `@edmate/contracts`, not `@edmate/db`
+Decided: `@edmate/db`'s `index.ts` doesn't re-export the contract types (only runtime values/schemas it
+defines itself); `apps/web` already depends on `@edmate/contracts` directly, so the memory route and
+view types import from there, matching how other value types that cross the API boundary are typed
+elsewhere in `apps/web`.
+
+---
+
 ### 21 Oct 2026 · 5.8a merge: role-play wiring and the run-time pick of the newest signed prompt-pack set · decided by lead · risk: high
 - Decided: merge 5.8a. `isSignedSet`/`newestSignedSet` in `packages/content/src/promptPacks.ts` (risky path) serve only a set whose manifest and every pinned pack are signed. The CLI and the seed pick that set at run time (1.3.0 today); the CLI falls back only to the harness fixture set. Personas reach CLI chat and the web runtime, and `/roleplay` and `/leave` drive a mock interview in the CLI. The work is on `m5/5.8a-signed-set-pick` because the rebased branch could not be force-pushed.
 - Why: code-reviewer (sonnet) and typescript-reviewer (opus) approve with no CRITICAL or HIGH. Two MEDIUMs and four LOWs are deferred: the pre-release ranking to 5.8b, the rest to 5.8e.

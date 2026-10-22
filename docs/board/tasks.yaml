@@ -1690,9 +1690,31 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: running
+  status: done
   branch: m6/6.5-memory-reset
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet x2 review:sonnet x3
+  metrics:
+    tool_calls: 270
+    tokens_in: 922
+    tokens_out: 80774
+    cache_read_tokens: 34089140
+    wall_time_seconds: 2222
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: '7.1'
   milestone: M7
   title: 'Eval reports and judge calibration: JSON + HTML reports per suite and model; 10% human double-check with agreement tracking'
