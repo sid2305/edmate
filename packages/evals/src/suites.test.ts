@@ -55,6 +55,32 @@ describe('evals/suites (real cases)', () => {
     expect(floorProblems(report.cases, SUITE_FLOORS)).toEqual([]);
   });
 
+  // Task 7.2b: the 7.2a banned-phrase rules, applied to the pedagogy suite. A correct reply may
+  // echo the student's own words, so no banned phrase may already be in the case's student turns,
+  // and a case that bans phrases bans at least 2 (one short entry is too easy to miss or misfire).
+  const pedagogy = report.cases
+    .filter((c) => c.file.startsWith('pedagogy/'))
+    .map((c) => c.evalCase);
+
+  it('pedagogy: no must_not_contain entry is in the case’s own student turns', () => {
+    const echoes: string[] = [];
+    for (const c of pedagogy) {
+      const said = c.turns.map((t) => t.student.toLowerCase()).join('\n');
+      for (const t of c.turns)
+        for (const phrase of t.expect?.must_not_contain ?? [])
+          if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
+    }
+    expect(pedagogy.length).toBeGreaterThan(0);
+    expect(echoes).toEqual([]);
+  });
+
+  it('pedagogy: a case that bans phrases bans at least 2', () => {
+    const single = pedagogy.filter(
+      (c) => c.turns.flatMap((t) => t.expect?.must_not_contain ?? []).length === 1,
+    );
+    expect(single.map((c) => c.id)).toEqual([]);
+  });
+
   for (const guard of GUARD_FOLDERS) {
     const count = report.guardCounts[guard] ?? 0;
     it.skipIf(count === 0)(`${guard} has at least ${MIN_CASES_PER_GUARD} cases`, () => {
@@ -324,7 +350,7 @@ describe('floorProblems (task 7.2 count ratchet)', () => {
       locked: 100,
       safety: 214,
       persona: 42,
-      pedagogy: 1,
+      pedagogy: 60,
       advice: 37,
     });
   });

@@ -1,0 +1,14 @@
+id: pedagogy-check-bool-capital-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/values-variables/notes.md §1.1 (bool, "with a capital T and F")
+turns:
+  - skill: explain
+    student: what's a bool? and why does True need a capital T
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood what a bool is.

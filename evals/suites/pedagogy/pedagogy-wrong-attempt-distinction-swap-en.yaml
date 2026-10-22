@@ -1,0 +1,23 @@
+id: pedagogy-wrong-attempt-distinction-swap-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#elif-order;
+  content/demo-teacher/question-bank/conditions.yaml#co-q3
+turns:
+  - skill: coach
+    student: |-
+      For the Distinction bug I changed it to this but 85 still prints Pass:
+      if marks >= 50:
+          print("Pass")
+      elif marks > 80:
+          print("Distinction")
+    expect:
+      max_words: 80
+      must_not_contain:
+        - if marks >= 80
+        - elif marks >= 50
+      judge:
+        - The reply points to the order of the two conditions in the student's code without writing the corrected code.

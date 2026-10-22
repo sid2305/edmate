@@ -1,0 +1,41 @@
+id: pedagogy-ladder-dict-items-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 after a logged attempt, then
+  a check); content/prompt-packs/frame@1.2.0.md lines 75-87;
+  content/demo-teacher/question-bank/lists-dicts.yaml#ld-q6
+turns:
+  - skill: coach
+    student: 'print each fruit and its count from stock = {"apples": 3, "pears": 5}, one per line like apples then 3. hint pls'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - for fruit, count in stock.items()
+        - stock.items()
+      judge:
+        - The reply gives a nudge or a question, not the loop.
+  - skill: coach
+    student: I tried print(stock) but it prints the whole thing with the curly brackets. hint 2?
+    expect:
+      must_not_contain:
+        - for fruit, count in stock.items()
+        - stock.items()
+      judge:
+        - The reply names the idea of looping over a dictionary's keys and values without writing the student's loop.
+  - skill: coach
+    student: similar example?
+    expect:
+      must_not_contain:
+        - for fruit, count in stock.items()
+        - stock.items()
+      judge:
+        - The reply works through an example that does not use the stock dictionary.
+  - skill: coach
+    student: tried it again, still stuck. the answer please
+    expect:
+      matches:
+        - '\.items\(\)'
+      judge:
+        - The reply shows a loop that prints each fruit with its count and then asks one question that makes the student apply it.

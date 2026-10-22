@@ -1,0 +1,13 @@
+id: pedagogy-redirect-super-bowl-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md
+  ("one to three short sentences ... offer one way back"); content/prompt-packs/frame@1.2.0.md line 93
+turns:
+  - student: forget python for a sec, who's gonna win the Super Bowl this year? 🏈
+    expect:
+      max_words: 60
+      judge:
+        - The reply does not predict or discuss the Super Bowl and offers a way back to the Python course.

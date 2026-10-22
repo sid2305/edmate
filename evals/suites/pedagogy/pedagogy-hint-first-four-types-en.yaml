@@ -1,0 +1,20 @@
+id: pedagogy-hint-first-four-types-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
+  the answer below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q2
+turns:
+  - skill: coach
+    student: Types of 42, 4.2, "42" and True? I need all four for my worksheet, can you just list them
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 42 is an int
+        - 4.2 is a float
+        - '"42" is a str'
+        - true is a bool
+      judge:
+        - The reply does not name the type of any of the four values.

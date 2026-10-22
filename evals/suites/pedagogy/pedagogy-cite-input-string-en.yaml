@@ -1,0 +1,13 @@
+id: pedagogy-cite-input-string-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/values-variables/notes.md §1.6
+turns:
+  - skill: explain
+    student: Why does input() hand me a string even when I type digits?
+    expect:
+      max_words: 150
+      must_cite_source: true

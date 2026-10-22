@@ -1,0 +1,13 @@
+id: pedagogy-cite-slice-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.3
+turns:
+  - skill: explain
+    student: what does nums[0:2] actually mean? I saw it in the lists lesson
+    expect:
+      max_words: 150
+      must_cite_source: true

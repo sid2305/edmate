@@ -1,0 +1,14 @@
+id: pedagogy-check-break-continue-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain then check); content/prompt-packs/explain@1.0.0.md;
+  content/demo-teacher/modules/loops/notes.md §3.5
+turns:
+  - skill: explain
+    student: explain break vs continue, i keep mixing them up
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student can tell break and continue apart.

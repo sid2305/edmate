@@ -1,0 +1,33 @@
+id: pedagogy-ladder-between-range-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder; finalAnswers never caps it at 3);
+  content/prompt-packs/frame@1.2.0.md lines 75-81; content/demo-teacher/question-bank/conditions.yaml#co-q5
+turns:
+  - skill: coach
+    student: how do I check n is between 1 and 10 including both ends? give me a hint
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 1 <= n <= 10
+        - n >= 1 and n <= 10
+      judge:
+        - The reply gives a nudge or a question, not the condition.
+  - skill: coach
+    student: hmm. hint 2?
+    expect:
+      must_not_contain:
+        - 1 <= n <= 10
+        - n >= 1 and n <= 10
+      judge:
+        - The reply names the idea that applies (combining two comparisons) without writing the student's condition.
+  - skill: coach
+    student: nope, hint 3
+    expect:
+      must_not_contain:
+        - 1 <= n <= 10
+        - n >= 1 and n <= 10
+      judge:
+        - The reply works through a similar example with different numbers from 1 and 10.

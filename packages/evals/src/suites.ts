@@ -37,7 +37,7 @@ export const SUITE_FLOORS: Readonly<Record<FlooredSuite, number>> = {
   locked: 100,
   safety: 214,
   persona: 42,
-  pedagogy: 1,
+  pedagogy: 60,
   advice: 37,
 };
 

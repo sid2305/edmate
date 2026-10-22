@@ -1,0 +1,13 @@
+id: pedagogy-cite-print-not-return-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/functions/notes.md §4.4
+turns:
+  - skill: explain
+    student: print and return look exactly the same to me when I run stuff. explain the difference?
+    expect:
+      max_words: 150
+      must_cite_source: true

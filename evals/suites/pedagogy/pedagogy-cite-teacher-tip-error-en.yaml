@@ -1,0 +1,16 @@
+id: pedagogy-cite-teacher-tip-error-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  .claude/skills/edmate-pedagogy/SKILL.md (sources include teacher notes);
+  content/demo-teacher/modules/values-variables/notes.md §1.6 (Teacher's tip);
+  content/demo-teacher/style-card.yaml ("read the last line first")
+turns:
+  - teacher: Tip for everyone this week. When you get an error, read the last line first.
+    skill: explain
+    student: what was that tip about errors again? and why does it actually help
+    expect:
+      max_words: 150
+      must_cite_source: true

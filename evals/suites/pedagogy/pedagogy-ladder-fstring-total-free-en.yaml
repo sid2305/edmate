@@ -1,0 +1,43 @@
+id: pedagogy-ladder-fstring-total-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder: each hint request climbs one rung;
+  finalAnswers never caps it at 3); content/prompt-packs/frame@1.2.0.md lines 75-81 (MOVE-HINT-1,
+  MOVE-HINT-2, MOVE-WORKED-EXAMPLE); content/demo-teacher/packages/free.yaml;
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q8
+turns:
+  - skill: coach
+    student: given total = 12 I need one line that prints Total then 12, using an f-string. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 'print(f"Total: {total}")'
+        - 'f"Total: {total}"'
+      judge:
+        - The reply gives a nudge or a question, not the line of code.
+  - skill: coach
+    student: another hint pls
+    expect:
+      must_not_contain:
+        - 'print(f"Total: {total}")'
+        - 'f"Total: {total}"'
+      judge:
+        - The reply names the rule for putting a value inside an f-string without writing the student's line.
+  - skill: coach
+    student: still stuck, one more
+    expect:
+      must_not_contain:
+        - 'print(f"Total: {total}")'
+        - 'f"Total: {total}"'
+      judge:
+        - The reply works through a similar example that uses a different variable or value from total = 12.
+  - skill: coach
+    student: ok just give me the line now
+    expect:
+      must_not_contain:
+        - 'print(f"Total: {total}")'
+        - 'f"Total: {total}"'
+      judge:
+        - The reply still does not give the line and invites the student to try it.
