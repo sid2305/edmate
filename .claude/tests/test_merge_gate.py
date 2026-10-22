@@ -834,3 +834,35 @@ class FenceParseTest(unittest.TestCase):
     def test_reviewers_after_closed_fence_found(self):
         review = "# r\n~~~\nReviewers: fake\n~~~\nReviewers: code-reviewer, architect\n"
         self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+
+class IndentedDecoyTest(unittest.TestCase):
+    """Fix round 3: a line indented 4+ columns (a tab counts as 4) is a CommonMark indented code
+    block, so it never counts as the live Budget/Reviewers line."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_indented_budget_decoy_ignored(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n    Budget: 999 tool calls\nBudget: 30 tool calls\n"), 30)
+
+    def test_indented_reviewers_decoy_ignored(self):
+        review = "## Section\n    Reviewers: fake-reviewer\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+    def test_tab_indented_decoys_ignored(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n\tBudget: 999 tool calls\nBudget: 30 tool calls\n"), 30)
+        self.assertIsNone(self.g.budget_cap("# p\n\t- Budget: 999 tool calls\n"))
+        review = "# r\n\tReviewers: fake-reviewer\nReviewers: code-reviewer\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer"})
+
+    def test_whitespace_after_short_indent_cannot_sneak_past(self):
+        # 3 spaces then a tab is still 4+ columns of indentation.
+        self.assertIsNone(self.g.reviewer_names("# r\n   \tReviewers: fake-reviewer\n"))
+        self.assertIsNone(self.g.budget_cap("# p\n  \t  Budget: 999 tool calls\n"))
+
+    def test_list_nested_real_lines_still_count(self):
+        self.assertEqual(self.g.budget_cap("## Budget\n- Limits:\n  - Budget: 30 tool calls\n"), 30)
+        self.assertEqual(self.g.reviewer_names("# r\n1. Round 1\n  Reviewers: code-reviewer\n"), {"code-reviewer"})
+        self.assertEqual(self.g.reviewer_names("# r\n   - Reviewers: architect\n"), {"architect"})

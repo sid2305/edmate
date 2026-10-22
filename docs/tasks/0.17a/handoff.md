@@ -136,4 +136,35 @@ $ python3 .githooks/secret-scan.py --all
 (exit 0, no findings)
 ```
 
-Tool calls used: 75 (harness counts: 22 build + 36 fix round 1; 17 fix round 2, my own count)
+## Fix round 3
+
+Finding 1 (HIGH, security-reviewer; pre-existing): a line indented 4+ spaces is a CommonMark
+indented code block (quoted/hidden text) but counted as a live line. A `## Budget` section with
+an indented `Budget: 999 tool calls` decoy above the real `Budget: 30 tool calls` gave 999, and
+`reviewer_names` read an indented `Reviewers: fake-reviewer` decoy as the real line.
+
+Fix (`.claude/skills/merge-gate/merge_gate.py`): new `LIVE_INDENT = r"^ {0,3}"` prefix for
+`BUDGET_LINE` and `REVIEWERS_LINE`. At most 3 leading spaces, no tab (a tab counts as 4).
+Whitespace is now allowed only after a bullet/number marker, so "3 spaces + tab" can't sneak
+past. A line nested under a list item with 2–3 spaces still counts.
+
+Finding 2 (LOW, code-reviewer): `budget_cap` ran `fence_mask` 3–4 times. Now it runs once; a
+small `_section_in(clean, heading)` helper returns (heading line, body) from the already
+unfenced text, and `section()` wraps it. `section_heading_line()` lost its only caller and was
+removed.
+
+Tests added (`IndentedDecoyTest`, 5 tests, 4 red before the fix): cases A and B, tab-indented
+decoys (Budget and Reviewers), 3-spaces-plus-tab decoys, and 2–3-space list-nested real lines
+that still count.
+
+Real-file check: `budget_cap` and `reviewer_names` computed before and after for every
+`docs/tasks/*/plan.md` (101) and `review.md` (105) on origin/main, and for this branch's copies:
+identical output, 0 changes.
+
+```
+$ python3 -m unittest discover .claude/tests
+Ran 284 tests
+OK
+```
+
+Tool calls used: 100 (harness counts: 22 build + 36 fix round 1; 17 fix round 2; 25 fix round 3, my own count)

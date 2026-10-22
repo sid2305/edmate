@@ -62,10 +62,13 @@ MIGRATION_FILE = re.compile(r"(^|/)migrations/.+\.(sql|ts|js|mjs|cjs|mts|cts)$")
 REVIEWER_ITEM = re.compile(r"([a-z][a-z0-9-]*)(\s*\([^()]*\))?")
 MIGRATION_REVIEWERS = ("database-reviewer",)
 PATH_TOKEN = re.compile(r"[\w.@-]*[\w@-](/[\w.@-]+)*")
+# At most 3 leading spaces (no tab) before a live line: 4+ columns is a CommonMark indented code
+# block, i.e. quoted/hidden text, so it never counts. Whitespace is allowed only after a marker.
+LIVE_INDENT = r"^ {0,3}"
 # "Budget: 24 tool calls", tolerant of a leading bullet/bold (same convention as STATUS_LINE), or
 # the heading form "## Budget: 24 tool calls" / "### Budget: 24 tool calls".
 BUDGET_LINE = re.compile(
-    r"^[ \t]*(?:#{2,3}[ \t]+)?[ \t]*[-*\d.]*[ \t]*\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls",
+    LIVE_INDENT + r"(?:#{2,3}[ \t]+)?(?:[-*\d.]+[ \t]*)?\*{0,2}Budget[ \t*]*:[ \t*]*(\d+)\s*tool\s*calls",
     re.I | re.M,
 )
 # The first "<N> ... calls" number inside a `## Budget` section's prose, e.g. "~70 tool calls",
@@ -125,11 +128,12 @@ def fence_mask(lines):
     return hidden, opened_at
 
 
-REVIEWERS_LINE = re.compile(r"^[ \t]*[-*\d.]*[ \t]*Reviewers?:\s*(\S.*)$", re.I)
+REVIEWERS_LINE = re.compile(LIVE_INDENT + r"(?:[-*\d.]+[ \t]*)?Reviewers?:\s*(\S.*)$", re.I)
 
 
 def reviewer_names(review):
-    """Names on the first `Reviewers:` line outside code fences, or None if there is none.
+    """Names on the first `Reviewers:` line outside code fences (and not indented 4+ columns,
+    which is an indented code block), or None if there is none.
     The line may carry a leading bullet/number ("- Reviewers: ...", same convention as
     STATUS_LINE). The value is a comma-separated list; each item is a name with an optional
     `(model)` suffix; a trailing period on the whole line is ignored. Any other item
@@ -170,24 +174,22 @@ def unfenced(text):
     return "\n".join("" if h else line for line, h in zip(lines, hidden))
 
 
+def _section_in(clean, heading):
+    """(heading line, body) of the first `## heading` section in already-unfenced text, the body
+    running up to the next `## ` heading; (None, None) if there is no such section."""
+    m = re.search(rf"^##\s+{heading}\b.*$", clean, re.M)
+    if not m:
+        return None, None
+    rest = clean[m.end():]
+    nxt = re.search(r"^##\s", rest, re.M)
+    return m.group(0), (rest[: nxt.start()] if nxt else rest)
+
+
 def section(text, heading):
     """Body of a `## heading` section (its first unfenced occurrence), up to the next `## `
     heading (or None). Fenced code is blanked out first, so a quoted `## heading` inside an
     example never counts as the section."""
-    clean = unfenced(text)
-    m = re.search(rf"^##\s+{heading}\b.*$", clean, re.M)
-    if not m:
-        return None
-    rest = clean[m.end():]
-    nxt = re.search(r"^##\s", rest, re.M)
-    return rest[: nxt.start()] if nxt else rest
-
-
-def section_heading_line(text, heading):
-    """The exact text of the section's own `## heading ...` line (its first unfenced occurrence),
-    or None if there is no such section."""
-    m = re.search(rf"^##\s+{heading}\b.*$", unfenced(text), re.M)
-    return m.group(0) if m else None
+    return _section_in(unfenced(text), heading)[1]
 
 
 def entries(text):
@@ -229,30 +231,27 @@ def budget_cap(plan):
     tool calls` line gives UNPARSEABLE (visible FAIL) rather than a silent skip; an unclosed fence
     with nothing budget-like after it changes nothing.
     Returns None if nothing at all is present (old-style plan, silent skip)."""
-    text = plan or ""
-    lines = text.splitlines()
-    _, unclosed_at = fence_mask(lines)
+    lines = (plan or "").splitlines()
+    hidden, unclosed_at = fence_mask(lines)  # computed once; everything below reuses it
+    clean = "\n".join("" if h else line for line, h in zip(lines, hidden))
     if unclosed_at is not None:
         # A stray unclosed fence would blank out the rest of the document. If anything
         # budget-like sits in that hidden tail, the cap can't be read safely: fail visibly.
         tail = "\n".join(lines[unclosed_at + 1:])
         if re.search(r"^##\s+Budget\b", tail, re.M | re.I) or BUDGET_LINE.search(tail):
             return UNPARSEABLE
-    heading_line = section_heading_line(text, "Budget")
-    sect = section(text, "Budget")
-    if sect is not None:
-        if heading_line:
-            hm = BUDGET_LINE.match(heading_line.strip())
-            if hm:
-                return int(hm.group(1))
-        body = unfenced(sect)
+    heading_line, body = _section_in(clean, "Budget")
+    if body is not None:
+        hm = BUDGET_LINE.match(heading_line.strip())
+        if hm:
+            return int(hm.group(1))
         m = BUDGET_LINE.search(body)
         if m:
             return int(m.group(1))
         first_line = next((ln for ln in body.splitlines() if ln.strip()), "")
         m2 = BUDGET_SECTION_NUM.search(first_line)
         return int(m2.group(1)) if m2 else UNPARSEABLE
-    m = BUDGET_LINE.search(unfenced(text))
+    m = BUDGET_LINE.search(clean)
     return int(m.group(1)) if m else None
 
 
