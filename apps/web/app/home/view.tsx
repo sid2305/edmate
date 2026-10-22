@@ -5,9 +5,12 @@
 // 11.1c Phase C: a third block, "Upcoming live classes" -- title, start time, the join link (new
 // tab, since it leaves the app) and the window label. Shown whenever there is at least one
 // entitled class; it never affects the existing chats/startable placeholder.
+// 11.2b: each listed class also gets a small "ask a question" form (`AskQuestionForm`), feeding
+// the teacher's pre-class queue (`/api/live-classes/[id]/questions`).
 import { getTranslations } from 'next-intl/server';
 import type { UpcomingLiveClass } from '@edmate/db';
 import { AppShell } from '../../src/ui/AppShell';
+import { AskQuestionForm } from './AskQuestionForm';
 import { signOutAndRedirect } from './actions';
 
 export interface HomeViewProps {
@@ -84,6 +87,7 @@ export async function HomeView({ chats = [], startable = [], liveClasses = [] }:
                     {t('liveClasses.join')}
                   </a>
                 )}
+                <AskQuestionForm liveClassId={liveClass.id} />
               </li>
             ))}
           </ul>

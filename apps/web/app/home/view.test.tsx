@@ -7,6 +7,16 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import messages from '../../messages/en.json';
 
 vi.mock('./actions', () => ({ signOutAndRedirect: vi.fn() }));
+// 11.2b: `AskQuestionForm` is a client component (`useTranslations` from `next-intl`, which needs
+// a real provider this file doesn't set up -- see the mock below for `next-intl/server`, the
+// server-side API `HomeView` itself calls). Mocked here the same way `LiveClassesView` is mocked
+// in `page.test.tsx`; its own interactive behaviour (submit, busy state, errors) is covered by
+// `AskQuestionForm.test.tsx` under the real `NextIntlClientProvider`.
+vi.mock('./AskQuestionForm', () => ({
+  AskQuestionForm: ({ liveClassId }: { liveClassId: string }) => (
+    <span data-testid={`ask-question-${liveClassId}`}>ask form for {liveClassId}</span>
+  ),
+}));
 // Same reason as `app/sign-in/page.test.tsx`: next-intl's real server API isn't callable under
 // jsdom (no server/client runtime split there); the mock reads the same `en.json` the production
 // `src/i18n/request.ts` loads, so a typo'd or missing key still fails the test. 11.1c: `liveClasses`
@@ -169,6 +179,31 @@ describe('HomeView', () => {
       expect(link).toHaveAttribute('href', 'https://meet.example.com/calc');
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('renders an ask-a-question form for each listed live class (task 11.2b)', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_1',
+              title: 'Algebra basics',
+              link: null,
+              startsAt: '2099-01-01T00:00:00.000Z',
+              window: 'later',
+            },
+            {
+              id: 'lc_2',
+              title: 'Geometry',
+              link: null,
+              startsAt: '2099-01-02T00:00:00.000Z',
+              window: 'later',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByTestId('ask-question-lc_1')).toBeInTheDocument();
+      expect(screen.getByTestId('ask-question-lc_2')).toBeInTheDocument();
     });
 
     it('no axe violations with a live class shown', async () => {

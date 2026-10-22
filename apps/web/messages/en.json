@@ -23,7 +23,12 @@
         "reminder_24h": "Starting in 24 hours",
         "reminder_1h": "Starting in 1 hour",
         "starting_soon": "Starting soon"
-      }
+      },
+      "askLabel": "Ask your teacher a question before class",
+      "askButton": "Send question",
+      "asking": "Sending…",
+      "askSent": "Your question was sent.",
+      "askError": "Something went wrong. Try again."
     }
   },
   "teacher": {
@@ -633,6 +638,15 @@
       "validation": "Check the title, link, start time and packages, and try again.",
       "not_found": "One of those packages was not found. Reload and try again.",
       "generic": "Something went wrong. Try again."
+    },
+    "studentQueue": {
+      "title": "From students",
+      "empty": "No pre-class questions yet.",
+      "since": "{count} asked near-identically since {date}"
+    },
+    "askQueue": {
+      "title": "Unanswered ask-the-teacher questions",
+      "empty": "No unanswered questions right now."
     }
   }
 }
