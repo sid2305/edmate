@@ -3863,9 +3863,30 @@ tasks:
   deps:
   - 9.2a
   risk: high
-  status: running
+  status: done
   branch: m8/8.7a-publish-repo
-  model: plan:opus build:opus-5.5/medium
+  model: plan:opus build:sonnet fix:sonnet review:sonnet+opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        CRITICAL: 1
+        MEDIUM: 1
+        LOW: 5
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 8.7b
   milestone: M8
   title: Gate agent and gate-input assembly (8.7 Phase B, apps/worker)
@@ -3907,7 +3928,9 @@ tasks:
   - 8.7a
   - 8.7b
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7c-gate-queue
+  model: plan:opus build:opus-5.5/medium
 - id: 8.7d
   milestone: M8
   title: Publish API and /teacher/publish page (8.7 Phase D, apps/web)
@@ -4011,7 +4034,9 @@ tasks:
   deps:
   - 9.2a
   risk: high
-  status: todo
+  status: running
+  branch: m9/9.6a-export-readers
+  model: plan:sonnet build:sonnet
 - id: 9.6b
   milestone: M9
   title: Progress page, complete JSON export and notes PDF (9.6 Phase B, apps/web)
