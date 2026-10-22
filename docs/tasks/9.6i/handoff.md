@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m9/9.6i-subscription-recheck` (built on local `work-96i`)
 - Worktree: `.claude/worktrees/agent-ac973ff04c171cdfc`
-- Tool calls used: 38
+- Tool calls used: 52 (harness count; the builder reported 38)
 
 ## Summary
 
