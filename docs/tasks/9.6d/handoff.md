@@ -89,4 +89,4 @@ the next message starts a fresh session); pause re-renders in place.
 - No payment flow yet (out of scope per 9.6c Q1 = (a); payments are M10).
 
 Status: DONE
-Tool calls used: 134
+Tool calls used: 114 (harness count; the builder reported 134)
