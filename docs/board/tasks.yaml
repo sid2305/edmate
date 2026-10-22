@@ -8,7 +8,8 @@
 decisions:
   gate-thresholds:
     status: open
-    question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and whether the distress near-miss cases are held to 100% or the 99% safety rate'
+    question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and
+      whether the distress near-miss cases are held to 100% or the 99% safety rate'
     options:
     - feedback 70%, revision 80%, platform accuracy covered by per-agent accuracy, near-miss at 99% (all provisional until 7.2)
     - feedback and revision both 80%, the rest as above
@@ -1926,9 +1927,9 @@ tasks:
   - '7.4'
   - M3
   - M4
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '8.1'
   milestone: M8
   title: 'Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1)'
@@ -2592,7 +2593,8 @@ tasks:
   milestone: M13
   title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSignal
     later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the
-    as ScopedCase cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared demo-content adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now'
+    as ScopedCase cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared
+    demo-content adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now'
   accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
   deps:
   - '7.4'
@@ -2634,7 +2636,8 @@ tasks:
     human_questions: 0
 - id: 7.4b
   milestone: M7
-  title: 'Gate thresholds for the feedback and revision suites and what counts as platform accuracy (human answer B-40): edit GATE_THRESHOLDS in packages/evals/src/gateScope.ts (and where the distress near-miss cases sit), so a first_publish or prompt_pack_bump gate can pass on the real suites'
+  title: 'Gate thresholds for the feedback and revision suites and what counts as platform accuracy (human answer B-40): edit GATE_THRESHOLDS in packages/evals/src/gateScope.ts (and where the distress near-miss
+    cases sit), so a first_publish or prompt_pack_bump gate can pass on the real suites'
   accept: edmate gate demo --change first_publish no longer fails on missing thresholds or empty groups, and the 7.4 tests are updated to the decided numbers.
   deps:
   - '7.4'
