@@ -12,6 +12,8 @@ import { TEST_DATABASE_URL } from './global-setup';
 /** A free, active demo student (seed.ts): 'clear' status, a live package with `demo-agent`. */
 export const DEMO_STUDENT = 'demo-student-01';
 export const DEMO_AGENT = 'demo-agent';
+/** The seeded demo teacher (seed.ts's `DEMO_IDS.teacher`), verified in global-setup.ts (task 9.7). */
+export const DEMO_TEACHER = 'demo-teacher';
 
 /** http, not https: the dev server's AUTH_URL is http, so this is the un-prefixed cookie name
  * (`sessionCookieName(false)`, src/auth/config.ts). */
@@ -51,6 +53,15 @@ export async function signInAsStudent(context: BrowserContext, baseURL: string):
   await signInSession(context, baseURL, DEMO_STUDENT);
 }
 
+/** Signs the browser context in as the seeded demo teacher (task 9.7). */
+export async function signInAsTeacher(
+  context: BrowserContext,
+  baseURL: string,
+  userId = DEMO_TEACHER,
+): Promise<void> {
+  await signInSession(context, baseURL, userId);
+}
+
 /**
  * A brand-new student, 15 years old, with no parental consent on record: `learnerStatus` is
  * `parent_needed` (the age gate, task 1.7; `DEFAULT_AGE_POLICY` requires consent under 18).
@@ -71,6 +82,34 @@ export async function signInAsParentNeeded(context: BrowserContext, baseURL: str
     return created;
   });
   await signInSession(context, baseURL, user.id);
+}
+
+/**
+ * A brand-new, 'clear' adult student (task 9.7) with no subscription at all: every one of
+ * `seed.ts`'s 20 fictional students already has a subscription row (`subscriptionKind`), so
+ * `DEMO_STUDENT` cannot exercise the "subscribe to a free package" step -- `/packages/demo-agent`
+ * shows "You already have a package with this teacher" for it. This student is old enough that
+ * the age gate needs no parental consent (`learnerStatus: 'clear'`), so it can reach a package's
+ * compare-and-start page for real. Returns the created user id (`teacherQuestions.open`'s scope
+ * needs it).
+ */
+export async function signInAsFreshStudent(context: BrowserContext, baseURL: string): Promise<string> {
+  const user: IdentityUser = await withDb(async ({ identity }) => {
+    const created = await identity.createStudent({
+      email: `e2e-fresh-student-${randomBytes(4).toString('hex')}@example.invalid`,
+      emailVerifiedAt: null,
+      name: 'E2E Fresh Student',
+    });
+    await identity.recordAgeAnswer({
+      userId: created.id,
+      market: 'global',
+      birthYear: new Date().getUTCFullYear() - 25,
+      noticeVersion: 'e2e-test',
+    });
+    return created;
+  });
+  await signInSession(context, baseURL, user.id);
+  return user.id;
 }
 
 /** One SSE fixture's bytes, built from events checked against `TurnEventSchema` (via `formatSseEvent`). */

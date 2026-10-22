@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.7a CI runs the Playwright e2e suite in the node job · decided by builder · risk: high
+- Decided: added two steps to the existing `.github/workflows/ci.yml` `node` job, after "Build
+  smoke": "Install Playwright browsers" (`corepack pnpm --filter @edmate/web exec playwright
+  install --with-deps chromium`) and "Student/teacher e2e (scripted turns)" (`corepack pnpm
+  --filter @edmate/web e2e`). No new job, no new service, no new secret, no new permission and no
+  third-party action — only the official `actions/checkout`/`actions/setup-node` already pinned in
+  this job are used, and both new steps run shell commands through the repo's own pnpm/Playwright
+  devDependency. `TEST_DATABASE_URL` is unchanged (the job's existing Postgres-only value); the
+  suite needs no Redis, though the job already starts one for the worker's own tests.
+  `playwright.config.ts`'s `testIgnore: ['stack/**']` keeps task 9.0's docker-compose stack suite
+  out of this job, so only `chat.spec.ts`, `full-flow.spec.ts` and (after the `origin/main` merge)
+  `skills.spec.ts` run here.
+- Why: plan 9.7 open question 5 (accepted by the lead): reuses the job's existing
+  Postgres/Redis services and `docs_only` skip gate instead of booting a second multi-minute
+  service set in every PR.
+- risk: high (`.github/**` is a risky path per `.claude/skills/merge-gate/risk-paths.txt`;
+  security-reviewer is the required reviewer).
+
+---
+
+### 22 Oct 2026 · 9.7a demo teacher verification lives in e2e setup, not seed.ts · decided by builder · risk: medium
+- Decided: `apps/web/e2e/global-setup.ts` creates a throwaway `@example.invalid` staff user and
+  calls `teacherProfiles.setVerification` for the seeded demo teacher, after `migrate`/`seed`,
+  guarded by `getUserByEmail` so a re-run against a persistent dev Postgres is a no-op rather than
+  a unique-email error. `packages/db/src/seed.ts` is unchanged.
+- Why: plan 9.7 open question 1 (accepted): `seed.ts` is shared by 1.5 and every other task's db
+  fixtures; verifying there would silently change what `docs/try-it.md`'s manual "staff verifies
+  the teacher" walkthrough demonstrates.
+- risk: medium (new e2e-only side effect, no production code path, no shared fixture change).
+
+---
+
+### 22 Oct 2026 · 9.7a uncovered question seeded directly, no real pipeline run · decided by builder · risk: low
+- Decided: the test calls `repos.teacherQuestions.open(...)` directly to create a real row, then
+  mocks an SSE `teacher_question` event carrying that row's real id.
+- Why: plan 9.7 open question 3 (accepted): running the real pipeline needs Redis and the
+  worker's BullMQ queue (task 3.8), which 9.0 deliberately keeps out of the `node` CI job (that's
+  `playwright.stack.config.ts`'s job instead).
+- risk: low (test-only, no production code touched).
+
+---
+
 ### 22 Oct 2026 · 9.6a export readers on the repositories path (no help_state, pair-scoped, keyset paged) · decided by builder · risk: high
 - Decided: `sessions.listForStudent` and `messages.listForStudent` are new student-scope readers.
   They never select `help_state` (the only place the answer key is stored, ADR-0005), they are

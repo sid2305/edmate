@@ -4025,7 +4025,9 @@ tasks:
   - 8.7c
   - 8.6c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7d-publish-page
+  model: plan:opus build:opus
 - id: 8.7e
   milestone: M8
   title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
@@ -4153,7 +4155,9 @@ tasks:
   deps:
   - 9.6a
   risk: medium
-  status: todo
+  status: running
+  branch: m9/9.6b-progress-export
+  model: plan:sonnet build:sonnet
 - id: 9.6c
   milestone: M9
   title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
@@ -4195,9 +4199,31 @@ tasks:
   deps:
   - '9.4'
   risk: high
-  status: running
+  status: done
   branch: m9/9.7a-e2e-full-flow
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet fix:opus review:sonnet
+  metrics:
+    tool_calls: 64
+    tokens_in: 214
+    tokens_out: 1613
+    cache_read_tokens: 3687511
+    wall_time_seconds: 1805
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.7b
   milestone: M9
   title: '9.7 Phase B: add the discover and upgrade-to-unlocked stages to the full-flow spec (plan docs/tasks/9.7/plan.md)'
@@ -4290,7 +4316,8 @@ tasks:
 - id: 9.7c
   milestone: M13
   title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
-    MEDIUM)'
+    MEDIUM); a failed local full-flow run leaves its seeded teacher question open and the next local run fails strict mode on getByText, so global-setup resets that state or the spec uses a per-run unique
+    question)'
   accept: global-setup throws on a non-local host with a clear message, with a unit test; the local e2e run is unchanged.
   deps:
   - 9.7a
@@ -4323,6 +4350,24 @@ tasks:
   deps:
   - 9.6a
   risk: high
+  status: todo
+- id: 12.1c
+  milestone: M13
+  title: '12.1a review follow-ups: a leak.test.ts case for teacherProfiles.listPendingForStaff (a driver error never carries name or email); an additive partial index on teacher_profiles (created_at, id)
+    WHERE verification_status = ''pending''; fix the stale role-lock.ts comment and the scope.test.ts title now that teacher-profiles.ts reads users'
+  accept: the leak case passes; EXPLAIN on the staff queue uses the partial index; the comment and title match the code.
+  deps:
+  - 12.1a
+  risk: high
+  status: todo
+- id: 8.7k
+  milestone: M8
+  title: '8.7 lead answer Q10: the studio shows a "changed since last publish" note on /teacher/publish (and the studio home) when the style card, outline, packages or uploads changed after the latest published
+    run, so the teacher knows to publish again (automatic re-gating stays 13.regate)'
+  accept: a teacher who edits after a publish sees the note; after a new publish it is gone; a component test for both, with jest-axe.
+  deps:
+  - 8.7d
+  risk: low
   status: todo
 - id: 9.4c
   milestone: M13
