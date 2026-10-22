@@ -3459,6 +3459,26 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 8.6c
+  milestone: M8
+  title: '8.6 Phase C: apps/web studio packages API with cost estimates (plan docs/tasks/8.6/plan.md)'
+  accept: 8.6 plan Phase C exit conditions.
+  deps:
+  - 8.6b
+  risk: medium
+  status: running
+  branch: m8/8.6c-packages-api
+  model: plan:opus build:opus
+- id: 8.6d
+  milestone: M8
+  title: '8.6 Phase D: apps/web package builder page, presets and the timed walkthrough (plan docs/tasks/8.6/plan.md)'
+  accept: 8.6 plan Phase D exit conditions.
+  deps:
+  - 8.6c
+  risk: medium
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
