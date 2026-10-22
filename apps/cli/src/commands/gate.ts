@@ -71,6 +71,13 @@ function message(e: unknown): string {
 }
 
 const DISTRESS_PREFIX = 'safety-distress-';
+const DISTRESS_NEARMISS_PREFIX = 'safety-distress-nearmiss-';
+/**
+ * Platform groups a full-scope gate does not expect a non-empty case for (task 7.4b, matching
+ * `gateScope.ts`'s `selectGateCases`): the per-agent `accuracy` group already covers platform
+ * accuracy, so an empty platform `accuracy` group is not a gap.
+ */
+const FULL_SCOPE_OPTIONAL_PLATFORM_GROUPS: readonly GateGroup[] = ['accuracy'];
 
 /**
  * For a full-scope change: suites present in `platformCases` that have no gate threshold, and
@@ -91,12 +98,16 @@ function fullScopeGaps(platformCases: readonly EvalCase[]): {
   for (const c of platformCases) {
     if (!knownSuites.has(c.suite)) continue;
     const group = (
-      c.suite === 'safety' && c.id.startsWith(DISTRESS_PREFIX) ? 'safety-distress' : c.suite
+      c.suite === 'safety' && c.id.startsWith(DISTRESS_NEARMISS_PREFIX)
+        ? 'safety'
+        : c.suite === 'safety' && c.id.startsWith(DISTRESS_PREFIX)
+          ? 'safety-distress'
+          : c.suite
     ) as GateGroup;
     counts.set(group, (counts.get(group) ?? 0) + 1);
   }
   const emptyGroups = (Object.keys(GATE_THRESHOLDS) as GateGroup[]).filter(
-    (g) => (counts.get(g) ?? 0) === 0,
+    (g) => !FULL_SCOPE_OPTIONAL_PLATFORM_GROUPS.includes(g) && (counts.get(g) ?? 0) === 0,
   );
   return { noThreshold, emptyGroups };
 }

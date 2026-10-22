@@ -10,6 +10,74 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.2d staff reports/takedowns security review · decided by builder · risk: high
+- Decided: `apps/web/app/api/staff/**` is a risky path (merge-gate risk-paths.txt);
+  this PR needs `security-reviewer` to confirm the staff-only guard, the strict/
+  discriminated zod bodies (no unknown keys, no client-supplied actor), the fixed
+  error-code mapping (no raw error messages reach the client or logs), and
+  `cache-control: no-store` on every response, before merge.
+- Why: these routes let staff dismiss reports and take down documents/agents —
+  getting the actor or the auth check wrong would let a non-staff user hide reports
+  or censor content; getting the error mapping wrong could leak internal details.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 7.4b gate group mirror in packages/db · decided by builder · risk: high
+- Decided: added `feedback` and `revision` to `GATE_GROUP_NAMES` in
+  `packages/db/src/repositories/publish.ts`, in the same order as `GATE_THRESHOLDS`' keys.
+- Why: the mirror must match `GATE_THRESHOLDS` or the worker can't record feedback and revision
+  results.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 7.4b tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 59 tool calls against the lead plan's budget of 40.
+- Why: the lead's budget missed that apps/cli gate.ts carries its own copy of the grouping, which also had to change with its tests; both reviews approved.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 7.4b feedback and revision thresholds (B-40 option a) · decided by builder · risk: low
+- Decided: `feedback: 70` (matches 5.7's ≥70% rubric-agreement bar) and `revision: 80` (same bar
+  as `pedagogy`, both style/coaching skills scored pass/fail the same way), per the plan's exact
+  numbers. Both are provisional until the 7.2 expert pass, same footing as `pedagogy` and
+  `grounding`.
+- Why: the plan (human answer B-40, option a) names these exact numbers; this just wires them in.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 7.4b platform accuracy is no longer an expected full-scope group · decided by builder · risk: medium
+- Decided: a full-scope gate's `expectedGroups` skips platform `accuracy` (via
+  `FULL_SCOPE_OPTIONAL_PLATFORM_GROUPS`); the per-agent `accuracy` group (already expected via
+  `agentAccuracy`) is the one that's required. `accuracy` stays a key in `GATE_THRESHOLDS` so a
+  platform accuracy case, if ever added, is still scored and still gated at 99%.
+- Why: the plan says platform accuracy is covered by each agent's own accuracy cases, and the
+  real `evals/suites/accuracy` dir has 0 cases today — requiring it would permanently fail-closed
+  a full-scope gate with no platform accuracy content planned.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 7.4b near-miss distress cases move from safety-distress to safety · decided by builder · risk: medium
+- Decided: `groupOf` checks `safety-distress-nearmiss-` as an exact prefix before the broader
+  `safety-distress-` prefix, routing those 15 cases into the 99% `safety` group instead of the
+  100% `safety-distress` group. This reverses 7.4's "near-miss cases count in the 100% distress
+  group" decision (its reading was the stricter one, offered as a one-line change if the lead
+  wanted the looser reading instead — this is that change, per the plan). `apps/cli`'s
+  `fullScopeGaps` precheck mirrors the same split so its report matches `selectGateCases`'s
+  actual behavior.
+- Why: the plan (human answer B-40) states this exactly: near-miss cases (must NOT trigger the
+  crisis flow) belong with the general safety bar, not the stricter 100% distress bar meant for
+  real distress.
+- risk: medium
+
+Tool calls used: 59 (harness count; the builder reported 32)
+
+---
+
 ### 22 Oct 2026 · 8.2l caption upload security LOWs left as they are · decided by lead · risk: low
 - Decided: no byte sniffing of caption files in apps/web/src/studio/files.ts, and apps/web/src/studio/uploadClient.ts contentTypeFor keeps preferring the extension over a mismatched browser type.
 - Why: every upload type works this way today, and the server's `complete` re-checks the stored object's content type against the fixed table, so neither has a security effect (security-reviewer LOWs).
