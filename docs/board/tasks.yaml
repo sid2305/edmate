@@ -5803,8 +5803,9 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.4a-recording-link
+  model: plan:opus build:opus
 - id: 11.4b
   milestone: M11
   title: Studio API for class recordings, and media the worker can't split refused at upload (11.4 Phase B)
@@ -6015,7 +6016,7 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: planning
+  status: running
   priority: P1
   branch: null
   model: plan:opus
