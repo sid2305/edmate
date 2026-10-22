@@ -105,6 +105,15 @@ export {
   type GateStats,
 } from './qualityGate.js';
 export { toJsonReport, toSummary, type JsonReport, type ReportCost } from './report.js';
+export {
+  buildScorecard,
+  SCORECARD_GROUPS,
+  ScorecardSchema,
+  type Scorecard,
+  type ScorecardCategory,
+  type ScorecardCategoryKey,
+  type ScorecardCategoryOrigin,
+} from './scorecard.js';
 export { toHtmlReport } from './htmlReport.js';
 export {
   RecordedJudgeSchema,
