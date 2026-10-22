@@ -10,6 +10,32 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.3c Manual timed walkthrough deferred to the human's try-it run · decided by lead · risk: low
+- Decided: the plan's Phase C step 7 (a manual timed edit pass over ~20 fixture chunks, pasting
+  timestamps into the handoff) is skipped by this builder; the human will time the edit pass
+  during their own try-it run instead.
+- Why: this bar is a human-usability check, not a CI assertion (the plan itself calls out the
+  same precedent as 9.1's Lighthouse run and 8.2's dev-stack step); the lead chose to have the
+  human run it directly rather than have a builder spin up the dev compose stack for a timing
+  exercise with no automated assertion attached.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.3c Merge is module-scoped; split appends a new topic rather than inserting in place · decided by builder · risk: low
+- Decided: "Merge selected topics" only combines topics within the same module (the plan's
+  checkbox-based merge control is rendered per module, scoped to that module's own topics); a
+  split's new topic is appended after the module's existing topics with the next integer `order`,
+  rather than attempting to insert it adjacent to the original topic's position.
+- Why: the plan's acceptance table scopes merge/split to topics (scope decision 1 of 8.3's plan,
+  "modules are rename/reorder only; topics are the mergeable/splittable unit") without specifying
+  cross-module merge or exact split placement; appending keeps the `order` values simple integers
+  (matching the server's `OrderSchema`) and the teacher can reorder the new topic afterward with
+  the existing up/down controls if they want it elsewhere.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.9a Lead accepts the dismiss repository method · decided by lead · risk: high
 - Decided: `teacherQuestions.dismiss` merges as one scoped UPDATE with no transaction, closing a single question and leaving its group open. It touches packages/db/src/repositories/teacher-questions.ts, a risky path for keeping each teacher's data apart.
 - Why: the security, database and TypeScript reviewers all approved it. Ownership is enforced in the SQL WHERE, so a guessed question id can't reach another teacher's row, and every refusal writes nothing. The one LOW, a concurrency test, joins the repository follow-ups in 8.6f.
