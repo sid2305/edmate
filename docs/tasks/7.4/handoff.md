@@ -155,6 +155,11 @@ still needs to decide.
 
 ## Decisions
 
+### 21 Oct 2026 · 7.4 merge: scoped teacher eval-case read path reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.4, including `packages/db` `teacherEvalCases.listForTeacher` (a risky path), reviewed by security-reviewer and code-reviewer (the group's required reviewers) plus typescript-reviewer; all approved with no CRITICAL or HIGH. MEDIUM and LOW findings go to 7.4a; the undecided feedback and revision thresholds (blocker B-40) go to 7.4b, and until then a first_publish or prompt_pack_bump gate fails closed with a clear error.
+- Why: the gate already blocks a bad agent and publishes a good one; the open thresholds only keep the full scope failing closed, which is the safe direction.
+- risk: high
+
 ### Pedagogy and grounding thresholds are provisional pass-rate proxies
 - Decided: pedagogy passes at a pass rate of 80% or more until the runner can score a 1-5 mean. Grounding is held to 99% and runs only on a first publish or a prompt-pack bump. Lead's Q2 answer, 21 Oct 2026; 7.2 or 7.6 revisits it once scored runs exist.
 - Why: the runner scores pass/fail, not a mean, and the build plan's table has no grounding row.
