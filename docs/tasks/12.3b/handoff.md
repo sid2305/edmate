@@ -85,4 +85,4 @@ teacher 0, back to baseline on lift).
   `apps/web/src/studio/routes.ts` passing `body.rightsDeclared` (plus `routes.test.ts`,
   `apps/worker/test/ingest.int.test.ts` and the db tests that create documents).
 
-Tool calls used: 66
+Tool calls used: 77 (harness count, including an 18-call continuation after the lead answer; the builder reported 66)
