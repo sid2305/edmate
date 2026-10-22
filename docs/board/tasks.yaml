@@ -2159,7 +2159,7 @@ tasks:
   - '9.4'
   - '8.2'
   - '9.3'
-  status: running
+  status: review
   branch: m9/9.0-try-it
   model: plan:opus build:opus
 - id: '9.2'
@@ -2437,9 +2437,31 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: running
+  status: done
   branch: m0/0.17a-budget-parse
-  model: plan:lead build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 425
+    tokens_in: 1392
+    tokens_out: 123088
+    cache_read_tokens: 33746319
+    wall_time_seconds: 24102
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 4
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 4
+        LOW: 1
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 0.16b
   milestone: M13
   title: metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already
@@ -3054,7 +3076,8 @@ tasks:
   model: null
 - id: 9.0c
   milestone: M13
-  title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool at start or give that read its own timeout, and test it'
+  title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool
+    at start or give that read its own timeout, and test it'
   accept: a fresh web container's first turn logs no background failure; a test covers it.
   deps:
   - '9.0'

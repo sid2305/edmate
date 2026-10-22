@@ -10,6 +10,21 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 0.17a Lead merges after the fourth fix round, without another probe, and accepts the budget overrun · decided by lead · risk: high
+- Decided: merge 0.17a after fix round 4 (HTML comments masked), with no further security probing round. Any further way to hide a decoy line becomes a new board task. This also accepts the tool calls over budget.
+- Why: the human's answer to B-39 (a), 22 Oct 2026. Every round fixed its finding, the branch is strictly better than main, and all 106 merge-gate tests pass.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 0.17a merge-gate budget parse · risk: high
+Decided: tightened `budget_cap`'s fallback to the `## Budget` section's first non-blank line only,
+and added the `## Budget: N tool calls` heading form to `BUDGET_LINE`, per plan. No behaviour
+change for plans that already use a plain `Budget: N tool calls` line or a single-line `## Budget`
+section (the common cases); only multi-line `## Budget` sections with a decoy number are affected.
+
+---
+
 ### 22 Oct 2026 · Builders: 1 Opus + 2 Sonnet, no-shared-files rule, two plans ready ahead · decided by you · risk: high
 Decided: Builders run as 1 Opus + 2 Sonnet at once (was 1 + 1). Two builds may share a package as long as their plans' file lists, migration numbers and barrel exports don't overlap; the lead checks the lists before starting a build. The lead keeps the next two tasks planned while builders run. Trial until 24 Oct 2026; task 0.22 compares merges per day, idle time, HIGH findings and fix rounds, and recommends keep, revert or adjust.
 Why: "One builder per package" serialized every apps/web task (9.0, all of M8 and M9) for weeks. Sonnet is about 14% of spend and its tasks hold up in review, so a second Sonnet fits the subscription; a second Opus does not. A freed slot waited 10–20 minutes on a plan.
