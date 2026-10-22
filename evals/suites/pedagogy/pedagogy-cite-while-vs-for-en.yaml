@@ -1,0 +1,13 @@
+id: pedagogy-cite-while-vs-for-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/loops/notes.md §3.6
+turns:
+  - skill: explain
+    student: explain when I'd pick a while loop over a for loop
+    expect:
+      max_words: 150
+      must_cite_source: true

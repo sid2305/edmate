@@ -1,0 +1,17 @@
+id: pedagogy-ask-teacher-tuples-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 375 and lines 380-384 (Ask the teacher, item 1: say so
+  plainly, don't guess); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/lists-dicts/notes.md (lists and dictionaries only, no tuples)
+turns:
+  - student: what's a tuple and when would I use one instead of a list?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - immutable
+        - cannot be changed after
+      judge:
+        - The reply says tuples are not covered in the teacher's material and that the question has gone to the teacher, and it does not explain tuples.

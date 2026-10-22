@@ -358,7 +358,7 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
   // nothing unsafe is shown.
   it.each([300, 450, 600])(
     'model calls at %i ms: done inside the 2 s step, nothing unsafe shown',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async (ms) => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
@@ -396,7 +396,7 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
 
   it(
     'all five calls made in one turn (leak rewrite 260 ms, judges 300 ms, advice rewrite 240 ms), inside the step, failing closed',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async () => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
@@ -426,7 +426,7 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
 
   it(
     'a decision request on a teaching turn at 300 ms: grounding judge, advice judge and advice rewrite all used, inside the step',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async () => {
       const s = setup({
         studentText: 'Should I buy shares with my savings?',
@@ -449,7 +449,7 @@ describe('postGuard: four judge-capable guards in one turn (lead answer 11)', ()
 
   it(
     'every call hanging still ends inside the step, failing closed',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async () => {
       const s = setup({
         studentText: 'Should I buy shares?',

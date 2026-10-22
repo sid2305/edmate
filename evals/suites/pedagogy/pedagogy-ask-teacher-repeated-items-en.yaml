@@ -1,0 +1,18 @@
+id: pedagogy-ask-teacher-repeated-items-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 375 and lines 380-384 (Ask the teacher, item 1);
+  content/prompt-packs/ask_teacher@1.0.0.md ("Don't guess and don't answer from general knowledge,
+  not even partly"); content/demo-teacher/modules/lists-dicts/notes.md (no sets)
+turns:
+  - student: how do I get rid of repeated items in a list? someone online said use a set
+    expect:
+      max_words: 120
+      must_not_contain:
+        - set(
+        - removes duplicates
+        - list(set
+      judge:
+        - The reply says this is not covered in the teacher's material and that the question has gone to the teacher, and it does not explain sets.

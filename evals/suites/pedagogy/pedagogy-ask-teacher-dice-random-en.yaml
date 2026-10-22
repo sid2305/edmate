@@ -1,0 +1,17 @@
+id: pedagogy-ask-teacher-dice-random-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 380-384 (Ask the teacher, item 1: it can still help with
+  the parts that are covered); content/prompt-packs/ask_teacher@1.0.0.md;
+  content/demo-teacher/modules/conditions/notes.md §2.2 (if and else; no random numbers in any module)
+turns:
+  - student: I'm making a dice game, roll a random number 1 to 6 and print You win if it's a 6. how do I get the random number?
+    expect:
+      max_words: 120
+      must_not_contain:
+        - import random
+        - randint
+      judge:
+        - The reply says random numbers are not covered in the teacher's material and that the question has gone to the teacher; any help it gives is only about the if check.

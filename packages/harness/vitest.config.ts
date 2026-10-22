@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
+    // Catches hangs, not speed; CI runs every package's tests at once, so the vitest default
+    // (5s) is too tight under load (task 0.20).
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

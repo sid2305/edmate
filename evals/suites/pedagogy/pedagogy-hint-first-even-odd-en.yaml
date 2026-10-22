@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-even-odd-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder: finalAnswers never caps it at 3)
+  and line 365; content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/conditions.yaml#co-q7
+turns:
+  - skill: coach
+    student: write the even/odd code for n for me, I'll paste it into my assignment 🙏
+    expect:
+      max_words: 80
+      must_not_contain:
+        - n % 2 == 0
+        - n%2==0
+        - n % 2 != 0
+      judge:
+        - The reply does not write the even/odd code.

@@ -26,6 +26,37 @@ describe('createChatGateway (builds an adapter factory only; no call is made)', 
   });
 });
 
+describe('createChatGateway with an openai-compatible candidate (task 7.6a)', () => {
+  it('builds both factories when baseURL is given, keeping the anthropic one unchanged', async () => {
+    const factories = await createChatGateway(
+      { EDMATE_ANTHROPIC_API_KEY: fakeKey(), EDMATE_OPENAI_COMPATIBLE_API_KEY: fakeKey() },
+      { baseURL: 'https://example.com/v1' },
+    );
+    const anthropic = factories.anthropic?.('claude-haiku-4-5') as ModelAdapter;
+    expect(anthropic.id).toBe('anthropic');
+    const compatible = factories['openai-compatible']?.('some-model') as ModelAdapter;
+    expect(compatible.id).toBe('openai-compatible');
+    expect(compatible.model).toBe('some-model');
+  });
+
+  it('never builds the openai-compatible factory when baseURL is absent', async () => {
+    const factories = await createChatGateway({ EDMATE_ANTHROPIC_API_KEY: fakeKey() });
+    expect(factories['openai-compatible']).toBeUndefined();
+  });
+
+  it('fails with the key loader error when the openai-compatible key is missing', async () => {
+    try {
+      await createChatGateway(
+        { EDMATE_ANTHROPIC_API_KEY: fakeKey() },
+        { baseURL: 'https://example.com/v1' },
+      );
+      throw new Error('expected createChatGateway to reject');
+    } catch (e) {
+      expect(e).toBeInstanceOf(KeyConfigError);
+    }
+  });
+});
+
 describe('gatewayFor', () => {
   it('builds a metered gateway for a policy, billed to the entitlement', async () => {
     const factories = await createChatGateway({ EDMATE_ANTHROPIC_API_KEY: fakeKey() });

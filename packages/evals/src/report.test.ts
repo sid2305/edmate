@@ -119,11 +119,26 @@ describe('toJsonReport', () => {
   });
 
   it('includes judgeModel and calibration only when passed', () => {
-    const calibration = { sampled: 1, reviewed: 1, agreed: 1, rate: 1, disagreements: [] };
+    const calibration = {
+      sampled: 1,
+      reviewed: 1,
+      agreed: 1,
+      rate: 1,
+      disagreements: [],
+      unmatched: [],
+    };
     const r = toJsonReport(results, { judgeModel: 'anthropic:judge-test-model', calibration });
     expect(r).toMatchObject({ judgeModel: 'anthropic:judge-test-model', calibration });
     expect(toJsonReport(results)).not.toHaveProperty('judgeModel');
     expect(toJsonReport(results)).not.toHaveProperty('calibration');
+  });
+
+  it('includes model and cost only when passed (task 7.6 Phase B, additive)', () => {
+    const cost = { perTurnMicroUsd: 500, byTier: { small: 100, main: 400 }, unpricedCalls: 0 };
+    const r = toJsonReport(results, { model: 'claude-haiku-4-5', cost });
+    expect(r).toMatchObject({ model: 'claude-haiku-4-5', cost });
+    expect(toJsonReport(results)).not.toHaveProperty('model');
+    expect(toJsonReport(results)).not.toHaveProperty('cost');
   });
 
   it('copies the results, so later mutation does not change the report', () => {

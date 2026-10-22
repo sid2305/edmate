@@ -1,0 +1,22 @@
+id: pedagogy-check-lists-then-move-on-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain then check); content/prompt-packs/explain@1.0.0.md
+  ("When the decision is a check, ask that one question only and don't explain again");
+  .claude/skills/edmate-pedagogy/SKILL.md ("checks understanding before moving on");
+  content/demo-teacher/modules/lists-dicts/notes.md §5.1
+turns:
+  - skill: explain
+    student: explain what a list is and how the positions work
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood list positions.
+  - skill: explain
+    student: yep makes sense 👍 what's next
+    expect:
+      max_words: 80
+      judge:
+        - Before starting a new topic, the reply asks one question that checks the student can use list positions, and does not explain lists again.

@@ -439,4 +439,69 @@ describe.skipIf(!up)(`profileStoreFor on Postgres${up ? '' : ` (${SKIP_REASON})`
     },
     15_000,
   );
+
+  it(
+    // Task 6.3: applyMistakes merges a known-only patch into mistakes (count/lastSeen merged, not
+    // replaced), leaving mastery and lastSummary untouched -- same no-clobber invariant 6.2 and
+    // 3.17 already guard for their own columns.
+    'applyMistakes merges a patch into mistakes (count/lastSeen merged) and leaves mastery and lastSummary untouched',
+    async () => {
+      const fresh = { studentId: 'stu_mistakes', teacherId: own.teacherId };
+      await handle.db.execute(
+        sql`insert into users (id, name, locale, market, role)
+            values (${fresh.studentId}, 'Mistakes', 'en', 'test', 'student')`,
+      );
+      await repos.learnerProfiles.save(fresh, {
+        ...fresh,
+        lang: 'en',
+        mastery: { [topicId]: { p: 0.5, n: 1, updatedAt: '2026-10-19T10:00:00.000Z' } },
+        mistakes: [{ tag: 'off-by-one-range', count: 1, lastSeen: '2026-10-19T10:00:00.000Z' }],
+        lastSummary: 'seeded summary',
+      });
+
+      await repos.learnerProfiles.applyMistakes(fresh, [
+        { tag: 'off-by-one-range', count: 2, lastSeen: '2026-10-20T10:00:00.000Z' },
+        { tag: 'string-number-mix', count: 1, lastSeen: '2026-10-19T11:00:00.000Z' },
+      ]);
+
+      const after = await repos.learnerProfiles.get(fresh);
+      expect(after!.mistakes).toEqual(
+        expect.arrayContaining([
+          { tag: 'off-by-one-range', count: 3, lastSeen: '2026-10-20T10:00:00.000Z' },
+          { tag: 'string-number-mix', count: 1, lastSeen: '2026-10-19T11:00:00.000Z' },
+        ]),
+      );
+      expect(after!.mistakes).toHaveLength(2);
+      expect(after!.mastery).toEqual({
+        [topicId]: { p: 0.5, n: 1, updatedAt: '2026-10-19T10:00:00.000Z' },
+      });
+      expect(after!.lastSummary).toBe('seeded summary');
+    },
+    15_000,
+  );
+
+  it(
+    'applyMistakes rejects a malformed scope before any SQL, and is a no-op for an empty patch',
+    async () => {
+      expect(
+        await kind(
+          repos.learnerProfiles.applyMistakes({ studentId: 'a b', teacherId: own.teacherId }, [
+            { tag: 'off-by-one-range', count: 1, lastSeen: '2026-10-19T10:00:00.000Z' },
+          ]),
+        ),
+      ).toBe('scope');
+      expect(
+        await kind(
+          repos.learnerProfiles.applyMistakes({ studentId: own.studentId, teacherId: '' }, [
+            { tag: 'off-by-one-range', count: 1, lastSeen: '2026-10-19T10:00:00.000Z' },
+          ]),
+        ),
+      ).toBe('scope');
+
+      const before = await repos.learnerProfiles.get(own);
+      await repos.learnerProfiles.applyMistakes(own, []);
+      expect(await repos.learnerProfiles.get(own)).toEqual(before);
+    },
+    15_000,
+  );
 });

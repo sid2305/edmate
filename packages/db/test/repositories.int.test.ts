@@ -173,6 +173,8 @@ const newSession = (t: Teacher) => ({
 });
 /** A spare open session per pair, for sessions.endOnPackageChange (inserted in beforeAll). */
 const endable = (p: Pair) => `${ids.session(p)}_end`;
+/** A second spare open session per pair, for sessions.end (inserted in beforeAll). */
+const endable2 = (p: Pair) => `${ids.session(p)}_end2`;
 
 /** Over the 10 000-character cap on a serialised before/after. */
 const BIG = { blob: 'x'.repeat(10_001) };
@@ -423,6 +425,21 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'invalid',
       ],
     ],
+  },
+  // Task 7.4: read path for the rows chunks.addTeacherNote just wrote (its positive control writes
+  // `[actor]` rows for each teacher, so every actor has its own rows by now).
+  'teacherEvalCases.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.teacherEvalCases.listForTeacher(scope),
+    random: (r, _scope, rid) => r.teacherEvalCases.listForTeacher({ teacherId: rid }),
+    owners: (rows: { question: string; answer: string; moduleId: string }[]) =>
+      rows.flatMap((c) => [
+        ...markers(c.question),
+        ...markers(c.answer),
+        c.moduleId.slice(4, 5).toUpperCase(),
+      ]),
   },
   'retrieval.search': {
     scope: 'teacher',
@@ -838,6 +855,51 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ],
     ],
   },
+  // Task 6.4: ends the scope's own session normally and upserts its own pair's summary; anything
+  // else is not_found and writes nothing. Targets a second spare session per pair (seeded in
+  // beforeAll, distinct from endOnPackageChange's so the two write cases never share a row).
+  'sessions.end': {
+    scope: 'student',
+    op: 'write',
+    attempt: (r, scope, actor, target) =>
+      r.sessions.end(scope, endable2(target), `[${actor}] wrap-up`),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ ended: true });
+      for (const p of PAIRS) {
+        const row = await r.sessions.get(sScope(p), endable2(actor));
+        if (p === actor) {
+          expect(row?.endedAt).not.toBeNull();
+          expect(row?.summary).toBe(`[${actor}] wrap-up`);
+        } else {
+          expect(row, `${p} reads ${actor}'s session`).toBeNull();
+        }
+        const summary = (await r.learnerProfiles.get(sScope(p)))?.lastSummary;
+        expect(summary, `${p}'s summary`).toBe(p === actor ? `[${actor}] wrap-up` : `[${p}] last time`);
+      }
+      // Put the summary back to the seed's own value, same as endOnPackageChange's own case.
+      await raw.query(
+        'update learner_profiles set last_summary = $1 where student_id = $2 and teacher_id = $3',
+        [`[${actor}] last time`, sScope(actor).studentId, sScope(actor).teacherId],
+      );
+    },
+    mismatches: (a) => [
+      [
+        'a session id that is not an id',
+        (r) => r.sessions.end(sScope(a), 'ses not an id', 'summary'),
+        'invalid',
+      ],
+      [
+        'a session that does not exist',
+        (r) => r.sessions.end(sScope(a), 'ses_nowhere', 'summary'),
+        'not_found',
+      ],
+      [
+        'a summary over the word limit',
+        (r) => r.sessions.end(sScope(a), endable2(a), Array(LIMITS.lastSummaryMaxWords + 1).fill('w').join(' ')),
+        'invalid',
+      ],
+    ],
+  },
   'messages.history': {
     scope: 'student',
     op: 'read',
@@ -1143,6 +1205,83 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         (x) => (x as LearnerProfile | null)?.mastery[topicId]?.updatedAt === ts,
       );
     },
+  },
+  'learnerProfiles.applyMistakes': {
+    scope: 'student',
+    op: 'write',
+    // Same shape as applyMastery above: the payload names no target row, only a mistake tag as
+    // content, so there is no "actor writes toward target" to test (owns: () => true skips that
+    // grid).
+    owns: () => true,
+    attempt: async (r, scope) => {
+      const tag = `mistake_${++counter}`;
+      const lastSeen = new Date(Date.UTC(2026, 9, 19, 14, 0, counter)).toISOString();
+      await r.learnerProfiles.applyMistakes(scope, [{ tag, count: 1, lastSeen }]);
+      return { tag, lastSeen };
+    },
+    verify: async (r, actor, result) => {
+      const { tag, lastSeen } = result as { tag: string; lastSeen: string };
+      await onlyPairSees(
+        (sc) => r.learnerProfiles.get(sc),
+        actor,
+        (x) => (x as LearnerProfile | null)?.mistakes.some((m) => m.tag === tag && m.lastSeen === lastSeen) ?? false,
+      );
+    },
+  },
+  // Task 6.5: no target row named (the scope's own profile, sessions and evidence are always the
+  // target), so owns: () => true skips the cross-actor grid, same shape as applyMastery above.
+  // The positive control ends the pair's main seeded session and clears its profile and evidence;
+  // `verify` restores all three to the seed's own values so later cases and tests are unaffected
+  // (same "put it back" idiom sessions.end/endOnPackageChange already use above).
+  'learnerProfiles.reset': {
+    scope: 'student',
+    op: 'write',
+    owns: () => true,
+    attempt: (r, scope) => r.learnerProfiles.reset(scope),
+    verify: async (r, actor, res) => {
+      expect(res).toEqual({ reset: true });
+      const sc = sScope(actor);
+      const profile = await r.learnerProfiles.get(sc);
+      expect(profile).toMatchObject({ mastery: {}, mistakes: [] });
+      expect(profile && 'lastSummary' in profile).toBe(false);
+      const session = await r.sessions.get(sc, ids.session(actor));
+      expect(session?.endedAt).not.toBeNull();
+      for (const p of PAIRS) {
+        if (p === actor) continue;
+        const other = await r.learnerProfiles.get(sScope(p));
+        expect(other?.mastery, `${p}'s mastery after ${actor}'s reset`).not.toEqual({});
+      }
+      // Restore the seed's own values, so every case and test after this one sees the original
+      // fixture (same idiom sessions.end / endOnPackageChange already use).
+      const t = teacherOf(actor);
+      await raw.query(`update sessions set ended_at = null where id = $1`, [ids.session(actor)]);
+      await raw.query(
+        `update learner_profiles set mastery = $1::jsonb, mistakes = $2::jsonb, last_summary = $3
+         where student_id = $4 and teacher_id = $5`,
+        [
+          JSON.stringify({ [ids.topic(t)]: { p: 0.5, n: 2, updatedAt: '2026-10-17T10:00:00Z' } }),
+          JSON.stringify([{ tag: `[${actor}] sign`, count: 1, lastSeen: '2026-10-17T10:00:00Z' }]),
+          `[${actor}] last time`,
+          sc.studentId,
+          sc.teacherId,
+        ],
+      );
+      await raw.query(
+        `insert into evidence_events (id, student_id, teacher_id, topic_id, correct, source)
+         values (gen_random_uuid()::text, $1, $2, $3, true, 'check')`,
+        [sc.studentId, sc.teacherId, ids.topic(t)],
+      );
+    },
+  },
+  'evidenceEvents.list': {
+    scope: 'student',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.evidenceEvents.list(scope, { limit: 100 }),
+    random: (r, _scope, rid) =>
+      r.evidenceEvents.list({ studentId: rid, teacherId: rid }, { limit: 100 }),
+    owners: (res: { events: EvidenceEvent[] }) =>
+      res.events.map((e) => pairOfIds(e.studentId, e.teacherId)),
   },
   'evidenceEvents.append': {
     scope: 'student',
@@ -2362,6 +2501,11 @@ describe.skipIf(!up)(
           `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
            values ($1, $2, $3, $4, 1, $5, 1)`,
           [endable(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
+        );
+        await raw.query(
+          `insert into sessions (id, student_id, teacher_id, agent_id, agent_version, package_id, package_version)
+           values ($1, $2, $3, $4, 1, $5, 1)`,
+          [endable2(p), studentId(studentOf(p)), teacherId(t), ids.agent(t), ids.pkg(t)],
         );
       }
       // Task 5.10: fixed fixtures for teacherQuestions.answer / notifications' isolation cases.

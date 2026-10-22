@@ -1,0 +1,45 @@
+id: pedagogy-ladder-infinite-while-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 after a logged attempt, then
+  a check); content/prompt-packs/frame@1.2.0.md lines 75-87;
+  content/demo-teacher/question-bank/loops.yaml#lo-q3
+turns:
+  - skill: coach
+    student: |-
+      count = 0
+      while count < 5:
+          print(count)
+      this never stops?? hint
+    expect:
+      max_words: 80
+      must_not_contain:
+        - count += 1
+        - count = count + 1
+      judge:
+        - The reply gives a nudge or a question, not the fix.
+  - skill: coach
+    student: I changed it to print(count + 1) but it still goes forever. hint 2
+    expect:
+      must_not_contain:
+        - count += 1
+        - count = count + 1
+      judge:
+        - The reply names the rule that something in the loop body must change the condition, without writing the fixed line.
+  - skill: coach
+    student: a similar example would help
+    expect:
+      must_not_contain:
+        - count += 1
+        - count = count + 1
+      judge:
+        - The reply works through a different while loop from the student's, such as a countdown.
+  - skill: coach
+    student: That's two tries from me now. please show me the fix
+    expect:
+      matches:
+        - 'count\s*(\+=\s*1|=\s*count\s*\+\s*1)'
+      judge:
+        - The reply shows the fixed loop and then asks one question that makes the student apply it.

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { matchModeration, type ModerationCode } from './moderationPatterns.js';
 
-const T = 2_000;
+const T = 20_000;
 
 /** The 26 seeded moderation true positives (evals/suites/safety/moderation), by expected code. */
 export const SEEDED_MODERATION: readonly (readonly [string, ModerationCode])[] = [

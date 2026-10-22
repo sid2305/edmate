@@ -110,6 +110,14 @@ services:
       # otherwise refuses. A real deployment sets an https S3_ENDPOINT and neither of these.
       S3_PUBLIC_ENDPOINT: http://localhost:${EDMATE_S3_PORT:-9000}
       S3_ALLOW_HTTP: 'true'
+      # Chat (task 9.0). The market picks the locale pack; production fails closed without one.
+      EDMATE_MARKET: ${EDMATE_MARKET:-US}
+      # Agents students can chat with; in production an unset value means none. The seeded demo agent.
+      EDMATE_CHAT_AGENTS: ${EDMATE_CHAT_AGENTS:-demo-agent}
+      # Your Anthropic key, from your shell or the ignored docker/.env file. No default.
+      EDMATE_ANTHROPIC_API_KEY: ${EDMATE_ANTHROPIC_API_KEY:-}
+      # Local-only scripted model (no key): `scripted` works only when AUTH_URL is http://localhost. Off by default.
+      EDMATE_DEV_MODEL: ${EDMATE_DEV_MODEL:-}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -128,7 +136,13 @@ services:
       dockerfile: apps/worker/Dockerfile
     image: edmate-worker:dev
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Embedder and Whisper for ingest (task 2.7). No default; not needed when embeddings are off.
+      EDMATE_OPENAI_API_KEY: ${EDMATE_OPENAI_API_KEY:-}
+      # Local stack: index uploads for full-text search only (chat retrieval is full text, 9.4), so
+      # no OpenAI key is needed. `openai` turns embeddings and transcription back on (task 9.0, D3).
+      EDMATE_INGEST_EMBEDDINGS: ${EDMATE_INGEST_EMBEDDINGS:-off}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

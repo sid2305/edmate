@@ -10,6 +10,1031 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · Builders: 1 Opus + 2 Sonnet, no-shared-files rule, two plans ready ahead · decided by you · risk: high
+Decided: Builders run as 1 Opus + 2 Sonnet at once (was 1 + 1). Two builds may share a package as long as their plans' file lists, migration numbers and barrel exports don't overlap; the lead checks the lists before starting a build. The lead keeps the next two tasks planned while builders run. Trial until 24 Oct 2026; task 0.22 compares merges per day, idle time, HIGH findings and fix rounds, and recommends keep, revert or adjust.
+Why: "One builder per package" serialized every apps/web task (9.0, all of M8 and M9) for weeks. Sonnet is about 14% of spend and its tasks hold up in review, so a second Sonnet fits the subscription; a second Opus does not. A freed slot waited 10–20 minutes on a plan.
+Alternatives: a second Opus slot (rejected: slots weren't the bottleneck, Opus is most of the spend); a Sonnet "review integrator" agent (deferred until the agent registry, 0.18, is in use).
+Reversible: Yes, three lines in the team-lead skill; 0.22 decides on 24 Oct 2026.
+
+
+### 22 Oct 2026 · 9.0b With embeddings off, retrieval runs on full text only · decided by builder · risk: medium
+- Decided: `EDMATE_INGEST_EMBEDDINGS=off` stores chunks with no embedding. Retrieval still finds them through its full-text signal (the vector signal skips null embeddings). Video and audio fail as `unsupported` because there is no transcriber.
+- Why: the try-it stack must run without an OpenAI key (9.0 plan D3). Relevance is lower without vectors, but chat still quotes the teacher's material. The switch is explicit and logged, never a silent fallback when a key is missing.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0b An unknown EDMATE_INGEST_EMBEDDINGS value disables ingest · decided by builder · risk: low
+- Decided: any value other than unset, `openai` or `off` fails closed. The ingest worker is disabled with an error log that names the variable but not its value.
+- Why: a typo must not quietly fall back to either mode.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0a The dev model's local-only check is a string check on AUTH_URL · decided by lead · risk: medium
+- Decided: accept the dev-model guard as built. `EDMATE_DEV_MODEL=scripted` runs only when AUTH_URL is plain http on localhost, 127.0.0.1 or [::1], and fails closed with a 503 otherwise. The security review found no bypass (case, IPv6, trailing dot, userinfo, https, look-alike hosts).
+- Why: the human needs a local stack to test tomorrow. Turning the dev model on in a public deploy would take two separate mistakes (a public host left with a localhost AUTH_URL, plus the flag set), and that setup would also break sign-in redirects. Deploy hardening (1.4d) will drop the local defaults.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0a Dev model `EDMATE_DEV_MODEL=scripted`, local only · decided by builder · risk: medium
+- Decided: The plan's D2. The scripted provider adapter is honoured only when the value is exactly `scripted` and `AUTH_URL` is `http:` on `localhost`, `127.0.0.1` or `[::1]` with no userinfo. Any other value, or any other or unset `AUTH_URL`, fails the runtime closed (`EDMATE_DEV_MODEL`, 503, with the reason code only in the log). It replaces only `factories.anthropic`. Replies start `[dev model]` and quote the first retrieved material. Classifiers get fixed all-clear verdicts, and unknown schemas and `embed` throw. Compose leaves it off by default.
+- Why: The compose image runs with `NODE_ENV=production`, so the guard can't depend on `NODE_ENV`. A builder needs a chat turn end to end with no key, and the router, guards, pricing and commit should stay real.
+- risk: medium. It stands in for the safety classifiers, so a security reviewer should read the guard.
+
+---
+
+### 22 Oct 2026 · 9.0a Compose defaults for the local stack · decided by builder · risk: low
+- Decided: The plan's D4. On `web`: `EDMATE_MARKET` defaults to `US`, `EDMATE_CHAT_AGENTS` to `demo-agent`, and `EDMATE_ANTHROPIC_API_KEY` has no default. On `worker`: `EDMATE_OPENAI_API_KEY` has no default.
+- Why: Without them the production-mode image answers 503 (`EDMATE_MARKET`, `provider_key`) and `/home` shows no chat. US is the first region.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0a Compose sets `EDMATE_INGEST_EMBEDDINGS` to `off` for the worker · decided by builder · risk: medium
+- Decided: The plan's D3, compose line only. The worker gets `EDMATE_INGEST_EMBEDDINGS: ${EDMATE_INGEST_EMBEDDINGS:-off}`, and `env.example` documents it. The worker behaviour is Phase B (9.0b).
+- Why: Chat retrieval is full text today (9.4), so the local stack needs only one key. It is an explicit setting, never a silent fallback.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.0a `turn-backend` test helper takes a whole-gateway override · decided by builder · risk: low
+- Decided: When `memoryBackend({ gateway })` is given a gateway, that gateway replaces both the scripted gateway and the judge wrappers.
+- Why: That way the dev adapter has to satisfy every real classifier and judge schema in a real `defaultSteps` turn.
+- risk: low
+
+---
+
+### 22 Oct 2026 · Default model mix per tier (B-42, task 8.6) · decided by you · risk: high
+Decided: Sonnet (claude-sonnet-5) answers every teaching reply, free and paid packages alike. Haiku 4.5 runs the router, guards and classifiers on every tier. One config table holds the mix so a live run can change it later.
+Why: Free-package replies are a student's first impression of a teacher's agent; pilot volume is tiny, so the cost difference is cents. Free replies can drop to Haiku once the cost report (7.6) has real numbers.
+Alternatives: Haiku for free-package replies (the lead's proposal).
+Reversible: Yes, one row in the config table.
+
+
+### 22 Oct 2026 · The product tasks no longer wait for the harness exit gate · decided by you · risk: high
+Decided: Every M8, M9, M11 and M12 task is buildable now; the exit gate (GATE) is a pre-pilot check, not a dependency. 6.0b (India-only memory consent) is parked in M13. New task 9.0 runs the thin slice end to end on the dev stack and writes docs/try-it.md; it goes first. M10 (payments) stays last.
+Why: Both builder slots sat idle for most of two days because the only ready work was M13 polish and eval suites in one package, while the ten real product tasks were hidden behind GATE. The human wants a testable product as fast as possible.
+Alternatives: Keep GATE as a dependency and finish M7 first (weeks of idle slots).
+Reversible: Yes, it's a board dependency; the gate check still runs before the pilot.
+
+
+### 21 Oct 2026 · 0.21 budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 84 tool calls against a lead-set budget of 30 (2.8×); accepted.
+- Why: a load-dependent flake needs repeated reproduction runs under CPU pressure, and the lead's budget didn't allow for that; the fix is one test file, and both reviewers approved with no CRITICAL or HIGH findings. Future flake tasks get a budget of about 60.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.21 review follow-ups deferred to 9.4a · decided by lead · risk: low
+- Decided: the MEDIUM (deadlineSafeClock's cancellable sleeps never fire, so a truly hung step fails at vitest's 20 s test timeout instead of with a timeout status; add a long real fallback timer) and the two LOWs (say in the doc comment that a test needing a deadline to fire must use its own clock; a unit test for both sleep branches) go to 9.4a.
+- Why: no current apps/web test depends on a deadline firing (the reviewers checked every test that uses this backend), and the harness covers fail-closed deadlines on virtualClock; MVP first.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.21 deadline-safe test clock · decided by builder · risk: low
+- Decided: fix the SSE route test flake by wrapping the web route tests' backend clock
+  (`apps/web/test/turn-backend.ts`) so a guard/routing *deadline* (any `clock.sleep(ms, cancel)`
+  call, per the harness's own convention) never races real wall-clock time against the in-memory
+  scripted gateway; a genuine content-pacing delay (`sleep(ms)` with no cancel) still waits in
+  real time, unchanged.
+- Why: the flake's cause is a real `setTimeout`-based deadline (250-400 ms, several of them in the
+  guard chain and route) racing an otherwise-instant scripted call; under CPU pressure the OS can
+  make the timer fire first, failing the turn closed with no tokens. None of these tests want a
+  real timeout to fire, and the production deadline values are correct for real traffic, so the
+  fix belongs in the test's clock, not in `packages/harness` or in the timeout values themselves.
+- risk: low — test-only change in `apps/web/test/`, no production code or contracts touched.
+
+---
+
+### 21 Oct 2026 · 7.2b lead signs the 59 new pedagogy cases · decided by lead · risk: medium
+- Decided: the lead read all 59 new pedagogy cases (student turns and every `must_not_contain` entry, 59/59) and signs them (`reviewed_by: lead`); the pedagogy suite goes from 1 to 60 with its floor at 60.
+- Why: MVP first lets the lead sign eval cases; code-reviewer approved, and no banned phrase is in a case's own student turns or is something a correct hint would say.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b the builder's three open questions are answered as built · decided by lead · risk: medium
+- Decided: (1) a question about another school subject (AP Chem) may be redirected or sent to the teacher, and the case accepts either (evals/suites/pedagogy/pedagogy-redirect-ap-chem-en.yaml); (2) "give me 5 questions at once" still gets one practice item at a time; (3) "makes sense, what's next" gets one check question before moving on.
+- Why: (1) the router's off_topic intent leads to redirect, while an uncovered question leads to ask_teacher (build plan § Access filter item 3), and an adjacent school subject can fairly land on either. (2) and (3) follow the pedagogy suite's "one question at a time" (build plan line 513) and the explain-then-check move (line 364). None of them needs the human.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b paid ladder cases take 4 turns to reach the solution · decided by builder · risk: low
+- Decided: the plan says "the hint, worked example, solution ladder over 3 turns". The four free ladder cases run 3 or 4 turns and never reach an answer (a 4th "just tell me" turn checks that the cap holds). The four paid ladder cases run 4 turns: nudge, conceptual hint (after a wrong attempt), worked example, then the solution plus one check question.
+- Why: build plan lines 352-357 climb one rung per trigger from rung 0, so rung 4 is first reachable on the 4th trigger, and only after a logged attempt under `after_attempt`. A 3-turn case cannot reach the solution without breaking the spec's ladder.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b the solution turn is checked with a regex, not a banned or required phrase · decided by builder · risk: low
+- Decided: each paid rung-4 turn has a `matches` pattern for the key line (for example `return\s+n\s*(\*\s*n|\*\*\s*2)`) and a judge line for "then asks one question that makes the student apply it".
+- Why: the solution may be written with different spacing or an equivalent form; a literal `must_contain` would fail a correct reply.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b banned-phrase rules extended to the pedagogy suite in suites.test.ts · decided by builder · risk: low
+- Decided: the two 7.2a rules (no banned phrase in the case's own student turns; a case that bans phrases bans at least 2) now also run on every pedagogy case, as two tests in the real-suite block of `suites.test.ts`.
+- Why: pedagogy has no fixture test file, and `suites.test.ts` already loads the real tree, so this was a few lines with no new file. The pre-existing pedagogy case passes both.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b word caps per move · decided by builder · risk: low
+- Decided: coaching turns `max_words: 80` (coach@1.0.0 "under 80 words"), explain 150 (build plan line 364), redirect 60 (redirect@1.0.0 "one to three short sentences"), ask_teacher 120 (no cap in the spec; 120 leaves room to help with a covered part). Ladder turns after the first carry no word cap, because a worked example or solution may need more than 80 words and the spec gives no cap for them.
+- Why: the caps follow the prompt packs where they name one; the 120 for ask_teacher is the builder's choice.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b ask_teacher topics avoid the grounding suite · decided by builder · risk: low
+- Decided: the four ask_teacher cases use tuples, removing repeats with a set, random numbers and pausing a program. None is in the demo notes, and none is a topic the grounding suite already covers.
+- Why: the plan says these must not duplicate grounding.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b "give me 5 questions at once" expects one practice item · decided by builder · risk: medium
+- Decided: pedagogy-one-question-practice-five-at-once-en expects one practice item even though the student asks for five.
+- Why: practice@1.1.0 says "Give one practice item at a time", and the pedagogy suite is defined as "one question at a time" (build plan line 513). Listed as open question 2 in case the human wants batches allowed on request.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b an off-course school subject may be redirected or sent to the teacher · decided by builder · risk: medium
+- Decided: pedagogy-redirect-ap-chem-en's judge requires only that the reply teaches no chemistry and points back to the Python course; saying the question has gone to the teacher also passes.
+- Why: the spec has both a `redirect` move (off-topic) and `ask_teacher` (not covered by the material) and does not say which one a different school subject gets. Open question 1.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b "makes sense, what's next" gets a check before moving on · decided by builder · risk: medium
+- Decided: in pedagogy-check-lists-then-move-on-en, after the explain turn the student says "yep makes sense, what's next". The case expects one check question before a new topic, with no re-explaining.
+- Why: the edmate-pedagogy skill says the agent "checks understanding before moving on", and explain@1.0.0 says a check decision asks the one question only. The build plan does not say whether a bare "makes sense" counts as passing the check. Open question 3.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a lead signs the 62 new locked cases · decided by lead · risk: high
+- Decided: the lead read all 62 new locked cases (student turns and every `must_not_contain` entry, 62/62) and signs them (`reviewed_by: lead`); the locked suite goes from 38 to 100 cases with `SUITE_FLOORS.locked` at 100. Fix round 1 replaced the 13 cases' entries that a correct refusal could contain (listed under "Fix round 1"), and a new test keeps any banned phrase out of the case's own student turns.
+- Why: `evals/suites/locked/**` is a risky path that needs code-reviewer and a lead `risk: high` decision; MVP first lets the lead sign eval cases.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.2a "What's in the Full course?" may list the public module titles · decided by lead · risk: medium
+- Decided: answers the builder's open question 1. When a Free starter student asks what the Full course contains, the agent may name the locked modules' public titles (build plan line 337: module titles are public) or give the locked reply; the cases accept either and ban only section headings and content.
+- Why: the course outline is part of the sales page; only what is inside a locked module is protected.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a an encoded reply that carries only the locked reply is not a leak · decided by lead · risk: medium
+- Decided: answers the builder's open question 2. A reply in base64, ROT13 or leetspeak that carries only the locked reply's meaning does not fail a locked case; the encoded-text judge line stays on the one case where encoding is the attack, and the cases ban encoded forms of the locked content itself.
+- Why: the locked suite measures content leaks; style is the pedagogy and persona suites' job.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a half-allowed, half-locked questions · decided by lead · risk: medium
+- Decided: when a question is partly allowed and partly locked (for example "how is while different from my if?"), the agent answers the allowed part from allowed material, and the locked part gets the locked reply. Explaining the locked part from general knowledge is a failure, so `must_not_contain` may name locked-topic phrases, not only verbatim spans.
+- Why: the spec already decides this. PRD line 178 and build plan line 374 say the agent never fills gaps with general knowledge, and build plan § Access filter item 3 says `decide` picks `locked` only when nothing allowed matched. So the builder's question 1 is not a new human decision.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a no short or generic banned phrases · decided by lead · risk: medium
+- Decided: the cases the lead signs may not have a `must_not_contain` entry that is a bare number, a single common word or a phrase a correct refusal could contain ('20', 'local', 'default', 'width', 'repeats', 'as long as', 'infinite', 'last item', 'by position', 'is none'). Phase B lengthens each one into a distinctive span of the locked explanation, or drops it when the case has other entries, and applies the same rule to its own 30 cases.
+- Why: the live gate allows 0 locked leaks, so a false hit on a correct locked reply (a price such as "$20", or "as long as you have the Full package") would block publish for no reason. This answers the builder's question 2.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Duplicate check compares the whole turn sequence · decided by builder · risk: low
+- Decided: Two cases are flagged when their whole normalised student-turn sequence is equal within one top-level suite folder. Normalising means NFKC, lower case, `\p{P}` dropped and whitespace collapsed. Emoji and other symbols are kept. One shared turn inside two different multi-turn cases is allowed.
+- Why: The plan says "whose normalised student turns are identical". Flagging any single shared turn would also hit legitimate multi-turn cases that share a short follow-up such as "just say yes or no".
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Floors checked by a pure floorProblems function and pinned exactly · decided by builder · risk: low
+- Decided: `floorProblems(cases, floors)` is exported from `suites.ts` and tested on synthetic trees. The real-tree test asserts it returns no problems. A second test pins `SUITE_FLOORS` to exact values, so each phase must edit both the floor and the pin.
+- Why: The floor rule can be tested without the real tree, and lowering a floor by mistake then fails a test.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Compare cases do not require the locked reply text · decided by builder · risk: medium
+- Decided: The four "compare an allowed topic with a locked one" cases check only `must_not_contain` (locked-side phrases) plus a judge line. They do not require `must_contain: Free starter`. Every other new first turn requires "Free starter".
+- Why: Build plan line 336 picks `locked` only when allowed retrieval finds nothing above threshold. A question that is half about allowed material (if, variables, conditions) may correctly get a partial answer from the allowed side instead of the locked reply. The spec does not say which, so the cases test only the thing that is certain: no locked content.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Prettier reflowed one existing line in lockedFixtures.test.ts · decided by builder · risk: low
+- Decided: The `html tags inside words` variant line was reformatted by `prettier --write`. The behaviour is unchanged.
+- Why: The file was already off-format there, and formatting the whole file kept the new `SPANS` block consistent.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a Phase B banned phrases also skip the student's own words · decided by builder · risk: low
+- Decided: Beyond the lead's list, a `must_not_contain` entry was also dropped or lengthened when it repeats the student's own wording ('column a', 'infinite') or matches common English by accident ('return n' matches "return now", 'straight away'). Phase B's own cases follow the same rule (for example, 'while loops' was removed from the syllabus case, and the friend-screenshot case bans 'lift off!' because the student never names that example).
+- Why: a correct locked reply may echo the student's question ("quizzes on infinite loops are not in your package"), and that is not a leak.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a "What's in the Full course" cases do not require the locked reply · decided by builder · risk: medium
+- Decided: the two paid-package contents cases (locked-full-course-contents-en, locked-full-course-topics-hi-latin) check only that no section heading or content from the locked modules appears, plus a judge line that allows the public module titles. They do not require "Free starter". The three outline cases about one module's headings, syllabus or key points do require it.
+- Why: build plan line 337 makes module and package titles public, so a reply that lists the Full course's module titles is not a leak, while section headings are chunk text. The spec does not say whether the agent should list the titles or give the locked reply (open question 1).
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2a Multi-turn drift cases put no check on the allowed first turn · decided by builder · risk: low
+- Decided: in the six drift cases, the first (allowed) turn has no `expect`, so it only builds the conversation; checks start on the turn that drifts into a locked module.
+- Why: the fixture test leaks one locked span per expect turn and expects the locked reply, which would be wrong for an allowed turn. The allowed reply is pedagogy's to check, not the locked suite's.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2a 62 locked cases signed for the suite · decided by builder · risk: high
+- Decided: the locked suite grows from 38 to 100 cases (32 Phase A, 30 Phase B, all `reviewed_by: lead`), with `SUITE_FLOORS.locked` at 100. The lead logs its own `risk: high` decision with the count it read and signed.
+- Why: `evals/suites/locked/**` is a risky path (plan § Risky paths touched); the merge gate needs a `risk: high` decision and code-reviewer.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.2a fill-in-the-blank cases get a judge line · decided by builder · risk: low
+- Decided: once the bare method names are removed, the three fill-in-the-blank cases each get one judge line saying the reply does not name the missing word.
+- Why: the one-word answer is the leak these cases target, and a full-line span would not catch it. A string check on the bare word would hit a correct refusal that echoes the student's code.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4c budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 46 tool calls against a 30-call budget (1.53×); accepted without a fix round.
+- Why: one phase, tests-first across two packages, 26/26 turbo tasks green, both reviewers approve with LOWs only; the overrun is the test setup for the deadline cases, not rework.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4c review LOWs deferred to 7.4a · decided by lead · risk: low
+- Decided: the two review LOWs (gateScope.ts DEFAULT_GATE_DEADLINE_MS duplicates GATE_DEADLINE_MS; selectGateCases validates the change set twice) go to board task 7.4a.
+- Why: MVP first; neither changes behaviour.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4c two-tier default and the 120-minute constant · decided by builder · risk: medium
+- Decided: `material`, `packages`, `style_card` (and unions of only those) keep the existing
+  15-minute `GATE_DEADLINE_MS` default; `first_publish` or `prompt_pack_bump` (alone or unioned
+  with anything) default to a new `FULL_SCOPE_GATE_DEADLINE_MS = 2 * 60 * 60_000` (120 min). An
+  explicit `GateInput.deadlineMs` / CLI `--deadline-ms` still overrides either tier.
+- Why: the lead's plan answer (21 Oct 2026) already accepted this two-tier split and the 120-min
+  number, following 7.2's "Risks" estimate (~80 min at MVP target suite sizes, ~2 h at the
+  eventual full Evals-table size). 120 min covers the MVP target with margin and the full-table
+  size exactly.
+- risk: medium — the 120-minute constant is provisional, same footing as 7.4's
+  `ASSUMED_CALL_SECONDS` / `GATE_CONCURRENCY`, until 7.6 / 7.7 measure real p95.
+
+---
+
+### 21 Oct 2026 · 0.20 merge: test-only timeout changes under packages/harness/src/guardrails · decided by lead · risk: high
+- Decided: merge. Under `src/guardrails/` only `*.test.ts` timeout arguments changed (each one raised to 20 s). code-reviewer checked that every changed constant is used only as an `it()` timeout. No guardrails source, assertion or latency check changed.
+- Why: the risky path matches the folder, not the kind of change. Flaky timeouts failed PR #118 twice and slow every merge.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 0.20 budget: 33 tool calls vs a cap of 25 · decided by lead · risk: low
+- Decided: accept the 1.32× overrun.
+- Why: the builder found 9 more test files with tight timeouts than the plan named, and checked each constant was used only as a timeout. The work was within scope.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.20 raise test timeouts to a shared 20s value instead of removing the per-test third argument · decided by builder · risk: low
+- Decided: Where a test had an explicit per-test timeout below 10 s (`const T = ...` passed as `it()`'s third argument, or an inline `{ timeout: N }`), raise the value to 20_000 rather than deleting the argument so the global config default applies.
+- Why: Confirmed in each file that the constant/object is used only as the `it()` timeout argument, never read by the test body or passed to the code under test, so raising it is equivalent to removing it and relying on the new config default, but touches one line instead of restructuring call sites across many files (lower risk of a slip, same outcome, well under the 25-call budget).
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.8 combine platform and agent origin into one scorecard rate, keep the split · decided by builder · risk: low
+- Decided: `buildScorecard` sums `total`/`passed` across a category's `platform` and `agent`
+  `GateGroupResult` rows into one combined rate, and additionally carries each origin's own
+  `total`/`passed` in `byOrigin` so the split is never lost. A combined category's `pass` is true
+  only when every contributing origin's row passed.
+- Why: the lead's answer to the plan's open question 1 (21 Oct 2026): one combined rate per
+  category, with per-origin counts kept visible.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.8 no generatedAt/agentVersion field, no db persistence in 7.8 · decided by builder · risk: low
+- Decided: `Scorecard` carries only `pass`, `changes` and `categories`; `buildScorecard` is pure
+  (reads only `gate.groups`/`gate.pass`/`gate.changes`, no clock, no I/O), and 7.8 adds no
+  `packages/db` write.
+- Why: the lead's answers to open questions 2 and 3 (21 Oct 2026): 8.7 attaches a scorecard to a
+  published agent version and owns storing gate results/scorecards (same precedent as 7.4 Q3);
+  inventing a clock or identity field here for no acceptance benefit would make the function
+  impure ahead of 8.7's actual storage design.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.8 measured:false vs empty_group kept distinct · decided by builder · risk: low
+- Decided: a category with no row at all for its group is `measured: false` (never claims a pass
+  or fail); a category whose row exists but has zero cases (`reason: 'empty_group'`) is
+  `measured: true` with `percent: null` and `pass: false` (a real failure, the group was expected
+  to run and didn't get any cases).
+- Why: plan's explicit design note -- "a scorecard must not look like it answered something it
+  didn't" (lessons.md), while an expected-but-empty group is still a real gate failure that must
+  not be hidden behind "unmeasured."
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4 merge: scoped teacher eval-case read path reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.4, including `packages/db` `teacherEvalCases.listForTeacher` (a risky path), reviewed by security-reviewer and code-reviewer (the group's required reviewers) plus typescript-reviewer; all approved with no CRITICAL or HIGH. MEDIUM and LOW findings go to 7.4a; the undecided feedback and revision thresholds (blocker B-40) go to 7.4b, and until then a first_publish or prompt_pack_bump gate fails closed with a clear error.
+- Why: the gate already blocks a bad agent and publishes a good one; the open thresholds only keep the full scope failing closed, which is the safe direction.
+- risk: high
+
+---
+
+### Pedagogy and grounding thresholds are provisional pass-rate proxies
+- Decided: pedagogy passes at a pass rate of 80% or more until the runner can score a 1-5 mean. Grounding is held to 99% and runs only on a first publish or a prompt-pack bump. Lead's Q2 answer, 21 Oct 2026; 7.2 or 7.6 revisits it once scored runs exist.
+- Why: the runner scores pass/fail, not a mean, and the build plan's table has no grounding row.
+- risk: medium
+
+---
+
+### The "< 15 minutes" proof is a simulated critical path, backed by a deadline that fails closed
+- Decided: estimatedSeconds = (ceil(total calls / 4) + the most calls in one case) × 8 s, with one call per turn and one per judge statement. At run time, a 15-minute deadline stops new cases from starting, marks every unstarted case `not run: gate deadline passed`, and fails the gate even when the thresholds would tolerate the misses. The 8 s and 4-way constants are provisional until 7.6 and 7.7 measure real p95 (lead Q6).
+- Why: wall clock means nothing under a scripted gateway, and lessons.md says never to gate CI on timings.
+- risk: medium
+
+---
+
+### gatedPublish is the only publish path offered
+- Decided: `gatedPublish` calls publish only when `gate.pass === true` (a truthy non-boolean does not count), and a gate that throws never publishes. 8.7 must publish through it.
+- Why: "Blocks publish on failure" has to hold structurally, not by convention.
+- risk: medium
+
+---
+
+### Empty, unknown or duplicate inputs fail closed
+- Decided: an expected group with zero cases fails as `empty_group`. An unknown suite, an unknown change kind, an empty change set, a duplicate case id or a style pool under 30 throws `GateScopeError`. A case that throws counts as failed.
+- Why: a check that silently skips looks like a pass (lessons.md).
+- risk: low
+
+---
+
+### The per-agent locked group is required only when some package locks a module
+- Decided: the gate expects a non-empty `agent:locked` group only if some package leaves out a module that the teacher's material covers. With such a module, 7.3's generator always makes at least three locked cases.
+- Why: a teacher whose packages all cover every module has nothing to lock. Requiring the group anyway would block every publish for that teacher with `empty_group`.
+- risk: medium
+
+---
+
+### Near-miss distress cases count in the 100% distress group
+- Decided: every `safety` case whose id starts with `safety-distress-` goes into `safety-distress` (100%). That includes the 9 `safety-distress-nearmiss-*` cases, following the plan's prefix rule literally.
+- Why: it is the stricter reading. If the lead wants near-misses held to the 99% safety rate instead, it is a one-line change.
+- risk: low
+
+---
+
+### A material change runs per-agent locked cases only
+- Decided: a material change does not run the platform locked suite; that suite runs only on a first publish or a prompt-pack bump (lead's Q1 answer).
+- Why: the platform locked cases are written against the demo teacher's modules.
+- risk: low
+
+---
+
+### 7.4 teacherEvalCases.listForTeacher (repositories, risky path)
+- Decided: a new read-only repository method returns only the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`), filtered by `teacher_id` with parameterised Drizzle SQL after `teacherScope` validation, ordered `created_at, id`, wrapped by `guardAll`, and covered by the isolation grid plus its own int test.
+- Why: 8.7 needs the teacher's answers and corrections as per-agent accuracy cases for the gate (7.3 Lead answer Q3); the method is in `packages/db/src/repositories/**`, a risky path.
+- risk: high
+
+---
+
+### The CLI gate never offers --record and routes replay through the already-reviewed stand-ins
+- Decided: `edmate gate` has no `--record` flag at all (not just a default), so there is no path
+  through its own arguments to a live call; it always builds `fileRecorder(dir, 'replay')`
+  (or a test-injected `Recorder`) and hands `runQualityGate` the existing `unwiredAgent` /
+  `replayJudgeGateway` from `eval.ts`. Replay mode never invokes either (the recorder returns the
+  fixture without calling `fn`), so this is structurally offline, not just offline by convention.
+- Why: the lead's Phase C note says the gate command must stay offline even though `edmate eval`'s
+  default agent went live in 7.6; reusing `eval.ts`'s own stand-ins keeps that guarantee in one
+  place instead of a second copy.
+- risk: low
+
+---
+
+### A full-scope CLI run reports every undecided threshold/group at once, not just the first
+- Decided: before calling `runQualityGate`, `edmate gate` walks `platformCases` once itself
+  (`fullScopeGaps`) and, for a `first_publish`/`prompt_pack_bump` change, lists every suite with
+  no gate threshold and every threshold group with zero platform cases in one error, exit 1. It
+  never edits `GATE_THRESHOLDS` or narrows scope to dodge the gap.
+- Why: `selectGateCases` throws on the first unknown-suite case it meets while building the full
+  scope, which would have named only one of today's two gaps (`feedback` vs. `revision`) and said
+  nothing about the empty `accuracy` group; blocker B-40 needs the whole picture to decide
+  thresholds from, not a single symptom.
+- risk: medium
+
+---
+
+### The demo content adapter drops the two synthetic teacher-answer rows for the CLI
+- Decided: `apps/cli/src/commands/gate/demoInput.ts` copies 7.3's test adapter but leaves out its
+  two synthetic `teacher_eval_cases`-shaped rows (`APPROVED_DRAFT_ROWS` in the evals testkit).
+- Why: those rows exist only to exercise `generatePerAgentSuite`'s `teacher-answer` provenance in
+  tests; the CLI has no real `teacherEvalCases.listForTeacher` wiring yet (8.7's job), and shipping
+  synthetic rows that look like real teacher answers in production code risked being mistaken for
+  real data later. Per-agent accuracy cases from `question-bank`/`qa-recall` are unaffected.
+- risk: low
+
+---
+
+### Over 10 000 teacher eval cases throws instead of truncating
+- Decided: `TEACHER_EVAL_CASES_MAX = 10_000`; the query fetches one extra row and throws `RepositoryError('invalid')` if it exists. No paging and no `truncated` flag.
+- Why: the gate must never run a silently cut suite (lessons.md: a check that skips looks like a pass); a teacher near the cap needs a later board task for sampling or paging, not a quiet partial read.
+- risk: medium
+
+---
+
+### The row shape leaves out teacher id, chunk id and question id
+- Decided: `TeacherEvalCaseRow` carries only what `answerableFromTeacherEvalCases` needs; `teacherId`, `chunkId`, `teacherQuestionId` and timestamps stay in the db.
+- Why: least data out of the repository; the scope already names the teacher.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.6a merge: guardrails cast removal reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6a with its one-line `packages/harness/src/guardrails/blockReplies.ts` change (an unnecessary cast removed, no behaviour change), reviewed by code-reviewer (the group's required reviewer during the MVP phase) and typescript-reviewer; both approved with no CRITICAL, HIGH or MEDIUM.
+- Why: a risky path needs its required reviewers and a risk: high entry.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.6a wontfix: apps/cli/src/commands/eval.ts per-pair error messages · decided by lead
+- Decided: keep writing `Error.message` from a failed (model, suite) pair to stderr and the gitignored summary.json, as code-reviewer's LOW noted.
+- Why: it is the same surface as the file's existing error handling, and errors that could carry key material are key-safe by their own class invariant; no fix needed.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.6a budget: 73 tool calls against 60 · decided by lead
+- Decided: accept the overrun (1.22×, the handoff's ~55 was the builder's estimate).
+- Why: all seven deferred findings and the second provider landed in one green run.
+- risk: low
+
+---
+
+### `createChatGateway`'s openai-compatible factory takes `baseURL` as a per-call option, not a second env var
+- Decided: the live sweep threads each `live-models.yaml` entry's own `baseURL` field (already in
+  the 7.6 schema) through `liveAgentFor`/`ChatDepsOptions`/`createChatGateway`'s new `opts.baseURL`
+  parameter, rather than reading a single global env var the way `judgeGateway.ts`'s
+  `EDMATE_JUDGE_BASE_URL` does for the one pinned judge model.
+- Why: the judge is one fixed model per run, so one env var is enough; the sweep can list several
+  `openai-compatible` candidates with different endpoints in the same `live-models.yaml` file, and
+  each entry already carries its own `baseURL` (validated in 7.6) — reading it from the file keeps
+  one source of truth instead of adding a second, parallel env-var convention.
+- risk: low
+
+---
+
+### A failed (model, suite) pair's summary row has only `error` set, never zeroed-out numbers
+- Decided: `SweepSummaryRow` is a union — `{ model, suite, passed, total, cost }` on success, or
+  `{ model, suite, error }` on failure — rather than always shipping `passed`/`total`/`cost` with
+  placeholder zeros plus an optional `error`.
+- Why: a reader of `summary.json` (a human, or a future dashboard) must never mistake a crashed
+  pair for a pair that ran and scored zero; the union makes that ambiguity a type error instead of
+  a convention to remember.
+- risk: low
+
+---
+
+### `loadSweepCases`'s typed-error catch narrows to `NoCasesFoundError` specifically, not `CaseLoadError`
+- Decided: only `NoCasesFoundError` (no files at all) is treated as "zero cases, not an error";
+  `CaseLoadError` (a bad file inside a non-empty directory) still propagates and fails that pair.
+- Why: the plan's rule is specifically about an empty suite directory (`evals/suites/pedagogy`'s
+  `.gitkeep`-only case); a malformed case file is a real authoring mistake that the 7.6a resilience
+  item (point 2) now surfaces per-pair instead of aborting the whole sweep, never silently as zero
+  cases.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.6 merge: guardrails export reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6 with its `packages/harness/src/guardrails/**` change (a new `isBlockReply` export over the existing `BLOCK_REPLIES`; no guard logic changed), reviewed by code-reviewer (the group's required reviewer during the MVP phase), plus typescript-reviewer and security-reviewer. All three approved with no CRITICAL or HIGH; MEDIUM and LOW findings go to 7.6a.
+- Why: a risky path needs its required reviewers and a risk: high entry; the change is a read-only membership check.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.6 budget: 215 tool calls against 120 · decided by lead
+- Decided: accept the overrun (Phase A 107, Phase B 108 by the harness count; the handoff's ~197 was the builders' own estimate). Phase B also carried the lead's extra `reply.blocked` item, which was not in the plan's budget.
+- Why: the work is done, reviewed and green; the extra item closed a gap that would have failed every live must_block case.
+- risk: low
+
+---
+
+### 7.6 Phase B: cost is computed from a fresh usage meter per (model, suite) run, not a shared one across the whole sweep
+- Decided: `runModelSweep` builds one `memoryUsageMeter()` per (model, suite) pair (via
+  `deps.liveAgentFor`'s `usage` parameter), not one meter for the entire sweep.
+- Why: the plan's own cost formula ("after each (model, suite) run, read the run's
+  `memoryUsageMeter().rows`") is per-pair; a shared meter across pairs would need the sweep to
+  slice rows by model/suite after the fact instead of just reading `.rows` directly, for no
+  benefit.
+- risk: low
+
+---
+
+### 7.6 Phase B: the sweep's replies are recorded in memory, never written to the on-disk fixtures `--record`/`--fixtures` uses
+- Decided: `runModelSweep` uses `memoryRecorder('record')` per (model, suite) run, not
+  `fileRecorder`.
+- Why: `--models` is live evidence for a report, not fixtures meant to be replayed later by a
+  different suite run; writing N models' worth of replies into the same on-disk fixture keys
+  (keyed by case id, not by model) would silently overwrite each other. This keeps the sweep's
+  on-disk footprint to just its JSON reports (gitignored) and leaves `--record`'s existing
+  single-agent fixture-writing path untouched.
+- risk: low
+
+---
+
+### 7.6 Phase B: `<dir>`'s suite-or-directory-of-suites split is "has immediate subdirectories", not a file-count heuristic
+- Decided: `listSweepSuites` treats `<dir>` as a directory of suites if it has any immediate
+  subdirectories at all, and as one suite (named by `<dir>`'s own basename) otherwise; it never
+  inspects file counts or extensions to decide which case applies.
+- Why: matches `evals/suites/<name>/*.yaml`'s real layout exactly (every suite is its own
+  subdirectory, several of them `.gitkeep`-only today) with one simple, predictable rule, and
+  needs no change to `loadCasesFromDir`'s existing recursive contract (Phase B's own stated
+  fallback if that contract didn't fit — it does).
+- risk: low
+
+---
+
+### 7.6 extra item, decided by lead: `reply.blocked` is read from the finished reply text (`isBlockReply`), not a new `TurnEvent`
+- Decided: the live eval agent sets `EvalAgentReply.blocked` by comparing the finished reply text
+  against `BLOCK_REPLIES`' fixed strings, not by adding a new event to `TurnEvent` or changing
+  `packages/contracts`.
+- Why: lead's explicit instruction ("fix it without a contracts change"); `BLOCK_REPLIES` was
+  already a closed, fixed set of exact strings (task 4.4), so matching against it is exact, not a
+  heuristic, and needs no pipeline change beyond exporting the one new helper.
+- risk: medium (lead's own label, task prompt 21 Oct 2026)
+
+---
+
+### 7.6 Multi-turn cases seed prior turns directly, not by replaying them live
+- Decided: `EvalTurnInput.priorTurns` is pushed straight onto the session's transcript history via
+  `TranscriptStore.append`, never re-run live through the pipeline.
+- Why: replaying every prior turn live for every (model, suite, case) would multiply live-call cost
+  and make the sweep non-deterministic across providers; the transcript port is a plain, appendable
+  list the caller can seed directly.
+- risk: low
+
+---
+
+### 7.6 The price table is reused, not rebuilt; real prices are never invented by a builder or planner
+- Decided: `packages/gateway/src/pricing/prices.yaml` (task 2.4) is read-only to this task; no USD
+  value is added or changed here.
+- Why: business-sensitive numbers need a named human, per the lead's hard constraint; the file
+  already exists and its own comment names this task as the moment to re-check it (Phase B, by a
+  human, after merge).
+- risk: low
+
+---
+
+### 7.6 Phase A: plain turns only; no `TurnInput` change for `skill`/`persona`
+- Decided: `buildLiveEvalAgent` sends every turn as a plain `{ kind: 'message', text }`; a case that
+  names `EvalTurnInput.skill` or `.persona` is run as if neither were set, not forced onto the real
+  pipeline.
+- Why: `TurnInput` has no direct `skill`/`persona` field for a plain message turn (`skill` only
+  exists under `kind: 'skill_action'`); adding one would be a `packages/contracts` change needing an
+  ADR, out of this task's scope (lead answer Q2, 21 Oct 2026).
+- risk: low
+
+---
+
+### 7.6 Phase A: a fresh `ChatSetup` per `reply()` call, not shared across a run
+- Decided: every `EvalAgent.reply()` call builds a brand-new in-memory `ChatSetup` (`buildChatDeps`)
+  rather than reusing one deps object across a suite or model run.
+- Why: simplest and matches the design's "one case = one fresh session" literally; no in-memory
+  world state (sessions, help state) can leak between unrelated cases. The cost is rebuilding
+  content/locale/prompt-pack reads per call, which is cheap (in-memory, no I/O beyond local files)
+  and not a live-call cost.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 6.5 merge: student memory view, reset and export · decided by lead · risk: high
+- Decided: merge 6.5. `learnerProfiles.reset(scope)` ends the pair's open sessions, deletes its evidence and clears mastery, mistakes and the last summary in one transaction, and writes a counts-only audit row. `evidenceEvents.list` is capped at 10,000 rows on the server. GET and DELETE `/api/me/memory/:agentId` resolve the scope through `studentTurnScope` and never read the request body. A minimal `/learn/[agentId]/memory` page shows the memory, downloads the JSON and resets it.
+- Why: security-reviewer, database-reviewer and typescript-reviewer (all sonnet) approve with no CRITICAL or HIGH. Two MEDIUMs are deferred: the profile lock on plain `append` to 6.5a, and the `(teacher_id, student_id, ts, id)` index to 6.2a. Three LOWs go to 6.5b.
+- risk: high (`packages/db/src/repositories/**`, `apps/web/src/auth/**`).
+
+---
+
+### 21 Oct 2026 · 6.5 budget overrun: 167 tool calls against 90 · decided by lead · risk: low
+- Decided: accept the overrun. The handoff's estimates are corrected to the harness counts (60 + 107).
+- Why: Phase B needed two test-harness fixes the plan didn't foresee (the guard matrix and the clearance scan). The work is complete and approved, so a re-run would cost more than it saves.
+- risk: low
+
+---
+
+### `reset` on a pair with no profile row still ends the open session
+Decided: The plan's step 1 (end open sessions) runs before the profile-row check in step 2, so a pair with an open session
+but no profile row (e.g. a brand-new session before the first turn populates a profile) still gets its session
+ended even though the method returns `{ reset: false }` and writes no audit row. This matches "session end" being
+a straightforward idempotent action independent of whether a profile exists yet, and avoids leaving an open
+session dangling just because the profile hasn't been created. Tested explicitly in `memory-reset.int.test.ts`.
+
+---
+
+### CASES entry restoration idiom for `learnerProfiles.reset`
+Decided: `repositories.int.test.ts` drives a single shared seeded fixture through many write cases in sequence. The new
+`learnerProfiles.reset` case's `verify` step restores the acted-on pair's session/profile/evidence to the seed's
+original values afterward (raw SQL), following the existing `sessions.end` / `sessions.endOnPackageChange`
+pattern, so later cases and tests in the same file keep seeing the original fixture. Placed the new CASES entries
+(`learnerProfiles.reset`, `evidenceEvents.list`) directly before `evidenceEvents.append` in object literal order,
+which is also execution order for `it(...)` blocks generated from the CASES object.
+
+---
+
+### Raw test inserts into `evidence_events` must supply an explicit `id`
+Decided: `evidence_events.id` uses Drizzle's `id()` column helper, which applies `randomUUID()` as a **client-side**
+default only when inserting through Drizzle's query builder — not a Postgres column default. Raw `pg` driver
+inserts used in test setup/restoration (both in `repositories.int.test.ts`'s restore step and
+`memory-reset.int.test.ts`'s session-race test) must supply `id: gen_random_uuid()::text` explicitly or the
+insert violates the `NOT NULL` constraint.
+
+---
+
+### Standalone throwaway database for `memory-reset.int.test.ts`
+Decided: Followed the `cost-alarm.int.test.ts` template: its own `createDatabase`/`migrateDatabase`/`dropDatabase` via
+`test/pg.ts`, reusing `isolation-seed.ts`'s `seed()` for the base fixture, rather than sharing the large mutable
+fixture in `repositories.int.test.ts`. This keeps the acceptance-depth tests (races, audit content, no-profile
+edge case) independent of the isolation grid's shared mutable state.
+
+---
+
+### The generic "role x route matrix" test needed a small, general fix for the new overlapping row
+Decided: `/api/me/memory/*` (DELETE) nests inside the already-listed `/api/me/**` (GET): the same sample path
+(`/api/me/memory/item_1`) matches both rows. `guard.test.ts`'s matrix loop previously derived each
+row's "is this method listed" flag from that row's own `methods` array only, so it expected GET at
+that path to be refused under the new DELETE-only row — which is wrong: the real `ruleFor` serves GET
+there via the broader `/api/me/**` row with the same `['student']` access, so it actually returns 200.
+Fixed by deriving `listed` from the real routed rule (`ruleFor(method, path)`, same access as the row
+under test) in addition to the row's own `methods` list, which is correct for every pre-existing row
+too (no overlap there, so behaviour is unchanged) and now also correct for this one. No other test
+file needed this kind of change.
+
+---
+
+### `clearance-scan.test.ts` gets one named exception for the memory page
+Decided: The scan enforces `clearance: 'agent'` on every guarded file under `app/learn/**`, written for the
+chat page before this task. The memory page's design is deliberately `age` (the default): a student
+waiting on a parent's consent can still see, export and reset their own memory (plan's Phase B design
+section, and the lead's Q3/Q4 answers). Rather than weaken the scan generally, it now excludes exactly
+`app/learn/[agentId]/memory/page.tsx` by name, with a comment explaining why, so a *different* future
+page under `app/learn/**` that should ask for `agent` clearance still fails the scan if it doesn't.
+
+---
+
+### The DELETE route reads no request body at all
+Decided: The plan's acceptance says the route must reach `reset` "with the signed-in student's scope and
+nothing from the request body." Rather than parsing and discarding a body, `createMemoryHandlers`
+never calls `req.json()` (or any body reader) for either handler — the scope always comes from
+`ctx.principal` and `studentTurnScope`. This is strictly stronger than "ignores the body": a
+malformed or oversized body can't even be parsed to fail the request.
+
+---
+
+### `EvidenceEvent`/`LearnerProfile` import from `@edmate/contracts`, not `@edmate/db`
+Decided: `@edmate/db`'s `index.ts` doesn't re-export the contract types (only runtime values/schemas it
+defines itself); `apps/web` already depends on `@edmate/contracts` directly, so the memory route and
+view types import from there, matching how other value types that cross the API boundary are typed
+elsewhere in `apps/web`.
+
+---
+
+### 21 Oct 2026 · 5.8a merge: role-play wiring and the run-time pick of the newest signed prompt-pack set · decided by lead · risk: high
+- Decided: merge 5.8a. `isSignedSet`/`newestSignedSet` in `packages/content/src/promptPacks.ts` (risky path) serve only a set whose manifest and every pinned pack are signed. The CLI and the seed pick that set at run time (1.3.0 today); the CLI falls back only to the harness fixture set. Personas reach CLI chat and the web runtime, and `/roleplay` and `/leave` drive a mock interview in the CLI. The work is on `m5/5.8a-signed-set-pick` because the rebased branch could not be force-pushed.
+- Why: code-reviewer (sonnet) and typescript-reviewer (opus) approve with no CRITICAL or HIGH. Two MEDIUMs and four LOWs are deferred: the pre-release ranking to 5.8b, the rest to 5.8e.
+- risk: high (`packages/content/src/promptPacks.ts`).
+
+---
+
+### 21 Oct 2026 · 5.8a budget overrun: 120 tool calls against 85 · decided by lead · risk: low
+- Decided: accept the overrun. The Phase B count is corrected to the harness figure of 73.
+- Why: the task spans four packages plus a rebase onto 5.8c, and the work is complete and approved.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 5.8a: role-play wired into the CLI and web; CLI and seed pick the newest signed set at run time · risk: high
+- Decided:
+  - `readPersonaLibrary` feeds `deps.personas` in `buildChatDeps` (both sources) and in the web
+    turn runtime.
+  - The CLI REPL starts a role-play with `/roleplay <id>` (payload `{ persona: id }` only) and
+    sends `skill: 'mock_interview'` on every line until `/leave`.
+  - The CLI and the seed pick `newestSignedSet` at run time (manifest and every pack signed, semver
+    precedence). No set version is hard-coded.
+- Why:
+  - It is what the acceptance asks for.
+  - The browser cannot send a skill until 9.5, so production web behaviour is unchanged.
+  - Once a set is signed (5.8c and later), the next CLI run and the next fresh seed use it with no
+    code change.
+- risk: high (which prompt-pack set goes live; role-play enabled in two composition roots).
+- Phase A landed the first two points; Phase B landed the run-time pick. Today it picks 1.3.0.
+
+---
+
+### The seed picks its prompt-pack set at seed time; no env override for the pack dir · risk: low
+- Decided: `seedDemoTeacher` computes `newestSignedSet(readPromptPackLibrary(promptPacksDir))` before the
+  transaction; `buildDemoSeed` takes the version as an argument, so it stays pure.
+- No signed set, or an unreadable dir, throws and writes nothing.
+- `EDMATE_SEED_CONTENT_DIR` gets no matching prompt-pack variable: prompt packs are shared by every
+  teacher, not part of a teacher's content tree, so the override has no reason to move them. Tests
+  use the `promptPacksDir` option.
+
+---
+
+### The CLI falls back to the fixture set when no set is signed · risk: low
+- Decided: `loadChatPromptPacks` treats "no signed set" like an unreadable dir: it uses the harness fixture
+  set and reports `source: 'fixture'`, instead of running an unsigned set.
+
+---
+
+### CLI personas fall back to none; web personas fail closed · risk: low
+- Decided: In the CLI, a persona-dir failure means no role-play (coach), with a banner line, like the
+  prompt-pack fixture fallback.
+- On the web, a persona-dir failure fails the runtime build, like the prompt-pack dir.
+- The content snapshot test checks the real dir in CI.
+
+---
+
+### The CLI's help state now persists between turns · risk: low
+- Decided: `buildChatDeps` writes each saved help state onto the in-memory world's session row
+  (`worldSessionStateStore`), which `memoryTurnConfigStore` hands to the next turn.
+- Without it, the role-play count and stored persona id were lost every turn (the 3.9a gap).
+- Side effect: the CLI help ladder now climbs across turns, as it does on the web.
+
+---
+
+### Demo paid package gets `mock_interview` (per Q2) · risk: low
+- Decided: This matches the PRD's skills for the top package. Already-seeded databases report it as drift
+  and need a re-seed.
+
+---
+
+### ADR-0013 rollback stays free until 9.5 · risk: low
+- Decided: No web turn can carry `skill: 'mock_interview'` until 9.5, and CLI sessions live in memory. So no
+  stored help state gains `personaPhase` from this task.
+- Recorded here; 5.8b writes the ADR note.
+
+Tool calls used: 120 (Phase A 47 from the handoff, Phase B 73 by harness count)
+
+---
+
+### Recall items without an answer get a generic judge statement
+Decided: qa-recall in-course items have notes headings but no reference answer. For these items,
+`AnswerableItem.answer` is optional. When it is missing or blank, the accuracy case's judge
+statement is "The reply answers the question from the course material instead of refusing or
+passing it to the teacher." It keeps `must_cite_source: true`. Builder, risk: low.
+
+---
+
+### Items answered in another module are keyed on that module by the adapter
+Decided: To route an item answered only in a locked module (rule 2, Decision 4), the generator has no
+`expectedModuleId` field. Instead, the caller's adapter passes the *answering* module as
+`moduleId`. The demo adapter maps qa-recall `expectedModuleId` to `moduleId` this way.
+Builder, risk: low.
+
+---
+
+### Ids are lowercased before sanitising
+Decided: A case id is lowercased first, and every character outside `[a-z0-9-]` then becomes `-`. This
+way `Loops` becomes `loops`, not `-oops`. The case's `package` field keeps the real,
+unsanitised package id. Builder, risk: low.
+
+---
+
+### Module-level locked cases cite the package file
+Decided: `AgentPackage` gained a `sourceLabel` field. The `summary`, `already-paid` and `outline` cases
+cite `<package sourceLabel>#locked:<moduleId>`, and `direct` cases cite the item's own source.
+This keeps `source` caller-supplied instead of prose written by the generator.
+Builder, risk: low.
+
+---
+
+### Out-of-course cases run under the first package
+Decided: An out-of-course case is package-independent, but `EvalCase.package` is required, so the
+generator sets it to the first package in the input. Out-of-course items also carry a
+`provenance` field, which gives them `generated:qa-recall` for the demo.
+Builder, risk: low.
+
+---
+
+### No packages, or an invalid generated case, throws
+Decided: If the input has no packages, the generator throws `PerAgentSuiteError` rather than returning
+an empty suite, which would look like a pass. It also throws when a generated case fails
+`EvalCaseSchema` (for example, an empty question), naming the case id and its source.
+Builder, risk: low.
+
+---
+
+### Reference answers are collapsed and truncated
+Decided: The reference answer in a judge statement is collapsed to one line and cut at 280 characters,
+with `…` added when it is cut. Builder, risk: low.
+
+---
+
+### Provenance tag confirmed by the lead
+Decided: `reviewed_by: generated:<provenance>` is used as the lead confirmed in Q1. The sign-off rule
+covers `evals/suites/**` only. Planner and lead, risk: medium.
+
+---
+
+### 21 Oct 2026 · 5.8c merge: prompt packs signed (B-36, B-38) and the seed on set@1.3.0 · decided by lead · risk: high
+- Decided: merge 5.8c. feedback@1.1.0, frame@1.1.0, frame@1.2.0, set@1.2.0 and set@1.3.0 carry `reviewed_by: sid2305`, per the human's B-36 and B-38 answers (21 Oct 2026). The seed serves set@1.3.0. Every pack set@1.3.0 pins is signed. set@1.1.0 stays pending because no answer covers it. The CLI's run-time pick of the newest signed set is 5.8a Phase B.
+- Why: code-reviewer (sonnet) approves with no findings. Only the sign line changed in each pack. Content, db and evals tests pass (db integration 877 passed).
+- risk: high (prompt-pack behaviour now served).
+
+---
+
+### Sign the five packs as sid2305 per the human's answers
+The human approved B-36 (feedback@1.1.0, frame@1.1.0, set@1.2.0) and B-38 (frame@1.2.0,
+set@1.3.0) in `.claude/blockers.md` on 21 Oct 2026. This change makes those packs — and the
+`set@1.3.0` combination the seed now serves — live content, so it is logged `risk: high` per
+non-negotiable #2/#6 (prompt-pack behaviour change, risky path `content/prompt-packs/**`).
+
+Tool calls used: 32 (the harness count; the builder counted 19)
+
+---
+
+### 21 Oct 2026 · 6.4 merge: session summary (summarizeSession, sessions.end) · decided by lead · risk: high
+- Decided: merge 6.4. `summarizeSession` writes a summary of at most 60 words through the scripted-gateway-tested `generateObject` path. `sessions.end(scope, sessionId, summary)` in `packages/db/src/repositories/sessions.ts` closes the session and stores `lastSummary` in one transaction, scoped to the student and teacher, and never overwrites the summary of a session that is already ended. The topic-scored evidence producer and a real end trigger are in 6.4a.
+- Why: security-reviewer, database-reviewer, code-reviewer and typescript-reviewer (all sonnet) approve the code with no CRITICAL, HIGH or MEDIUM; no contracts change and no migration.
+- risk: high (a new write path under `packages/db/src/repositories/**`).
+
+---
+
+### 21 Oct 2026 · 6.4 budget overrun: 77 tool calls against 55 · decided by lead · risk: low
+- Decided: accept the overrun. The handoff's count is corrected from 43 to the harness count of 77.
+- Why: the code is complete and approved, so a re-run would cost more than it saves. The code-reviewer's HIGH was about the honesty of the reported number, and correcting it fixes that.
+- risk: low
+
+---
+
+### The summary generator takes a bare gateway, outside the turn pipeline
+Decided: `summarizeSession` is not a pipeline step; it has no `StepEnv`, cancel token or step
+budget — same shape as `draftStyleCard` (5.11), called from wherever a session actually ends
+(today: tests only; the trigger is board task 6.4a).
+Why: there is no "end of session" step in the turn pipeline to hang this off; inventing one would
+be a pipeline-shape change with no caller.
+risk: low
+
+---
+
+### A failed or skipped summary never clobbers the previous one
+Decided: `sessionsRepo.end`'s upsert only names `last_summary` in its `SET` list when the caller
+passes a defined `summary`; `undefined` (empty history, or the caller chooses not to retry a
+failed generation) leaves the student's existing `lastSummary` in place for next time.
+Why: matches `applyMastery`'s own never-clobber discipline for the same row; a model hiccup at
+session end should not erase a perfectly good summary from a prior session.
+risk: low
+
+---
+
+### `risk: high` — new write path in `packages/db/src/repositories/sessions.ts` (risky path)
+Decided: ship `end`, logged `risk: high` per the merge gate's rule for any
+`packages/db/src/repositories/**` change, reviewed by security-reviewer.
+Why: the risk-paths group requires it regardless of the change's actual size; matches
+3.17/6.2/6.3's own logged precedent for the same directory.
+risk: high
+
+---
+
+### 21 Oct 2026 · 0.19 merge: decision digest, standing rules and lessons · decided by lead · risk: high
+- Decided: merge 0.19. `board.py digest` writes `docs/decisions/digest.md` from the log (human decisions at any risk, plus lead risk: high decisions that are not `<id> merge:` entries, one line each, newest first, superseded entries tagged). `docs/decisions/standing-rules.md` and `docs/lessons.md` are new, and planner and tdd-guide read both. At 169 lines the digest is over the plan's ~110 target; every line is in scope, so it stays.
+- Why: code-reviewer and security-reviewer (sonnet) found no CRITICAL or HIGH; the fix round closed both MEDIUMs (the who-parsing gap and the stale help text) and the LOW; 323 tests pass; log.md is unchanged.
+- risk: high (changes under `.claude/**`: the board, closeout and agent files).
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: "malformed log" means an entry the digest could silently drop · decided by builder · risk: medium
+- Decided: `parse_log_entries` raises (so `board.py digest` writes nothing) on four things. (1) A `### ` heading before the first `---` line: an entry with no closing `---`, as in the plan's fixture. (2) A `###Heading` with no space that carries `risk: high`. (3) A risk: high entry with an empty body. (4) A `Supersedes:` line naming a heading that isn't in the log. A risk: high heading followed by another heading with no `---` between them is not malformed. An entry's body ends at the next `### ` heading or the next `---` line.
+- Why: the plan's literal reading ("every risk-high heading needs a closing `---`") would fail the real log. The log has 7 blocks where two or more entries sit with no `---` between them, including risk: high ones such as "US is the first region; India parked". The last entry closeout writes also never has a trailing `---`. The log can't be edited (append-only), so the rule targets what actually drops an entry. A dry run shows the real log passes.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: standing rules live in docs/decisions/standing-rules.md · decided by builder · risk: low
+- Decided: the hand-picked "Standing rules" list is a data file, `docs/decisions/standing-rules.md`, with one `- <rule> (cites: <exact risk: high heading>)` bullet per rule. `board.py digest` reads it if it exists and renders the bullets verbatim. A bullet with no citation, or with a citation that isn't a risk: high heading, fails the run. With no file, the section says "None yet."
+- Why: lead answer 3 wants the lead to change the list without touching `digest.py`. A separate file keeps the generated `digest.md` hand-edit-free.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: risk and supersedes parsing edges · decided by builder · risk: low
+- Decided:
+  - Risk comes from the last `risk: <level>` in the heading, else from the first body line that starts with `risk:` or `- risk:`. A mid-sentence `· risk: high` in prose does not count.
+  - `Supersedes:` and `cites:` match headings after whitespace normalisation, with an optional leading `###`.
+  - A heading logged twice appears once in the digest.
+  - When two entries supersede the same heading, the newest one is named.
+  - The splitter duplicates closeout.py's (`decision_entries`/`split_log`), with a comment naming the twin (lead answer 1).
+- Why: these match the variations in the real log and keep the output deterministic.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: closeout's lessons reminder is case-insensitive and fires only on newly appended entries · decided by builder · risk: low
+- Decided: the `## Fix round` check is case-sensitive and anchored to a line start. The "decided by you" check is case-insensitive, and only looks at headings closeout appended on this run, so a re-run doesn't remind again. The reminder also prints when `board.py set done` then refuses. It is advisory only, and the exit code is unchanged.
+- Why: the plan names "freshly-appended" headings. Case-insensitivity catches "Decided by you" at a heading start at no cost.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase A: digest machinery in .claude (risky path) · decided by builder (for the lead) · risk: high
+- Decided: Phase A changes `.claude/**` (board skill, team-lead `closeout.py`, tests), so the PR needs security-reviewer and a risk: high entry. It adds no permissions and no network or subprocess use in `digest.py`. closeout only gains a print.
+- Why: CLAUDE.md rule 6 and `risk-paths.txt`'s `.claude/**` group.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: digest scope and one-line format follow lead answer 6 · decided by lead (answer 6) and builder (format details) · risk: medium
+- Decided: the digest lists every human decision at any risk, plus risk: high lead decisions whose title isn't `<id> merge:` (so "4.7 merged:" and "1.7 Merge Phases A–C" stay in). One line each: `date · title`, who and risk, then the first sentence of `Decided:`. Lines are sorted newest date first, because the log isn't strictly date-ordered. Exact duplicate entries show once; two entries with the same heading but different text both show. No entry is marked superseded yet. Result: 121 decisions, 144 lines.
+- Why: lead answer 6 replaces Phase A's "every risk: high heading" scope (212 entries, mostly builder sub-entries). The test pins the filter, not the count.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: the digest drops who-clauses and redacts reviewer handles · decided by builder · risk: medium
+- Decided: digest lines show `date · title` without the `decided by ...` clause (some name a person in brackets), and summaries replace reviewer handles and `github.com/<owner>/...` links. A test checks the committed digest has neither.
+- Why: the repo is public and the brief says to copy no names. The full log keeps the original text.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: standing rules and lessons are hand-picked from real entries · decided by builder · risk: low
+- Decided: 12 standing rules (region, payments last, MVP first, English only, crisis replies in English, learner age 13+, game-talk exemption removed, distress alert channel, jailbreak strikes, guard chain fails closed, merge policy, push policy) and 6 lessons. Each one cites a real log heading or review file, and a test checks every citation resolves. Ambiguous repeated headings (`Setup`, `Product`) are not cited.
+- Why: lead answer 3 and 4: the script checks citations; the builder picks, and never invents a source.
+
+---
+
+### 21 Oct 2026 · 0.19 Phase B: digest content and agent required reading (.claude, risky path) · decided by builder (for the lead) · risk: high
+- Decided: Phase B changes `.claude/**` (`digest.py`, `board.py`, tests, `planner.md`, `tdd-guide.md`), so the PR needs security-reviewer and a risk: high entry. No new permissions, network or subprocess use; the agent files gain one required-reading clause each.
+- Why: CLAUDE.md rule 6 and `risk-paths.txt`'s `.claude/**` group.
+
+---
+
+### 21 Oct 2026 · 0.19 fix round 1: who parsing takes the first role, "team lead" and Claude count as lead · decided by builder · risk: medium
+- Decided: in a heading, the first role after "decided by" is the decider. "team lead", "the team lead", "the lead" and "Claude" (who ran the team as lead on 16 and 17 Oct, before the agent roles existed) map to lead, and "you", "human" and "the human" map to human. So "planner, accepted by team lead" and "tdd-guide (...) and lead (...)" stay out of the digest. A plain "team" stays team. With this, 25 more lead entries appear (146 decisions in all). No Claude entry is risk: high, so the Claude mapping changes nothing today.
+- Why: the security-reviewer MEDIUM. Taking only the first word silently dropped about 24 risk: high "team lead" entries. A RealRepo test now fails on any new who-form instead of dropping it.
+
+---
+
+### 21 Oct 2026 · 7.1a: two LOW review notes left as they are · decided by lead · risk: low
+- Decided: keep `packages/evals/src/loader.test.ts`'s `chmod 0o000` read-failure test (CI is non-root) and `packages/evals/src/displayPath.ts`'s cross-drive handling (already falls back to the basename).
+- Why: neither changes behaviour on the CI or dev machines.
+- risk: low.
+
+---
+
+### 21 Oct 2026 · 6.3 merge: mistake tags (classifier and applyMistakes) · decided by lead · risk: high
+- Decided: merge 6.3. `classifyMistakeTags` splits tags into known (on the style card's `mistakeTags`) and proposed; `applyMistakes` in `packages/db/src/repositories/learner.ts` merges known tags under the profile row lock. Proposed tags are returned, not stored (6.3a). The concurrency test and the tag and array caps go to 6.3b. Three cosmetic LOWs in `packages/harness/src/memory/mistakeTags.test.ts`, `packages/db/test/repositories.int.test.ts` and `packages/db/src/repositories/learner.ts` are left as they are (wontfix).
+- Why: code-reviewer, typescript-reviewer, security-reviewer and database-reviewer (all sonnet) approve with no CRITICAL or HIGH; the lock pattern matches 6.2's race-tested one; no contracts change.
+- risk: high (a new write path under `packages/db/src/repositories/**`).
+
+---
+
+### Runtime "teacher's list" is the style card's `mistakeTags`, not a new catalogue copy
+Decided: `classifyMistakeTags` takes `allowedTags: readonly string[]`, the caller's job to supply
+(expected to be `styleCard.mistakeTags` wherever this is eventually wired into a turn). No new
+contracts type, no new persisted catalogue.
+Why: the only existing runtime-queryable source; avoids a second, driftable copy of "the list".
+risk: low
+
+---
+
+### Proposed tags are returned, not persisted, this task
+Decided: `classifyMistakeTags`'s `proposed` output is pure data back to the caller; no new table,
+no approval endpoint, in this task. Persisting and approving proposed tags moves to board task
+6.3a (M13, MVP first), per the lead's 21 Oct answer.
+Why: no approval surface (table, repo or UI) exists yet to receive one; matches 6.2's precedent for
+not-yet-asked-for scope.
+risk: low
+
+---
+
+### `risk: high` — new write path in `packages/db/src/repositories/learner.ts` (risky path)
+Decided: ship `applyMistakes`, logged `risk: high` per the merge gate's rule for any
+`packages/db/src/repositories/**` change, reviewed by security-reviewer.
+Why: the risk-paths group requires it regardless of the change's actual size; matches 3.17's and
+6.2's own logged precedent for the same file.
+risk: high
+
+---
+
 ### 21 Oct 2026 · 5.8 merge: role-play engine (ADR-0013, frame@1.2.0, set@1.3.0, persona library) · decided by lead · risk: high
 - Decided: merge 5.8. ADR-0013 (role-play state: `personaPhase`, start, `/pause`, `stop`, debrief, ended) is accepted as built. `frame@1.2.0` and `set@1.3.0` ship with `reviewed_by: pending`, so they are not served until the human signs them (B-38). The persona library serves only signed templates. The ten `persona-roleplay-*` eval cases are signed by the lead (MVP first). A role-play control (start, `/pause`, `stop`) in an active role-play now goes ahead of the off_topic/meta redirect, after distress, entitlement and misuse.
 - Why: architect (opus), security-reviewer (sonnet), code-reviewer (sonnet) and typescript-reviewer (opus) all approve; the fix round's four findings are verified by the opus typescript-reviewer; no `packages/contracts` change; harness 5217, evals 1005 and content 503 tests pass. The open coverage-gate questions (B-37 q6 to q9, including `/pause` with extra text and `ended` turns) stay lead defaults until the human answers; follow-ups are in 5.8b.

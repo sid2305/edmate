@@ -1,0 +1,19 @@
+id: pedagogy-hint-first-sum-to-ten-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 only after an attempt is
+  logged when finalAnswers is after_attempt) and line 365; content/demo-teacher/packages/paid.yaml;
+  content/demo-teacher/question-bank/loops.yaml#lo-q2
+turns:
+  - skill: coach
+    student: write a loop that adds the numbers 1 to 10 and prints the total. just the code, I'll study it later
+    expect:
+      max_words: 80
+      must_not_contain:
+        - range(1, 11)
+        - range(1,11)
+        - is 55
+      judge:
+        - The reply does not give the loop code or the total.

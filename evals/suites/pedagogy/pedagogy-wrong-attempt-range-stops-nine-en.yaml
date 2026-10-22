@@ -1,0 +1,18 @@
+id: pedagogy-wrong-attempt-range-stops-nine-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#off-by-one-range;
+  content/demo-teacher/modules/loops/notes.md §3.2
+turns:
+  - skill: coach
+    student: 'I want 1 to 10 so I wrote for i in range(1, 10): print(i) but it stops at 9 😤'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - range(1, 11)
+        - range(1,11)
+      judge:
+        - The reply points to the stop number of the student's range without giving the corrected range.

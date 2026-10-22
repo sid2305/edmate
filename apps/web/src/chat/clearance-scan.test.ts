@@ -29,9 +29,16 @@ export function clearanceProblem(text: string): string | null {
   return bare === undefined ? null : `requireRole without clearance 'agent': ${bare[0]}`;
 }
 
+// Task 6.5: the one deliberate exception. `/learn/[agentId]/memory` is a student's own view,
+// export and reset of their memory, reachable even with a parent's consent outstanding, so it
+// asks for the default clearance ('age') on purpose -- it is not the chat itself.
+const MEMORY_PAGE = join('app', 'learn', '[agentId]', 'memory', 'page.tsx');
+
 describe('clearance scan (app/learn/**, src/chat/**)', () => {
   it('every guarded file asks for clearance: agent', () => {
-    const files = ROOTS.flatMap((r) => filesUnder(join(WEB, r))).filter((f) => f !== SELF);
+    const files = ROOTS.flatMap((r) => filesUnder(join(WEB, r)))
+      .filter((f) => f !== SELF)
+      .filter((f) => !f.endsWith(MEMORY_PAGE));
     expect(files.some((f) => f.includes(join('app', 'learn')))).toBe(true);
     const problems = files.flatMap((f) => {
       const p = clearanceProblem(readFileSync(f, 'utf8'));

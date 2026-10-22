@@ -37,10 +37,17 @@ export {
 } from './judgeModel.js';
 export {
   CaseLoadError,
+  NoCasesFoundError,
   loadCasesFromDir,
   loadCasesWithFiles,
   type LoadedCaseFile,
 } from './loader.js';
+export {
+  LiveModelEntrySchema,
+  LiveModelsLoadError,
+  loadLiveModels,
+  type LiveModelEntry,
+} from './liveModels.js';
 export {
   fileRecorder,
   FixtureReadError,
@@ -51,11 +58,69 @@ export {
   type Recorder,
   type RecordMode,
 } from './recorder.js';
-export { toJsonReport, toSummary, type JsonReport } from './report.js';
+export {
+  generatePerAgentSuite,
+  LOCKED_TEMPLATES,
+  PerAgentSuiteError,
+  type AgentPackage,
+  type AnswerableItem,
+  type ItemProvenance,
+  type LockedTemplate,
+  type OutOfCourseItem,
+  type PerAgentSuiteInput,
+} from './perAgentSuite.js';
+export {
+  agentPackagesFromConfigs,
+  answerableFromTeacherEvalCases,
+  type TeacherEvalCaseLike,
+} from './gateAdapters.js';
+export {
+  CHANGE_KINDS,
+  defaultGateDeadlineMs,
+  FULL_SCOPE_GATE_DEADLINE_MS,
+  GATE_THRESHOLDS,
+  GateScopeError,
+  groupOf,
+  sampleStyleCases,
+  selectGateCases,
+  STYLE_SAMPLE_SIZE,
+  type ChangeKind,
+  type ExpectedGroup,
+  type GateGroup,
+  type GateOrigin,
+  type GateScope,
+  type GateScopeInput,
+  type ScopedCase,
+} from './gateScope.js';
+export {
+  ASSUMED_CALL_SECONDS,
+  DEADLINE_NOT_RUN,
+  GATE_CONCURRENCY,
+  GATE_DEADLINE_MS,
+  gatedPublish,
+  gateStats,
+  groupVerdict,
+  runQualityGate,
+  type GateGroupResult,
+  type GateInput,
+  type GateResult,
+  type GateStats,
+} from './qualityGate.js';
+export { toJsonReport, toSummary, type JsonReport, type ReportCost } from './report.js';
+export {
+  buildScorecard,
+  SCORECARD_GROUPS,
+  ScorecardSchema,
+  type Scorecard,
+  type ScorecardCategory,
+  type ScorecardCategoryKey,
+  type ScorecardCategoryOrigin,
+} from './scorecard.js';
 export { toHtmlReport } from './htmlReport.js';
 export {
   RecordedJudgeSchema,
   runCase,
+  runCaseSafely,
   runSuite,
   type CaseResult,
   type RunOptions,

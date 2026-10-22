@@ -1,0 +1,24 @@
+id: pedagogy-wrong-attempt-total-reset-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#accumulator-reset;
+  content/demo-teacher/modules/loops/notes.md §3.3
+turns:
+  - skill: coach
+    student: |-
+      for n in range(1, 4):
+          total = 0
+          total += n
+      print(total)
+      I want 1+2+3 = 6 but I get 3, why
+    expect:
+      max_words: 80
+      must_not_contain:
+        - "total = 0\nfor n in range(1, 4):"
+        - move total = 0
+        - move `total = 0`
+      judge:
+        - The reply asks about where total is set to 0 without writing the corrected code.

@@ -4,14 +4,19 @@ import {
   type EvidenceEvent,
   type LearnerProfile,
 } from '@edmate/contracts';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { foldMastery } from '../mastery.js';
-import { evidenceEvents, learnerProfiles, topics } from '../schema/index.js';
+import { evidenceEvents, learnerProfiles, sessions, topics } from '../schema/index.js';
+import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
+import { written } from './insert.js';
 import { toLearnerProfile } from './map.js';
 import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
+
+/** Largest page `evidenceEvents.list` returns; a bigger `limit` is `invalid`. */
+export const EVIDENCE_LIST_MAX = 10_000;
 
 const sameScope = (x: { studentId: string; teacherId: string }, scope: StudentScope) =>
   x.studentId === scope.studentId && x.teacherId === scope.teacherId;
@@ -110,6 +115,84 @@ export function learnerProfilesRepo(db: Db) {
                 updatedAt: sql`now()`,
               },
             });
+        }),
+      );
+    },
+
+    /**
+     * Task 6.3: merges `patch` (the `known` output of `classifyMistakeTags`,
+     * `packages/harness/src/memory/mistakeTags.ts`) into the scope's `mistakes` jsonb array, under
+     * a row lock so two concurrent calls for the same pair can never both read the same prior
+     * mistakes and clobber each other (same lost-update concern `applyEvidenceMastery` already
+     * guards for `mastery`). By tag: a tag already present has its `count` summed and `lastSeen`
+     * replaced with whichever of the two is later; a tag not yet present is appended. There is no
+     * event log to replay here (unlike `applyEvidenceMastery`/`rebuildMastery`) — just a merge,
+     * same shape as `applyMastery`.
+     *
+     * The `SET` list only ever names `mistakes` and `updated_at` (never `mastery`/`last_summary`),
+     * same narrow-write discipline `applyMastery`'s own doc comment requires of itself. No topic-
+     * ownership check: a mistake tag is not a topic id, and `classifyMistakeTags` has already
+     * guaranteed every `patch` entry's tag is a member of the caller-supplied allowed list (the
+     * style card's `mistakeTags`) before this is ever called — this method only merges, it does not
+     * re-validate "on the teacher's list" (that invariant lives in the pure classifier, not here).
+     * An empty `patch` is a no-op.
+     */
+    async applyMistakes(scope: StudentScope, patch: LearnerProfile['mistakes']): Promise<void> {
+      const method = 'learnerProfiles.applyMistakes';
+      const sc = studentScope(scope, method);
+      const p = parseArg(LearnerProfileSchema.shape.mistakes, patch, method);
+      if (p.length === 0) return;
+      await translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          await tx
+            .insert(learnerProfiles)
+            .values({
+              studentId: sc.studentId,
+              teacherId: sc.teacherId,
+              lang: 'en',
+              mastery: {},
+              mistakes: [],
+            })
+            .onConflictDoNothing({
+              target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+            });
+
+          // The insert above guarantees this row exists (freshly inserted, or already there):
+          // the select always finds exactly one, now locked against any other transaction.
+          const [locked] = await tx
+            .select({ mistakes: learnerProfiles.mistakes })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          /* v8 ignore next */
+          if (!locked) throw new RepositoryError('scope', method);
+
+          const byTag = new Map(locked.mistakes.map((m) => [m.tag, { ...m }]));
+          for (const entry of p) {
+            const existing = byTag.get(entry.tag);
+            if (existing) {
+              existing.count += entry.count;
+              if (entry.lastSeen > existing.lastSeen) existing.lastSeen = entry.lastSeen;
+            } else {
+              byTag.set(entry.tag, { ...entry });
+            }
+          }
+          const next = [...byTag.values()];
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mistakes: next, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
         }),
       );
     },
@@ -265,6 +348,99 @@ export function learnerProfilesRepo(db: Db) {
             );
 
           return toLearnerProfile({ ...locked, mastery: next }, method);
+        }),
+      );
+    },
+
+    /**
+     * Task 6.5: the student's own "reset what my tutor remembers". One transaction, in a lock
+     * order that matches `sessions.end` (sessions, then the profile row), so the two can never
+     * deadlock (40P01):
+     * 1. Ends every one of the pair's still-open sessions (no summary written, so a later
+     *    `sessions.end`/`endOnPackageChange` on one of them is a no-op that can't re-seed
+     *    `last_summary`).
+     * 2. Locks the profile row (`FOR UPDATE`). No row at all is `{ reset: false }` — step 1 still
+     *    ran, but nothing else is written: no evidence delete, no audit row.
+     * 3. Deletes the pair's `evidence_events` (the one delete this file is allowed, pinned by
+     *    `test/scope.test.ts`): keeping them would let `rebuildMastery` bring the mastery back.
+     * 4. Clears `mastery` to `{}`, `mistakes` to `[]` and `last_summary` to null. `lang` is kept:
+     *    it is a setting, not memory.
+     * 5. Writes one `profile.reset` audit row (actor the scope's own student) with before/after
+     *    **counts and booleans only** — never the summary text or tag names (the redactor does
+     *    not catch free text; this is why the shape here is counts, not content).
+     * Deleting the row instead of clearing it in place is unsafe: every other writer in this file
+     * inserts a default row, then locks it, and throws `scope` if it has vanished underneath it —
+     * a delete racing one of those would turn a normal write into a spurious error.
+     */
+    async reset(scope: StudentScope): Promise<{ reset: boolean }> {
+      const method = 'learnerProfiles.reset';
+      const sc = studentScope(scope, method);
+      return translateWrite(method, () =>
+        db.transaction(async (tx) => {
+          const endedSessions = await tx
+            .update(sessions)
+            .set({ endedAt: sql`now()` })
+            .where(
+              and(
+                eq(sessions.teacherId, sc.teacherId),
+                eq(sessions.studentId, sc.studentId),
+                isNull(sessions.endedAt),
+              ),
+            );
+
+          const [locked] = await tx
+            .select({
+              id: learnerProfiles.id,
+              mastery: learnerProfiles.mastery,
+              mistakes: learnerProfiles.mistakes,
+              lastSummary: learnerProfiles.lastSummary,
+            })
+            .from(learnerProfiles)
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            )
+            .for('update');
+          if (!locked) return { reset: false };
+
+          const deleted = await tx
+            .delete(evidenceEvents)
+            .where(
+              and(
+                eq(evidenceEvents.teacherId, sc.teacherId),
+                eq(evidenceEvents.studentId, sc.studentId),
+              ),
+            )
+            .returning({ id: evidenceEvents.id });
+
+          await tx
+            .update(learnerProfiles)
+            .set({ mastery: {}, mistakes: [], lastSummary: null, updatedAt: sql`now()` })
+            .where(
+              and(
+                eq(learnerProfiles.teacherId, sc.teacherId),
+                eq(learnerProfiles.studentId, sc.studentId),
+              ),
+            );
+
+          await insertAuditEntry(tx, method, sc.teacherId, sc.studentId, {
+            actor: sc.studentId,
+            actorRole: 'student',
+            action: 'profile.reset',
+            target: `learner_profile:${locked.id}`,
+            before: {
+              topics: Object.keys(locked.mastery).length,
+              mistakes: locked.mistakes.length,
+              hadSummary: locked.lastSummary !== null,
+              evidence: deleted.length,
+              sessionsEnded: written(endedSessions),
+            },
+            after: { topics: 0, mistakes: 0, hadSummary: false, evidence: 0 },
+          });
+
+          return { reset: true };
         }),
       );
     },
@@ -463,5 +639,40 @@ export function evidenceEventsRepo(db: Db) {
         }),
       );
     },
+
+    /**
+     * Task 6.5: the scope's own evidence, for export, ordered `ts ASC, id ASC` (same tie-break as
+     * `rebuildMastery`'s replay). `limit` is capped at `EVIDENCE_LIST_MAX`; a bigger one is
+     * `invalid`. Fetches `limit + 1` rows to set `truncated`, so a cut export always says so
+     * rather than silently looking complete.
+     */
+    async list(
+      scope: StudentScope,
+      options: { limit: number },
+    ): Promise<{ events: EvidenceEvent[]; truncated: boolean }> {
+      const method = 'evidenceEvents.list';
+      const sc = studentScope(scope, method);
+      const { limit } = parseArg(ListOptions, options, method);
+      const rows = await db
+        .select({
+          studentId: evidenceEvents.studentId,
+          teacherId: evidenceEvents.teacherId,
+          topicId: evidenceEvents.topicId,
+          correct: evidenceEvents.correct,
+          source: evidenceEvents.source,
+          weight: evidenceEvents.weight,
+          ts: evidenceEvents.ts,
+        })
+        .from(evidenceEvents)
+        .where(
+          and(eq(evidenceEvents.teacherId, sc.teacherId), eq(evidenceEvents.studentId, sc.studentId)),
+        )
+        .orderBy(asc(evidenceEvents.ts), asc(evidenceEvents.id))
+        .limit(limit + 1);
+      const truncated = rows.length > limit;
+      return { events: rows.slice(0, limit).map((r) => toEvidenceEvent(r, method)), truncated };
+    },
   };
 }
+
+const ListOptions = z.strictObject({ limit: z.int().min(1).max(EVIDENCE_LIST_MAX) });

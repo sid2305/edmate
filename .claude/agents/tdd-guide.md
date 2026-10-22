@@ -9,7 +9,7 @@ isolation: worktree
 <!-- Adapted from ECC (https://github.com/affaan-m/ECC, MIT licence, commit 76aaa77). Edmate changes: description, model default, Edmate notes below. -->
 
 ## Edmate notes (take precedence over anything below)
-- Read `CLAUDE.md` and the plan file your prompt names (copy it into `docs/tasks/<id>/plan.md` in your worktree if it is missing). The build plan's rules and Definition of done override this file.
+- Read `CLAUDE.md` and the plan file your prompt names (copy it into `docs/tasks/<id>/plan.md` in your worktree if it is missing), and `docs/decisions/digest.md` and `docs/lessons.md` (required reading before building). The build plan's rules and Definition of done override this file.
 - Branch: `git checkout -b m<milestone>/<id>-<slug>`. Shell: prefix with `source ~/.nvm/nvm.sh &&`; run pnpm as `corepack pnpm`; never install anything globally.
 - Coverage: 80% on new code; 100% for `packages/harness/src/access/`, guard logic and the subscription state machine.
 - No real model or payment calls in tests (scripted gateway, fixtures). Never touch `packages/contracts` without an approved ADR; stop and report BLOCKED instead.

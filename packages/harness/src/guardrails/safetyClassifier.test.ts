@@ -19,7 +19,7 @@ import {
   SafetyGuardCancelledError,
 } from './safetyClassifier.js';
 
-const T = 1_000;
+const T = 20_000;
 const ABOUT = { course: 'Course canary_course', minAge: 13 };
 
 function ctx(answer: unknown): PreGuardCtx {

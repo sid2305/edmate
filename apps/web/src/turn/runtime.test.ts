@@ -1,6 +1,10 @@
 // The web's turn runtime (task 9.4): built lazily, once; a missing Redis URL or provider key
 // fails the build by reason code (logged once), never by key; Redis opens nothing real here.
 import type { Repositories } from '@edmate/db';
+import type * as Gateway from '@edmate/gateway';
+import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { consoleLog, contentDir, createTurnRuntime, openRedis, type RuntimeHooks } from './runtime';
@@ -17,6 +21,19 @@ vi.mock('ioredis', async () => {
     }
   }
   return { Redis, default: Redis };
+});
+
+const keys = vi.hoisted(() => ({ loads: 0 }));
+
+vi.mock('@edmate/gateway', async (importOriginal) => {
+  const real = await importOriginal<typeof Gateway>();
+  return {
+    ...real,
+    loadProviderKeys: (...args: Parameters<typeof real.loadProviderKeys>) => {
+      keys.loads += 1;
+      return real.loadProviderKeys(...args);
+    },
+  };
 });
 
 vi.mock('@edmate/queue', async (importOriginal) => ({
@@ -42,6 +59,7 @@ function hooks() {
 
 afterEach(() => {
   opened.clients.length = 0;
+  keys.loads = 0;
   vi.restoreAllMocks();
 });
 
@@ -59,6 +77,32 @@ describe('createTurnRuntime', () => {
     expect(backend.now()).toBeInstanceOf(Date);
     expect(typeof backend.depsFor).toBe('function');
     expect(backend.log).toBe(h.log);
+  });
+
+  it('holds the signed persona library from content/skills/mock_interview (5.8a)', async () => {
+    const { h } = hooks();
+    const backend = await createTurnRuntime(() => ENV, h)();
+    const deps = backend.depsFor({ studentId: 'stu_1', teacherId: 'tch_a' } as Parameters<typeof backend.depsFor>[0]);
+    expect([...(deps.personas?.keys() ?? [])].sort()).toEqual(['job-interview', 'viva']);
+  });
+
+  it('a broken persona file fails the runtime build like a broken prompt pack (5.8a)', async () => {
+    const copy = mkdtempSync(join(tmpdir(), 'edmate-content-'));
+    try {
+      for (const sub of ['locales', 'prompt-packs', 'skills']) {
+        cpSync(join(CONTENT, sub), join(copy, sub), { recursive: true });
+      }
+      writeFileSync(join(copy, 'skills', 'mock_interview', 'job-interview@1.0.0.yaml'), 'id: [unclosed\n');
+      const { h, log } = hooks();
+      const runtime = createTurnRuntime(() => ({ ...ENV, EDMATE_CONTENT_DIR: copy }), h);
+      await expect(runtime()).rejects.toThrow();
+      await expect(runtime()).rejects.toThrow();
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls[0]?.[0]).toBe('turn.runtime_unavailable');
+      expect(h.database).not.toHaveBeenCalled();
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 
   it('a missing REDIS_URL fails with its reason code, logged once', async () => {
@@ -117,6 +161,52 @@ describe('createTurnRuntime', () => {
     });
     await expect(createTurnRuntime(() => ENV, h)()).rejects.toBeInstanceOf(RangeError);
     expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'RangeError' });
+  });
+});
+
+describe('createTurnRuntime with the dev model (9.0, D2)', () => {
+  const NO_KEY = { ...ENV, EDMATE_ANTHROPIC_API_KEY: undefined, EDMATE_DEV_MODEL: 'scripted' };
+
+  it('on localhost, builds with no provider key, logs turn.dev_model_on and loads no key', async () => {
+    for (const url of ['http://localhost:8080', 'http://127.0.0.1:18080', 'http://[::1]:8080']) {
+      const { h, log } = hooks();
+      const env = { ...NO_KEY, NODE_ENV: 'production', EDMATE_MARKET: 'US', AUTH_URL: url };
+      await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
+      expect(log.mock.calls).toEqual([['turn.dev_model_on', {}]]);
+    }
+    expect(keys.loads).toBe(0);
+  });
+
+  it('anywhere else, or with AUTH_URL unset, fails closed by its code alone', async () => {
+    for (const url of ['https://edmate.example', 'http://10.0.0.5:8080', undefined]) {
+      const { h, log } = hooks();
+      const runtime = createTurnRuntime(() => ({ ...NO_KEY, AUTH_URL: url }), h);
+      await expect(runtime()).rejects.toBeInstanceOf(TurnUnavailableError);
+      await expect(runtime()).rejects.toThrow('EDMATE_DEV_MODEL');
+      expect(log.mock.calls).toEqual([['turn.runtime_unavailable', { reason: 'EDMATE_DEV_MODEL' }]]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('edmate.example');
+      expect(h.database).not.toHaveBeenCalled();
+    }
+    expect(keys.loads).toBe(0);
+  });
+
+  it('only the exact value turns it on: yes or Scripted fail closed, even with a key', async () => {
+    for (const flag of ['yes', 'Scripted']) {
+      const { h, log } = hooks();
+      const env = { ...ENV, EDMATE_DEV_MODEL: flag, AUTH_URL: 'http://localhost:8080' };
+      await expect(createTurnRuntime(() => env, h)()).rejects.toThrow('EDMATE_DEV_MODEL');
+      expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'EDMATE_DEV_MODEL' });
+    }
+  });
+
+  it('unset or empty keeps today: no key fails as provider_key', async () => {
+    for (const flag of [undefined, '']) {
+      const { h, log } = hooks();
+      const env = { ...NO_KEY, EDMATE_DEV_MODEL: flag, AUTH_URL: 'http://localhost:8080' };
+      await expect(createTurnRuntime(() => env, h)()).rejects.toThrow('provider_key');
+      expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'provider_key' });
+    }
+    expect(keys.loads).toBe(2);
   });
 });
 

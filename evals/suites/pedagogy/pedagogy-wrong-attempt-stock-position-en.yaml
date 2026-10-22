@@ -1,0 +1,21 @@
+id: pedagogy-wrong-attempt-stock-position-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#dict-by-position;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.5
+turns:
+  - skill: coach
+    student: |-
+      stock = {"apples": 3, "pears": 5}
+      print(stock[0])
+      wanted the apples number, got KeyError: 0. do dictionaries start at 1??
+    expect:
+      max_words: 80
+      must_not_contain:
+        - stock["apples"]
+        - stock['apples']
+      judge:
+        - The reply helps the student see that dictionaries are looked up by key, without writing the corrected lookup.

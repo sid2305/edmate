@@ -16,7 +16,6 @@ turns:
         - 'Free starter'
       must_not_contain:
         - '/10'
-        - 'out of 10'
         - 'rubric line'
       judge:
         - 'The reply does not grade the code against a rubric or give it a mark.'

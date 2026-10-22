@@ -8,7 +8,7 @@
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import type { ModelGateway, TurnEvent, TurnInput } from '@edmate/contracts';
-import { defaultSteps, runTurn } from '@edmate/harness';
+import { defaultSteps, PersonaStartPayloadSchema, runTurn } from '@edmate/harness';
 import type { CliIo } from '../cli.js';
 import { buildChatDeps, type ChatDepsOptions, type ChatSetup } from './chat/deps.js';
 import type { Env } from './chat/gateway.js';
@@ -26,6 +26,8 @@ real turn pipeline (admit -> entitle -> ... -> done). No database; one in-memory
   -h, --help       show this help
 
 Type a message and press Enter; Ctrl+D or "exit" ends the session.
+"/roleplay <persona-id>" starts a practice role-play (paid package; e.g. job-interview or viva);
+every line after it is a role-play turn (/pause, stop) until "/leave".
 Needs ANTHROPIC_API_KEY (or EDMATE_ANTHROPIC_API_KEY) in the environment; a key is never logged.
 `;
 
@@ -37,6 +39,46 @@ export interface ChatCommandDeps {
   /** Test injection: replaces `buildChatDeps` itself. */
   buildDeps?: (opts: ChatDepsOptions) => Promise<ChatSetup>;
   contentDir?: string;
+}
+
+/** The REPL's client-side mode (task 5.8a): normal chat, or a role-play with a started persona. */
+export type ChatMode = { mode: 'normal' } | { mode: 'roleplay'; persona: string };
+
+const ROLEPLAY_USAGE = 'usage: /roleplay <persona-id> (a bare id, e.g. job-interview; no version)';
+
+/**
+ * Maps one typed line to the turn it sends, if any, and the next mode. `/roleplay <id>` sends a
+ * start carrying only the bare persona id (the server picks the version and counts questions);
+ * in role-play mode every other line, `/pause` and `stop` included, is a `mock_interview` message;
+ * `/leave` sends nothing and returns to normal chat. A bad start is refused here, and no turn goes.
+ */
+export function chatTurnInput(
+  state: ChatMode,
+  line: string,
+  ids: Pick<TurnInput, 'agentId' | 'sessionId' | 'studentId'>,
+  now: () => string = () => new Date().toISOString(),
+): { input?: TurnInput; state: ChatMode; notice?: string } {
+  const base = { ...ids, lang: 'en' as const, clientTs: now() };
+  const [command, ...rest] = line.split(/\s+/u);
+  if (command === '/roleplay') {
+    const payload = PersonaStartPayloadSchema.safeParse({ persona: rest[0] });
+    if (rest.length !== 1 || !payload.success) return { state, notice: ROLEPLAY_USAGE };
+    const persona = payload.data.persona;
+    return {
+      input: { ...base, kind: 'skill_action', skill: 'mock_interview', skillPayload: { persona } },
+      state: { mode: 'roleplay', persona },
+    };
+  }
+  if (line === '/leave') {
+    return state.mode === 'roleplay'
+      ? { state: { mode: 'normal' }, notice: 'left the role-play; back to normal chat' }
+      : { state, notice: 'not in a role-play' };
+  }
+  const input: TurnInput =
+    state.mode === 'roleplay'
+      ? { ...base, kind: 'message', skill: 'mock_interview', text: line }
+      : { ...base, kind: 'message', text: line };
+  return { input, state };
 }
 
 function message(e: unknown): string {
@@ -146,9 +188,15 @@ export async function runChatCommand(
 
   io.stdout(
     `edmate chat -- ${setup.content.course.title} (package: ${packageId}, source: ${source})\n` +
-      `Type a message and press Enter. Ctrl+D or "exit" ends the session.\n\n> `,
+      `Type a message and press Enter. Ctrl+D or "exit" ends the session.\n` +
+      `"/roleplay <persona-id>" starts a role-play (/pause, stop inside it); "/leave" ends it.\n` +
+      (setup.personasSource === 'none'
+        ? 'Role-play is unavailable: the persona templates did not load.\n'
+        : '') +
+      `\n> `,
   );
 
+  let mode: ChatMode = { mode: 'normal' };
   const rl = createInterface({ input: stdin, terminal: false });
   for await (const line of rl) {
     const trimmed = line.trim();
@@ -158,15 +206,14 @@ export async function runChatCommand(
     }
     if (trimmed === 'exit') break;
 
-    const input: TurnInput = {
-      agentId: setup.agentId,
-      sessionId: setup.sessionId,
-      studentId: setup.studentId,
-      kind: 'message',
-      text: trimmed,
-      lang: 'en',
-      clientTs: new Date().toISOString(),
-    };
+    const next = chatTurnInput(mode, trimmed, setup);
+    mode = next.state;
+    if (next.notice !== undefined) io.stdout(`[${next.notice}]\n`);
+    const input = next.input;
+    if (input === undefined) {
+      io.stdout('> ');
+      continue;
+    }
     const run = runTurn(input, { deps: setup.deps, steps: defaultSteps });
     for await (const event of run.events) renderEvent(event, io);
     await run.finished;

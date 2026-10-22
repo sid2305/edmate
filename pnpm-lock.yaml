@@ -536,6 +536,9 @@ importers:
       '@edmate/config':
         specifier: workspace:*
         version: link:../config
+      '@edmate/content':
+        specifier: workspace:*
+        version: link:../content
       '@edmate/harness':
         specifier: workspace:*
         version: link:../harness

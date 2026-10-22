@@ -1,0 +1,13 @@
+id: pedagogy-cite-negative-floor-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/values-variables/notes.md §1.3 ("-7 // 2 is -4")
+turns:
+  - skill: explain
+    student: explain why -7 // 2 comes out as -4 and not -3, that makes no sense to me
+    expect:
+      max_words: 150
+      must_cite_source: true

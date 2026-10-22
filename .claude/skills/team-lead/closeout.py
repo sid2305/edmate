@@ -8,8 +8,10 @@ tree). It:
 
   1. appends the handoff's `## Decisions` entries to docs/decisions/log.md, word for word
      (skips entries already logged by heading -- safe to run twice);
-  2. runs `board.py set <id> done` (which itself refuses unless every `Decided:` line is logged);
-  3. removes the task's git worktree, if one still exists for its board branch, and deletes the
+  2. prints a one-line reminder to add a docs/lessons.md entry when the handoff has a
+     `## Fix round` heading or a just-appended decision is "decided by you" (never blocks);
+  3. runs `board.py set <id> done` (which itself refuses unless every `Decided:` line is logged);
+  4. removes the task's git worktree, if one still exists for its board branch, and deletes the
      local branch -- but only if the branch is fully merged into main. An unmerged branch is left
      alone with a clear message (mirrors board.py's refuse-without-decisions check); pass
      `--remote` to also delete the branch on origin once it is removed locally.
@@ -32,6 +34,7 @@ DECISIONS_HEADING = re.compile(r"^##\s+Decisions\b.*$", re.M)
 ENTRY_HEADING = re.compile(r"^###\s", re.M)
 NEXT_H2 = re.compile(r"^##\s", re.M)
 LOG_SEP = re.compile(r"\n-{3,}\n")
+FIX_ROUND = re.compile(r"^## Fix round\b", re.M)
 
 
 def repo_root():
@@ -77,25 +80,41 @@ def split_log(text):
     return blocks[0].rstrip("\n"), [b.strip("\n") for b in blocks[1:]]
 
 
-def append_decisions(log_path, handoff_path):
+def append_decisions(log_path, handoff_path, handoff_text=None):
     """Append `handoff_path`'s `## Decisions` entries to `log_path`, skipping any entry already
     there (matched by its heading). Returns the number of entries appended."""
-    handoff_text = handoff_path.read_text() if handoff_path.exists() else ""
+    return len(append_decision_entries(log_path, handoff_path, handoff_text))
+
+
+def append_decision_entries(log_path, handoff_path, handoff_text=None):
+    """Like `append_decisions`, but returns the headings it appended. `handoff_text`, when given,
+    is used instead of reading `handoff_path` (main() reads the handoff once and reuses it)."""
+    if handoff_text is None:
+        handoff_text = handoff_path.read_text() if handoff_path.exists() else ""
     body = decisions_body(handoff_text)
     if body is None or norm(body).rstrip(".").lower() == "none":
-        return 0
+        return []
     new_entries = decision_entries(body)
     if not new_entries:
-        return 0
+        return []
     log_text = log_path.read_text() if log_path.exists() else "# Edmate decision log\n"
     header, existing = split_log(log_text)
     existing_headings = {norm(e.splitlines()[0]) for e in existing if e.startswith("###")}
-    to_add = [text for heading, text in new_entries if heading not in existing_headings]
+    to_add = [(heading, text) for heading, text in new_entries if heading not in existing_headings]
     if not to_add:
-        return 0
-    all_entries = to_add + existing
+        return []
+    all_entries = [text for _, text in to_add] + existing
     log_path.write_text(header + "\n\n---\n\n" + "\n\n---\n\n".join(all_entries) + "\n")
-    return len(to_add)
+    return [heading for heading, _ in to_add]
+
+
+def needs_lesson(handoff_text, appended_headings):
+    """True when the handoff has a `## Fix round` heading or a just-appended decision heading
+    says "decided by you" (a human correction). closeout then nudges the lead toward a
+    docs/lessons.md entry (task 0.19). Advisory only: never blocks or changes the exit code."""
+    if FIX_ROUND.search(handoff_text or ""):
+        return True
+    return any("decided by you" in h.lower() for h in appended_headings)
 
 
 def worktree_for_branch(root, branch):
@@ -149,7 +168,11 @@ def main(argv):
 
     handoff = root / "docs" / "tasks" / task_id / "handoff.md"
     log = root / "docs" / "decisions" / "log.md"
-    added = append_decisions(log, handoff)
+    handoff_text = handoff.read_text() if handoff.exists() else ""
+    appended = append_decision_entries(log, handoff, handoff_text)
+    added = len(appended)
+    if needs_lesson(handoff_text, appended):
+        print(f"{task_id}: handoff shows a fix round or human correction — consider a docs/lessons.md entry.")
 
     board_py = str(root / ".claude" / "skills" / "board" / "board.py")
     code, show_out = sh(root, "python3", board_py, "show", task_id)

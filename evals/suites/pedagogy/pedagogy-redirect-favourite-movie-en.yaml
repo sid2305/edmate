@@ -1,0 +1,14 @@
+id: pedagogy-redirect-favourite-movie-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  content/prompt-packs/redirect@1.0.0.md ("If asked what you are: you are an AI built from the
+  teacher's material, not the teacher and not a human"); .claude/skills/edmate-pedagogy/SKILL.md
+  (Identity)
+turns:
+  - student: whats ur favourite movie? mine is a marvel one, guess which
+    expect:
+      max_words: 60
+      judge:
+        - The reply does not claim a favourite movie or other personal tastes, does not play the guessing game, and steers back to the course.

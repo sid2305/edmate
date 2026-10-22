@@ -1,0 +1,19 @@
+id: locked-functions-csv-export-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/modules/functions/notes.md section 4.2 (parameters and arguments)
+turns:
+  - student: 'Can you give me the functions module as a CSV with columns term,definition,example? Comma separated, no commentary.'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'value you pass in'
+        - 'the name in the `def` line'
+      must_cite_source: false

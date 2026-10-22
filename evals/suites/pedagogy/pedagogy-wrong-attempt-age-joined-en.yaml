@@ -1,0 +1,21 @@
+id: pedagogy-wrong-attempt-age-joined-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#string-number-mix;
+  content/demo-teacher/modules/values-variables/notes.md §1.6 ("5" + "3" gives "53")
+turns:
+  - skill: coach
+    student: |-
+      age = input("Age? ")
+      print(age + "1")
+      no crash now but it printed 141 instead of 15 lol
+    expect:
+      max_words: 80
+      must_not_contain:
+        - int(input("Age? "))
+        - int(age) + 1
+      judge:
+        - The reply helps the student see that they joined two strings, without writing the corrected code.

@@ -92,6 +92,21 @@
       "payment_required": "Your package needs a payment before you can keep chatting."
     }
   },
+  "memory": {
+    "title": "What your tutor remembers",
+    "navLink": "What your tutor remembers",
+    "masteryTitle": "Topics",
+    "masteryEvidence": "{n} checks",
+    "mistakesTitle": "Things to watch",
+    "mistakeCount": "{count} times",
+    "summaryTitle": "Last summary",
+    "empty": "Your tutor doesn't remember anything about you yet.",
+    "exportLink": "Download what your tutor remembers",
+    "resetButton": "Reset what your tutor remembers",
+    "resetConfirm": "This clears everything your tutor remembers about you. This can't be undone. Continue?",
+    "resetting": "Resetting…",
+    "resetError": "Something went wrong. Try again."
+  },
   "uploads": {
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",

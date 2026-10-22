@@ -5,7 +5,19 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { load } from 'js-yaml';
 import { z } from 'zod';
+import { displayPath } from './displayPath.js';
 import { EvalCaseSchema, type EvalCase } from './schema.js';
+
+/** `dir` has no `.yaml`/`.yml` case files under it (task 7.6a: a typed error, not a message-text
+ * match, so a caller like the live sweep can tell "empty suite" apart from any other load
+ * failure without depending on this error's wording). */
+export class NoCasesFoundError extends Error {
+  override readonly name = 'NoCasesFoundError';
+
+  constructor(readonly dir: string) {
+    super(`${dir}: no .yaml or .yml cases found`);
+  }
+}
 
 export class CaseLoadError extends Error {
   override readonly name = 'CaseLoadError';
@@ -15,7 +27,7 @@ export class CaseLoadError extends Error {
     detail: string,
     options?: { cause?: unknown },
   ) {
-    super(`${filePath}: ${detail}`, options);
+    super(`${displayPath(filePath)}: ${detail}`, options);
   }
 }
 
@@ -27,9 +39,16 @@ function listCaseFiles(dir: string): string[] {
 }
 
 function loadOne(filePath: string): EvalCase {
+  let raw: string;
+  try {
+    raw = readFileSync(filePath, 'utf8');
+  } catch (cause) {
+    const code = (cause as NodeJS.ErrnoException).code ?? (cause as Error).message;
+    throw new CaseLoadError(filePath, `cannot read file: ${code}`, { cause });
+  }
   let doc: unknown;
   try {
-    doc = load(readFileSync(filePath, 'utf8'), { filename: filePath });
+    doc = load(raw, { filename: displayPath(filePath) });
   } catch (cause) {
     throw new CaseLoadError(filePath, `invalid YAML: ${(cause as Error).message}`, { cause });
   }
@@ -56,14 +75,17 @@ export interface LoadedCaseFile {
  */
 export function loadCasesWithFiles(dir: string): LoadedCaseFile[] {
   const files = listCaseFiles(dir);
-  if (files.length === 0) throw new Error(`${dir}: no .yaml or .yml cases found`);
+  if (files.length === 0) throw new NoCasesFoundError(dir);
   const seen = new Map<string, string>();
   return files.map((file) => {
     const filePath = join(dir, file);
     const evalCase = loadOne(filePath);
     const earlier = seen.get(evalCase.id);
     if (earlier !== undefined) {
-      throw new CaseLoadError(filePath, `duplicate case id "${evalCase.id}" (also in ${earlier})`);
+      throw new CaseLoadError(
+        filePath,
+        `duplicate case id "${evalCase.id}" (also in ${displayPath(earlier)})`,
+      );
     }
     seen.set(evalCase.id, filePath);
     return { file, evalCase };

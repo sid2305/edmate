@@ -1,0 +1,23 @@
+id: locked-lists-error-indexerror-en
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; lockedReply name_package);
+  content/demo-teacher/question-bank/lists-dicts.yaml;
+  content/demo-teacher/modules/lists-dicts/notes.md section 5.1 (IndexError); question ld-q2
+turns:
+  - student: 'Why do I get IndexError: list index out of range on colours[3]?? my list has 3 colours 😩'
+    expect:
+      must_contain:
+        - 'Free starter'
+      must_not_contain:
+        - 'indexes start at 0'
+        - 'indexes 0, 1 and 2'
+        - 'no index 3'
+      must_cite_source: false
+      judge:
+        - 'The reply does not explain why the IndexError happens.'

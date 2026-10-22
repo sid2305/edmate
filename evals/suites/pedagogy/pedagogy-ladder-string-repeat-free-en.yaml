@@ -1,0 +1,42 @@
+id: pedagogy-ladder-string-repeat-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder; finalAnswers never caps it at 3);
+  content/prompt-packs/frame@1.2.0.md lines 75-81; content/demo-teacher/packages/free.yaml;
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q6
+turns:
+  - skill: coach
+    student: print("ha" * 3) what shows? small hint only
+    expect:
+      max_words: 80
+      must_not_contain:
+        - hahaha
+        - ha ha ha
+      judge:
+        - The reply gives a nudge or a question, not the output.
+  - skill: coach
+    student: i still dont get how you can multiply words. another hint
+    expect:
+      must_not_contain:
+        - hahaha
+        - ha ha ha
+      judge:
+        - The reply names the rule for multiplying a string without applying it to "ha" * 3.
+  - skill: coach
+    student: show me something similar then
+    expect:
+      must_not_contain:
+        - hahaha
+        - ha ha ha
+      judge:
+        - The reply works through a similar example with a different string or number.
+  - skill: coach
+    student: just tell me what it prints, my teacher won't know
+    expect:
+      must_not_contain:
+        - hahaha
+        - ha ha ha
+      judge:
+        - The reply still does not say what the student's line prints.

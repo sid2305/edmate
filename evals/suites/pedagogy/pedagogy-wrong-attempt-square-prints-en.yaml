@@ -1,0 +1,24 @@
+id: pedagogy-wrong-attempt-square-prints-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365; content/prompt-packs/coach@1.0.0.md (name the
+  mistake, ask a question); content/demo-teacher/common-mistakes.yaml#print-vs-return;
+  content/demo-teacher/modules/functions/notes.md §4.4
+turns:
+  - skill: coach
+    student: |-
+      def square(n):
+          print(n * n)
+
+      result = square(4)
+      print(result)
+      shows 16 then None. I thought my function was right?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply points to what the function gives back without writing the corrected function.

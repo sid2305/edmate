@@ -4,7 +4,7 @@
 // grounding and advice judges are answered by the harness's own judge wrappers (as in the CLI's
 // chat deps test), so a script only needs the reply streams.
 import type { Chunk, LearnerProfile, ModelGateway, ProfileStore } from '@edmate/contracts';
-import { createTurnLimits, defaultSteps, type PipelineDeps } from '@edmate/harness';
+import { createTurnLimits, defaultSteps, type Clock, type PipelineDeps } from '@edmate/harness';
 import {
   adviceJudgeGateway,
   CLEAN_ADVICE_VERDICT,
@@ -33,6 +33,25 @@ import { fileURLToPath } from 'node:url';
 import { systemClock, systemIds } from '../src/turn/deps';
 import { webFallbackReplies } from '../src/turn/fallbackReplies';
 import type { TurnBackend } from '../src/turn/routes';
+
+/**
+ * Wraps a real clock so a step or classifier *deadline* (task 0.21) never races real wall-clock
+ * time against the in-memory scripted gateway: `runWithTimeout` always calls `sleep(ms, cancel)`
+ * with a cancel token, so that branch only resolves once the real work settles and cancels it,
+ * never on its own. A content-pacing delay (a scripted stream's `delay` step, or a background
+ * retry backoff) calls `sleep(ms)` with no cancel token, so it still waits in real time. Under
+ * CPU pressure (several heavy processes at once), a real 250-400 ms guard deadline could otherwise
+ * fire before the scripted gateway's already-resolved promise is scheduled, failing turns closed
+ * with no tokens even though nothing was actually slow in-process (`now()` stays real, for
+ * realistic timestamps).
+ */
+function deadlineSafeClock(real: Clock): Clock {
+  return {
+    now: () => real.now(),
+    sleep: (ms, cancel) =>
+      cancel === undefined ? real.sleep(ms) : new Promise((resolve) => cancel.onCancel(resolve)),
+  };
+}
 
 /** preGuard's three classifiers, all clear. */
 export function clearClassifiers(): ScriptedObjectCall[] {
@@ -119,17 +138,23 @@ export interface MemoryBackendOptions {
   /** Extra or replacement object calls (default: the three clear classifiers). */
   objects?: ScriptedObjectCall[];
   world?: AccessWorld;
+  /**
+   * Replaces the scripted gateway and the judge wrappers entirely (9.0): the given gateway answers
+   * every stream, classifier and judge call, through the real `defaultSteps`.
+   */
+  gateway?: ModelGateway;
 }
 
 export function memoryBackend(opts: MemoryBackendOptions = {}) {
   const world = opts.world ?? twoTeacherWorld();
-  const clock = systemClock();
+  const clock = deadlineSafeClock(systemClock());
   const scripted = new ScriptedGateway(
     { generateObject: opts.objects ?? clearClassifiers(), stream: opts.stream ?? [says('Hello')] },
     clock,
   );
   const observed = observedGateway(
-    adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
+    opts.gateway ??
+      adviceJudgeGateway(judgeGateway(scripted, () => GROUNDED_VERDICT), () => CLEAN_ADVICE_VERDICT),
   );
   const entitlements = memoryEntitlementStore(world, { market: 'IN' });
   const transcripts = memoryTranscriptStore();

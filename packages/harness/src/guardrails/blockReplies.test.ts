@@ -3,9 +3,9 @@
 // Neutral, adult-safe wording throughout (fix round MEDIUM 7).
 import { SafetyEventCodeSchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
-import { BLOCK_REPLIES, type BlockCode, blockReplyFor } from './blockReplies.js';
+import { BLOCK_REPLIES, type BlockCode, blockReplyFor, isBlockReply } from './blockReplies.js';
 
-const T = 1_000;
+const T = 20_000;
 
 describe('block replies', () => {
   it(
@@ -49,6 +49,22 @@ describe('block replies', () => {
     'cheating offers coaching instead',
     () => {
       expect(BLOCK_REPLIES.cheating).toMatch(/coach you/);
+    },
+    T,
+  );
+
+  it.each(Object.values(BLOCK_REPLIES))(
+    'isBlockReply recognises every fixed block reply',
+    (reply) => {
+      expect(isBlockReply(reply)).toBe(true);
+    },
+    T,
+  );
+
+  it(
+    'isBlockReply is false for an ordinary reply',
+    () => {
+      expect(isBlockReply('Sure, let\'s work through fractions together.')).toBe(false);
     },
     T,
   );

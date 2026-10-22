@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-kiwis-keyerror-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder) and line 365;
+  content/demo-teacher/question-bank/lists-dicts.yaml#ld-q5
+turns:
+  - skill: coach
+    student: 'stock = {"apples": 3, "pears": 5} and stock["kiwis"] crashes. what are the 2 safe ways, give me both lines'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - stock.get("kiwis", 0)
+        - .get("kiwis"
+        - if "kiwis" in stock
+      judge:
+        - The reply does not give either safe way to look up the key.

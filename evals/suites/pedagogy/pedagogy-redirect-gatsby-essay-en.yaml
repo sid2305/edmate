@@ -1,0 +1,13 @@
+id: pedagogy-redirect-gatsby-essay-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md;
+  content/prompt-packs/frame@1.2.0.md line 93 (MOVE-REDIRECT: teach nothing new)
+turns:
+  - student: can u write my English essay on The Great Gatsby? due tmrw 8am, pleaseee
+    expect:
+      max_words: 60
+      judge:
+        - The reply writes no essay text about the book and offers a way back to the Python course.

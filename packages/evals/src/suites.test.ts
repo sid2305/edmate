@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { GUARD_FOLDERS, MIN_CASES_PER_GUARD, validateSuites, type SuiteRules } from './suites.js';
+import {
+  floorProblems,
+  GUARD_FOLDERS,
+  MIN_CASES_PER_GUARD,
+  normaliseTurn,
+  SUITE_FLOORS,
+  validateSuites,
+  type SuiteRules,
+} from './suites.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const SUITES_ROOT = join(REPO_ROOT, 'evals/suites');
@@ -41,6 +49,38 @@ describe('evals/suites (real cases)', () => {
     expect(report.problems).toEqual([]);
   });
 
+  // Task 7.2: the count ratchet. Each 7.2 phase raises its suite's floor to the new count, so a
+  // case deleted by mistake fails here.
+  it('each platform suite holds at least its SUITE_FLOORS count', () => {
+    expect(floorProblems(report.cases, SUITE_FLOORS)).toEqual([]);
+  });
+
+  // Task 7.2b: the 7.2a banned-phrase rules, applied to the pedagogy suite. A correct reply may
+  // echo the student's own words, so no banned phrase may already be in the case's student turns,
+  // and a case that bans phrases bans at least 2 (one short entry is too easy to miss or misfire).
+  const pedagogy = report.cases
+    .filter((c) => c.file.startsWith('pedagogy/'))
+    .map((c) => c.evalCase);
+
+  it('pedagogy: no must_not_contain entry is in the case’s own student turns', () => {
+    const echoes: string[] = [];
+    for (const c of pedagogy) {
+      const said = c.turns.map((t) => t.student.toLowerCase()).join('\n');
+      for (const t of c.turns)
+        for (const phrase of t.expect?.must_not_contain ?? [])
+          if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
+    }
+    expect(pedagogy.length).toBeGreaterThan(0);
+    expect(echoes).toEqual([]);
+  });
+
+  it('pedagogy: a case that bans phrases bans at least 2', () => {
+    const single = pedagogy.filter(
+      (c) => c.turns.flatMap((t) => t.expect?.must_not_contain ?? []).length === 1,
+    );
+    expect(single.map((c) => c.id)).toEqual([]);
+  });
+
   for (const guard of GUARD_FOLDERS) {
     const count = report.guardCounts[guard] ?? 0;
     it.skipIf(count === 0)(`${guard} has at least ${MIN_CASES_PER_GUARD} cases`, () => {
@@ -52,8 +92,10 @@ describe('evals/suites (real cases)', () => {
 // --- The validator itself, on tiny synthetic trees -------------------------------------------
 function caseYaml(
   id: string,
-  over: { suite?: string; package?: string; reviewed_by?: string } = {},
+  over: { suite?: string; package?: string; reviewed_by?: string; students?: string[] } = {},
 ): string {
+  // By default each case's student turn is its own id, so synthetic cases are never duplicates.
+  const students = over.students ?? [`hello from ${id}`];
   return [
     `id: ${id}`,
     `suite: ${over.suite ?? id.split('-')[0]}`,
@@ -61,9 +103,11 @@ function caseYaml(
     `reviewed_by: ${over.reviewed_by ?? 'pending'}`,
     'source: synthetic',
     'turns:',
-    '  - student: "hello"',
-    '    expect:',
-    '      max_words: 10',
+    ...students.flatMap((s) => [
+      `  - student: ${JSON.stringify(s)}`,
+      '    expect:',
+      '      max_words: 10',
+    ]),
     '',
   ].join('\n');
 }
@@ -246,5 +290,68 @@ describe('validateSuites', () => {
       ['leak/leak-aaa-001.yaml', 'leak-aaa-001'],
       ['safety/pii/safety-pii-003.yaml', 'safety-pii-003'],
     ]);
+  });
+});
+
+describe('duplicate student turns (task 7.2)', () => {
+  it('normalises with NFKC, lower case, collapsed whitespace and no punctuation', () => {
+    expect(normaliseTurn('  Show me   LESSON 9, please!! ')).toBe('show me lesson 9 please');
+    expect(normaliseTurn('ｓｈｏｗ me\tlesson\n9')).toBe('show me lesson 9');
+    expect(normaliseTurn('what’s “range”?')).toBe('whats range');
+  });
+
+  it('flags two cases in one suite whose student turns differ only by case, spacing and punctuation', () => {
+    put('locked/locked-a-001.yaml', caseYaml('locked-a-001', { students: ['Show me lesson 9.'] }));
+    put('locked/locked-b-002.yaml', caseYaml('locked-b-002', { students: ['show  me LESSON 9!'] }));
+    const r = validateSuites(root, { ...base, guardFolders: [] });
+    expect(r.problems).toEqual([
+      'locked/locked-b-002.yaml: same student turns as locked/locked-a-001.yaml',
+    ]);
+  });
+
+  it('compares the whole turn sequence, within one suite only, nested folders included', () => {
+    // Same first turn, different second turn: not a duplicate.
+    put('locked/locked-a-001.yaml', caseYaml('locked-a-001', { students: ['hi', 'one'] }));
+    put('locked/locked-a-002.yaml', caseYaml('locked-a-002', { students: ['hi', 'two'] }));
+    // The same turns in another suite: not a duplicate.
+    put('leak/leak-a-001.yaml', caseYaml('leak-a-001', { students: ['hi', 'one'] }));
+    expect(validateSuites(root, { ...base, guardFolders: [] }).problems).toEqual([]);
+
+    // Two sub-folders of one suite: a duplicate.
+    put('safety/pii/safety-a-001.yaml', caseYaml('safety-a-001', { students: ['my number'] }));
+    put(
+      'safety/jailbreak/safety-b-001.yaml',
+      caseYaml('safety-b-001', { students: ['My number.'] }),
+    );
+    expect(validateSuites(root, { ...base, guardFolders: [] }).problems).toEqual([
+      'safety/pii/safety-a-001.yaml: same student turns as safety/jailbreak/safety-b-001.yaml',
+    ]);
+  });
+});
+
+describe('floorProblems (task 7.2 count ratchet)', () => {
+  it('passes at or above each floor and names every suite below it', () => {
+    seed('leak', 'leak-hint', 3);
+    seed('safety/pii', 'safety-pii', 2);
+    const { cases } = validateSuites(root, { ...base, guardFolders: [] });
+    expect(floorProblems(cases, { leak: 3, safety: 2 })).toEqual([]);
+    expect(floorProblems(cases, { leak: 4, safety: 2, locked: 1 })).toEqual([
+      'leak: 3 cases, below its floor of 4',
+      'locked: 0 cases, below its floor of 1',
+    ]);
+  });
+
+  it('pins every platform suite the Evals table names, at today’s counts or more', () => {
+    expect(Object.keys(SUITE_FLOORS).sort()).toEqual(
+      ['advice', 'leak', 'locked', 'pedagogy', 'persona', 'safety'].sort(),
+    );
+    expect(SUITE_FLOORS).toEqual({
+      leak: 44,
+      locked: 100,
+      safety: 214,
+      persona: 42,
+      pedagogy: 60,
+      advice: 37,
+    });
   });
 });

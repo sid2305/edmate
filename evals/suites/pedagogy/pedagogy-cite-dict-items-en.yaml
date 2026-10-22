@@ -1,0 +1,13 @@
+id: pedagogy-cite-dict-items-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: cites sources) and line 513;
+  content/demo-teacher/modules/lists-dicts/notes.md §5.6
+turns:
+  - skill: explain
+    student: how do I loop over a dictionary and get the key AND the value each time? explain pls
+    expect:
+      max_words: 150
+      must_cite_source: true

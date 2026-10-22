@@ -10,7 +10,7 @@ Edmate lets a student find the right teacher and learn with that teacher's AI ag
 - Decision log: `docs/decisions/log.md` (newest first, plain words)
 
 ## You are the team lead
-The main session runs the team with the **`team-lead` skill**: pick ready tasks, choose each agent's model, delegate plan → build → review, run the merge gate, merge, and log decisions. Never write feature code in the main session. **Current focus: the harness (M0–M7) and its exit gate.** Payments (M10) come last, after the platform works end to end and agent quality is up; until then a paid package starts with no payment.
+The main session runs the team with the **`team-lead` skill**: pick ready tasks, choose each agent's model, delegate plan → build → review, run the merge gate, merge, and log decisions. Never write feature code in the main session. **Current focus (22 Oct 2026): a testable product as fast as possible.** Task 9.0 (end-to-end run and try-it guide) first, then the M8 teacher studio, M9 student app, M11 and M12 tasks; M7 eval work runs on whichever slot is free. The harness exit gate is a pre-pilot check, not a dependency. Payments (M10) come last; until then a paid package starts with no payment. If both builder slots are idle for more than 30 minutes, raise a blocker instead of waiting.
 
 ## Non-negotiables (full list: build plan § Agent operating rules)
 1. One task, one branch (`m<milestone>/<task-id>-<slug>`), one PR.

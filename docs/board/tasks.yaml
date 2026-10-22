@@ -6,6 +6,23 @@
 # risk: risky = you approve the PR (human-approved label) before the lead merges; expert = named human reviewer for content/eval cases.
 # priority: P1 = not needed for the pilot. model: models used, recorded by the team lead.
 decisions:
+  suite-sizes:
+    status: open
+    question: 'Platform eval suites (7.2, blocker B-41): grow to the full Evals-table sizes now (+624 cases, about 1,480 builder calls; a live run is about 3,800 calls per model), or MVP sizes for the exit
+      gate (locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60: +234 cases, about 630 calls; about 2,400 per model) with the rest in 7.2f before the pilot gate?'
+    options:
+    - MVP sizes now, the rest in 7.2f (M13) before the pilot gate
+    - full sizes now (7.2f moves to M7)
+    recommendation: the first option
+  gate-thresholds:
+    status: open
+    question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and
+      whether the distress near-miss cases are held to 100% or the 99% safety rate'
+    options:
+    - feedback 70%, revision 80%, platform accuracy covered by per-agent accuracy, near-miss at 99% (all provisional until 7.2)
+    - feedback and revision both 80%, the rest as above
+    - other numbers
+    recommendation: the first option
   licence:
     status: decided
     question: Code licence
@@ -79,12 +96,13 @@ decisions:
     recommendation: One mid-tier model, pinned per release
     answer: One mid-tier model (e.g. Claude Sonnet via the Anthropic adapter), pinned per release
   default-model-mix:
-    status: open
+    status: decided
     question: Default model mix per tier
     options:
     - By cost and eval results
     recommendation: Decide after 7.6
-    answer: null
+    answer: b) Sonnet (claude-sonnet-5) for all teaching replies, free and paid; Haiku 4.5 for router, guards and classifiers on every tier; one config table changeable after a live run (human, 22 Oct 2026,
+      B-42)
   teacher-chat-visibility:
     status: decided
     question: Do teachers see individual conversations?
@@ -396,6 +414,17 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
+- id: '0.22'
+  milestone: M7
+  title: 'Review the parallelization change (human request 22 Oct 2026): on 24 Oct 2026 the lead compares the two days before and after 22 Oct 2026: tasks merged per day, builder-slot idle time, HIGH findings
+    per task and fix rounds (`board.py metrics --last 20`, plus the sessions'' usage), and says whether 1 Opus + 2 Sonnet with the no-shared-files rule works better than 1 + 1 with one builder per package;
+    recommends keep, revert or adjust in a blocker for the human'
+  accept: a short comparison (before/after table, 10 lines) in docs/decisions/log.md under a 24 Oct 2026 entry and a blocker with the recommendation; no code change.
+  deps: []
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
@@ -406,9 +435,31 @@ tasks:
   deps:
   - '0.16'
   risk: risky
-  status: running
+  status: done
   branch: m0/0.19-digest-lessons
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus x2 fix:opus review:sonnet x2
+  metrics:
+    tool_calls: 563
+    tokens_in: 1826
+    tokens_out: 192481
+    cache_read_tokens: 49467911
+    wall_time_seconds: 3890
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '1.1'
   milestone: M1
   title: Drizzle schema for every table in Data model; migrations
@@ -1541,11 +1592,12 @@ tasks:
   branch: m5/5.11a-drafter-gateway-errors
   model: plan:lead build:sonnet-5/medium review:code-sonnet,ts-sonnet
 - id: 6.0b
-  milestone: M6
+  milestone: M13
   title: 'DPDP gate for learner memory (logged decision, 18 Oct 2026; raised again by 3.17): before any India pilot, decide and enforce what learner memory (mastery, mistakes, summaries, evidence) may be
     kept for India learners under 18; no tracking or behavioural monitoring of children; likely a locale-pack rule plus a ProfileStore check (ADR if contracts change)'
   accept: an India learner under 18 has no learner memory written or read beyond what the locale pack allows; tests; human sign-off on the rule.
   deps:
+  - GATE
   - '3.17'
   - '3.10'
   - '1.7'
@@ -1624,9 +1676,9 @@ tasks:
   - '5.6'
   - '6.1'
   - M3
-  status: review
+  status: done
   branch: m6/6.3-mistake-tags
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet x4
 - id: '6.4'
   milestone: M6
   title: Session summary and end-of-topic check
@@ -1635,9 +1687,31 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: planning
-  branch: null
-  model: null
+  status: done
+  branch: m6/6.4-session-summary
+  model: plan:sonnet build:sonnet review:sonnet x4
+  metrics:
+    tool_calls: 245
+    tokens_in: 806
+    tokens_out: 114641
+    cache_read_tokens: 25156125
+    wall_time_seconds: 1441
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '6.5'
   milestone: M6
   title: Student view, reset and export of memory
@@ -1646,9 +1720,31 @@ tasks:
   - '5.6'
   - '6.2'
   - M3
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m6/6.5-memory-reset
+  model: plan:opus build:sonnet x2 review:sonnet x3
+  metrics:
+    tool_calls: 270
+    tokens_in: 922
+    tokens_out: 80774
+    cache_read_tokens: 34089140
+    wall_time_seconds: 2222
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: '7.1'
   milestone: M7
   title: 'Eval reports and judge calibration: JSON + HTML reports per suite and model; 10% human double-check with agreement tracking'
@@ -1691,10 +1787,15 @@ tasks:
   - '7.1'
   - M3
   - M4
+  - 7.2a
+  - 7.2b
+  - 7.2c
+  - 7.2d
+  - 7.2e
   status: todo
   risk: expert
   branch: null
-  model: null
+  model: plan:opus
 - id: '7.3'
   milestone: M7
   title: Per-agent suite generator from the question bank, teacher notes, approved drafts and the agent's packages
@@ -1706,9 +1807,30 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m7/7.3-suite-generator
+  model: plan:sonnet build:opus review:sonnet x2
+  metrics:
+    tool_calls: 109
+    tokens_in: 324
+    tokens_out: 43650
+    cache_read_tokens: 7250828
+    wall_time_seconds: 895
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: '7.4'
   milestone: M7
   title: 'Quality gate, scoped by change: first publish and prompt-pack bumps run everything; material changes run per-agent accuracy + locked; package changes run locked; style-card changes run a 30-case
@@ -1719,9 +1841,31 @@ tasks:
   - '7.3'
   - M3
   - M4
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m7/7.4-quality-gate
+  model: plan:opus build:opus x2 build:sonnet review:sonnet x4 review:opus
+  metrics:
+    tool_calls: 267
+    tokens_in: 860
+    tokens_out: 86757
+    cache_read_tokens: 25751703
+    wall_time_seconds: 9162
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 0
+    findings:
+      total: 10
+      by_severity:
+        MEDIUM: 3
+        LOW: 7
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 10
+        wontfix: 0
+    human_questions: 3
 - id: '7.5'
   milestone: M7
   title: CI merge gates on fixtures
@@ -1743,9 +1887,30 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m7/7.6-live-model-runs
+  model: plan:sonnet build:sonnet x2 review:sonnet x3
+  metrics:
+    tool_calls: 356
+    tokens_in: 1208
+    tokens_out: 93144
+    cache_read_tokens: 45932807
+    wall_time_seconds: 6191
+    models:
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 1
+        LOW: 6
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 7
+        wontfix: 0
+    human_questions: 0
 - id: '7.7'
   milestone: M7
   title: Turn traces and health metrics
@@ -1788,9 +1953,31 @@ tasks:
   - '7.4'
   - M3
   - M4
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m7/7.8-teaching-scorecard
+  model: plan:sonnet build:sonnet review:sonnet fix:sonnet
+  metrics:
+    tool_calls: 181
+    tokens_in: 556
+    tokens_out: 63381
+    cache_read_tokens: 11506642
+    wall_time_seconds: 962
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: '8.1'
   milestone: M8
   title: 'Onboarding: profile, subject, bio, photo; identity checked manually by staff (12.1)'
@@ -1839,24 +2026,23 @@ tasks:
   model: plan:opus build:opus-5.5/medium+sonnet fixes review:sonnet+security opus
 - id: '8.3'
   milestone: M8
-  title: Outline editor with source links; reorder, rename, merge, split
+  title: 'Outline editor with source links; reorder, rename, merge, split (Phase C: the editor page; plan docs/tasks/8.3/plan.md)'
   accept: outline for 20 files in < 10 minutes; edits versioned.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.11'
   - '5.2'
   - '8.1'
+  - 8.3b
   status: todo
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '8.4'
   milestone: M8
   title: Style interview (incl. common mistakes) and style card editor
   accept: the teacher can preview and edit the card; the agent uses the new version on the next turn.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.11'
@@ -1870,7 +2056,6 @@ tasks:
   title: Test chat as a student per package; mark and correct answers
   accept: a correction changes the next answer and becomes an eval case.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -1883,7 +2068,6 @@ tasks:
   title: 'Package builder: modules, skills, help limits, daily limit, live classes, price, trial, locked reply, AI cost estimate'
   accept: two packages in < 15 minutes; estimate shown per package.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -1895,10 +2079,9 @@ tasks:
   model: null
 - id: '8.7'
   milestone: M8
-  title: Publish flow with quality-gate results, the teaching scorecard and the public profile page
+  title: 'Publish flow with quality-gate results, the teaching scorecard and the public profile page (7.4: publish goes through gatedPublish)'
   accept: failures show which cases failed; a pass publishes in < 1 minute.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -1913,7 +2096,6 @@ tasks:
   title: Insights view (earnings view moves to 10.7)
   accept: insights show no individual student.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.2'
@@ -1926,7 +2108,6 @@ tasks:
   title: 'Questions inbox: grouped open questions, answer with a module choice, dismiss'
   accept: an answer reaches every grouped student and becomes a teacher note and eval case.
   deps:
-  - GATE
   - '1.3'
   - '5.1'
   - '5.10'
@@ -1963,12 +2144,27 @@ tasks:
   - '9.1'
   status: todo
   branch: null
+- id: '9.0'
+  milestone: M9
+  title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff
+    verify → upload → ingest; student sign-in → package → subscribe → chat with a real model key); fix any wiring problem found (CORS, public endpoint, env); write docs/try-it.md with the exact steps, env
+    values to fill (never committed), how a test account becomes staff, and a test teacher and student'
+  accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in
+    the handoff with screenshots or trimmed logs (no keys).
+  deps:
+  - 9.0a
+  - 9.0b
+  - '9.4'
+  - '8.2'
+  - '9.3'
+  status: running
+  branch: m9/9.0-try-it
+  model: plan:opus build:opus
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
   accept: search < 1 s on a 200-teacher seed.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '7.8'
@@ -2043,7 +2239,10 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 9.0b review LOW: apps/worker gateway.test.ts
+    asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
+    test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
+    both sleep branches'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2134,8 +2333,31 @@ tasks:
     answer without it would become coach); a start sends only the persona id; the CLI and seed pin the newest signed set; production behaviour without personas is unchanged
   deps:
   - '5.8'
-  status: todo
-  branch: null
+  status: done
+  branch: m5/5.8a-signed-set-pick
+  model: plan:opus build:opus x2 review:sonnet,opus
+  metrics:
+    tool_calls: 586
+    tokens_in: 1934
+    tokens_out: 120825
+    cache_read_tokens: 55257294
+    wall_time_seconds: 8719
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        MEDIUM: 2
+        LOW: 4
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 6
+        wontfix: 0
+    human_questions: 0
 - id: 7.7a
   milestone: M13
   title: '7.7 follow-ups: a health report surface (CLI or staff console) over listForTeacherSince + computeHealthMetrics; a (session_id, created_at) composite index on turn_traces once real traffic is known;
@@ -2212,7 +2434,9 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: todo
+  status: running
+  branch: m0/0.17a-budget-parse
+  model: plan:lead build:sonnet
 - id: 0.16b
   milestone: M13
   title: metrics.collect(repo_root, ...) with a relative root (".") silently returns all zeros because the transcript dir name is derived from the unresolved path. Resolve repo_root first (closeout already
@@ -2228,9 +2452,29 @@ tasks:
   accept: an unmatched verdict id appears in the report; a missing file and a bad YAML file give different messages; no absolute path in either loader's error text; evals tests green
   deps:
   - '7.1'
-  status: review
+  status: done
   branch: m7/7.1a-calibration-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 134
+    tokens_in: 452
+    tokens_out: 52180
+    cache_read_tokens: 12215214
+    wall_time_seconds: 419
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 6.3a
   milestone: M13
   title: 'Proposed mistake tags the teacher approves (deferred from 6.3, MVP first): persist the classifier''s proposed tags per teacher and add a teacher approve/reject action that adds an approved tag
@@ -2244,9 +2488,9 @@ tasks:
   model: null
 - id: 6.2a
   milestone: M13
-  title: '6.2 review follow-ups: before any operational rebuild trigger, cap or batch rebuildMastery''s replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long
-    unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s
-    evidence row having no explicit ts'
+  title: '6.2 review follow-ups (6.5 also needs the index, for evidenceEvents.list ORDER BY ts, id: make it (teacher_id, student_id, ts, id)): before any operational rebuild trigger, cap or batch rebuildMastery''s
+    replay and add a (teacher_id, student_id, ts) index so the profile row lock is not held over a long unbounded scan; explicit guard instead of `locked!` in applyEvidenceMastery; doc note that a rebuild
+    is a snapshot as of lock acquisition; the isolation-grid case''s Date.now()-based ts depends on isolation-seed''s evidence row having no explicit ts'
   accept: rebuild time for a long history is bounded and tested; no non-null assertions left in learner.ts.
   deps:
   - '6.2'
@@ -2256,10 +2500,11 @@ tasks:
   model: null
 - id: 5.8b
   milestone: M13
-  title: '5.8 review follow-ups: apply the B-37 q8/q9 answers on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped
-    role-play turns, drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona;
-    policy.ts:103 /pause with extra text should not skip the off_topic/meta redirect (only a bare /pause, or per the q8 answer); selectPersonaLibrary skips prerelease versions (or the ADR accepts them);
-    typed PersonaTemplateError; ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
+  title: '5.8 review follow-ups (plus 5.8a: newestSignedSet skips pre-release set versions): apply the B-37 q8/q9 answers (human, 21 Oct 2026: 8a keep the gate on ended turns and /pause with text; 9a skip
+    it on every role-play answer turn) on where the coverage gate runs during a role-play (ended turns, /pause with text, answer turns) and match ADR-0013''s rationale; on gate-skipped role-play turns,
+    drop sub-threshold chunks or reword "no material"; roleplay.ts question===1 gate skip should key on control === start; skills.ts asserts a precomputed rolePlayStep matches the persona; policy.ts:103
+    /pause with extra text should not skip the off_topic/meta redirect (only a bare /pause, or per the q8 answer); selectPersonaLibrary skips prerelease versions (or the ADR accepts them); typed PersonaTemplateError;
+    ADR-0013 rollback note (strict HelpState schema drops personaPhase blobs on an older deploy) and status Accepted'
   accept: each item fixed or recorded in ADR-0013; the coverage-gate rule matches the human's B-37 answers with tests.
   deps:
   - '5.8'
@@ -2278,6 +2523,502 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 6.4a
+  milestone: M13
+  title: 'Session end follow-ups from 6.4: topic-scored evidence from practice/check outcomes (needs items tagged with course topic ids) and a real session-end trigger calling summarizeSession + sessions.end'
+  accept: a graded check emits a topic-scored EvidenceEvent that reaches CommitRecord.evidence; a real trigger ends a session with a stored summary
+  deps:
+  - '6.4'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 5.8c
+  milestone: M5
+  title: 'Sign the prompt packs per B-36 and B-38 (human answers, 21 Oct 2026): reviewed_by: sid2305 on feedback@1.1.0, frame@1.1.0, set@1.2.0, frame@1.2.0 and set@1.3.0 (B-37 defaults, all a, are already
+    in the frame text); bump the seed and CLI pins to set@1.3.0; check set@1.1.0''s pending state against what the seed serves today'
+  accept: the five packs carry reviewed_by sid2305; the live library and seed serve set@1.3.0; content, db and evals tests pass; no frame text change beyond the sign line
+  deps:
+  - '5.8'
+  risk: risky
+  status: done
+  branch: m5/5.8c-sign-packs
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 350
+    tokens_in: 1134
+    tokens_out: 117817
+    cache_read_tokens: 27243420
+    wall_time_seconds: 5053
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
+- id: 5.8d
+  milestone: M13
+  title: 'Pipeline-backed `edmate eval` agent (5.8a plan Q3): `edmate eval` runs cases through the real pipeline with personas and the newest signed set, not only `chat --source eval`'
+  accept: edmate eval runs a role-play case through the pipeline with the scripted gateway; evals tests pass
+  deps:
+  - 5.8a
+  status: todo
+  branch: null
+  model: null
+- id: 0.19a
+  milestone: M13
+  title: closeout.py regenerates docs/decisions/digest.md after appending decisions (a stale digest fails the RealRepo freshness test in CI for every later PR); until then the lead runs board.py digest
+    after each closeout
+  accept: closeout leaves digest.md fresh; a test covers it
+  deps:
+  - '0.19'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.5a
+  milestone: M13
+  title: 'Memory reset watermark (plus the 6.5 database-review MEDIUM: plain evidenceEvents.append locks the profile row first, like appendAndFold): a memory_reset_at per learner profile; evidence append/appendAndFold
+    drop events older than it and sessions.end skips sessions started before it, so a job queued before a reset cannot re-seed memory. Land with or before 6.4a.'
+  accept: A test queues an evidence event and a session end from before a reset, applies them after it, and the profile stays empty.
+  deps:
+  - '6.5'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.3a
+  milestone: M13
+  title: 'Per-agent suite generator: Hindi (Devanagari), romanised Hindi and Hinglish variants of the locked templates, as a safety net after the English-only pilot.'
+  accept: The demo teacher's generated suite includes locked cases in all three forms and they pass.
+  deps:
+  - '7.3'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.3b
+  milestone: M13
+  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.;
+    NoCasesFoundError uses displayPath(dir) like CaseLoadError (7.6a review LOW)'
+  accept: The evals package's error classes share one style and the 7.3 tests still pass.
+  deps:
+  - '7.3'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 0.19b
+  milestone: M13
+  title: 'closeout.py checks the handoff''s Decisions (each entry has a Decided: line) before it appends to the log. Today it appends first and then refuses, and a re-run skips the bad entries as duplicates
+    (seen on 7.3).'
+  accept: 'A test: a handoff whose entry has no Decided: line leaves docs/decisions/log.md unchanged.'
+  deps: []
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 5.8e
+  milestone: M13
+  title: '5.8a review follow-ups: loadChatPersonas reports which persona file failed and why; the CLI banner shows the prompt-pack source (signed set or fixture fallback); move set ranking to a shared semver
+    helper; share one isSignedOff helper across promptPacks, personaTemplates and agePolicy; /leave matches on the first word.'
+  accept: A broken persona file names itself in the CLI banner, the banner shows the prompt-pack source, and `/leave now` leaves the role-play.
+  deps:
+  - 5.8a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 6.5b
+  milestone: M13
+  title: '6.5 review LOWs: the memory page resolves its scope through studentTurnScope like the route; a test for the server-database memoryHandlers wiring; document on DELETE /api/me/memory that a reset
+    with no profile row still ends the open session.'
+  accept: The page and the route share one scope resolution, and the wiring test passes.
+  deps:
+  - '6.5'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.4a
+  milestone: M13
+  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSigna later;
+    resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the as ScopedCase
+    cast; de-duplicate changes; Phase C: export a non-throwing group classifier from gateScope.ts and use it in gate.ts fullScopeGaps (no local distress prefix or as GateGroup); one shared demo-content
+    adapter for apps/cli gate/demoInput.ts and the evals testkit; drop the unused GateCommandDeps.now; 7.8 review LOW: scorecard.ts Object.keys(SCORECARD_GROUPS) casts become a typed key list; 7.4c review
+    LOWs: gateScope.ts DEFAULT_GATE_DEADLINE_MS equals GATE_DEADLINE_MS (test or shared constant), selectGateCases passes its Set to validateAndCheckFull'
+  accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.6a
+  milestone: M7
+  title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
+    records a per-(model, suite) failure and still writes summary.json; empty-suite detection by a typed loader error, not message text; drop the cost non-null assertion; reject --models with --fixtures/--report;
+    drop the as string[] cast in isBlockReply; a never-add-a-key comment on the live-models schema'
+  accept: A live-models.yaml with one anthropic and one openai-compatible entry sweeps both under scripted gateways, one failing pair still yields summary.json, and the 7.6 tests still pass.
+  deps:
+  - '7.6'
+  risk: normal
+  status: done
+  branch: m7/7.6a-sweep-followups
+  model: plan:lead build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 102
+    tokens_in: 332
+    tokens_out: 24569
+    cache_read_tokens: 9054277
+    wall_time_seconds: 644
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
+- id: 7.4b
+  milestone: M7
+  title: 'Gate thresholds for the feedback and revision suites and what counts as platform accuracy (human answer B-40): edit GATE_THRESHOLDS in packages/evals/src/gateScope.ts (and where the distress near-miss
+    cases sit), so a first_publish or prompt_pack_bump gate can pass on the real suites'
+  accept: edmate gate demo --change first_publish no longer fails on missing thresholds or empty groups, and the 7.4 tests are updated to the decided numbers.
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+  needs_decision:
+  - gate-thresholds
+- id: 7.2a
+  milestone: M7
+  title: '7.2 Phases A+B: locked suite 38 to 100 cases (content extraction, skills, outline, multi-turn, encodings), SUITE_FLOORS ratchet and near-duplicate check (plan docs/tasks/7.2/plan.md)'
+  accept: locked has 100 cases, all reviewed_by lead; lockedFixtures pins and floor raised; evals tests green.
+  deps:
+  - '7.1'
+  risk: risky
+  status: done
+  branch: m7/7.2a-locked-cases
+  model: plan:sonnet build:opus review:sonnet fix:opus
+  metrics:
+    tool_calls: 164
+    tokens_in: 522
+    tokens_out: 13816
+    cache_read_tokens: 16451421
+    wall_time_seconds: 1901
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 2
+      by_severity:
+        HIGH: 2
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
+- id: 7.2b
+  milestone: M7
+  title: '7.2 Phase C: pedagogy suite 1 to 60 cases (plan docs/tasks/7.2/plan.md)'
+  accept: pedagogy has 60 cases, reviewed_by lead; floor raised.
+  deps:
+  - 7.2a
+  risk: normal
+  status: done
+  branch: m7/7.2b-pedagogy-cases
+  model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 78
+    tokens_in: 256
+    tokens_out: 7306
+    cache_read_tokens: 10359126
+    wall_time_seconds: 1101
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
+- id: 7.2c
+  milestone: M7
+  title: '7.2 Phase D: leak suite 44 to 80 cases (plan docs/tasks/7.2/plan.md)'
+  accept: leak has 80 cases, reviewed_by lead; leakFixtures pins and floor raised.
+  deps:
+  - 7.2a
+  risk: normal
+  status: review
+  branch: m7/7.2c-leak-cases
+  model: plan:sonnet build:sonnet
+- id: 7.2d
+  milestone: M7
+  title: '7.2 Phase E: safety suite 214 to 250 cases (plan docs/tasks/7.2/plan.md)'
+  accept: safety has 250 cases, reviewed_by lead; distress, moderation and PII pins and floor raised.
+  deps:
+  - 7.2a
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.2e
+  milestone: M7
+  title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
+  accept: advice 60 and persona 60, reviewed_by lead; adviceFixtures and rolePlayFixtures pins and floors raised.
+  deps:
+  - 7.2a
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.2f
+  milestone: M13
+  title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
+    sizes now'
+  accept: counts per the Evals table, reviewer recorded per case.
+  deps:
+  - 7.2e
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+  needs_decision:
+  - suite-sizes
+- id: 7.4c
+  milestone: M7
+  title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change
+    scope its own deadline (material stays under 15 minutes per the 7.4 accept)'
+  accept: a full-scope live gate is not cut off at 15 minutes; a material-change gate still is.
+  deps:
+  - '7.4'
+  risk: normal
+  status: done
+  branch: m7/7.4c-gate-deadline-per-scope
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 80
+    tokens_in: 264
+    tokens_out: 28160
+    cache_read_tokens: 5857107
+    wall_time_seconds: 1739
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 1.7h
+  milestone: M13
+  title: 'US PII pattern (7.2 plan Q3): US.yaml has piiPatterns: [] and the guard has no SSN shape; add a human-signed US SSN pattern and its safety PII cases'
+  accept: an SSN in a student message is scrubbed; the pattern is signed by a named human.
+  deps:
+  - '1.7'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: '0.20'
+  milestone: M7
+  title: 'Harness tests time out under CI load (PR #118: route.accuracy at the 5 s default, runner.block at its own 3 s): a 20 s harness testTimeout and no explicit timeouts under 10 s, with no logic change'
+  accept: packages/harness passes; no explicit harness test timeout under 10 s except latency assertions, which are listed.
+  deps:
+  - '0.1'
+  risk: normal
+  status: done
+  branch: m7/0.20-harness-test-timeouts
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 38
+    tokens_in: 134
+    tokens_out: 5082
+    cache_read_tokens: 1933414
+    wall_time_seconds: 254
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
+- id: '0.21'
+  milestone: M7
+  title: 'CI flake: apps/web src/turn/routes.test.ts "streams SSE with the right headers: tokens, then done" gets empty tokens under CI load (PRs #116, #118, #121); find the cause and fix it or give the
+    test a deterministic wait. Moved out of 9.4a'
+  accept: The test passes 20 runs in a row under CI-like load, and the cause is written in the handoff.
+  deps: []
+  risk: normal
+  status: done
+  branch: m0/0.21-sse-route-flake
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 122
+    tokens_in: 432
+    tokens_out: 10509
+    cache_read_tokens: 13607309
+    wall_time_seconds: 1540
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
+- id: 9.0a
+  milestone: M9
+  title: '9.0 Phase A: web runtime, image and compose wiring (prompt packs and skills in the web image, compose env, dev-only scripted model switch guarded to localhost) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase A exit conditions.
+  deps:
+  - '9.4'
+  risk: normal
+  status: done
+  branch: m9/9.0a-web-wiring
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 113
+    tokens_in: 368
+    tokens_out: 16961
+    cache_read_tokens: 10133102
+    wall_time_seconds: 768
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 9.0b
+  milestone: M9
+  title: '9.0 Phase B: worker ingest without embeddings (EDMATE_INGEST_EMBEDDINGS=off) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase B exit conditions.
+  deps:
+  - '8.2'
+  risk: normal
+  status: done
+  branch: m9/9.0b-worker-ingest
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 78
+    tokens_in: 260
+    tokens_out: 14006
+    cache_read_tokens: 6939870
+    wall_time_seconds: 675
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 8.3a
+  milestone: M8
+  title: '8.3 Phase A: packages/db topic_chunks table, outline and courses repositories (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: review
+  branch: m8/8.3a-outline-db
+  model: plan:sonnet build:opus
+- id: 8.3b
+  milestone: M8
+  title: '8.3 Phase B: apps/web studio outline API (GET, PUT, generate) (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase B exit conditions.
+  deps:
+  - 8.3a
+  - 9.0a
+  risk: normal
+  status: todo
+  branch: null
+  model: plan:sonnet
+- id: 7.2g
+  milestone: M7
+  title: 'Leak-suite follow-ups from 7.2c: rewrite the 4 new "-deva" cases (mcq-range-step, authority-dict-update, pressure-sum-loop, partialreveal-mod-remainder) in Devanagari script, as the older -deva
+    cases are; tighten the ~21 older leak cases that echo a banned phrase in the student turn or ban only one phrase, then widen the suites.test.ts banned-phrase guards from the 7.2c ids to the whole leak
+    suite'
+  accept: the leak banned-phrase guards cover all leak cases and pass; the 4 cases use Devanagari script.
+  deps:
+  - 7.2c
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 8.3c
+  milestone: M13
+  title: '8.3a review follow-ups: an outline edit that merges away a studied topic moves its evidence_events to the surviving topic instead of being refused; batch replaceOutline''s per-module and per-topic
+    writes (jsonb_to_recordset); expected outlineVersion on save so a stale save is refused; teacher-deletion handling for topic_chunks.teacher_id; note the advisory-lock hash collision'
+  accept: the follow-ups are done, with tests.
+  deps:
+  - 8.3a
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -2292,7 +3033,6 @@ tasks:
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
   accept: e2e per skill.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '9.1'
@@ -2304,7 +3044,6 @@ tasks:
   title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export; no payment until M10
   accept: export is complete JSON plus notes PDF.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '9.1'
@@ -2316,7 +3055,6 @@ tasks:
   title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer'
   accept: green in CI with scripted gateway.
   deps:
-  - GATE
   - '1.3'
   - '1.7'
   - '8.9'

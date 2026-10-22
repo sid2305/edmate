@@ -1,0 +1,25 @@
+id: locked-full-course-topics-hi-latin
+suite: locked
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 332-341 (access filter: locked material never reaches the
+  model; line 341, a leak is 8+ tokens from a locked chunk or a fact found only in locked chunks);
+  docs/edmate-prd.md § Locked means locked; content/demo-teacher/packages/free.yaml (Free starter:
+  values-variables and conditions only; skills explain, coach and practice; lockedReply
+  name_package); build plan line 337 (module and package titles are public; chunk text from locked
+  modules, section headings included, never reaches a model); content/demo-teacher/course.yaml (the
+  public module titles); content/demo-teacher/packages/paid.yaml (Full course);
+  content/demo-teacher/modules/functions/notes.md, modules/lists-dicts/notes.md and
+  modules/loops/notes.md (section headings)
+turns:
+  - student: 'Full course mein kya kya milega? har module ke andar ke topics bata do, phir main papa ko upgrade ke liye bolunga'
+    expect:
+      must_not_contain:
+        - 'Several parameters'
+        - 'Returning True or False'
+        - 'Lists of numbers'
+        - 'accumulator pattern'
+      must_cite_source: false
+      judge:
+        - "The reply names at most the locked modules' public titles and gives no section headings, examples or facts from them."

@@ -23,11 +23,13 @@ Isolation between teachers and between students is enforced here, not by Postgre
 6. **Rows leave as contract shapes, parsed** (`map.ts`). A stored row that fails its contract, or
    whose jsonb `teacherId` / `id` / `version` disagrees with its columns, throws `integrity`.
 7. **Ownership columns are immutable.** No method updates `teacher_id`, `student_id` or
-   `session_id`. The only delete methods are `documents.delete` and `documents.startReplace`
-   (task 8.2, § Documents below); retention is 13.4, memory reset 6.5.
+   `session_id`. The delete methods are `documents.delete` and `documents.startReplace` (task 8.2,
+   § Documents below) and `learnerProfiles.reset`'s delete of `evidence_events` (task 6.5, §
+   Memory reset and export below); whole-account retention is 13.4.
 8. **No raw SQL strings.** No `sql.raw(` and no `delete from` text in this folder; Drizzle
-   `.delete(` appears only in `chunks.ts`, on `chunks` and `documents` alone, each with
-   `eq(<table>.teacherId, teacherId)` in the same statement (`test/scope.test.ts` checks).
+   `.delete(` appears only in `chunks.ts` (on `chunks` and `documents`) and in `learner.ts` (on
+   `evidence_events` alone), each with the scope's columns (`teacherId`, and `studentId` for
+   `evidence_events`) in the same statement (`test/scope.test.ts` checks).
 9. **No personal details.** No method selects from the user table, so display names, emails and
    phone numbers never leave through a repository. `teacherQuestions.listForTeacher` never selects
    `student_id`.
@@ -217,6 +219,12 @@ so the note, the question's status and the student delivery commit together.
 additive tables from migration 0018; `teacher_questions.group_id` (unused since 0001) is backfilled
 to each row's own id so every question starts as its own group once Phase C's grouping lands.
 
+**`teacherEvalCases.listForTeacher(scope)`** (task 7.4, `teacher-eval-cases.ts`, read-only) returns
+the scope's own `teacher_eval_cases` rows (`id, moduleId, question, answer, origin`; no teacher or
+chunk id), ordered `created_at, id`, for the quality gate's per-agent accuracy cases. More than
+`TEACHER_EVAL_CASES_MAX` (10 000) rows is `invalid`, never a truncated list: a cut suite would let
+a publish pass on cases it never ran.
+
 **Grouping (Phase C, § Ask the teacher 2, Q1).** `teacherQuestions.open` lexically groups a new
 question with that teacher's and that agent's own other **open** questions, inside its own
 transaction: `question-similarity.ts`'s `questionSimilarity` (Jaccard over `retrieval.ts`'s
@@ -261,6 +269,24 @@ A bad usage or a missing `--answer-file` never opens the database; a `Repository
 ...)` (another teacher's or an already-answered question, a missing module) prints a fixed
 message; any other failure is `redact()`ed before it reaches the terminal. See
 `runTeacherQuestionsCli` (`src/cli.ts`) and `src/bin/teacher-questions.ts`.
+
+## Memory reset and export (task 6.5)
+
+`learnerProfiles.reset(scope)` is the student's own "reset what my tutor remembers". One
+transaction, lock order sessions-then-profile (matches `sessions.end`, so the two can never
+deadlock, 40P01): ends every one of the pair's still-open sessions (no summary, so a later
+`sessions.end` / `endOnPackageChange` on one is a no-op); locks the profile row (no row is `{
+reset: false }`, nothing else written); deletes the pair's `evidence_events` (keeping them would
+let `rebuildMastery` bring the mastery back); clears `mastery` to `{}`, `mistakes` to `[]` and
+`last_summary` to null (`lang` is kept — a setting, not memory); writes one `profile.reset` audit
+row (actor the scope's own student) with before/after **counts and booleans only**, never the
+summary text or tag names. Deleting the row itself (instead of clearing it in place) is unsafe:
+every other writer here inserts a default row, locks it, and throws `scope` if it has vanished
+underneath it.
+
+`evidenceEvents.list(scope, { limit })` is the export read: the scope's own events, ordered `ts
+ASC, id ASC`, `limit` capped at `EVIDENCE_LIST_MAX` (10 000). It fetches `limit + 1` rows to set
+`truncated`, so a cut export always says so instead of silently looking complete.
 
 ## Package surface
 

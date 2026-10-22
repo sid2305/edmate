@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { LIMITS } from '@edmate/contracts';
+import { countWords, LIMITS } from '@edmate/contracts';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
@@ -175,6 +175,74 @@ export function sessionsRepo(db: Db) {
                 eq(learnerProfiles.studentId, sc.studentId),
               ),
             );
+          return { ended: true };
+        }
+        const [own] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(ownSession(id, sc))
+          .limit(1);
+        if (!own) throw new RepositoryError('not_found', method);
+        return { ended: false };
+      });
+    },
+
+    /**
+     * Task 6.4: ends the scope's own **open** session normally (the opposite direction of
+     * `endOnPackageChange`, 3.16), storing `summary` (the output of
+     * `packages/harness/src/memory/sessionSummary.ts`'s `summarizeSession`, or `undefined` when
+     * the session had no messages or the generator failed) on `sessions.summary` and, only when
+     * this call is the one that ends it, upserting it onto `learner_profiles.last_summary` for
+     * the same (student, teacher) pair — same upsert shape `applyMastery`/`applyMistakes` use for
+     * a first-ever profile row, so a student's very first session still seeds a readable
+     * `lastSummary` for session two.
+     *
+     * `summary === undefined` is written as SQL `NULL` on `sessions.summary` and leaves
+     * `learner_profiles.last_summary` **unset** (the upsert's `SET` list never names
+     * `last_summary` when `summary` is undefined), so a failed-to-summarize session can never
+     * clobber a summary written by a prior session — same never-clobber discipline `applyMastery`
+     * already requires of `mastery`.
+     *
+     * Already-ended (another call, or a race with `endOnPackageChange`) is a no-op, `{ ended:
+     * false }`, nothing written: a retried call can never clobber a summary written since by a
+     * session that started after this one ended. A summary over
+     * `LIMITS.lastSummaryMaxWords` words is `invalid`, checked before any SQL — defense in depth,
+     * since `summarizeSession`'s own schema should already guarantee this. A missing session, or
+     * another student's or teacher's, is `not_found` and nothing is written.
+     */
+    async end(
+      scope: StudentScope,
+      sessionId: string,
+      summary: string | undefined,
+    ): Promise<{ ended: boolean }> {
+      const method = 'sessions.end';
+      const sc = studentScope(scope, method);
+      const id = parseArg(IdSchema, sessionId, method);
+      if (summary !== undefined && countWords(summary) > LIMITS.lastSummaryMaxWords) {
+        throw new RepositoryError('invalid', method);
+      }
+      return db.transaction(async (tx) => {
+        const closed = await tx
+          .update(sessions)
+          .set({ endedAt: sql`now()`, summary: summary ?? null })
+          .where(and(ownSession(id, sc), isNull(sessions.endedAt)));
+        if (written(closed) === 1) {
+          if (summary !== undefined) {
+            await tx
+              .insert(learnerProfiles)
+              .values({
+                studentId: sc.studentId,
+                teacherId: sc.teacherId,
+                lang: 'en',
+                mastery: {},
+                mistakes: [],
+                lastSummary: summary,
+              })
+              .onConflictDoUpdate({
+                target: [learnerProfiles.teacherId, learnerProfiles.studentId],
+                set: { lastSummary: summary, updatedAt: sql`now()` },
+              });
+          }
           return { ended: true };
         }
         const [own] = await tx

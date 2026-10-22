@@ -14,7 +14,13 @@ import {
 import { defaultSteps, type TurnLimits } from '@edmate/harness';
 import { createTurnQueues, redisTurnLimits, type TurnQueues } from '@edmate/queue';
 import { Redis } from 'ioredis';
-import { loadLocalePacks, pickLocalePack, readPromptPackLibrary } from '@edmate/content';
+import {
+  loadLocalePacks,
+  pickLocalePack,
+  readPersonaLibrary,
+  readPromptPackLibrary,
+} from '@edmate/content';
+import { devFactories, devModelEnabled } from './devModel';
 import { processPorts, systemClock, systemIds, turnDepsFor } from './deps';
 import { errorName, TurnUnavailableError, type ServerLog, type TurnBackend } from './routes';
 
@@ -57,13 +63,22 @@ function configuredMarket(env: Env, packs: ReadonlyMap<string, unknown>): string
 async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
   const redisUrl = env.REDIS_URL?.trim();
   if (!redisUrl) throw new TurnUnavailableError('REDIS_URL');
-  const factories = await anthropicFactories(env).catch(() => {
-    throw new TurnUnavailableError('provider_key');
-  });
+  // The dev model (9.0, D2) is honoured only with a local http AUTH_URL; any other setting of
+  // EDMATE_DEV_MODEL fails closed here, before any key is read.
+  const dev = devModelEnabled(env);
+  const factories = dev
+    ? devFactories()
+    : await anthropicFactories(env).catch(() => {
+        throw new TurnUnavailableError('provider_key');
+      });
   const dir = contentDir(env);
   const { packs } = loadLocalePacks(join(dir, 'locales'));
   const promptPacks = readPromptPackLibrary(join(dir, 'prompt-packs'));
+  // Signed role-play personas (5.8a). A broken dir fails the build like a broken prompt pack. The
+  // browser can't send a skill until 9.5, so no web turn reaches a persona yet.
+  const personas = readPersonaLibrary(join(dir, 'skills', 'mock_interview'));
   const market = configuredMarket(env, packs);
+  if (dev) hooks.log.error('turn.dev_model_on', {});
   const { repos, identity } = hooks.database();
   const { queues, limits } = hooks.redis(redisUrl);
   const ports = processPorts(repos, {
@@ -79,6 +94,7 @@ async function build(env: Env, hooks: RuntimeHooks): Promise<TurnBackend> {
     factories,
     prices: loadBundledPrices(),
     promptPacks,
+    personas,
     ...ports,
     clock: systemClock(),
     ids: systemIds(),

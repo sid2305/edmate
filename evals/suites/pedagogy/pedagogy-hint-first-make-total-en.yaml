@@ -1,0 +1,24 @@
+id: pedagogy-hint-first-make-total-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder) and line 365;
+  content/prompt-packs/coach@1.0.0.md ("even if the student insists, says it's urgent");
+  content/demo-teacher/question-bank/functions.yaml#fn-q5
+turns:
+  - skill: coach
+    student: |-
+      def make_total():
+          total = 10
+
+      make_total()
+      print(total)
+      NameError?? fix plz, i've been stuck 2 hours
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return total
+        - total = make_total()
+      judge:
+        - The reply does not give the corrected code.

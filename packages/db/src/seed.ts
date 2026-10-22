@@ -13,6 +13,8 @@ import { inArray } from 'drizzle-orm';
 import {
   checkPilotLanguages,
   loadDemoTeacherContent,
+  newestSignedSet,
+  readPromptPackLibrary,
   type DemoTeacherContent,
 } from '@edmate/content';
 import {
@@ -28,6 +30,11 @@ import type { Db } from './internal.js';
 /** The content the CLI seeds unless EDMATE_SEED_CONTENT_DIR says otherwise. */
 export const DEMO_CONTENT_DIR = fileURLToPath(
   new URL('../../../content/demo-teacher/', import.meta.url),
+);
+
+/** The prompt-pack sets the seed picks from (shared by every teacher, so no env override). */
+export const DEMO_PROMPT_PACKS_DIR = fileURLToPath(
+  new URL('../../../content/prompt-packs/', import.meta.url),
 );
 
 /** Fixed ids the seed owns. Module and course ids come from course.yaml. */
@@ -73,6 +80,14 @@ export interface SeedResult {
 export interface SeedOptions {
   /** Content tree to seed from; defaults to DEMO_CONTENT_DIR. */
   contentDir?: string;
+  /** Prompt-pack dir whose newest signed set the agent pins; defaults to DEMO_PROMPT_PACKS_DIR. */
+  promptPacksDir?: string;
+}
+
+/** What `buildDemoSeed` needs besides the content; the caller computes it, so the build is pure. */
+export interface DemoSeedOptions {
+  /** The prompt-pack set the demo agent pins (`AgentConfig.promptPackVersion`). */
+  promptPackVersion: string;
 }
 
 /** A fixed instant, so re-runs build identical rows. */
@@ -91,8 +106,19 @@ const MODEL_POLICY: ModelPolicy = {
     main: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   },
 };
-// PROVISIONAL: the prompt-pack set; 3.11 published 1.0.0, 5.6 moves the seed to 1.1.0 (ADR-0010).
-const PROMPT_PACK_VERSION = '1.1.0';
+// The prompt-pack set is not pinned here: seedDemoTeacher picks the newest signed set in
+// DEMO_PROMPT_PACKS_DIR at seed time (task 5.8a), so a newly signed set reaches the next fresh
+// seed with no code change. An already-seeded database keeps its row and reports drift.
+
+/**
+ * The newest signed prompt-pack set's version in `dir` (manifest and every pinned pack signed,
+ * semver precedence). Throws when the dir fails to load or holds no signed set.
+ */
+export function pickDemoPromptPackVersion(dir: string = DEMO_PROMPT_PACKS_DIR): string {
+  const set = newestSignedSet(readPromptPackLibrary(dir));
+  if (set === undefined) throw new Error(`${dir}: no signed prompt-pack set to seed`);
+  return set.version;
+}
 
 type SubscriptionKind = { package: 'free' | 'paid'; status: 'active' | 'paused' | 'ended' };
 
@@ -110,7 +136,7 @@ function subscriptionKind(n: number): SubscriptionKind {
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Every row the seed writes, built from a loaded content tree. Pure and deterministic. */
-export function buildDemoSeed(content: DemoTeacherContent): DemoSeed {
+export function buildDemoSeed(content: DemoTeacherContent, options: DemoSeedOptions): DemoSeed {
   const teacherId = DEMO_IDS.teacher;
   const { course } = content;
   const moduleIds = new Set(course.modules.map((m) => m.id));
@@ -127,7 +153,7 @@ export function buildDemoSeed(content: DemoTeacherContent): DemoSeed {
     teacherId,
     courseId: course.id,
     styleCardId: styleCard.id,
-    promptPackVersion: PROMPT_PACK_VERSION,
+    promptPackVersion: options.promptPackVersion,
     languages: ['en'],
     modelPolicy: MODEL_POLICY,
   });
@@ -286,11 +312,14 @@ async function findDrift(tx: Db, seed: DemoSeed): Promise<string[]> {
 
 /**
  * Seeds the demo teacher. Idempotent: rows that already exist (by id) are skipped, never
- * updated. Throws, writing nothing, when the content fails to load or a row conflicts on
- * anything other than its id (for example an email another user already has).
+ * updated. Throws, writing nothing, when the content or the prompt packs fail to load, no
+ * prompt-pack set is signed, or a row conflicts on anything other than its id (for example an
+ * email another user already has).
  */
 export async function seedDemoTeacher(db: Db, options: SeedOptions = {}): Promise<SeedResult> {
-  const seed = buildDemoSeed(loadDemoTeacherContent(options.contentDir ?? DEMO_CONTENT_DIR));
+  const content = loadDemoTeacherContent(options.contentDir ?? DEMO_CONTENT_DIR);
+  const promptPackVersion = pickDemoPromptPackVersion(options.promptPacksDir);
+  const seed = buildDemoSeed(content, { promptPackVersion });
   return db.transaction(async (tx) => {
     const inserted = {} as Record<SeedTable, number>;
     for (const table of SEED_TABLES) {

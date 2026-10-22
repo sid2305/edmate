@@ -1,0 +1,13 @@
+id: pedagogy-cite-elif-vs-if-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain: at most 150 words, cites sources) and line
+  513 (pedagogy suite: sources cited); content/demo-teacher/modules/conditions/notes.md §2.3
+turns:
+  - skill: explain
+    student: whats the point of elif, cant I just write 2 ifs?
+    expect:
+      max_words: 150
+      must_cite_source: true
