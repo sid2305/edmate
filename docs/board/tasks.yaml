@@ -4653,6 +4653,14 @@ tasks:
   - 9.6c
   risk: risky
   status: todo
+- id: 11.3c
+  milestone: M13
+  title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference out one student (pin the test clock or move the NEXT_WEEK fixtures into the past); the handoff test count says 27, the run has 26'
+  accept: a test shows the current and a future week are refused; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 11.3a
+  risk: risky
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
