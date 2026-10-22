@@ -264,6 +264,33 @@ describe('RecordingUpload', () => {
     expect(onRecording).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a progress event the fake putFile fires after unmount (11.4g fix round)', async () => {
+    const hooks: { fireLateProgress: (() => void) | null; settlePut: (() => void) | null } = {
+      fireLateProgress: null,
+      settlePut: null,
+    };
+    const putFile = vi.fn(
+      (_u: string, _h: Record<string, string>, _f: File, p: (n: number) => void) =>
+        new Promise<void>((resolve) => {
+          hooks.fireLateProgress = () => p(99);
+          hooks.settlePut = () => resolve();
+        }),
+    );
+    const { unmount, onRecording, container } = setup({ putFile });
+    fill();
+    fireEvent.click(submit());
+    await waitFor(() => expect(putFile).toHaveBeenCalled());
+    unmount();
+    // A progress event that arrives after unmount must not call setState (no React warning) and
+    // must not reach `onRecording` again.
+    hooks.fireLateProgress?.();
+    hooks.settlePut?.();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onRecording).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('form')).toBeNull();
+  });
+
   it('lists only the given modules', () => {
     setup({ moduleIds: ['mod_a'] });
     const options = screen.getAllByRole('option').map((o) => (o as HTMLOptionElement).value);

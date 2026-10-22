@@ -156,7 +156,12 @@ export function RecordingUpload({
       currentRow = row;
       onRecording(row);
       stage = 'put';
-      await putFile(ticket.data.uploadUrl, ticket.data.uploadHeaders, file, setProgress);
+      // 11.4g fix round (typescript-reviewer, HIGH): a progress event can fire after unmount
+      // (the teacher collapses the form mid-PUT); gate the callback itself, not only the
+      // awaits below, so a late event never calls `setProgress` on an unmounted component.
+      await putFile(ticket.data.uploadUrl, ticket.data.uploadHeaders, file, (p) => {
+        if (alive.current) setProgress(p);
+      });
       if (!alive.current) return;
       stage = 'complete';
       const done = await completeDocument(ticket.data.documentId);
@@ -172,7 +177,10 @@ export function RecordingUpload({
     } catch {
       if (!alive.current) return;
       setFailure({ key: stage === 'put' ? 'upload_failed' : 'generic' });
-      if (currentRow && stage !== 'create') onRecording({ ...currentRow, status: 'failed' });
+      // `currentRow` is only ever set right before `stage` leaves 'create' (see above), so
+      // `currentRow !== null` already implies `stage !== 'create'`; the second check is kept
+      // only as a visible safeguard if a future stage is inserted between the two assignments.
+      if (currentRow !== null) onRecording({ ...currentRow, status: 'failed' });
     } finally {
       if (alive.current) {
         setBusy(false);

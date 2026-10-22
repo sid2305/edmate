@@ -76,8 +76,54 @@ None for this task's scope.
   self-rescheduling `setTimeout`, and matches "about 10 minutes" from the brief directly.
 - risk: low
 
+## Fix round (22 Oct 2026)
+
+Fixed all three reviewer findings on the same branch.
+
+1. HIGH — `RecordingUpload.tsx:159` (`putFile`'s progress callback was never gated by `alive`).
+   The callback passed to `putFile` is now `(p) => { if (alive.current) setProgress(p); }`, so a
+   progress event firing after unmount never calls `setProgress`. `putFile` itself still has no
+   abort signal (`uploadClient.ts` is outside this task's scope), so the network PUT keeps
+   running after unmount; only the state update is gated, as the brief allows ("if that needs an
+   API change outside this file, leave it and say so"). Test:
+   `RecordingUpload.test.tsx` → "ignores a progress event the fake putFile fires after unmount
+   (11.4g fix round)" (a fake `putFile` that exposes a hook to fire `p(99)` after `unmount()`;
+   asserts `onRecording` is still called exactly once and the form is gone).
+2. MEDIUM x2 — the poll-cap clock was one shared clock (`pending`/"any row active" boolean), not
+   per row. Both views now track each row's own start time:
+   - `LiveClassesView.tsx`: a `pollStart` ref (`Map<documentId, number>`) plus `timedOutIds`
+     state (a `Set<string>`), kept in sync by a `sync()` helper run on every tick. A row is added
+     to the map the first tick it is pending, removed once no longer pending, and marked timed
+     out once its own `RECORDING_POLL_MAX_MS` has elapsed. The shared `setInterval` is never
+     cleared while `pending` is true; a tick skips the `listDocuments` fetch only when every
+     currently-pending row has timed out, so a fresh row added later still gets fetched (and its
+     own timeout message) even while an older row stays capped out. The per-row "Still
+     processing" notice now reads `timedOutIds.has(r.documentId)` instead of one shared boolean.
+   - `UploadsView.tsx`: the same pattern with a `pollStart` ref keyed by document id and
+     `timedOutIds` state; the poll effect (deps `[docs, refresh]`) only skips scheduling the next
+     `setTimeout` when every currently-active id has timed out. The single `pollTimeout` banner
+     is now `timedOutIds.size > 0` (any row stuck), since this view has no per-row timeout text.
+   Tests (fake timers): `LiveClassesView.test.tsx` → "a row past the poll cap does not stop a
+   newer row from polling to completion (11.4g fix round)" (doc_1 capped out, then a second
+   recording uploaded via the form and polled to `ready`). `UploadsView.test.tsx` → "a row past
+   the poll cap does not stop a newer row from polling to completion (11.4g fix round)" (doc_old
+   capped out, then doc_new uploaded and polled to `ready`).
+3. LOW — `RecordingUpload.tsx:175` — added a one-line comment next to the failed-row guard
+   (`currentRow !== null`) explaining that `currentRow` is only ever set right after `stage`
+   leaves `'create'`, so the two checks already imply each other; kept as a visible safeguard
+   for a future stage.
+
+### Fix round decisions
+
+None beyond what the two original decisions above already cover.
+
+### Fix round gate
+`corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks passed (typecheck,
+lint, and `vitest run --coverage` all green, including the three new/updated test files).
+`python3 .githooks/secret-scan.py --all` — clean (no output).
+
 ## Gate
 `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks passed.
 `python3 .githooks/secret-scan.py --all` — clean (no output).
 
-Tool calls used: 48
+Tool calls used: 48 + 34 (fix round)
