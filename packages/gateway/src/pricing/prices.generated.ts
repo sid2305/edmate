@@ -26,4 +26,10 @@ claude-haiku-4-5:
 claude-sonnet-4-5:
   inputUsdPerMillion: 3
   outputUsdPerMillion: 15
+
+# Task 8.6a (lead answer Q1, provider price page checked 22 Oct 2026). Cache prices are not metered
+# yet, so they are only noted here: cache read $0.20, 5-minute cache write $2.50 per million.
+claude-sonnet-5:
+  inputUsdPerMillion: 2
+  outputUsdPerMillion: 10
 `;

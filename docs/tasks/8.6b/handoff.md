@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.6b-packages-repo` (built on local branch `work-86b`)
 - Worktree: `.claude/worktrees/agent-a574f8ca5b6318e24`
-- Tool calls used: 52
+- Tool calls used: 68
 
 ## What changed
 
@@ -53,9 +53,9 @@ Phase C maps `scope`/`not_found` to 404 and `invalid` to 400 (or 409 for the cap
 
 ## Evidence
 
-- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55486/edmate corepack pnpm vitest run test/packages.int.test.ts` → `Tests  14 passed (14)`
-- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` (with the edmate86b Postgres) → see GATE below
-- `python3 .githooks/secret-scan.py --all` → see SCAN below
+- `TEST_DATABASE_URL=postgres://edmate:edmate-dev@127.0.0.1:55486/edmate corepack pnpm vitest run test/repositories.int.test.ts test/packages.int.test.ts` → `Test Files  2 passed (2)`, `Tests  124 passed (124)` (packages.int: 17 tests incl. integrity cases)
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` (Postgres from compose project `edmate86b`, port 55486), after merging origin/main (8.5a, 8.3b, 8.6a) → `Tasks: 26 successful, 26 total`; `@edmate/db:test Test Files 59 passed (59), Tests 1017 passed | 4 skipped`; `src/repositories/**` coverage 100% (agents.ts, packages.ts 100/100/100/100)
+- `python3 .githooks/secret-scan.py --all` → exit 0, no findings
 
 ## Deviations
 
@@ -69,6 +69,10 @@ Phase C maps `scope`/`not_found` to 404 and `invalid` to 400 (or 409 for the cap
   21st package would be stored but never listed.
 - `ensureDraft` checks the course and style card on every call, even when the agent exists (the
   plan checked them only before creating), so a foreign id always fails closed.
+- Merge with main (8.5a): kept both export lines in `index.ts`. 8.5a's `packageVersions.listForAgent`
+  isolation case derived the owner from the seeded `pkg_<t>` id; it now also accepts the `[A]` name
+  marker for the UUID-id studio packages this task's `beforeAll` creates (one-line change in its
+  `owners`, same leak check).
 - Handoff is at `docs/tasks/8.6b/handoff.md` (the brief said `docs/tasks/8.5a/handoff.md`, which
   is task 8.5a's file).
 

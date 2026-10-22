@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { agents, modules, packages, packageVersions } from '../schema/index.js';
@@ -11,6 +11,15 @@ import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js'
 
 const Ref = z.strictObject({ packageId: IdSchema, version: z.int().min(0) });
 const PublicAgentPackages = z.strictObject({ agentId: IdSchema });
+
+/** Most packages `packageVersions.listForAgent` returns (a teacher has a handful per agent). */
+export const AGENT_PACKAGES_MAX = 100;
+
+/** One of the teacher's own previewable packages (task 8.5): id and name only. */
+export interface TeacherPackageSummary {
+  packageId: string;
+  name: string;
+}
 
 /**
  * What a student sees of one live package when comparing (task 9.3): the public fields only.
@@ -115,6 +124,40 @@ export function packageVersionsRepo(db: Db) {
         .orderBy(desc(packageVersions.version))
         .limit(1);
       return row ? toPackageConfig(row, method) : null;
+    },
+
+    /**
+     * Task 8.5 (teacher test chat): the scope's teacher's packages for one of its agents that have
+     * at least one version (so `latest` can preview them), any agent or package status, newest
+     * created first (then id), at most `AGENT_PACKAGES_MAX`. Another teacher's or a missing agent
+     * is `[]`. Teacher-side twin of `liveForAgent`, which stays public and live-only.
+     */
+    async listForAgent(scope: TeacherScope, agentId: string): Promise<TeacherPackageSummary[]> {
+      const method = 'packageVersions.listForAgent';
+      const { teacherId } = teacherScope(scope, method);
+      const id = parseArg(IdSchema, agentId, method);
+      return db
+        .select({ packageId: packages.id, name: packages.name })
+        .from(packages)
+        .where(
+          and(
+            eq(packages.teacherId, teacherId),
+            eq(packages.agentId, id),
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(packageVersions)
+                .where(
+                  and(
+                    eq(packageVersions.packageId, packages.id),
+                    eq(packageVersions.teacherId, teacherId),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .orderBy(desc(packages.createdAt), asc(packages.id))
+        .limit(AGENT_PACKAGES_MAX);
     },
 
     /**
