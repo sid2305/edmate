@@ -348,6 +348,17 @@ const gateRunOf = (teacherId: string) =>
 export function publishRepo(db: Db) {
   type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
+  /**
+   * The per-teacher publish lock. Lock order for every publish write that takes more than one
+   * row lock (startRun, goLive): this lock, the profile FOR SHARE, the agent FOR UPDATE, then
+   * the run FOR UPDATE. markRunning, recordResults and finishRun lock the run row only.
+   */
+  async function publishLock(tx: Tx, teacherId: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(${PUBLISH_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
+    );
+  }
+
   /** The profile row locked FOR SHARE: verification can't change before the transaction ends. */
   async function lockVerified(tx: Tx, teacherId: string, method: string): Promise<void> {
     const [p] = await tx
@@ -405,9 +416,7 @@ export function publishRepo(db: Db) {
       const p = parseArg(PinsSchema, pins, method);
       const runId = await translateWrite(method, () =>
         db.transaction(async (tx) => {
-          await tx.execute(
-            sql`select pg_advisory_xact_lock(${PUBLISH_LOCK_NAMESPACE}::int4, hashtext(${teacherId}))`,
-          );
+          await publishLock(tx, teacherId);
           await lockVerified(tx, teacherId, method);
           const [agent] = await tx
             .select({ status: agents.status })
@@ -665,11 +674,17 @@ export function publishRepo(db: Db) {
       const g = parseArg(GoLiveInput, input, method);
       return translateWrite(method, () =>
         db.transaction(async (tx) => {
+          // startRun's lock order (advisory, profile, agent, run): goLive locking the run before
+          // the agent deadlocked with a re-clicked Publish (40P01) and could lose a passed gate.
+          await publishLock(tx, teacherId);
           await lockVerified(tx, teacherId, method);
-          const run = await lockRun(tx, teacherId, g.runId, method);
-          if (run.status !== 'running') throw new RepositoryError('invalid', method);
-          const basis = stored(BasisSchema, run.basis, method);
-          const agentId = run.agentId as string;
+          // The run's agent, read unlocked: a run's agent_id is never updated.
+          const [ref] = await tx
+            .select({ agentId: evalRuns.agentId })
+            .from(evalRuns)
+            .where(and(eq(evalRuns.id, g.runId), gateRunOf(teacherId)));
+          if (!ref) throw new RepositoryError('not_found', method);
+          const agentId = stored(IdSchema, ref.agentId, method);
           const [agent] = await tx
             .select({ status: agents.status, liveVersion: agents.liveVersion })
             .from(agents)
@@ -677,6 +692,11 @@ export function publishRepo(db: Db) {
             .for('update');
           /* v8 ignore next -- eval_runs.agent_id references agents; agents are never deleted */
           if (!agent) throw new RepositoryError('integrity', method);
+          const run = await lockRun(tx, teacherId, g.runId, method);
+          /* v8 ignore next -- agent_id is never updated, and the run was read just above */
+          if (run.agentId !== agentId) throw new RepositoryError('integrity', method);
+          if (run.status !== 'running') throw new RepositoryError('invalid', method);
+          const basis = stored(BasisSchema, run.basis, method);
           if (agent.status === 'suspended') {
             throw new PublishRefusedError('invalid', method, 'suspended');
           }

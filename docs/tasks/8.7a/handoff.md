@@ -151,7 +151,44 @@ python3 .githooks/secret-scan.py --all   → clean
 - Why: nothing listened on the shared port and other sessions' containers must not be touched.
 - risk: low
 
+### 22 Oct 2026 · 8.7a one lock order for publish writes · decided by builder · risk: low
+- Decided: startRun and goLive both lock in this order: the per-teacher advisory lock (8701), the teacher profile FOR SHARE, the agent FOR UPDATE, then the run FOR UPDATE. goLive reads the run's agent id without a lock first (agent_id is never updated), then rechecks it under the run lock. markRunning, recordResults and finishRun lock the run row only.
+- Why: goLive locked the run before the agent, the reverse of startRun. A Publish re-click during goLive deadlocked (40P01), and the passed gate could be lost (database-reviewer, CRITICAL).
+- risk: low
+
 ## Left to do
 
 - Phase B (worker gate agent, already merged as 8.7b) and Phases C and D wire these methods into
   the worker and the studio; Phase C should confirm the local mirrors match `@edmate/evals`.
+
+## Fix round
+
+Fixes the database-reviewer CRITICAL (lock-order deadlock between startRun and goLive) and the
+typescript-reviewer MEDIUM (`run.agentId as string`).
+
+- `packages/db/src/repositories/publish.ts`: a new `publishLock` helper holds the advisory lock
+  that startRun used inline. goLive now takes it first, then the profile FOR SHARE, then reads the
+  run's agent id without a lock, then the agent FOR UPDATE, then `lockRun`. This is the same
+  order startRun uses. The agent id is checked at runtime with `stored(IdSchema, …)` (`integrity`
+  if it is wrong) instead of a cast. markRunning, recordResults and finishRun lock only the run
+  row, so they have no inverted pair.
+- `packages/db/test/publish.int.test.ts`: new test "takes the same lock order as startRun". It
+  runs 3 iterations. A raw connection holds the agent row; startRun is started and waits on it,
+  then goLive is started and waits too (both are seen in `pg_stat_activity`); then the row is
+  released. Before the fix this was a deterministic `40P01`. After the fix goLive goes live
+  (agent v2) and startRun is refused cleanly with `gate_running`.
+
+Evidence:
+
+```
+vitest run test/publish.int.test.ts -t "lock order" (before fix) → RepositoryError … 40P01
+vitest run test/publish.int.test.ts --coverage                   → Tests 30 passed (30); publish.ts 100 | 98.7 | 100 | 100
+TEST_DATABASE_URL=… turbo run typecheck lint test --filter=@edmate/db... --force → Tasks: 26 successful, 26 total
+python3 .githooks/secret-scan.py --all                           → clean
+```
+
+Found, not fixed (outside this round's scope): the existing goLive test "publishes the agent
+version … with audit rows" fails about 1 run in 40. The audit scrub replaces a run id's first
+UUID segment with `[redacted]` when its 8 hex characters are all digits, so the audit row's
+`after.runId` is changed in production too. This is not caused by this fix. It needs a board task
+for `audit.ts`'s scrubber.

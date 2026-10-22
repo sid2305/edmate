@@ -670,6 +670,58 @@ describe.skipIf(!up)(`publish repository on Postgres${up ? '' : ` (${SKIP_REASON
   });
 
   describe('goLive', () => {
+    /** Waits until `want` sessions of this database wait on a lock. */
+    async function lockWaiters(want: number): Promise<void> {
+      for (let i = 0; i < 500; i++) {
+        // pg_stat_activity is a per-transaction snapshot; `raw` is inside one.
+        await raw.query('select pg_stat_clear_snapshot()');
+        const got = await count(
+          `select count(*)::int as n from pg_stat_activity
+           where datname = current_database() and wait_event_type = 'Lock'`,
+        );
+        if (got >= want) return;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error(`fewer than ${want} lock waiters`);
+    }
+
+    it('takes the same lock order as startRun: a re-click during goLive never deadlocks', async () => {
+      // The worst interleaving, forced: startRun waits on the agent row, then goLive starts. With
+      // goLive locking the run before the agent, startRun (holding the agent) would wait on the
+      // run and goLive on the agent: 40P01. One lock order (advisory, profile, agent, run) can't.
+      for (let i = 0; i < 3; i++) {
+        const t = await makeTeacher();
+        const first = await repos.publish.startRun(scope(t), pins(t));
+        expect(await repos.publish.markRunning(scope(t), first.id)).toBe(true);
+        await raw.query('begin');
+        await raw.query('select 1 from agents where id = $1 for update', [t.agentId]);
+        const again = repos.publish.startRun(scope(t), pins(t)).then(
+          (r) => r,
+          (e: unknown) => e,
+        );
+        await lockWaiters(1);
+        const live = repos.publish
+          .goLive(scope(t), {
+            runId: first.id,
+            passRate: 1,
+            summary: summary(),
+            scorecard: scorecard(['accuracy']),
+          })
+          .then(
+            (r) => r,
+            (e: unknown) => e,
+          );
+        await lockWaiters(2);
+        await raw.query('commit');
+        const [startResult, liveResult] = await Promise.all([again, live]);
+        expect(liveResult).toEqual({ agentVersion: 2, packageVersions: { [t.pkgId]: 1 } });
+        // startRun went first: the open run refuses it cleanly.
+        expect(startResult).toBeInstanceOf(PublishRefusedError);
+        expect((startResult as PublishRefusedError).reason).toBe('gate_running');
+        expect(await agentRow(t)).toEqual({ status: 'live', live_version: 2 });
+      }
+    });
+
     it('publishes the agent version and every package version in one transaction, with audit rows', async () => {
       const t = await makeTeacher();
       await raw.query(
