@@ -3614,6 +3614,30 @@ tasks:
   status: running
   branch: m8/8.5e-test-chat-ui
   model: plan:opus build:opus
+- id: 9.5a
+  milestone: M9
+  title: 'Practice screen (9.5 Phase A, apps/web): skill input kinds, ChatView activeSkill, PracticeCard'
+  accept: per docs/tasks/9.5/plan.md Phase A; web typecheck, lint, test and the practice e2e case green.
+  deps:
+  - '9.4'
+  risk: low
+  status: todo
+- id: 9.5b
+  milestone: M9
+  title: 'Feedback submission and mock-interview screens (9.5 Phase B, apps/web)'
+  accept: per docs/tasks/9.5/plan.md Phase B; web typecheck, lint, test and both e2e cases green.
+  deps:
+  - 9.5a
+  risk: low
+  status: todo
+- id: 13.skillpresent
+  milestone: M13
+  title: 'Harness: wire feedback (5.7) and mock-interview (5.8) present() hooks so they emit structured skill events (interview progress), then show them in 9.5 screens'
+  accept: registry appends the feedback and role-play tools; skill events carry progress; code-reviewer on the pedagogy path; harness and web tests green.
+  deps:
+  - 9.5b
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
