@@ -86,17 +86,17 @@ once combined — the gate re-run above confirms `apps/cli` also passed with no 
 
 `python3 .githooks/secret-scan.py --all` → clean, no output.
 
-### 22 Oct 2026 · 7.4b tool budget overrun accepted · decided by lead · risk: low
-- Decided: accept 59 tool calls against the lead plan's budget of 40.
-- Why: the lead's budget missed that apps/cli gate.ts carries its own copy of the grouping, which also had to change with its tests; both reviews approved.
-- risk: low
-
 ## Left to do
 None for this task's scope. The two uncovered branch lines in `gateScope.ts` (145, 201) are
 pre-existing (sort tie-break / existing ternary), not touched by this change; branch coverage
 rose from 87.23% to 89.09%.
 
 ## Decisions
+
+### 22 Oct 2026 · 7.4b tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 59 tool calls against the lead plan's budget of 40.
+- Why: the lead's budget missed that apps/cli gate.ts carries its own copy of the grouping, which also had to change with its tests; both reviews approved.
+- risk: low
 
 ### 22 Oct 2026 · 7.4b feedback and revision thresholds (B-40 option a) · decided by builder · risk: low
 - Decided: `feedback: 70` (matches 5.7's ≥70% rubric-agreement bar) and `revision: 80` (same bar
