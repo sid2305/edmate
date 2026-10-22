@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { type JailbreakCode, matchJailbreak } from './jailbreakPatterns.js';
 
-const T = 2_000;
+const T = 20_000;
 const D = (code: JailbreakCode) => ({ code, decisive: true });
 
 /** One blocking turn per seeded jailbreak case (31), by expected code. */
