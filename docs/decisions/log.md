@@ -10,6 +10,48 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6b answered-question pairing in the notes PDF · decided by builder · risk: low
+- Decided: `notesDocument()` pairs each `answered` `TeacherQuestion` with the next unused
+  `role: 'teacher'` chat message whose `createdAt` is on or after the question's `answeredAt`
+  (falling back to `createdAt`), in chronological order of both lists.
+- Why: `TeacherQuestion` (packages/contracts) has no `answer` field -- the teacher's answer text is
+  only ever written as a chat message into whichever session happens to be open at answer-time.
+  This heuristic is the closest available approximation given the current schema; it can mis-pair
+  in pathological message timing but never leaks another student's or another question's data,
+  since it only ever reads from this one student's own messages.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b en.json namespace · decided by builder · risk: low
+- Decided: only a `progress` namespace was added to `apps/web/messages/en.json`, not a separate
+  `export` namespace.
+- Why: every string this phase needed (including the two export link labels) fit naturally under
+  `progress`; adding an empty or redundant `export` namespace would have been dead weight. No other
+  builder's lines were touched; `git merge origin/main` was clean (fast-forward, no conflicts).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b clearance-scan exception · decided by builder · risk: low
+- Decided: added `/learn/[agentId]/progress/page.tsx` to `clearance-scan.test.ts`'s one deliberate
+  default-clearance exception list, alongside the existing memory page.
+- Why: the progress page intentionally asks for the default clearance (`age`, not `agent`) for the
+  same reason the memory page does -- it is the student's own view and exports, not the chat itself,
+  and should stay reachable while a parent's consent is outstanding. Without this the pre-existing
+  scan test (not part of Phase B's own file list, but a shared guard over all of `app/learn/**`)
+  would fail on a correct, intended page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b the handoff was recovered from the builder's transcript · decided by lead · risk: low
+- Decided: the builder wrote this handoff but never committed it, and the lead removed its worktree before checking. The lead rebuilt the file word for word from the builder's own Write and Edit calls in its transcript and committed it; only the tool-call line changed, to the harness count.
+- Why: the builder could not be resumed once its worktree was gone, and its decisions must reach the log as written. From now on the lead checks `git status` in a builder's worktree before removing it, and briefs ask builders to confirm a clean tree before returning.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.7h UUID-shaped values are exempt from the phone digit-run rule · decided by builder · risk: high
 - Decided: in `redactPersonalData`'s string scrubber, a UUID-shaped span (whole value or embedded
   in free text, case-insensitive) is never treated as a phone-number candidate, even when one of

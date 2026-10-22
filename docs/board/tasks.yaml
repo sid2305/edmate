@@ -4202,9 +4202,31 @@ tasks:
   deps:
   - 9.6a
   risk: medium
-  status: running
+  status: done
   branch: m9/9.6b-progress-export
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 76
+    tokens_in: 262
+    tokens_out: 1115
+    cache_read_tokens: 5804537
+    wall_time_seconds: 218
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 9.6c
   milestone: M9
   title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
