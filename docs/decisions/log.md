@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.3b ran over budget · decided by lead · risk: low
+- Decided: accept the overrun (231 harness tool calls against a 70-call build budget plus a 40-call fix round) and merge.
+- Why: the work is complete and both reviewer HIGHs are fixed and re-verified; the Sonnet builder and fixer both under-reported their counts (105 and 45), which the 0.22 review on 24 Oct 2026 takes up.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3b stale-version detection by version-number comparison · decided by builder · risk: high
+- Decided: "stale version" (item 3) means the package-version row's own `version` number is strictly **lower** than the package's current `liveVersion` — not merely "not equal to the live version." A higher version number is a draft never yet promoted, and stays `not_found`.
+- Why: an existing fixture (`PV1_V2`, version 2 when `liveVersion` is 1) already asserted `not_found` for a draft; a naive not-equal check would have wrongly flagged it `invalid` and broken that test. Edmate's publish flow only ever increments `liveVersion` (never decrements), so "lower" is the only safe signal that a version was once live and has since been superseded.
+- risk: high — touches `packages/db/src/repositories/subscriptions.ts` (risky path). Needs security-reviewer (multi-tenant scope: the join still requires `teacherId` match and `verified`/`live` status, same as the existing `liveTarget` helper) and database-reviewer (index usage, join shape) sign-off before merge.
+
+---
+
+### 22 Oct 2026 · 9.3b unique-violation cause now travels on every RepositoryError, not only `guarded`'s failed · decided by builder · risk: high
+- Decided: `translateWrite` (`packages/db/src/repositories/errors.ts`) attaches a `ScrubbedDbError` cause (SQLSTATE + constraint name only, never the raw driver message) to the thrown `RepositoryError` for every unique-violation, including the existing `onDuplicate`-mapped `invalid`/`not_found` cases, not only to `guarded`'s `failed` path.
+- Why: item 2 needs `apps/web/src/subscriptions/start.ts` to tell the live-per-pair constraint apart from any other unique violation without ever inspecting message text (scrub-compliant). The constraint name was already scrub-safe (it's a fixed schema identifier, never user data); only its *reach* changed.
+- risk: high — touches `packages/db/src/repositories/errors.ts` (risky path, used by every repository write). Needs security-reviewer (confirms the cause carries no user data across the whole write path) and database-reviewer (confirms no repository relies on the old narrower cause-attachment behavior) sign-off before merge.
+
+---
+
+### 22 Oct 2026 · 9.3b no-cause invalid stays 400, not the old unconditional 409 · decided by builder · risk: low
+- Decided: when a `RepositoryError('invalid', ...)` has no `ScrubbedDbError` cause at all (e.g. a non-unique-violation `invalid`, such as a stale-version refusal from item 3), `fromError` returns the ordinary 400 validation response, not the already-subscribed 409.
+- Why: the brief's wording for item 2 only specifically addressed disambiguating *which* unique violation maps to 409; a `RepositoryError('invalid')` with no unique-violation cause at all (the stale-version case from item 3 is exactly this) is not a "you already have this" conflict, so 409 would be misleading. This also means item 3's stale-version refusal surfaces as a 400 (same shape as other `start` refusals), matching the brief's own item-3 wording ("as start already does for other refusals").
+- risk: low — response-shape choice within one route handler, no schema/contract change.
+
+---
+
+### 22 Oct 2026 · 9.3b live-classes stays a dependent second step, not a Promise.all with homeLinks · decided by builder · risk: low
+- Decided: `/home`'s `homeLinks` and `homeLiveClasses` calls run one after another (`await homeLinks(...)` then `await homeLiveClasses(...)`), not wrapped in `Promise.all`, because `homeLiveClasses` now needs `homeLinks`' own resolved `teacherIds` as input — a real data dependency, not an artificial ordering.
+- Why: the brief's goal was to stop four scans from each re-querying `agents.owner`/`subscriptions.findLive` independently. Removing that duplication required consolidating the owner lookup into one scan (`homeLinks`) that the live-classes loader then reuses; inventing a *second*, independent way to list a student's subscribed teacher ids (so the two calls could stay literally parallel) would need a new, redundant `packages/db` read solely to preserve `Promise.all`, which re-introduces the duplicate-query problem the decision was about. The two internal scans within `homeCandidateScan`'s own candidate loop already run concurrently via `Promise.all`; `homeLiveClasses`'s own per-teacher-id calls also already run concurrently via `Promise.all`. This is the only level at which "independent" genuinely applies.
+- risk: low — no schema change, no new repository method; the tradeoff is documented in `apps/web/app/home/page.tsx`'s own comment.
+
+---
+
 ### 22 Oct 2026 · 11.4g ran over budget · decided by lead · risk: low
 - Decided: accept 234 tool calls (88 build + 146 fix round) against a 60-call budget; the result is small (three views and their tests) and both reviewers approved after re-verifying.
 - Why: the Sonnet agents under-reported their calls by about 2 to 4 times and didn't stop at the brief's limit; the lead raises this in the 0.22 review rather than redoing the work.

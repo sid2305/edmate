@@ -2,7 +2,13 @@
 // database; rule 4). The scope's student is always the session's own principal; the package
 // version is always looked up server-side from the agent's own live packages, never trusted from
 // the client body.
-import { RepositoryError, type LivePackage, type LiveSubscription, type Repositories } from '@edmate/db';
+import {
+  RepositoryError,
+  ScrubbedDbError,
+  type LivePackage,
+  type LiveSubscription,
+  type Repositories,
+} from '@edmate/db';
 import { NextRequest } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal, RoleContext } from '../auth/guard';
@@ -201,6 +207,28 @@ describe('createSubscriptionHandlers', () => {
     });
   });
 
+  it('task 9.3b: a stale-version refusal is its own message, not the alarm-paused guess', async () => {
+    const { repos, calls } = fakeRepos({
+      start: () => {
+        throw new RepositoryError('invalid', 'subscriptions.start', {
+          cause: new ScrubbedDbError(undefined, 'subscriptions_stale_package_version'),
+        });
+      },
+      findLive: async () => null,
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_free' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(400);
+    const text = JSON.stringify(await res.json());
+    expect(text).toContain('This plan has changed. Reload the page to see the current plans.');
+    expect(text).not.toContain("free plan is paused");
+    // The marker is checked before any findLive call -- no guess needed.
+    expect(calls.find((c) => c.method === 'findLive')).toBeUndefined();
+  });
+
   it('task 9.6i: a findLive failure while explaining an invalid start is a 500, not a guess', async () => {
     const { repos } = fakeRepos({
       start: () => {
@@ -216,6 +244,60 @@ describe('createSubscriptionHandlers', () => {
       ctxFor(STUDENT),
     );
     expect(res.status).toBe(500);
+  });
+
+  // Task 9.3b: fromError's `invalid` case, exercised directly (not through `explainInvalid`) by
+  // an error thrown from `owner`, before `scope` is ever set.
+  it('fromError: an invalid with the live-per-pair constraint is 409 already-subscribed', async () => {
+    const { repos } = fakeRepos({
+      owner: () => {
+        throw new RepositoryError('invalid', 'agents.owner', {
+          cause: new ScrubbedDbError('23505', 'subscriptions_one_live_per_pair_key'),
+        });
+      },
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_paid' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toContain('You already have a package with this teacher.');
+  });
+
+  it('fromError: an invalid with a different unique-violation constraint is a logged 500, not a 409', async () => {
+    const log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    const { repos } = fakeRepos({
+      owner: () => {
+        throw new RepositoryError('invalid', 'agents.owner', {
+          cause: new ScrubbedDbError('23505', 'some_other_constraint'),
+        });
+      },
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos, log });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_paid' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(500);
+    expect(log.error).toHaveBeenCalledWith('subscriptions.start.unexpected_unique_violation', {
+      error: 'RepositoryError',
+    });
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain('some_other_constraint');
+  });
+
+  it('fromError: an invalid with no unique-violation cause (a malformed argument) is an ordinary 400', async () => {
+    const { repos } = fakeRepos({
+      owner: () => {
+        throw new RepositoryError('invalid', 'agents.owner');
+      },
+    });
+    const handlers = createSubscriptionHandlers({ repos: () => repos });
+    const res = await handlers.start(
+      req({ agentId: 'agt_demo', packageId: 'pkg_paid' }),
+      ctxFor(STUDENT),
+    );
+    expect(res.status).toBe(400);
   });
 
   it('a malformed body is 400 before any repo call', async () => {
