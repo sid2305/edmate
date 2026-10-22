@@ -7,15 +7,16 @@
 # priority: P1 = not needed for the pilot. model: models used, recorded by the team lead.
 decisions:
   suite-sizes:
-    status: open
+    status: decided
     question: 'Platform eval suites (7.2, blocker B-41): grow to the full Evals-table sizes now (+624 cases, about 1,480 builder calls; a live run is about 3,800 calls per model), or MVP sizes for the exit
       gate (locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60: +234 cases, about 630 calls; about 2,400 per model) with the rest in 7.2f before the pilot gate?'
     options:
     - MVP sizes now, the rest in 7.2f (M13) before the pilot gate
     - full sizes now (7.2f moves to M7)
     recommendation: the first option
+    answer: 'a) MVP sizes for the exit gate: locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60; the remaining ~390 cases in task 7.2f before the pilot gate (human, 22 Oct 2026, B-41)'
   gate-thresholds:
-    status: open
+    status: decided
     question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and
       whether the distress near-miss cases are held to 100% or the 99% safety rate'
     options:
@@ -23,6 +24,8 @@ decisions:
     - feedback and revision both 80%, the rest as above
     - other numbers
     recommendation: the first option
+    answer: a) feedback >= 70% (matches 5.7), revision >= 80% (like pedagogy); platform accuracy covered by each agent's own accuracy cases; near-miss cases held to the 99% safety rate; provisional until
+      the 7.2 expert pass (human, 22 Oct 2026, B-40)
   licence:
     status: decided
     question: Code licence
@@ -2873,9 +2876,9 @@ tasks:
   deps:
   - 7.2a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2d-safety-cases
+  model: plan:sonnet build:sonnet
 - id: 7.2e
   milestone: M7
   title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
@@ -4327,9 +4330,29 @@ tasks:
   deps:
   - 9.6c
   risk: medium
-  status: running
+  status: done
   branch: m9/9.6d-plan-page
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 114
+    tokens_out: 483
+    cache_read_tokens: 2990296
+    wall_time_seconds: 336
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.6e
   milestone: M9
   title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
@@ -4618,9 +4641,29 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: running
+  status: done
   branch: m8/8.7k-changed-since-publish
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 92
+    tokens_in: 274
+    tokens_out: 30111
+    cache_read_tokens: 7461435
+    wall_time_seconds: 3718
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
@@ -4752,9 +4795,31 @@ tasks:
   deps:
   - 8.2d
   risk: high
-  status: running
+  status: done
   branch: m8/8.2e-web-link-job
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:opus
+  metrics:
+    tool_calls: 309
+    tokens_in: 1012
+    tokens_out: 48240
+    cache_read_tokens: 36814745
+    wall_time_seconds: 121661
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 17
+      by_severity:
+        MEDIUM: 3
+        LOW: 14
+      by_status:
+        fixed: 5
+        open: 0
+        deferred: 11
+        wontfix: 1
+    human_questions: 0
 - id: 8.2f
   milestone: M8
   title: Add a web link in the upload centre; YouTube links refused with fixed words (8.2b Phase C)
@@ -4762,14 +4827,15 @@ tasks:
   deps:
   - 8.2e
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.2f-web-link-ui
+  model: plan:sonnet build:sonnet
 - id: 8.2c
   milestone: M8
-  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
-    8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots,
-    a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the
-    real one, a real https test, and fake timers in the deadline tests; from the 8.2e security review: a per-teacher limit on adding links, so one teacher can''t fill the ingest queue'
+  title: 'YouTube material per B-47 (human, 22 Oct 2026): the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube; also fixes the 8.2d review findings first
+    (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots, a cancellable resolver, explicit
+    rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the real one, a real https test, and
+    fake timers in the deadline tests; from the 8.2e security review: a per-teacher limit on adding links, so one teacher can''t fill the ingest queue'
   accept: per the B-47 answer.
   deps:
   - 8.2f
@@ -4816,7 +4882,9 @@ tasks:
   deps:
   - 8.2e
   risk: risky
-  status: todo
+  status: running
+  branch: m8/8.2h-web-link-followups
+  model: plan:sonnet build:opus
 - id: 11.2a
   milestone: M11
   title: Class questions repository and clustering in packages/db (11.2 Phase A)
@@ -4844,9 +4912,30 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.5a-safety-alerts-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 148
+    tokens_out: 1453
+    cache_read_tokens: 3327594
+    wall_time_seconds: 557
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.5b
   milestone: M12
   title: Alert worker stores alerts, marks escalation and reads acks from the DB (12.5 Phase B)
@@ -4978,6 +5067,67 @@ tasks:
   accept: each MEDIUM has a failing-then-passing test; db and web typecheck, lint and test green; security-reviewer re-checks.
   deps:
   - 9.6h
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.5d
+  milestone: M13
+  title: 'Safety alerts follow-ups: listForStaff sort index and acknowledged_by FK index (12.5a review)'
+  accept: per docs/tasks/12.5a/review.md deferred findings; db typecheck, lint and test green.
+  deps:
+  - 12.5a
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 12.4a
+  milestone: M12
+  title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
+  accept: per docs/tasks/12.4/plan.md Phase A and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.5a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4b
+  milestone: M12
+  title: Publish refuses a flagged agent without staff approval (12.4 Phase B)
+  accept: per docs/tasks/12.4/plan.md Phase B and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4c
+  milestone: M12
+  title: Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)
+  accept: per docs/tasks/12.4/plan.md Phase C and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 12.4d
+  milestone: M12
+  title: Staff page /staff/agents and the teacher's publish refusal text (12.4 Phase D)
+  accept: per docs/tasks/12.4/plan.md Phase D and Lead answers; typecheck, lint and test green.
+  deps:
+  - 12.4c
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 9.3e
+  milestone: M13
+  title: 'A safety-reason rejection of a teacher cuts their students'' access at once (B-46, human 22 Oct 2026): before the pilot opens to strangers; until then existing students keep access until their
+    plan ends'
+  accept: after a staff rejection with a safety reason, the rejected teacher's agents refuse new turns for every student, and a test proves it; other rejection reasons still block only new starts.
+  deps:
+  - 9.3c
   risk: high
   status: todo
   branch: null
@@ -5197,10 +5347,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: todo
+  status: planning
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '12.5'
   milestone: M12
   title: Safety alert inbox with acknowledgement

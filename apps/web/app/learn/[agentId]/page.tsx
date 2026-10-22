@@ -34,6 +34,7 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
   const chat = await getTranslations('chat');
   const memory = await getTranslations('memory');
   const progress = await getTranslations('progress');
+  const plan = await getTranslations('plan');
   return (
     <AppShell
       brand={shell('brand')}
@@ -44,6 +45,8 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
         { href: `/learn/${encodeURIComponent(data.agentId)}/memory`, label: memory('navLink') },
         // 9.6: the progress page, with links to the complete JSON export and notes PDF.
         { href: `/learn/${encodeURIComponent(data.agentId)}/progress`, label: progress('navLink') },
+        // 9.6 Phase D: upgrade, downgrade, pause, resume and cancel, no payment yet.
+        { href: `/learn/${encodeURIComponent(data.agentId)}/plan`, label: plan('navLink') },
       ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}

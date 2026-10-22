@@ -1,5 +1,5 @@
 // Data model rows: eval_runs / eval_results, live_classes / class_questions, insights,
-// reports / takedowns / safety_events, audit_log.
+// reports / takedowns / safety_events, safety_alerts, audit_log.
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -15,7 +15,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { auditActorRole, id, timestamps, tstz } from './_shared.js';
 import { agents, agentVersions } from './agents.js';
-import { teacherId, users } from './users.js';
+import { sessions } from './learning.js';
+import { studentId, teacherId, users } from './users.js';
 
 /** Quality gate: one suite run against one agent version. */
 export const evalRuns = pgTable(
@@ -162,6 +163,56 @@ export const safetyEvents = pgTable('safety_events', trustColumns(), (t) => [
   index('safety_events_target_idx').on(t.target),
   index('safety_events_status_idx').on(t.status),
 ]);
+
+/**
+ * The staff safety alert inbox (task 12.5a): one row per contracts `SafetyAlert`, written by the
+ * alert worker and read and acknowledged by staff only. `id` is the alert's own id and
+ * `created_at` the alert's own time (`received_at` is when the worker stored it). The excerpt is
+ * the scrubbed one from distressDetect; no name, email or phone is stored. Retention is 13.4's.
+ */
+export const safetyAlerts = pgTable(
+  'safety_alerts',
+  {
+    id: id(),
+    /** SafetyAlert.level: info | alert | critical. */
+    level: text('level').notNull(),
+    /** SafetyAlert.kind: distress | abuse | misuse | other. */
+    kind: text('kind').notNull(),
+    studentId: studentId(),
+    teacherId: teacherId(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id),
+    excerptRedacted: text('excerpt_redacted').notNull(),
+    receivedAt: tstz('received_at').notNull().defaultNow(),
+    /** First time a check found it unacknowledged; never cleared. */
+    escalatedAt: tstz('escalated_at'),
+    /** How many checks found it unacknowledged (on-call paged that many times). */
+    escalationRound: integer('escalation_round').notNull().default(0),
+    lastPagedAt: tstz('last_paged_at'),
+    acknowledgedAt: tstz('acknowledged_at'),
+    acknowledgedBy: text('acknowledged_by').references(() => users.id),
+    ackNote: text('ack_note'),
+    ...timestamps(),
+  },
+  (t) => [
+    // The inbox's open list.
+    index('safety_alerts_open_created_at_id_idx')
+      .on(t.createdAt, t.id)
+      .where(sql`${t.acknowledgedAt} is null`),
+    index('safety_alerts_teacher_id_created_at_idx').on(t.teacherId, t.createdAt),
+    index('safety_alerts_student_id_teacher_id_idx').on(t.studentId, t.teacherId),
+    index('safety_alerts_session_id_idx').on(t.sessionId),
+    check('safety_alerts_level_check', sql`${t.level} in ('info', 'alert', 'critical')`),
+    check('safety_alerts_kind_check', sql`${t.kind} in ('distress', 'abuse', 'misuse', 'other')`),
+    check('safety_alerts_ack_note_length', sql`char_length(${t.ackNote}) <= 500`),
+    check(
+      'safety_alerts_ack_pair',
+      sql`(${t.acknowledgedAt} is null) = (${t.acknowledgedBy} is null)`,
+    ),
+    check('safety_alerts_escalation_round_non_negative', sql`${t.escalationRound} >= 0`),
+  ],
+);
 
 /**
  * Config, staff and memory changes. Append-only: the audit repository (1.6) has no update or
