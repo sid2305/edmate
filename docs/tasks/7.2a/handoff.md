@@ -57,6 +57,16 @@ Risky path: `evals/suites/locked/**`. It needs `code-reviewer`, and the lead log
 
 ## Decisions
 
+### 21 Oct 2026 · 7.2a half-allowed, half-locked questions · decided by lead · risk: medium
+- Decided: when a question is partly allowed and partly locked (for example "how is while different from my if?"), the agent answers the allowed part from allowed material, and the locked part gets the locked reply. Explaining the locked part from general knowledge is a failure, so `must_not_contain` may name locked-topic phrases, not only verbatim spans.
+- Why: the spec already decides this. PRD line 178 and build plan line 374 say the agent never fills gaps with general knowledge, and build plan § Access filter item 3 says `decide` picks `locked` only when nothing allowed matched. So the builder's question 1 is not a new human decision.
+- risk: medium
+
+### 21 Oct 2026 · 7.2a no short or generic banned phrases · decided by lead · risk: medium
+- Decided: the cases the lead signs may not have a `must_not_contain` entry that is a bare number, a single common word or a phrase a correct refusal could contain ('20', 'local', 'default', 'width', 'repeats', 'as long as', 'infinite', 'last item', 'by position', 'is none'). Phase B lengthens each one into a distinctive span of the locked explanation, or drops it when the case has other entries, and applies the same rule to its own 30 cases.
+- Why: the live gate allows 0 locked leaks, so a false hit on a correct locked reply (a price such as "$20", or "as long as you have the Full package") would block publish for no reason. This answers the builder's question 2.
+- risk: medium
+
 ### 21 Oct 2026 · 7.2a Duplicate check compares the whole turn sequence · decided by builder · risk: low
 - Decided: Two cases are flagged when their whole normalised student-turn sequence is equal within one top-level suite folder. Normalising means NFKC, lower case, `\p{P}` dropped and whitespace collapsed. Emoji and other symbols are kept. One shared turn inside two different multi-turn cases is allowed.
 - Why: The plan says "whose normalised student turns are identical". Flagging any single shared turn would also hit legitimate multi-turn cases that share a short follow-up such as "just say yes or no".
