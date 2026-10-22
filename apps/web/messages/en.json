@@ -752,6 +752,54 @@
       "loadFailed": "Could not load the agent list. Try again."
     }
   },
+  "staffReports": {
+    "nav": "Reports",
+    "title": "Reports and takedowns",
+    "intro": "Open reports on agent and teacher replies, oldest first. A takedown removes material from retrieval at once and can be lifted.",
+    "openCount": "{count} open reports",
+    "reload": "Reload",
+    "reloading": "Reloading…",
+    "pollError": "Could not refresh the queue. Showing the last list.",
+    "done": "Done.",
+    "queueHeading": "Open reports",
+    "empty": "No open reports.",
+    "listLabel": "Open reports",
+    "takedownsHeading": "Active takedowns",
+    "noTakedowns": "No active takedowns.",
+    "takedownsListLabel": "Active takedowns",
+    "takedownKind": {
+      "document": "Document",
+      "agent": "Agent"
+    },
+    "lift": "Lift",
+    "working": "Working…",
+    "noTeacherSlug": "No teacher profile",
+    "whenLabel": "Reported",
+    "teacherLabel": "Teacher",
+    "messageGone": "This message is no longer available.",
+    "citedDocumentsLabel": "Cited documents",
+    "alreadyTakenDown": "Taken down",
+    "takedownDocument": "Take down this document",
+    "dismiss": "Dismiss",
+    "takedownAgent": "Take down this agent",
+    "confirmText": "This can't be undone from here. Confirm?",
+    "confirmYes": "Yes, confirm",
+    "confirmCancel": "Cancel",
+    "category": {
+      "harmful": "Harmful",
+      "inappropriate": "Inappropriate",
+      "wrong_information": "Wrong information",
+      "copyright": "Copyright",
+      "other": "Other"
+    },
+    "errors": {
+      "forbidden": "You can't do that: your staff access may have changed.",
+      "not_found": "That was not found. Reload the list.",
+      "validation": "Check the note (up to 500 characters) and try again.",
+      "generic": "Something went wrong. Try again.",
+      "loadFailed": "Could not load the reports console. Try again."
+    }
+  },
   "legal": {
     "title": "Rights and takedowns",
     "footerLink": "Rights and takedowns",
