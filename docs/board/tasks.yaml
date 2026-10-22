@@ -3962,9 +3962,29 @@ tasks:
   deps:
   - 8.7b
   risk: medium
-  status: running
+  status: done
   branch: m8/8.7f-gate-followups
-  model: plan:lead build:sonnet-5/medium
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 9.6a
   milestone: M9
   title: Paged export readers sessions.listForStudent and messages.listForStudent, never returning help_state (9.6 Phase A, packages/db)
@@ -4046,14 +4066,16 @@ tasks:
   status: todo
 - id: 8.7h
   milestone: M8
-  title: 'Audit scrubber corrupts ids (found in the 8.7a fix round): packages/db/src/repositories/redact-json.ts (redactPersonalData, used by audit.ts) redacts any value whose first 8 hex characters are all digits as a phone-like number, so about 1 in 40 real audit rows lose their run or entity id (after.runId becomes [redacted]-...), and the 8.7a goLive audit test flakes. Exempt UUID-shaped values (and other known id fields) from the digit-run rule, with a test over generated UUIDs'
+  title: 'Audit scrubber corrupts ids (found in the 8.7a fix round): packages/db/src/repositories/redact-json.ts (redactPersonalData, used by audit.ts) redacts any value whose first 8 hex characters are
+    all digits as a phone-like number, so about 1 in 40 real audit rows lose their run or entity id (after.runId becomes [redacted]-...), and the 8.7a goLive audit test flakes. Exempt UUID-shaped values
+    (and other known id fields) from the digit-run rule, with a test over generated UUIDs'
   accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
   deps: []
   risk: high
   status: todo
 - id: 11.1a
   milestone: M11
-  title: 'Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)'
+  title: Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)
   accept: per docs/tasks/11.1/plan.md Phase A; db typecheck, lint, test and int tests green.
   deps:
   - 9.3c
@@ -4069,7 +4091,7 @@ tasks:
   status: todo
 - id: 11.1c
   milestone: M11
-  title: 'Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)'
+  title: Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)
   accept: per docs/tasks/11.1/plan.md Phase C; web typecheck, lint and test green.
   deps:
   - 11.1a
@@ -4085,7 +4107,8 @@ tasks:
   status: todo
 - id: 8.7i
   milestone: M13
-  title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates createdAt instead of a cast; a (teacher_id, created_at) index on eval_runs when runs grow; later migrations on a populated eval_runs use NOT VALID FKs and CONCURRENTLY indexes'
+  title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
+    createdAt instead of a cast; a (teacher_id, created_at) index on eval_runs when runs grow; later migrations on a populated eval_runs use NOT VALID FKs and CONCURRENTLY indexes'
   accept: each item fixed or recorded, with tests where behaviour changes.
   deps:
   - 8.7a

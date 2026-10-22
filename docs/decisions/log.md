@@ -10,6 +10,25 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7f persona always fails the case · decided by builder · risk: low
+- Decided: when `input.persona` is defined, the gate always throws (fails that case loudly)
+  rather than trying to honor it for a `kind: 'skill_action'` start turn only. `TurnInput` has no
+  `persona` field at all; a persona only enters the pipeline via a start turn's `skillPayload`
+  (bare id), and every later turn needs a *stored* `personaId` in that session's help state. The
+  gate creates a brand-new session (and a fresh help-state map) on every single `reply()` call,
+  so there is no continuity across a case's turns — a start-turn-only hack would silently produce
+  wrong, non-roleplay results for every multi-turn persona case (confirmed real multi-turn persona
+  suites exist, e.g. `evals/suites/persona/persona-roleplay-model-answer-en.yaml`). Failing the
+  case outright matches the brief ("fail any case that names one, with a clear reason, never
+  silently score it") and `runCaseSafely`'s existing catch-and-fail-this-case design.
+- Why: a half-working persona path (first turn only) would be worse than a clear failure, because
+  it would score a roleplay case as if it ran correctly when it did not resume the persona at all.
+- risk: low — gate-only behavior, no change to prompt-pack behaviour or contracts; persona gate
+  support is left as a known gap for whoever picks it up next (would need a `TurnInput.persona`
+  field or similar, which is a contracts change needing an ADR per rule 2).
+
+---
+
 ### 22 Oct 2026 · 9.2b A Redis outage fails the discovery rate limit open, not closed · decided by lead · risk: medium
 - Decided: unlike the sign-in limiter (fails closed, `src/auth/rate-limit.ts`), `discoveryRateLimiter` fails open on a store error or a missing `REDIS_URL`: the `/teachers` page still serves, and the failure is logged by code only (`rate_limit_unavailable`), never the client's IP.
 - Why: this limit protects database load on data that's already public and already published (scope decision 1/2 of the 9.2 plan); refusing every search because Redis blipped would hurt real students more than an occasional burst of searches hurts the database.
