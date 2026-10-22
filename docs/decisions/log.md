@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.5b Preview writes to the teacher's own inbox until 8.5d · decided by lead · risk: medium
+- Decided: the test-chat API merges with preview turns reusing the student write ports. A preview question the agent can't answer goes to the teacher's own Ask-the-teacher inbox, and profile, evidence and safety-event rows are written for the teacher as both sides. Follow-up 8.5d gives preview its own no-op question, profile and evidence ports (safety events stay recorded) before the pilot.
+- Why: the code reviewer's MEDIUM in apps/web/src/studio/testChat/deps.ts. It is visible only to the teacher who ran the preview and leaks nothing across teachers, so it doesn't block a testable studio; the fix needs its own small task.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.5b preview deps reuse the student turn deps · decided by builder · risk: low
+- Decided: `testChatDepsFor` returns `{ ...turnDepsFor({ ...p, entitlements: previewEntitlementsFor(p, packageId) }, scope), entitlementSource: 'teacher_preview' }` rather than copying turnDepsFor's 40 lines.
+- Why: one place for the queued ports, metered gateway, pricing and logging, so the preview can't drift from the student turn; the plan only asked not to import `processPorts`, which it doesn't.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.5b the preview entitlement store fails closed on a subscription resolve · decided by builder · risk: medium
+- Decided: `previewEntitlementsFor` passes `learnerClear: async () => false` (the plan said `true`).
+- Why: a preview only ever resolves `teacher_preview`, which never asks the age gate; answering false means that if a `subscription` resolve ever went through this store, it would refuse instead of skipping the age gate.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.5b a preview turn uses the session's package and the signed-in teacher only · decided by builder · risk: medium
+- Decided: the turn route reads the session in the scope `{ studentId: teacher, teacherId: teacher }` (from the principal, after `agents.get` confirms the body's agent is the teacher's), refuses ended sessions, sessions of another agent and sessions with no package, and builds the entitlement store from the session row's `packageId`. Starting a session resolves the same `teacher_preview` entitlement first, so a package of another agent or teacher is a 404 and nothing is created.
+- Why: keeps one teacher's drafts and packages away from other teachers and from students, without touching the risky auth or repository paths.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.5b small private helpers are copied, not shared · decided by builder · risk: low
+- Decided: the capped body reader and the production market rule are local copies in `src/studio/testChat/` rather than exports from `src/turn/`.
+- Why: `src/turn/**` is outside this phase's file list; a later clean-up can export them from one place.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 7.2e Lead accepts the budget overrun on the advice and persona cases · decided by lead · risk: low
 - Decided: 7.2e merges at about 324 tool calls against the plan's 155 for Phases F and G. Phase G ran 95 against 80, fix round 1 ran 116 against a 45 brief, and fix round 2 ran 38 against 20.
 - Why: the overrun went into re-running the eval suites and rewording echoed banned phrases one case at a time. The cases are right now, and re-planning would cost more than it saves. Later eval briefs list the echo rule up front (a `must_not_contain` phrase never repeats the student's words) and cap each fix round.
