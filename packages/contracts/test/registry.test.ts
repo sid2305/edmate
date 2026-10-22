@@ -16,8 +16,8 @@ describe('fixture registry', () => {
     }
   });
 
-  it('covers all 36 data types of Core contracts (32 + 3 media types from ADR-0005 + SafetyEventCode from ADR-0006)', () => {
-    expect(exportedSchemaNames).toHaveLength(36);
+  it('covers all 39 data types of Core contracts (32 + 3 media types from ADR-0005 + SafetyEventCode from ADR-0006 + 3 payment types from ADR-0015)', () => {
+    expect(exportedSchemaNames).toHaveLength(39);
   });
 
   it.each(exportedSchemaNames)('%s has at least one valid and one invalid fixture', (name) => {
@@ -46,5 +46,17 @@ describe('fixture registry', () => {
       [validFixtures.Attempt, C.AttemptSchema.options],
     ];
     for (const [fixtures, options] of enums) expect(new Set(fixtures)).toEqual(new Set(options));
+  });
+
+  it('has a PaymentEvent fixture per fact variant, an empty facts list and a multi-fact delivery', () => {
+    const events = validFixtures.PaymentEvent;
+    expect(new Set(events.flatMap((e) => e.facts.map((f) => f.type)))).toEqual(
+      new Set(['subscription', 'payment_succeeded', 'payment_failed', 'refund']),
+    );
+    expect(events.some((e) => e.facts.length === 0)).toBe(true);
+    expect(events.some((e) => e.facts.length > 1)).toBe(true);
+    expect(new Set(validFixtures.ProviderSubscription.map((s) => s.status))).toEqual(
+      new Set(C.EntitlementSchema.shape.status.options),
+    );
   });
 });

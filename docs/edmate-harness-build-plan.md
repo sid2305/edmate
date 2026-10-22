@@ -263,6 +263,49 @@ interface TranscribeInput { url: string; mimeType: string; languageHint?: Lang }
 interface TranscriptSegment { startMs: number; endMs: number; text: string }      // integers ≥ 0, endMs ≥ startMs; text non-empty
 interface Transcript { text: string; language?: Lang; durationMs: number; segments: TranscriptSegment[] }   // ≥ 1 segment; starts never go backwards; every endMs ≤ durationMs
 
+// ---- Payments (ADR-0015) ----
+type ProviderId = string;           // ^[a-z][a-z0-9_-]{1,31}$; equals LocalePack.payments.provider; 'tbd' never names an adapter
+type ProviderRef = string;          // a provider's own id: ^[A-Za-z0-9_.:-]{1,128}$
+interface PaymentOffer {            // built server-side from the package version; never from the client
+  packageVersionId: string; name: string; price: Money; interval: 'month'; trialDays?: number;
+}                                   // price.amountMinor > 0; name 1..120 chars, one line; trialDays 1..90
+interface ProviderSubscription {    // the provider's view; 10.3's state machine decides the entitlement
+  provider: ProviderId; providerRef: ProviderRef;
+  subscriptionId: string;           // Edmate's subscriptions.id, carried as provider metadata; required
+  status: 'trial' | 'active' | 'past_due' | 'paused' | 'ended';   // = Entitlement['status']
+  packageVersionId: string;
+  periodEnd: string;                // trial end in trial; end of the last paid period when paused or ended
+  scheduled?: { change: 'plan' | 'cancel' | 'pause' | 'resume'; at: string; packageVersionId?: string };   // packageVersionId exactly when change = 'plan'
+}
+type PaymentFact =
+  | { type: 'subscription'; subscription: ProviderSubscription }   // a full snapshot
+  | { type: 'payment_succeeded'; paymentRef: ProviderRef; providerRef: ProviderRef; subscriptionId: string;
+      amount: Money; tax: Money; fee: Money; net?: Money }         // amount, tax, fee: one currency; tax, fee <= amount; net may be the payout currency
+  | { type: 'payment_failed'; paymentRef: ProviderRef; providerRef: ProviderRef; subscriptionId: string }
+  | { type: 'refund'; refundRef: ProviderRef; paymentRef: ProviderRef; subscriptionId: string;
+      amount: Money; status: 'pending' | 'succeeded' | 'failed' };   // amount.amountMinor > 0
+interface PaymentEvent {            // one verified webhook delivery
+  provider: ProviderId; eventId: ProviderRef;   // (provider, eventId) is 10.2's idempotency key
+  providerType: string;             // the provider's event name, 1..64 chars; never payload text
+  occurredAt: string;
+  facts: PaymentFact[];             // 0..4; empty = verified, nothing Edmate uses
+}
+interface Payments {                // one provider; callers get it only from paymentsFor(market) or forProvider(id)
+  readonly provider: ProviderId;
+  startCheckout(x: { subscriptionId: string; offer: PaymentOffer; returnUrl: string; idempotencyKey: string }):
+    Promise<{ checkoutRef: ProviderRef; url: string; providerRef?: ProviderRef }>;   // url: the provider's hosted https page
+  changePlan(x: { providerRef: ProviderRef; offer: PaymentOffer; idempotencyKey: string }
+    & ({ when: 'now'; proration: 'prorate' | 'none' } | { when: 'period_end' })): Promise<ProviderSubscription>;
+  pause(x: { providerRef: ProviderRef; when: 'now' | 'period_end'; idempotencyKey: string }): Promise<ProviderSubscription>;
+  resume(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;
+  cancel(x: { providerRef: ProviderRef; when: 'now' | 'period_end'; idempotencyKey: string }): Promise<ProviderSubscription>;
+  clearScheduled(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;   // undoes a scheduled plan change, cancel or pause
+  getSubscription(providerRef: ProviderRef): Promise<ProviderSubscription>;
+  refund(x: { paymentRef: ProviderRef; amount?: Money; idempotencyKey: string }):
+    Promise<{ refundRef: ProviderRef; status: 'pending' | 'succeeded' }>;   // no amount = full refund
+  parseWebhook(x: { rawBody: Uint8Array; headers: Readonly<Record<string, string>>; receivedAt: string }): Promise<PaymentEvent>;
+}
+
 // ---- Ports (the harness defines them; db, gateway, ingest and worker implement them) ----
 interface RetrievalIndex {
   // The filter is required: there is no way to search a teacher's material without it.

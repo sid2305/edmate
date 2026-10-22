@@ -1,6 +1,7 @@
 // Each exported type must be exactly the Core contracts type (spec-types.ts is the verbatim copy).
 // `toEqualTypeOf` is checked by tsc (the typecheck script includes test/), in both directions.
 import { describe, expectTypeOf, it } from 'vitest';
+import type { z } from 'zod';
 import type * as C from '../src/index.js';
 import type * as Spec from './spec-types.js';
 
@@ -42,6 +43,12 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.TranscriptSegment>().toEqualTypeOf<Spec.TranscriptSegment>();
     expectTypeOf<C.Transcript>().toEqualTypeOf<Spec.Transcript>();
     expectTypeOf<C.SafetyEventCode>().toEqualTypeOf<Spec.SafetyEventCode>();
+    expectTypeOf<C.ProviderId>().toEqualTypeOf<Spec.ProviderId>();
+    expectTypeOf<C.ProviderRef>().toEqualTypeOf<Spec.ProviderRef>();
+    expectTypeOf<C.PaymentOffer>().toEqualTypeOf<Spec.PaymentOffer>();
+    expectTypeOf<C.ProviderSubscription>().toEqualTypeOf<Spec.ProviderSubscription>();
+    expectTypeOf<C.PaymentFact>().toEqualTypeOf<Spec.PaymentFact>();
+    expectTypeOf<C.PaymentEvent>().toEqualTypeOf<Spec.PaymentEvent>();
   });
 
   it('ports (type-only)', () => {
@@ -60,6 +67,7 @@ describe('z.infer types equal the Core contracts', () => {
     expectTypeOf<C.TraceSink>().toEqualTypeOf<Spec.TraceSink>();
     expectTypeOf<C.AlertSink>().toEqualTypeOf<Spec.AlertSink>();
     expectTypeOf<C.SafetyEventSink>().toEqualTypeOf<Spec.SafetyEventSink>();
+    expectTypeOf<C.Payments>().toEqualTypeOf<Spec.Payments>();
     expectTypeOf<C.Tool<{ a: number }, string>>().toEqualTypeOf<Spec.Tool<{ a: number }, string>>();
   });
 });
@@ -100,7 +108,54 @@ describe('RetrievalIndex.leakCheck (ADR-0007)', () => {
   });
 
   it('is a required member, so every adapter must implement it', () => {
-    expectTypeOf<{ search: C.RetrievalIndex['search']; probe: C.RetrievalIndex['probe'] }>()
-      .not.toExtend<C.RetrievalIndex>();
+    expectTypeOf<{
+      search: C.RetrievalIndex['search'];
+      probe: C.RetrievalIndex['probe'];
+    }>().not.toExtend<C.RetrievalIndex>();
+  });
+});
+
+describe('Payments (ADR-0015)', () => {
+  type P = C.Payments;
+  type Sub = z.infer<typeof C.ProviderSubscriptionSchema>;
+
+  it('every write returns a Promise of the schema types', () => {
+    expectTypeOf<ReturnType<P['changePlan']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['pause']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['resume']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['cancel']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['clearScheduled']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['getSubscription']>>().toEqualTypeOf<Promise<Sub>>();
+    expectTypeOf<ReturnType<P['parseWebhook']>>().toEqualTypeOf<
+      Promise<z.infer<typeof C.PaymentEventSchema>>
+    >();
+    expectTypeOf<Parameters<P['startCheckout']>[0]['offer']>().toEqualTypeOf<
+      z.infer<typeof C.PaymentOfferSchema>
+    >();
+  });
+
+  it('parseWebhook takes the raw bytes, never a re-serialised string', () => {
+    type In = Parameters<P['parseWebhook']>[0];
+    expectTypeOf<In['rawBody']>().toEqualTypeOf<Uint8Array>();
+    expectTypeOf<string>().not.toExtend<In['rawBody']>();
+  });
+
+  it("changePlan 'now' must say how to prorate; 'period_end' takes no proration", () => {
+    type In = Parameters<P['changePlan']>[0];
+    const base = { providerRef: 'sub_fake_0001', offer: {} as C.PaymentOffer, idempotencyKey: 'k' };
+    expectTypeOf({ ...base, when: 'now' as const, proration: 'prorate' as const }).toExtend<In>();
+    expectTypeOf({ ...base, when: 'period_end' as const }).toExtend<In>();
+    expectTypeOf({ ...base, when: 'now' as const }).not.toExtend<In>();
+  });
+
+  it('refund returns only a ref and a pending or succeeded status', () => {
+    expectTypeOf<Awaited<ReturnType<P['refund']>>>().toEqualTypeOf<{
+      refundRef: string;
+      status: 'pending' | 'succeeded';
+    }>();
+  });
+
+  it('a provider status is exactly the Entitlement status enum', () => {
+    expectTypeOf<C.ProviderSubscription['status']>().toEqualTypeOf<C.Entitlement['status']>();
   });
 });

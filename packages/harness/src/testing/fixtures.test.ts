@@ -24,8 +24,9 @@ describe('harness/testing re-exports the contracts fixtures', () => {
   const names = Object.keys(schemas) as (keyof typeof schemas)[];
 
   it('covers every schema', () => {
-    // 32 Core contracts types + 3 media types (ADR-0005) + SafetyEventCode (ADR-0006).
-    expect(names).toHaveLength(36);
+    // 32 Core contracts types + 3 media types (ADR-0005) + SafetyEventCode (ADR-0006)
+    // + 3 payment types (ADR-0015).
+    expect(names).toHaveLength(39);
   });
 
   it.each(names)('%s: the first fixture parses', (name) => {
