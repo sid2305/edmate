@@ -3145,9 +3145,29 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: review
+  status: done
   branch: m8/8.5a-corrections-db
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 69
+    tokens_in: 250
+    tokens_out: 1987
+    cache_read_tokens: 4357059
+    wall_time_seconds: 657
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 8.5b
   milestone: M8
   title: '8.5 Phase B: apps/web test-chat composition and API routes (plan docs/tasks/8.5/plan.md)'

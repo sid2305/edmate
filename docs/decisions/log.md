@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.5a Lead accepts the corrections repository scope checks · decided by lead · risk: high
+- Decided: merge 8.5a. corrections.record, agentVersions.latest and packageVersions.listForAgent (risky path packages/db/src/repositories/**) are reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the signed-in teacher, a correction on another teacher's module rolls back as not_found, and the isolation grid covers all three methods. The LOWs (a composite packages (teacher_id, agent_id) index, the silent 100-row cap on listForAgent in packages/db/src/repositories/package-versions.ts, and the double teacherNoteParts call in packages/db/src/repositories/corrections.ts) are deferred to 8.5c (M13).
+- Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher has a handful of packages per agent, so the cap and the index only matter at a scale the pilot won't reach.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.5a corrections and test-chat reads are teacher-scoped in the same statement · decided by builder · risk: high
+- Decided: `corrections.record` writes only through `insertTeacherNote`'s `INSERT … SELECT FROM
+  modules WHERE id = $m AND teacher_id = $t` (run first in the transaction; zero rows → `not_found`,
+  rollback) and then inserts the `corrections` row with the scope's `teacher_id`, so a correction
+  can never land on another teacher's module. `agentVersions.latest` filters `agent_versions` by
+  `teacher_id` and `agent_id`; `packageVersions.listForAgent` filters `packages` by `teacher_id` and
+  `agent_id` and its `EXISTS` on `package_versions` by `teacher_id` too. All three take a
+  `TeacherScope` parsed before any SQL (`scope`), are wrapped by `guardAll` (driver errors
+  scrubbed), and are covered by the isolation grid (`corrections.record` 6 write cases, 0 leaks; the
+  two reads over every actor × target). Callers: only the teacher's own studio routes (Phase B,
+  behind `withRole(['teacher'])`, with the scope built from the signed-in teacher's id), never a
+  student route; drafts are readable only to their own teacher.
+- Why: `packages/db/src/repositories/**` is a risky path ("keeping each teacher's and student's data
+  apart"); these are the first reads that return draft agents and unpublished packages, so they must
+  stay teacher-only.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.5a listForAgent returns at most 100 packages · decided by builder · risk: low
+- Decided: `packageVersions.listForAgent` returns at most `AGENT_PACKAGES_MAX` = 100 rows, newest
+  created first, then id.
+- Why: every list read in this folder is bounded; a teacher has a handful of packages per agent,
+  so 100 never cuts a real list, and the picker is not a completeness-critical read.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.5a the bad answer follows the teacher-note text rule · decided by builder · risk: low
+- Decided: `badAnswer` is checked and trimmed with the same `teacherNoteParts` helper as the
+  question and corrected answer (non-empty after trimming, at most `LIMITS.turnTextMaxLength` code
+  points), and stored trimmed.
+- Why: one rule for all three texts, the same cap the plan named, and no second length helper.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.4a Lead accepts the style-card repo scope checks and the unmetered drafting · decided by lead · risk: high
 - Decided: merge 8.4a. styleCards.create (risky path packages/db/src/repositories/**) is reviewed by security-reviewer, database-reviewer, code-reviewer and typescript-reviewer, all APPROVE: every query is filtered by the session teacher, students and staff are refused, and the per-teacher advisory lock closes the version race. Drafting stays unmetered for now; metering teacher studio calls and stripping override phrases from style-card text are follow-up task 8.4c (M13). The hashtext-collision LOW on packages/db/src/repositories/style-cards.ts is wontfix: a collision only serialises two teachers' saves.
 - Why: four reviewers found no CRITICAL, HIGH or MEDIUM issue; a teacher's style card only reaches that teacher's own students, and studio drafting is a small, teacher-only cost until the pilot.
