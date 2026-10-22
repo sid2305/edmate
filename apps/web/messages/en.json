@@ -634,5 +634,20 @@
       "not_found": "One of those packages was not found. Reload and try again.",
       "generic": "Something went wrong. Try again."
     }
+  },
+  "report": {
+    "button": "Report",
+    "categoryLabel": "Why are you reporting this?",
+    "categories": {
+      "harmful": "Harmful",
+      "inappropriate": "Inappropriate",
+      "wrong_information": "Wrong information",
+      "copyright": "Copyright",
+      "other": "Other"
+    },
+    "send": "Send report",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "thanks": "Thanks, our team will review this."
   }
 }

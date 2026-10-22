@@ -18,6 +18,7 @@ import { LockedNotice } from './LockedNotice';
 import { MessageBubble, type MessageRole } from './MessageBubble';
 import { MockInterviewControls } from './MockInterviewControls';
 import { PracticeCard, type PracticeCardData } from './PracticeCard';
+import { ReportButton } from './ReportButton';
 import { sendTurn as realSendTurn, startSession as realStartSession, type TurnHandle } from './sendTurn';
 import { SkillCard } from './SkillCard';
 import { SkillLauncher, type MockInterviewPersona } from './SkillLauncher';
@@ -71,6 +72,14 @@ function chatTurn(state: TurnView, action: ChatAction): TurnView {
 
 /** A thread entry: a plain message, or a finished turn with its cards and notices. */
 type ThreadItem = { key: string; message: ChatMessage; turn?: TurnView };
+
+/** 12.2c: the server message id a reply can be reported under, or null when it has none yet.
+ * A history item's own id is already a server id; a turn pushed into the thread (or shown as the
+ * latest final reply) can only be reported once it carries `messageId` from the `done` event. */
+function reportableId(message: ChatMessage, turn?: TurnView): string | null {
+  if (message.role !== 'agent' && message.role !== 'teacher') return null;
+  return turn === undefined ? message.id : turn.messageId;
+}
 
 function TurnExtras({
   turn,
@@ -236,27 +245,39 @@ export function ChatView({
 
   const finalTurn = active && turn.status === 'final' ? turn : null;
   const failed = active && turn.status === 'failed' ? turn.error : null;
+  // The session a reported message belongs to: the ref once a turn has started, else the page's
+  // own `?s=` session (history was loaded from it). Never the request body (12.2c design).
+  const reportSessionId = session.current ?? sessionId;
 
   return (
     <div className="chat">
       <section className="chat-thread-wrap" aria-label={t('threadLabel')}>
         {thread.length === 0 && !active ? <p className="chat-empty">{t('empty')}</p> : null}
         <ol className="chat-thread" aria-live="polite">
-          {thread.map((item) => (
-            <li key={item.key}>
-              <MessageBubble role={item.message.role} text={item.message.text} replaced={item.turn?.replaced ?? false}>
-                {item.turn === undefined ? (
-                  <SourcesList items={item.message.sources ?? []} />
-                ) : (
-                  <TurnExtras turn={item.turn} disabled={streaming} onPracticeAnswer={answerPractice} />
-                )}
-              </MessageBubble>
-            </li>
-          ))}
+          {thread.map((item) => {
+            const reportId = reportableId(item.message, item.turn);
+            return (
+              <li key={item.key}>
+                <MessageBubble role={item.message.role} text={item.message.text} replaced={item.turn?.replaced ?? false}>
+                  {item.turn === undefined ? (
+                    <SourcesList items={item.message.sources ?? []} />
+                  ) : (
+                    <TurnExtras turn={item.turn} disabled={streaming} onPracticeAnswer={answerPractice} />
+                  )}
+                  {reportId === null ? null : (
+                    <ReportButton agentId={agentId} sessionId={reportSessionId} messageId={reportId} />
+                  )}
+                </MessageBubble>
+              </li>
+            );
+          })}
           {finalTurn === null ? null : (
             <li key="current">
               <MessageBubble role="agent" text={finalTurn.text} replaced={finalTurn.replaced}>
                 <TurnExtras turn={finalTurn} disabled={streaming} onPracticeAnswer={answerPractice} />
+                {finalTurn.messageId === null ? null : (
+                  <ReportButton agentId={agentId} sessionId={reportSessionId} messageId={finalTurn.messageId} />
+                )}
               </MessageBubble>
             </li>
           )}

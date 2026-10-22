@@ -53,7 +53,7 @@ export default async function LearnPage({ params, searchParams }: LearnPageProps
     >
       <h1>{chat('title')}</h1>
       {/* English-only pilot: the chat's own strings go to the client, nothing else. */}
-      <NextIntlClientProvider locale="en" messages={{ chat: messages.chat }}>
+      <NextIntlClientProvider locale="en" messages={{ chat: messages.chat, report: messages.report }}>
         <ChatView agentId={data.agentId} sessionId={data.sessionId} history={data.history} />
       </NextIntlClientProvider>
     </AppShell>
