@@ -438,6 +438,23 @@ nothing), each with a window label (`reminder_24h` / `reminder_1h` / `starting_s
 computed here, from `startsAt` vs `now`, inside `live-classes.ts` (the one place this label is
 computed; `options.now` only overrides the clock for deterministic tests).
 
+## Pre-class question queue (task 11.2a)
+
+"Topic" is the existing lexical cluster (5.10/8.9's own convention), not the curriculum `topics`
+table: neither `class_questions` nor `teacher_questions` carries a `topic_id` (lead answer Q1, 22
+Oct 2026). `classQuestions.submit(scope, { liveClassId, text })` validates `text` (non-empty, ≤
+`LIMITS.turnTextMaxLength`), and checks, in one statement, that the class belongs to the scope's
+own teacher, the scope's student holds a live (`trial`/`active`) subscription to one of the
+class's packages, and the class has not started yet (`startsAt > now`) — the same
+entitlement/window `liveClasses.listUpcomingForStudent` already checks (lead answer Q4); anything
+else is `not_found`, nothing written. Writes one `class_questions` row. `listQueueForTeacher(scope,
+{ limit? })` reads the teacher's own classes' pending `class_questions`, clusters them with
+`clusterQuestions` (a pure, sibling clusterer of 5.10's `bestGroup` in `question-similarity.ts`,
+over a flat list rather than one-at-a-time against caller-filtered candidates), and returns
+`TopicQuestionGroup[]`, biggest group first then oldest. A cluster may span more than one of the
+teacher's classes (lead answer Q3, `liveClassIds: string[]`); the table has no student id, so the
+result never carries one.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and
