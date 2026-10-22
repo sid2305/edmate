@@ -4120,7 +4120,9 @@ tasks:
   accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
   deps: []
   risk: high
-  status: todo
+  status: running
+  branch: m8/8.7h-audit-uuid
+  model: plan:lead build:sonnet
 - id: 11.1a
   milestone: M11
   title: Live classes repository in packages/db (11.1 Phase A, plan docs/tasks/11.1/plan.md)
@@ -4182,7 +4184,8 @@ tasks:
   status: todo
 - id: 9.7c
   milestone: M13
-  title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer MEDIUM)'
+  title: '9.7a review follow-ups: apps/web/e2e/global-setup.ts refuses a non-local TEST_DATABASE_URL before any write (migrate, seed, grantRole staff, setVerification), like e2e/stack/mail.ts does (security-reviewer
+    MEDIUM)'
   accept: global-setup throws on a non-local host with a clear message, with a unit test; the local e2e run is unchanged.
   deps:
   - 9.7a
@@ -4190,7 +4193,8 @@ tasks:
   status: todo
 - id: 9.5c
   milestone: M13
-  title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts against the compose stack once CI runs e2e'
+  title: '9.5b review follow-ups: wrap the mock-interview persona buttons in SkillLauncher in a role="group" with an aria-label (or a fieldset and legend); run the feedback and mock-interview cases in apps/web/e2e/skills.spec.ts
+    against the compose stack once CI runs e2e'
   accept: an a11y test finds the persona buttons inside a labelled group; skills.spec.ts passes in the CI e2e job.
   deps:
   - 9.5b
