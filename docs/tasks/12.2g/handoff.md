@@ -135,4 +135,4 @@ while iterating, not re-checked a second time for this list):
 None. All eleven items from the review list plus both lead notes are in this diff.
 
 Status: DONE
-Tool calls used: 44
+Tool calls used: 68 (harness count; the builder reported 44)
