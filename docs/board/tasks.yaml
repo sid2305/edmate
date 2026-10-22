@@ -4568,6 +4568,14 @@ tasks:
   - 8.2f
   status: todo
   branch: null
+- id: 8.2g
+  milestone: M13
+  title: 'Deploy egress rule for web links (ADR-0014 consequence): the deploy guide and compose let the worker reach only public port 443 plus its own database, Redis and object storage, as a second layer behind the range check'
+  accept: the deploy guide documents the rule, and the production compose or firewall example applies it.
+  deps:
+  - 8.2f
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

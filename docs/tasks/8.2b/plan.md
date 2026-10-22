@@ -324,3 +324,9 @@ fetches of real sites, no `curl` to the internet, no new packages.
 - Q2: build both modes. The dev and example env use `*` (any https site that resolves only to public addresses). The pilot value is part of B-47; until the human answers, `*` stands.
 - Q3: accepted for MVP. A failed link is deleted and added again, and no `source_url` column is added.
 - ADR: yes, ADR-0014 web-link egress. architect drafts the text before Phase A starts, the Phase A builder writes the file, and reviewers are architect, security-reviewer and typescript-reviewer (opus). Phases B and C also get security-reviewer.
+- ADR text: the architect's draft is in the lead's scratchpad (path in the 8.2d brief). The Phase A builder copies it to `docs/adr/0014-web-link-egress.md` and applies these lead answers to the architect's concerns:
+  - DNS lookups run inside the 15 s deadline (race the resolver against it), so one slow answer can't stall the concurrency-1 ingest queue (Phase A).
+  - With no teacher title, the default title is the host only, never the path, because paths can carry share tokens (Phase C; the ADR says so in Decision 9).
+  - A link job's URL doesn't sit in Redis's failed set for 7 days: link jobs are removed on final failure, and the document row keeps only the fixed failure reason (Phase B; the ADR says so in Decision 9).
+  - After the transport decompresses, it drops `content-length` and `content-encoding`. An IP-literal host gets no `servername`, and the name denylist strips a trailing dot (Phase A).
+  - A network egress rule for deploys (the worker reaches only public :443 plus its own database, Redis and storage) is board task 8.2g, for the M12 deploy guide.
