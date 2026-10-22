@@ -64,6 +64,20 @@ describe('fake adapter specifics', () => {
     expect(() => createFakePayments({ ...base, webhookSecrets: [] })).toThrow(
       'payment request is invalid',
     );
+    // An empty or blank secret slipped past Secret.of (a stand-in with the same shape).
+    for (const value of ['', '  ']) {
+      const blank = { reveal: () => value } as unknown as Secret;
+      expect(() =>
+        createFakePayments({ ...base, webhookSecrets: [Secret.of(fakeSecret()), blank] }),
+      ).toThrow('payment request is invalid');
+    }
+    // No status may use the fake's pre-start word.
+    expect(() =>
+      createFakePayments({
+        ...base,
+        statusWords: { trial: 'incomplete', active: 'a', past_due: 'b', paused: 'c', ended: 'd' },
+      }),
+    ).toThrow('payment request is invalid');
     expect(createFakePayments(base).provider).toBe('fake');
   });
 
@@ -128,6 +142,27 @@ describe('fake adapter specifics', () => {
     expect(
       await codeOf(payments.clearScheduled({ providerRef: 'sub_none', idempotencyKey: k() })),
     ).toBe('not_found');
+  });
+
+  it('scheduleResume refuses a bad time with validation and changes nothing', async () => {
+    const { payments } = fakeSetup();
+    const s = await live(payments);
+    await payments.pause({ providerRef: s.providerRef, when: 'now', idempotencyKey: k() });
+    const before = await payments.getSubscription(s.providerRef);
+    for (const at of ['tomorrow', '2026-10-23T10:00:00', '', 7 as unknown as string]) {
+      expect(await codeOf(() => payments.scheduleResume(s.providerRef, at))).toBe('validation');
+      expect(await payments.getSubscription(s.providerRef)).toEqual(before);
+    }
+    expect(await codeOf(() => payments.scheduleResume('sub_missing_9', 'tomorrow'))).toBe(
+      'validation',
+    );
+  });
+
+  it('a pre-start delivery for an unknown checkout is not_found', async () => {
+    const { payments } = fakeSetup();
+    expect(await codeOf(() => payments.emit({ kind: 'pre_start', checkoutRef: 'chk_none' }))).toBe(
+      'not_found',
+    );
   });
 
   it('scheduleResume needs a paused subscription', async () => {

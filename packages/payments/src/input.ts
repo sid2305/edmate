@@ -43,8 +43,8 @@ export const PortInputSchemas = {
   getSubscription: ProviderRefSchema,
   refund: z.strictObject({
     paymentRef: ProviderRefSchema,
-    /** Omitted = a full refund of what is left on the payment. */
-    amount: MoneySchema.refine((m) => m.amountMinor > 0).optional(),
+    /** Omitted = a full refund of what is left on the payment. Present as undefined: validation. */
+    amount: MoneySchema.refine((m) => m.amountMinor > 0).exactOptional(),
     idempotencyKey: IdempotencyKeySchema,
   }),
 } as const;

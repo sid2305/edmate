@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { isPaymentsError } from '../src/errors.js';
 import { Secret } from '../src/secret.js';
@@ -69,9 +70,27 @@ describe('matchesAnySignature', () => {
     );
   });
 
-  it('refuses when there are no candidates or no secrets', () => {
+  it('refuses when there are no candidates; no secrets is a configuration bug', () => {
     expect(matchesAnySignature({ payload: body, candidates: [], secrets: [secret] })).toBe(false);
-    expect(matchesAnySignature({ payload: body, candidates: [good], secrets: [] })).toBe(false);
+    expect(codeOf(() => matchesAnySignature({ payload: body, candidates: [good], secrets: [] }))).toBe(
+      'validation',
+    );
+  });
+
+  it('an empty or blank secret never verifies: it is validation, even next to a good one', () => {
+    // Secret.of refuses these, so a stand-in with the same shape reaches the check.
+    for (const value of ['', '   ', '\t\n']) {
+      const blank = { reveal: () => value } as unknown as Secret;
+      const forged = createHmac('sha256', value).update(body).digest('hex');
+      expect(
+        codeOf(() => matchesAnySignature({ payload: body, candidates: [forged], secrets: [blank] })),
+      ).toBe('validation');
+      expect(
+        codeOf(() =>
+          matchesAnySignature({ payload: body, candidates: [good], secrets: [secret, blank] }),
+        ),
+      ).toBe('validation');
+    }
   });
 
   it('accepts any of several signatures and any of several secrets (rotation)', () => {
@@ -120,7 +139,7 @@ describe('checkSignedTimestamp', () => {
     );
   });
 
-  it('refuses a tolerance above 300 s or a receivedAt that is not a date', () => {
+  it('refuses a tolerance above 300 s or a receivedAt that is not an ISO timestamp with Z or an offset', () => {
     expect(MAX_TIMESTAMP_TOLERANCE_SECONDS).toBe(300);
     expect(
       codeOf(() =>
@@ -135,6 +154,17 @@ describe('checkSignedTimestamp', () => {
     expect(
       codeOf(() => checkSignedTimestamp({ signedAtSeconds: now, receivedAt: 'yesterday' })),
     ).toBe('validation');
+    // Date.parse would read these as local time or accept them; the contracts schema does not.
+    for (const bad of ['2026-10-22T10:00:00', '2026-10-22', 'Thu, 22 Oct 2026 10:00:00 GMT']) {
+      expect(codeOf(() => checkSignedTimestamp({ signedAtSeconds: now, receivedAt: bad }))).toBe(
+        'validation',
+      );
+    }
+    expect(
+      codeOf(() =>
+        checkSignedTimestamp({ signedAtSeconds: now, receivedAt: '2026-10-22T15:30:00+05:30' }),
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -169,6 +199,16 @@ describe('webhook body helpers', () => {
     expect(codeOf(() => checkWebhookInput({ rawBody, headers: {}, receivedAt: 'soon' }))).toBe(
       'validation',
     );
+    for (const bad of ['2026-10-22T10:00:00', '2026-10-22', 'Thu, 22 Oct 2026 10:00:00 GMT']) {
+      expect(codeOf(() => checkWebhookInput({ rawBody, headers: {}, receivedAt: bad }))).toBe(
+        'validation',
+      );
+    }
+    expect(
+      codeOf(() =>
+        checkWebhookInput({ rawBody, headers: {}, receivedAt: '2026-10-22T03:00:00-07:00' }),
+      ),
+    ).toBeUndefined();
     expect(codeOf(() => checkWebhookInput({ rawBody, headers: {}, receivedAt: 7 as never }))).toBe(
       'validation',
     );

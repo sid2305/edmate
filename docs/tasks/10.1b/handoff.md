@@ -31,7 +31,7 @@ Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/payments... 
 ```
  Tasks:    47 successful, 47 total
 ```
-payments tests: `Tests  141 passed | 1 skipped` (the skip is the stale-timestamp case for the body-only style, which has no signed timestamp). Coverage: all files 99%+. `src/webhook/**`, `src/registry.ts`, `src/errors.ts` and `src/testing/**` are at 100% and enforced by thresholds.
+payments tests (after the 22 Oct fix round): `Tests  579 passed | 20 expected fail | 2 skipped (601)`. The 2 skips are the stale-timestamp and rewritten-timestamp cases for the body-only style, which has no signed timestamp. The 20 expected fails are the mutant self-test cases (`it.fails`), listed below. contracts: `444 passed`. Coverage: all files 99%+. `src/webhook/**`, `src/registry.ts`, `src/errors.ts` and `src/testing/**` are at 100% and enforced by thresholds.
 
 `python3 .githooks/secret-scan.py --all` → no output, exit 0.
 
@@ -101,3 +101,37 @@ payments tests: `Tests  141 passed | 1 skipped` (the skip is the stale-timestamp
 - Deferred from 10.1a, not in this task: 10.2 (a standalone `PaymentFactSchema` parse skips the provider check) and 10.8 (matching snapshots and payments to the checkout intent).
 
 Tool calls used: 68
+
+## Fix round (22 Oct 2026)
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/payments... --filter=@edmate/contracts` → `Tasks: 10 successful, 10 total`; payments `579 passed | 20 expected fail | 2 skipped (601)`; contracts `444 passed`. `src/webhook/**`, `src/testing/**`, `src/registry.ts` and `src/errors.ts` stay at 100%. `python3 .githooks/secret-scan.py --all` → no output.
+
+Per item:
+1. **Blank secrets.** `Secret.of`, `matchesAnySignature` (also with no secrets at all) and the fake's constructor refuse an empty or whitespace-only secret with `validation`, the closest ADR §7 code for a configuration bug (`src/secret.ts` `isBlankSecretValue`). Tests: secret.test.ts "refuses an empty or whitespace-only value with validation (an HMAC under it is forgeable)"; hmac.test.ts "an empty or blank secret never verifies: it is validation, even next to a good one" (the old "no secrets → false" case now expects `validation`); fake.test.ts constructor checks; suite "refuses a delivery signed with an empty secret".
+2. **Rewritten timestamp.** Suite "refuses a delivery whose signed timestamp was rewritten, signature unchanged" (timestamped style only; the driver's `restamp` delivery option).
+3. **Exact bytes.** Suite "verifies the exact bytes: extra whitespace and unsorted keys, signed as sent, are accepted", "refuses the same JSON value in other bytes than were signed", "refuses a correctly signed body over 1 MiB; exactly 1 MiB is read".
+4. **Per-operation `unsupported`.** `ContractCapabilities.unsupported?: UnsupportedOperation[]` (`changePlan.period_end`, `changePlan.proration_none`, `pause.period_end`, `cancel.period_end`, `refund`); a declared operation must throw `unsupported` after the shared input check. Wrapper test: `test/suite-mutants.test.ts` runs the suite against `unsupportedSetup` for `pause.period_end` alone and for all five.
+5. **Mutants** (`test/helpers/mutants.ts`, run in `test/suite-mutants.test.ts` with `expectFailing`; each listed case runs as `it.fails`, every other case must pass, and "every case the self-test expects to fail exists and runs" proves each name exists):
+   - (a) unknown status → active: "a signed body with unknown_status is malformed_event, never active", "no key or secret fragment reaches any output or error".
+   - (b) idempotency key not honoured: "returns the hosted https page, and the same result for the same key", "the same key with different input is a conflict on every write".
+   - (c) refund retry refunds twice: "refund: the retry returns the first refund and nothing is refunded twice", "full refund (amount omitted): the retry returns the same refund, paid out once", "same key returns the same refund; a different amount under it is a conflict; too much is validation", "the same key with different input is a conflict on every write".
+   - (d) signature check skipped: "refuses a missing header, a bad signature and a tampered body", "refuses a delivery signed with an empty secret", "refuses the same JSON value in other bytes than were signed", "refuses a delivery whose signed timestamp was rewritten, signature unchanged", "a body with unknown_status signed with a foreign secret is invalid_signature (signature first)", "a body with missing_subscription_id signed with a foreign secret is invalid_signature (signature first)", "no key or secret fragment reaches any output or error".
+   - (e) timestamp not signed: "refuses a delivery whose signed timestamp was rewritten, signature unchanged".
+   - (f) JSON re-serialised before the check: "verifies the exact bytes: extra whitespace and unsorted keys, signed as sent, are accepted", "refuses the same JSON value in other bytes than were signed", "refuses a correctly signed body over 1 MiB; exactly 1 MiB is read".
+   - (g) empty secret accepted: "refuses a delivery signed with an empty secret".
+6. **LOW suite gaps.** New cases: "the same key with different input is a conflict on every write", "resume: the retry resumes once and charges once", "full refund (amount omitted): the retry returns the same refund, paid out once", "a provider state before the subscription starts gives no facts" (fake `FAKE_PRE_START_WORD = 'incomplete'`, driver event `pre_start`), "eventId is stable when the same bytes are redelivered", "accepts a delivery signed with the previous secret (rotation)", and "a body with unknown_status / missing_subscription_id signed with a foreign secret is invalid_signature (signature first)". Table cases became loops with the case named in the title; duplicate case names throw.
+7. **receivedAt** is checked against the contracts ISO timestamp schema (`IsoTimestampSchema` = `ProviderSubscriptionSchema.shape.periodEnd`, since `timestamp` isn't exported) in `checkSignedTimestamp` and `checkWebhookInput`. hmac.test.ts: offset-less, date-only and RFC 2822 refused; `+05:30` and `-07:00` accepted.
+8. **Fake.** `scheduleResume` validates `at` first and throws `validation` with no state change (fake.test.ts "scheduleResume refuses a bad time with validation and changes nothing"); `write<K extends KeyedOperation>` reads `idempotencyKey` without a cast. Also "a pre-start delivery for an unknown checkout is not_found".
+9. **Invisible characters** in offer-name.test.ts and suite.ts are `\u{...}` escapes; a scan finds no literal left.
+10. **No network.** `test/setup/no-network.ts` assigns (not spies) `fetch`, `net.connect`/`createConnection`/`Socket#connect`, `tls.connect`, `http`/`https` `get`/`request`, `dns.lookup`/`resolve`/`promises.lookup` and `dgram.createSocket`, calls `syncBuiltinESMExports()`, and re-applies before each test. Self-test `test/no-network.test.ts` (named import, `vi.restoreAllMocks()` survival).
+11. **Type test** `test/input-types.test.ts`: `PortOperation` equals the port's methods minus `provider`/`parseWebhook`; `PortInput<K>` equals `Parameters<Payments[K]>[0]` for every K, plus a negative check.
+12. **Not done (reverted).** Changing the PaymentOffer comment in `packages/contracts/test/spec-types.ts` fails `spec-drift.test.ts` ("spec-types.ts equals the Core contracts block of the build plan"), because the same comment lives in `docs/edmate-harness-build-plan.md` line 271, which this round may not touch. The lead should change both lines together (with the ADR-0015 amendment): `one line (no \p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}\p{Co}, nor the Hangul fillers U+115F U+1160 U+3164 U+FFA0), a letter or digit`.
+13. Evidence count corrected above.
+
+Deviations:
+- "PortInput equals the port" is checked as mutual assignability: zod spells the same types differently (one object per `when` for changePlan, `T | undefined` for optionals), so strict identity fails on spelling only.
+- The refund `amount` schema is now `.exactOptional()` so its type matches the port; an amount present as `undefined` is `validation`.
+- The signed webhook timestamp is whole Unix seconds (a safe integer), not ISO; only `receivedAt` is ISO.
+- Mutant runs wrap each setup in `quiet()`, which marks port promises handled: a case that fails on purpose leaves calls in flight, which would otherwise surface as unhandled rejections. Callers that await still see every rejection; the real fake runs are not wrapped.
+- The "expected failing names exist" check reads the set when it runs, not at collection, because nested describes register their cases after the parent callback.
+

@@ -1,9 +1,12 @@
 // Timing-safe HMAC-SHA256 webhook signature checks (ADR-0015 §5), shared by every adapter.
 // Nothing here throws on a bad candidate: a short, long, non-hex or empty signature simply does
-// not match, so the caller turns "no match" into one `invalid_signature`.
+// not match, so the caller turns "no match" into one `invalid_signature`. A missing, empty or
+// blank secret is different: it is a configuration bug (`validation`), never a match, because an
+// HMAC under an empty key is something anyone can compute.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { PaymentsError } from '../errors.js';
-import type { Secret } from '../secret.js';
+import { isBlankSecretValue, type Secret } from '../secret.js';
+import { isoTimestampMs } from './body.js';
 
 /** ADR-0015 §5: at most 300 s between a provider's signed timestamp and our receivedAt. */
 export const MAX_TIMESTAMP_TOLERANCE_SECONDS = 300;
@@ -35,13 +38,17 @@ export function hmacSha256Hex(secret: Secret, payload: Uint8Array): string {
 /**
  * True when any candidate signature (lower or upper-case hex) is the HMAC-SHA256 of `payload`
  * under any of the secrets (rotation). Each comparison is constant time, with the length checked
- * first so it never throws; every pair is compared, with no early exit.
+ * first so it never throws on a bad candidate; every pair is compared, with no early exit.
+ * No secrets, or an empty or blank one, throws `validation`.
  */
 export function matchesAnySignature(x: {
   payload: Uint8Array;
   candidates: readonly string[];
   secrets: readonly Secret[];
 }): boolean {
+  if (x.secrets.length === 0 || x.secrets.some((s) => isBlankSecretValue(s.reveal()))) {
+    throw new PaymentsError('validation');
+  }
   const expected = x.secrets.map((s) => digest(s, x.payload));
   let matched = false;
   for (const candidate of x.candidates) {
@@ -58,7 +65,8 @@ export function matchesAnySignature(x: {
 /**
  * Throws `stale_signature` when the signed timestamp (Unix seconds) is further than the
  * tolerance from `receivedAt`, in either direction. A tolerance above 300 s, or a receivedAt that
- * is not a date, is a configuration bug: `validation`.
+ * is not a contracts ISO timestamp (a `Z` or a numeric offset), is a configuration bug:
+ * `validation`. The signed timestamp itself is whole Unix seconds (a safe integer), not ISO.
  */
 export function checkSignedTimestamp(x: {
   signedAtSeconds: number;
@@ -66,9 +74,9 @@ export function checkSignedTimestamp(x: {
   toleranceSeconds?: number;
 }): void {
   const tolerance = x.toleranceSeconds ?? MAX_TIMESTAMP_TOLERANCE_SECONDS;
-  const receivedMs = Date.parse(x.receivedAt);
+  const receivedMs = isoTimestampMs(x.receivedAt);
   if (
-    !Number.isFinite(receivedMs) ||
+    receivedMs === undefined ||
     !(tolerance >= 0 && tolerance <= MAX_TIMESTAMP_TOLERANCE_SECONDS)
   ) {
     throw new PaymentsError('validation');

@@ -21,9 +21,10 @@ import {
 import { z } from 'zod';
 import { PaymentsError, type PaymentsErrorCode } from '../errors.js';
 import { checkPortInput, type PortInput, type PortOperation } from '../input.js';
-import type { Secret } from '../secret.js';
+import { isBlankSecretValue, type Secret } from '../secret.js';
 import {
   checkWebhookInput,
+  isoTimestampMs,
   parseJsonBody,
   readHeader,
   type WebhookInput,
@@ -80,7 +81,9 @@ export type FakeEmit =
   | { kind: 'payment_succeeded'; paymentRef: string }
   | { kind: 'payment_failed'; providerRef: string }
   | { kind: 'refund'; refundRef: string }
-  | { kind: 'other'; providerType: string };
+  | { kind: 'other'; providerType: string }
+  /** A provider subscription created by a checkout the buyer has not finished yet. */
+  | { kind: 'pre_start'; checkoutRef: string };
 
 export interface FakePayments extends Payments {
   /** The header the signature travels in (lower case). */
@@ -122,6 +125,11 @@ const PERIOD_MS = 30 * DAY_MS;
 const DEFAULT_TRIAL_DAYS = 14;
 /** The fake's processing fee, in percent of the amount. */
 const FEE_PERCENT = 5;
+/**
+ * The fake provider's word for a subscription that has not started (like Razorpay's `created`):
+ * a delivery in that state gives no facts (ADR-0015 §5). No status may use this word.
+ */
+export const FAKE_PRE_START_WORD = 'incomplete';
 const SUBSCRIPTION_TYPES = new Set([
   'checkout.completed',
   'subscription.created',
@@ -204,6 +212,11 @@ function parseOr<T>(schema: z.ZodType<T>, value: unknown): T {
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 
+/** The port operations whose input carries an idempotency key (every write; not getSubscription). */
+type KeyedOperation = {
+  [K in PortOperation]: PortInput<K> extends { idempotencyKey: string } ? K : never;
+}[PortOperation];
+
 export function createFakePayments(options: FakePaymentsOptions): FakePayments {
   const provider = options.provider ?? 'fake';
   const style = options.signatureStyle ?? 'timestamped';
@@ -212,7 +225,10 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
   if (
     !ProviderSubscriptionSchema.shape.provider.safeParse(provider).success ||
     statusOf.size !== Object.keys(DEFAULT_STATUS_WORDS).length ||
-    options.webhookSecrets.length === 0
+    statusOf.has(FAKE_PRE_START_WORD) ||
+    options.webhookSecrets.length === 0 ||
+    // An empty or blank webhook secret would let anyone sign a delivery.
+    options.webhookSecrets.some((secret) => isBlankSecretValue(secret.reveal()))
   ) {
     throw new PaymentsError('validation');
   }
@@ -283,7 +299,7 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
   }
 
   /** A write: injected failures, then the idempotency key (same input = same result). */
-  async function write<K extends PortOperation, T>(
+  async function write<K extends KeyedOperation, T>(
     op: K,
     raw: unknown,
     apply: (x: PortInput<K>) => T,
@@ -291,7 +307,7 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
     await Promise.resolve();
     const x = checkPortInput(op, raw);
     takeFailure(op, false);
-    const key = (x as { idempotencyKey: string }).idempotencyKey;
+    const key = x.idempotencyKey;
     const input = JSON.stringify(x);
     const prior = keys.get(key);
     if (prior !== undefined) {
@@ -407,6 +423,23 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
       }
       case 'other':
         return { type: event.providerType, data: {} };
+      case 'pre_start': {
+        const checkout = checkouts.get(event.checkoutRef);
+        if (checkout === undefined) throw new PaymentsError('not_found');
+        return {
+          type: 'subscription.created',
+          data: {
+            id: `pending_${event.checkoutRef}`,
+            status: FAKE_PRE_START_WORD,
+            custom_data: {
+              subscription_id: checkout.subscriptionId,
+              package_version_id: checkout.offer.packageVersionId,
+            },
+            current_period_end: options.now().toISOString(),
+            scheduled_change: null,
+          },
+        };
+      }
     }
   }
 
@@ -443,6 +476,8 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
   function facts(type: string, data: unknown): PaymentFact[] {
     if (SUBSCRIPTION_TYPES.has(type)) {
       const d = parseOr(SubDataSchema, data);
+      // Before the subscription starts there is nothing Edmate uses yet.
+      if (d.status === FAKE_PRE_START_WORD) return [];
       const status = statusOf.get(d.status);
       // An unknown provider status is never mapped to anything, least of all `active`.
       if (status === undefined) throw new PaymentsError('malformed_event');
@@ -694,6 +729,8 @@ export function createFakePayments(options: FakePaymentsOptions): FakePayments {
     },
 
     scheduleResume(providerRef, at) {
+      // Checked first, so a bad value changes nothing and never surfaces later as a ZodError.
+      if (isoTimestampMs(at) === undefined) throw new PaymentsError('validation');
       const s = sub(providerRef);
       if (s.status !== 'paused') throw new PaymentsError('conflict');
       s.scheduled = { change: 'resume', at };

@@ -5,8 +5,9 @@ import {
   createFakePayments,
   type FakePayments,
   type FakePaymentsOptions,
+  type FakeSignOptions,
 } from '../../src/testing/index.js';
-import type { ContractSetup } from '../contract/suite.js';
+import type { ContractSetup, DriverEvent, SigningSecret } from '../contract/suite.js';
 import { fakeSecret } from './fake-secret.js';
 
 export const START = Date.parse('2026-10-22T10:00:00.000Z');
@@ -29,6 +30,27 @@ export function fakeSetup(
     now: () => new Date(clock.ms),
   });
   const at = (skewSeconds = 0) => ({ signedAt: new Date(clock.ms + skewSeconds * 1000) });
+  const signingSecret = (which: SigningSecret): Secret => {
+    if (which === 'previous') return Secret.of(previous);
+    if (which === 'foreign') return Secret.of(fakeSecret());
+    // Secret.of refuses an empty value, so the empty key is a stand-in with the same shape: what
+    // an attacker signs with when an adapter accepts an unset secret.
+    if (which === 'empty') return { reveal: () => '' } as unknown as Secret;
+    return Secret.of(current);
+  };
+  const signedEvent = (event: DriverEvent, sign: FakeSignOptions) => {
+    switch (event.kind) {
+      case 'checkout_completed':
+        return payments.emit(
+          { kind: 'subscription', providerRef: event.providerRef, providerType: 'checkout.completed' },
+          sign,
+        );
+      case 'unused':
+        return payments.emit({ kind: 'other', providerType: 'customer.updated' }, sign);
+      default:
+        return payments.emit(event, sign);
+    }
+  };
   return {
     payments,
     clock,
@@ -40,28 +62,21 @@ export function fakeSetup(
       charges: (providerRef) => Promise.resolve(payments.charges(providerRef)),
       delivery(event, o = {}) {
         const sign = {
-          ...at(o.skewSeconds),
+          ...at(o.restamp?.signedSkewSeconds ?? o.skewSeconds),
           ...(o.foreignSecret === true ? { secret: Secret.of(fakeSecret()) } : {}),
         };
-        switch (event.kind) {
-          case 'checkout_completed':
-            return Promise.resolve(
-              payments.emit(
-                {
-                  kind: 'subscription',
-                  providerRef: event.providerRef,
-                  providerType: 'checkout.completed',
-                },
-                sign,
-              ),
-            );
-          case 'unused':
-            return Promise.resolve(
-              payments.emit({ kind: 'other', providerType: 'customer.updated' }, sign),
-            );
-          default:
-            return Promise.resolve(payments.emit(event, sign));
-        }
+        const d = signedEvent(event, sign);
+        if (o.restamp === undefined) return Promise.resolve(d);
+        // Rewrite the header's timestamp; leave the signature as it was.
+        const fresh = Math.floor((clock.ms + o.restamp.headerSkewSeconds * 1000) / 1000);
+        const headers = Object.fromEntries(
+          Object.entries(d.headers).map(([h, v]) => [h, v.replace(/ts=\d+/, `ts=${fresh}`)]),
+        );
+        return Promise.resolve({ rawBody: d.rawBody, headers });
+      },
+      signed(rawBody, o = {}) {
+        const secret = signingSecret(o.secret ?? 'current');
+        return Promise.resolve({ rawBody, headers: payments.sign(rawBody, { secret }) });
       },
       malformed(kind, providerRef) {
         if (kind === 'bad_json') {
