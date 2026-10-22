@@ -3730,7 +3730,7 @@ tasks:
   - 9.2b
   risk: low
   status: todo
-- id: 13.flaky
+- id: '13.7'
   milestone: M13
   title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
     ms bound (PR #148)'
@@ -3738,7 +3738,7 @@ tasks:
   deps: []
   risk: low
   status: running
-  branch: m13/13.flaky-timing-tests
+  branch: m13/13.7-timing-tests
   model: build:sonnet-5/medium
 - id: 8.5e
   milestone: M8
