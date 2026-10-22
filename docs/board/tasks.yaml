@@ -2772,11 +2772,31 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: running
+  status: done
   branch: m7/7.4b-gate-thresholds
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
   needs_decision:
   - gate-thresholds
+  metrics:
+    tool_calls: 28
+    tokens_in: 104
+    tokens_out: 1173
+    cache_read_tokens: 1488411
+    wall_time_seconds: 142
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2a
   milestone: M7
   title: '7.2 Phases A+B: locked suite 38 to 100 cases (content extraction, skills, outline, multi-turn, encodings), SUITE_FLOORS ratchet and near-duplicate check (plan docs/tasks/7.2/plan.md)'
@@ -5307,9 +5327,29 @@ tasks:
   - 12.2b
   - 12.2c
   risk: high
-  status: running
+  status: done
   branch: m12/12.2d-staff-reports-api
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 62
+    tokens_in: 208
+    tokens_out: 1030
+    cache_read_tokens: 3864822
+    wall_time_seconds: 136
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 12.2e
   milestone: M12
   title: /staff/reports page that re-reads the queue every 60 s (12.2 Phase E)
