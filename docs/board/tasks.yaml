@@ -2286,7 +2286,7 @@ tasks:
     asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
     test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
     both sleep branches; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (PR #127: empty reply instead of "Hello there." after 2.9 s, passed on re-run): find the
-    cause'
+    cause; the apps/web src/turn/routes.test.ts abort test is flaky under CI load (expected 10330 to be less than 3000, PR #166): give it a fake clock or a looser bound'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -4445,7 +4445,9 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: todo
+  status: running
+  branch: m11/11.1b-studio-live-classes
+  model: plan:sonnet build:sonnet
 - id: 11.1c
   milestone: M11
   title: Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)
@@ -4522,7 +4524,7 @@ tasks:
   milestone: M13
   title: '9.6a review follow-ups: an additive index migration so messages.listForStudent and sessions.listForStudent page by (created_at, id) without sorting the whole pair history each page (e.g. sessions
     (teacher_id, student_id, created_at, id), and a messages path that seeks by the cursor across the pair''s sessions), checked with EXPLAIN on a seeded large pair; messages.listForStudent tests gain the
-    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime'
+    malformed-cursor, exact-boundary next = null and return-key-set cases that the sessions test has; a comment on ExportCursorSchema''s Z-only datetime; 9.6g review LOW: answeredPairs in apps/web/src/export/notes.ts shares one used set across the exact-timestamp and fallback branches, so a teacher message matched exactly is not reused by a later fallback; 9.6c review LOWs: pause and cancel as one UPDATE ... RETURNING, a type guard for LIVE_FOR_STUDENT_WRITE.includes, a comment that StatusSnapshot is deliberately non-strict'
   accept: EXPLAIN on a pair with 10,000 messages shows an index scan with no full Sort per page; the new messages test cases pass; the migration is additive.
   deps:
   - 9.6a
@@ -4628,7 +4630,7 @@ tasks:
   branch: null
 - id: 8.2c
   milestone: M8
-  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube)'
+  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the 8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots, a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the real one, a real https test, and fake timers in the deadline tests'
   accept: per the B-47 answer.
   deps:
   - 8.2f
@@ -4643,6 +4645,22 @@ tasks:
   - 8.2f
   status: todo
   branch: null
+- id: 9.6h
+  milestone: M9
+  title: '9.6c security review follow-ups (packages/db subscriptions.ts, before the pilot): cancel then start can''t get round a cost-alarm pause (start refuses a free package while the teacher''s free tier is alarm-paused, or cancel keeps the alarm state); resume trusts only a pause_student audit row written by this student (actor and actorRole); changePackage requires a verified teacher like start (9.3c); LOWs: cancel then start doesn''t reset the trial, changePackage to a package with no trial ends the trial, resume orders audit rows by id-safe order, and the live-version check notes the same unlocked-publish gap as start'
+  accept: each MEDIUM has a failing-then-passing integration test; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 9.6c
+  risk: risky
+  status: todo
+- id: 11.3c
+  milestone: M13
+  title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference out one student (pin the test clock or move the NEXT_WEEK fixtures into the past); the handoff test count says 27, the run has 26'
+  accept: a test shows the current and a future week are refused; db typecheck, lint and test green; security-reviewer re-checks.
+  deps:
+  - 11.3a
+  risk: risky
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
