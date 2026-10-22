@@ -3,7 +3,7 @@
 Status: DONE
 Branch: `m8/8.1c-subject-reverify`
 Worktree: `.claude/worktrees/agent-a762078b8bb2e9422`
-Tool calls used: 24
+Tool calls used: 36
 
 ## Summary
 `teacherProfiles.update` now sends a profile back to `pending` when the subject actually changes,
@@ -33,7 +33,7 @@ hint case red before the form change).
   still `verified` and the publish guard still passes.
 - `corepack pnpm vitest run app/teacher/onboarding/OnboardingForm.test.tsx` (apps/web) →
   `Tests 15 passed (15)`.
-- Full gate: GATE_RESULT
+- Full gate, after merging origin/main: `TEST_DATABASE_URL=<own container> corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/web...` → `Tasks: 34 successful, 34 total`; db `Tests 1140 passed | 4 skipped`; web `Tests 1446 passed | 4 skipped` (the skips are Redis-only suites). `python3 .githooks/secret-scan.py --all` → clean.
 
 ### How it is shown
 | Item | Evidence |
