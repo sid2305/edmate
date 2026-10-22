@@ -2022,9 +2022,9 @@ tasks:
   - '5.11'
   - '5.2'
   - '8.1'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: '8.4'
   milestone: M8
   title: Style interview (incl. common mistakes) and style card editor
@@ -2133,17 +2133,18 @@ tasks:
   branch: null
 - id: '9.0'
   milestone: M9
-  title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff verify →
-    upload → ingest; student sign-in → package → subscribe → chat with a real model key); fix any wiring problem found (CORS, public endpoint, env); write docs/try-it.md with the exact steps, env values to
-    fill (never committed), how a test account becomes staff, and a test teacher and student'
-  accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in the handoff with screenshots or trimmed logs (no keys).
+  title: 'Thin-slice end-to-end run and try-it guide (human request 22 Oct 2026): bring up docker/compose.yaml, seed, and run the whole flow in a browser (teacher sign-in → profile → onboarding → staff
+    verify → upload → ingest; student sign-in → package → subscribe → chat with a real model key); fix any wiring problem found (CORS, public endpoint, env); write docs/try-it.md with the exact steps, env
+    values to fill (never committed), how a test account becomes staff, and a test teacher and student'
+  accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in
+    the handoff with screenshots or trimmed logs (no keys).
   deps:
   - '9.4'
   - '8.2'
   - '9.3'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
