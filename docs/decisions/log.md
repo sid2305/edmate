@@ -10,6 +10,70 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6c security review MEDIUMs go to 9.6h before the pilot · decided by lead · risk: high
+- Decided: the three security MEDIUMs (cancel then start gets round a cost-alarm pause, resume trusts any pause_student row, changePackage skips the verified-teacher check) and the security LOWs are fixed in 9.6h (M9), not in this PR.
+- Why: no payment exists until M10, no app code writes a pause row for another actor, and the student UI for plan changes (9.6d) isn't built yet. So none is reachable in a way that costs money today, and the one-fix-round rule keeps this PR moving.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6c downgrade and cancel apply at once until 10.3 (B-44 open) · decided by lead · risk: high
+
+- Decided: `changePackage` and `cancel` both apply immediately — no `cancel_at_period_end`, no
+  proration, no migration. `changePackage` leaves `status`/`period_end` unchanged; `cancel` sets
+  `status = 'ended'` right away.
+- Why: there's no payment integration yet (M10 comes last per the current focus), so "apply at
+  period end" has nothing real to wait for. A future answer to open question Q1 that chooses (b)
+  (delay to period end) becomes a follow-up task that adds a `cancel_at_period_end` flag and a
+  scheduled package-version change, once task 10.3 exists to drive it off real billing periods.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6c resume only restores the student's own pause · decided by builder · risk: medium
+
+- Decided: `resume` looks at the *latest* audit row for the subscription and only proceeds if its
+  `action` is `subscription.pause_student` (the action this task names for the student-initiated
+  pause); any other latest action (a future cost-alarm pause, a staff action, or no audit row at
+  all) rejects `invalid`.
+- Why: the plan didn't specify what resume should do about a pause it didn't cause (e.g. a future
+  cost-alarm auto-pause from another task). Restoring blindly from "any past pause" could resume a
+  subscription a cost alarm or staff member paused for a reason the student doesn't see. Picking
+  the latest row and checking its action is the narrowest rule that keeps resume a pure inverse of
+  the student's own pause.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.6c a second live package per teacher in the shared isolation seed · decided by builder · risk: low
+
+- Decided: added `pkg2`/`packageVersion2` (same agent, also live) to every teacher in
+  `test/isolation-seed.ts`, rather than only to a task-local fixture.
+- Why: `changePackage`'s isolation-grid positive control needs a real, live, different package of
+  the *same* agent to switch to; a task-local fixture can't be reached from the shared grid's
+  `CASES` runner, which always acts against the shared A/B seed. This is additive only (new ids,
+  no changes to existing rows) and two existing tests (`corrections.int.test.ts`'s
+  `listForAgent` test and `repositories.int.test.ts`'s `liveForAgent` isolation case) needed their
+  expected lists updated to include the new package — both are now exact about which packages
+  they expect, so a future addition to the seed will fail loudly here again rather than silently
+  passing.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6c one defensive branch marked `v8 ignore` · decided by builder · risk: low
+
+- Decided: `changePackage`'s "the subscription's own current package version row is missing"
+  check (`if (!current) throw new RepositoryError('integrity', ...)`) is marked `/* v8 ignore
+  next */`, matching the existing convention in `publish.ts` for FK-guaranteed-unreachable checks.
+- Why: `subscriptions.package_version_id` has a foreign key into `package_versions`, which itself
+  has a foreign key into `packages`; neither row can be deleted while referenced, so this branch
+  cannot be exercised by any test without first removing the FK (confirmed by trying: Postgres
+  rejects the delete). Kept as defense-in-depth in case a future migration relaxes that FK.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 11.3a The insights privacy floor counts distinct students, in the repository's own SQL · decided by builder · risk: high
 - Decided: every insights aggregate (question groups, open-question groups, sticking topics, the unhelpful-answer count) needs `count(distinct student_id) >= 5`, enforced with SQL `HAVING` inside `insightsRepo`. Below the floor, a group or topic is dropped and the count is `null`. No read selects or returns `student_id`. The payload schema also refuses anything under the floor before it is stored. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
 - Why: the lead's answer (22 Oct 2026) says the floor counts students, never rows; acceptance says "no student identifiable". Doing it in SQL keeps student ids out of process memory and out of every caller.

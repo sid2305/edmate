@@ -4295,9 +4295,31 @@ tasks:
   deps:
   - 9.6a
   risk: high
-  status: running
+  status: done
   branch: m9/9.6c-plan-changes
-  model: plan:sonnet build:sonnet
+  model: build:sonnet review:opus+sonnet
+  metrics:
+    tool_calls: 59
+    tokens_in: 188
+    tokens_out: 725
+    cache_read_tokens: 4241904
+    wall_time_seconds: 347
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 9
+      by_severity:
+        MEDIUM: 3
+        LOW: 6
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 9
+        wontfix: 0
+    human_questions: 2
 - id: 9.6d
   milestone: M9
   title: PATCH /api/subscriptions/[id] and the /learn/[agentId]/plan page (9.6 Phase D, apps/web)
