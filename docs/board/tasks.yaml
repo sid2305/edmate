@@ -4461,7 +4461,7 @@ tasks:
 - id: 11.1d
   milestone: M13
   title: '11.1 follow-ups: edit and cancel a scheduled live class; email reminders if the human picks B-45 option (b); 11.1a review: cap the meeting link length in CreateInputSchema and decide https only;
-    listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads'
+    listUpcomingForStudent returns each class once when a student holds two subscriptions whose packages share it (DISTINCT); a LIMIT on both list reads; 11.1b review LOWs: per-class aria-label on the studio join links, a test at the exact 2048-character link boundary'
   accept: a teacher can edit or cancel a class, with tests.
   deps:
   - 11.1b
