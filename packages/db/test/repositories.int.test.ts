@@ -23,6 +23,7 @@ import {
   type CourseRow,
   createRepositories,
   type Outline,
+  type PackageDraft,
   openDatabase,
   REDACTED,
   RepositoryError,
@@ -240,6 +241,17 @@ const outlineOwners = (o: Outline) => [
   ]),
 ];
 
+/** Task 8.6b: a studio package draft of `t` (the seed's package config without its ids). */
+function pkgDraft(t: Teacher, moduleIds = [ids.module(t, 1)]): PackageDraft {
+  const draft = Object.fromEntries(
+    Object.entries(packageConfig(t, 1, moduleIds)).filter(
+      ([k]) => !['id', 'version', 'teacherId', 'agentId'].includes(k),
+    ),
+  ) as PackageDraft;
+  return { ...draft, name: `[${t}] studio package ${++counter}` };
+}
+/** Task 8.6b: one studio package per teacher, created in `beforeAll`, that saveVersion targets. */
+const savePkg: Partial<Record<Teacher, string>> = {};
 const answerTarget: Partial<Record<Teacher, string>> = {};
 const answerEmpty: Partial<Record<Teacher, string>> = {};
 const answerDismissed: Partial<Record<Teacher, string>> = {};
@@ -896,6 +908,146 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         ],
       ];
     },
+  },
+  // Task 8.6b: the teacher's draft agent and studio packages. ensureDraft checks the course and
+  // style card are the scope's (key-share locked) before returning or creating the agent;
+  // packages writes check the agent or package row (scoped by teacher and agent) and every module.
+  'agents.ensureDraft': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.agents.ensureDraft(scope, {
+        courseId: ids.course(target),
+        styleCardId: ids.styleCard(target),
+        promptPackVersion: '1.0.0',
+        modelPolicy: agentConfig(target).modelPolicy,
+      }),
+    verify: async (r, actor, res) => {
+      const { agentId, version } = res as { agentId: string; version: number };
+      for (const t of TEACHERS) {
+        const got = await r.agents.get(tScope(t), agentId);
+        expect(got !== null, `${t} reading ${actor}'s agent`).toBe(t === actor);
+        const v = await r.agentVersions.get(tScope(t), { agentId, version });
+        expect(v !== null, `${t} reading ${actor}'s agent version`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => {
+      const mine = {
+        courseId: ids.course(a),
+        styleCardId: ids.styleCard(a),
+        promptPackVersion: '1.0.0',
+        modelPolicy: agentConfig(a).modelPolicy,
+      };
+      return [
+        [
+          "another teacher's style card",
+          (r) =>
+            r.agents.ensureDraft(tScope(a), {
+              ...mine,
+              styleCardId: ids.styleCard(otherTeacher(a)),
+            }),
+          'not_found',
+        ],
+        [
+          "a client-set teacherId (another teacher's)",
+          (r) =>
+            r.agents.ensureDraft(tScope(a), {
+              ...mine,
+              teacherId: teacherId(otherTeacher(a)),
+            } as never),
+          'invalid',
+        ],
+        [
+          'a student scope id',
+          (r) => r.agents.ensureDraft({ teacherId: studentId('1') }, mine),
+          'not_found',
+        ],
+      ];
+    },
+  },
+  'packages.create': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.packages.create(scope, { agentId: ids.agent(target), draft: pkgDraft(target) }),
+    verify: async (r, actor, res) => {
+      const { packageId } = res as { packageId: string };
+      for (const t of TEACHERS) {
+        const list = await r.packages.listForTeacher(tScope(t));
+        expect(
+          list.some((p) => p.packageId === packageId),
+          `${t} listing ${actor}'s new package`,
+        ).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        "another teacher's module",
+        (r) =>
+          r.packages.create(tScope(a), {
+            agentId: ids.agent(a),
+            draft: pkgDraft(a, [ids.module(otherTeacher(a), 1)]),
+          }),
+        'scope',
+      ],
+      [
+        "a client-set teacherId in the draft (another teacher's)",
+        (r) =>
+          r.packages.create(tScope(a), {
+            agentId: ids.agent(a),
+            draft: { ...pkgDraft(a), teacherId: teacherId(otherTeacher(a)) } as never,
+          }),
+        'invalid',
+      ],
+    ],
+  },
+  'packages.saveVersion': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: (r, scope, _actor, target) =>
+      r.packages.saveVersion(scope, {
+        packageId: savePkg[target]!,
+        agentId: ids.agent(target),
+        draft: pkgDraft(target),
+      }),
+    verify: async (r, actor, res) => {
+      const { packageId, version } = res as { packageId: string; version: number };
+      for (const t of TEACHERS) {
+        const got = await r.packageVersions.get(tScope(t), { packageId, version });
+        expect(got !== null, `${t} reading ${actor}'s saved version`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        "my package under another teacher's agent",
+        (r) =>
+          r.packages.saveVersion(tScope(a), {
+            packageId: savePkg[a]!,
+            agentId: ids.agent(otherTeacher(a)),
+            draft: pkgDraft(a),
+          }),
+        'not_found',
+      ],
+      [
+        "another teacher's module",
+        (r) =>
+          r.packages.saveVersion(tScope(a), {
+            packageId: savePkg[a]!,
+            agentId: ids.agent(a),
+            draft: pkgDraft(a, [ids.module(otherTeacher(a), 2)]),
+          }),
+        'scope',
+      ],
+    ],
+  },
+  'packages.listForTeacher': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.packages.listForTeacher(scope),
+    random: (r, _scope, rid) => r.packages.listForTeacher({ teacherId: rid }),
+    owners: (xs: { config: { name: string; teacherId: string } }[]) =>
+      xs.flatMap((x) => [...markers(x.config.name), teacherOfId(x.config.teacherId)]),
   },
   'teacherQuestions.listForTeacher': {
     scope: 'teacher',
@@ -2704,6 +2856,11 @@ describe.skipIf(!up)(
       }
       for (const p of PAIRS) {
         notifTarget[p] = await makeNotification(repos, p);
+      }
+      for (const t of TEACHERS) {
+        savePkg[t] = (
+          await repos.packages.create(tScope(t), { agentId: ids.agent(t), draft: pkgDraft(t) })
+        ).packageId;
       }
     });
 

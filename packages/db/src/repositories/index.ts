@@ -10,6 +10,7 @@ import { modulesRepo } from './modules.js';
 import { notificationsRepo } from './notifications.js';
 import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
+import { packagesRepo } from './packages.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
@@ -45,6 +46,7 @@ export function createRepositories(db: Db) {
     modules: guardAll('modules', modulesRepo(db)),
     styleCards: guardAll('styleCards', styleCardsRepo(db)),
     packageVersions: guardAll('packageVersions', packageVersionsRepo(db)),
+    packages: guardAll('packages', packagesRepo(db)),
     teacherQuestions: guardAll('teacherQuestions', teacherQuestionsRepo(db)),
     teacherEvalCases: guardAll('teacherEvalCases', teacherEvalCasesRepo(db)),
     sessions: guardAll('sessions', sessionsRepo(db)),
@@ -114,7 +116,8 @@ export {
   type PauseFreeOptions,
   type StartInput,
 } from './subscriptions.js';
-export type { AgentRow, PublicAgentScope } from './agents.js';
+export type { AgentRow, DraftAgentInput, PublicAgentScope } from './agents.js';
+export { PACKAGES_MAX, type PackageDraft, type TeacherPackageRow } from './packages.js';
 export type { LivePackage, PackageOffer } from './package-versions.js';
 export type {
   UnmeteredEntry,

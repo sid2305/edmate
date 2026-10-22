@@ -321,6 +321,32 @@ underneath it.
 ASC, id ASC`, `limit` capped at `EVIDENCE_LIST_MAX` (10 000). It fetches `limit + 1` rows to set
 `truncated`, so a cut export always says so instead of silently looking complete.
 
+## Agent bootstrap and packages (task 8.6b)
+
+`agents.ensureDraft(scope, { courseId, styleCardId, promptPackVersion, modelPolicy })` returns
+`{ agentId, version }`: the scope's teacher's agent (MVP: one per teacher). Under a per-teacher
+transaction lock it first key-share-locks the course and style card by id **and** `teacher_id`
+(either missing or another teacher's is `not_found`, on every call); then it returns the teacher's
+oldest agent with its newest version number, or inserts a `draft` agent and its version 1. The
+config is built from the scope (`teacherId`), the input and `languages: ['en']` and parsed by
+`AgentConfigSchema` before any SQL (`invalid`); the input is strict, so a client-set `teacherId`
+is `invalid`. An existing agent is never re-versioned here (publishing is 8.7).
+
+`packages.create(scope, { agentId, draft })` → `{ packageId, version: 1 }`,
+`packages.saveVersion(scope, { packageId, agentId, draft })` → `{ packageId, version }` and
+`packages.listForTeacher(scope)` → `TeacherPackageRow[]`. A `PackageDraft` is a `PackageConfig`
+without `id`, `version`, `teacherId` and `agentId` (strict: any of them is `invalid`); the
+repository fills them from the scope and the rows and parses the full config. `create` locks the
+teacher (advisory), checks the agent row by id and `teacher_id` (`not_found`), every module by id
+and `teacher_id` (`scope`), and the `PACKAGES_MAX` (20) cap (`invalid`), then inserts the package
+and its version 1 in one transaction. `saveVersion` locks the package row `FOR UPDATE` by id,
+`teacher_id` and `agent_id` (`not_found`), checks the modules, writes version max + 1 (the unique
+`(package_id, version)` index is the backstop) and updates `packages.name`, the only column it ever
+changes; ownership columns (`teacher_id`, `agent_id`) and `live_version` are never updated. Each
+write adds one `package.save` audit row: `target` `package:<id>`, `after` `{ version }` only (no
+price, no names). `listForTeacher` reads the scope's packages oldest first (at most
+`PACKAGES_MAX`) and each one's newest version, both filtered by `teacher_id`.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and
