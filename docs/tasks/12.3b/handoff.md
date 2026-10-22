@@ -52,7 +52,7 @@ disposable `pgvector/pgvector:0.8.1-pg16` containers (`edmate123b-pg-test` port 
 - `TEST_DATABASE_URL=… corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --concurrency=2`
   (after the optional-input change) → `Tasks: 26 successful, 26 total`. At the default
   concurrency `@edmate/harness#test` fails now and then on a load-sensitive guard test (harness
-  untouched; it passes on rerun).
+  untouched; it passes on rerun). After the last merge of main: `--force --concurrency=2` → `Tasks: 26 successful, 26 total` (container `edmate123b-pg-test3`, removed; an earlier run there failed `@edmate/db#test` once, likely the container still starting, and passed on rerun).
 - `python3 .githooks/secret-scan.py --all` → clean.
 
 Covered: create with `true` stamps now and returns it; create without leaves null; `false`,
@@ -85,4 +85,4 @@ teacher 0, back to baseline on lift).
   `apps/web/src/studio/routes.ts` passing `body.rightsDeclared` (plus `routes.test.ts`,
   `apps/worker/test/ingest.int.test.ts` and the db tests that create documents).
 
-Tool calls used: 59
+Tool calls used: 66
