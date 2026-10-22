@@ -14,6 +14,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
+  buildScorecard,
   CHANGE_KINDS,
   fileRecorder,
   GATE_THRESHOLDS,
@@ -42,6 +43,7 @@ the fixtures a scope needs.
   --fixtures <dir>  recorded agent/judge fixtures (default: evals/fixtures)
   --seed <s>        rotates the style-card sample (default: "")
   --report <file>   also write the GateResult as JSON
+  --scorecard <file> also write the Scorecard (per-agent pass rates) as JSON
 
 Exits 0 only when every group in scope passes its publish threshold. Exits 1 on any failure,
 including when a full-scope change needs a suite or group with no decided threshold yet (named,
@@ -113,6 +115,7 @@ export async function runGateCommand(
         fixtures: { type: 'string' },
         seed: { type: 'string' },
         report: { type: 'string' },
+        scorecard: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -196,6 +199,14 @@ export async function runGateCommand(
       const reportPath = resolve(deps.cwd, values.report);
       mkdirSync(dirname(reportPath), { recursive: true });
       writeFileSync(reportPath, JSON.stringify(result, null, 2) + '\n');
+    }
+    if (values.scorecard !== undefined) {
+      const scorecardPath = resolve(deps.cwd, values.scorecard);
+      mkdirSync(dirname(scorecardPath), { recursive: true });
+      writeFileSync(
+        scorecardPath,
+        JSON.stringify(buildScorecard(result), null, 2) + '\n',
+      );
     }
     return result.pass ? 0 : 1;
   } catch (e) {

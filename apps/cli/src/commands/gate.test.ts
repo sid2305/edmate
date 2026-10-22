@@ -207,6 +207,86 @@ describe('edmate gate', () => {
         rmSync(tmp, { recursive: true, force: true });
       }
     });
+    it('--scorecard writes the Scorecard as JSON, omitted by default', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
+      try {
+        writeSyntheticSuite(join(tmp, 'suites'));
+        for (const id of caseIds) writeFixture(join(tmp, 'fixtures'), id, true);
+        const { io } = capture();
+        const code = await runGateCommand(
+          [
+            'demo',
+            '--change',
+            'style_card',
+            '--fixtures',
+            join(tmp, 'fixtures'),
+            '--scorecard',
+            join(tmp, 'out', 'scorecard.json'),
+          ],
+          io,
+          { cwd: tmp, suitesDir: join(tmp, 'suites') },
+        );
+        expect(code).toBe(0);
+        const scorecard = JSON.parse(
+          readFileSync(join(tmp, 'out/scorecard.json'), 'utf8'),
+        ) as { pass: boolean; changes: string[]; categories: unknown[] };
+        expect(scorecard).toMatchObject({ pass: true, changes: ['style_card'] });
+        expect(scorecard.categories).toHaveLength(3);
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('writes both --report and --scorecard together', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
+      try {
+        writeSyntheticSuite(join(tmp, 'suites'));
+        for (const id of caseIds) writeFixture(join(tmp, 'fixtures'), id, true);
+        const { io } = capture();
+        const code = await runGateCommand(
+          [
+            'demo',
+            '--change',
+            'style_card',
+            '--fixtures',
+            join(tmp, 'fixtures'),
+            '--report',
+            join(tmp, 'out', 'gate.json'),
+            '--scorecard',
+            join(tmp, 'out', 'scorecard.json'),
+          ],
+          io,
+          { cwd: tmp, suitesDir: join(tmp, 'suites') },
+        );
+        expect(code).toBe(0);
+        expect(
+          JSON.parse(readFileSync(join(tmp, 'out/gate.json'), 'utf8')) as { pass: boolean },
+        ).toMatchObject({ pass: true });
+        expect(
+          JSON.parse(readFileSync(join(tmp, 'out/scorecard.json'), 'utf8')) as { pass: boolean },
+        ).toMatchObject({ pass: true });
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it('does not write a scorecard file when --scorecard is omitted', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'cli-gate-'));
+      try {
+        writeSyntheticSuite(join(tmp, 'suites'));
+        for (const id of caseIds) writeFixture(join(tmp, 'fixtures'), id, true);
+        const { io } = capture();
+        const code = await runGateCommand(
+          ['demo', '--change', 'style_card', '--fixtures', join(tmp, 'fixtures')],
+          io,
+          { cwd: tmp, suitesDir: join(tmp, 'suites') },
+        );
+        expect(code).toBe(0);
+        expect(() => readFileSync(join(tmp, 'out/scorecard.json'), 'utf8')).toThrow();
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('full-scope change on the real suites (blocker B-40: no thresholds yet)', () => {
