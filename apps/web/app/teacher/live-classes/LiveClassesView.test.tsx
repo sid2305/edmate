@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveClassRecording, TeacherLiveClassRow } from '@edmate/db';
 import type { ApiResult, DocumentView } from '../../../src/studio/uploadClient';
 import { renderIntl } from '../../../test/intl';
-import { LiveClassesView } from './LiveClassesView';
+import { LiveClassesView, RECORDING_POLL_MAX_MS, RECORDING_POLL_MS } from './LiveClassesView';
 
 const PACKAGES = [{ packageId: 'pkg_1', name: 'Grade 8 Math', moduleIds: ['mod_1'] }];
 
@@ -404,6 +404,95 @@ describe('LiveClassesView', () => {
       await waitFor(() => expect(screen.getByText('Failed')).toBeInTheDocument());
       expect(screen.getByText('The file is too big.')).toBeInTheDocument();
       expect(screen.queryByText('Unrelated notes')).toBeNull();
+    });
+
+    it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const listDocuments = vi.fn(
+        async (): Promise<ListResult> => ({ ok: true, value: [view({ status: 'processing' })] }),
+      );
+      renderIntl(
+        <LiveClassesView
+          classes={[PAST]}
+          packages={PKGS}
+          now={NOW}
+          recordings={[rec({ status: 'processing' })]}
+          listDocuments={listDocuments}
+        />,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MAX_MS + RECORDING_POLL_MS);
+      });
+      const callsAtCap = listDocuments.mock.calls.length;
+      expect(callsAtCap).toBeGreaterThan(0);
+      await waitFor(() => expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MS * 5);
+      });
+      expect(listDocuments).toHaveBeenCalledTimes(callsAtCap);
+    });
+
+    it('a row past the poll cap does not stop a newer row from polling to completion (11.4g fix round)', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const docStatus: Record<string, 'processing' | 'ready'> = { doc_1: 'processing' };
+      const listDocuments = vi.fn(
+        async (): Promise<ListResult> => ({
+          ok: true,
+          value: Object.entries(docStatus).map(([id, status]) => view({ id, status })),
+        }),
+      );
+      const createDocument = vi.fn(async () => ({
+        ok: true as const,
+        value: { documentId: 'doc_new', uploadUrl: 'https://bucket.example.test/p', uploadHeaders: {} },
+      }));
+      const putFile = vi.fn(async () => undefined);
+      const completeDocument = vi.fn(async () => ({
+        ok: true as const,
+        value: { documentId: 'doc_new', status: 'processing' },
+      }));
+      renderIntl(
+        <LiveClassesView
+          classes={[PAST]}
+          packages={PKGS}
+          now={NOW}
+          recordings={[rec({ documentId: 'doc_1', status: 'processing' })]}
+          listDocuments={listDocuments}
+          recordingClient={{ createDocument, putFile, completeDocument }}
+        />,
+      );
+      // doc_1 sits past its own window; row A alone caps out (same as the test above).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MAX_MS + RECORDING_POLL_MS);
+      });
+      const callsAtCap = listDocuments.mock.calls.length;
+      await waitFor(() => expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument());
+
+      // A brand-new recording (doc_new) must get its own full poll window even while doc_1 is
+      // still stuck past its cap.
+      fireEvent.click(screen.getByRole('button', { name: 'Add a recording to Past class' }));
+      fireEvent.change(screen.getByLabelText('Recording or transcript'), {
+        target: { files: [new File(['WEBVTT'], 'c.vtt', { type: 'text/vtt' })] },
+      });
+      fireEvent.change(screen.getByLabelText('Module'), { target: { value: 'mod_3' } });
+      fireEvent.click(screen.getByLabelText('I confirm I hold the rights to upload this material.'));
+      fireEvent.click(screen.getByLabelText(/Everyone heard in this recording agreed/));
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Upload recording' }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await waitFor(() => expect(completeDocument).toHaveBeenCalled());
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MS);
+      });
+      await waitFor(() => expect(listDocuments.mock.calls.length).toBeGreaterThan(callsAtCap));
+
+      docStatus.doc_new = 'ready';
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECORDING_POLL_MS);
+      });
+      const list = await screen.findByRole('list', { name: 'Recordings: Past class' });
+      await waitFor(() => expect(within(list).getAllByText('Ready')).toHaveLength(1));
     });
 
     it('a new upload appears under its class with its status', async () => {

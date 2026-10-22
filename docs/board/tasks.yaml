@@ -2359,9 +2359,31 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
-  status: running
+  status: done
   branch: m13/9.3b-home-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 177
+    tokens_in: 554
+    tokens_out: 38150
+    cache_read_tokens: 18152513
+    wall_time_seconds: 494
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.16a
   milestone: M0
   title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
@@ -4735,7 +4757,7 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: todo
+  status: planning
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5973,9 +5995,9 @@ tasks:
     gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
   deps: []
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/3.11g-linear-time-test
+  model: plan:lead build:sonnet
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
@@ -6246,9 +6268,30 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: running
+  status: done
   branch: m11/11.4g-recording-upload-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

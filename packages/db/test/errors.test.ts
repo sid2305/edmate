@@ -83,6 +83,29 @@ describe('translateWrite', () => {
   });
 });
 
+describe('translateWrite unique-violation cause (task 9.3b)', () => {
+  it('attaches the constraint name on the unique-violation cause, so a caller can tell which one fired', async () => {
+    const err = await translateWrite('subscriptions.start', async () => {
+      throw pgError('23505', 'Key (student_id, teacher_id)=(stu_x, tch_x) already exists');
+    }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ kind: 'invalid', method: 'subscriptions.start' });
+    const cause = (err as RepositoryError).cause as ScrubbedDbError;
+    expect(cause).toBeInstanceOf(ScrubbedDbError);
+    expect(cause.code).toBe('23505');
+  });
+
+  it('the constraint itself travels when the driver sets it (not just code/detail)', async () => {
+    const err = await translateWrite('subscriptions.start', async () => {
+      throw Object.assign(new Error('violates unique constraint'), {
+        code: '23505',
+        constraint: 'subscriptions_one_live_per_pair_key',
+      });
+    }).catch((e: unknown) => e);
+    const cause = (err as RepositoryError).cause as ScrubbedDbError;
+    expect(cause.constraint).toBe('subscriptions_one_live_per_pair_key');
+  });
+});
+
 describe('translateWrite onDuplicate', () => {
   it('can report a duplicate key as not_found (caller-chosen global ids)', async () => {
     await expect(
