@@ -16,10 +16,11 @@ import { Composer } from './Composer';
 import { HintButton } from './HintButton';
 import { LockedNotice } from './LockedNotice';
 import { MessageBubble, type MessageRole } from './MessageBubble';
+import { MockInterviewControls } from './MockInterviewControls';
 import { PracticeCard, type PracticeCardData } from './PracticeCard';
 import { sendTurn as realSendTurn, startSession as realStartSession, type TurnHandle } from './sendTurn';
 import { SkillCard } from './SkillCard';
-import { SkillLauncher } from './SkillLauncher';
+import { SkillLauncher, type MockInterviewPersona } from './SkillLauncher';
 import { SourcesList } from './SourcesList';
 import { TeacherQuestionNotice } from './TeacherQuestionNotice';
 import { initialTurn, reduceTurn, type SkillCardData, type StreamItem, type TurnView } from './turnState';
@@ -118,6 +119,10 @@ export function ChatView({
    * `skill` of its own (9.5a: a hint asked mid-practice stays on the practice ladder); never onto a
    * plain `message`, so leaving practice by typing is not silently tagged. */
   const [activeSkill, setActiveSkill] = useState<Skill | null>(null);
+  /** One-shot: set by the "Get feedback" toggle, consumed (and cleared) by the next Composer
+   * send. Unlike `activeSkill`, feedback never persists across turns (5.7 is a single verdict,
+   * not a ladder). */
+  const [feedbackPending, setFeedbackPending] = useState(false);
   const session = useRef<string | null>(sessionId);
   const handle = useRef<TurnHandle | null>(null);
   /** Bumped per turn and on unmount; an item for an older turn is dropped. */
@@ -134,7 +139,13 @@ export function ChatView({
 
   useEffect(() => {
     if (!active || turn.status !== 'final') return;
-    setActiveSkill(turn.skills.at(-1)?.skill ?? null);
+    // Practice (and any future skill with a dedicated `skill` event) is derived from the turn's
+    // own skill cards, last one wins, and clears when a turn has none. Mock interview never
+    // tool-wires a `present()` hook (Q2, 9.5 plan) so no turn ever carries a `skill:
+    // 'mock_interview'` event; it is set directly by the start/pause action below and only
+    // cleared by Stop, so a reply with no skill cards never silently drops the student out of it.
+    const named = turn.skills.at(-1)?.skill;
+    setActiveSkill((prev) => (named !== undefined ? named : prev === 'mock_interview' ? prev : null));
   }, [active, turn]);
 
   const streaming = active && turn.status === 'streaming';
@@ -168,10 +179,14 @@ export function ChatView({
   }
 
   function submit(request: TurnRequest, shown: string) {
-    const effective: TurnRequest =
-      request.skill !== undefined || activeSkill === null || request.kind === 'message'
-        ? request
-        : { ...request, skill: activeSkill };
+    // A plain Composer message never carries the active skill along -- except mock interview,
+    // whose answers *are* ordinary typed messages (there is no dedicated answer form, unlike
+    // practice's PracticeCard), so leaving it is Stop's job, not a side effect of typing.
+    const carries =
+      request.skill === undefined &&
+      activeSkill !== null &&
+      (request.kind !== 'message' || activeSkill === 'mock_interview');
+    const effective: TurnRequest = carries ? { ...request, skill: activeSkill } : request;
     const key = `local-${nextKey.current++}`;
     setThread((items) => {
       const out = [...items];
@@ -192,6 +207,26 @@ export function ChatView({
 
   function answerPractice(text: string) {
     submit({ kind: 'check_answer', text, skill: 'practice' }, text);
+  }
+
+  function startMockInterview(persona: MockInterviewPersona) {
+    submit({ kind: 'skill_action', skill: 'mock_interview', skillPayload: { persona } }, t('mockInterview.start'));
+    setActiveSkill('mock_interview');
+  }
+
+  function pauseMockInterview() {
+    submit({ kind: 'message', text: '/pause', skill: 'mock_interview' }, '/pause');
+  }
+
+  function stopMockInterview() {
+    submit({ kind: 'message', text: 'stop', skill: 'mock_interview' }, 'stop');
+    setActiveSkill(null);
+  }
+
+  function sendMessage(text: string) {
+    const tagged = feedbackPending ? ({ kind: 'message', text, skill: 'feedback' } as const) : ({ kind: 'message', text } as const);
+    submit(tagged, text);
+    if (feedbackPending) setFeedbackPending(false);
   }
 
   const finalTurn = active && turn.status === 'final' ? turn : null;
@@ -244,11 +279,17 @@ export function ChatView({
         disabled={streaming}
         onHint={() => submit({ kind: 'hint_request' }, t('hintAsked'))}
       />
+      {activeSkill === 'mock_interview' ? (
+        <MockInterviewControls disabled={streaming} onPause={pauseMockInterview} onStop={stopMockInterview} />
+      ) : null}
       <SkillLauncher
         disabled={streaming}
         onStartPractice={() => submit({ kind: 'message', text: t('practice.start'), skill: 'practice' }, t('practice.start'))}
+        feedbackActive={feedbackPending}
+        onToggleFeedback={() => setFeedbackPending((v) => !v)}
+        onStartMockInterview={startMockInterview}
       />
-      <Composer disabled={streaming} onSend={(text) => submit({ kind: 'message', text }, text)} />
+      <Composer disabled={streaming} onSend={sendMessage} />
     </div>
   );
 }
