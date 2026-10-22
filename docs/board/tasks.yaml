@@ -3085,6 +3085,17 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 9.0d
+  milestone: M9
+  title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
+    or its deps can fail at random'
+  accept: the cause is named in the handoff; the test passes 20 runs in a row locally under CPU load; no assertion is weakened.
+  deps:
+  - '9.4'
+  risk: normal
+  status: running
+  branch: m9/9.0d-sse-test-flake
+  model: build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
