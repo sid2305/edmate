@@ -5161,9 +5161,9 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: running
+  status: done
   branch: m12/12.5c-staff-alert-inbox
-  model: plan:opus build:opus
+  model: plan:opus build:sonnet review:sonnet
   metrics:
     tool_calls: 24
     tokens_in: 78
