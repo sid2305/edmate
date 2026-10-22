@@ -10,6 +10,55 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6a export readers on the repositories path (no help_state, pair-scoped, keyset paged) · decided by builder · risk: high
+- Decided: `sessions.listForStudent` and `messages.listForStudent` are new student-scope readers.
+  They never select `help_state` (the only place the answer key is stored, ADR-0005), they are
+  scoped by `(studentId, teacherId)` exactly like every other reader in these two files (and, for
+  messages, joined through `sessions` the same way `ownSession` checks one session), and they page
+  with a `(createdAt, id)` keyset cursor validated by a strict zod schema before any SQL runs (a
+  malformed cursor is `invalid`, never a query). The isolation grid (`repositories.int.test.ts`)
+  runs both methods through the full actor x target matrix and confirms another pair's rows never
+  appear, even on a shared timestamp; `leak.test.ts` confirms a driver failure never leaks ids or
+  text.
+- Why: this is the risky `packages/db/src/repositories/**` path (access / money / data isolation
+  group per `risk-paths.txt`), and it is the first reader of its kind (keyset-paged, no 200-row
+  cap) — worth a high-risk entry on its own even though it adds no write path.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6a cursor is a structured object, not an opaque token · decided by builder · risk: low
+- Decided: `after` is the literal `{ createdAt, id }` object the plan's "Tests first" section
+  names, validated by a strict zod schema (`ExportCursorSchema`), not a base64/opaque string.
+- Why: the plan spelled out the exact cursor schema, and a caller (9.6b's `buildExport`) already
+  has the previous page's last row to build the next `after` from — no encoding step earns its
+  keep here, and a strict schema makes "malformed cursor" trivial to define and test.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6a owner markers for the isolation grid come from row content, not scope columns · decided by builder · risk: low
+- Decided: `sessions.listForStudent`'s isolation case derives its owner marker from `summary`
+  (present on every pair's base seeded session) and `messages.listForStudent`'s from `text`
+  (present on every message, seeded or appended) — neither return shape carries `studentId`/
+  `teacherId`, unlike `sessions.get`'s full `SessionRow`. The grid's "greater than 0 markers, set
+  equals exactly `{actor}`" check still holds: every row that does carry a marker must be the
+  actor's own (a leaked row would contribute a different marker and fail), and at least one row
+  in scope always does.
+- Why: the plan deliberately strips the returned shape down for export (no scope columns, no
+  `helpState`), so the grid's owner-detection has to use what content remains instead of a shape
+  that doesn't exist for these two methods.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6a the export readers' missing index waits for 9.6f · decided by lead · risk: medium
+- Decided: database-reviewer's HIGH (no index for the export readers' pair filter plus (created_at, id) order) is re-rated MEDIUM and deferred to 9.6f, an additive index migration before opening up.
+- Why: the readers are correct and pair-scoped; export is rare and user-started; a closed-pilot pair has a few thousand messages at most, so a per-page sort is cheap; the 9.6 plan rules out a migration in this phase.
+- risk: medium
+
+---
+
 ### 22 Oct 2026 · 8.7c a failed run lookup ends the run error · decided by builder · risk: low
 - Decided: `getRun` runs inside the processor's error handling. If it throws, the failure is logged (`gate.error`, code `repository_<kind>`) and the run is finished `error`. If that also fails, `gate.finish_failed` is logged and the job fails (dead-lettered); the run then stays open until the stale rule closes it.
 - Why: no silent failures; a run should not wait up to 2 h 15 min as stale when the database blipped once.
