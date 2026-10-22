@@ -48,6 +48,7 @@
     "slugLabel": "Profile URL",
     "slugHint": "Can't be changed later.",
     "subjectLabel": "Subject",
+    "subjectHint": "Changing your subject sends your profile back for re-verification.",
     "bioLabel": "Bio",
     "languagesLabel": "Languages",
     "languagesHint": "Comma-separated, e.g. en, pt-BR",

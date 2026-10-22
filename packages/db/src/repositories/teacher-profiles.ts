@@ -5,7 +5,7 @@
 //
 // `photo` has no input yet (the column stays null until a storage port exists, 8.2 or later) and
 // `payoutAccountRef` belongs to payments (M10); neither is read or written here.
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
@@ -127,7 +127,14 @@ export function teacherProfilesRepo(db: Db) {
       return row ? toTeacherProfile(row, method) : null;
     },
 
-    /** Edits the scope's own profile; `not_found` if it has none. Never touches verification. */
+    /**
+     * Edits the scope's own profile; `not_found` if it has none. A teacher never sets their own
+     * verification, but a subject change (task 8.1c, B-30) sends the profile back to `pending`.
+     * The reset is part of the same UPDATE statement: the CASE reads the row's pre-update subject
+     * under the row lock the UPDATE already takes, so there is no read-then-write window. A
+     * subject equal to the stored one (after the schema's trim) is not a change; bio and
+     * languages edits never touch the status.
+     */
     async update(scope: TeacherScope, patch: TeacherProfileUpdate): Promise<TeacherProfileRow> {
       const method = 'teacherProfiles.update';
       const { teacherId } = teacherScope(scope, method);
@@ -135,7 +142,14 @@ export function teacherProfilesRepo(db: Db) {
       const [row] = await db
         .update(teacherProfiles)
         .set({
-          ...(p.subject === undefined ? {} : { subject: p.subject }),
+          ...(p.subject === undefined
+            ? {}
+            : {
+                subject: p.subject,
+                verificationStatus: sql`case when ${teacherProfiles.subject} <> ${p.subject}
+                  then 'pending'::teacher_verification_status
+                  else ${teacherProfiles.verificationStatus} end`,
+              }),
           ...(p.bio === undefined ? {} : { bio: p.bio }),
           ...(p.languages === undefined ? {} : { languages: p.languages }),
         })
