@@ -33,7 +33,12 @@ export default async function LiveClassesPage() {
       <h1>{t('title')}</h1>
       {/* English-only pilot: only the live-classes studio's strings go to the client. */}
       <NextIntlClientProvider locale="en" messages={{ liveClassesStudio: messages.liveClassesStudio }}>
-        <LiveClassesView classes={data.classes} packages={data.packages} />
+        <LiveClassesView
+          classes={data.classes}
+          packages={data.packages}
+          studentQueue={data.studentQueue}
+          askQueue={data.askQueue}
+        />
       </NextIntlClientProvider>
     </AppShell>
   );

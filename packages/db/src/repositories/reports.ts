@@ -19,14 +19,7 @@ import { and, asc, eq, inArray, like, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { lockRole } from '../role-lock.js';
-import {
-  documents,
-  messages,
-  reports,
-  sessions,
-  takedowns,
-  teacherProfiles,
-} from '../schema/index.js';
+import { documents, messages, reports, sessions, teacherProfiles } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
@@ -41,6 +34,7 @@ import {
 } from './map.js';
 import { IdSchema, parseArg, studentScope, type StudentScope } from './scope.js';
 import { ownSession } from './sessions.js';
+import { notTakenDown } from './takedowns.js';
 
 export { REPORT_CATEGORIES, REPORT_CITED_DOCUMENTS_MAX, type ReportCategory, type StaffReportRow };
 
@@ -182,11 +176,8 @@ export function reportsRepo(db: Db) {
                   teacherId: documents.teacherId,
                   title: documents.sourceTitle,
                   kind: documents.kind,
-                  // Qualified by hand: drizzle leaves a one-table select's columns bare, and a
-                  // bare "id" inside this subquery would bind to takedowns.id.
-                  takenDown: sql<boolean>`exists (select 1 from ${takedowns}
-                    where ${takedowns.target} = 'document:' || "documents"."id"
-                    and ${takedowns.status} = 'active')`.mapWith(Boolean),
+                  // The one takedown predicate (12.2b), which qualifies the column itself.
+                  takenDown: sql<boolean>`not ${notTakenDown(documents.id)}`.mapWith(Boolean),
                 })
                 .from(documents)
                 .where(

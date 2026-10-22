@@ -17,8 +17,8 @@ import { ALERT_QUEUE, DEAD_LETTER_QUEUE, JOB, jobId, queuedAlertSink } from '@ed
 import { type Job, Queue, type Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type AckStore, createAlertWorker, redisAckStore } from '../src/alerts/index.js';
-import type { AlertAudience, AlertNotifier } from '../src/alerts/types.js';
+import { createAlertWorker, redisAckStore } from '../src/alerts/index.js';
+import type { AckStore, AlertAudience, AlertNotifier, AlertStore } from '../src/alerts/types.js';
 import type { LogLine } from '../src/log.js';
 import { slackClock } from './clock.js';
 
@@ -108,8 +108,17 @@ let connection: Redis;
 let prodQueue: Queue;
 let fastQueue: Queue;
 let deadLetter: Queue;
-let ackStore: AckStore;
+let store: AlertStore & AckStore;
 const workers: Worker[] = [];
+
+/** An in-memory AlertStore (12.5b) over the Redis ack store: this file stays Redis-only. */
+function inMemoryAlertStore(ack: AckStore): AlertStore & AckStore {
+  return {
+    record: () => Promise.resolve(),
+    markEscalated: () => Promise.resolve(),
+    ...ack,
+  };
+}
 const prod = recordingNotifier({ alert_e2e: 6 });
 const fast = recordingNotifier();
 
@@ -119,14 +128,14 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
     prodQueue = new Queue(ALERT_QUEUE, { connection, prefix: prodPrefix });
     fastQueue = new Queue(ALERT_QUEUE, { connection, prefix: fastPrefix });
     deadLetter = new Queue(DEAD_LETTER_QUEUE, { connection, prefix: prodPrefix });
-    ackStore = redisAckStore(connection, { keyPrefix: `${fastPrefix}:` });
+    store = inMemoryAlertStore(redisAckStore(connection, { keyPrefix: `${fastPrefix}:` }));
     const log = (l: LogLine) => lines.push(l);
     // Production settings: 1 s backoff doubling to 30 s, 15-minute escalation.
     workers.push(
       createAlertWorker({
         connection,
         notifier: prod.notifier,
-        ackStore,
+        store,
         queue: prodQueue,
         deadLetter,
         log,
@@ -139,7 +148,7 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
       createAlertWorker({
         connection,
         notifier: fast.notifier,
-        ackStore,
+        store,
         queue: fastQueue,
         deadLetter,
         log,
@@ -235,7 +244,7 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
     // At most one pending check at any time.
     expect((await pendingChecks(fastQueue, id)).length).toBeLessThanOrEqual(1);
 
-    await ackStore.acknowledge(id);
+    await store.acknowledge(id);
     // The next check sees the ack and schedules nothing more.
     await until(
       () => pendingChecks(fastQueue, id),
@@ -249,7 +258,7 @@ describe.skipIf(!up)(`safety alerts on Redis${up ? '' : ` (${SKIP})`}`, () => {
 
   it('acknowledged before the first check → on-call is never paged', async () => {
     const id = 'alert_acked';
-    await ackStore.acknowledge(id);
+    await store.acknowledge(id);
     await queuedAlertSink(fastQueue, { escalateAfterMs: FAST_ESCALATE_MS }).raise(alertNamed(id));
     await until(
       () => fast.delivered.filter((d) => d.alertId === id),

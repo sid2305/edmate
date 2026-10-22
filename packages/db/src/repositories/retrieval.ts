@@ -13,6 +13,7 @@ import { RepositoryError } from './errors.js';
 import type { Repositories } from './index.js';
 import { leakCacheKey, LeakIndexCache } from './leakCache.js';
 import { IdSchema, parseArg, teacherScope, type TeacherScope } from './scope.js';
+import { notTakenDown } from './takedowns.js';
 
 /** Most module ids one call may name (a teacher's whole course fits many times over). */
 export const RETRIEVAL_MAX_MODULES = 500;
@@ -186,6 +187,8 @@ async function rank(
       eq(chunks.teacherId, teacherId),
       inArray(chunks.moduleId, moduleIds),
       inArray(chunks.moduleId, owned),
+      // Task 12.2b: a taken-down document is gone from text, vector and term stats at once.
+      notTakenDown(chunks.documentId),
     ],
     sql` and `,
   );
@@ -368,7 +371,13 @@ export function retrievalRepo(db: Db) {
       return db
         .select({ moduleId: chunks.moduleId, text: chunks.text })
         .from(chunks)
-        .where(and(eq(chunks.teacherId, teacherId), inArray(chunks.moduleId, owned)))
+        .where(
+          and(
+            eq(chunks.teacherId, teacherId),
+            inArray(chunks.moduleId, owned),
+            notTakenDown(chunks.documentId),
+          ),
+        )
         .orderBy(asc(chunks.moduleId), asc(chunks.documentId), asc(chunks.id));
     },
 

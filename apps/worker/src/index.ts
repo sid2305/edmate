@@ -1,6 +1,8 @@
 // Worker process entrypoint: opens Redis and the database, then runs the no-op worker, the turn
 // queues' workers (meter, commit; task 3.8), the scheduled cost alarm (2.5, scheduled in 3.8) and
-// the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged) and
+// the safety-alert worker (4.3: trust team, then on-call every 15 minutes until acknowledged;
+// 12.5b: the DB (`safety_alerts`, via `dbAlertStore`) is the ack source of truth, not Redis -- the
+// staff console acknowledges through the repository, not this worker) and
 // the safety-event worker (4.4: moderationIn and jailbreak blocks become safety_events rows) and
 // the publish-gate worker (8.7: one gate run at a time; models, content and suites from the
 // environment, failing closed per run when any is missing).
@@ -14,8 +16,8 @@ import { createCostAlarmWorker, logCostAlarmSink, scheduleCostAlarm } from './al
 import {
   createAlertWorker,
   createSafetyEventWorker,
+  dbAlertStore,
   logAlertNotifier,
-  redisAckStore,
 } from './alerts/index.js';
 import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
@@ -76,7 +78,7 @@ const weeklyInsights = createWeeklyInsightsWorker({
 const alert = createAlertWorker({
   connection,
   notifier: logAlertNotifier(),
-  ackStore: redisAckStore(connection),
+  store: dbAlertStore(db.repos.safetyAlerts),
   queue: alertQueue,
   deadLetter,
   log,
