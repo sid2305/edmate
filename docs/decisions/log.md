@@ -10,6 +10,27 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.3b countUpheld reads takedowns for the teacher's own content (risky path, security-reviewer) · decided by builder · risk: high
+- Decided: `takedowns.countUpheld(scope)` in `packages/db/src/repositories/takedowns.ts` counts active `copyright` takedowns on the teacher's own documents or agents, teacher-scoped and read only, with no lock and no caller yet; `documents.create` / `startReplace` in `chunks.ts` now stamp or clear `rights_declared_at`. Reviewer required: security-reviewer.
+- Why: the 12.3 plan's lead answers (12.2's literals, count only); `packages/db/src/repositories/**` is a risky path.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.3b the takedown's audit row also proves ownership · decided by builder · risk: medium
+- Decided: a takedown counts for a teacher when its target is theirs now or when its own `takedown.create` audit row (same target, `after.takedown` = the takedown id) names them, so deleting a taken-down document does not clear the count.
+- Why: `documents.delete` removes the document row, so a join on the target alone would let a teacher erase a strike; the audit row is written in the same transaction as the takedown and is never deleted. No migration needed.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.3b rightsDeclared is optional until 12.3c · decided by lead · risk: low
+- Decided: `documents.create` / `startReplace` accept `rightsDeclared: true` as optional: true stamps `rights_declared_at = now()`; absent leaves it null on create and clears it on replace; `false` is `invalid`. 12.3c makes it required for create, web link and replace together, with the routes.
+- Why: requiring it now would break three production routes in `apps/web/src/studio/routes.ts`; web links will need the declaration too (lead answer, option 2).
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.6e placeholder condition widens to all three lists · decided by builder · risk: low
 - Decided: `/home`'s empty-state placeholder (`t('placeholder')`) now shows only when `chats`,
   `startable` and `paused` are all empty, rather than just the first two.

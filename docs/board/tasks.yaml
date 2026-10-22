@@ -5367,9 +5367,29 @@ tasks:
   - 12.3a
   - 12.2b
   risk: high
-  status: running
+  status: done
   branch: m12/12.3b-rights-declaration-db
   model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 49
+    tokens_in: 170
+    tokens_out: 919
+    cache_read_tokens: 2787788
+    wall_time_seconds: 108
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.3c
   milestone: M12
   title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
@@ -5816,8 +5836,10 @@ tasks:
   branch: null
 - id: 8.2n
   milestone: M13
-  title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words; a complete-route test for .srt; drop the HTMLInputElement cast in UploadsView.test.tsx; replace updates documents.kind when the file kind changes (a PDF replaced by a .vtt stays material); the needs-transcription rule moves onto UploadType (a transcribe field) instead of routes.ts'
-  accept: 'web typecheck, lint and test green; the refusal test fails if the words revert.'
+  title: '8.2l review follow-ups in apps/web/src/studio: the YouTube refusal test asserts the exact new words (typescript MEDIUM, routes.test.ts:380); uploadClient.test.ts YouTube fixture uses the new words;
+    a complete-route test for .srt; drop the HTMLInputElement cast in UploadsView.test.tsx; replace updates documents.kind when the file kind changes (a PDF replaced by a .vtt stays material); the needs-transcription
+    rule moves onto UploadType (a transcribe field) instead of routes.ts'
+  accept: web typecheck, lint and test green; the refusal test fails if the words revert.
   deps:
   - 8.2l
   risk: low
