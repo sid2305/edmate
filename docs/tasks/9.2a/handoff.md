@@ -55,7 +55,7 @@ Postgres integration (own compose project `edmate92a`, torn down with `-v` after
 ### 22 Oct 2026 · 9.2a Lead accepts the public discovery repository in packages/db/src/repositories/discovery.ts · decided by lead · risk: high
 - Decided: merge the public, unauthenticated discovery read (packages/db/src/repositories/discovery.ts, index.ts, teacher-profiles.ts) after security-reviewer, database-reviewer, code-reviewer and typescript-reviewer all approved; it exposes only slug, display name, subject, bio, languages, package count and hasFree for verified teachers with a live agent and a live package version.
 - Why: every decoy (pending, rejected, student role, draft or suspended agent, no live package, draft version) is tested absent; input is parsed by strict zod before any SQL and the tsquery is a bound parameter.
-- risk: high (risky path packages/db/src/repositories/**). Follow-ups in 9.2d; request-level rate limiting on the public /teachers routes belongs to 9.2b.
+- risk: high (risky path packages/db/src/repositories/**). Follow-ups in 9.2e; request-level rate limiting on the public /teachers routes belongs to 9.2b.
 
 ### 22 Oct 2026 · 9.2a Lead ratifies 'scope' errors for bad public input in packages/db/src/repositories/discovery.ts · decided by lead · risk: low
 - Decided: discovery.search and discovery.teacherBySlug throw RepositoryError('scope', method) on malformed input, not 'invalid' as the plan's prose said; the code-reviewer's MEDIUM on this is wontfix. Phase B maps 'scope' from these two methods to a 400 or an empty result.
@@ -74,7 +74,7 @@ Postgres integration (own compose project `edmate92a`, torn down with `-v` after
 
 ### 22 Oct 2026 · 9.2a GIN-index test asserts no seq scan plus GIN usability on a join-free query · decided by builder · risk: low
 - Decided: at seed scale Postgres picks the btree join index for the full statement, so the test asserts no Seq Scan on teacher_profiles and, separately, that both GIN indexes are used when they are the only access path.
-- Why: a scale-dependent plan assertion would be brittle (database-reviewer MEDIUM on this test is deferred to 9.2d).
+- Why: a scale-dependent plan assertion would be brittle (database-reviewer MEDIUM on this test is deferred to 9.2e).
 - risk: low
 
 ### 22 Oct 2026 · 9.2a Seed CLI lives in cli.ts · decided by builder · risk: low
