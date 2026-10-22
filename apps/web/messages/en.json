@@ -389,5 +389,39 @@
       "not_found": "That question isn't there any more. Reload the page.",
       "generic": "Something went wrong. Please try again."
     }
+  },
+  "teacherPage": {
+    "defaultTitle": "Teacher | Edmate",
+    "metaTitle": "{name}, {subject} | Edmate",
+    "languagesLabel": "Teaches in",
+    "packagesHeading": "Packages",
+    "noPackages": "No packages are available yet.",
+    "free": "Free",
+    "pricePerMonth": "{price} a month",
+    "trialDays": "{days} day free trial",
+    "dailyMessageLimit": "{count} messages a day",
+    "liveClassesPerMonth": "{count} live classes a month",
+    "skillsLabel": "What the agent helps with",
+    "skills": {
+      "explain": "Explain",
+      "coach": "Coach",
+      "practice": "Practice",
+      "feedback": "Feedback",
+      "mock_interview": "Mock interview",
+      "revision": "Revision",
+      "study_plan": "Study plan"
+    },
+    "choosePackage": "Choose a package",
+    "scorecardHeading": "Teaching scorecard",
+    "scorecardNone": "No published scorecard yet.",
+    "scorecardNotMeasured": "Not measured yet",
+    "scorecardPercent": "{percent}% of checks passed",
+    "scorecardPassed": "Passed",
+    "scorecardNotPassed": "Not passed",
+    "scorecardCategories": {
+      "hints_before_answers": "Hints before answers",
+      "locked_content": "Locked content",
+      "accuracy": "Accuracy"
+    }
   }
 }
