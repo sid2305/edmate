@@ -135,3 +135,14 @@ now live and teacher-scoped; Phase C's `OutlineView.tsx` can call them directly.
   (matching drafted topics back onto specific existing topic ids) better left to a follow-up if a
   teacher actually hits this in practice.
 - risk: low
+
+## Fix round 1
+- `createStudioRuntime` (apps/web/src/studio/runtime.ts) memoised the resolved `Backend` value
+  (`backend ??= await build(...)`), so two concurrent requests on a cold process both saw
+  `undefined` and each built a full backend (two Redis, S3, queue and gateway clients). Now the
+  in-flight promise itself is cached, the same shape `styleCardRuntime.ts` uses, and cleared on
+  failure so a later request retries.
+- Added `runtime.test.ts` "two concurrent calls on a cold runtime build once" asserting
+  `Promise.all([get(), get()])` resolves to the same backend and `h.repos` is called once.
+- `turbo run typecheck lint test --filter=@edmate/web...`: 34/34 tasks pass. `secret-scan.py
+  --all`: clean.

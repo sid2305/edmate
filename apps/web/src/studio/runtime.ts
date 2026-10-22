@@ -83,14 +83,21 @@ async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
   };
 }
 
-/** A memoised backend factory; a failed build is not cached, so the next request retries. */
+/**
+ * A memoised backend factory. The in-flight promise is cached (not just its resolved value), so
+ * two concurrent cold requests share one build; a failed build is not cached, so the next
+ * request retries.
+ */
 export function createStudioRuntime(
   env: () => Env,
   hooks: StudioHooks,
 ): () => Promise<Backend> {
-  let backend: Backend | undefined;
-  return async () => {
-    backend ??= await build(env(), hooks);
+  let backend: Promise<Backend> | undefined;
+  return () => {
+    backend ??= build(env(), hooks).catch((error: unknown) => {
+      backend = undefined;
+      throw error;
+    });
     return backend;
   };
 }

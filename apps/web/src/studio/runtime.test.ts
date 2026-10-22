@@ -99,6 +99,17 @@ describe('createStudioRuntime', () => {
     });
     expect(send.mock.calls[0]![0]).toMatchObject({ input: { Bucket: 'b1', Key: 'k' } });
   });
+
+  it('two concurrent calls on a cold runtime build once (the in-flight promise is shared)', async () => {
+    const { h } = hooks();
+    const get = createStudioRuntime(
+      () => ({ REDIS_URL: 'redis://x', S3_BUCKET: 'b1', ...KEY_ENV }),
+      h,
+    );
+    const [a, b] = await Promise.all([get(), get()]);
+    expect(a).toBe(b);
+    expect(h.repos).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('upload URLs', () => {
