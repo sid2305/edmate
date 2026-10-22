@@ -172,7 +172,7 @@ Commands:
 - Phase A landed the first two points; Phase B landed the run-time pick. Today it picks 1.3.0.
 
 ### The seed picks its prompt-pack set at seed time; no env override for the pack dir · risk: low
-- `seedDemoTeacher` computes `newestSignedSet(readPromptPackLibrary(promptPacksDir))` before the
+- Decided: `seedDemoTeacher` computes `newestSignedSet(readPromptPackLibrary(promptPacksDir))` before the
   transaction; `buildDemoSeed` takes the version as an argument, so it stays pure.
 - No signed set, or an unreadable dir, throws and writes nothing.
 - `EDMATE_SEED_CONTENT_DIR` gets no matching prompt-pack variable: prompt packs are shared by every
@@ -180,27 +180,27 @@ Commands:
   use the `promptPacksDir` option.
 
 ### The CLI falls back to the fixture set when no set is signed · risk: low
-- `loadChatPromptPacks` treats "no signed set" like an unreadable dir: it uses the harness fixture
+- Decided: `loadChatPromptPacks` treats "no signed set" like an unreadable dir: it uses the harness fixture
   set and reports `source: 'fixture'`, instead of running an unsigned set.
 
 ### CLI personas fall back to none; web personas fail closed · risk: low
-- In the CLI, a persona-dir failure means no role-play (coach), with a banner line, like the
+- Decided: In the CLI, a persona-dir failure means no role-play (coach), with a banner line, like the
   prompt-pack fixture fallback.
 - On the web, a persona-dir failure fails the runtime build, like the prompt-pack dir.
 - The content snapshot test checks the real dir in CI.
 
 ### The CLI's help state now persists between turns · risk: low
-- `buildChatDeps` writes each saved help state onto the in-memory world's session row
+- Decided: `buildChatDeps` writes each saved help state onto the in-memory world's session row
   (`worldSessionStateStore`), which `memoryTurnConfigStore` hands to the next turn.
 - Without it, the role-play count and stored persona id were lost every turn (the 3.9a gap).
 - Side effect: the CLI help ladder now climbs across turns, as it does on the web.
 
 ### Demo paid package gets `mock_interview` (per Q2) · risk: low
-- This matches the PRD's skills for the top package. Already-seeded databases report it as drift
+- Decided: This matches the PRD's skills for the top package. Already-seeded databases report it as drift
   and need a re-seed.
 
 ### ADR-0013 rollback stays free until 9.5 · risk: low
-- No web turn can carry `skill: 'mock_interview'` until 9.5, and CLI sessions live in memory. So no
+- Decided: No web turn can carry `skill: 'mock_interview'` until 9.5, and CLI sessions live in memory. So no
   stored help state gains `personaPhase` from this task.
 - Recorded here; 5.8b writes the ADR note.
 
