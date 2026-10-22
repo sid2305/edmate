@@ -4072,9 +4072,31 @@ tasks:
   deps:
   - 8.7a
   risk: high
-  status: running
+  status: done
   branch: m12/12.1a-staff-queue
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet fix:opus review:sonnet
+  metrics:
+    tool_calls: 73
+    tokens_in: 254
+    tokens_out: 987
+    cache_read_tokens: 3272977
+    wall_time_seconds: 1148
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 7
+      by_severity:
+        HIGH: 2
+        LOW: 3
+        MEDIUM: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 12.1b
   milestone: M12
   title: Staff console page and verification routes in apps/web (12.1 Phase B)
@@ -4382,7 +4404,8 @@ tasks:
   status: todo
 - id: 8.7m
   milestone: M13
-  title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
+  title: '8.7h review follow-ups (redact-json): a test for a phone number padded with hex to UUID shape (accepted as exempt, documented); the pre-existing gap where a digit run glued to letters (a UUID
+    with a phone number appended, no separator) is never redacted; drop the non-UUID ''runId'' value from the crafted all-digit UUID cases; reword the matchAll comment and remove the rest[0] cast'
   accept: tests for the hex-padded and glued cases (the glued case redacts the phone digits); the crafted-UUID cases are all UUID-shaped; redact-json.ts stays at 100% coverage.
   deps:
   - 8.7h

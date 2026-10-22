@@ -10,6 +10,53 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.1a Staff-only join of users for name/email in listPendingForStaff · decided by builder · risk: high
+- Decided: `teacherProfiles.listPendingForStaff` is the one repository method that selects
+  `users.name` and `users.email` (never `phone`), gated by checking the caller's own role is
+  `staff` right now (unlocked read of `users.role`, before any other SQL). `role-lock.ts` itself
+  stays personal-data-free: the staff check here is a plain, local `select role from users` in
+  `teacher-profiles.ts`, not routed through `role-lock.ts`, so that file's own test (it selects only
+  `{ role: users.role }`) is unaffected.
+- Why: staff need the teacher's declared name and email to actually check identity before
+  approving or rejecting (same precedent as `identity.getUserByEmail`); the plan (Q2) accepted this
+  scoped to this one method. `packages/db/src/repositories/**` is a risk path
+  (`security-reviewer`), and this is the first repository method to read personal data outside
+  `discovery.ts`'s existing public-display-name exception, so it is logged `risk: high` per the
+  plan's "Risky paths touched" section.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.1a listPendingForStaff excluded from the scope.test.ts bad-scope grid · decided by builder · risk: low
+- Decided: `teacherProfiles.listPendingForStaff` is excluded from `scope.test.ts`'s "every
+  repository method rejects a bad scope" grid, with a comment explaining why (same pattern as the
+  existing `discovery.search` exclusion).
+- Why: that grid's `BAD_SCOPES` fixtures assume the first argument is a `TeacherScope`/
+  `StudentScope` object; `listPendingForStaff`'s first argument is a bare staff id, so a fixture
+  like the plain string `'tch_a'` is actually a well-formed id by `IdSchema` and would reach the
+  database (against the grid's unreachable-host pool) instead of failing before any SQL. Its own
+  malformed/non-staff cases are covered directly in `teacher-profiles.test.ts` and
+  `teacher-profiles.int.test.ts`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1a isolation-grid case is `scope: 'public'`, not a teacher/student pair · decided by builder · risk: low
+- Decided: `teacherProfiles.listPendingForStaff`'s entry in `repositories.int.test.ts`'s `CASES`
+  record uses `scope: 'public'` (the `agents.owner`-style "no teacher or student scope at all"
+  case), with its own `check` asserting the staff/non-staff split and that every returned row is
+  `pending` with the right shape — not an exact pending set, since an earlier case in the same file
+  (`teacherProfiles.assertVerifiedForPublish`) deliberately flips verification status for the
+  teachers in the seed and test order determines which one ends up verified.
+- Why: the method genuinely has no `TeacherScope`/`StudentScope` first argument, so it cannot run
+  through `runGrid`'s per-teacher/per-pair actor loop; asserting the exact pending set would be
+  brittle against `CASES`' insertion order (a correctness risk a future reorder could silently
+  break). The int test in `teacher-profiles.int.test.ts` already asserts the exact pending set,
+  name/email join and cap in an isolated, controlled database.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.7a CI runs the Playwright e2e suite in the node job · decided by builder · risk: high
 - Decided: added two steps to the existing `.github/workflows/ci.yml` `node` job, after "Build
   smoke": "Install Playwright browsers" (`corepack pnpm --filter @edmate/web exec playwright
