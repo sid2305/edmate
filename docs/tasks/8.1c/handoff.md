@@ -3,7 +3,7 @@
 Status: DONE
 Branch: `m8/8.1c-subject-reverify`
 Worktree: `.claude/worktrees/agent-a762078b8bb2e9422`
-Tool calls used: 36
+Tool calls used: 46 (harness count; the builder reported 36)
 
 ## Summary
 `teacherProfiles.update` now sends a profile back to `pending` when the subject actually changes,
