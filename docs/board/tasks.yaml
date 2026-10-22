@@ -3656,9 +3656,29 @@ tasks:
   deps:
   - 8.5b
   risk: low
-  status: running
+  status: done
   branch: m8/8.5e-test-chat-ui
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 112
+    tokens_out: 691
+    cache_read_tokens: 1747684
+    wall_time_seconds: 128
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.5a
   milestone: M9
   title: 'Practice screen (9.5 Phase A, apps/web): skill input kinds, ChatView activeSkill, PracticeCard'
