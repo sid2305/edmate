@@ -98,4 +98,57 @@ Integration tests ran against a disposable container (`pg-124a-builder`, pgvecto
   the only source of the version's `regulatedSubject`.
 - 12.4c / 12.4d: staff API and page.
 
-Tool calls used: 50
+## Fix round 1
+
+Fixed the DB HIGH from review (findings scratchpad, 22 Oct 2026): migration 0023's new FK and both
+CHECK constraints were added without `NOT VALID` / a `POST_MIGRATE_STEPS` entry, so their full
+validation scan of every existing `agents` row (plus the backfill UPDATE) ran under drizzle's
+single-transaction ACCESS EXCLUSIVE lock on a hot table. The MEDIUM (`listForStaff`'s unindexed
+sort) is deferred, untouched.
+
+- `packages/db/migrations/0023_agents_regulated_subject.sql`: the FK and both CHECK constraints
+  are now added `NOT VALID`; the backfill UPDATE is unchanged.
+- `packages/db/src/migrate.ts`: appended three `validateConstraint` steps for
+  `agents_regulated_approved_by_users_id_fk`, `agents_regulated_subject_check` and
+  `agents_regulated_approval_check` to `POST_MIGRATE_STEPS` (same pattern as 0009 / task 3.16b);
+  updated the doc comment.
+- `packages/db/test/regulated-subject-migration.int.test.ts`: the final migrate call now uses
+  `migrateDatabase()` (not bare `migrate()`), so the post-migrate step runs; added a test
+  asserting `convalidated = true` on all three new constraints via `pg_constraint`.
+- `packages/db/test/migrate.test.ts`: updated the `POST_MIGRATE_STEPS` shape assertion
+  (3 `validateConstraint` entries → 6, with the new three for `agents`).
+- No new migration number: 0023 had not yet shipped past review, so editing it in place follows
+  the 0009 precedent (that migration's own `NOT VALID` + `POST_MIGRATE_STEPS` fix was made in the
+  same migration file, not a later one, since forward-only applies to merged/applied migrations).
+- No drizzle snapshot/journal change needed: the schema file (`src/schema/agents.ts`) already
+  declares the FK and CHECKs as plain (non-`NOT VALID`) constraints, and `NOT VALID` is a DDL-time
+  property drizzle's snapshot diff doesn't model — the 0009 precedent made the same hand-edit
+  with no snapshot change, keeping `db:generate` a no-op (comment in migrate.ts).
+- Merged `origin/main` first (additive conflicts only, in `packages/db/src/repositories/index.ts`
+  and `map.ts`, from the 12.2a reports repository landing on main after this branch forked); kept
+  both sides.
+
+### 22 Oct 2026 · 12.4a Migration 0023's new constraints validate outside the migration transaction · decided by builder · risk: high
+- Decided: the FK and both CHECK constraints in `0023_agents_regulated_subject.sql` are added
+  `NOT VALID`, and validated by three new `POST_MIGRATE_STEPS` entries in
+  `packages/db/src/migrate.ts` (`validateConstraint`), run as autocommit steps after
+  `migrateDatabase()` commits — the same pattern 0009 (task 3.16b) used for the sessions
+  package-pin constraints. The backfill UPDATE in 0023 is unchanged; it still runs inside the
+  migration transaction, row-locking only the flagged agents it touches, not the whole table.
+  Reviewer: database-reviewer.
+- Why: fix brief and review findings (scratchpad `124a-findings.md`, DB [HIGH]); the project's own
+  precedent (migration 0009 / `packages/db/src/migrate.ts` `validateConstraint`).
+- risk: high
+
+### Tests (fix round 1)
+- `corepack pnpm vitest run test/migrate.test.ts` → 22 passed.
+- Against a disposable Postgres container (pgvector 0.8.1-pg16, `edmate-124a-pg`,
+  127.0.0.1:55499, removed after):
+  `TEST_DATABASE_URL=… corepack pnpm turbo run typecheck lint test --filter=@edmate/db...` →
+  `Tasks: 26 successful, 26 total`, coverage `All files | 99.83 | 97.83 | 99.86 | 99.85`.
+  `corepack pnpm vitest run test/regulated-subject-migration.int.test.ts test/migrate.int.test.ts`
+  → `Test Files 2 passed (2)`, `Tests 16 passed (16)`, including the new
+  `validates the three NOT VALID 0023 constraints outside the migration transaction` test.
+- `python3 .githooks/secret-scan.py --all` → exit 0.
+
+Tool calls used: 50 + 31 (fix round 1)

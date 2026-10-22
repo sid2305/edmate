@@ -8,7 +8,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { MIGRATIONS_DIR } from '../src/migrate.js';
+import { migrateDatabase, MIGRATIONS_DIR } from '../src/migrate.js';
 import {
   createDatabase,
   dropDatabase,
@@ -82,7 +82,10 @@ describe.skipIf(!up)(`migration 0023 on Postgres${up ? '' : ` (${SKIP_REASON})`}
         [`agv_${agent}_${version}`, agent, version, JSON.stringify(config)],
       );
     }
-    await migrateWith(MIGRATIONS_DIR);
+    // migrateDatabase() (not migrateWith/migrate()): this is what also runs the post-migrate
+    // step that validates the 0023 NOT VALID constraints (packages/db/src/migrate.ts
+    // POST_MIGRATE_STEPS), same pattern as 0009 (task 3.16b).
+    await migrateDatabase(TEST_URL);
   }, SLOW_MS);
 
   afterAll(async () => {
@@ -103,6 +106,21 @@ describe.skipIf(!up)(`migration 0023 on Postgres${up ? '' : ` (${SKIP_REASON})`}
       { id: 'agt_newest_unset', regulated_subject: null, regulated_approved_at: null, regulated_approved_by: null },
       { id: 'agt_none', regulated_subject: null, regulated_approved_at: null, regulated_approved_by: null },
     ]);
+  });
+
+  it('validates the three NOT VALID 0023 constraints outside the migration transaction', async () => {
+    const { rows } = await raw.query<{ conname: string; convalidated: boolean }>(
+      `select conname, convalidated from pg_constraint where conrelid = 'agents'::regclass
+         and conname in (
+           'agents_regulated_approved_by_users_id_fk',
+           'agents_regulated_subject_check',
+           'agents_regulated_approval_check'
+         )`,
+    );
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.convalidated, row.conname).toBe(true);
+    }
   });
 
   it('keeps every agent and version (nothing dropped or deleted)', async () => {
