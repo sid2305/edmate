@@ -145,6 +145,16 @@ Commands:
 
 ## Decisions
 
+### 21 Oct 2026 · 5.8a merge: role-play wiring and the run-time pick of the newest signed prompt-pack set · decided by lead · risk: high
+- Decided: merge 5.8a. `isSignedSet`/`newestSignedSet` in `packages/content/src/promptPacks.ts` (risky path) serve only a set whose manifest and every pinned pack are signed. The CLI and the seed pick that set at run time (1.3.0 today); the CLI falls back only to the harness fixture set. Personas reach CLI chat and the web runtime, and `/roleplay` and `/leave` drive a mock interview in the CLI. The work is on `m5/5.8a-signed-set-pick` because the rebased branch could not be force-pushed.
+- Why: code-reviewer (sonnet) and typescript-reviewer (opus) approve with no CRITICAL or HIGH. Two MEDIUMs and four LOWs are deferred: the pre-release ranking to 5.8b, the rest to 5.8e.
+- risk: high (`packages/content/src/promptPacks.ts`).
+
+### 21 Oct 2026 · 5.8a budget overrun: 120 tool calls against 85 · decided by lead · risk: low
+- Decided: accept the overrun. The Phase B count is corrected to the harness figure of 73.
+- Why: the task spans four packages plus a rebase onto 5.8c, and the work is complete and approved.
+- risk: low
+
 ### 21 Oct 2026 · 5.8a: role-play wired into the CLI and web; CLI and seed pick the newest signed set at run time · risk: high
 - Decided:
   - `readPersonaLibrary` feeds `deps.personas` in `buildChatDeps` (both sources) and in the web
@@ -194,4 +204,4 @@ Commands:
   stored help state gains `personaPhase` from this task.
 - Recorded here; 5.8b writes the ADR note.
 
-Tool calls used: 89 (Phase A 47, Phase B 42)
+Tool calls used: 120 (Phase A 47 from the handoff, Phase B 73 by harness count)
