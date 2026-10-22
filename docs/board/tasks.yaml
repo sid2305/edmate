@@ -4753,9 +4753,28 @@ tasks:
   accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
   deps:
   - 11.3a
-  status: running
+  status: done
   branch: m11/11.3b-insights-job
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 64
+    tokens_out: 941
+    cache_read_tokens: 911178
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2d
   milestone: M8
   title: Pinned, SSRF-safe web fetcher and ADR-0014 web-link egress (8.2b Phase A)
@@ -4827,9 +4846,29 @@ tasks:
   deps:
   - 8.2e
   risk: high
-  status: running
+  status: done
   branch: m8/8.2f-web-link-ui
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 197
+    tokens_in: 648
+    tokens_out: 43066
+    cache_read_tokens: 19959904
+    wall_time_seconds: 129151
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 8.2c
   milestone: M8
   title: 'YouTube material per B-47 (human, 22 Oct 2026): the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube; also fixes the 8.2d review findings first
@@ -4860,9 +4899,30 @@ tasks:
   deps:
   - 9.6c
   risk: risky
-  status: running
+  status: done
   branch: m9/9.6h-subscription-hardening
-  model: build:opus
+  model: plan:opus build:sonnet review:opus
+  metrics:
+    tool_calls: 25
+    tokens_in: 78
+    tokens_out: 463
+    cache_read_tokens: 1786416
+    wall_time_seconds: 625
+    models:
+    - claude-opus-5-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 7
+        wontfix: 0
+    human_questions: 0
 - id: 11.3c
   milestone: M13
   title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference
@@ -4897,7 +4957,7 @@ tasks:
   model: plan:sonnet build:sonnet
 - id: 11.2b
   milestone: M11
-  title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B)
+  title: 'Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with a test'
   accept: per docs/tasks/11.2/plan.md Phase B and Lead answers; web typecheck, lint and test green.
   deps:
   - 11.2a
@@ -4943,9 +5003,9 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.5b-alert-worker-acks
+  model: plan:opus build:sonnet review:sonnet
 - id: 12.5c
   milestone: M12
   title: Staff alert inbox at /staff/alerts with acknowledgement (12.5 Phase C)
@@ -4963,9 +5023,29 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.2a-reports-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 79
+    tokens_in: 254
+    tokens_out: 1502
+    cache_read_tokens: 5441995
+    wall_time_seconds: 5458
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.2b
   milestone: M12
   title: 'Takedowns repository: retrieval, material and module lists skip taken-down documents at once; an agent takedown suspends it (12.2 Phase B)'
@@ -5008,7 +5088,8 @@ tasks:
   model: null
 - id: 12.2f
   milestone: M13
-  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents'
+  title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
+    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -5068,9 +5149,9 @@ tasks:
   deps:
   - 9.6h
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.6i-subscription-recheck
+  model: plan:lead build:opus review:sonnet
 - id: 12.5d
   milestone: M13
   title: 'Safety alerts follow-ups: listForStaff sort index and acknowledged_by FK index (12.5a review)'
@@ -5128,6 +5209,28 @@ tasks:
   accept: after a staff rejection with a safety reason, the rejected teacher's agents refuse new turns for every student, and a test proves it; other rejection reasons still block only new starts.
   deps:
   - 9.3c
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 8.2i
+  milestone: M13
+  title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
+    review MEDIUM, replaces the re-read check); the pinned transport sends the Host header as bareHostName like SNI (LOW); document the all-transient-failure path in packages/ingest address.ts (LOW); ADR-0014
+    Decision 6 wording: 2 s per query x 2 tries, WEB_INGEST_ATTEMPTS = 2, FAMILY_GRACE_MS 500 ms, SNI and the `..` refusal (LOW; docs/adr needs its reviewers)'
+  accept: each follow-up has a test where code changes; touched packages green.
+  deps:
+  - 8.2h
+  risk: high
+  status: todo
+  branch: null
+  model: null
+- id: 11.2c
+  milestone: M13
+  title: '11.2a review LOW: a composite index on class_questions (live_class_id, created_at, id) for the teacher queue scan once volumes grow'
+  accept: additive migration; db typecheck, lint and test green.
+  deps:
+  - 11.2a
   risk: high
   status: todo
   branch: null
@@ -5287,11 +5390,11 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: done
   needs_decision:
   - teacher-chat-visibility
   branch: null
-  model: null
+  model: 'phases: 11.3a, 11.3b'
 - id: '11.4'
   milestone: M11
   title: Live-class recording ingestion into the agent's knowledge (P1)

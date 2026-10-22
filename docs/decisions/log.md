@@ -10,6 +10,146 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2f The link route and `.link` key; replace refused for links · decided by builder · risk: high
+- Decided: `POST /api/studio/links` creates a document with a `.link` storage key (no S3 object),
+  checks the URL with the shared `checkWebLinkUrl` before any write, and enqueues
+  `{ fileKind: 'web', url }` keyed on that storage key. `replace` on a `.link` row is refused
+  (400, "delete and add again"); `remove` on a link skips the S3 delete.
+- Why: this is the task's core surface (ADR-0014's policy reaches production here for the first
+  time) and the plan calls for `risk: high` with security-reviewer named.
+- risk: high (names security-reviewer as a required reviewer)
+
+---
+
+### 22 Oct 2026 · 8.2f YouTube refused at create, same fixed words as the worker · decided by builder · risk: medium
+- Decided: `checkWebLinkUrl`'s `youtube_unsupported` code gets its own fixed 400 message at
+  create time ("YouTube links aren't supported yet. Upload the video file instead."), so a
+  teacher never reaches a queued job that 8.2e's worker would also refuse.
+- Why: the plan's Decision list and ADR-0014 Decision 11 require this until Q1 (B-47) is
+  answered; failing fast at the API avoids a pointless enqueue/failed round trip.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.2f Per-teacher link rate limit: one Lua script, fail closed · decided by builder · risk: medium
+- Decided: a new `apps/web/src/studio/linkRateLimit.ts`, not `packages/queue` or the existing
+  `discovery/rateLimit.ts`. 20 links/teacher/hour, a single `INCR`+`PEXPIRE` Lua script (atomic,
+  like `packages/queue/src/turnLimits.ts`'s pattern) behind a small `LinkRateLimiter` port; a
+  store error rejects, and the route turns that into a 503 with a fixed code, never the
+  underlying error or value.
+- Why: added by the 8.2e review as a follow-up (no limit existed on adding links, which drive
+  SSRF-checked egress and the ingest queue); `discovery/rateLimit.ts`'s separate INCR-then-PEXPIRE
+  is fine for its own fail-open, advisory use but would leave a key with no TTL under a crash here,
+  capping a teacher forever; this guard must fail closed, not open.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.2a Student reports and the staff report queue (risky path, security-reviewer) · decided by builder · risk: high
+- Decided: in `packages/db/src/repositories/reports.ts` a student files a report only on an agent or teacher message in their own session (scoped in the same INSERT…SELECT), with a category from a closed set and no free text, at most once per student per message; only a user who is staff right now can list or review reports, each review is audited (`report.review`), and the staff queue returns no reporter id, no session id and no student name, email or phone. Reviewer required: security-reviewer.
+- Why: the plan's Phase A design and lead answers (Q2 category only); reports are a trust tool and must not become a way to reach another student's chat or a reporter's identity.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.2a Staff checks in reports.ts use lockRole, not a users read · decided by builder · risk: low
+- Decided: `listOpenForStaff` reads the staff role with `lockRole` (share lock) inside a short read transaction instead of a plain `users` select, so `reports.ts` never names the users table and the scope test's users-read exception list stays as it was.
+- Why: the plan asked for a "plain staff role check"; this is the same check with a share lock, and it keeps personal columns structurally out of the file.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2a Report row shape for missing or unexpected messages · decided by builder · risk: low
+- Decided: the queue joins only agent or teacher messages; a report whose message is gone reads with `message`, `teacherId`, `agentId` and `teacherSlug` null and no cited documents. Reviewing such a report is `integrity` (the audit row needs a teacher) and it stays open. A stored report with a category outside the closed set makes the queue read `integrity`, like every other repository read. A repeat report keeps the first category.
+- Why: repositories never delete messages, so the orphan case is defensive; failing loudly beats auditing against a guessed teacher.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3b weekStart is the Monday of the most recently finished week, computed from `now` alone · decided by builder · risk: low
+- Decided: `finishedWeekStart(now)` finds the most recent UTC-midnight Monday on or before `now`
+  (the in-progress week's start) and subtracts 7 days. A Monday 07:00 run, a run at exactly
+  Monday 00:00:00.000 UTC and a mid-week hand re-run (e.g. Wednesday) all return the same answer:
+  the week before the one `now` sits in. This can never be the current or a future week; 11.3c's
+  repository-level refusal is a second line, not the only one. Tested with fixed clocks for all
+  three cases plus a Sunday (end of the in-progress week) run.
+- Why: the brief's exact wording ("a run on Monday 07:00 reports the week that ended at that
+  Monday 00:00 UTC. Never the current or a future week.") and the need for a pure, clock-only
+  computation the scheduler's actual run time can't perturb.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3b The worker calls only computeAndSaveWeek; no reads, no local payload building · decided by builder · risk: low
+- Decided: `weeklyInsightsForTeacher` is a one-line pass-through to
+  `repos.insights.computeAndSaveWeek(scope, weekStart)`. The worker has no knowledge of the
+  payload shape, the privacy floor or any of the four underlying reads.
+- Why: lead note; `insightsRepo` (11.3a) already keeps `saveWeek` internal and not on the repo
+  object specifically so no caller — including this worker — can store a forged payload.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3b The schedule's timezone comes from the US locale pack at start-up, read once per process start · decided by builder · risk: low
+- Decided: `insightsTimezone(contentDir)` loads locale packs via `@edmate/content`'s
+  `loadLocalePacks` and reads the `US` pack's `timezone` field; it throws if the pack is missing
+  or unusable, and `apps/worker/src/index.ts` treats that failure the same as a failed
+  `scheduleCostAlarm` call (logged, non-zero exit code) rather than falling back to a hardcoded
+  zone. `insightsContentDir` mirrors `gate/workers.ts`'s `gateContentDir` (`EDMATE_CONTENT_DIR`,
+  else the repo's `content/`).
+- Why: lead note ("not hardcoded"); failing closed on a missing pack matches the project's
+  general "a guard/config that can't run must fail closed" lesson rather than silently defaulting
+  to UTC or `America/New_York` in code.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3b Per-teacher failures are logged with the error name/message only, via a small logSink module · decided by builder · risk: low
+- Decided: `logWeeklyInsightsTeacherFailed`/`logWeeklyInsightsRun` live in their own
+  `logSink.ts` (mirroring the alarms module's file shape) rather than being inlined in the job
+  function, so each has its own unit test. Neither function accepts or forwards any field beyond
+  teacher id, week, counts and `describeError`'s `{name, message}`.
+- Why: lead note ("per-teacher try/catch with logs of the error name only ... like
+  costAlarmJob") plus rule 5 (no student data, no teacher text in logs).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6h subscription hardening on a risky path · decided by builder · risk: high
+- Decided: the three 9.6c security MEDIUMs and four LOWs are fixed in `packages/db/src/repositories/subscriptions.ts` (risky path). security-reviewer must re-check this PR before merge, as the board's accept line says.
+- Why: the file is on the merge gate's risk list and the changes touch access to paid/free subscriptions.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6h start refuses a free package while the teacher's free tier is alarm-paused · decided by builder · risk: medium
+- Decided: the lead's preferred option. `start` is `invalid` for a free version when a `subscription.pause_cost_alarm` audit row exists for that teacher since the start of the current UTC month. The block is per teacher, not per pair, so a new student also can't start the free package until the month ends. A staff unpause of an existing subscription doesn't lift it. Paid packages still start.
+- Why: it reuses the alarm's own marker (no schema change) and closes the cancel -> start loop for every student, not just the one who cancelled. Keeping the alarm state on cancel would have left new free starts open until the next daily alarm run. If staff need to reopen a teacher's free tier mid-month, that needs a later task (for example, a staff action that writes an "unblock" row).
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.6h a restarted pair gets no second trial · decided by builder · risk: low
+- Decided: if the student has any earlier subscription row with this teacher, a `trial` start becomes `active`, with the caller's `periodEnd` unchanged (that is the trial length the web caller computed). It is not refused.
+- Why: refusing would break restarting a trial-offering package. With no payment until M10, `active` vs `trial` only matters for future billing, and 10.3 revisits trial rules.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6h changePackage ends a trial on a no-trial target · decided by builder · risk: low
+- Decided: `trial` -> a version whose `config.trialDays` is missing, 0 or not a number becomes `active`. `period_end` is kept. Other statuses are unchanged.
+- Why: the review's LOW. Recomputing the period needs billing (10.3).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6h resume fails closed on a timestamp tie · decided by builder · risk: low
+- Decided: resume orders by (ts, created_at, id) and rejects `invalid` when the two latest rows tie on both timestamps, because a random id isn't a real order.
+- Why: no schema change was allowed, so there's no sequence column. A paused_by column or a sequence is left for 10.3.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.5a safety alerts are staff-only, the ack is audited and lock-ordered, no personal columns · decided by builder · risk: high
 - Decided: `safety_alerts` stores ids, level, kind, the scrubbed excerpt and timestamps only. `listForStaff` and `acknowledge` require `by` to be staff now (via `role-lock.ts`; the repository never names the users table). `acknowledge` locks the actor's role FOR SHARE, then the alert row FOR UPDATE, and commits exactly one `safety_alert.ack` audit row with the ack (never the excerpt). Worker writes are scoped through the alert's own session. Reviewer: security-reviewer (risky path `packages/db/src/repositories/**`).
 - Why: plan Phase A and lead answers Q1, Q3 and Q4; lessons "lock order".
