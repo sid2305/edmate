@@ -3344,6 +3344,26 @@ tasks:
   status: running
   branch: m8/8.9a-dismiss-question
   model: plan:sonnet build:sonnet
+- id: 8.8a
+  milestone: M8
+  title: 'Insights data (8.8 Phase A): loadInsights aggregates 7-day turn health and the top 5 open-question groups for a teacher (apps/web, no UI)'
+  accept: insights.test.ts covers volume, error and guard rates, p50/p95 latency and the top question groups with fakes; no student id in the output; web typecheck, lint and test green.
+  deps: []
+  risk: low
+  status: running
+  branch: m8/8.8a-insights-data
+  model: plan:sonnet build:sonnet
+- id: 8.6f
+  milestone: M13
+  title: '8.6b follow-ups (review MEDIUM/LOW): concurrent PACKAGES_MAX test; a distinct error kind for the package cap; share the module check and version locking between packages.ts and package-versions.ts;
+    ModelPolicySchema in DraftAgentInput; the audit redactor treats digit-led UUIDs as phone numbers'
+  accept: a concurrent create test at the cap boundary passes; package-versions writes take the package row lock; an audit after with a UUID keeps the UUID.
+  deps:
+  - 8.6b
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
