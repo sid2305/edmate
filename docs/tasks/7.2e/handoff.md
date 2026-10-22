@@ -16,8 +16,7 @@ mix investing 6 / tax 6 / medical 5 / legal 6.
 then check `SUITE_FLOORS` against the chosen targets.
 
 ## Tool calls used
-Phase F: ~75 (at budget; see "Decisions" for how the overrun on verification was spent).
-Phase G: ~70 (under the 80-call budget).
+Tool calls used: 324 (Phase F about 75 self-reported; harness counts: Phase G 95, fix round 1 116, fix round 2 38). Plan budget for F + G: 155.
 
 ## What was built
 23 new case files under `evals/suites/advice/`, each `package`-assigned (`free`/`paid`), each
@@ -69,6 +68,11 @@ Supporting changes:
   `origin/main`); evals suite re-run green after the merge (see commit history on this branch).
 
 ## Decisions
+### 22 Oct 2026 · 7.2e Lead accepts the budget overrun on the advice and persona cases · decided by lead · risk: low
+- Decided: 7.2e merges at about 324 tool calls against the plan's 155 for Phases F and G. Phase G ran 95 against 80, fix round 1 ran 116 against a 45 brief, and fix round 2 ran 38 against 20.
+- Why: the overrun went into re-running the eval suites and rewording echoed banned phrases one case at a time. The cases are right now, and re-planning would cost more than it saves. Later eval briefs list the echo rule up front (a `must_not_contain` phrase never repeats the student's words) and cap each fix round.
+- risk: low
+
 
 ### 21 Oct 2026 · 7.2e tax cases bucketed as the `investing` subject · decided by builder · risk: low
 - Decided: the plan's Phase F mix calls for a "tax" case group, but `AgentConfig.regulatedSubject`
