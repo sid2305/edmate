@@ -2090,7 +2090,7 @@ tasks:
   - '7.4'
   - '7.8'
   - '8.6'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '8.8'
@@ -3522,7 +3522,7 @@ tasks:
   model: plan:opus build:sonnet
 - id: 8.9c
   milestone: M8
-  title: 'Teacher questions page (8.9 Phase C, apps/web UI)'
+  title: Teacher questions page (8.9 Phase C, apps/web UI)
   accept: per docs/tasks/8.9/plan.md Phase C; web typecheck, lint and test green.
   deps:
   - 8.9b
@@ -3530,7 +3530,7 @@ tasks:
   status: todo
 - id: 9.2a
   milestone: M9
-  title: 'Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)'
+  title: Public discovery repository, search index and dev seed (9.2 Phase A, packages/db)
   accept: per docs/tasks/9.2/plan.md Phase A; only verified teachers with live agents and packages are reachable; leak tests cover the new methods; db typecheck, lint and test green.
   deps:
   - 8.6b
@@ -3540,7 +3540,7 @@ tasks:
   model: plan:opus build:sonnet
 - id: 9.2b
   milestone: M9
-  title: 'Teachers search page /teachers (9.2 Phase B, apps/web)'
+  title: Teachers search page /teachers (9.2 Phase B, apps/web)
   accept: per docs/tasks/9.2/plan.md Phase B; web typecheck, lint and test green.
   deps:
   - 9.2a
@@ -3548,7 +3548,7 @@ tasks:
   status: todo
 - id: 9.2c
   milestone: M9
-  title: 'Teacher profile page /teachers/[slug] (9.2 Phase C, apps/web)'
+  title: Teacher profile page /teachers/[slug] (9.2 Phase C, apps/web)
   accept: per docs/tasks/9.2/plan.md Phase C; web typecheck, lint and test green.
   deps:
   - 9.2b
@@ -3571,7 +3571,7 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: todo
+  status: planning
   branch: null
   model: null
 - id: '9.6'
