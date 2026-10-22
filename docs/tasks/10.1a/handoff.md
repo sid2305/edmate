@@ -6,7 +6,7 @@ Status: DONE
 - Worktree: `.claude/worktrees/agent-a4591c541207852d0` (under the repo root)
 - Plan: `docs/tasks/10.1/plan.md` (Phase A); ADR text from architect (the ADR wins over the plan's port draft)
 - Builder: tdd-guide
-- Tool calls used: 42 + 43 (fix round)
+Tool calls used: 105 (harness count: builder 58 + fixer 47; the agents reported 42 + 43)
 
 ## Summary
 
@@ -48,6 +48,16 @@ Fixes from the architect, security-reviewer and typescript-reviewer findings, as
 - Deferred to 10.1b as decided: full refund when the amount is omitted, a `PaymentsErrorCode` union, one shared input check in `packages/payments`.
 
 ## Decisions
+### 22 Oct 2026 · 10.1a review MEDIUMs fixed before merge · decided by lead · risk: high
+- Decided: fix the review MEDIUMs (exported helper schemas, offer-name and ref rules, ADR notes on caller-claimed idempotency keys and server-set webhook binding) in one fix round before merge instead of deferring them; the lead restored the ADR sentence that adapters without provider idempotency check existing refunds before refunding (typescript re-verify MEDIUM) and noted that 10.8 strips format characters from offer names; ADR-0015 is Accepted.
+- Why: any later fix would be a contracts change needing another ADR and three reviews; the restored sentence is the reviewed original wording. Reviewers: architect, security-reviewer and typescript-reviewer (all re-verified the fix).
+- risk: high
+
+### 22 Oct 2026 · 10.1a ran over budget · decided by lead · risk: low
+- Decided: accept 105 tool calls (58 build + 47 fix round) against the plan's ~60 for Phase A.
+- Why: the fix round was a lead choice to avoid a second contracts ADR; the build itself was within 1.2 × budget.
+- risk: low
+
 
 ### 22 Oct 2026 · 10.1a fix round: exported helper schemas and ADR notes · decided by builder · risk: high
 - Decided: export five unregistered helper schemas (`IdempotencyKey`, `ProviderRef`, `CheckoutResult`, `RefundResult`, `PaymentFact`) as part of the port's contract (ADR-0015 §9); tighten the offer name (no Cc, Cf, Zl or Zp; a letter or digit) and `ProviderRef` (a letter or digit); move the https URL rule into a shared `httpsUrl()` helper; add the ADR notes on idempotency claims, server-set binding, instant comparison, the `proration: 'none'` limit, `clearScheduled` and resume, B-54, the body-hash eventId and 10.8 offer building.
