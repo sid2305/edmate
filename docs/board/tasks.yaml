@@ -2863,9 +2863,30 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: running
+  status: done
   branch: m7/7.2e-advice-persona-cases
-  model: plan:sonnet build:sonnet
+  model: build:sonnet fix:sonnet review:sonnet+lead
+  metrics:
+    tool_calls: 32
+    tokens_in: 126
+    tokens_out: 558
+    cache_read_tokens: 2350904
+    wall_time_seconds: 3085
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 2
+        LOW: 1
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 7.2f
   milestone: M13
   title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full
@@ -3552,6 +3573,13 @@ tasks:
   accept: per docs/tasks/9.2/plan.md Phase C; web typecheck, lint and test green.
   deps:
   - 9.2b
+  risk: low
+  status: todo
+- id: 13.flaky
+  milestone: M13
+  title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count'
+  accept: each test uses a fake clock or a loose bound per docs/lessons.md "Wall-clock bounds fail on shared CI runners"; 20 repeated CI-style runs pass.
+  deps: []
   risk: low
   status: todo
 - id: 9.4c
