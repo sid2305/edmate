@@ -4466,7 +4466,7 @@ tasks:
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
-    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start()'
+    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard in one Promise.all, and the duplicate "draft agent" null test is merged or renamed'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
