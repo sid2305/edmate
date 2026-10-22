@@ -1,6 +1,6 @@
 # 12.3f handoff: rightsDeclared becomes required in packages/db documents create, web link and replace
 
-Status: PARTIAL
+Status: DONE
 
 Branch: `m12/12.3f-rights-required` (pushed from local `work-123f`)
 Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
@@ -15,14 +15,6 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
   declaration" branch is gone (it can't happen any more).
 - No schema edit, no migration, no `packages/contracts` change.
 
-## Why PARTIAL
-`apps/web` fails typecheck after this change, at one test file the brief does not let me edit:
-
-- `apps/web/app/api/staff/reports/route.int.test.ts:103-106` calls `db.repos.documents.create(...)`
-  without `rightsDeclared`. Fix: add `rightsDeclared: true` to that object literal. The three
-  production calls in `apps/web/src/studio/routes.ts` already pass `body.rightsDeclared` and
-  typecheck clean.
-
 ## Files
 - `packages/db/src/repositories/chunks.ts` (documents repo): `DocumentInputSchema` and
   `ReplaceInputSchema` require `rightsDeclared: z.literal(true)`; `startReplace` input type;
@@ -34,6 +26,8 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
 - Callers updated to pass `rightsDeclared: true` (additions only): `packages/db/test/`
   `access-property`, `outline`, `recall`, `repositories`, `retrieval`, `retrieval-hnsw`,
   `retrieval-leak`, `takedowns`, `video-ingest` int tests; `apps/worker/test/ingest.int.test.ts`.
+- `apps/web/app/api/staff/reports/route.int.test.ts`: its one `documents.create` call passes
+  `rightsDeclared: true` (the only apps/web edit, approved by the lead).
 
 ## Tests
 - `corepack pnpm turbo run typecheck lint test --filter=@edmate/db... --filter=@edmate/worker...`
@@ -44,8 +38,7 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
 - Two existing 12.3b tests in `documents.int.test.ts` were adjusted: a new row now always carries
   `rightsDeclaredAt`, and the "omitted before declaration" check nulls the column first (as for a
   row from before 12.3f).
-- `corepack pnpm turbo run typecheck --filter=@edmate/web` → fails only at
-  `app/api/staff/reports/route.int.test.ts(105,7)` (see Why PARTIAL).
+- `corepack pnpm turbo run typecheck lint --filter=@edmate/web` → green after the web test edit.
 
 ## Decisions
 
@@ -55,8 +48,6 @@ Worktree: `.claude/worktrees/agent-a18102ee0d45f0057`
 - risk: high
 
 ## Left to do
-- Add `rightsDeclared: true` to the `documents.create` call in
-  `apps/web/app/api/staff/reports/route.int.test.ts` (line ~105) so `@edmate/web` typecheck is
-  green, then run `--filter=@edmate/web` typecheck/lint/test.
+None.
 
-Tool calls used: 37
+Tool calls used: 44
