@@ -44,10 +44,28 @@ import type { TurnBackend } from '../src/turn/routes';
  * fire before the scripted gateway's already-resolved promise is scheduled, failing turns closed
  * with no tokens even though nothing was actually slow in-process (`now()` stays real, for
  * realistic timestamps).
+ *
+ * `now()` itself needs the same guard (task 9.0d): some budgets are *subtracted*, not raced, e.g.
+ * `runner.ts`'s `budget - sc.ms` (preGuard's remaining slice after the regex scrub) and
+ * `postGuard.ts`'s `POST_GUARD_BUDGET_MS - (clock.now() - started)`. Those read `clock.now()`
+ * twice and use the real elapsed time between the calls directly, with no race and no cancel
+ * token to protect them; on a cold, CPU-starved CI worker, scheduling delay alone between two
+ * `now()` calls (no in-process work was actually slow) can push the subtraction to zero or
+ * negative, which `runWithTimeout` then times out immediately, before it ever runs the guard —
+ * failing the turn closed with no tokens. Capping how far a single `now()` call may jump past the
+ * last one keeps timestamps real (and still monotonic) while never letting one scheduling stall
+ * read as hundreds of ms of in-process work.
  */
+const MAX_CLOCK_JUMP_MS = 20;
+
 function deadlineSafeClock(real: Clock): Clock {
+  let virtual = real.now();
   return {
-    now: () => real.now(),
+    now: () => {
+      const wall = real.now();
+      virtual += Math.min(Math.max(wall - virtual, 0), MAX_CLOCK_JUMP_MS);
+      return virtual;
+    },
     sleep: (ms, cancel) =>
       cancel === undefined ? real.sleep(ms) : new Promise((resolve) => cancel.onCancel(resolve)),
   };
