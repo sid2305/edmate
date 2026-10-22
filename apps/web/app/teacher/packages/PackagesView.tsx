@@ -4,9 +4,11 @@
 // thin wrapper here (no separate client module is in this phase's file list); every body read is
 // try/caught and every busy flag is cleared in a `finally` (lessons.md: "A studio page that trusts
 // a 200 response gets stuck").
+import { SkillSchema } from '@edmate/contracts';
 import type { PackageDraft } from '@edmate/db';
 import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { z } from 'zod';
 import type { PackageView } from '../../../src/studio/packages';
 import { costWarning, monthlyEstimate, PACKAGE_LIMITS, type MonthlyEstimate } from '../../../src/studio/costEstimate';
 
@@ -171,6 +173,44 @@ function money(microUsd: number): string {
   return `$${(microUsd / 1_000_000).toFixed(2)}`;
 }
 
+// Validation for every server body this view trusts (HIGH fix, 8.6d fix round): a cast with `as`
+// never checks the shape, so a malformed or changed-shape response would be spread into state as
+// if it were real. Mirrors `PackageView`/the GET body in src/studio/packages.ts; kept loose
+// (`z.object`, not `z.strictObject`) so an extra server field never breaks the client.
+const PackageDraftSchema = z.object({
+  name: z.string(),
+  moduleIds: z.array(z.string()),
+  skills: z.array(SkillSchema),
+  helpCeiling: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+  finalAnswers: z.enum(['never', 'after_attempt', 'allowed']),
+  dailyMessageLimit: z.number(),
+  liveClassesPerMonth: z.number(),
+  pricePerMonth: z.object({ amountMinor: z.number(), currency: z.string() }),
+  trialDays: z.number().exactOptional(),
+  lockedReply: z.enum(['name_package', 'generic']),
+});
+const MonthlyEstimateSchema = z.object({
+  typicalMicroUsd: z.number(),
+  maxMicroUsd: z.number(),
+  shareOfPrice: z.number().exactOptional(),
+});
+const PackageViewSchema = z.object({
+  packageId: z.string(),
+  version: z.number(),
+  liveVersion: z.number().nullable(),
+  draft: PackageDraftSchema,
+  estimate: MonthlyEstimateSchema,
+});
+const ModuleOptionSchema = z.object({ id: z.string(), title: z.string() });
+const SetupSchema = z.object({ styleCard: z.boolean(), styleCardLink: z.string() });
+const GetBodySchema = z.object({
+  packages: z.array(PackageViewSchema),
+  modules: z.array(ModuleOptionSchema),
+  setup: SetupSchema,
+  perTurnMicroUsd: z.number(),
+});
+const SaveBodySchema = z.object({ package: PackageViewSchema });
+
 export function PackagesView() {
   const t = useTranslations('packageBuilder');
   const [loading, setLoading] = useState(true);
@@ -194,12 +234,13 @@ export function PackagesView() {
         setBanner(errorKey((await errorInfo(res)).code));
         return;
       }
-      const body = (await res.json()) as {
-        packages: PackageView[];
-        modules: ModuleOption[];
-        setup: Setup;
-        perTurnMicroUsd: number;
-      };
+      const raw = await res.json();
+      const parsed = GetBodySchema.safeParse(raw);
+      if (!parsed.success) {
+        setBanner('provider_error');
+        return;
+      }
+      const body = parsed.data;
       setPackages(body.packages);
       setModules(body.modules);
       setSetup(body.setup);
@@ -256,7 +297,13 @@ export function PackagesView() {
         setFormError(next);
         return;
       }
-      const saved = (await res.json()) as { package: PackageView };
+      const raw = await res.json();
+      const parsed = SaveBodySchema.safeParse(raw);
+      if (!parsed.success) {
+        setFormError({ key: 'provider_error' });
+        return;
+      }
+      const saved = parsed.data;
       setPackages((prev) => {
         const i = prev.findIndex((p) => p.packageId === saved.package.packageId);
         return i === -1 ? [...prev, saved.package] : prev.map((p, j) => (j === i ? saved.package : p));

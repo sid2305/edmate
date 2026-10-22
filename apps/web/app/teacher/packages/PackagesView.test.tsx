@@ -241,6 +241,29 @@ describe('PackagesView', () => {
     );
   });
 
+  it('a malformed GET body shows the error banner and stops loading', async () => {
+    api({
+      packages: 'not-an-array',
+      modules: MODULES,
+      setup: SETUP,
+      perTurnMicroUsd: PER_TURN_MICRO_USD,
+    } as unknown as GetBody);
+    renderIntl(<PackagesView />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/went wrong|Try again/i);
+    expect(screen.queryByText('New package')).toBeNull();
+  });
+
+  it('a malformed save body shows the error banner and does not change the list', async () => {
+    const s = api(getBody([]));
+    renderIntl(<PackagesView />);
+    await screen.findByText('New package');
+    fireEvent.click(screen.getByRole('button', { name: 'Free starter' }));
+    s.next('POST /api/studio/packages', { status: 201, body: { package: { bogus: true } } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create package' }));
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
+    expect(screen.queryByRole('list', { name: 'Your packages' })).toBeNull();
+  });
+
   it('has no axe violations with a package card and the form open', async () => {
     api(getBody([pkgRow()]));
     const { container } = renderIntl(<PackagesView />);

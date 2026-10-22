@@ -103,3 +103,38 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
   unlike uploads/style-card's own `.css` files); the page renders with plain semantic HTML only.
 
 Tool calls used: 65
+
+## Fix round
+
+8.6d fix round (typescript-reviewer HIGH findings, fixed by a fresh fixer agent, 22 Oct 2026):
+
+1. `refresh()`'s GET body was cast with `as` (no validation) before being spread into
+   `packages`/`modules`/`setup`/`perTurnMicroUsd` state. Added `PackageViewSchema` /
+   `ModuleOptionSchema` / `SetupSchema` / `GetBodySchema` (zod, mirroring `PackageView` and the GET
+   body), `safeParse`d; on failure shows the existing `provider_error` banner and returns (the
+   `finally` still clears `loading`), never sets state from the unvalidated body.
+2. `onSave`'s save response was cast `as { package: PackageView }` and spread into `packages`
+   unvalidated. Added `SaveBodySchema` (same `PackageViewSchema`), `safeParse`d; on failure sets
+   `formError` to `provider_error` and returns, leaving the list unchanged (the `finally` still
+   clears `saving`).
+
+`skills` is typed with the contracts `SkillSchema` (not `z.string()`) and `trialDays`/
+`shareOfPrice` use `.exactOptional()` so the inferred types line up with `PackageView`/
+`PackageDraft`/`MonthlyEstimate` without an `as` anywhere. zod was already an `apps/web`
+dependency (4.6.7); no new dependency added.
+
+Tests added to `PackagesView.test.tsx`:
+- "a malformed GET body shows the error banner and stops loading" — GET returns
+  `packages: 'not-an-array'`; asserts the error banner (`role="alert"`) appears and the form
+  ("New package") never renders.
+- "a malformed save body shows the error banner and does not change the list" — POST returns
+  `{ package: { bogus: true } }`; asserts an alert appears and the packages list
+  (`role="list", name: 'Your packages'`) is never rendered (still empty).
+
+Verification:
+- `corepack pnpm --filter @edmate/web exec vitest run app/teacher/packages/PackagesView.test.tsx`
+  → 12 passed (10 existing + 2 new).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` → `Tasks: 34 successful, 34 total`.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+Tool calls used (fix round): 24
