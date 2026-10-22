@@ -658,6 +658,35 @@
     "askQueue": {
       "title": "Unanswered ask-the-teacher questions",
       "empty": "No unanswered questions right now."
+    },
+    "recording": {
+      "add": "Add recording",
+      "addLabel": "Add a recording to {title}",
+      "close": "Close",
+      "formLabel": "Add a recording",
+      "listLabel": "Recordings: {title}",
+      "fileLabel": "Recording or transcript",
+      "fileHint": "A caption or transcript file (.vtt or .srt) is fastest. MP3 and WAV audio also work; M4A, MP4 and WebM up to 24 MB.",
+      "moduleLabel": "Module",
+      "chooseModule": "Choose a module",
+      "noModules": "The packages on this class have no modules yet, so a recording has nowhere to go. Add modules to a package first.",
+      "sourceTitleLabel": "Title students see when it is cited",
+      "defaultTitle": "Live class: {title}, {date}",
+      "rightsLabel": "I confirm I hold the rights to upload this material.",
+      "consentLabel": "Everyone heard in this recording agreed to it being used to teach, or I removed their parts.",
+      "consentHint": "Best: upload your own transcript with students' names removed.",
+      "submit": "Upload recording",
+      "uploading": "Uploading…",
+      "progress": "Uploading: {percent}%",
+      "added": "The recording is uploaded. It will be ready to search in a few minutes.",
+      "errors": {
+        "unsupported_type": "That file type can't be used for a recording. Use a caption or transcript file (.vtt or .srt), MP3, WAV, M4A, MP4 or WebM.",
+        "media_too_large": "Videos and M4A audio over 24 MB can't be transcribed yet. Upload the audio as MP3, or the class transcript (.vtt or .srt).",
+        "title": "Give the recording a title of up to 500 characters.",
+        "not_found": "This class or module was not found. Reload and try again.",
+        "upload_failed": "The upload didn't finish. Check your connection, then try again.",
+        "generic": "Something went wrong. Try again."
+      }
     }
   },
   "report": {
