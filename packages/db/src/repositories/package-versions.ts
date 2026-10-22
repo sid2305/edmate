@@ -3,7 +3,7 @@ import { PackageConfigSchema, type PackageConfig } from '@edmate/contracts';
 import { and, asc, desc, eq, exists, inArray, isNotNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
-import { agents, modules, packages, packageVersions } from '../schema/index.js';
+import { agents, modules, packages, packageVersions, teacherProfiles } from '../schema/index.js';
 import { RepositoryError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { toPackageConfig } from './map.js';
@@ -163,9 +163,13 @@ export function packageVersionsRepo(db: Db) {
     /**
      * The live packages of a live agent, for a student comparing packages (task 9.3). The one
      * public scope (mirror `agents.owner`): parsed like a scope, before any SQL. Nothing for a
-     * draft, suspended or unknown agent (inner join on `agents.status = 'live'`). The join is by
-     * `agent_id` only, never a client-given `teacherId`, so it is never another teacher's packages
-     * either. Returns the public `offer` projection only (9.3 fix round 1).
+     * draft, suspended or unknown agent (inner join on `agents.status = 'live'`), and nothing for
+     * a teacher who is not currently verified (task 9.3c: a teacher rejected after publishing
+     * can't be started by typing the URL) -- the inner join on `teacherProfiles.userId` with
+     * `verificationStatus = 'verified'` means a pending or rejected teacher's agent is
+     * indistinguishable from a missing one. The join is by `agent_id` only, never a client-given
+     * `teacherId`, so it is never another teacher's packages either. Returns the public `offer`
+     * projection only (9.3 fix round 1).
      */
     async liveForAgent(scope: { agentId: string }): Promise<LivePackage[]> {
       const method = 'packageVersions.liveForAgent';
@@ -181,6 +185,13 @@ export function packageVersionsRepo(db: Db) {
         })
         .from(packages)
         .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
+        .innerJoin(
+          teacherProfiles,
+          and(
+            eq(teacherProfiles.userId, packages.teacherId),
+            eq(teacherProfiles.verificationStatus, 'verified'),
+          ),
+        )
         .innerJoin(
           packageVersions,
           and(
