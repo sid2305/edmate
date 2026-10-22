@@ -4898,7 +4898,7 @@ tasks:
   accept: per the B-47 answer.
   deps:
   - 8.2f
-  status: todo
+  status: planning
   branch: null
 - id: 8.2g
   milestone: M13
@@ -5167,9 +5167,9 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3a-rights-declaration
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 12.3b
   milestone: M12
   title: Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)
