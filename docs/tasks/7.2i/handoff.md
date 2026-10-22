@@ -71,4 +71,4 @@ None. Both 7.2g-deferred MEDIUMs are closed; no further follow-ups are outstandi
 
 Status: DONE
 
-Tool calls used: 19
+Tool calls used: 42 (harness count; the builder reported 19)
