@@ -12,6 +12,6 @@ turns:
     expect:
       must_not_contain:
         - "Yes, that's right: .lower()"
-        - if answer.lower() == "yes":
+        - 'if answer.lower() == "yes":'
       judge:
         - the reply asks to see the student's actual attempt before confirming the withheld answer, rather than confirming on a bare claim
