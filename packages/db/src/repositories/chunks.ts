@@ -123,6 +123,8 @@ const DocumentInputSchema = z.strictObject({
   kind: ChunkKindSchema,
   sourceTitle: z.string().min(1).max(500),
   storageKey: z.string().min(1).max(1024).optional(),
+  /** Task 12.3b: the teacher declared they hold the rights. Optional until 12.3c requires it. */
+  rightsDeclared: z.literal(true).optional(),
 });
 export type DocumentInput = z.infer<typeof DocumentInputSchema>;
 
@@ -150,7 +152,11 @@ const StatusUpdateSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.enum(['processing', 'ready']), failureReason: z.undefined() }),
 ]);
 
-const ReplaceInputSchema = z.strictObject({ storageKey: z.string().min(1).max(1024) });
+const ReplaceInputSchema = z.strictObject({
+  storageKey: z.string().min(1).max(1024),
+  /** Task 12.3b: as on create; a replace without it clears the old declaration. */
+  rightsDeclared: z.literal(true).optional(),
+});
 
 const documentColumns = {
   id: documents.id,
@@ -275,7 +281,8 @@ export async function bumpRevision(tx: Tx, teacherId: string): Promise<void> {
 export function documentsRepo(db: Db) {
   return {
     /**
-     * Files a document under one of the scope's modules. Another teacher's module, a missing one
+     * Files a document under one of the scope's modules; `rightsDeclared: true` stamps
+     * `rights_declared_at = now()` (task 12.3b). Another teacher's module, a missing one
      * and an id already taken (by anyone) are all `not_found`, so ids can't be probed.
      */
     async create(scope: TeacherScope, input: DocumentInput): Promise<{ id: string }> {
@@ -296,6 +303,7 @@ export function documentsRepo(db: Db) {
                   [documents.kind, sql`${d.kind}::chunk_kind`],
                   [documents.sourceTitle, sql`${d.sourceTitle}::text`],
                   [documents.storageKey, sql`${d.storageKey ?? null}::text`],
+                  [documents.rightsDeclaredAt, d.rightsDeclared ? sql`now()` : sql`null`],
                 ],
                 sql`from ${modules} where ${modules.id} = ${d.moduleId} and ${modules.teacherId} = ${teacherId}`,
               ),
@@ -403,13 +411,14 @@ export function documentsRepo(db: Db) {
     /**
      * Starts replacing the scope's document with a new file: in one transaction, deletes its
      * chunks, points it at `storageKey`, resets it to `uploading` (clearing any failure) and bumps
-     * the revision. Returns the previous storage key for the caller to delete. Another teacher's
+     * the revision. The rights declaration is stamped `now()` when `rightsDeclared` is true, else
+ * cleared (the new file has none yet). Returns the previous storage key for the caller to delete. Another teacher's
      * or a missing one is `not_found` and nothing is written.
      */
     async startReplace(
       scope: TeacherScope,
       id: string,
-      input: { storageKey: string },
+      input: { storageKey: string; rightsDeclared?: true },
     ): Promise<{ previousStorageKey: string | null }> {
       const method = 'documents.startReplace';
       const { teacherId } = teacherScope(scope, method);
@@ -425,6 +434,7 @@ export function documentsRepo(db: Db) {
               storageKey: r.storageKey,
               status: 'uploading',
               failureReason: null,
+              rightsDeclaredAt: r.rightsDeclared ? sql`now()` : null,
               updatedAt: sql`now()`,
             })
             .where(and(eq(documents.id, docId), eq(documents.teacherId, teacherId)));

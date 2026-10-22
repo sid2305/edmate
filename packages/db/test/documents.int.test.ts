@@ -373,6 +373,72 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
     });
   });
 
+  // Task 12.3b: `rightsDeclared` is optional until 12.3c makes it required with the web routes.
+  describe('rights declaration', () => {
+    const declaredAt = async (id: string) =>
+      (
+        await raw.query<{ t: Date | null }>(
+          'select rights_declared_at as t from documents where id = $1',
+          [id],
+        )
+      ).rows[0]?.t ?? null;
+    const input = (id: string, extra: object = {}) => ({
+      id,
+      moduleId: MOD.allowed,
+      kind: 'material' as const,
+      sourceTitle: id,
+      storageKey: `uploads/${id}.pdf`,
+      ...extra,
+    });
+
+    it('create with rightsDeclared: true stores now(); without it the column stays null', async () => {
+      const t0 = Date.now();
+      await repos.documents.create(A, input('doc_rd_yes', { rightsDeclared: true }));
+      const at = await declaredAt('doc_rd_yes');
+      expect(at).not.toBeNull();
+      expect(at!.getTime()).toBeGreaterThanOrEqual(t0 - 5_000);
+      expect((await repos.documents.get(A, 'doc_rd_yes'))?.rightsDeclaredAt).toBe(
+        at!.toISOString(),
+      );
+      await repos.documents.create(A, input('doc_rd_none'));
+      expect(await declaredAt('doc_rd_none')).toBeNull();
+    });
+
+    it('rightsDeclared: false (or any non-true value) is invalid and writes nothing', async () => {
+      for (const bad of [false, 'true', 1, null]) {
+        const err = await rejection(
+          repos.documents.create(A, input('doc_rd_bad', { rightsDeclared: bad }) as never),
+        );
+        expect(err.kind).toBe('invalid');
+      }
+      expect(await repos.documents.get(A, 'doc_rd_bad')).toBeNull();
+      const id = await doc([], 'uploads/rd-keep.pdf');
+      const err = await rejection(
+        repos.documents.startReplace(A, id, { storageKey: 'k', rightsDeclared: false } as never),
+      );
+      expect(err.kind).toBe('invalid');
+      expect((await repos.documents.get(A, id))?.storageKey).toBe('uploads/rd-keep.pdf');
+    });
+
+    it('replace with rightsDeclared: true sets a fresh time; without it clears to null', async () => {
+      await repos.documents.create(A, input('doc_rd_rep', { rightsDeclared: true }));
+      await raw.query(
+        `update documents set rights_declared_at = '2020-01-01T00:00:00Z' where id = 'doc_rd_rep'`,
+      );
+      await repos.documents.startReplace(A, 'doc_rd_rep', {
+        storageKey: 'uploads/rd-rep-2.pdf',
+        rightsDeclared: true,
+      });
+      const fresh = await declaredAt('doc_rd_rep');
+      expect(fresh!.getTime()).toBeGreaterThan(Date.parse('2020-01-02T00:00:00Z'));
+      await repos.documents.startReplace(A, 'doc_rd_rep', { storageKey: 'uploads/rd-rep-3.pdf' });
+      expect(await declaredAt('doc_rd_rep')).toBeNull();
+      expect(Object.keys((await repos.documents.get(A, 'doc_rd_rep'))!)).not.toContain(
+        'rightsDeclaredAt',
+      );
+    });
+  });
+
   describe('chunks.insertManyIfStorageKey (8.2 fix round: check and write in one statement)', () => {
     const draft = [{ ord: 0, text: 'quokka keyed chunk', locator: 'p1' }];
 
