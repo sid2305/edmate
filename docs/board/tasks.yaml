@@ -5312,9 +5312,9 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4c-staff-agents-api
+  model: plan:opus build:opus review:sonnet
 - id: 12.4d
   milestone: M12
   title: Staff page /staff/agents and the teacher's publish refusal text (12.4 Phase D)
@@ -5395,9 +5395,9 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
   deps:
   - 8.2f
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2j-caption-parse
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.2k
   milestone: M8
   title: Caption files ingested by the worker and searchable (8.2c Phase B)
