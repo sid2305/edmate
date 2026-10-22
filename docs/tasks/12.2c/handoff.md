@@ -53,6 +53,10 @@ that message after a successful send and shows "Thanks, our team will review thi
 - One unrelated flake seen on an earlier run of the same gate: `src/turn/runtime.test.ts`'s dev-model
   test timed out once; it passed cleanly on the next run included in the green evidence above (not
   a file this task touches).
+- After merging `origin/main` (resolved a conflict in the shared, append-only `apps/web/messages/en.json`
+  between this task's new `report` block and an unrelated, concurrently-merged `staffAlerts` block —
+  kept both as sibling top-level keys), re-ran the full gate and the secret scan: both green/clean
+  again. 34/34 tasks successful.
 
 ## Decisions
 
@@ -84,4 +88,4 @@ trust-inbox paging) are unaffected by this slice.
 
 Status: DONE
 
-Tool calls used: 62
+Tool calls used: 75
