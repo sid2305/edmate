@@ -866,3 +866,40 @@ class IndentedDecoyTest(unittest.TestCase):
         self.assertEqual(self.g.budget_cap("## Budget\n- Limits:\n  - Budget: 30 tool calls\n"), 30)
         self.assertEqual(self.g.reviewer_names("# r\n1. Round 1\n  Reviewers: code-reviewer\n"), {"code-reviewer"})
         self.assertEqual(self.g.reviewer_names("# r\n   - Reviewers: architect\n"), {"architect"})
+
+
+class HtmlCommentDecoyTest(unittest.TestCase):
+    """Fix round 4: GitHub never renders an HTML comment <!-- ... -->, but the parser used to
+    read right through it, so a decoy Budget/Reviewers line hidden inside one would silently win."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.g = _load_gate()
+
+    def test_decoy_budget_inside_comment_ignored(self):
+        plan = "## Budget\n<!-- Budget: 999 tool calls -->\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_decoy_reviewers_inside_comment_ignored(self):
+        review = "<!-- Reviewers: fake-reviewer -->\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})
+
+    def test_multiline_comment_decoy_ignored(self):
+        plan = "## Budget\n<!--\nBudget: 999 tool calls\n-->\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_unclosed_comment_hiding_budget_section_is_unparseable(self):
+        plan = "# plan\n<!--\nstray unclosed comment\n## Budget\nBudget: 30 tool calls\n"
+        self.assertIs(self.g.budget_cap(plan), self.g.UNPARSEABLE)
+
+    def test_unclosed_comment_hiding_reviewers_fails_closed(self):
+        review = "# r\n<!--\nstray\nReviewers: code-reviewer\n"
+        self.assertIsNone(self.g.reviewer_names(review))
+
+    def test_real_budget_line_after_comment_still_counts(self):
+        plan = "<!-- decoy -->\n## Budget\nBudget: 30 tool calls\n"
+        self.assertEqual(self.g.budget_cap(plan), 30)
+
+    def test_real_reviewers_line_after_closed_comment_found(self):
+        review = "<!-- Reviewers: fake -->\nReviewers: code-reviewer, architect\n"
+        self.assertEqual(self.g.reviewer_names(review), {"code-reviewer", "architect"})

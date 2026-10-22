@@ -168,3 +168,35 @@ OK
 ```
 
 Tool calls used: 100 (harness counts: 22 build + 36 fix round 1; 17 fix round 2; 25 fix round 3, my own count)
+
+## Fix round 4
+
+Finding (human decision B-39a): GitHub never renders an HTML comment `<!-- ... -->`, but the
+parser read right through one, so a decoy `Budget:`/`Reviewers:` line hidden inside a comment
+(single-line or multi-line) above the real line would silently win.
+
+Fix (`.claude/skills/merge-gate/merge_gate.py`): `fence_mask` now masks HTML comments the same
+way it masks fenced code — a line that opens (and optionally closes) `<!--`/`-->` is hidden, and
+every line between an opener and its closer is hidden too. An unclosed `<!--` sets `unclosed_at`
+the same way an unclosed fence does, so every existing caller (`unfenced`, `section`,
+`reviewer_names`, `budget_cap`'s unclosed-tail check) gets the protection for free with no other
+code changes: a real Budget/Reviewers line hidden behind an unclosed comment now fails visibly
+(`budget_cap` returns `UNPARSEABLE`; `reviewer_names` returns `None`, which the gate already
+treats as a visible FAIL) instead of silently skipping.
+
+Tests added (`HtmlCommentDecoyTest`, 8 tests, red before the fix): decoy Budget inside a
+single-line comment, decoy Reviewers inside a comment, a multi-line comment decoy, an unclosed
+comment hiding a `## Budget` section (UNPARSEABLE), an unclosed comment hiding a Reviewers line
+(fails closed), and a real Budget/Reviewers line after a (closed) comment, which still counts.
+
+```
+$ python3 -m unittest discover -s .claude/tests -p "test_merge_gate.py"
+Ran 106 tests
+OK
+```
+```
+$ python3 .githooks/secret-scan.py --all
+(exit 0, no findings)
+```
+
+Tool calls used: 18 (fix round 4, my own count)

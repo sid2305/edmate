@@ -104,28 +104,50 @@ def matches(path, glob):
 
 
 FENCE_OPEN = re.compile(r"^[ \t]*(`{3,}|~{3,})")
+# GitHub never renders an HTML comment, but the parser used to read right through it, so a decoy
+# `Budget:`/`Reviewers:` line hidden inside one would silently win. One line may open and close
+# several comments; a comment opened on one line and closed on a later one hides every line in
+# between (same convention as a fenced code block).
+HTML_COMMENT_OPEN = re.compile(r"<!--")
+HTML_COMMENT_CLOSE = re.compile(r"-->")
 
 
 def fence_mask(lines):
-    """(hidden, unclosed_at): hidden[i] is True for a fence marker line or a line inside a fenced
-    code block. A fence opened by a run of N backticks (or tildes) closes only on a line that is
-    a run of at least N of the SAME character with nothing else after it (CommonMark), so ```
-    is never closed by ~~~, a shorter run, or a line like ```md. unclosed_at is the index of the
-    opening line of a fence the document never closes, else None (callers must not silently treat
+    """(hidden, unclosed_at): hidden[i] is True for a fence marker line, a line inside a fenced
+    code block, or a line that is (part of) an HTML comment `<!-- ... -->`. A fence opened by a
+    run of N backticks (or tildes) closes only on a line that is a run of at least N of the SAME
+    character with nothing else after it (CommonMark), so ``` is never closed by ~~~, a shorter
+    run, or a line like ```md. An HTML comment closes on the first `-->` found (single-line or
+    spanning several lines); it never nests. unclosed_at is the index of the opening line of a
+    fence or HTML comment the document never closes, else None (callers must not silently treat
     everything after it as absent)."""
     hidden, opener, opened_at = [], None, None
+    in_comment, comment_opened_at = False, None
     for i, line in enumerate(lines):
-        m = FENCE_OPEN.match(line)
-        if opener is None:
-            if m:
-                opener, opened_at = m.group(1), i
-            hidden.append(m is not None)
+        if in_comment:
+            hidden.append(True)
+            if HTML_COMMENT_CLOSE.search(line):
+                in_comment, comment_opened_at = False, None
             continue
-        hidden.append(True)
-        run = m.group(1) if m else ""
-        if run and run[0] == opener[0] and len(run) >= len(opener) and not line[m.end():].strip():
-            opener, opened_at = None, None
-    return hidden, opened_at
+        if opener is not None:
+            hidden.append(True)
+            m = FENCE_OPEN.match(line)
+            run = m.group(1) if m else ""
+            if run and run[0] == opener[0] and len(run) >= len(opener) and not line[m.end():].strip():
+                opener, opened_at = None, None
+            continue
+        cm = HTML_COMMENT_OPEN.search(line)
+        if cm:
+            hidden.append(True)
+            if HTML_COMMENT_CLOSE.search(line, cm.end()):
+                continue
+            in_comment, comment_opened_at = True, i
+            continue
+        m = FENCE_OPEN.match(line)
+        if m:
+            opener, opened_at = m.group(1), i
+        hidden.append(m is not None)
+    return hidden, opened_at if opener is not None else comment_opened_at
 
 
 REVIEWERS_LINE = re.compile(LIVE_INDENT + r"(?:[-*\d.]+[ \t]*)?Reviewers?:\s*(\S.*)$", re.I)
