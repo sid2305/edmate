@@ -5848,6 +5848,16 @@ tasks:
   risk: low
   status: todo
   branch: null
+- id: 12.3f
+  milestone: M12
+  title: 'rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing it; split from 12.3c so it does not collide with 11.4a in documents.ts'
+  accept: 'a documents create, link or replace without rightsDeclared is a typecheck error and an invalid result; db and worker typecheck, lint and test green.'
+  deps:
+  - 12.3c
+  - 11.4a
+  risk: high
+  status: todo
+  branch: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
