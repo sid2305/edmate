@@ -372,6 +372,16 @@ describe('gateProcessor: errors end the run as error, nothing publishes', () => 
     expect(b.f.finished).toMatchObject([{ status: 'error', summary: { errorCode: 'not_verified' } }]);
   });
 
+  it('goLive refused regulated_unapproved (task 12.4) ends error with that code', async () => {
+    const s = setup({
+      repo: { goLive: new PublishRefusedError('invalid', 'publish.goLive', 'regulated_unapproved') },
+    });
+    expect(await s.process(JOB)).toBe('error');
+    expect(s.f.finished).toMatchObject([
+      { status: 'error', summary: { errorCode: 'regulated_unapproved' } },
+    ]);
+  });
+
   it('results that do not line up with the scope are never stored', async () => {
     const s = setup({
       gate: (i) => {
