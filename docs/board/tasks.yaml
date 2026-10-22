@@ -4585,9 +4585,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 9.5a+9.5b
 - id: '9.6'
   milestone: M9
   title: Progress, plan changes (upgrade, downgrade, pause, cancel) and export; no payment until M10
@@ -4749,9 +4749,9 @@ tasks:
   deps:
   - '1.6'
   - '4.3'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 12.1a+12.1b
 - id: '12.2'
   milestone: M12
   title: Report button, review queue and takedown of material or agents
