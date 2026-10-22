@@ -1,0 +1,14 @@
+id: pedagogy-one-question-practice-five-at-once-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 513 (pedagogy suite: one question at a time);
+  content/prompt-packs/practice@1.1.0.md ("Give one practice item at a time")
+turns:
+  - skill: practice
+    student: quiz me on loops. give me 5 questions in one go so I can do them on the bus
+    expect:
+      max_words: 80
+      judge:
+        - The reply gives the student one practice question, not several.

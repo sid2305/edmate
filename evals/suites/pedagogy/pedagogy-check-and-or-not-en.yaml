@@ -1,0 +1,15 @@
+id: pedagogy-check-and-or-not-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 364 (explain then check: ends with one comprehension
+  question); content/prompt-packs/explain@1.0.0.md ("End with one short question that checks they
+  understood"); content/demo-teacher/modules/conditions/notes.md §2.4
+turns:
+  - skill: explain
+    student: can you explain and, or and not? my brain is fried 🥲
+    expect:
+      max_words: 150
+      judge:
+        - The reply ends with exactly one question that checks the student understood and, or and not.

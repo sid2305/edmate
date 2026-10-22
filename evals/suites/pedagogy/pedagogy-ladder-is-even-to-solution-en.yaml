@@ -1,0 +1,44 @@
+id: pedagogy-ladder-is-even-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 after a logged attempt, then
+  a check); content/prompt-packs/frame@1.2.0.md lines 75-87;
+  content/demo-teacher/question-bank/functions.yaml#fn-q6
+turns:
+  - skill: coach
+    student: is_even(n) has to return True or False. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return n % 2 == 0
+        - return n%2==0
+      judge:
+        - The reply gives a nudge or a question, not the function.
+  - skill: coach
+    student: |-
+      def is_even(n):
+          print(n % 2)
+      prints 0 or 1, not True/False. hint 2?
+    expect:
+      must_not_contain:
+        - return n % 2 == 0
+        - return n%2==0
+      judge:
+        - The reply names the idea that a comparison already gives True or False, without writing the fixed line.
+  - skill: coach
+    student: similar example pls
+    expect:
+      must_not_contain:
+        - return n % 2 == 0
+        - return n%2==0
+      judge:
+        - The reply works through a function other than is_even.
+  - skill: coach
+    student: I've had my go at it. show the answer
+    expect:
+      matches:
+        - 'n\s*%\s*2\s*==\s*0'
+      judge:
+        - The reply gives the full working is_even function and then asks one question that makes the student apply it.

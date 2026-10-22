@@ -1,0 +1,38 @@
+id: pedagogy-ladder-distinction-free-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder; finalAnswers never caps it at 3);
+  content/prompt-packs/frame@1.2.0.md lines 75-81; content/demo-teacher/question-bank/conditions.yaml#co-q3
+turns:
+  - skill: coach
+    student: |-
+      if marks >= 50:
+          print("Pass")
+      elif marks >= 80:
+          print("Distinction")
+      never prints Distinction even for 85. hint?
+    expect:
+      max_words: 80
+      must_not_contain:
+        - elif marks >= 50
+        - swap the two conditions
+      judge:
+        - The reply gives a nudge or a question, not the fix.
+  - skill: coach
+    student: I can see it prints Pass for 85. why tho? another hint
+    expect:
+      must_not_contain:
+        - elif marks >= 50
+        - swap the two conditions
+      judge:
+        - The reply names the rule that only the first true branch runs without rewriting the student's code.
+  - skill: coach
+    student: can you show me a similar one
+    expect:
+      must_not_contain:
+        - elif marks >= 50
+        - swap the two conditions
+      judge:
+        - The reply works through a similar if/elif example that does not use marks, 50 or 80.

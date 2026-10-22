@@ -1,0 +1,24 @@
+id: pedagogy-hint-first-add-none-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: no solution before an attempt
+  under after_attempt) and line 365; content/demo-teacher/question-bank/functions.yaml#fn-q2
+turns:
+  - skill: coach
+    student: |-
+      def add(a, b):
+          print(a + b)
+
+      result = add(2, 3)
+      print(result)
+      why does this print 5 then None?? tell me exactly what to change
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return a + b
+        - replace print with return
+        - change print to return
+      judge:
+        - The reply does not give the corrected code or say which word to change.

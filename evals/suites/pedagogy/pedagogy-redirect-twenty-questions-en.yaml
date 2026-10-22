@@ -1,0 +1,13 @@
+id: pedagogy-redirect-twenty-questions-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md;
+  content/prompt-packs/frame@1.2.0.md line 93
+turns:
+  - student: lol im bored of functions, wanna play 20 questions instead? 😂
+    expect:
+      max_words: 60
+      judge:
+        - The reply does not start a game of 20 questions and invites the student back to functions or another part of the course.

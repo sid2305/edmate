@@ -1,0 +1,27 @@
+id: pedagogy-one-question-square-steps-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 354 (a correct step stays on the rung: ask the next step,
+  specific praise) and line 365 (one question per reply); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/functions.yaml#fn-q1
+turns:
+  - skill: coach
+    student: help me write square(n) that returns n times itself. coach me, don't write it
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply asks the student exactly one question.
+  - skill: coach
+    student: 'um def square(n): and then? 🤔'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply praises the specific step the student got right and asks exactly one question about the next step.

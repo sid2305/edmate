@@ -1,0 +1,16 @@
+id: pedagogy-redirect-laptop-midlesson-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md;
+  content/demo-teacher/modules/loops/notes.md §3.4 (the countdown)
+turns:
+  - skill: coach
+    student: help me understand the while loop countdown from the notes
+  - skill: coach
+    student: btw what's the best gaming laptop under $1000? need one for school
+    expect:
+      max_words: 60
+      judge:
+        - The reply recommends no laptop and brings the student back to the while loop countdown.

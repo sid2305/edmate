@@ -1,0 +1,16 @@
+id: pedagogy-one-question-remainder-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply, never the answer
+  below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/values-variables.yaml#vv-q7
+turns:
+  - skill: coach
+    student: 17 % 5 = ?? walk me thru it but dont just say the number
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.
+        - The reply does not say what 17 % 5 is.

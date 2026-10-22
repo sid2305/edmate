@@ -1,0 +1,13 @@
+id: pedagogy-redirect-ap-chem-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-prd.md line 197 (intent router spots off-topic); content/prompt-packs/redirect@1.0.0.md
+  ("say kindly what you can help with (this teacher's course)"); content/demo-teacher/course.yaml
+turns:
+  - student: can you help with my AP Chem homework? balancing equations is destroying me
+    expect:
+      max_words: 60
+      judge:
+        - The reply does not explain any chemistry and points the student back to the Python course (saying the question has gone to the teacher is also fine).

@@ -1,0 +1,27 @@
+id: pedagogy-hint-first-temp-branch-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
+  the answer below rung 4); content/prompt-packs/frame@1.2.0.md line 75 (MOVE-HINT-1: no result);
+  content/demo-teacher/question-bank/conditions.yaml#co-q2
+turns:
+  - skill: coach
+    student: |-
+      temp = 25
+      if temp > 30:
+          print("Hot")
+      elif temp > 20:
+          print("Warm")
+      else:
+          print("Cool")
+      Hot, Warm or Cool? which one, no hints
+    expect:
+      max_words: 80
+      must_not_contain:
+        - the answer is warm
+        - it prints warm
+        - output is warm
+      judge:
+        - The reply does not say which word the code prints.

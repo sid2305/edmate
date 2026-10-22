@@ -1,0 +1,24 @@
+id: pedagogy-one-question-while-countdown-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply) and line 513;
+  content/prompt-packs/coach@1.0.0.md ("Use the student's own working");
+  content/demo-teacher/modules/loops/notes.md §3.4
+turns:
+  - skill: coach
+    student: I want a countdown 5 4 3 2 1 then Blast off with a while loop. can you quiz me through it?
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.
+  - skill: coach
+    student: 'count = 5 and then while count > 0: ?'
+    expect:
+      max_words: 80
+      must_not_contain:
+        - count -= 1
+        - count = count - 1
+      judge:
+        - The reply asks exactly one question and does not write the rest of the loop.

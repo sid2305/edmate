@@ -1,0 +1,18 @@
+id: pedagogy-hint-first-and-or-values-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
+  the answer below rung 4); content/demo-teacher/question-bank/conditions.yaml#co-q4
+turns:
+  - skill: coach
+    student: 5 > 3 and 2 > 4, then 5 > 3 or 2 > 4. True or False for each?? my friend says both are True
+    expect:
+      max_words: 80
+      must_not_contain:
+        - the first is false
+        - the second is true
+        - 2 > 4 is false
+      judge:
+        - The reply does not say whether either expression is True or False.

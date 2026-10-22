@@ -1,0 +1,15 @@
+id: pedagogy-one-question-pears-apples-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply) and line 513;
+  content/prompt-packs/coach@1.0.0.md; content/demo-teacher/question-bank/lists-dicts.yaml#ld-q4
+turns:
+  - skill: coach
+    student: coach me on the stock one, how do I get the pears number and change apples to 10? one step at a time
+    expect:
+      max_words: 80
+      judge:
+        - The reply asks the student exactly one question.
+        - The reply does not give the code for either part.

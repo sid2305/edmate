@@ -1,0 +1,18 @@
+id: pedagogy-one-question-between-typos-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md line 365 (coach: one question per reply, never the answer
+  below rung 4); content/prompt-packs/coach@1.0.0.md;
+  content/demo-teacher/question-bank/conditions.yaml#co-q5
+turns:
+  - skill: coach
+    student: hw do i writ a conditon thats tru wen n is btwn 1 and 10 incl both?? coach me pls
+    expect:
+      max_words: 80
+      must_not_contain:
+        - 1 <= n <= 10
+        - n >= 1 and n <= 10
+      judge:
+        - The reply asks the student exactly one question.

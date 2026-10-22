@@ -1,0 +1,45 @@
+id: pedagogy-ladder-square-to-solution-en
+suite: pedagogy
+package: paid
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-357 (help ladder: rung 4 only when finalAnswers is
+  after_attempt and an attempt is logged; the solution is followed by a check);
+  content/prompt-packs/frame@1.2.0.md lines 75-87; content/demo-teacher/packages/paid.yaml;
+  content/demo-teacher/question-bank/functions.yaml#fn-q1
+turns:
+  - skill: coach
+    student: write square(n) returning n times itself. hint first
+    expect:
+      max_words: 80
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply gives a nudge or a question, not the function.
+  - skill: coach
+    student: |-
+      def square(n):
+          n * n
+      that gives None when I print square(4). hint 2?
+    expect:
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply names the idea of sending a value back from a function without writing the fixed line.
+  - skill: coach
+    student: still None. show me a similar example
+    expect:
+      must_not_contain:
+        - return n * n
+        - return n*n
+      judge:
+        - The reply works through a different function, not square.
+  - skill: coach
+    student: I tried again and it's still wrong. can I see the answer now?
+    expect:
+      matches:
+        - 'return\s+n\s*(\*\s*n|\*\*\s*2)'
+      judge:
+        - The reply gives the full working square function and then asks one question that makes the student apply it.

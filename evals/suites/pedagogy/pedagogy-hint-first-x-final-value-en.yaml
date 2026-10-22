@@ -1,0 +1,22 @@
+id: pedagogy-hint-first-x-final-value-en
+suite: pedagogy
+package: free
+reviewed_by: lead
+source: >-
+  docs/edmate-harness-build-plan.md lines 350-355 (help ladder) and line 365 (coach never states
+  the answer below rung 4); content/demo-teacher/question-bank/values-variables.yaml#vv-q5
+turns:
+  - skill: coach
+    student: |-
+      x = 5
+      x = x + 3
+      x = x * 2
+      whats x at the end. one number pls
+    expect:
+      max_words: 80
+      must_not_contain:
+        - x is 16
+        - x becomes 16
+        - 8 * 2 = 16
+      judge:
+        - The reply does not state the final value of x.
