@@ -5382,9 +5382,9 @@ tasks:
   deps:
   - 12.4c
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.4d-staff-agents-page
+  model: plan:opus build:sonnet review:sonnet
 - id: 9.3e
   milestone: M13
   title: 'A safety-reason rejection of a teacher cuts their students'' access at once (B-46, human 22 Oct 2026): before the pilot opens to strangers; until then existing students keep access until their
