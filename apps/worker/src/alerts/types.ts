@@ -16,3 +16,13 @@ export interface AckStore {
   acknowledge(alertId: string): Promise<void>;
   isAcknowledged(alertId: string): Promise<boolean>;
 }
+
+/**
+ * Persists an alert and its escalations (task 12.5b). `dbAlertStore` (dbStore.ts) is the real
+ * implementation, backed by `safetyAlertsRepo`; a failed call never blocks notifying (the
+ * processor logs it and carries on).
+ */
+export interface AlertStore {
+  record(alert: SafetyAlert): Promise<unknown>;
+  markEscalated(alert: SafetyAlert, round: number): Promise<unknown>;
+}

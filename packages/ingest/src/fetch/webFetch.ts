@@ -118,7 +118,7 @@ const REFUSAL_WORDS: Readonly<Record<Exclude<WebLinkRefusal, 'youtube_unsupporte
 
 function refusalError(code: WebLinkRefusal): IngestError {
   return code === 'youtube_unsupported'
-    ? new IngestError('unsupported', false, "YouTube links aren't supported yet")
+    ? new IngestError('unsupported', false, "YouTube links aren't fetched")
     : forbidden(REFUSAL_WORDS[code]);
 }
 

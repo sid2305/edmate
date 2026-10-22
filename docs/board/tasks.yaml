@@ -3180,9 +3180,9 @@ tasks:
   deps:
   - 7.2c
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2g-leak-followups
+  model: plan:lead build:sonnet review:sonnet
 - id: 8.3c
   milestone: M13
   title: '8.3a review follow-ups: an outline edit that merges away a studied topic moves its evidence_events to the surviving topic instead of being refused; batch replaceOutline''s per-module and per-topic
@@ -5027,9 +5027,29 @@ tasks:
   deps:
   - 11.2a
   risk: high
-  status: running
+  status: done
   branch: m11/11.2b-question-queue-ui
   model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 35
+    tokens_in: 114
+    tokens_out: 367
+    cache_read_tokens: 2559911
+    wall_time_seconds: 152
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 1
+      by_severity:
+        HIGH: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.5a
   milestone: M12
   title: safety_alerts table and repository with an audited staff ack (12.5 Phase A)
@@ -5068,9 +5088,29 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: running
+  status: done
   branch: m12/12.5b-alert-worker-acks
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 30
+    tokens_in: 108
+    tokens_out: 2262
+    cache_read_tokens: 1743603
+    wall_time_seconds: 329
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 12.5c
   milestone: M12
   title: Staff alert inbox at /staff/alerts with acknowledgement (12.5 Phase C)
@@ -5138,9 +5178,29 @@ tasks:
   deps:
   - 12.2a
   risk: high
-  status: running
+  status: done
   branch: m12/12.2b-takedowns-repo
   model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 79
+    tokens_in: 286
+    tokens_out: 1459
+    cache_read_tokens: 7112092
+    wall_time_seconds: 856
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 2
+    human_questions: 0
 - id: 12.2c
   milestone: M12
   title: Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)
@@ -5220,9 +5280,9 @@ tasks:
   - 12.3a
   - 12.2b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3b-rights-declaration-db
+  model: plan:opus build:opus review:sonnet
 - id: 12.3c
   milestone: M12
   title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
@@ -5455,18 +5515,38 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
   deps:
   - 8.2f
-  status: running
+  status: done
   branch: m8/8.2j-caption-parse
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 36
+    tokens_in: 130
+    tokens_out: 830
+    cache_read_tokens: 2449516
+    wall_time_seconds: 172
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 8.2k
   milestone: M8
   title: Caption files ingested by the worker and searchable (8.2c Phase B)
   accept: per docs/tasks/8.2c/plan.md Phase B and Lead answers; queue and worker typecheck, lint and test green.
   deps:
   - 8.2j
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2k-caption-ingest
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.2l
   milestone: M8
   title: Upload centre accepts caption files, YouTube refusal points to them, ADR-0014 amended (8.2c Phase C)
@@ -5484,9 +5564,29 @@ tasks:
   accept: the node job and the e2e job each finish well inside their limits on a full PR run; .github/workflows/ci.yml reviewed by security-reviewer
   deps: []
   risk: risky
-  status: running
+  status: done
   branch: m0/0.23-ci-e2e-job
   model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 10
+    tokens_in: 38
+    tokens_out: 1839
+    cache_read_tokens: 443475
+    wall_time_seconds: 72
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 2
 - id: 3.11g
   milestone: M13
   title: 'Flaky timing bound in packages/harness src/pedagogy/modelRequest.test.ts "runs in linear time on long hostile input" (2048 ms vs a 2000 ms bound on a CI runner, #191, 22 Oct 2026): use a loose
@@ -5506,6 +5606,15 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 9.7d
+  milestone: M13
+  title: '9.7b follow-ups: full-flow.spec.ts:224 toHaveCount(0) takes the STEP_TIMEOUT like the other assertions (typescript-reviewer LOW); give chat.spec.ts a postOnce-style send with a hydration retry
+    if CI shows it flaking under load'
+  accept: the full-flow and chat e2e specs stay green in three CI runs in a row.
+  deps:
+  - 9.7b
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

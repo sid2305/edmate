@@ -10,6 +10,187 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2j Tag/override stripping is a hand scan, not a `<[^>]*>` regex · decided by builder · risk: low
+- Decided: `stripTags`/`stripOverrides` in `captions.ts` are written as a forward-only character
+  scan with a cached "next close" position, not as a regex replace.
+- Why: the plan requires "no nested quantifiers (no ReDoS)". A single, non-nested quantifier like
+  `<[^>]*>` is still quadratic on an adversarial input (many `<` never followed by `>`), which is a
+  well-known ReDoS shape independent of nesting. The scan is true O(n) in every case; a test with a
+  1 MB line of unclosed `<` and a loose 5 s bound (per `docs/lessons.md`, no tight timings) guards
+  the fix.
+- risk: low (new code, 100% branch-covered by the fixture tests above; no external input beyond the
+  teacher's own caption file reaches this function).
+
+---
+
+### 22 Oct 2026 · 8.2j Caption parser rules · decided by builder · risk: medium
+- Decided: VTT requires a `WEBVTT` header line (else `unsupported`); any cue block whose timing line
+  doesn't match the `[hh:]mm:ss.ttt --> [hh:]mm:ss.ttt` (or SRT comma-separated) shape is silently
+  skipped, which is also how `NOTE`/`STYLE`/`REGION` blocks (no timing line) are dropped without a
+  separate keyword check; a cue's first line is dropped when it exactly repeats the previous *kept*
+  cue's last line (YouTube rolling auto-captions); cues are bucketed through the shared
+  `unitsFromTimedText` so captions land in the same 90 s units a Whisper transcript gives; and every
+  thrown error is one of the two fixed `IngestError`s named in the plan, with no file text quoted.
+- Why: matches the plan (docs/tasks/8.2c/plan.md, Phase A) exactly; relying on "no timing line
+  parses" to also catch NOTE/STYLE/REGION (rather than a separate keyword-based skip) is simpler and
+  was verified correct by test (`captions.test.ts` "skips NOTE, STYLE and REGION blocks").
+- risk: medium (new parser on untrusted teacher-uploaded files; no network or file-system access,
+  no eval, output is plain text only; recommend the plan's optional, non-gating
+  `security-reviewer` pass on this file at the lead's discretion, per the plan's risky-paths note).
+
+---
+
+### 22 Oct 2026 · 8.2j budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (76 harness-counted calls against a budget of 60); no re-run.
+- Why: the phase is complete with 99.7% line coverage, and both reviewers found nothing above LOW; the extra calls went to tests, not scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 0.23 Split e2e into its own CI job · decided by builder · risk: high
+- Decided: Move "Install Playwright browsers" and the e2e test run out of `node` into a new `e2e`
+  job (`needs: changes`, same `if:`, `timeout-minutes: 20`, its own Postgres service, no Redis),
+  with the Playwright browser cache (`actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830`,
+  v4.3.0) keyed on `runner.os` and the `@playwright/test` version read from `pnpm-lock.yaml`;
+  on a cache hit, only `playwright install-deps chromium` runs.
+- Why: PR #188's `node` job was cancelled twice around 20 minutes at the Playwright install step;
+  splitting the job (plus caching the browser binary) keeps both jobs inside their limits.
+- risk: high (this is a `.github/**` workflow change; security-reviewer must review it).
+
+---
+
+### 22 Oct 2026 · 0.23 No Redis service in the e2e job · decided by builder · risk: low
+- Decided: The new `e2e` job gets a Postgres service but no Redis service.
+- Why: `apps/web/e2e/global-setup.ts` sets `REDIS_URL: 'redis://127.0.0.1:1'` on purpose
+  (syntactically valid, unreachable) because starting a session never touches the turn queue in
+  this suite — every turn is a `page.route` fixture. Adding an unused Redis service would only
+  slow the job down for no test coverage gained.
+- risk: low.
+
+---
+
+### 22 Oct 2026 · 0.23 `node`'s timeout-minutes left at 20 · decided by builder · risk: low
+- Decided: Did not raise `node`'s `timeout-minutes` above 20.
+- Why: `node` now runs only build, typecheck, lint, test and build-smoke — the same steps that
+  ran comfortably inside 20 minutes before 9.7 added Playwright to this job. No local estimate
+  suggested it needs more.
+- risk: low.
+
+---
+
+### 22 Oct 2026 · 11.2b new ROUTE_POLICY row · decided by builder · risk: high
+- Decided: added exactly one row to `apps/web/src/auth/policy.ts` — `pattern:
+  '/api/live-classes/*/questions'`, `methods: ['POST']`, `access: ['student']`, `clearance:
+  'agent'` — same clearance as the existing `/api/sessions` row, appended at the end of
+  `ROUTE_POLICY` per the append-only rule for this shared file.
+- Why: the plan calls for a student-facing write route; `route-coverage.test.ts` requires every
+  exported HTTP method to carry a matching policy row, deny-by-default.
+- risk: high — touches the authorization policy table (a risky path). Needs `security-reviewer`
+  and `typescript-reviewer` sign-off per the plan's "Risky paths touched" section.
+
+---
+
+### 22 Oct 2026 · 11.2b teacher-scope resolution via candidate agents · decided by builder · risk: medium
+- Decided: the ask-question route resolves `{studentId, teacherId}` for `classQuestions.submit`
+  by calling `chatAgentCandidates(env)` for the student's configured agents, resolving each to an
+  owning teacher via `agents.owner({agentId})`, deduping teacherIds, and trying `submit()` against
+  each candidate teacher in turn until one succeeds; any exhausted list (wrong teacher, no
+  candidates, unentitled student, unknown/mismatched class) is folded into a single `not_found`.
+- Why: the plan's Phase B doesn't specify the lookup mechanism, and `packages/db` is out of
+  bounds this phase so no new repository method could be added. This reuses the exact pattern
+  already proven in `/home`'s own `homeLiveClasses()` (11.1c), and avoids an existence oracle (no
+  response ever distinguishes "wrong teacher" from "not your class" from "no agents configured").
+- risk: medium — new runtime logic in a request handler, but no schema/contract change and fully
+  covered by `route.test.ts`'s memory-backend and real-guard tests.
+
+---
+
+### 22 Oct 2026 · 11.2b mocking AskQuestionForm in view.test.tsx · decided by builder · risk: low
+- Decided: `app/home/view.test.tsx` mocks `./AskQuestionForm` with a stub span (same pattern
+  `page.test.tsx` already uses for `LiveClassesView`), rather than wrapping `HomeView`'s render in
+  a real `NextIntlClientProvider`. The form's own interactive behaviour (submit, busy state,
+  trimming, errors) is covered separately by `AskQuestionForm.test.tsx` under `renderIntl()`.
+- Why: `HomeView` is a server component tested with a `next-intl/server` mock that has no client
+  provider wiring; `AskQuestionForm` is a client component needing `useTranslations`. Mirroring
+  the existing stub pattern keeps `view.test.tsx` focused on composition (one form per listed
+  class) without duplicating the form's own test coverage.
+- risk: low — test-only change, no production behaviour affected.
+
+---
+
+### 22 Oct 2026 · 11.2b budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (132 harness-counted calls against a budget of 90, plus a 39-call fix round); no re-run.
+- Why: the build is complete and green; the one HIGH from the security review is fixed with a red-then-green test; re-running would cost more than it saves.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2b Staff takedowns of documents and agents, and the retrieval filter (risky path, security-reviewer, database-reviewer) · decided by builder · risk: high
+- Decided: in `packages/db/src/repositories/takedowns.ts` only a user who is staff right now can take down a document or an agent, lift a takedown or list them; create and lift are audited (`takedown.create`, `takedown.lift`, plus `report.review` when a report is linked). A document takedown is one `notTakenDown` predicate added to retrieval's single scope fragment (text, vector and term stats), to `retrieval.material` (leakCheck) and to `chunks.listForModule`, with a material revision bump so leakCheck rebuilds. An agent takedown sets `suspended`. Every write locks the staff role row, then the target, then the takedown, then the report; publish never locks a role row, takedown or report, so the agent is the only shared row and a two-connection test shows no deadlock with `publish.goLive`. Reviewers required: security-reviewer and database-reviewer.
+- Why: the plan's Phase B design and lead answers (Q4 filter not delete, Q5 leakCheck too); the 8.7a lesson on lock order.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.2b A linked report gets its own report.review audit row · decided by builder · risk: low
+- Decided: when a takedown links an open report, the report is set `actioned`, gets a staff action naming the takedown id, and a `report.review` audit row is written next to `takedown.create`.
+- Why: the plan only named the `takedown.create` audit; a report closed without its own audit row would look different from one closed by `reports.review`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2b Lift restores live or draft whatever the agent status was · decided by builder · risk: low
+- Decided: lifting an agent takedown sets `live` when `live_version` is set, else `draft`, as the plan says; there is no other path that suspends an agent today, so no earlier status is stored. The `takedown.create` audit row records the status before the takedown.
+- Why: the plan's rule; storing the previous status would need a schema change.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2b two review LOWs left as is · decided by lead · risk: low
+- Decided: the whitespace-only reformat in packages/db/test/repositories.int.test.ts and the import-order nit in packages/db/src/repositories/index.ts stay (security-reviewer LOWs, wontfix).
+- Why: both are cosmetic; the branch merges cleanly with main and no running build edits those lines. Reverting would cost a build round for no behaviour change.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.5b the DB is the ack source of truth; a failed ack read pages, a failed escalation mark never stops a page · decided by builder · risk: high
+- Decided: the alert worker's `isAcknowledged` reads `safety_alerts` (via `dbAlertStore`), not
+  Redis. A failed read is treated as "not acknowledged" (fails closed: pages and logs
+  `safety_alert.ack_read_failed`) rather than rejecting the job. A failed `markEscalated` write is
+  logged (`safety_alert.mark_escalated_failed`) but does not throw, so the on-call page still goes
+  out on schedule; a throw there would retry the whole check job on the queue's 30 s backoff and
+  could page on-call far more than once per interval. `dbAlertStore.acknowledge` always rejects:
+  only the staff console (12.5c) may acknowledge. Reviewer: code-reviewer (risky path
+  `apps/worker/src/alerts/**`, the student-safety group; safety-reviewer returns at 13.3, per the
+  MVP rule). silent-failure-hunter recommended for the retry/failure policy.
+- Why: plan Phase B ("A failed ack read counts as not acknowledged... If that fails, log the error
+  but do not throw"); lead answer Q6 (the DB is the only ack store).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.5b a record failure on raise still notifies, then throws to retry the write · decided by builder · risk: medium
+- Decided: `alert.raise` calls `store.record(alert)` before notifying; if it fails, the trust-team
+  notice still goes out, the failure is logged with ids and the error name only
+  (`safety_alert.store_failed`), and the job then throws so BullMQ retries (eventually writing the
+  row). A duplicate trust-team notice on a retry is accepted, as the file's own header already
+  documents for this processor.
+- Why: plan Phase B ("record, then notify... If record failed, still notify, log... then throw so
+  BullMQ retries").
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.5b `AlertWorkerOptions.ackStore` becomes `store: AlertStore & AckStore` · decided by builder · risk: low
+- Decided: one combined dependency (`store`) replaces the separate `ackStore` across
+  `AlertProcessorDeps`, `AlertWorkerOptions`, the worker entrypoint and every test; `redisAckStore`
+  stays exported from the barrel but is no longer wired into the production worker.
+- Why: `dbAlertStore` implements both `AlertStore` and `AckStore` over the same repository, and the
+  plan's "pass the `store` option through" implies one dependency, not two.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.4c Staff agents API boundary (staff-only, strict body, session id, note never logged) · decided by builder · risk: high
 - Decided: `/api/staff/agents` GET and POST are `withRole(['staff'])` under the existing `/api/staff/**` policy row; the POST body is a strict discriminated union (unknown keys such as `by` are 400), the acting staff id comes only from the session, repository errors map to fixed codes, and only the error's name is logged, never its message or the note. Reviewer: security-reviewer (risky path `apps/web/app/api/staff/**`).
 - Why: plan 12.4 Phase C and the 12.1b/12.5c staff pattern; the flag decides what regulated subject reaches the harness on the next publish, so only staff may set it and every change is audited by the repository.
