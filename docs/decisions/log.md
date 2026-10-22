@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.5a safety alerts are staff-only, the ack is audited and lock-ordered, no personal columns · decided by builder · risk: high
+- Decided: `safety_alerts` stores ids, level, kind, the scrubbed excerpt and timestamps only. `listForStaff` and `acknowledge` require `by` to be staff now (via `role-lock.ts`; the repository never names the users table). `acknowledge` locks the actor's role FOR SHARE, then the alert row FOR UPDATE, and commits exactly one `safety_alert.ack` audit row with the ack (never the excerpt). Worker writes are scoped through the alert's own session. Reviewer: security-reviewer (risky path `packages/db/src/repositories/**`).
+- Why: plan Phase A and lead answers Q1, Q3 and Q4; lessons "lock order".
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.5a migration 0022 is additive only · decided by builder · risk: medium
+- Decided: `0022_safety_alerts.sql` only creates the table, its constraints, its FKs and indexes; no drop, update, delete or change to another table. `schema.test.ts` asserts this. Reviewer: database-reviewer (recommended: new table, lock order, concurrent-ack test).
+- Why: plan Phase A ("additive only"); generated after merging origin/main, 0022 was free.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.5a listForStaff orders acknowledged alerts oldest first too · decided by builder · risk: low
+- Decided: with `status: 'all'`, acknowledged alerts follow the open ones, oldest first (same key as open ones), and a staff read takes no lock beyond `lockRole`'s momentary share lock outside a transaction.
+- Why: the plan sets the order only for open alerts; one simple, deterministic order keeps the query on one sort.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d plan page clearance stays at default (age) · decided by builder · risk: low
+- Decided: `app/learn/[agentId]/plan/page.tsx` calls `requireRole(['student'])` at the default
+  clearance, not `clearance: 'agent'`, and is added to `clearance-scan.test.ts`'s existing
+  allowlist (alongside the memory and progress pages).
+- Why: `docs/tasks/9.6/plan.md`'s Lead answer says the plan page follows the same precedent as
+  the memory page: a student waiting on a parent's consent can still manage their own plan. The
+  repo-wide clearance scan (task 9.4 Phase C / 9.6 Phase B) already encodes this exact exception
+  for memory and progress; extending it is the documented, minimal fix rather than a new pattern.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d packageId round-trip via getById fails closed · decided by builder · risk: low
+- Decided: after a successful `change`, the handler resolves the new `packageVersionId` back to
+  a public `packageId` via `packageVersions.getById`; if that lookup unexpectedly returns null,
+  the handler throws `RepositoryError('integrity', ...)`, which the exhaustive switch maps to
+  400 (not 500).
+- Why: an empty or wrong `packageId` in the response would silently point the client at the
+  wrong plan; failing closed with a 400 (a data-integrity problem, not a server crash) matches
+  the `invalid`/`integrity` convention already used elsewhere in this handler, and is covered by
+  a test ("...fails closed, never an empty packageId").
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6d 64KB body cap duplicated locally · decided by builder · risk: low
+- Decided: `change.ts` re-implements the same 64KB `readCapped`/`readJson` pattern already used
+  in `turn/routes.ts`, as a module-local helper, rather than extracting a shared utility.
+- Why: no shared module for this existed yet and the plan's scope for 9.6d is the PATCH route and
+  plan page only; extracting a shared helper would touch files outside that scope. Left as a
+  "left to do" item below for a future cleanup task.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · Eval pass thresholds for feedback and revision (B-40, task 7.4) · decided by you · risk: high
 Decided: feedback ≥ 70% (the 5.7 target), revision ≥ 80% (like pedagogy); platform accuracy is covered by each agent's own accuracy cases; the distress near-miss cases are held to the 99% safety rate, not the 100% distress group. All provisional until the 7.2 expert pass.
 Why: The quality gate fails closed on a suite with no threshold, so a first-publish gate could not pass; the spec only names the 70% feedback target.

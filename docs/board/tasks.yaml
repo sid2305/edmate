@@ -4330,9 +4330,29 @@ tasks:
   deps:
   - 9.6c
   risk: medium
-  status: running
+  status: done
   branch: m9/9.6d-plan-page
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 33
+    tokens_in: 114
+    tokens_out: 483
+    cache_read_tokens: 2990296
+    wall_time_seconds: 336
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 9.6e
   milestone: M9
   title: Paused plans on /home and paused text with a plan link on the compare page (9.6 Phase E, apps/web)
@@ -4892,9 +4912,30 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.5a-safety-alerts-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 148
+    tokens_out: 1453
+    cache_read_tokens: 3327594
+    wall_time_seconds: 557
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.5b
   milestone: M12
   title: Alert worker stores alerts, marks escalation and reads acks from the DB (12.5 Phase B)
