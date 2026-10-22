@@ -4753,9 +4753,28 @@ tasks:
   accept: per docs/tasks/11.3/plan.md Phase B; worker typecheck, lint and test green.
   deps:
   - 11.3a
-  status: running
+  status: done
   branch: m11/11.3b-insights-job
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 64
+    tokens_out: 941
+    cache_read_tokens: 911178
+    wall_time_seconds: 91
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2d
   milestone: M8
   title: Pinned, SSRF-safe web fetcher and ADR-0014 web-link egress (8.2b Phase A)
@@ -4827,9 +4846,29 @@ tasks:
   deps:
   - 8.2e
   risk: high
-  status: running
+  status: done
   branch: m8/8.2f-web-link-ui
-  model: plan:sonnet build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 197
+    tokens_in: 648
+    tokens_out: 43066
+    cache_read_tokens: 19959904
+    wall_time_seconds: 129151
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 1
 - id: 8.2c
   milestone: M8
   title: 'YouTube material per B-47 (human, 22 Oct 2026): the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube; also fixes the 8.2d review findings first
@@ -4984,9 +5023,29 @@ tasks:
   deps:
   - '12.1'
   risk: high
-  status: running
+  status: done
   branch: m12/12.2a-reports-repo
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 79
+    tokens_in: 254
+    tokens_out: 1502
+    cache_read_tokens: 5441995
+    wall_time_seconds: 5458
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.2b
   milestone: M12
   title: 'Takedowns repository: retrieval, material and module lists skip taken-down documents at once; an agent takedown suspends it (12.2 Phase B)'
@@ -5321,11 +5380,11 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: todo
+  status: done
   needs_decision:
   - teacher-chat-visibility
   branch: null
-  model: null
+  model: 'phases: 11.3a, 11.3b'
 - id: '11.4'
   milestone: M11
   title: Live-class recording ingestion into the agent's knowledge (P1)
