@@ -3534,9 +3534,9 @@ tasks:
   deps:
   - '9.3'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m9/9.3c-verified-start
+  model: build:sonnet
 - id: 9.2d
   milestone: M13
   title: '9.2 plan Q2 follow-up: a public display name the teacher sets in onboarding, shown on discovery and teacher pages instead of the sign-in name'
