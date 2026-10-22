@@ -582,6 +582,7 @@
       "enqueue_failed": "The check could not be started. Nothing was published. Try again.",
       "not_verified": "Your profile is not verified, so nothing was published.",
       "suspended": "Your agent is suspended, so nothing was published.",
+      "regulated_unapproved": "Your agent covers a regulated subject (investing, health or law), so Edmate staff review it before it can be published. We'll let you know when it's approved.",
       "generic": "Something went wrong during the check. Nothing was published. Try again."
     },
     "startErrors": {
@@ -591,6 +592,7 @@
       "gate_running": "A check is already running. Wait for it to finish.",
       "nothing_to_publish": "Nothing has changed since your last publish.",
       "suspended": "Your agent is suspended, so it cannot be published.",
+      "regulated_unapproved": "Your agent covers a regulated subject (investing, health or law), so Edmate staff review it before it can be published. We'll let you know when it's approved.",
       "conflict": "Something changed while you were publishing. Reload and try again.",
       "unavailable": "Publishing is not available right now. Try again soon.",
       "generic": "Something went wrong. Try again."
@@ -700,6 +702,46 @@
       "info": "Info",
       "alert": "Alert",
       "critical": "Critical"
+    }
+  },
+  "staffAgents": {
+    "nav": "Regulated agents",
+    "title": "Regulated-subject agents",
+    "intro": "Agents that cover a regulated subject (investing, health or law) need Edmate staff approval before they can publish.",
+    "listLabel": "Agents",
+    "empty": "No agents yet.",
+    "reload": "Reload",
+    "reloading": "Reloading…",
+    "noTeacherSlug": "No teacher profile",
+    "statusLabel": "Status",
+    "status": {
+      "draft": "Draft",
+      "live": "Live",
+      "suspended": "Suspended"
+    },
+    "subjectLabel": "Regulated subject",
+    "subjectNone": "None",
+    "subject": {
+      "investing": "Investing",
+      "health": "Health",
+      "law": "Law"
+    },
+    "approvedAtLabel": "Approved",
+    "save": "Save",
+    "saving": "Saving…",
+    "approve": "Approve",
+    "revoke": "Revoke",
+    "confirmApprove": "Approve this agent to publish with its current subject?",
+    "confirmRevoke": "Revoke approval? It will need staff approval again before its next publish.",
+    "confirmYes": "Yes",
+    "confirmCancel": "Cancel",
+    "saved": "Saved.",
+    "errors": {
+      "forbidden": "You can't change this agent: your staff access may have changed.",
+      "not_found": "That agent was not found. Reload the list.",
+      "validation": "Check the request and try again.",
+      "generic": "Something went wrong. Try again.",
+      "loadFailed": "Could not load the agent list. Try again."
     }
   }
 }
