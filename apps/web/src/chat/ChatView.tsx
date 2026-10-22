@@ -132,6 +132,11 @@ export function ChatView({
    * send. Unlike `activeSkill`, feedback never persists across turns (5.7 is a single verdict,
    * not a ladder). */
   const [feedbackPending, setFeedbackPending] = useState(false);
+  /** 12.2c fix round: a report's busy/done half, keyed by `messageId` (not the component instance
+   * -- a final turn is first shown as the current turn, then re-rendered under a new thread key
+   * once the student sends another message; without this a report in flight, or its "Thanks"
+   * result, was lost on that remount). `'idle'` clears the entry rather than storing it. */
+  const [reportState, setReportState] = useState<Record<string, 'busy' | 'done'>>({});
   const session = useRef<string | null>(sessionId);
   const handle = useRef<TurnHandle | null>(null);
   /** Bumped per turn and on unmount; an item for an older turn is dropped. */
@@ -219,6 +224,18 @@ export function ChatView({
     void run(effective);
   }
 
+  function setReportStatus(messageId: string, status: 'idle' | 'busy' | 'done') {
+    setReportState((prev) => {
+      if (status === 'idle') {
+        if (!(messageId in prev)) return prev;
+        const next = { ...prev };
+        delete next[messageId];
+        return next;
+      }
+      return { ...prev, [messageId]: status };
+    });
+  }
+
   function answerPractice(text: string) {
     submit({ kind: 'check_answer', text, skill: 'practice' }, text);
   }
@@ -265,7 +282,13 @@ export function ChatView({
                     <TurnExtras turn={item.turn} disabled={streaming} onPracticeAnswer={answerPractice} />
                   )}
                   {reportId === null ? null : (
-                    <ReportButton agentId={agentId} sessionId={reportSessionId} messageId={reportId} />
+                    <ReportButton
+                      agentId={agentId}
+                      sessionId={reportSessionId}
+                      messageId={reportId}
+                      status={reportState[reportId]}
+                      onStatusChange={(s) => setReportStatus(reportId, s)}
+                    />
                   )}
                 </MessageBubble>
               </li>
@@ -275,9 +298,18 @@ export function ChatView({
             <li key="current">
               <MessageBubble role="agent" text={finalTurn.text} replaced={finalTurn.replaced}>
                 <TurnExtras turn={finalTurn} disabled={streaming} onPracticeAnswer={answerPractice} />
-                {finalTurn.messageId === null ? null : (
-                  <ReportButton agentId={agentId} sessionId={reportSessionId} messageId={finalTurn.messageId} />
-                )}
+                {(() => {
+                  const finalMessageId = finalTurn.messageId;
+                  return finalMessageId === null ? null : (
+                    <ReportButton
+                      agentId={agentId}
+                      sessionId={reportSessionId}
+                      messageId={finalMessageId}
+                      status={reportState[finalMessageId]}
+                      onStatusChange={(s) => setReportStatus(finalMessageId, s)}
+                    />
+                  );
+                })()}
               </MessageBubble>
             </li>
           )}

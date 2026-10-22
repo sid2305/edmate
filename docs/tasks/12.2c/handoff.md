@@ -89,3 +89,38 @@ trust-inbox paging) are unaffected by this slice.
 Status: DONE
 
 Tool calls used: 75
+
+## Fix round (22 Oct 2026)
+
+Review findings (`findings`, HIGH + LOW) fixed; nothing else touched.
+
+1. **HIGH `ChatView.tsx:260-281` / `ReportButton.tsx`** — reported/in-flight state followed the
+   component instance (keyed by React's `key`), not the message. A final turn is first rendered as
+   `<li key="current">`; once the student sends another message, `submit()` pushes the same reply
+   into `thread` under a new key (`${key}-reply`) and mounts a fresh `ReportButton` in `phase:
+   'closed'` for the same `messageId` — a report still in flight on the old instance resolved into
+   a silent no-op (React drops state updates on an unmounted function component), so a student
+   never saw "Thanks" for a report that actually succeeded, and could file a duplicate.
+   - Fix: lifted the busy/done half of report state into `ChatView` as `reportState:
+     Record<messageId, 'busy' | 'done'>`, with a `setReportStatus(messageId, status)` helper
+     (`'idle'` clears the entry). `ReportButton` gained optional `status`/`onStatusChange` props:
+     when `status` is set it overrides this component's own phase display (so the lifted value
+     wins across a remount); `onStatusChange` is called on send-start (`'busy'`), success
+     (`'done'`) and failure (back to `'idle'`, so the form reopens for retry). Left undefined
+     (`ReportButton.test.tsx`, this component's own tests, never pass these props) it falls back
+     to fully local state, unchanged from before this fix.
+   - Test: `src/chat/ChatView.test.tsx` — **"a report in flight survives the reply moving into the
+     thread, and resolves there (12.2c fix round)"**. Confirmed red first: with the fix's two
+     source files stashed out (`git stash` on just `ChatView.tsx`/`ReportButton.tsx`, test kept),
+     it failed on `expect(screen.queryByRole('button', { name: 'Report' })).toBeNull()` — a fresh,
+     clickable "Report" button appeared on the just-moved reply while its report was still in
+     flight. Restored the fix; the test (and the other 26 in the file) pass.
+2. **LOW `ReportButton.tsx:60`** — `sessionId as string` inside `send()` (TS does not carry the
+   outer `if (sessionId === null) return null` narrowing into the nested closure). Replaced with
+   `const openSessionId: string = sessionId;` bound right after the null check, used in `send()`
+   instead of asserting at the call site.
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 10/10 tasks green
+(typecheck, lint, test). `python3 .githooks/secret-scan.py --all` — clean, no output.
+
+Fix tool calls used: 26

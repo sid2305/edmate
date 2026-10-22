@@ -8,7 +8,16 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../test/intl';
 import { ChatView, type ChatMessage } from './ChatView';
+import type * as reportMessageModule from './reportMessage';
+import { reportMessage } from './reportMessage';
 import type { SendTurnOptions, StartSessionResult } from './sendTurn';
+
+// 12.2c fix round: ReportButton's default client, mocked here so a test can hold a report in
+// flight across the reply moving from the current turn into the persisted thread.
+vi.mock('./reportMessage', async (importOriginal) => {
+  const actual = await importOriginal<typeof reportMessageModule>();
+  return { ...actual, reportMessage: vi.fn(actual.reportMessage) };
+});
 
 beforeAll(() => {
   expect.extend(toHaveNoViolations);
@@ -542,5 +551,38 @@ describe('ChatView', () => {
     expect(screen.getByText('Practice', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.queryByText('Pick one')).toBeNull();
     expect(screen.queryByLabelText('Your answer')).toBeNull();
+  });
+
+  it('a report in flight survives the reply moving into the thread, and resolves there (12.2c fix round)', async () => {
+    const mockedReport = vi.mocked(reportMessage);
+    let resolve!: (r: Awaited<ReturnType<typeof reportMessage>>) => void;
+    mockedReport.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+
+    const f = setup();
+    type('Hello');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push(tok('Hi there'), done);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Report' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Harmful' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send report' }));
+    expect(mockedReport).toHaveBeenCalledWith({
+      sessionId: 'ses_1',
+      agentId: 'agt_a',
+      messageId: 'msg_9',
+      category: 'harmful',
+    });
+
+    // Sending a new message before the report resolves moves the reply from the current turn
+    // into the persisted thread, remounting its ReportButton under a new key.
+    type('Something else');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+
+    // The report is still in flight: no fresh "Report" button for that reply.
+    expect(screen.queryByRole('button', { name: 'Report' })).toBeNull();
+
+    resolve({ ok: true });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Thanks, our team will review this.'));
+    expect(screen.queryByRole('button', { name: 'Report' })).toBeNull();
   });
 });

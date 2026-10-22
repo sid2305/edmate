@@ -19,6 +19,13 @@ export interface ReportButtonProps {
   /** The open session this message belongs to; no session, no report (nothing is rendered). */
   sessionId: string | null;
   messageId: string;
+  /** The busy/done half of this message's report state, lifted by the caller and keyed by
+   * `messageId` (fix round, 22 Oct 2026): a final turn is first shown here, then re-rendered as a
+   * new instance once it joins the persisted thread, so "reported" cannot live in this
+   * component's own state or a report in flight -- or its "Thanks" result -- would be lost on that
+   * remount. Undefined (this component's own tests, unlifted) falls back to local state only. */
+  status?: 'busy' | 'done' | undefined;
+  onStatusChange?: (status: 'idle' | 'busy' | 'done') => void;
   /** Injected in tests; the real fetch-based client otherwise. */
   report?: (input: {
     sessionId: string;
@@ -30,14 +37,27 @@ export interface ReportButtonProps {
 
 type Phase = 'closed' | 'open' | 'busy' | 'done';
 
-export function ReportButton({ agentId, sessionId, messageId, report = realReportMessage }: ReportButtonProps) {
+export function ReportButton({
+  agentId,
+  sessionId,
+  messageId,
+  status,
+  onStatusChange,
+  report = realReportMessage,
+}: ReportButtonProps) {
   const t = useTranslations('report');
   const groupId = useId();
-  const [phase, setPhase] = useState<Phase>('closed');
+  const [localPhase, setLocalPhase] = useState<Phase>('closed');
   const [category, setCategory] = useState<ReportCategory | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (sessionId === null) return null;
+  const openSessionId: string = sessionId;
+
+  // The lifted `status` (busy/done) wins when present -- it is what survives this component
+  // remounting under a new key -- otherwise this instance's own closed/open/busy/done runs the
+  // show (this component's own tests, which never pass `status`).
+  const phase: Phase = status ?? localPhase;
 
   if (phase === 'done') {
     return (
@@ -49,7 +69,7 @@ export function ReportButton({ agentId, sessionId, messageId, report = realRepor
 
   if (phase === 'closed') {
     return (
-      <button type="button" className="report-open" onClick={() => setPhase('open')}>
+      <button type="button" className="report-open" onClick={() => setLocalPhase('open')}>
         {t('button')}
       </button>
     );
@@ -59,19 +79,23 @@ export function ReportButton({ agentId, sessionId, messageId, report = realRepor
 
   async function send() {
     if (category === null) return;
-    setPhase('busy');
+    setLocalPhase('busy');
+    onStatusChange?.('busy');
     setError(null);
     try {
-      const result = await report({ sessionId: sessionId as string, agentId, messageId, category });
+      const result = await report({ sessionId: openSessionId, agentId, messageId, category });
       if (result.ok) {
-        setPhase('done');
+        setLocalPhase('done');
+        onStatusChange?.('done');
       } else {
         setError(errorText(result.code));
-        setPhase('open');
+        setLocalPhase('open');
+        onStatusChange?.('idle');
       }
     } catch {
       setError(errorText('provider_error'));
-      setPhase('open');
+      setLocalPhase('open');
+      onStatusChange?.('idle');
     }
   }
 
@@ -102,7 +126,7 @@ export function ReportButton({ agentId, sessionId, messageId, report = realRepor
       <button type="button" disabled={busy || category === null} onClick={() => void send()}>
         {busy ? t('sending') : t('send')}
       </button>
-      <button type="button" disabled={busy} onClick={() => setPhase('closed')}>
+      <button type="button" disabled={busy} onClick={() => setLocalPhase('closed')}>
         {t('cancel')}
       </button>
     </div>
