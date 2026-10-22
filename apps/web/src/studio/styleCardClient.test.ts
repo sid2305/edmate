@@ -93,6 +93,19 @@ describe('errors', () => {
     });
   });
 
+  it('a 200 with malformed JSON is provider_error, not a rejection', async () => {
+    const malformed = new Response('not json', {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+    stubFetch(malformed);
+    await expect(getStyleCard()).resolves.toEqual({
+      ok: false,
+      status: 200,
+      code: 'provider_error',
+    });
+  });
+
   it('a network failure is provider_error with status 0', async () => {
     vi.stubGlobal(
       'fetch',

@@ -74,25 +74,35 @@ export function StyleCardView({ initialCard }: StyleCardViewProps) {
     e.preventDefault();
     setDrafting(true);
     setError(null);
-    const result = await draftStyleCardApi({
-      answers,
-      sampleExplanations: samples,
-      mistakeCandidates: parseLines(mistakesText),
-    });
-    setDrafting(false);
-    if (!result.ok) return setError(errorKey(result));
-    setText(result.value.text);
-    setTagsText(result.value.mistakeTags.join(', '));
+    try {
+      const result = await draftStyleCardApi({
+        answers,
+        sampleExplanations: samples,
+        mistakeCandidates: parseLines(mistakesText),
+      });
+      if (!result.ok) return setError(errorKey(result));
+      setText(result.value.text);
+      setTagsText(result.value.mistakeTags.join(', '));
+    } catch {
+      setError('provider_error');
+    } finally {
+      setDrafting(false);
+    }
   }
 
   async function onSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const result = await saveStyleCard({ text, mistakeTags: parseTags(tagsText) });
-    setSaving(false);
-    if (!result.ok) return setError(errorKey(result));
-    setCard(result.value);
+    try {
+      const result = await saveStyleCard({ text, mistakeTags: parseTags(tagsText) });
+      if (!result.ok) return setError(errorKey(result));
+      setCard(result.value);
+    } catch {
+      setError('provider_error');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

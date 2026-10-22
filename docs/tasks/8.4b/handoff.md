@@ -60,3 +60,17 @@ starting, per the plan's exit condition); each page still builds its own `nav` a
   current card directly, no interview" from the plan's `StyleCardView.tsx` description, with one
   save path instead of two.
 - risk: low
+
+## Fix round 1
+- Fixed `apps/web/src/studio/styleCardClient.ts`'s `call()`: the success path's `await read(res)`
+  is now inside a `try`/`catch`, so a 200 with malformed JSON returns `{ ok: false, status:
+  res.status, code: 'provider_error' }` instead of rejecting. Added a test (`a 200 with malformed
+  JSON is provider_error, not a rejection`).
+- Fixed `StyleCardView.tsx`'s `onDraft`/`onSave`: `setDrafting(false)`/`setSaving(false)` now run
+  in a `finally`, and a thrown rejection is caught and shown as the `provider_error` alert, instead
+  of leaving the button disabled forever with an unhandled rejection. Added one test per handler
+  (client rejects with `TypeError('offline')`; button re-enables, alert shows "Something went
+  wrong. Please try again.").
+- Evidence: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` →
+  `Tasks: 34 successful, 34 total`. `python3 .githooks/secret-scan.py --all` → clean.
+- Tool calls used: 17

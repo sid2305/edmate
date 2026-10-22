@@ -111,6 +111,30 @@ describe('StyleCardView', () => {
     expect(screen.getByText('Current version: 1')).toBeInTheDocument();
   });
 
+  it('re-enables the save button and shows an error when the request rejects', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('offline'))),
+    );
+    renderIntl(<StyleCardView initialCard={CARD} />);
+    const button = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.');
+  });
+
+  it('re-enables the draft button and shows an error when the request rejects', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('offline'))),
+    );
+    renderIntl(<StyleCardView initialCard={null} />);
+    const button = screen.getByRole('button', { name: 'Generate draft' });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.');
+  });
+
   it('has no axe violations', async () => {
     api();
     const { container } = renderIntl(<StyleCardView initialCard={CARD} />);
