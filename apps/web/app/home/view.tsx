@@ -47,10 +47,7 @@ export async function HomeView({
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[
-        { href: '/home', label: t('nav') },
-        { href: '/teachers', label: discovery('findTeacherNav') },
-      ]}
+      nav={[{ href: '/teachers', label: discovery('findTeacherNav') }]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

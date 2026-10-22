@@ -7,7 +7,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import messages from '../../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../../src/auth';
+import { requireRole, serverDatabase, TEACHER_PATH } from '../../../../src/auth';
 import { loadTestChat } from '../../../../src/studio/testChat/loadTestChat';
 import { TestChatView } from '../../../../src/studio/testChat/TestChatView';
 import { AppShell } from '../../../../src/ui/AppShell';
@@ -36,7 +36,7 @@ export default async function TestChatPage({ params }: TestChatPageProps) {
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[{ href: '/teacher', label: teacher('nav') }]}
+      nav={[{ href: TEACHER_PATH, label: teacher('nav') }]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

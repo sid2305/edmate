@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.1b builder ran over budget · decided by lead · risk: low
+- Decided: accept the run at 128 tool calls against a budget of 45 (stop at 60); the work is complete and every reviewer approved with no findings.
+- Why: replacing the route literals touched 44 files (pages, their tests and the auth mocks in each test), which the lead's brief underestimated; the builder did not stop at the PARTIAL limit. Future briefs for repo-wide substitutions budget per file touched.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.1b logging the currentPrincipal failure · decided by builder · risk: high
+- Decided: Log the caught error in `currentPrincipal` as `[auth] currentPrincipal <name> (<Auth.js
+  type>)` via the existing `describeError` helper (never the error's `message` or `cause`), then
+  still return `null`. No change to who is treated as signed in or to any guard's enforcement.
+- Why: `apps/web/src/auth/**` is a risk path; a silent `catch { return null }` hid lookup failures
+  (reviewed in 9.1). The rest of `src/auth` (redis errors, mail errors, age-content errors) already
+  logs this way, so this keeps one convention and avoids leaking anything personal -- `describeError`
+  deliberately drops the message because Auth.js, nodemailer and driver errors can carry an email
+  there.
+- risk: high (touches `apps/web/src/auth/**`; reviewers: security-reviewer to confirm no personal
+  data can reach the log and no behaviour change to sign-in; typescript-reviewer for the
+  `guard.ts`/`index.ts` export changes).
+
+---
+
+### 22 Oct 2026 · 9.1b HOME_PATH/TEACHER_PATH scope · decided by builder · risk: low
+- Decided: Added the two constants only where `'/home'` or `'/teacher'` was used as a full route
+  path (redirects, nav `href`s); left every sub-route (`/teacher/uploads`, `/learn/.../plan`, etc.)
+  and every test file's expected URL string untouched, matching the written scope.
+- Why: keeps the diff to the literal ask and avoids churn in files outside this task's scope.
+- risk: low (no behaviour change; purely a string constant substitution, covered by the existing
+  route tests which still assert the same literal URLs).
+
+---
+
 ### 22 Oct 2026 · 12.2g dateTime formatting is call-site, not provider-level · decided by builder · risk: low
 - Decided: format `createdAt` with `useFormatter().dateTime(date, { timeZone: 'UTC', ... })` at
   each call site, rather than adding a `timeZone` prop to the shared `NextIntlClientProvider` in

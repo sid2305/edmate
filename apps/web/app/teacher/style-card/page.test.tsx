@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../../src/auth', () => ({
   requireRole: state.requireRole,
   serverDatabase: () => ({ repos: { styleCards: { latest: state.latest } } }),
+  TEACHER_PATH: '/teacher',
 }));
 vi.mock('../actions', () => ({ signOutAndRedirect: vi.fn() }));
 vi.mock('next-intl/server', () => ({

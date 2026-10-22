@@ -3,7 +3,7 @@
 // JS, no fetch -- so there is no "trusts a 200 response" risk here (see docs/lessons.md): the
 // data comes from a direct server-side call to `loadInsights`, not a route handler.
 import { getTranslations } from 'next-intl/server';
-import { requireRole, serverDatabase } from '../../../src/auth';
+import { requireRole, serverDatabase, TEACHER_PATH } from '../../../src/auth';
 import { loadInsights, type InsightsQuestionGroup } from '../../../src/studio/insights';
 import { AppShell } from '../../../src/ui/AppShell';
 import { signOutAndRedirect } from '../actions';
@@ -36,7 +36,7 @@ export default async function InsightsPage() {
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: teacher('nav') },
+        { href: TEACHER_PATH, label: teacher('nav') },
         { href: '/teacher/uploads', label: teacher('uploadsLink') },
         { href: '/teacher/insights', label: teacher('insightsLink') },
       ]}

@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import messages from '../../../../messages/en.json';
-import { requireRole, serverDatabase } from '../../../../src/auth';
+import { HOME_PATH, requireRole, serverDatabase } from '../../../../src/auth';
 import { StartSessionSchema } from '../../../../src/turn/clientInput';
 import { MemoryView } from '../../../../src/memory/MemoryView';
 import { AppShell } from '../../../../src/ui/AppShell';
@@ -37,7 +37,7 @@ export default async function MemoryPage({ params }: MemoryPageProps) {
     <AppShell
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
-      nav={[{ href: '/home', label: home('nav') }]}
+      nav={[{ href: HOME_PATH, label: home('nav') }]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
     >

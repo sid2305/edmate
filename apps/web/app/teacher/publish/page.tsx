@@ -4,7 +4,7 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 import messages from '../../../messages/en.json';
-import { requireRole } from '../../../src/auth';
+import { requireRole, TEACHER_PATH } from '../../../src/auth';
 import { AppShell } from '../../../src/ui/AppShell';
 import { signOutAndRedirect } from '../actions';
 import { PublishView } from './PublishView';
@@ -21,7 +21,7 @@ export default async function PublishPage() {
       brand={shell('brand')}
       skipLabel={shell('skipToContent')}
       nav={[
-        { href: '/teacher', label: teacher('nav') },
+        { href: TEACHER_PATH, label: teacher('nav') },
         { href: '/teacher/packages', label: teacher('packagesLink') },
         { href: '/teacher/publish', label: t('navLink') },
       ]}

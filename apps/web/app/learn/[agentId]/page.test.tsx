@@ -70,6 +70,7 @@ vi.mock('../../../src/auth', async () => {
       state.dbOpened += 1;
       return { repos, identity: {} };
     },
+    HOME_PATH: '/home',
   };
 });
 
