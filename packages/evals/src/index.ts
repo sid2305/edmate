@@ -42,6 +42,12 @@ export {
   type LoadedCaseFile,
 } from './loader.js';
 export {
+  LiveModelEntrySchema,
+  LiveModelsLoadError,
+  loadLiveModels,
+  type LiveModelEntry,
+} from './liveModels.js';
+export {
   fileRecorder,
   FixtureReadError,
   InvalidFixtureKeyError,
@@ -62,7 +68,7 @@ export {
   type OutOfCourseItem,
   type PerAgentSuiteInput,
 } from './perAgentSuite.js';
-export { toJsonReport, toSummary, type JsonReport } from './report.js';
+export { toJsonReport, toSummary, type JsonReport, type ReportCost } from './report.js';
 export { toHtmlReport } from './htmlReport.js';
 export {
   RecordedJudgeSchema,

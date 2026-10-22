@@ -55,6 +55,10 @@ export async function run(argv: readonly string[], io: CliIo = defaultIo): Promi
         agent: buildLiveEvalAgent({ env: process.env }),
         env: process.env,
         cwd: process.cwd(),
+        // `--models` sweep (task 7.6 Phase B): one fresh agent per (model, suite) run, sharing
+        // that run's own usage meter so its cost-per-turn covers the whole suite.
+        liveAgentFor: ({ modelPolicy, usage, onUnmetered }) =>
+          buildLiveEvalAgent({ env: process.env, modelPolicy, usage, onUnmetered }),
       });
     case 'content':
       return runContentCommand(rest, io, { cwd: process.cwd() });

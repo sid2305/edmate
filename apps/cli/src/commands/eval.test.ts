@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelRequest } from '@edmate/contracts';
 import type { EvalAgent } from '@edmate/evals';
 import { manualClock, ScriptedGateway } from '@edmate/harness/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { replayJudgeGateway, runEvalCommand, unwiredAgent } from './eval.js';
+import { replayJudgeGateway, runEvalCommand, unwiredAgent, type EvalCommandDeps } from './eval.js';
 
 const CASE = `id: cli-case-001
 suite: cli
@@ -23,16 +23,14 @@ const agent: EvalAgent = {
   reply: () => Promise.resolve({ text: 'A fraction is part of a whole.' }),
 };
 
-function judgeGateway(pass = true): ScriptedGateway {
+function judgeGateway(pass = true, calls = 1): ScriptedGateway {
   return new ScriptedGateway(
     {
-      generateObject: [
-        {
-          match: (req: ModelRequest) =>
-            (req.messages[0]?.content ?? '').includes('The reply explains a fraction.'),
-          value: { pass, reason: pass ? 'explains it' : 'does not' },
-        },
-      ],
+      generateObject: Array.from({ length: calls }, () => ({
+        match: (req: ModelRequest) =>
+          (req.messages[0]?.content ?? '').includes('The reply explains a fraction.'),
+        value: { pass, reason: pass ? 'explains it' : 'does not' },
+      })),
     },
     manualClock(),
   );
@@ -219,6 +217,128 @@ describe('edmate eval', () => {
     const { io, out } = capture();
     expect(await runEvalCommand(['-h'], io, { agent, env: {}, cwd: dir })).toBe(0);
     expect(out.join('')).toContain('--record');
+  });
+});
+
+describe('edmate eval --models (sweep, task 7.6 Phase B)', () => {
+  it('rejects --models without --record', async () => {
+    const { io, err } = capture();
+    expect(
+      await runEvalCommand(['.', '--models', 'live-models.yaml'], io, { agent, env: {}, cwd: dir }),
+    ).toBe(1);
+    expect(err.join('')).toContain('--models needs --record');
+  });
+
+  it('rejects --models when no liveAgentFor is wired', async () => {
+    writeFileSync(join(dir, 'live-models.yaml'), '- label: m\n  provider: anthropic\n  model: m\n');
+    const { io, err } = capture();
+    expect(
+      await runEvalCommand(['.', '--models', 'live-models.yaml', '--record'], io, {
+        agent,
+        env: ENV,
+        cwd: dir,
+        makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+      }),
+    ).toBe(1);
+    expect(err.join('')).toContain('no liveAgentFor');
+  });
+
+  it('one report per (model, suite); additive fields; exact cost arithmetic; unpriced never reported as free', async () => {
+    mkdirSync(join(dir, 'suites', 'alpha'), { recursive: true });
+    mkdirSync(join(dir, 'suites', 'beta'), { recursive: true });
+    writeFileSync(join(dir, 'suites/alpha/case.yaml'), CASE.replace('suite: cli', 'suite: alpha'));
+    writeFileSync(
+      join(dir, 'suites/beta/case.yaml'),
+      CASE.replace('cli-case-001', 'beta-case-001').replace('suite: cli', 'suite: beta'),
+    );
+    writeFileSync(
+      join(dir, 'live-models.yaml'),
+      '- label: model-a\n  provider: anthropic\n  model: priced-model\n' +
+        '- label: model-b\n  provider: anthropic\n  model: unpriced-model\n',
+    );
+    const liveAgentFor: NonNullable<EvalCommandDeps['liveAgentFor']> = ({ modelPolicy, usage, onUnmetered }) => {
+      const model = modelPolicy.tiers.main?.model;
+      return {
+        reply: async () => {
+          if (model === 'priced-model') {
+            await usage.record(
+              { model, tier: 'main', inputTokens: 100, outputTokens: 100, costMicroUsd: 500 },
+              { teacherId: 't', packageId: 'p', studentId: 's', turnId: 'turn-1', source: 'eval' },
+            );
+          } else {
+            onUnmetered({ model: model ?? '' });
+          }
+          return { text: 'A fraction is part of a whole.' };
+        },
+      };
+    };
+
+    const { io } = capture();
+    const code = await runEvalCommand(
+      ['suites', '--models', 'live-models.yaml', '--record', '--report-dir', 'reports/live'],
+      io,
+      {
+        agent,
+        env: ENV,
+        cwd: dir,
+        makeJudgeGateway: () => Promise.resolve(judgeGateway(true, 4)),
+        liveAgentFor,
+        now: () => new Date('2026-10-18T12:00:00.000Z'),
+      },
+    );
+    expect(code).toBe(0);
+
+    const alphaPriced = JSON.parse(
+      readFileSync(join(dir, 'reports/live/model-a/alpha.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(alphaPriced).toMatchObject({
+      model: 'model-a',
+      total: 1,
+      passed: 1,
+      cost: { perTurnMicroUsd: 500, byTier: { main: 500 }, unpricedCalls: 0 },
+    });
+
+    const betaUnpriced = JSON.parse(
+      readFileSync(join(dir, 'reports/live/model-b/beta.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(betaUnpriced).toMatchObject({
+      model: 'model-b',
+      total: 1,
+      passed: 1,
+      cost: { perTurnMicroUsd: 0, byTier: {}, unpricedCalls: 1 },
+    });
+
+    const summary = JSON.parse(
+      readFileSync(join(dir, 'reports/live/summary.json'), 'utf8'),
+    ) as unknown[];
+    expect(summary).toHaveLength(4); // 2 models x 2 suites
+  });
+
+  it('an empty suite directory is zero cases, not an error', async () => {
+    mkdirSync(join(dir, 'suites', 'alpha'), { recursive: true });
+    mkdirSync(join(dir, 'suites', 'empty'), { recursive: true });
+    writeFileSync(join(dir, 'suites/alpha/case.yaml'), CASE.replace('suite: cli', 'suite: alpha'));
+    writeFileSync(join(dir, 'suites/empty/.gitkeep'), '');
+    writeFileSync(
+      join(dir, 'live-models.yaml'),
+      '- label: model-a\n  provider: anthropic\n  model: priced-model\n',
+    );
+    const liveAgentFor: NonNullable<EvalCommandDeps['liveAgentFor']> = () => ({
+      reply: () => Promise.resolve({ text: 'A fraction is part of a whole.' }),
+    });
+    const { io } = capture();
+    const code = await runEvalCommand(['suites', '--models', 'live-models.yaml', '--record'], io, {
+      agent,
+      env: ENV,
+      cwd: dir,
+      makeJudgeGateway: () => Promise.resolve(judgeGateway()),
+      liveAgentFor,
+    });
+    expect(code).toBe(0);
+    const emptyReport = JSON.parse(
+      readFileSync(join(dir, 'evals/reports/live/model-a/empty.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(emptyReport).toMatchObject({ total: 0, passed: 0, failed: 0 });
   });
 });
 

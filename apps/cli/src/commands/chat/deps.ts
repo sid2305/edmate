@@ -26,7 +26,7 @@ import {
   type IdSource,
   type PipelineDeps,
 } from '@edmate/harness';
-import type { AccessWorld, MemorySessionStateStore } from '@edmate/harness/testing';
+import type { AccessWorld, MemorySessionStateStore, MemoryUsageMeter } from '@edmate/harness/testing';
 import {
   memoryAlertSink,
   memorySafetyEventSink,
@@ -155,6 +155,20 @@ export interface ChatDepsOptions extends ChatWorldOptions {
   gateway?: ModelGateway;
   /** Replaces the real clock (tests pass `slackClock`, task 3.9b). Defaults to `systemClock()`. */
   clock?: Clock;
+  /**
+   * Shares one usage meter across several `buildChatDeps` calls instead of starting a fresh one
+   * each time (task 7.6 Phase B: the live model sweep builds a fresh `ChatSetup` per case but
+   * needs every case's usage rows in one place to compute cost per turn for a (model, suite)
+   * run). Defaults to a fresh `memoryUsageMeter()`, as before — purely additive.
+   */
+  usage?: MemoryUsageMeter;
+  /**
+   * Called (in addition to the usual loud log line) for every unpriced/unknown-model call — real
+   * tokens with no `costMicroUsd` row (task 7.6 Phase B: the sweep counts these so a model
+   * missing from `prices.yaml` is never silently reported as free). Ignored when `opts.gateway`
+   * is given (test injection never meters).
+   */
+  onUnmetered?: (usage: Parameters<MeterSink['recordUnmetered']>[0]) => void;
 }
 
 export interface ChatSetup {
@@ -179,7 +193,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
   const { personas, source: personasSource } = loadChatPersonas();
 
   const clock = opts.clock ?? systemClock();
-  const usage = memoryUsageMeter();
+  const usage = opts.usage ?? memoryUsageMeter();
   const prices = loadBundledPrices();
 
   let gatewayForDeps: PipelineDeps['gatewayFor'];
@@ -196,6 +210,7 @@ export async function buildChatDeps(opts: ChatDepsOptions): Promise<ChatSetup> {
         console.error(
           `edmate chat: unmetered usage (${u.reason}) model=${u.model} tier=${u.tier} turn=${u.turnId}`,
         );
+        opts.onUnmetered?.(u);
         return Promise.resolve();
       },
     };

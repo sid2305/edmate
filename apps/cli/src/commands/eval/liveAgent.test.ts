@@ -88,11 +88,12 @@ describe('buildLiveEvalAgent', () => {
     expect(reply.sources?.length).toBeGreaterThan(0);
   }, 20000);
 
-  // Gap (flagged in the handoff, not guessed at): a real decisive guard block (defaultSteps)
-  // replies with its own fixed token + done, never an `error`/`guard_blocked` event (that event
-  // only fires for a synthetic "block with no reply", see runner.block.test.ts) — so
-  // `reply.blocked` stays undefined for a live run today, even on a canonical jailbreak probe.
-  it('a decisive jailbreak hit gives the fixed redirect reply; reply.blocked stays undefined (today\'s gap)', async () => {
+  // `defaultSteps`' real guard chain never emits an `error`/`guard_blocked` event for an
+  // ordinary decisive block (that event only fires for a synthetic "block with no reply", see
+  // runner.block.test.ts): every real block replies with one of `BLOCK_REPLIES`' fixed strings
+  // instead. So `reply.blocked` is set by matching the finished reply text against those fixed
+  // strings (task 7.6, lead decision), not from the event stream.
+  it('a canonical jailbreak probe through the real pipeline gives reply.blocked: true', async () => {
     const agent = buildLiveEvalAgent({
       env: {},
       gateway: scriptedChatGateway(1),
@@ -105,7 +106,22 @@ describe('buildLiveEvalAgent', () => {
       priorTurns: [],
     });
     expect(reply.text.length).toBeGreaterThan(0);
-    expect(reply.blocked).toBeUndefined();
+    expect(reply.blocked).toBe(true);
+  }, 20000);
+
+  it('a plain reply through the real pipeline gives reply.blocked: false', async () => {
+    const agent = buildLiveEvalAgent({
+      env: {},
+      gateway: scriptedChatGateway(1),
+      clock: slackClock(STEP_BUDGET_SLACK),
+    });
+    const reply = await agent.reply({
+      caseId: 'plain-2',
+      turnIndex: 0,
+      student: 'What is a variable?',
+      priorTurns: [],
+    });
+    expect(reply.blocked).toBe(false);
   }, 20000);
 
   it('a hard distress keyword escalates: reply.escalated is true', async () => {

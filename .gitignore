@@ -36,6 +36,7 @@ dist/
 build/
 coverage/
 packages/evals/reports/
+evals/reports/live/
 *.tsbuildinfo
 next-env.d.ts
 

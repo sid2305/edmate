@@ -1,33 +1,47 @@
 // `edmate eval <dir> [--fixtures <dir>] [--record] [--report <file>]` (task 3.12).
 // Replay (the default) is fully offline: agent replies and judge verdicts come from recorded
 // fixtures, and a missing fixture fails the run. --record makes live calls and rewrites them.
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+// `--models <file>` (task 7.6 Phase B) sweeps every configured model over every suite instead:
+// it always implies --record (a sweep is, by definition, a live run) and never touches
+// --fixtures/--report's recorded-fixture replay path.
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import type { ModelGateway } from '@edmate/contracts';
+import type { ModelGateway, ModelPolicy } from '@edmate/contracts';
 import {
   fileRecorder,
   loadCasesFromDir,
+  loadLiveModels,
+  memoryRecorder,
   resolveJudgeModel,
   runSuite,
   toJsonReport,
   toSummary,
   type EvalAgent,
   type JudgeModelConfig,
+  type ReportCost,
 } from '@edmate/evals';
+import { memoryUsageMeter, type MemoryUsageMeter } from '@edmate/harness/testing';
 import type { CliIo } from '../cli.js';
 import { createJudgeGateway, type Env } from './judgeGateway.js';
 
 export const EVAL_USAGE = `Usage: edmate eval <dir> [--fixtures <dir>] [--record] [--report <file>]
+       edmate eval <dir> --models <file> [--report-dir <dir>]
 
 Runs every .yaml/.yml eval case under <dir>.
-  --fixtures <dir>  recorded agent replies and judge outputs (default: evals/fixtures)
-  --record          call the agent and the judge live and rewrite the fixtures
-                    (needs EDMATE_JUDGE_MODEL="<provider>:<model>" and that provider's key)
-  --report <file>   also write a JSON report
+  --fixtures <dir>    recorded agent replies and judge outputs (default: evals/fixtures)
+  --record            call the agent and the judge live and rewrite the fixtures
+                      (needs EDMATE_JUDGE_MODEL="<provider>:<model>" and that provider's key)
+  --report <file>     also write a JSON report
 Without --record nothing is called live; a missing fixture fails the run.
 --record runs the real turn pipeline (task 7.6) over the demo-teacher content; it needs
 ANTHROPIC_API_KEY (or EDMATE_ANTHROPIC_API_KEY) and EDMATE_JUDGE_MODEL, neither logged.
+
+  --models <file>     sweep every model in <file> (evals/live-models.yaml's format) over every
+                      suite under <dir> (a suite directory, or a directory of suite directories);
+                      always live (implies --record; an error if given without it)
+  --report-dir <dir>  where the sweep writes one JSON report per (model, suite), plus a combined
+                      summary.json (default: evals/reports/live)
 `;
 
 export interface EvalCommandDeps {
@@ -36,6 +50,17 @@ export interface EvalCommandDeps {
   cwd: string;
   makeJudgeGateway?: (config: JudgeModelConfig, env: Env) => Promise<ModelGateway>;
   now?: () => Date;
+  /**
+   * Builds a fresh pipeline-backed agent for one (model, suite) run of the `--models` sweep
+   * (task 7.6 Phase B). Absent: `--models` is rejected (same discipline as a missing judge
+   * gateway in record mode — never silently falls back to `deps.agent`, which has no model
+   * policy to sweep with).
+   */
+  liveAgentFor?: (opts: {
+    modelPolicy: ModelPolicy;
+    usage: MemoryUsageMeter;
+    onUnmetered: (usage: { model: string }) => void;
+  }) => EvalAgent;
 }
 
 /** Stands in for the judge in replay: the recorder never calls it while fixtures exist. */
@@ -67,6 +92,8 @@ export async function runEvalCommand(
         fixtures: { type: 'string' },
         record: { type: 'boolean', default: false },
         report: { type: 'string' },
+        models: { type: 'string' },
+        'report-dir': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -83,6 +110,23 @@ export async function runEvalCommand(
   if (suiteArg === undefined || extra.length > 0) {
     io.stderr(`edmate eval: expected exactly one suite directory\n\n${EVAL_USAGE}`);
     return 1;
+  }
+
+  if (values.models !== undefined) {
+    if (!values.record) {
+      io.stderr(`edmate eval: --models needs --record (the sweep is always a live run)\n\n${EVAL_USAGE}`);
+      return 1;
+    }
+    if (deps.liveAgentFor === undefined) {
+      io.stderr(`edmate eval: --models is not wired for this agent (no liveAgentFor)\n`);
+      return 1;
+    }
+    try {
+      return await runModelSweep(suiteArg, values, io, deps);
+    } catch (e) {
+      io.stderr(`edmate eval: ${message(e)}\n`);
+      return 1;
+    }
   }
 
   try {
@@ -117,6 +161,129 @@ export async function runEvalCommand(
     io.stderr(`edmate eval: ${message(e)}\n`);
     return 1;
   }
+}
+
+/**
+ * `<dir>` may itself be one suite (no subdirectories), or a directory of suite directories (its
+ * immediate subdirectories are the suites). An empty suite directory (`evals/suites/pedagogy`'s
+ * `.gitkeep` only, 7.2 not done yet) is zero cases, never an error (plan's own requirement).
+ */
+function listSweepSuites(dir: string): { name: string; dir: string }[] {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const subdirs = entries.filter((e) => e.isDirectory());
+  if (subdirs.length === 0) return [{ name: basename(dir), dir }];
+  return subdirs
+    .map((e) => ({ name: e.name, dir: join(dir, e.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Loads a suite's cases, or `[]` for an empty suite directory (never an error, plan's own rule). */
+function loadSweepCases(dir: string) {
+  try {
+    return loadCasesFromDir(dir);
+  } catch (e) {
+    if (message(e).includes('no .yaml or .yml cases found')) return [];
+    throw e;
+  }
+}
+
+/** One (model, suite) run's cost, from its own fresh usage meter (plan's "by tier" design, lead
+ * answer Q3: split by the tier a call actually used, not by model). */
+function sweepCost(usage: MemoryUsageMeter, unpricedCalls: number, totalTurns: number): ReportCost {
+  let sum = 0;
+  const byTier: Record<string, number> = {};
+  for (const row of usage.rows) {
+    sum += row.usage.costMicroUsd;
+    byTier[row.usage.tier] = (byTier[row.usage.tier] ?? 0) + row.usage.costMicroUsd;
+  }
+  return { perTurnMicroUsd: totalTurns === 0 ? 0 : sum / totalTurns, byTier, unpricedCalls };
+}
+
+/** `edmate eval <dir> --models <file> [--report-dir <dir>]` (task 7.6 Phase B). One report per
+ * (model, suite) pair under `--report-dir`, plus a combined `summary.json`. Never touches
+ * `--fixtures`/single-suite `--report`'s recorded-fixture path (`memoryRecorder`, not
+ * `fileRecorder`: a sweep's replies are evidence, not fixtures to replay later). */
+async function runModelSweep(
+  suiteArg: string,
+  values: { models?: string; 'report-dir'?: string },
+  io: CliIo,
+  deps: EvalCommandDeps,
+): Promise<number> {
+  const entries = loadLiveModels(resolve(deps.cwd, values.models!));
+  const suites = listSweepSuites(resolve(deps.cwd, suiteArg));
+  const judgeModel = resolveJudgeModel(deps.env);
+  const judgeGateway = await (deps.makeJudgeGateway ?? createJudgeGateway)(judgeModel, deps.env);
+  const reportDir = resolve(deps.cwd, values['report-dir'] ?? 'evals/reports/live');
+  const generatedAt = (deps.now ?? (() => new Date()))().toISOString();
+  const summary: { model: string; suite: string; passed: number; total: number; cost: ReportCost }[] =
+    [];
+  let anyFailed = false;
+
+  for (const entry of entries) {
+    const target = { provider: entry.provider, model: entry.model };
+    const modelPolicy: ModelPolicy = { tiers: { small: target, main: target } };
+    for (const suite of suites) {
+      const cases = loadSweepCases(suite.dir);
+      let report;
+      if (cases.length === 0) {
+        report = toJsonReport([], {
+          suite: suite.name,
+          generatedAt,
+          model: entry.label,
+          cost: { perTurnMicroUsd: 0, byTier: {}, unpricedCalls: 0 },
+        });
+      } else {
+        const usage = memoryUsageMeter();
+        let unpricedCalls = 0;
+        const agent = deps.liveAgentFor!({
+          modelPolicy,
+          usage,
+          onUnmetered: () => {
+            unpricedCalls += 1;
+          },
+        });
+        const { results, failed } = await runSuite(cases, {
+          agent,
+          judgeGateway,
+          judgeModel,
+          recorder: memoryRecorder('record'),
+        });
+        if (failed > 0) anyFailed = true;
+        const totalTurns = results.reduce((n, r) => n + r.turns.length, 0);
+        report = toJsonReport(results, {
+          suite: suite.name,
+          generatedAt,
+          model: entry.label,
+          cost: sweepCost(usage, unpricedCalls, totalTurns),
+        });
+      }
+      const reportPath = join(reportDir, entry.label, `${suite.name}.json`);
+      mkdirSync(dirname(reportPath), { recursive: true });
+      writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
+      summary.push({
+        model: entry.label,
+        suite: suite.name,
+        passed: report.passed,
+        total: report.total,
+        cost: report.cost!,
+      });
+    }
+  }
+
+  const summaryPath = join(reportDir, 'summary.json');
+  mkdirSync(dirname(summaryPath), { recursive: true });
+  writeFileSync(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+  io.stdout(
+    summary
+      .map(
+        (r) =>
+          `${r.model} / ${r.suite}: ${r.passed}/${r.total} passed, ` +
+          `${r.cost.perTurnMicroUsd} microUSD/turn` +
+          (r.cost.unpricedCalls > 0 ? ` (${r.cost.unpricedCalls} unpriced calls)` : ''),
+      )
+      .join('\n') + '\n',
+  );
+  return anyFailed ? 1 : 0;
 }
 
 /** The agent `edmate eval` uses until the harness pipeline exists: it refuses every call. */

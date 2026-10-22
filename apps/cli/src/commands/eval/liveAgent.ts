@@ -5,7 +5,9 @@
 // `ModelGateway` via `LiveEvalAgentOptions.gateway`, exactly as `chat/deps.ts` already does.
 import { randomUUID } from 'node:crypto';
 import type { Message, ModelGateway, ModelPolicy, SourceRef, TurnEvent } from '@edmate/contracts';
-import { defaultSteps, runTurn, type Clock } from '@edmate/harness';
+import type { MeterSink } from '@edmate/gateway';
+import { defaultSteps, isBlockReply, runTurn, type Clock } from '@edmate/harness';
+import type { MemoryUsageMeter } from '@edmate/harness/testing';
 import type { EvalAgent, EvalAgentReply, EvalTurnInput, PriorTurn } from '@edmate/evals';
 import { buildChatDeps, type ChatDepsOptions } from '../chat/deps.js';
 import type { Env } from '../chat/gateway.js';
@@ -20,6 +22,14 @@ export interface LiveEvalAgentOptions {
   modelPolicy?: ModelPolicy;
   market?: string;
   packageId?: ChatPackageId;
+  /**
+   * Shares one usage meter across every `reply()` call this agent makes (task 7.6 Phase B: the
+   * sweep passes one meter per (model, suite) run so its rows cover the whole suite, not just
+   * one case). Defaults to a fresh meter per call, matching Phase A's "one fresh session" design.
+   */
+  usage?: MemoryUsageMeter;
+  /** Forwarded to `buildChatDeps` (task 7.6 Phase B: the sweep counts unpriced calls). */
+  onUnmetered?: (usage: Parameters<MeterSink['recordUnmetered']>[0]) => void;
   /** Test injection only: `slackClock` widens every step budget so a cold run on a loaded CI
    * runner doesn't overrun preGuard's timeout (same need as `chat/deps.test.ts`'s own tests). */
   clock?: Clock;
@@ -48,7 +58,15 @@ async function seedPriorTurns(
 }
 
 /** Builds one reply from a finished turn's event stream (`chat.ts`'s `renderEvent` handles the
- * same event shapes for display; this collects them into one `EvalAgentReply` instead). */
+ * same event shapes for display; this collects them into one `EvalAgentReply` instead).
+ *
+ * `blocked` (task 7.6): `defaultSteps`' real guard chain never emits an `error: guard_blocked`
+ * event for an ordinary moderationIn/jailbreak block — every such block replies with one of
+ * `BLOCK_REPLIES`' fixed strings followed by `done` (`preGuard.ts`). So `blocked` is set from the
+ * *final reply text* via `isBlockReply`, not from the event stream: `true` when the finished
+ * text is exactly one of those fixed replies, `false` otherwise. The `error: guard_blocked`
+ * event is still honoured first (a block with no code, the runner's generic fallback) in case it
+ * ever fires; it is never overridden by the text check below. */
 async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgentReply> {
   let text = '';
   let sources: SourceRef[] | undefined;
@@ -78,7 +96,7 @@ async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgent
   return {
     text,
     ...(sources === undefined ? {} : { sources }),
-    ...(blocked === undefined ? {} : { blocked }),
+    blocked: blocked ?? isBlockReply(text),
     ...(escalated === undefined ? {} : { escalated }),
   };
 }
@@ -103,6 +121,8 @@ export function buildLiveEvalAgent(opts: LiveEvalAgentOptions): EvalAgent {
         ...(opts.contentDir === undefined ? {} : { contentDir: opts.contentDir }),
         ...(opts.modelPolicy === undefined ? {} : { modelPolicy: opts.modelPolicy }),
         ...(opts.clock === undefined ? {} : { clock: opts.clock }),
+        ...(opts.usage === undefined ? {} : { usage: opts.usage }),
+        ...(opts.onUnmetered === undefined ? {} : { onUnmetered: opts.onUnmetered }),
       };
       const setup = await buildChatDeps(depsOpts);
       await seedPriorTurns(setup.sessionId, input.priorTurns, setup.deps.transcripts);
