@@ -5372,6 +5372,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.2g
+  milestone: M12
+  title: '12.2e review follow-ups in apps/web/app/staff/reports: a stale poll must not bring back a dismissed report or lifted takedown (generation ref); a 400 on an action says "already actioned or no longer open", and the agent takedown button hides when that agent is already taken down; takedown rows show target, category and date, and each Lift has an aria-label naming its target; reported text renders as plain text with no live links (test with an embedded markdown link); tests for poll clearInterval on unmount and the no-overlap guard; refresh catches a rejecting loader; ICU plural and no count in the fallback view; a separate takedown confirm text; drop the agentId cast; reuse REPORT_CATEGORIES; a poll clears only loadFailed; format createdAt'
+  accept: each item has a test that fails without it; web typecheck, lint and test green.
+  deps:
+  - 12.2e
+  risk: medium
+  status: todo
+  branch: null
+  model: null
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
