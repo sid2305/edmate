@@ -82,4 +82,4 @@ Tests were written first and failed (`safetyAlerts` undefined, no `safety_alerts
 - Phase B (12.5b, apps/worker) and Phase C (12.5c, apps/web) use this repository.
 - 13.4: add `safety_alerts` to the retention jobs (lead answer Q5).
 
-Tool calls used: 58
+Tool calls used: 87 (harness count; the builder reported 58)
