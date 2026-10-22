@@ -102,4 +102,4 @@ card per saved package showing its monthly AI-cost estimate. The form and cards 
 - No CSS file was added for `/teacher/packages` (the plan's Phase D file list doesn't include one,
   unlike uploads/style-card's own `.css` files); the page renders with plain semantic HTML only.
 
-Tool calls used: 55
+Tool calls used: 65
