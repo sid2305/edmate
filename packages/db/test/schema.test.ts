@@ -219,6 +219,20 @@ describe('constraints the Data model states', () => {
     expect(gin?.columns.map((c) => c.expression)).toEqual(['search']);
   });
 
+  it('teacher_profiles carry a generated tsvector search with a GIN index, and a GIN languages index (task 9.2)', () => {
+    const t = table('teacher_profiles');
+    expect(t.columns.search?.type).toBe('tsvector');
+    expect(t.columns.search?.notNull).toBe(true);
+    const gin = Object.values(t.indexes).filter((i) => i.method === 'gin');
+    expect(gin.map((i) => i.name).sort()).toEqual(
+      ['teacher_profiles_search_idx', 'teacher_profiles_languages_idx'].sort(),
+    );
+    expect(gin.find((i) => i.name === 'teacher_profiles_search_idx')?.columns.map((c) => c.expression)).toEqual(['search']);
+    expect(
+      gin.find((i) => i.name === 'teacher_profiles_languages_idx')?.columns.map((c) => c.expression),
+    ).toEqual(['languages']);
+  });
+
   it('topic_chunks links topics to chunks, both foreign keys ON DELETE CASCADE (task 8.3)', () => {
     const t = table('topic_chunks');
     expect(Object.keys(t.columns).sort()).toEqual(

@@ -11,6 +11,12 @@ import {
   type Repositories,
 } from './repositories/index.js';
 import { SEED_TABLES, seedDemoTeacher, type SeedOptions, type SeedResult } from './seed.js';
+import {
+  buildDiscoverySeed,
+  DISCOVERY_SEED_TABLES,
+  type DiscoverySeedTable,
+} from './discovery-seed.js';
+import * as discoverySchema from './schema/index.js';
 
 /** `pnpm --filter @edmate/db db:migrate`. Returns the process exit code. */
 export async function runMigrateCli(
@@ -435,5 +441,76 @@ export async function runTeacherQuestionsCli(
     return 1;
   } finally {
     await handle?.close().catch(() => undefined);
+  }
+}
+
+/**
+ * `pnpm --filter @edmate/db db:seed-discovery -- --fake-teachers <n>`: `n` synthetic, verified
+ * teachers for exercising `discovery.search` at scale (task 9.2). Dev/test only: refuses with
+ * exit code 1 and writes nothing when `NODE_ENV` is `production` or the flag is missing or not a
+ * positive whole number -- checked before any database connection is opened. Idempotent: an
+ * existing row (by id) is left as is (`onConflictDoNothing`).
+ */
+export async function runSeedDiscoveryCli(
+  argv: string[],
+  env: { DATABASE_URL?: string | undefined; NODE_ENV?: string | undefined },
+  log: (line: string) => void,
+): Promise<number> {
+  if (env.NODE_ENV === 'production') {
+    log('seed-discovery: refused: NODE_ENV is production (dev/test only)');
+    return 1;
+  }
+  let values: Record<string, string | boolean | undefined>;
+  try {
+    ({ values } = parseArgs({
+      args: argv,
+      options: { 'fake-teachers': { type: 'string' } },
+      strict: false,
+    }));
+  } catch {
+    values = {};
+  }
+  const raw = values['fake-teachers'];
+  const n = typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    log('seed-discovery: usage: db:seed-discovery -- --fake-teachers <n>');
+    return 1;
+  }
+  const url = env.DATABASE_URL;
+  if (!url) {
+    log('seed-discovery: DATABASE_URL is not set');
+    return 1;
+  }
+  const seed = buildDiscoverySeed(n);
+  const { db, close } = createDb({ DATABASE_URL: url });
+  try {
+    const inserted = {} as Record<DiscoverySeedTable, number>;
+    await db.transaction(async (tx) => {
+      for (const table of DISCOVERY_SEED_TABLES) {
+        const t = discoverySchema[table];
+        const rows = await tx
+          .insert(t)
+          .values(seed[table] as never)
+          .onConflictDoNothing({ target: t.id })
+          .returning({ id: t.id });
+        inserted[table] = rows.length;
+      }
+    });
+    const total = DISCOVERY_SEED_TABLES.reduce((sum, t) => sum + inserted[t], 0);
+    log(
+      total === 0
+        ? 'seed-discovery: already seeded (inserted 0 rows)'
+        : `seed-discovery: inserted ${total} rows`,
+    );
+    log(
+      "seed-discovery: these teachers have no course or module; they appear in search but can't " +
+        'start a chat',
+    );
+    return 0;
+  } catch (err) {
+    log(`seed-discovery: failed: ${redact(err instanceof Error ? err.message : String(err))}`);
+    return 1;
+  } finally {
+    await close();
   }
 }

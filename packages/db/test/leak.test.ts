@@ -52,6 +52,8 @@ describe('driver errors are scrubbed', () => {
           }),
       ],
       ['packageVersions.liveForAgent', () => repos.packageVersions.liveForAgent({ agentId: 'agt_x' })],
+      ['discovery.search', () => repos.discovery.search({ q: 'private words here' })],
+      ['discovery.teacherBySlug', () => repos.discovery.teacherBySlug({ slug: 'tch-leak-9' })],
       ['sessions.get', () => repos.sessions.get(scope, 'ses_leak_3')],
       [
         'teacherQuestions.open',
