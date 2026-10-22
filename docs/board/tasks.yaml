@@ -4025,9 +4025,30 @@ tasks:
   - 8.7c
   - 8.6c
   risk: low
-  status: running
+  status: done
   branch: m8/8.7d-publish-page
-  model: plan:opus build:opus
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 56
+    tokens_in: 182
+    tokens_out: 354
+    cache_read_tokens: 2860258
+    wall_time_seconds: 165
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 2
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 4
+        wontfix: 1
+    human_questions: 0
 - id: 8.7e
   milestone: M8
   title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
