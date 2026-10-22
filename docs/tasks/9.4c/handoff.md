@@ -77,4 +77,42 @@ All three 9.4b review findings closed in `apps/web/src/chat/renderReply.tsx`.
   temporary.
 - risk: low
 
+## Fix round (22 Oct 2026)
+
+Three findings closed, same file scope (`renderReply.tsx`, its test file, this handoff).
+
+1. **HIGH (code-reviewer): `safeHref` now also strips percent-encoded invisible/bidi
+   characters.** react-markdown/remark-gfm run every link destination through micromark's
+   `normalizeUri` before `SafeLink`/`safeHref` ever sees it, which percent-encodes every
+   non-ASCII character, so the first fix round's `\p{Cc}\p{Cf}` strip never saw the attack through
+   the real pipeline (it only matched a literal, raw Unicode character). `safeHref` now also finds
+   every run of one or more `%XX` groups, tries `decodeURIComponent` on the run (a malformed run
+   throws and is left byte-for-byte alone), and drops the whole run if the decoded text contains a
+   `\p{Cc}`/`\p{Cf}` character; every other run (a genuine non-ASCII path, e.g. `%C3%A9`) is kept
+   exactly as it was — it is never decoded back to a raw character. The scheme/protocol check
+   still runs on the fully cleaned string.
+   Tests now go through the real component with `renderToStaticMarkup` (not just `safeHref()`
+   directly), per the review: `a U+202E or U+200B inside an href, raw or percent-encoded, never
+   reaches the rendered href (9.4c fix round)` (6 cases: raw RLO, raw ZWSP, and their %E2%80%AE /
+   %E2%80%8B forms in both hex cases); `a normal non-ASCII percent-encoded path stays unchanged
+   through the real pipeline (9.4c fix round)` (`/caf%C3%A9` unchanged); `a percent-encoded hidden
+   scheme is still refused through the real pipeline (9.4c fix round)` (`java%E2%80%8Bscript:`
+   still has no `href`). The old `safeHref returns the href with invisible and bidi characters
+   removed...` and `a U+202E inside an href never reaches the rendered href (9.4c)` tests (which
+   called `safeHref()` directly with a raw character, a shape that never occurs through the real
+   caller) are kept — they still prove the direct-call path — but are no longer the only coverage.
+2. **LOW (typescript-reviewer): known limit for a maths span ending in a hyphen.** Added
+   `known limit: protectMath no longer reads a genuine maths span ending in a hyphen as maths`,
+   pinning `$a_1-$` and `$-$` next to the existing en-dash known-limit test.
+3. **LOW (security-reviewer): moved the "costs $5 and $10" case out of the new-behaviour table.**
+   It passes on the old regex too (the space before the second `$` already failed the old `\S`
+   requirement), so it doesn't prove this task's fix. Moved to its own test,
+   `protectMath leaves two separate amounts joined by "and" as plain text (unchanged: already true
+   on the old regex)`, with a comment explaining it's a regression pin, not proof of the new rule.
+   The `it.each` table now only holds the two cases (`$5-$10`, `price is $5-$10 today`) that fail
+   without the fix.
+
+Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → `Tasks: 10 successful,
+10 total`. `python3 .githooks/secret-scan.py --all` → clean.
+
 ## Tool calls used: 19

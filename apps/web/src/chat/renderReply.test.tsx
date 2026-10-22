@@ -5,6 +5,7 @@
 // 9.4b swapped in react-markdown + remark-gfm (B-32) under these tests.
 import type { TurnEvent } from '@edmate/contracts';
 import { render } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { protectMath, renderReply, safeHref } from './renderReply';
 import { initialTurn, reduceTurn } from './turnState';
@@ -12,6 +13,15 @@ import { initialTurn, reduceTurn } from './turnState';
 function show(text: string): HTMLElement {
   const { container } = render(<div>{renderReply(text)}</div>);
   return container.firstElementChild as HTMLElement;
+}
+
+// Task 9.4c fix round: renders through the real pipeline (react-markdown + remark-gfm), the way
+// the shipped code does, so the href this returns has already been through micromark's
+// normalizeUri (which percent-encodes non-ASCII link-destination characters) before safeHref ever
+// sees it — unlike calling safeHref() directly with a raw Unicode character.
+function hrefOf(markdown: string): string | null {
+  const html = renderToStaticMarkup(<div>{renderReply(markdown)}</div>);
+  return (html.match(/href="([^"]*)"/) ?? [])[1] ?? null;
 }
 
 const DANGEROUS = 'script, img, iframe, a, object, embed, svg, style, link, meta, form, input, video, audio';
@@ -245,9 +255,15 @@ describe('renderReply', () => {
   it.each([
     ['digit dash digit, no space', '$5-$10'],
     ['digit dash digit inside a sentence', 'price is $5-$10 today'],
-    ['two separate amounts joined by "and"', 'costs $5 and $10'],
   ])('protectMath leaves a price range as plain text (%s) (9.4c)', (_name, text) => {
     expect(protectMath(text)).toBe(text);
+  });
+
+  it('protectMath leaves two separate amounts joined by "and" as plain text (unchanged: already true on the old regex)', () => {
+    // "costs $5 and $10" was never read as maths even before 9.4c: the space right before the
+    // second `$` already failed the old regex's `\S` requirement. Kept as a regression pin, not
+    // as proof of the new exclusion rule (see the two cases above for that).
+    expect(protectMath('costs $5 and $10')).toBe('costs $5 and $10');
   });
 
   it('known limit: protectMath still reads a price range as maths when it uses an en dash (9.4c)', () => {
@@ -258,6 +274,18 @@ describe('renderReply', () => {
     const text = 'price $5\u2013$10';
     expect(protectMath(text)).not.toBe(text);
     expect(protectMath(text)).toBe('price \\$5\u2013\\$10');
+  });
+
+  it('known limit: protectMath no longer reads a genuine maths span ending in a hyphen as maths', () => {
+    // The price-range exclusion requires the character right before the closing `$` to not be an
+    // ASCII hyphen. That also means a genuine TeX span whose content happens to end in `-` (e.g.
+    // a truncated subtraction, or a span that is only a hyphen) is no longer escaped, so any
+    // markdown-special characters inside it (underscores, asterisks) could be read as emphasis
+    // instead of staying literal. Documented rather than fixed: distinguishing "ends in `-`
+    // because it's a price range" from "ends in `-` because it's genuine maths" has no clean,
+    // narrow rule (see the en-dash known limit above).
+    expect(protectMath('$a_1-$')).toBe('$a_1-$');
+    expect(protectMath('$-$')).toBe('$-$');
   });
 
   it('safeHref allows only absolute http, https and mailto URLs', () => {
@@ -280,14 +308,34 @@ describe('renderReply', () => {
     expect(safeHref('java\u200bscript:alert(1)')).toBeNull();
   });
 
-  it('a U+202E inside an href never reaches the rendered href (9.4c)', () => {
-    // safeHref is the only place that decides what `href` SafeLink renders (COMPONENTS.a in
-    // renderReply.tsx), so this proves the attribute itself. Going through the full markdown
-    // pipeline instead would test micromark's own link-destination percent-encoding, which runs
-    // before safeHref and is outside this task's scope (renderReply.tsx's safeHref/protectMath).
-    const safe = safeHref('https://example.com/\u202epath');
-    expect(safe).toBe('https://example.com/path');
-    expect(safe).not.toContain('\u202e');
+  it('a U+202E or U+200B inside an href, raw or percent-encoded, never reaches the rendered href (9.4c fix round)', () => {
+    // Through the real pipeline, react-markdown + remark-gfm run every link destination through
+    // micromark's normalizeUri before safeHref ever sees it, which percent-encodes a raw
+    // character like U+202E into "%E2%80%AE" \u2014 so this proves the fix on the shipped path, not
+    // just on safeHref() called directly with a raw Unicode character.
+    const bad = [
+      'https://example.com/\u202epath', // raw RLO
+      'https://example.com/\u200bpath', // raw ZWSP
+      'https://example.com/%E2%80%AEpath', // RLO, upper-case hex
+      'https://example.com/%e2%80%aepath', // RLO, lower-case hex
+      'https://example.com/%E2%80%8Bpath', // ZWSP, upper-case hex
+      'https://example.com/%e2%80%8bpath', // ZWSP, lower-case hex
+    ];
+    for (const url of bad) {
+      const href = hrefOf(`[here](${url})`);
+      expect(href).not.toBeNull();
+      expect(href).not.toMatch(/[\u202e\u200b]/i);
+      expect(href).not.toMatch(/%e2%80%ae/i);
+      expect(href).not.toMatch(/%e2%80%8b/i);
+    }
+  });
+
+  it('a normal non-ASCII percent-encoded path stays unchanged through the real pipeline (9.4c fix round)', () => {
+    expect(hrefOf('[here](https://example.com/caf%C3%A9)')).toBe('https://example.com/caf%C3%A9');
+  });
+
+  it('a percent-encoded hidden scheme is still refused through the real pipeline (9.4c fix round)', () => {
+    expect(hrefOf('[click](java%E2%80%8Bscript:alert(1))')).toBeNull();
   });
 
   it('empty or blank text renders nothing', () => {

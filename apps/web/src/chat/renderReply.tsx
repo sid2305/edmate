@@ -41,6 +41,12 @@ const ALLOWED = [
 
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
+// Task 9.4c fix round: react-markdown + remark-gfm run every link destination through
+// micromark's normalizeUri before SafeLink/safeHref ever sees it, which percent-encodes every
+// non-ASCII character — so an invisible/bidi character the review named reaches here as a run of
+// %XX bytes (e.g. "%E2%80%AE"), not the raw codepoint. Matches one or more consecutive %XX groups.
+const PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
+
 /** The href if it is an absolute http(s)/mailto URL, else null. Exported for direct tests. */
 export function safeHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
@@ -51,7 +57,21 @@ export function safeHref(href: unknown): string | null {
   // already strips all of them here. The scheme and protocol checks below run on `cleaned`, so a
   // character that only hides a scheme (e.g. "java<ZWSP>script:") is re-checked after cleaning
   // and refused; `cleaned`, not `href`, is what gets returned and rendered.
-  const cleaned = href.replace(/[\p{Cc}\p{Cf}\s]/gu, '');
+  let cleaned = href.replace(/[\p{Cc}\p{Cf}\s]/gu, '');
+  // Task 9.4c fix round: decode each run of %XX sequences that forms valid UTF-8 (a malformed run
+  // throws and is left alone, byte-for-byte) and drop the whole run if the decoded text contains
+  // a control/format character — the same percent-encoded invisible/bidi attack, just hidden as
+  // bytes. Every other run (e.g. a genuine non-ASCII path such as "%C3%A9") is kept exactly as it
+  // was: we never decode a legitimate percent-encoded byte back to its raw character.
+  cleaned = cleaned.replace(PERCENT_RUN, (run) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+    return /[\p{Cc}\p{Cf}]/u.test(decoded) ? '' : run;
+  });
   if (!/^[a-z][a-z0-9+.-]*:/i.test(cleaned)) return null;
   try {
     return SAFE_PROTOCOLS.has(new URL(cleaned).protocol) ? cleaned : null;
