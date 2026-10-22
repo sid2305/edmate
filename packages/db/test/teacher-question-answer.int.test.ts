@@ -271,6 +271,47 @@ describe.skipIf(!up)(`teacherQuestions grouping and answer on Postgres${up ? '' 
       expect(notes2.find((n) => n.questionId === q2.id)?.answer).toMatch(/scatters blue light/);
     });
 
+    it('two of the same student’s own questions in one group count as one student, one message, one notification', async () => {
+      const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+      const tag = uid('q');
+      const q1 = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `ANSWER-CANARY-SAME-STUDENT-${tag}: why does the moon seem to follow the car?`,
+        similarIds: [],
+      });
+      const q2 = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `ANSWER-CANARY-SAME-STUDENT-${tag}: why does the moon appear to follow a moving car?`,
+        similarIds: [],
+      });
+      expect(await groupOf(q1.id)).toBe(await groupOf(q2.id));
+
+      const before = await raw.query<{ n: string }>('select count(*)::text as n from messages');
+      const result = await repos.teacherQuestions.answer(
+        { teacherId: tA },
+        { questionId: q1.id, moduleId: moduleA, answer: 'The moon is so far away its angle barely changes.' },
+      );
+      expect(result.answered).toBe(2);
+      expect(result.students).toBe(1);
+      expect(result.threadMessages).toBe(1);
+      const after = await raw.query<{ n: string }>('select count(*)::text as n from messages');
+      expect(Number(after.rows[0]!.n) - Number(before.rows[0]!.n)).toBe(1);
+      expect(await statusOf(q1.id)).toBe('answered');
+      expect(await statusOf(q2.id)).toBe('answered');
+
+      const notes = await repos.notifications.listForStudent(
+        { studentId: stu1, teacherId: tA },
+        { unreadOnly: false, limit: 50 },
+      );
+      // One notification per distinct student, not per question: both members are this one
+      // student's own rows, so only one of them (the earliest) stands for the student below.
+      expect(notes.filter((n) => n.questionId === q1.id || n.questionId === q2.id)).toHaveLength(1);
+    });
+
     it('a replay of an already-answered question is not_found and writes nothing new', async () => {
       const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
       const q = await store1.open({
@@ -472,6 +513,157 @@ describe.skipIf(!up)(`teacherQuestions grouping and answer on Postgres${up ? '' 
         { unreadOnly: true, limit: 50 },
       );
       expect(afterRead.some((n) => n.id === notif.id)).toBe(false);
+    });
+  });
+
+  describe('5.10b review follow-ups', () => {
+    it(
+      'two concurrent answers to different members of one group finish without a 40P01 deadlock, and both groups end up fully answered',
+      async () => {
+        const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+        const store2 = teacherQuestionStoreFor(repos, { studentId: stu2, teacherId: tA });
+        const q1 = await store1.open({
+          teacherId: tA,
+          agentId: agentA,
+          studentId: stu1,
+          text: `LOCK-CANARY-${uid('g')}: why does the moon look bigger near the horizon than overhead?`,
+          similarIds: [],
+        });
+        const q2 = await store2.open({
+          teacherId: tA,
+          agentId: agentA,
+          studentId: stu2,
+          text: `LOCK-CANARY-${uid('g')}: why does the moon seem bigger near the horizon compared to overhead?`,
+          similarIds: [],
+        });
+        expect(await groupOf(q1.id)).toBe(await groupOf(q2.id));
+
+        // Both calls answer the same group, one by each of its two members, at once. Before the
+        // 5.10b fix (locking the target row alone, then the group unordered) this could abort one
+        // side with Postgres error 40P01 (deadlock_detected); the fix locks the whole group's open
+        // ids, ordered, in one statement, so whichever call gets there first holds the full set
+        // and the other blocks rather than each holding a row the other wants.
+        const results = await Promise.allSettled([
+          repos.teacherQuestions.answer(
+            { teacherId: tA },
+            { questionId: q1.id, moduleId: moduleA, answer: 'The moon illusion is a perceptual effect.' },
+          ),
+          repos.teacherQuestions.answer(
+            { teacherId: tA },
+            { questionId: q2.id, moduleId: moduleA, answer: 'It is the Ponzo illusion, not magnification.' },
+          ),
+        ]);
+
+        const errorText = (r: PromiseRejectedResult) =>
+          `${String(r.reason)} ${(r.reason as { cause?: unknown })?.cause ?? ''}`;
+        const deadlocked = results.filter(
+          (r) => r.status === 'rejected' && /40P01|deadlock/i.test(errorText(r)),
+        );
+        expect(deadlocked).toHaveLength(0);
+
+        // Either call may win the race to answer the still-open group; the loser is `not_found`
+        // (its own target or group is already answered by the time it resumes) rather than a
+        // driver error, and the group ends up consistently answered either way.
+        const fulfilled = results.filter((r) => r.status === 'fulfilled');
+        const rejected = results.filter((r) => r.status === 'rejected');
+        expect(fulfilled.length + rejected.length).toBe(2);
+        for (const r of rejected) {
+          if (r.status === 'rejected') {
+            expect(r.reason).toBeInstanceOf(RepositoryError);
+            expect((r.reason as RepositoryError).kind).toBe('not_found');
+          }
+        }
+        expect(await statusOf(q1.id)).toBe('answered');
+        expect(await statusOf(q2.id)).toBe('answered');
+      },
+      15_000,
+    );
+
+    it(
+      "a question opened during an answer doesn't stay open after its group is answered",
+      async () => {
+        const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+        const store2 = teacherQuestionStoreFor(repos, { studentId: stu2, teacherId: tA });
+        const tag = uid('g');
+        const text = `RACE-CANARY-${tag}: why does a rainbow always appear opposite the sun?`;
+        const similarText = `RACE-CANARY-${tag}: why does a rainbow always show up opposite the sun?`;
+        const q1 = await store1.open({
+          teacherId: tA,
+          agentId: agentA,
+          studentId: stu1,
+          text,
+          similarIds: [],
+        });
+
+        // `open` and `answer` both take the agent's `no key update` lock first (task 5.10b), so
+        // this concurrent, similarly worded open either lands (and commits) entirely before the
+        // answer reads the group's members, or waits for the answer's transaction to finish — it
+        // never lands in between, after the member list is read but before it is locked.
+        const [, q2] = await Promise.all([
+          repos.teacherQuestions.answer(
+            { teacherId: tA },
+            { questionId: q1.id, moduleId: moduleA, answer: 'Rainbows form opposite the sun.' },
+          ),
+          store2.open({
+            teacherId: tA,
+            agentId: agentA,
+            studentId: stu2,
+            text: similarText,
+            similarIds: [],
+          }),
+        ]);
+
+        expect(await statusOf(q1.id)).toBe('answered');
+        // Whichever side of the race q2 landed on, it is never left open as an orphaned member of
+        // an already-fully-answered group: either it joined q1's group and was answered with it,
+        // or it missed the group entirely (q1 was no longer open by the time it read candidates)
+        // and became its own separate, still-open group — never "open, but part of a group every
+        // other member of which is answered".
+        const q2Status = await statusOf(q2.id);
+        const q2Group = await groupOf(q2.id);
+        const q1Group = await groupOf(q1.id);
+        if (q2Group === q1Group) {
+          expect(q2Status).toBe('answered');
+        } else {
+          expect(q2Status).toBe('open');
+        }
+      },
+      15_000,
+    );
+
+    it('the stored answer is the same trimmed text in the thread message and teacher_questions.answer, with no trailing newline', async () => {
+      const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+      const q = await store1.open({
+        teacherId: tA,
+        agentId: agentA,
+        studentId: stu1,
+        text: `TRIM-CANARY-${uid('q')}: why do leaves on a tree rustle in the wind?`,
+        similarIds: [],
+      });
+      // As if read from an answer file ending in a newline.
+      const fileAnswer = '  Air moving past the leaves makes them flutter.\n';
+      await repos.teacherQuestions.answer(
+        { teacherId: tA },
+        { questionId: q.id, moduleId: moduleA, answer: fileAnswer },
+      );
+      const trimmed = fileAnswer.trim();
+
+      const col = await raw.query<{ answer: string }>(
+        'select answer from teacher_questions where id = $1',
+        [q.id],
+      );
+      expect(col.rows[0]!.answer).toBe(trimmed);
+      expect(col.rows[0]!.answer.endsWith('\n')).toBe(false);
+
+      const msg = await raw.query<{ text: string }>(
+        `select m.text from messages m
+         join sessions s on s.id = m.session_id
+         where s.teacher_id = $1 and s.student_id = $2 and s.agent_id = $3
+         order by m.created_at desc, m.id desc limit 1`,
+        [tA, stu1, agentA],
+      );
+      expect(msg.rows[0]!.text).toBe(trimmed);
+      expect(msg.rows[0]!.text.endsWith('\n')).toBe(false);
     });
   });
 });

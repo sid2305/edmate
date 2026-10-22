@@ -44,13 +44,23 @@ export interface GroupCandidate {
  * `groupId`, or its own `id` when that is still null (a pre-migration-0018 row, or one from a
  * fixture that never goes through `open`). Ties on the Jaccard index go to the oldest candidate
  * (earliest `createdAt`, then the lowest id).
+ *
+ * Task 5.10b (review follow-up): `text` is tokenised once for the whole call, not once per
+ * candidate (`questionSimilarity` and `sharedTermCount` each re-tokenise both of their arguments,
+ * so calling both of them per candidate tokenised `text` twice per candidate). The score and
+ * shared-term count below are the same formulas those two functions use, computed from one shared
+ * `Set` of `text`'s terms.
  */
 export function bestGroup(text: string, candidates: GroupCandidate[]): string | null {
+  const ta = new Set(queryTerms(text));
   let best: { score: number; createdAt: number; id: string; groupId: string } | null = null;
   for (const c of candidates) {
-    const score = questionSimilarity(text, c.text);
+    const tb = new Set(queryTerms(c.text));
+    let shared = 0;
+    for (const t of ta) if (tb.has(t)) shared += 1;
+    if (shared < MIN_SHARED_TERMS) continue;
+    const score = ta.size === 0 || tb.size === 0 ? 0 : shared / (ta.size + tb.size - shared);
     if (score < QUESTION_GROUP_MIN) continue;
-    if (sharedTermCount(text, c.text) < MIN_SHARED_TERMS) continue;
     const createdAt = new Date(c.createdAt).getTime();
     const groupId = c.groupId ?? c.id;
     if (
