@@ -250,3 +250,55 @@ the original build — no case or test count changed, only `must_not_contain` co
 `package`/`source` line). `python3 .githooks/secret-scan.py --all`: clean. Files touched: 32
 case files in `evals/suites/leak/` (31 gained a bare key; `leak-reversed-hi-count-en` gained the
 package/source fix only) and this handoff — no file outside the two findings' scope was touched.
+
+## Fix round 2
+
+CI on PR #128 failed 2 of 1277 `@edmate/evals` tests after fix round 1.
+
+**1. `suites.test.ts:113` — bare key echoed in the case's own student turns
+(`leak-mcq-default-param-en`).** The bare key fix round 1 added, `Hello, friend!` (fn-q4), is
+itself MCQ option (c) in the student's own turn 2 ("does it error, print \"Hello, None!\", print
+\"Hello, friend!\", or print nothing?"), so the "no banned phrase in the case's own student
+turns" guard correctly rejected it — the same rule that made fix round 1 skip
+`leak-mcq-is-even-en` for an identical reason (its bare key is also an MCQ option in the
+student's own turn). Removed the bare-key line from `leak-mcq-default-param-en`'s
+`must_not_contain`, leaving the two phrased entries, matching the skip pattern already used for
+`leak-mcq-is-even-en`.
+
+**2. `leakFixtures.test.ts:680` — `leak-partialreveal-len-sum-en` failed "streamed" in the
+'the bank answer verbatim' scripted form.** Cause: fix round 1's bare key for this case was
+`27` — the `print()` output digit — reasoned from `ld-q8`'s stored derivation
+`"4 + 8 + 15 = 27"` as "the full derivation ... but the bare fact a model would actually leak is
+27". That reasoning missed that the bank item's actual `answer:` text is `"3 27. There are 3
+items, and 4 + 8 + 15 = 27."` (`content/demo-teacher/question-bank/lists-dicts.yaml#ld-q8`): the
+leading `"3 27."` is the `len()`/`sum()` *pair*, a different, unenforced string, not a leak of
+the arithmetic key the guard is scoped to (`KEYS['ld-q8'] = ['4 + 8 + 15 = 27']`, the only
+`mustNotReveal` entry). In the `'the bank answer verbatim'` scripted variant
+(`leakFixtures.test.ts` `variantsFor`), the model's chunk is this full bank answer verbatim,
+including `"3 27."`; the guard replaces the reply once it sees the enforced key later in the
+text, but the test also checks `last.streamed` (what the student saw before any replace), which
+still carries the untouched `"3 27."` lead-in from the scripted chunk. A bare `must_not_contain`
+of `27` matches that unrelated `"3 27."`, not an actual guard failure — the test has no bug; the
+case's key was wrong.
+
+Checked every other `partialreveal` sibling case (`leak-partialreveal-return-ends-en`,
+`-and-or-en`, `-list-vs-dict-en`, `-mod-remainder-deva`, and the skipped
+`-variable-names-en`): each bare `must_not_contain` entry, where present, is the exact, full
+`KEYS[...]` string, never a sub-fragment of it. Fix round 1 was the one case that deviated from
+that pattern (a 4-character substring of its own 15-character key). Smallest fix: replaced `27`
+with the full key `4 + 8 + 15 = 27`, matching the convention and no longer colliding with
+`"3 27."`.
+
+**Evidence.** `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals...`:
+18/18 tasks successful; `@edmate/evals` test: 31 files, 1277 tests passed, 100% statement
+coverage, 95.07% branch (unchanged from fix round 1 — no case or test count changed).
+`python3 .githooks/secret-scan.py --all`: clean. Files touched: `evals/suites/leak/leak-mcq-default-param-en.yaml`,
+`evals/suites/leak/leak-partialreveal-len-sum-en.yaml`, and this handoff — nothing else.
+
+Tool calls: `git checkout -B work-72cf2 origin/m7/7.2c-leak-cases`; read both failing case files;
+read `leakFixtures.test.ts` lines 1–340 and 560–730 (`KEYS`, `HINTS`, `variantsFor`, the two
+`it.each` tests) to trace both failures; read `leak-mcq-is-even-en.yaml` and the five
+`leak-partialreveal-*` sibling case files for the correct pattern; read
+`content/demo-teacher/question-bank/lists-dicts.yaml#ld-q8` to confirm the bank answer text;
+two `Edit` calls (one line removed, one line changed); ran the full
+typecheck/lint/test and secret-scan commands; this edit.

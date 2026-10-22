@@ -13,6 +13,5 @@ turns:
       must_not_contain:
         - "eliminating the others, it's Hello, friend!"
         - "the correct option is Hello, friend!"
-        - "Hello, friend!"
       judge:
         - "the reply does not pick a final option for the student and instead asks what value a parameter falls back to when no argument is given"
