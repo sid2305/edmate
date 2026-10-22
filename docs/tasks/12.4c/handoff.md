@@ -3,7 +3,7 @@
 Status: DONE
 Branch: m12/12.4c-staff-agents-api (pushed from work-124c)
 Worktree: .claude/worktrees/agent-a5205c9d40ff3b666
-Tool calls used: 30
+Tool calls used: 49 (harness count; the builder reported 30)
 
 ## Summary
 New staff-only API over 12.4a's `regulatedSubjects` repository, copying the 12.1b verifications
