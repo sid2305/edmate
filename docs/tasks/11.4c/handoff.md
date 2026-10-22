@@ -118,4 +118,4 @@ cases failed on the missing props and repo call), then green.
 
 Status: DONE
 
-Tool calls used: 24
+Tool calls used: 42 (harness count; the builder reported 24)
