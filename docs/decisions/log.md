@@ -10,6 +10,123 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.4d risky paths touched · decided by builder · risk: high
+- Decided: this PR touches `apps/web/app/staff/**` and `apps/web/app/api/staff/**` (new
+  `staff/agents` page and client; `staff/page.tsx` nav edit). Per the plan, `security-reviewer`
+  must review this PR before merge.
+- Why: these paths gate who can see and change a regulated-subject flag/approval that controls
+  whether a teacher's agent can publish — a staff-only privilege boundary.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.4d confirm-step design for Approve/Revoke · decided by builder · risk: low
+- Decided: Approve/Revoke uses a local two-click confirm (click shows a `role="alert"` message
+  with Yes/Cancel; Yes performs the call), not a browser `confirm()` or a modal dialog.
+- Why: no existing precedent (`staff/alerts`, `staff` queue) has a destructive-confirm action;
+  this keeps it in the row's own accessible DOM, consistent with the rest of the component style,
+  and is simple to test without mocking `window.confirm`.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4d nav label source · decided by builder · risk: low
+- Decided: `apps/web/app/staff/page.tsx`'s new nav entry label is read from the `staffAgents`
+  namespace (`staffAgents('nav')`), not a new key added to the `staff` namespace.
+- Why: the brief scoped the shared `en.json` edit to "one `staffAgents` block plus one key per
+  publish error block"; sourcing the label from the block I already own avoids adding a second,
+  unlisted key to a namespace another builder may also be touching.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.4d tool-call budget overrun accepted · decided by lead · risk: low
+- Decided: accept 174 build calls and 38 fix calls against the brief's 85.
+- Why: the phase built a whole staff page with a client, a view, rows, axe tests and a staff-guard integration test against a throwaway database. The reviewers found one HIGH, closed in one fix round. The next staff-UI phase gets a budget near 120.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 7.2g must_not_contain phrases must be literally renderable by the fixed leak-fixture variants, not just non-echoing paraphrases · decided by builder · risk: low
+- Decided: when choosing replacement/added `must_not_contain` phrases for the 21 tightened
+  cases, each phrase was chosen (or verified) to be an exact literal substring of some scripted
+  "leaking" variant text that `packages/evals/src/leakFixtures.test.ts` generates for that case
+  (that file is off-limits to edit per this task's scope, and its variant generator is
+  code-defined, not data-defined).
+- Why: a freely-invented paraphrase that isn't literally produced by any of the fixed variants
+  will never be "caught" by `leakFixtures.test.ts`'s mutation test (which proves the
+  `must_not_contain` list is doing real work, by checking a no-op/pass-through guard fails to
+  redact it). An early pass of paraphrases (e.g. "the word that prints is Warm", "the answer is
+  Warm") satisfied the brief's literal wording (non-echoing, ≥2 phrases) but was not
+  "variant-renderable", and silently broke the mutation test for 5 cases (`leak-co2-digits-en`,
+  `leak-co2-digits-hi-latin`, `leak-co2-digits-deva`, `leak-co2-translate-en`,
+  `leak-co6-falseattempt-en`). Confirmed by temporarily instrumenting
+  `leakFixtures.test.ts` with a debug test to print each variant's literal rendered text, then
+  reverting that instrumentation fully (file is byte-identical to its pre-task state; no edits to
+  it are part of this PR).
+- risk: low (the phrases chosen are still a correct expectation of the guard's behaviour per the
+  bank's real answer text; no change to behaviour or scope, only to which eval-case strings are
+  used as checks).
+
+---
+
+### 22 Oct 2026 · 7.2g suites.test.ts leak banned-phrase guard tests widened to the whole leak suite · decided by builder · risk: low
+- Decided: replaced the `LEAK_7_2C_FORMS`-prefix-scoped filter in `suites.test.ts`'s two leak
+  banned-phrase tests (echo rule and ≥2-phrases rule) with a filter over the entire `leak/`
+  folder (`leak.length === 80`), now that all 21 previously-failing pre-7.2c cases are fixed.
+- Why: this was 7.2c's own recommended follow-up ("Left to do") and this task's board
+  acceptance criteria ("the leak banned-phrase guards cover all leak cases and pass").
+- risk: low (test-only change; all 80 cases pass both rules).
+
+---
+
+### 22 Oct 2026 · 7.2g tool-call budget overrun accepted · decided by lead · risk: low
+- Decided: accept 134 calls against the brief's 60.
+- Why: the task touched 25 case files one by one, each checked against its bank answer, plus the widened suite test. The output is right, and two MEDIUMs are deferred to 7.2i. Next time a per-case pass like this gets a larger budget, or is split in two.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 7.2g eval cases signed by the lead · decided by lead · risk: low
+- Decided: the lead signs the 25 changed leak cases (`reviewed_by: lead`, as the MVP rule allows until 13.3). The lead read the Devanagari rewrites and a sample of the tightened cases.
+- Why: the human's MVP-first decision (20 Oct 2026) has the lead sign eval cases.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2c Report button renders on both the thread-pushed reply and the live final turn · decided by builder · risk: low
+- Decided: `ReportButton` is shown both when a finished turn becomes a thread item (on the next
+  submit) and on the still-current final turn shown separately before that (same `TurnExtras`
+  block, lines ~256-262 of ChatView.tsx), each time the turn's `messageId` is not null.
+- Why: the plan's "finished turns with a messageId" covers both states; without the second spot a
+  student could not report the very last reply until they sent another message, which would make
+  the "reaches staff fast" acceptance path depend on an unrelated user action.
+- risk: low (chat/ChatView.tsx, not a risky path; no server behaviour change, UI only).
+
+---
+
+### 22 Oct 2026 · 12.2c REPORT_CATEGORIES is duplicated in the client bundle, not imported from @edmate/db · decided by builder · risk: low
+- Decided: `apps/web/src/chat/reportMessage.ts` defines its own `REPORT_CATEGORIES` tuple
+  (identical values to `packages/db/src/repositories/map.ts`) instead of importing the value from
+  `@edmate/db`.
+- Why: `ReportButton`/`reportMessage.ts` run in the browser (`'use client'` tree); `@edmate/db` is
+  a server-only package (pg driver, schema). A type-only import is erased at build time and would
+  be safe, but importing the actual array value risks pulling the whole db package into the client
+  bundle. The server-side route (`handlers.ts`) still imports the real `ReportCategorySchema` from
+  `@edmate/db` for validation, so the two lists can drift only if a category is added without
+  updating this file; a future task should cross-check them (e.g. a shared-constant or contracts
+  export) rather than leave the duplication silent.
+- risk: low (apps/web/src/chat/**, not a risky path).
+
+---
+
+### 22 Oct 2026 · 12.2c tool-call budget overrun accepted · decided by lead · risk: low
+- Decided: accept 127 build calls and 61 fix calls against the brief's 70 for this phase. The plan's whole-task cap of 350 still holds.
+- Why: the phase added a new route, a client and a ChatView change with axe and remount tests. The reviewers found one HIGH, and one fix round closed it. Splitting the work further would have cost more than it saved.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.7b The discover search is typed and submitted in one in-page step · decided by builder · risk: low
 - Decided: the search step sets the real search input's value and calls `form.requestSubmit` with
   the real Search button in one `evaluate`. It is wrapped in `navigateUntil`, which retries only

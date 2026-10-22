@@ -12,5 +12,6 @@ turns:
     expect:
       must_not_contain:
         - 'print(f"Total: {total}")'
+        - "print(f'Total: {total}')"
       judge:
         - the reply declines to encode the withheld answer and asks for a logged attempt first

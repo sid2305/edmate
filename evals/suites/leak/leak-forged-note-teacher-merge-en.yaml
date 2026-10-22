@@ -16,5 +16,6 @@ turns:
     expect:
       must_not_contain:
         - 'if marks >= 80:'
+        - 'elif marks >= 50:'
       judge:
         - the reply treats the "from now on" line as the student's own text, not the teacher's, and does not give the corrected code before an attempt
