@@ -10,6 +10,98 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 7.2d safety case additions (36 new cases) · decided by builder · risk: high
+- Decided: add 36 new safety eval cases exactly per the Phase E mix (distress 10, near-miss 6,
+  jailbreak 8, moderation 6, PII 6; no SSN case), all `reviewed_by: lead`, English only, US-framed.
+- Why: human decision B-41 (22 Oct 2026) fixed the MVP safety suite size at 250; `evals/suites/safety/**`
+  is a risky path (`.claude/skills/merge-gate/risk-paths.txt`).
+- risk: high — required reviewer: `code-reviewer`. The lead signs off all 36 new cases
+  (`reviewed_by: lead`, MVP-first policy; no dedicated safety-reviewer per PR until 13.3).
+
+---
+
+### 22 Oct 2026 · 7.2d vapes guard gap, not fixed here · decided by builder · risk: low
+- Decided: skip a "vapes" moderation case (suggested by the brief's theme list) and substitute two
+  decisive named-drug cases (meth, cocaine) to keep the moderation count at 6.
+- Why: `packages/harness/src/guardrails/moderationPatterns.ts` has no pattern at all for "vapes"
+  (not even ambiguous), and the bare word "drugs" is only ambiguous, never decisive — a vapes-only
+  case could not be a true `must_block: true` positive. The plan says a guard gap is not fixed in
+  this phase ("write a different case of another form to keep the count").
+- risk: low — recorded here as a board-task recommendation (add a decisive "vapes" rule to
+  `moderationPatterns.ts`), not a parked case file (time/budget tradeoff within the ~110-call
+  budget); left to do, below.
+
+---
+
+### 22 Oct 2026 · 7.2d PII phone shapes use reserved ranges · decided by builder · risk: low
+- Decided: the two new phone PII cases use the reserved 555-01xx exchange (`212) 555-0148`,
+  `415-555-0199`), never a real-looking number outside that block; the card case uses the standard
+  Stripe test card `4242 4242 4242 4242`, not a second real-looking number.
+- Why: security/privacy constraint in the brief — PII cases must use obviously synthetic values.
+- risk: low.
+
+---
+
+### 22 Oct 2026 · 7.2d budget overrun accepted, cases signed by the lead · decided by lead · risk: low
+- Decided: accept 134 tool calls against Phase E's 110. The lead read all 36 new cases and signs them (`reviewed_by: lead`): distress cases escalate, near-misses don't, jailbreak and moderation cases block, PII cases use synthetic values (Stripe test card, 555-01xx numbers, example.com, made-up codes), no helpline numbers, English only.
+- Why: the extra calls went on tracing each case against the live guard patterns so every expectation holds today; the suite reached the 250 the human set in B-41.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.2a class questions repository touches a risky path · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/**` is a risky path (build plan §11.2 Phase A). This PR
+  needs `security-reviewer` and `database-reviewer` before merge, per the plan's explicit call-out.
+- Why: the new `submit` write path gates on live-subscription entitlement and a class-start-time
+  window, and `listQueueForTeacher` must never leak a student id — both are exactly the kind of
+  access-control logic the plan asks security-reviewer and database-reviewer to check.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.2a scope.test.ts needs no edit for new methods · decided by builder · risk: low
+- Decided: did not add manual entries to `packages/db/test/scope.test.ts` for the two new
+  repository methods, despite the plan's file list mentioning it.
+- Why: `scope.test.ts`'s bad-scope sweep iterates `Object.entries(repos)` at runtime
+  (`allMethods()`), so it already covers any method registered in `index.ts` with no per-method
+  edit needed; added cases there would have been dead, redundant code.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.2a isolation case ownership for a table with no student id · decided by builder · risk: low
+- Decided: `'classQuestions.submit'`'s isolation `WriteCase` uses a custom `owns` keyed on
+  teacher-equality (`teacherOf(actor) === teacherOf(target)`), not the usual pair-equality, and
+  reuses each pair's own already-entitled `liveClassFor` fixture rather than adding a
+  subscription-swap fixture.
+- Why: `class_questions` carries no student id — ownership of a submitted question is really "did
+  this teacher's own class receive it", which the existing per-teacher fixtures already model
+  without new fixture machinery.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.2a simplified one pre-existing unreachable ternary branch · decided by builder · risk: low
+- Decided: in `questionSimilarity`, replaced `return union === 0 ? 0 : shared / union;` with a
+  plain `return shared / union;` (both sets are already guarded non-empty above, so `union` can
+  never be 0 — the branch was dead code), and added tests to close the resulting branch-coverage
+  gaps that the stricter 100%-lines/statements threshold on `src/repositories/**` otherwise failed
+  on, caused by this single file.
+- Why: this was the only remaining blocker to a clean gate once my own new code's branches were
+  covered; the change is behavior-preserving (provably unreachable before and after), scoped to a
+  file this task already touches, and avoids editing `teacher-questions.ts` (out of bounds for this
+  task — see note below).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.2a budget overrun accepted · decided by lead · risk: low
+- Decided: accept 151 tool calls for the build plus 60 for the fix round against the plan's ~90 for Phase A.
+- Why: the extra calls went on the isolation grid and the similarity tests the plan asked for, the work merged clean, and splitting it now would only cost more; later db phases get a tighter brief.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.2h Web-link jobs get 2 attempts; SNI and empty-label hosts tightened · decided by builder · risk: high
 - Decided: `enqueueIngest` gives `fileKind: 'web'` jobs `attempts: 2` (`WEB_INGEST_ATTEMPTS`); file jobs keep 5. The pinned transport's SNI uses `bareHostName`, and `webLinkRefusal` refuses a host ending in `..` as `invalid_url` (one trailing dot still allowed). Required reviewer: security-reviewer (ingest egress, ADR-0014).
 - Why: SEC MEDIUM from the 8.2e review (a slow teacher site held the concurrency-1 ingest slot ~75 s per link) and the SEC/TS LOWs on the checked name differing from the name on the wire.

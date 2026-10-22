@@ -2876,9 +2876,29 @@ tasks:
   deps:
   - 7.2a
   risk: risky
-  status: running
+  status: done
   branch: m7/7.2d-safety-cases
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 26
+    tokens_in: 92
+    tokens_out: 3236
+    cache_read_tokens: 3206355
+    wall_time_seconds: 371
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 1
 - id: 7.2e
   milestone: M7
   title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
@@ -4973,9 +4993,30 @@ tasks:
   deps:
   - '11.1'
   risk: high
-  status: running
+  status: done
   branch: m11/11.2a-class-questions-repo
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 80
+    tokens_in: 270
+    tokens_out: 5386
+    cache_read_tokens: 4145350
+    wall_time_seconds: 5317
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        LOW: 3
+      by_status:
+        fixed: 2
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 11.2b
   milestone: M11
   title: Pre-class question queue on the teacher live-classes page and a student ask form on /home (11.2 Phase B); the queue renders student text only as React text, never as HTML (11.2a review LOW), with
