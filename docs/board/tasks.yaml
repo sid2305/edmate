@@ -6,6 +6,13 @@
 # risk: risky = you approve the PR (human-approved label) before the lead merges; expert = named human reviewer for content/eval cases.
 # priority: P1 = not needed for the pilot. model: models used, recorded by the team lead.
 decisions:
+  suite-sizes:
+    status: open
+    question: 'Platform eval suites (7.2, blocker B-41): grow to the full Evals-table sizes now (+624 cases, about 1,480 builder calls; a live run is about 3,800 calls per model), or MVP sizes for the exit gate (locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60: +234 cases, about 630 calls; about 2,400 per model) with the rest in 7.2f before the pilot gate?'
+    options:
+    - MVP sizes now, the rest in 7.2f (M13) before the pilot gate
+    - full sizes now (7.2f moves to M7)
+    recommendation: the first option
   gate-thresholds:
     status: open
     question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and
@@ -1766,7 +1773,12 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: planning
+  - '7.2a'
+  - '7.2b'
+  - '7.2c'
+  - '7.2d'
+  - '7.2e'
+  status: todo
   risk: expert
   branch: null
   model: plan:opus
@@ -2647,6 +2659,88 @@ tasks:
   model: null
   needs_decision:
   - gate-thresholds
+- id: 7.2a
+  milestone: M7
+  title: '7.2 Phases A+B: locked suite 38 to 100 cases (content extraction, skills, outline, multi-turn, encodings), SUITE_FLOORS ratchet and near-duplicate check (plan docs/tasks/7.2/plan.md)'
+  accept: 'locked has 100 cases, all reviewed_by lead; lockedFixtures pins and floor raised; evals tests green.'
+  deps:
+  - '7.1'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.2b
+  milestone: M7
+  title: '7.2 Phase C: pedagogy suite 1 to 60 cases (plan docs/tasks/7.2/plan.md)'
+  accept: 'pedagogy has 60 cases, reviewed_by lead; floor raised.'
+  deps:
+  - '7.2a'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.2c
+  milestone: M7
+  title: '7.2 Phase D: leak suite 44 to 80 cases (plan docs/tasks/7.2/plan.md)'
+  accept: 'leak has 80 cases, reviewed_by lead; leakFixtures pins and floor raised.'
+  deps:
+  - '7.2a'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.2d
+  milestone: M7
+  title: '7.2 Phase E: safety suite 214 to 250 cases (plan docs/tasks/7.2/plan.md)'
+  accept: 'safety has 250 cases, reviewed_by lead; distress, moderation and PII pins and floor raised.'
+  deps:
+  - '7.2a'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+- id: 7.2e
+  milestone: M7
+  title: '7.2 Phases F+G: advice 37 to 60 and persona 42 to 60, closing floors (plan docs/tasks/7.2/plan.md)'
+  accept: 'advice 60 and persona 60, reviewed_by lead; adviceFixtures and rolePlayFixtures pins and floors raised.'
+  deps:
+  - '7.2a'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.2f
+  milestone: M13
+  title: '7.2 Phases H-P: grow platform suites to the full Evals-table sizes (locked 200, pedagogy 150, leak 150, safety 300, persona 100, advice 100) before the pilot gate; moves to M7 if B-41 picks full sizes now'
+  accept: 'counts per the Evals table, reviewer recorded per case.'
+  deps:
+  - '7.2e'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
+  needs_decision:
+  - suite-sizes
+- id: 7.4c
+  milestone: M7
+  title: 'Per-scope gate deadline (7.2 plan risk): GATE_DEADLINE_MS is 15 minutes for every scope, but a live first-publish or prompt-pack gate takes about 45-80 minutes and fails closed; give each change scope its own deadline (material stays under 15 minutes per the 7.4 accept)'
+  accept: 'a full-scope live gate is not cut off at 15 minutes; a material-change gate still is.'
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 1.7h
+  milestone: M13
+  title: 'US PII pattern (7.2 plan Q3): US.yaml has piiPatterns: [] and the guard has no SSN shape; add a human-signed US SSN pattern and its safety PII cases'
+  accept: 'an SSN in a student message is scrubbed; the pattern is signed by a named human.'
+  deps:
+  - '1.7'
+  risk: risky
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
