@@ -438,6 +438,28 @@ nothing), each with a window label (`reminder_24h` / `reminder_1h` / `starting_s
 computed here, from `startsAt` vs `now`, inside `live-classes.ts` (the one place this label is
 computed; `options.now` only overrides the clock for deterministic tests).
 
+## Reports (12.2)
+
+No migration: the `reports` table is from 0001. `reports.file(scope, { sessionId, messageId,
+category })` files the scope's student's report on an agent or teacher reply in their own session,
+in one INSERT…SELECT scoped through the session (a student message, another scope's message or a
+missing one is `not_found`, nothing written). `category` is one of `REPORT_CATEGORIES`; students
+send no free text. The row id is `reportRowId(student, message)`, so a second report on the same
+message is `{ created: false }` (first category wins). `target` is `message:<id>`; `reporter_id`
+never leaves the repository.
+
+`reports.listOpenForStaff(by)` and `reports.review(by, reportId, { decision, note? })` take a bare
+staff id first (malformed `invalid`, not staff right now `scope`, checked with `lockRole` so no
+repository source names the users table). The queue is open reports oldest first by
+`(created_at, id)`, at most `REPORTS_QUEUE_MAX_LIMIT` (50), each with the reported reply (null if
+gone), the session's teacher and agent ids, the teacher's slug and up to 10 of the teacher's
+documents a cited source title names (`takenDown` when an active `document:<id>` takedown exists).
+Never the reporter's id, name, email or phone, and never the session id. `review` sets `dismissed`
+or `actioned` once (a closed or concurrently closed report is `not_found`), appends `{ actor,
+action, note, ts }` to `staff_actions` and writes a `report.review` audit row (target
+`report:<id>`, the reply's teacher, note as reason). Lock order: role (`FOR SHARE`), then the
+report (`FOR UPDATE`); 12.2b's takedowns keep role first and report last.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and
