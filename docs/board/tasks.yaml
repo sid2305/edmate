@@ -2077,11 +2077,11 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: planning
+  status: done
   needs_decision:
   - default-model-mix
   branch: null
-  model: null
+  model: phases 8.6a+8.6b+8.6c+8.6d+8.6g
 - id: '8.7'
   milestone: M8
   title: 'Publish flow with quality-gate results, the teaching scorecard and the public profile page (7.4: publish goes through gatedPublish)'
@@ -2093,9 +2093,9 @@ tasks:
   - '7.4'
   - '7.8'
   - '8.6'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 8.7a+8.7b+8.7c+8.7d+8.7e+8.7f+8.7h+8.7k
 - id: '8.8'
   milestone: M8
   title: Insights view (earnings view moves to 10.7)
@@ -2195,9 +2195,9 @@ tasks:
   - '1.7'
   - '7.8'
   - '9.1'
-  status: planning
+  status: done
   branch: null
-  model: plan:opus
+  model: phases 9.2a+9.2b+9.2c
 - id: '9.3'
   milestone: M9
   title: Package compare and start; until M10 a paid package starts as an active subscription with no payment (checkout moves to 10.8)
@@ -2270,7 +2270,7 @@ tasks:
   accept: a teacher adds a web link or YouTube video and it reaches ready or a fixed failure reason; private and internal addresses are refused.
   deps:
   - '8.2'
-  status: planning
+  status: done
   branch: null
   risk: risky
 - id: 9.4b
@@ -3357,9 +3357,9 @@ tasks:
   deps:
   - '9.0'
   risk: normal
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:sonnet
 - id: 9.0d
   milestone: M9
   title: 'Fix the flaky apps/web src/turn/routes.test.ts "streams SSE with the right headers" test: in CI it returns no tokens after about 2.9 s (PRs #126 and #127, 22 Oct 2026), so every PR touching apps/web
@@ -4454,9 +4454,31 @@ tasks:
   deps:
   - 8.6d
   risk: low
-  status: running
+  status: done
   branch: m8/8.6g-package-builder-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet+opus
+  metrics:
+    tool_calls: 20
+    tokens_in: 78
+    tokens_out: 432
+    cache_read_tokens: 904915
+    wall_time_seconds: 143
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 6
+      by_severity:
+        HIGH: 3
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 6
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.7a
   milestone: M9
   title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
@@ -5009,7 +5031,7 @@ tasks:
   accept: per the B-47 answer.
   deps:
   - 8.2f
-  status: planning
+  status: done
   branch: null
 - id: 8.2g
   milestone: M13
@@ -5405,7 +5427,7 @@ tasks:
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
     12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
-    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500; from the 12.2g review (LOW): apps/web/app/staff/reports/view.test.tsx adds a stale-poll test for a lifted takedown and a test that an <a href="javascript:..."> string in reported text stays inert text'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -6124,6 +6146,18 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 11.4g
+  milestone: M11
+  title: '11.4c review follow-ups: a recording whose PUT or complete fails no longer shows "Uploading" forever: RecordingUpload reports a failed row to LiveClassesView (RecordingUpload.tsx:155) and the
+    5 s poll is capped by attempts or elapsed time (LiveClassesView.tsx:115), same fix in the upload centre (UploadsView.tsx isActive); RecordingUpload skips state updates and onRecording after unmount
+    (RecordingUpload.tsx:107-158)'
+  accept: tests fail without the failed row, the poll cap and the unmount guard; web typecheck, lint and test green.
+  deps:
+  - 11.4c
+  risk: low
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -6152,9 +6186,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 9.6a+9.6b+9.6c+9.6d+9.6e+9.6g+9.6h+9.6i
 - id: '9.7'
   milestone: M9
   title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer'
@@ -6165,9 +6199,9 @@ tasks:
   - '8.9'
   - '9.3'
   - '9.4'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 9.7a+9.7b
 - id: '10.1'
   milestone: M10
   title: Payment provider adapter for the pilot market behind the `Payments` port, using the provider's subscriptions
@@ -6175,13 +6209,13 @@ tasks:
   deps:
   - '2.4'
   - M1
-  status: todo
+  status: planning
   needs_decision:
   - payment-provider
   - pilot-market
   risk: risky
   branch: null
-  model: null
+  model: plan:opus
 - id: '10.2'
   milestone: M10
   title: Signed, idempotent, order-independent webhooks → subscriptions → entitlements
@@ -6268,9 +6302,9 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: planning
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases 11.2a+11.2b
 - id: '11.3'
   milestone: M11
   title: 'Weekly insights worker: top questions, sticking topics, unhelpful answers, open teacher questions; aggregated with a minimum group size of 5'
@@ -6328,9 +6362,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases 12.3a+12.3b+12.3c+12.3f
 - id: '12.4'
   milestone: M12
   title: Regulated-subject flag set manually by staff before publish
@@ -6339,10 +6373,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   risk: risky
   branch: null
-  model: plan:opus
+  model: phases 12.4a+12.4b+12.4c+12.4d
 - id: '12.5'
   milestone: M12
   title: Safety alert inbox with acknowledgement
@@ -6351,9 +6385,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   branch: null
-  model: plan:opus
+  model: phases 12.5a+12.5b+12.5c
 - id: '13.1'
   milestone: M13
   title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
