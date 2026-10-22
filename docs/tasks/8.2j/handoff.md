@@ -76,10 +76,15 @@ are synthetic text written for this task; no real caption or lecture content is 
   no eval, output is plain text only; recommend the plan's optional, non-gating
   `security-reviewer` pass on this file at the lead's discretion, per the plan's risky-paths note).
 
+### 22 Oct 2026 · 8.2j budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (76 harness-counted calls against a budget of 60); no re-run.
+- Why: the phase is complete with 99.7% line coverage, and both reviewers found nothing above LOW; the extra calls went to tests, not scope.
+- risk: low
+
 ## Left to do
 Nothing for Phase A. Phases B (8.2k, packages/queue + apps/worker) and C (8.2l, apps/web + ADR-0014
 amendment) are separate board tasks per the plan's "Lead answers" section, each with its own
 handoff.
 
 Status: DONE
-Tool calls used: 34
+Tool calls used: 76 (harness count; the builder reported 34)
