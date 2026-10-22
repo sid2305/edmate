@@ -40,7 +40,7 @@ $ python3 .githooks/secret-scan.py --all
   line with no number followed by a later prose number (UNPARSEABLE).
 
 ## Decisions
-### 22 Oct 2026 · 0.17a Lead merges after the fourth fix round, without another probe · decided by lead · risk: high
+### 22 Oct 2026 · 0.17a Lead merges after the fourth fix round, without another probe, and accepts the budget overrun · decided by lead · risk: high
 - Decided: merge 0.17a after fix round 4 (HTML comments masked), with no further security probing round. Any further way to hide a decoy line becomes a new board task. This also accepts the tool calls over budget.
 - Why: the human's answer to B-39 (a), 22 Oct 2026. Every round fixed its finding, the branch is strictly better than main, and all 106 merge-gate tests pass.
 - risk: high
