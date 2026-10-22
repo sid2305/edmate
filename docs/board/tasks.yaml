@@ -2772,11 +2772,31 @@ tasks:
   deps:
   - '7.4'
   risk: normal
-  status: running
+  status: done
   branch: m7/7.4b-gate-thresholds
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
   needs_decision:
   - gate-thresholds
+  metrics:
+    tool_calls: 28
+    tokens_in: 104
+    tokens_out: 1173
+    cache_read_tokens: 1488411
+    wall_time_seconds: 142
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        MEDIUM: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 7.2a
   milestone: M7
   title: '7.2 Phases A+B: locked suite 38 to 100 cases (content extraction, skills, outline, multi-turn, encodings), SUITE_FLOORS ratchet and near-duplicate check (plan docs/tasks/7.2/plan.md)'
@@ -4434,7 +4454,9 @@ tasks:
   deps:
   - 8.6d
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.6g-package-builder-followups
+  model: plan:lead build:sonnet
 - id: 9.7a
   milestone: M9
   title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
@@ -5305,9 +5327,29 @@ tasks:
   - 12.2b
   - 12.2c
   risk: high
-  status: running
+  status: done
   branch: m12/12.2d-staff-reports-api
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 62
+    tokens_in: 208
+    tokens_out: 1030
+    cache_read_tokens: 3864822
+    wall_time_seconds: 136
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 12.2e
   milestone: M12
   title: /staff/reports page that re-reads the queue every 60 s (12.2 Phase E)
@@ -5315,13 +5357,14 @@ tasks:
   deps:
   - 12.2d
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2e-staff-reports-page
+  model: plan:opus build:sonnet
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents; from the
-    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
+    12.2a review (LOW): an integrity failure on one unknown reason should not block the whole batch, and cap the cited-docs batch size; from the 12.2d review (LOW): apps/web/app/api/staff/{reports,takedowns}/handlers.ts
+    import REPORT_NOTE_MAX and TAKEDOWN_NOTE_MAX from @edmate/db instead of a local MAX_NOTE_CHARS = 500'
   accept: each follow-up has a test; touched packages green.
   deps:
   - 12.2e
@@ -5397,9 +5440,9 @@ tasks:
   deps:
   - 12.3b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.3c-rights-checkbox
+  model: plan:sonnet build:sonnet
 - id: 12.3d
   milestone: M13
   title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
@@ -5704,9 +5747,31 @@ tasks:
   deps:
   - 8.2k
   risk: high
-  status: running
+  status: done
   branch: m8/8.2l-caption-upload-ui
-  model: plan:opus build:sonnet
+  model: plan:opus build:sonnet review:opus+sonnet
+  metrics:
+    tool_calls: 77
+    tokens_in: 256
+    tokens_out: 10801
+    cache_read_tokens: 4185552
+    wall_time_seconds: 362
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 8
+      by_severity:
+        MEDIUM: 1
+        LOW: 7
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 5
+        wontfix: 2
+    human_questions: 0
 - id: '0.23'
   milestone: M7
   title: 'CI node job runs out of its 20-minute limit now that the Playwright e2e runs in it (#188 cancelled twice at "Install Playwright browsers", 22 Oct 2026): move the e2e into its own job (or raise
@@ -5775,7 +5840,9 @@ tasks:
   deps:
   - 12.4d
   risk: low
-  status: todo
+  status: running
+  branch: m12/12.4f-staff-agents-polish
+  model: plan:lead build:sonnet
 - id: 7.2i
   milestone: M13
   title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
@@ -5850,14 +5917,31 @@ tasks:
   branch: null
 - id: 12.3f
   milestone: M12
-  title: 'rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing it; split from 12.3c so it does not collide with 11.4a in documents.ts'
-  accept: 'a documents create, link or replace without rightsDeclared is a typecheck error and an invalid result; db and worker typecheck, lint and test green.'
+  title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
+    it; split from 12.3c so it does not collide with 11.4a in documents.ts
+  accept: a documents create, link or replace without rightsDeclared is a typecheck error and an invalid result; db and worker typecheck, lint and test green.
   deps:
   - 12.3c
   - 11.4a
   risk: high
   status: todo
   branch: null
+- id: 12.4g
+  milestone: M13
+  title: '12.4f review LOW: apps/web/app/staff/agents/view.tsx onSetApproval''s post-action reload replaces the whole fresh agent record, not only approvedAt, approvedBy and regulatedSubject'
+  accept: A test shows status, liveVersion and teacherSlug come from the reload after approve or revoke.
+  deps:
+  - 12.4f
+  risk: low
+  status: todo
+- id: 11.4e
+  milestone: M13
+  title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
+  accept: 'Both tests fail with the cap or the join check removed and pass with them in place.'
+  deps:
+  - 11.4a
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
