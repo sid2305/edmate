@@ -79,6 +79,11 @@ const alarmPausedFree = sql`(${packageVersions.config} -> 'pricePerMonth' -> 'am
     where ${auditLog.teacherId} = ${packageVersions.teacherId}
       and ${auditLog.action} = ${COST_ALARM_PAUSE_ACTION}
       and ${auditLog.ts} >= date_trunc('month', now() at time zone 'UTC') at time zone 'UTC'))`;
+// Known window (task 9.6i, accepted): the marker only exists once the alarm has paused at least
+// one subscription. A teacher over threshold with no live free subscription at alarm time gets no
+// row, so a free start stays open until the next daily run pauses it; likewise a start whose
+// snapshot predates the alarm's commit. Both windows are at most a day. A teacher-level marker
+// row is left for 10.3/7.6.
 
 /** Statuses a pause leaves alone: already paused (staff or alarm), or ended for good. */
 const NOT_LIVE = ['paused', 'ended'] as const;
@@ -118,6 +123,46 @@ const StatusSnapshot = z.object({
 });
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/**
+ * The package version a student may start or switch to (tasks 9.3b/9.3c/9.6/9.6h): this
+ * teacher's version, the **live** version of its package, of a **live** agent (of `agentId`
+ * when given), whose teacher is **verified**. Null when any of that fails (`not_found`).
+ * `alarmPaused` is true when it is free and the teacher's free tier is cost-alarm paused this
+ * month (`invalid`). Task 9.6i: `start`'s refusal re-read and `changePackage` both use this one
+ * read, so a missing/unverified/non-live version is `not_found` before the alarm is considered.
+ */
+async function liveTarget(
+  q: Db | Tx,
+  teacherId: string,
+  packageVersionId: string,
+  agentId?: string,
+): Promise<{ trialDays: unknown; alarmPaused: boolean } | null> {
+  const [row] = await q
+    .select({
+      trialDays: sql<unknown>`${packageVersions.config} -> 'trialDays'`,
+      alarmPaused: sql<boolean>`${alarmPausedFree}`,
+    })
+    .from(packageVersions)
+    .innerJoin(
+      teacherProfiles,
+      and(
+        eq(teacherProfiles.userId, packageVersions.teacherId),
+        eq(teacherProfiles.verificationStatus, 'verified'),
+      ),
+    )
+    .innerJoin(
+      packages,
+      and(
+        eq(packages.id, packageVersions.packageId),
+        eq(packages.liveVersion, packageVersions.version),
+        agentId === undefined ? undefined : eq(packages.agentId, agentId),
+      ),
+    )
+    .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
+    .where(and(eq(packageVersions.id, packageVersionId), eq(packageVersions.teacherId, teacherId)));
+  return row ?? null;
+}
 
 /**
  * Lock order for every write in this file that takes more than one lock: **the subscription row
@@ -265,17 +310,10 @@ export function subscriptionsRepo(db: Db) {
           ),
         );
         if (written(result) !== 1) {
-          const [blocked] = await db
-            .select({ id: packageVersions.id })
-            .from(packageVersions)
-            .where(
-              and(
-                eq(packageVersions.id, i.packageVersionId),
-                eq(packageVersions.teacherId, teacherId),
-                alarmPausedFree,
-              ),
-            );
-          throw new RepositoryError(blocked ? 'invalid' : 'not_found', method);
+          // Same joins as the insert above (task 9.6i), so only a startable version can be the
+          // alarm's `invalid`; anything else stays `not_found` (no alarm-state oracle).
+          const target = await liveTarget(db, teacherId, i.packageVersionId);
+          throw new RepositoryError(target?.alarmPaused ? 'invalid' : 'not_found', method);
         }
         return { id, packageVersionId: i.packageVersionId, status, periodEnd: i.periodEnd };
       });
@@ -385,7 +423,8 @@ export function subscriptionsRepo(db: Db) {
      * so neither proration nor a new billing period exists (9.6's Q1 = (a), until 10.3) — except
      * that a `trial` moved to a version whose offer has no trial (`trialDays` absent or 0) becomes
      * `active` (task 9.6h). Task 9.6h also requires the teacher to be verified, as `start` does
-     * (9.3c): a teacher rejected after publishing can't be switched to (`not_found`).
+     * (9.3c): a teacher rejected after publishing can't be switched to (`not_found`). Task 9.6i:
+     * a free target while the teacher's free tier is cost-alarm paused is `invalid`, as in `start`.
      */
     async changePackage(
       scope: StudentScope,
@@ -419,32 +458,11 @@ export function subscriptionsRepo(db: Db) {
           // (see the lock-order note on `lockLive`), so a publish or suspend that commits between
           // this read and the update below can leave the subscription on a version that has just
           // stopped being live. Accepted: existing subscribers keep old versions anyway.
-          const [target] = await tx
-            .select({ id: packageVersions.id, trialDays: sql<unknown>`${packageVersions.config} -> 'trialDays'` })
-            .from(packageVersions)
-            .innerJoin(
-              teacherProfiles,
-              and(
-                eq(teacherProfiles.userId, packageVersions.teacherId),
-                eq(teacherProfiles.verificationStatus, 'verified'),
-              ),
-            )
-            .innerJoin(
-              packages,
-              and(
-                eq(packages.id, packageVersions.packageId),
-                eq(packages.liveVersion, packageVersions.version),
-                eq(packages.agentId, current.agentId),
-              ),
-            )
-            .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
-            .where(
-              and(
-                eq(packageVersions.id, i.packageVersionId),
-                eq(packageVersions.teacherId, live.teacherId),
-              ),
-            );
+          const target = await liveTarget(tx, live.teacherId, i.packageVersionId, current.agentId);
           if (!target) throw new RepositoryError('not_found', method);
+          // Task 9.6i: the same alarm check as `start`, so a paid start then a change to the free
+          // package can't get round a cost-alarm pause.
+          if (target.alarmPaused) throw new RepositoryError('invalid', method);
           const targetHasTrial = typeof target.trialDays === 'number' && target.trialDays > 0;
           const status = live.status === 'trial' && !targetHasTrial ? 'active' : live.status;
 
@@ -512,6 +530,10 @@ export function subscriptionsRepo(db: Db) {
      * that action from anyone else means "paused by Edmate". Rows are ordered by (ts, created_at,
      * id); since ids are random, two latest rows that tie on both timestamps are ambiguous and
      * resume fails closed (`invalid`) rather than let the id pick.
+     *
+     * Note for 10.3 (task 9.6i): `ts` and `created_at` both default to `now()`, the transaction
+     * start, so the `created_at` tie-break adds no order in practice; 10.3's `paused_by` or a
+     * sequence column should replace this ordering.
      */
     async resume(scope: StudentScope, input: SubscriptionIdInput): Promise<LiveSubscription> {
       const method = 'subscriptions.resume';

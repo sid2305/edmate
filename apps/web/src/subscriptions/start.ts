@@ -29,6 +29,7 @@ const MSG = {
   bodyTooLarge: 'The request is too large.',
   notFound: 'That package was not found.',
   alreadySubscribed: 'You already have a package with this teacher.',
+  freePaused: "This teacher's free plan is paused for now. Try again next month or choose another package.",
   failed: 'Something went wrong. Try again.',
 } as const;
 
@@ -46,7 +47,8 @@ function fromError(error: unknown): Response {
       case 'scope':
         return notFound();
       case 'invalid':
-        // The one-live-row-per-pair unique index: this pair already has a live subscription.
+        // The one-live-row-per-pair unique index: this pair already has a live subscription. (The
+        // cost-alarm `invalid` is told apart in the handler first, task 9.6i.)
         return apiError('validation', MSG.alreadySubscribed, 409);
       case 'integrity':
         return validation();
@@ -72,6 +74,26 @@ function startParams(pkg: LivePackage, now: Date): { status: 'trial' | 'active';
   return { status: 'active', periodEnd: periodEnd.toISOString() };
 }
 
+/**
+ * Task 9.6i: `start` is `invalid` either when the pair already has a live subscription (the
+ * unique index) or when the teacher's free tier is cost-alarm paused this month. `findLive`
+ * tells them apart: no live row means the alarm refusal, with its own fixed words. A `findLive`
+ * failure goes through `fromError` (never a guessed message).
+ */
+async function explainInvalid(
+  repos: ReturnType<StartBackend['repos']>,
+  scope: StudentScope,
+): Promise<Response> {
+  try {
+    const live = await repos.subscriptions.findLive(scope);
+    return live === null
+      ? apiError('validation', MSG.freePaused, 409)
+      : apiError('validation', MSG.alreadySubscribed, 409);
+  } catch (error) {
+    return fromError(error);
+  }
+}
+
 type Handler = (req: NextRequest, ctx: RoleContext) => Promise<Response>;
 
 /** The start handler over an injected backend (no database in tests; rule 4). */
@@ -83,13 +105,14 @@ export function createSubscriptionHandlers(backend: StartBackend): { start: Hand
     if (!parsed.success) return validation();
     const { agentId, packageId } = parsed.data;
     const repos = backend.repos();
+    let scope: StudentScope | null = null;
     try {
       const owner = await repos.agents.owner({ agentId });
       if (owner === null) return notFound();
       const packages = await repos.packageVersions.liveForAgent({ agentId });
       const pkg = findPackage(packages, packageId);
       if (pkg === null) return notFound();
-      const scope: StudentScope = { studentId: ctx.principal.userId, teacherId: owner.teacherId };
+      scope = { studentId: ctx.principal.userId, teacherId: owner.teacherId };
       const { status, periodEnd } = startParams(pkg, new Date());
       const subscription = await repos.subscriptions.start(scope, {
         packageVersionId: pkg.packageVersionId,
@@ -98,6 +121,9 @@ export function createSubscriptionHandlers(backend: StartBackend): { start: Hand
       });
       return ok({ subscription }, 201);
     } catch (error) {
+      if (error instanceof RepositoryError && error.kind === 'invalid' && scope !== null) {
+        return explainInvalid(repos, scope);
+      }
       return fromError(error);
     }
   };
