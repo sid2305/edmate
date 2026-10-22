@@ -5395,9 +5395,9 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase A and Lead answers; ingest typecheck, lint and test green.
   deps:
   - 8.2f
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2j-caption-parse
+  model: plan:opus build:sonnet review:sonnet
 - id: 8.2k
   milestone: M8
   title: Caption files ingested by the worker and searchable (8.2c Phase B)
