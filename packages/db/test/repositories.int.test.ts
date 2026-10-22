@@ -5135,11 +5135,13 @@ describe.skipIf(!up)(
         expect(moved.packageVersionId).toBe(PV_PAID_2);
       });
 
-      it('start (LOW): during the alarm, a non-live free version or a rejected teacher\'s free version is not_found, not invalid', async () => {
+      it('start (9.3b): a stale (superseded) version is invalid; a rejected teacher\'s or suspended agent\'s free version is still not_found', async () => {
         const s = sc('stu_96i_b');
+        // 9.3b: a stale version of an otherwise-live, verified package is `invalid`, not
+        // `not_found` -- the student can recover by re-reading the live version.
         await expect(
           repos.subscriptions.start(s, { packageVersionId: PV_FREE_OLD, status: 'active', periodEnd: PERIOD_END }),
-        ).rejects.toMatchObject({ kind: 'not_found' });
+        ).rejects.toMatchObject({ kind: 'invalid' });
         // The live free version of a verified teacher is the alarm's invalid.
         await expect(
           repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),

@@ -91,7 +91,14 @@ export async function translateWrite<T>(
     if (err instanceof RepositoryError) throw err;
     const code = find(err, 'code');
     if (code === FOREIGN_KEY_VIOLATION) throw new RepositoryError('not_found', method);
-    if (code === UNIQUE_VIOLATION) throw new RepositoryError(onDuplicate, method);
+    // Task 9.3b: the constraint name travels on `cause` even for `invalid`/`not_found` (not just
+    // `guarded`'s `failed`), so a caller such as the subscription-start route can tell the
+    // live-per-pair unique index apart from any other unique violation -- never by message text.
+    if (code === UNIQUE_VIOLATION) {
+      throw new RepositoryError(onDuplicate, method, {
+        cause: new ScrubbedDbError(code, find(err, 'constraint')),
+      });
+    }
     throw err;
   }
 }

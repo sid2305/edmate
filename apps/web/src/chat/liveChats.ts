@@ -3,6 +3,13 @@
 // configured agents: `EDMATE_CHAT_AGENTS` (comma list), or the seeded `demo-agent` outside
 // production. Each candidate gets a link only if the agent is live and the student has a live,
 // unpaused subscription with its teacher.
+//
+// Task 9.3b (9.3/9.6e review follow-up, MEDIUM): chat, start and paused used to be three
+// separate candidate scans, each re-running `agents.owner` and `subscriptions.findLive` for
+// every candidate -- four scans in total once /home's own live-classes lookup is counted. Now
+// `homeCandidateScan` runs that lookup exactly once per candidate (candidates run concurrently
+// via `Promise.all`), and `homeLinks` classifies the one set of rows into all three lists plus
+// the distinct teacher ids /home's live-classes block needs -- no second `agents.owner` pass.
 import { studentScope, type StudentScope } from '@edmate/db';
 import type { Principal } from '../auth/guard';
 import { StartSessionSchema } from '../turn/clientInput';
@@ -17,7 +24,6 @@ export interface LiveChatDeps {
 }
 
 const IdSchema = StartSessionSchema.shape.agentId;
-const NOT_LIVE = new Set(['paused', 'ended']);
 
 export function chatAgentCandidates(env: Env): string[] {
   const raw = env.EDMATE_CHAT_AGENTS;
@@ -29,112 +35,86 @@ export function chatAgentCandidates(env: Env): string[] {
   return [...new Set(ids)];
 }
 
-export async function liveChatAgents(
+/** One candidate's resolved owner and live-subscription status (`null` when never subscribed, or
+ * ended -- `subscriptions.findLive` excludes `ended` rows in production; the explicit check in
+ * `classifyHomeLinks` below is for callers/tests whose stub still returns the row). */
+export interface HomeCandidate {
+  agentId: string;
+  teacherId: string;
+  status: string | null;
+}
+
+/** The one scan: `agents.owner` then `subscriptions.findLive`, once per candidate, run
+ * concurrently. A draft/suspended/unknown agent id is dropped (no owner, so no scope to read). */
+export async function homeCandidateScan(
   deps: LiveChatDeps,
   principal: Principal,
   candidates: readonly string[],
-): Promise<string[]> {
-  const out: string[] = [];
-  for (const agentId of candidates) {
-    const owner = await deps.agents.owner({ agentId });
-    if (owner === null) continue;
-    const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
-    const sub = await deps.subscriptions.findLive(scope);
-    if (sub !== null && !NOT_LIVE.has(sub.status)) out.push(agentId);
-  }
-  return out;
-}
-
-/** The links for /home; a failure shows no links (the placeholder) and logs the error name. */
-export async function homeChatLinks(
-  open: () => LiveChatDeps,
-  principal: Principal,
-  candidates: readonly string[],
-  log: ServerLog,
-): Promise<string[]> {
-  if (candidates.length === 0) return [];
-  try {
-    return await liveChatAgents(open(), principal, candidates);
-  } catch (error) {
-    log.error('home.chat_links_failed', { error: errorName(error) });
-    return [];
-  }
+): Promise<HomeCandidate[]> {
+  const rows = await Promise.all(
+    candidates.map(async (agentId): Promise<HomeCandidate | null> => {
+      const owner = await deps.agents.owner({ agentId });
+      if (owner === null) return null;
+      const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
+      const sub = await deps.subscriptions.findLive(scope);
+      return { agentId, teacherId: owner.teacherId, status: sub?.status ?? null };
+    }),
+  );
+  return rows.filter((row): row is HomeCandidate => row !== null);
 }
 
 /**
- * Task 9.6e: which agents /home offers a "paused" plan link for -- the complement of both
- * `liveChatAgents` and `startableAgents`: a paused subscription with this teacher. A paused
- * subscription keeps its own chat (human answer B-49), so this list is additional, not instead
- * of the chat link's set, and links to the plan page (`/learn/<id>/plan`), not chat.
+ * Task 9.4/9.3/9.6e: one classification pass over the scan above --
+ * - `chats`: a live, unpaused subscription (`trial`/`active`/`past_due`).
+ * - `paused`: a `paused` subscription -- its own plan-page link, not chat. A paused subscription
+ *   keeps its own chat (human answer B-49), so this is additional, not instead of `chats`.
+ * - `startable`: never subscribed (`status === null`), or a subscription that `ended`. Resuming a
+ *   *paused* subscription is not "startable" here -- it already has its own list (`paused`), and
+ *   managing/resuming it is the plan page's job (9.6c's `resume`, shipped), not this one.
  */
-export async function pausedAgents(
-  deps: LiveChatDeps,
-  principal: Principal,
-  candidates: readonly string[],
-): Promise<string[]> {
-  const out: string[] = [];
-  for (const agentId of candidates) {
-    const owner = await deps.agents.owner({ agentId });
-    if (owner === null) continue;
-    const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
-    const sub = await deps.subscriptions.findLive(scope);
-    if (sub !== null && sub.status === 'paused') out.push(agentId);
+export function classifyHomeLinks(rows: readonly HomeCandidate[]): {
+  chats: string[];
+  paused: string[];
+  startable: string[];
+} {
+  const chats: string[] = [];
+  const paused: string[] = [];
+  const startable: string[] = [];
+  for (const row of rows) {
+    if (row.status === null || row.status === 'ended') startable.push(row.agentId);
+    else if (row.status === 'paused') paused.push(row.agentId);
+    else chats.push(row.agentId);
   }
-  return out;
+  return { chats, paused, startable };
 }
 
-/** The /home "paused" links; a failure shows none and logs the error name only. */
-export async function homePausedLinks(
+export interface HomeLinks {
+  chats: string[];
+  paused: string[];
+  startable: string[];
+  /** Every candidate's resolved teacher, deduplicated -- /home's live-classes block reuses this
+   * instead of its own `agents.owner` pass (task 9.3b). */
+  teacherIds: string[];
+}
+
+const EMPTY: HomeLinks = { chats: [], paused: [], startable: [], teacherIds: [] };
+
+/** The /home chat+paused+startable links and teacher ids, from one shared scan; a failure shows
+ * none of the three and logs the error name only. */
+export async function homeLinks(
   open: () => LiveChatDeps,
   principal: Principal,
   candidates: readonly string[],
   log: ServerLog,
-): Promise<string[]> {
-  if (candidates.length === 0) return [];
+): Promise<HomeLinks> {
+  if (candidates.length === 0) return EMPTY;
   try {
-    return await pausedAgents(open(), principal, candidates);
+    const rows = await homeCandidateScan(open(), principal, candidates);
+    const { chats, paused, startable } = classifyHomeLinks(rows);
+    const teacherIds = [...new Set(rows.map((row) => row.teacherId))];
+    return { chats, paused, startable, teacherIds };
   } catch (error) {
-    log.error('home.paused_links_failed', { error: errorName(error) });
-    return [];
-  }
-}
-
-/**
- * Task 9.3 Phase C: which agents /home offers a "start a package" link for -- the same candidate
- * list as the chat links, but the complement: a live agent the student has never subscribed to,
- * or whose subscription has ended. A *paused* subscription is neither a chat link nor a start
- * link here (resuming it is 9.6, out of scope). `subscriptions.findLive` excludes only `ended`
- * rows in production, so `null` is the normal "never subscribed" signal; the explicit `ended`
- * check below is for callers/tests whose stub still returns the row.
- */
-export async function startableAgents(
-  deps: LiveChatDeps,
-  principal: Principal,
-  candidates: readonly string[],
-): Promise<string[]> {
-  const out: string[] = [];
-  for (const agentId of candidates) {
-    const owner = await deps.agents.owner({ agentId });
-    if (owner === null) continue;
-    const scope = studentScope({ studentId: principal.userId, teacherId: owner.teacherId }, 'homeChats');
-    const sub = await deps.subscriptions.findLive(scope);
-    if (sub === null || sub.status === 'ended') out.push(agentId);
-  }
-  return out;
-}
-
-/** The /home "start a package" links; a failure shows none and logs the error name only. */
-export async function homeStartLinks(
-  open: () => LiveChatDeps,
-  principal: Principal,
-  candidates: readonly string[],
-  log: ServerLog,
-): Promise<string[]> {
-  if (candidates.length === 0) return [];
-  try {
-    return await startableAgents(open(), principal, candidates);
-  } catch (error) {
-    log.error('home.start_links_failed', { error: errorName(error) });
-    return [];
+    log.error('home.links_failed', { error: errorName(error) });
+    return EMPTY;
   }
 }

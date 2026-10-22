@@ -16,9 +16,16 @@ interface ErrorBody {
   error?: { message?: string };
 }
 
-/** `pricePerMonth` formatted currency-neutral (no hardcoded `$`; the pilot is US-only for now). */
+/** `pricePerMonth` formatted currency-neutral (no hardcoded `$`; the pilot is US-only for now).
+ * `Intl.NumberFormat` picks each currency's own fraction digits (e.g. 2 for USD, 0 for JPY) --
+ * never hardcoded here (task 9.3b). */
 function formatPrice(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amountMinor / 100);
+}
+
+/** An error's name only (never its message, which may quote ids or content) -- task 9.3b. */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
 }
 
 export function PackageCompare({ agentId, packages }: PackageCompareProps) {
@@ -42,7 +49,10 @@ export function PackageCompare({ agentId, packages }: PackageCompareProps) {
         return;
       }
       window.location.href = `/learn/${encodeURIComponent(agentId)}`;
-    } catch {
+    } catch (error) {
+      // Task 9.3b: log the error's name only -- never its message, which may quote a network
+      // detail -- and still show the same fixed, translated error text.
+      console.error('[packages] start failed', errorName(error));
       setError(t('errors.generic'));
       setStartingId(null);
     }
