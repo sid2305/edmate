@@ -1,10 +1,16 @@
 // Task 8.2 Phase 3: the studio backend, built once, lazily, on the first studio request, so
 // `next build` and the route-coverage test open no database, Redis or S3 client. A missing
-// REDIS_URL fails the build (logged by reason); the routes then answer 503 and the next request
-// tries again.
+// REDIS_URL fails the build (logged by reason); the routes then answer 503.
+//
+// Task 8.3 Phase B adds the outline's repositories and a `small`-tier-only model gateway, built
+// the same way `apps/web/src/turn/deps.ts`/`runtime.ts` compose theirs (provider keys via
+// `@edmate/gateway`'s existing loader, reusing `anthropicFactories` read-only from there — no
+// change to that file). A missing provider key behaves like a missing REDIS_URL: a logged
+// `StudioUnavailableError`, 503.
 import { randomUUID } from 'node:crypto';
 import { S3Client } from '@aws-sdk/client-s3';
 import type { Repositories } from '@edmate/db';
+import { createRouter, DEFAULT_MODEL_POLICY } from '@edmate/gateway';
 import { createIngestQueue, enqueueIngest, type JobQueue } from '@edmate/queue';
 import { Redis } from 'ioredis';
 import { serverDatabase } from '../auth';
@@ -14,13 +20,17 @@ import {
   storageConfigFromEnv,
   type S3Like,
 } from '../storage/presign';
+import { anthropicFactories } from '../turn/runtime';
 import { StudioUnavailableError, type ServerLog, type StudioBackend } from './routes';
+import type { OutlineBackend } from './outline';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
+type Backend = StudioBackend & OutlineBackend;
+
 /** The outside world the backend opens; injected so tests open nothing real. */
 export interface StudioHooks {
-  repos(): Pick<Repositories, 'documents'>;
+  repos(): Pick<Repositories, 'documents' | 'courses' | 'outline' | 'chunks'>;
   s3(config: ReturnType<typeof storageConfigFromEnv>): S3Like;
   queue(redisUrl: string, log: ServerLog): JobQueue;
   log: ServerLog;
@@ -38,7 +48,7 @@ export function consoleLog(prefix: string): ServerLog {
   };
 }
 
-function build(env: Env, hooks: StudioHooks): StudioBackend {
+async function build(env: Env, hooks: StudioHooks): Promise<Backend> {
   const redisUrl = env.REDIS_URL?.trim();
   if (!redisUrl) throw new StudioUnavailableError('REDIS_URL');
   let config: ReturnType<typeof storageConfigFromEnv>;
@@ -56,8 +66,16 @@ function build(env: Env, hooks: StudioHooks): StudioBackend {
       ? client
       : hooks.s3({ ...config, endpoint: config.publicEndpoint });
   const queue = hooks.queue(redisUrl, hooks.log);
+  const factories = await anthropicFactories(env).catch(() => {
+    throw new StudioUnavailableError('provider_key');
+  });
+  const repos = hooks.repos();
   return {
-    documents: hooks.repos().documents,
+    documents: repos.documents,
+    courses: repos.courses,
+    outline: repos.outline,
+    chunks: repos.chunks,
+    gateway: createRouter(DEFAULT_MODEL_POLICY, factories),
     storage: s3StudioStorage(client, config.bucket, signer),
     enqueue: (job, storageKey) => enqueueIngest(queue, job, storageKey),
     newDocumentId: () => `doc_${randomUUID()}`,
@@ -69,16 +87,17 @@ function build(env: Env, hooks: StudioHooks): StudioBackend {
 export function createStudioRuntime(
   env: () => Env,
   hooks: StudioHooks,
-): () => Promise<StudioBackend> {
-  let backend: StudioBackend | undefined;
+): () => Promise<Backend> {
+  let backend: Backend | undefined;
   return async () => {
-    backend ??= build(env(), hooks);
+    backend ??= await build(env(), hooks);
     return backend;
   };
 }
 
 /** The auth runtime's database: one pool per web process, shared with the guard (9.4). */
-const sharedRepos = (): Pick<Repositories, 'documents'> => serverDatabase().repos;
+const sharedRepos = (): Pick<Repositories, 'documents' | 'courses' | 'outline' | 'chunks'> =>
+  serverDatabase().repos;
 
 /* v8 ignore start -- the real clients; every test injects hooks instead (rule 4). */
 export const realHooks: StudioHooks = {
