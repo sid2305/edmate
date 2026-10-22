@@ -4,7 +4,7 @@ Status: DONE
 
 - Branch: `m8/8.7h-audit-uuid` (built locally as `work-87h`)
 - Worktree: `.claude/worktrees/agent-a3a3cb9e8b7ad9862`
-- Tool calls used: 45
+- Tool calls used: 51
 
 ## Summary
 
