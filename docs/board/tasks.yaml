@@ -3127,7 +3127,7 @@ tasks:
   deps:
   - 8.3a
   risk: high
-  status: running
+  status: review
   branch: m8/8.3c-outline-editor
   model: plan:opus build:sonnet
 - id: 8.4a
@@ -3197,9 +3197,9 @@ tasks:
   deps:
   - 8.5a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.5b-test-chat-api
+  model: plan:opus build:opus
 - id: 9.0c
   milestone: M13
   title: '9.0 follow-up: the first chat turn after the web container starts logs turn.background_failed because preGuard''s earlier-messages read times out (probably a cold database pool); warm the pool
@@ -3289,7 +3289,7 @@ tasks:
   deps:
   - '8.1'
   risk: high
-  status: running
+  status: review
   branch: m8/8.6b-packages-repo
   model: plan:opus build:opus
 - id: 8.5c
