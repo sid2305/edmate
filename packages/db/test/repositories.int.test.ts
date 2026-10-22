@@ -257,6 +257,12 @@ const answerEmpty: Partial<Record<Teacher, string>> = {};
 const answerDismissed: Partial<Record<Teacher, string>> = {};
 const answerWrongModule: Partial<Record<Teacher, string>> = {};
 const answerReplay: Partial<Record<Teacher, string>> = {};
+/** Task 8.9: a fixed open question per teacher for `teacherQuestions.dismiss`'s cross-scope
+ * attempt (reused by every non-owning actor; dismiss fails `not_found` without writing, so it
+ * stays open for the next actor's attempt). */
+const dismissTarget: Partial<Record<Teacher, string>> = {};
+/** Task 8.9: a question already dismissed once, for the owning actor's "already-closed" mismatch. */
+const dismissReplay: Partial<Record<Teacher, string>> = {};
 /** Task 5.10: one persisted notification per pair, created once in `beforeAll` — guarantees every
  * pair has at least one of its own readable notifications, and gives `notifications.markRead`'s
  * cross-scope attempt a fixed id to call against without writing anything new first. */
@@ -2693,6 +2699,43 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       ];
     },
   },
+  'teacherQuestions.dismiss': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      const qid =
+        actor === target
+          ? await openedQuestion(r, `1${actor}` as Pair, 'dismiss-own')
+          : dismissTarget[target]!;
+      await r.teacherQuestions.dismiss(scope, qid);
+      return { id: qid };
+    },
+    verify: async (r, actor, res) => {
+      const { id } = res as { id: string };
+      const open = await r.teacherQuestions.listForTeacher(tScope(actor), {
+        status: 'open',
+        limit: 200,
+      });
+      expect(open.some((q) => q.id === id)).toBe(false);
+    },
+    mismatches: (a) => [
+      [
+        'a missing question id',
+        (r) => r.teacherQuestions.dismiss(tScope(a), uid('tq_missing')),
+        'not_found',
+      ],
+      [
+        'an already-dismissed question',
+        (r) => r.teacherQuestions.dismiss(tScope(a), dismissReplay[a]!),
+        'not_found',
+      ],
+      [
+        'an already-answered question',
+        (r) => r.teacherQuestions.dismiss(tScope(a), answerReplay[a]!),
+        'not_found',
+      ],
+    ],
+  },
   'notifications.listForStudent': {
     scope: 'student',
     op: 'read',
@@ -2919,6 +2962,10 @@ describe.skipIf(!up)(
           noteQuestion: `[${t}] replay note`,
         });
         answerReplay[t] = replayId;
+        dismissTarget[t] = await openedQuestion(repos, p, 'dismiss-cross');
+        const dismissReplayId = await openedQuestion(repos, p, 'dismiss-replay');
+        await repos.teacherQuestions.dismiss(tScope(t), dismissReplayId);
+        dismissReplay[t] = dismissReplayId;
       }
       for (const p of PAIRS) {
         notifTarget[p] = await makeNotification(repos, p);

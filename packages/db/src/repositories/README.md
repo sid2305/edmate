@@ -286,6 +286,12 @@ to insert one row's id twice and fail its primary key) and one `notifications` r
 (`onConflictDoNothing`, so a retry is harmless). Returns counts only (`answered`, `students`,
 `threadMessages`, `noteChunkId`, `evalCaseId`) — no student id ever leaves.
 
+**`teacherQuestions.dismiss(scope, questionId)`** (task 8.9) closes the scope's own open question
+alone: a single scoped UPDATE (`status 'open' -> 'dismissed'`, `answer`/`answered_at` left null),
+never the group or the other members — unlike `answer`, dismissing one wording never silently
+closes a differently-worded sibling that might still deserve an answer. Another teacher's, a
+missing, or an already-answered/dismissed question is `not_found` and nothing is written.
+
 **`notifications`** (`notifications.ts`) is the student's own read of a teacher's answer: in-app
 only (email and push wait, decision B-25). `listForStudent(scope, { unreadOnly, limit })` joins to
 the scope's own `teacher_questions` row (another scope's notification can't be read through a

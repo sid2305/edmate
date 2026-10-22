@@ -448,5 +448,32 @@ export function teacherQuestionsRepo(db: Db) {
         }),
       );
     },
+
+    /**
+     * Closes the scope's own open question, alone (task 8.9 open question 1: `answer` is
+     * deliberately group-wide because it writes one shared note that teaches every member;
+     * `dismiss` writes nothing that benefits the rest of the group, so it never touches sibling
+     * rows, the group id, or `answer`/`answered_at`). Another teacher's, a missing, or an
+     * already-answered/dismissed question is `not_found` and nothing is written. Once dismissed
+     * the row already drops out of `listForTeacher`'s and `listGroupsForTeacher`'s
+     * `status = 'open'` queries, so no other table or column changes.
+     */
+    async dismiss(scope: TeacherScope, questionId: string): Promise<void> {
+      const method = 'teacherQuestions.dismiss';
+      const { teacherId } = teacherScope(scope, method);
+      const id = parseArg(IdSchema, questionId, method);
+      const [row] = await db
+        .update(teacherQuestions)
+        .set({ status: 'dismissed' })
+        .where(
+          and(
+            eq(teacherQuestions.id, id),
+            eq(teacherQuestions.teacherId, teacherId),
+            eq(teacherQuestions.status, 'open'),
+          ),
+        )
+        .returning({ id: teacherQuestions.id });
+      if (!row) throw new RepositoryError('not_found', method);
+    },
   };
 }
