@@ -43,6 +43,61 @@ re-applying the real fix, confirmed by re-reading the file and re-running the ga
 
 Tool calls used: 16
 
+## Fix round (22 Oct 2026)
+
+The lead flagged that `expectLinear` ran each function 6 times (3 best-of at `n`, 3 at `4n`)
+at `n = 20_000`, about 15x the work of the old single-run test (which already took 2s on a
+loaded CI runner), risking a run near or over the harness's 20s `testTimeout`.
+
+Changes (`modelRequest.test.ts` only):
+- `n` dropped from `20_000` to `5_000`, so the largest (`4n`) run matches the old test's
+  input size (`20_000`) instead of exceeding it 4x.
+- `bestOf3` now times with `performance.now()` instead of `Date.now()`, giving sub-millisecond
+  resolution on the now-smaller runs; the small-run floor dropped from 1ms to 0.5ms to match.
+  `performance` isn't in the harness's `lib`/`types`, so it's declared ambient
+  (`declare const performance: { now(): number }`) rather than imported, to avoid an
+  `node:perf_hooks` import the purity lint rule (harness-purity/no-external-import) rejects.
+- The `it` now takes an explicit `60_000` ms third-argument timeout.
+- The gross hang-guard bound on the `4n` run dropped from `15_000` to `10_000` ms.
+
+### Timings (this run, local machine, 5x standalone)
+
+Each of 5 standalone runs of the test alone (not the full suite) passed in ~0.4-0.5s wall
+time (well under the new 60s timeout). Running inside the full `@edmate/harness` test suite
+(119 files, parallel workers) also passed once the machine wasn't under extra load from a
+concurrent full-suite run; a first full-suite attempt produced several unrelated timeouts
+(access property, distressKeywords, calculator fuzz, preGuard) alongside one ratio miss
+(18.66 > 10) on this test, consistent with the lead's loaded-CI-runner concern — a second
+full-suite run (not under that extra load) was clean, including this test.
+
+### Regression ratio (scratch quadratic change, not committed)
+
+Temporarily added a nested `O(n^2)` loop (`for q in 0..text.length: for r in 0..text.length:
+acc += text.charCodeAt(r) & 1`) at the top of `breakFenceRuns`, then ran the changed test
+standalone. Result: the `4n` run (now ~180k characters) took **66,852 ms**, failing the
+10,000 ms absolute bound outright (never even reaching the ratio assertion):
+
+```
+AssertionError: expected 66851.79458399999 to be less than 10000
+ ❯ expectLinear src/pedagogy/modelRequest.test.ts:346:19
+```
+
+This confirms the test still catches a true quadratic regression at the smaller `n = 5_000`
+/ `4n = 20_000` sizes. The scratch change was reverted (file restored from a pre-edit copy,
+confirmed by `git diff --stat` showing no change to `modelRequest.ts`) before the gate re-run
+below.
+
+### Gate (re-run)
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness` (forced, no cache):
+  green, 4/4 tasks, ~17.5s.
+- The changed test run 5x in a row standalone (`vitest run ... -t "runs in linear time"`):
+  all green, ~0.4-0.5s each.
+- Same test run once with `--coverage` (full file, 84 tests): `Tests 84 passed (84)` — the
+  unrelated global/per-folder coverage-threshold errors printed are from running one file in
+  isolation against whole-package thresholds, not a test failure.
+- `python3 .githooks/secret-scan.py --all`: clean, no output.
+
 ## Decisions
 
 ### 22 Oct 2026 · 3.11g flaky timing bound → ratio check · decided by builder · risk: low

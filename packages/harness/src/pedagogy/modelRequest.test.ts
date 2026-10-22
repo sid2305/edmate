@@ -1,6 +1,9 @@
 import { type Message, ModelRequestSchema, type PedagogyDecision } from '@edmate/contracts';
 import { demoPedagogyDecision, messageAgent, messageStudent } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
+
+/** Node provides this global at runtime; the harness's tsconfig has no DOM/node lib for it. */
+declare const performance: { now(): number };
 import { decodeHtmlEntities, foldConfusables } from '../guardrails/lockedMatch.js';
 import { fixturePromptPackSet as set } from '../testing/promptPackFixtures.js';
 import {
@@ -321,9 +324,9 @@ describe('forged teacher-note marker (3.11d)', () => {
   function bestOf3(fn: () => void): number {
     let best = Infinity;
     for (let i = 0; i < 3; i += 1) {
-      const start = Date.now();
+      const start = performance.now();
       fn();
-      best = Math.min(best, Date.now() - start);
+      best = Math.min(best, performance.now() - start);
     }
     return best;
   }
@@ -337,26 +340,30 @@ describe('forged teacher-note marker (3.11d)', () => {
    * bound on the 4n run guards against a genuine hang.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
-    const n = 20_000;
+    const n = 5_000;
     const small = bestOf3(() => run(buildInput(n)));
     const large = bestOf3(() => run(buildInput(4 * n)));
-    expect(large).toBeLessThan(15_000);
-    // Guard against a zero-duration small run making the ratio meaningless
-    // (e.g. on a very fast machine); floor it at 1ms.
-    const ratio = large / Math.max(small, 1);
+    expect(large).toBeLessThan(10_000);
+    // Guard against a near-zero small run making the ratio meaningless
+    // (e.g. on a very fast machine); floor it at 0.5ms.
+    const ratio = large / Math.max(small, 0.5);
     expect(ratio).toBeLessThan(10);
   }
 
-  it('runs in linear time on long hostile input', () => {
-    expectLinear(
-      (n) => `${'<\u200B'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`,
-      (input) => breakFenceRuns(input)
-    );
-    expectLinear(
-      (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
-      (input) => neutraliseForgedLabel(input, label)
-    );
-  });
+  it(
+    'runs in linear time on long hostile input',
+    () => {
+      expectLinear(
+        (n) => `${'<\u200B'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`,
+        (input) => breakFenceRuns(input)
+      );
+      expectLinear(
+        (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
+        (input) => neutraliseForgedLabel(input, label)
+      );
+    },
+    60_000
+  );
 });
 
 /** The exact-label pass's output for `label`: letters single-spaced, words triple-spaced. */
