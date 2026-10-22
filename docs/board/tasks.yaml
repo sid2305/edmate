@@ -4025,7 +4025,9 @@ tasks:
   - 8.7c
   - 8.6c
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.7d-publish-page
+  model: plan:opus build:opus
 - id: 8.7e
   milestone: M8
   title: Stored scorecard on the public teacher page (8.7 Phase E, apps/web)
