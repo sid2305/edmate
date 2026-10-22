@@ -147,6 +147,22 @@
     "resetting": "Resetting…",
     "resetError": "Something went wrong. Try again."
   },
+  "progress": {
+    "title": "Your progress",
+    "navLink": "Progress",
+    "covered": "{n} topics covered",
+    "mastered": "{n} mastered",
+    "empty": "Nothing to show yet -- keep learning and it will show up here.",
+    "nextStepsTitle": "Next steps",
+    "nextStepsEmpty": "Nothing new to try yet.",
+    "exportJsonLink": "Download the complete JSON export",
+    "exportPdfLink": "Download your notes (PDF)",
+    "state": {
+      "mastered": "mastered",
+      "practising": "practising",
+      "not_started": "not started"
+    }
+  },
   "uploads": {
     "title": "Your teaching files",
     "intro": "Upload the notes, slides and recordings your agent teaches from. Students see changes within a minute.",
