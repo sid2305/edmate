@@ -96,12 +96,13 @@ decisions:
     recommendation: One mid-tier model, pinned per release
     answer: One mid-tier model (e.g. Claude Sonnet via the Anthropic adapter), pinned per release
   default-model-mix:
-    status: open
+    status: decided
     question: Default model mix per tier
     options:
     - By cost and eval results
     recommendation: Decide after 7.6
-    answer: null
+    answer: b) Sonnet (claude-sonnet-5) for all teaching replies, free and paid; Haiku 4.5 for router, guards and classifiers on every tier; one config table changeable after a live run (human, 22 Oct 2026,
+      B-42)
   teacher-chat-visibility:
     status: decided
     question: Do teachers see individual conversations?

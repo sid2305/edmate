@@ -10,6 +10,13 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · Default model mix per tier (B-42, task 8.6) · decided by you · risk: high
+Decided: Sonnet (claude-sonnet-5) answers every teaching reply, free and paid packages alike. Haiku 4.5 runs the router, guards and classifiers on every tier. One config table holds the mix so a live run can change it later.
+Why: Free-package replies are a student's first impression of a teacher's agent; pilot volume is tiny, so the cost difference is cents. Free replies can drop to Haiku once the cost report (7.6) has real numbers.
+Alternatives: Haiku for free-package replies (the lead's proposal).
+Reversible: Yes, one row in the config table.
+
+
 ### 22 Oct 2026 · The product tasks no longer wait for the harness exit gate · decided by you · risk: high
 Decided: Every M8, M9, M11 and M12 task is buildable now; the exit gate (GATE) is a pre-pilot check, not a dependency. 6.0b (India-only memory consent) is parked in M13. New task 9.0 runs the thin slice end to end on the dev stack and writes docs/try-it.md; it goes first. M10 (payments) stays last.
 Why: Both builder slots sat idle for most of two days because the only ready work was M13 polish and eval suites in one package, while the ten real product tasks were hidden behind GATE. The human wants a testable product as fast as possible.
