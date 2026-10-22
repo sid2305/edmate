@@ -1,7 +1,7 @@
 # Task 7.4c handoff: per-scope gate deadline
 
 Status: DONE
-Tool calls used: 27
+Tool calls used: 46 (harness count; the builder reported 27)
 
 ## What changed
 
@@ -43,6 +43,16 @@ $ python3 .githooks/secret-scan.py --all
 No file outside the plan's list was touched.
 
 ## Decisions
+
+### 21 Oct 2026 · 7.4c budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 46 tool calls against a 30-call budget (1.53×); accepted without a fix round.
+- Why: one phase, tests-first across two packages, 26/26 turbo tasks green, both reviewers approve with LOWs only; the overrun is the test setup for the deadline cases, not rework.
+- risk: low
+
+### 21 Oct 2026 · 7.4c review LOWs deferred to 7.4a · decided by lead · risk: low
+- Decided: the two review LOWs (gateScope.ts DEFAULT_GATE_DEADLINE_MS duplicates GATE_DEADLINE_MS; selectGateCases validates the change set twice) go to board task 7.4a.
+- Why: MVP first; neither changes behaviour.
+- risk: low
 
 ### 21 Oct 2026 · 7.4c two-tier default and the 120-minute constant · decided by builder · risk: medium
 - Decided: `material`, `packages`, `style_card` (and unions of only those) keep the existing
