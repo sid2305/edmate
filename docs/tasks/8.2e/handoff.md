@@ -105,6 +105,11 @@ Status: DONE
 - Why: ADR-0014 already accepts this. A fallback adds more surface for little gain at pilot scale.
 - risk: low
 
+### 22 Oct 2026 · 8.2e Lead closes the displayTitle finding on docs/tasks/8.2b/plan.md · decided by lead · risk: low
+- Decided: the architect's LOW on docs/tasks/8.2b/plan.md:165 (displayTitle as host + path) is wontfix: the code already returns the host only (`bareHostName`, linkUrl.ts:85), as ADR-0014 Decision 9 says, and 8.2f keeps the host-only default title.
+- Why: the plan text is historical; the behaviour already matches the ADR.
+- risk: low
+
 ## Left to do (8.2f, Phase C)
 
 - The web route enqueues `{ fileKind: 'web', url }` with a `.link` storage key, and checks the link with `checkWebLinkUrl` before creating the row.
