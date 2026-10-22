@@ -10,6 +10,61 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · Eval pass thresholds for feedback and revision (B-40, task 7.4) · decided by you · risk: high
+Decided: feedback ≥ 70% (the 5.7 target), revision ≥ 80% (like pedagogy); platform accuracy is covered by each agent's own accuracy cases; the distress near-miss cases are held to the 99% safety rate, not the 100% distress group. All provisional until the 7.2 expert pass.
+Why: The quality gate fails closed on a suite with no threshold, so a first-publish gate could not pass; the spec only names the 70% feedback target.
+Alternatives: 80% for both (b); other numbers (c).
+Reversible: Yes, numbers in the suite config.
+
+### 22 Oct 2026 · Eval suites grow to MVP sizes first (B-41, task 7.2) · decided by you · risk: high
+Decided: MVP sizes for the exit gate: locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60 (about 234 new cases). The remaining ~390 cases to reach the plan's ~1,000 land in task 7.2f before the pilot gate.
+Why: Every case costs model calls on each live run and each first-publish gate; the MVP sizes cover every attack type the plan lists.
+Alternatives: Full sizes now (b): about 2.5x the agent calls and live-run cost.
+Reversible: Yes, 7.2f adds the rest.
+
+### 22 Oct 2026 · First-publish gate runs in full; material edits after publish are ungated for the MVP (B-43, task 8.7) · decided by you · risk: high
+Decided: Run the publish gate as specified and store its cost per publish. After publish, material edits reach students with a "changed since last publish" note until the teacher republishes; automatic re-gating is task 13.regate.
+Why: It matches the spec and the pilot has few teachers; blocking edits would slow teachers down.
+Alternatives: A smaller gate (b); block edits until republish (c).
+Reversible: Yes.
+
+### 22 Oct 2026 · Downgrade and cancel apply at once until payments (B-44, task 9.6) · decided by you · risk: high
+Decided: Downgrade and cancel take effect immediately until 10.3, which moves them to period end. The plan page says so, and the cancel confirm offers both exports first.
+Why: Nothing ends a billing period before M10 and the schema has no scheduled-change column; there is no payment to protect yet.
+Alternatives: Schedule now with an additive migration (b): one more risky phase.
+Reversible: Yes, 10.3 changes it.
+
+### 22 Oct 2026 · Live-class invites and reminders are in-app only for the pilot (B-45, task 11.1) · decided by you · risk: high
+Decided: An "upcoming live classes" block on /home with 24 h and 1 h labels; nothing is sent. Email reminders are a follow-up once an email vendor and an identity-boundary change are agreed (same gap as safety alerts, 4.3).
+Why: Only the sign-in code may read student emails today and no background job sends mail; faster to a testable product.
+Alternatives: Build email reminders now (b): an ADR plus a scheduled job, about two risky phases.
+Reversible: Yes.
+
+### 22 Oct 2026 · A rejected teacher's existing students keep access in the closed pilot (B-46, task 9.3c) · decided by you · risk: high
+Decided: Existing students keep access until their plan ends; only new starts are blocked. Before the pilot opens to strangers, a safety-reason rejection cuts access at once (board task behind GATE).
+Why: Rejections in a small pilot are rare and staff can contact the students.
+Alternatives: Cut access at once for every rejection (b).
+Reversible: Yes.
+
+### 22 Oct 2026 · YouTube material comes from the owner's exported captions; web links fetch any public https site (B-47, task 8.2b) · decided by you · risk: high
+Decided: The teacher uploads the caption file (.vtt or .srt) exported from YouTube Studio for their own video; Edmate never calls YouTube. Web links may fetch any https site that resolves only to public addresses; private, internal and cloud-metadata addresses are always refused.
+Why: No reliable, key-free way to fetch a YouTube transcript within YouTube's terms; the official API needs the owner's OAuth consent and a Google Cloud project. A fixed site list would block most teachers' own pages.
+Alternatives: Official API later (b); unofficial scraping (c); a staff-kept site list (2).
+Reversible: Yes, (b) stays open as a later ADR.
+
+### 22 Oct 2026 · Escalated safety alerts reach only the staff inbox until real paging lands (B-48, task 12.5) · decided by you · risk: high
+Decided: During internal testing an escalated alert is shown at the top of every staff user's in-app inbox with an overdue marker and reaches no phone or email. Task 4.3c (real paging) must merge before real students; it needs vendor accounts and the on-call contact from the human as environment values.
+Why: Testing uses no real students and the pilot gate already requires 4.3c.
+Alternatives: Pull 4.3c forward now (b).
+Reversible: Yes.
+
+### 22 Oct 2026 · Takedown pauses the subscription; old chat text stays (B-49, task 12.2) · decided by you · risk: high
+Decided: When staff take down a teacher's agent, the student's subscription pauses and billing stops until the agent is restored (feeds the M10 payments tasks). Past chat replies and session summaries that quoted the material keep that text; it is blanked only if a rights holder asks.
+Why: Students already saw the text; a pause is simpler than a pro-rata refund and fair to the student.
+Alternatives: End with a pro-rata refund (b); leave the subscription as is (c); blank quoted text on takedown (2).
+Reversible: Yes.
+
+
 ### 22 Oct 2026 · 8.2e The job payload carries the URL; failed web jobs are removed from Redis · decided by builder · risk: high
 - Decided: The web link's URL travels only in the BullMQ job payload (`IngestJob.url`); Postgres keeps a `.link` storage key and the title. Web jobs are enqueued with `removeOnFail: true` (and `removeOnComplete: true`), so the URL leaves Redis when the job finishes or fails for the last time. The dead-letter copy keeps only refs. The URL is never logged and never put in an error message.
 - Why: Plan Decision 9 and the lead's answers say the URL must not be stored in Postgres or logged. Removing the job on failure stops the URL from sitting in Redis's failed-job history for 7 days. An integration test checks that no Redis key holds it.

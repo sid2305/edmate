@@ -7,15 +7,16 @@
 # priority: P1 = not needed for the pilot. model: models used, recorded by the team lead.
 decisions:
   suite-sizes:
-    status: open
+    status: decided
     question: 'Platform eval suites (7.2, blocker B-41): grow to the full Evals-table sizes now (+624 cases, about 1,480 builder calls; a live run is about 3,800 calls per model), or MVP sizes for the exit
       gate (locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60: +234 cases, about 630 calls; about 2,400 per model) with the rest in 7.2f before the pilot gate?'
     options:
     - MVP sizes now, the rest in 7.2f (M13) before the pilot gate
     - full sizes now (7.2f moves to M7)
     recommendation: the first option
+    answer: 'a) MVP sizes for the exit gate: locked 100, pedagogy 60, leak 80, safety 250, advice 60, persona 60; the remaining ~390 cases in task 7.2f before the pilot gate (human, 22 Oct 2026, B-41)'
   gate-thresholds:
-    status: open
+    status: decided
     question: 'Quality gate (7.4, blocker B-40): pass thresholds for the feedback (32 cases) and revision (10 cases) suites, whether platform accuracy is covered by each agent''s own accuracy cases, and
       whether the distress near-miss cases are held to 100% or the 99% safety rate'
     options:
@@ -23,6 +24,8 @@ decisions:
     - feedback and revision both 80%, the rest as above
     - other numbers
     recommendation: the first option
+    answer: a) feedback >= 70% (matches 5.7), revision >= 80% (like pedagogy); platform accuracy covered by each agent's own accuracy cases; near-miss cases held to the 99% safety rate; provisional until
+      the 7.2 expert pass (human, 22 Oct 2026, B-40)
   licence:
     status: decided
     question: Code licence
@@ -5037,7 +5040,7 @@ tasks:
   model: null
 - id: 12.4a
   milestone: M12
-  title: 'Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)'
+  title: Regulated-subject flag and staff approval columns on agents, audited repo (12.4 Phase A)
   accept: per docs/tasks/12.4/plan.md Phase A and Lead answers; typecheck, lint and test green.
   deps:
   - 12.5a
@@ -5047,7 +5050,7 @@ tasks:
   model: null
 - id: 12.4b
   milestone: M12
-  title: 'Publish refuses a flagged agent without staff approval (12.4 Phase B)'
+  title: Publish refuses a flagged agent without staff approval (12.4 Phase B)
   accept: per docs/tasks/12.4/plan.md Phase B and Lead answers; typecheck, lint and test green.
   deps:
   - 12.4a
@@ -5057,7 +5060,7 @@ tasks:
   model: null
 - id: 12.4c
   milestone: M12
-  title: 'Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)'
+  title: Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)
   accept: per docs/tasks/12.4/plan.md Phase C and Lead answers; typecheck, lint and test green.
   deps:
   - 12.4a
@@ -5067,7 +5070,7 @@ tasks:
   model: null
 - id: 12.4d
   milestone: M12
-  title: 'Staff page /staff/agents and the teacher''s publish refusal text (12.4 Phase D)'
+  title: Staff page /staff/agents and the teacher's publish refusal text (12.4 Phase D)
   accept: per docs/tasks/12.4/plan.md Phase D and Lead answers; typecheck, lint and test green.
   deps:
   - 12.4c
