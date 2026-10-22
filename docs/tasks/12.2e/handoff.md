@@ -82,4 +82,4 @@ server read is the fallback view, recoverable with Reload).
   report (12.2f), a teacher-facing "Removed by Edmate staff" badge (12.2f).
 
 Status: DONE
-Tool calls used: 46
+Tool calls used: 73 (harness count; the builder reported 46)
