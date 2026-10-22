@@ -1806,9 +1806,9 @@ tasks:
   - '7.3'
   - M3
   - M4
-  status: planning
-  branch: null
-  model: plan:opus
+  status: running
+  branch: m7/7.4-quality-gate
+  model: plan:opus build:opus
 - id: '7.5'
   milestone: M7
   title: CI merge gates on fixtures
@@ -1830,9 +1830,9 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: planning
-  branch: null
-  model: plan:sonnet
+  status: running
+  branch: m7/7.6-live-model-runs
+  model: plan:sonnet build:sonnet
 - id: '7.7'
   milestone: M7
   title: Turn traces and health metrics
@@ -1982,7 +1982,7 @@ tasks:
   model: null
 - id: '8.7'
   milestone: M8
-  title: Publish flow with quality-gate results, the teaching scorecard and the public profile page
+  title: 'Publish flow with quality-gate results, the teaching scorecard and the public profile page (7.4: publish goes through gatedPublish)'
   accept: failures show which cases failed; a pass publishes in < 1 minute.
   deps:
   - GATE
