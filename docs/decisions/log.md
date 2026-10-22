@@ -10,6 +10,108 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.6 merge: guardrails export reviewed and merged · decided by lead · risk: high
+- Decided: merge 7.6 with its `packages/harness/src/guardrails/**` change (a new `isBlockReply` export over the existing `BLOCK_REPLIES`; no guard logic changed), reviewed by code-reviewer (the group's required reviewer during the MVP phase), plus typescript-reviewer and security-reviewer. All three approved with no CRITICAL or HIGH; MEDIUM and LOW findings go to 7.6a.
+- Why: a risky path needs its required reviewers and a risk: high entry; the change is a read-only membership check.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 7.6 budget: 215 tool calls against 120 · decided by lead
+- Decided: accept the overrun (Phase A 107, Phase B 108 by the harness count; the handoff's ~197 was the builders' own estimate). Phase B also carried the lead's extra `reply.blocked` item, which was not in the plan's budget.
+- Why: the work is done, reviewed and green; the extra item closed a gap that would have failed every live must_block case.
+- risk: low
+
+---
+
+### 7.6 Phase B: cost is computed from a fresh usage meter per (model, suite) run, not a shared one across the whole sweep
+- Decided: `runModelSweep` builds one `memoryUsageMeter()` per (model, suite) pair (via
+  `deps.liveAgentFor`'s `usage` parameter), not one meter for the entire sweep.
+- Why: the plan's own cost formula ("after each (model, suite) run, read the run's
+  `memoryUsageMeter().rows`") is per-pair; a shared meter across pairs would need the sweep to
+  slice rows by model/suite after the fact instead of just reading `.rows` directly, for no
+  benefit.
+- risk: low
+
+---
+
+### 7.6 Phase B: the sweep's replies are recorded in memory, never written to the on-disk fixtures `--record`/`--fixtures` uses
+- Decided: `runModelSweep` uses `memoryRecorder('record')` per (model, suite) run, not
+  `fileRecorder`.
+- Why: `--models` is live evidence for a report, not fixtures meant to be replayed later by a
+  different suite run; writing N models' worth of replies into the same on-disk fixture keys
+  (keyed by case id, not by model) would silently overwrite each other. This keeps the sweep's
+  on-disk footprint to just its JSON reports (gitignored) and leaves `--record`'s existing
+  single-agent fixture-writing path untouched.
+- risk: low
+
+---
+
+### 7.6 Phase B: `<dir>`'s suite-or-directory-of-suites split is "has immediate subdirectories", not a file-count heuristic
+- Decided: `listSweepSuites` treats `<dir>` as a directory of suites if it has any immediate
+  subdirectories at all, and as one suite (named by `<dir>`'s own basename) otherwise; it never
+  inspects file counts or extensions to decide which case applies.
+- Why: matches `evals/suites/<name>/*.yaml`'s real layout exactly (every suite is its own
+  subdirectory, several of them `.gitkeep`-only today) with one simple, predictable rule, and
+  needs no change to `loadCasesFromDir`'s existing recursive contract (Phase B's own stated
+  fallback if that contract didn't fit — it does).
+- risk: low
+
+---
+
+### 7.6 extra item, decided by lead: `reply.blocked` is read from the finished reply text (`isBlockReply`), not a new `TurnEvent`
+- Decided: the live eval agent sets `EvalAgentReply.blocked` by comparing the finished reply text
+  against `BLOCK_REPLIES`' fixed strings, not by adding a new event to `TurnEvent` or changing
+  `packages/contracts`.
+- Why: lead's explicit instruction ("fix it without a contracts change"); `BLOCK_REPLIES` was
+  already a closed, fixed set of exact strings (task 4.4), so matching against it is exact, not a
+  heuristic, and needs no pipeline change beyond exporting the one new helper.
+- risk: medium (lead's own label, task prompt 21 Oct 2026)
+
+---
+
+### 7.6 Multi-turn cases seed prior turns directly, not by replaying them live
+- Decided: `EvalTurnInput.priorTurns` is pushed straight onto the session's transcript history via
+  `TranscriptStore.append`, never re-run live through the pipeline.
+- Why: replaying every prior turn live for every (model, suite, case) would multiply live-call cost
+  and make the sweep non-deterministic across providers; the transcript port is a plain, appendable
+  list the caller can seed directly.
+- risk: low
+
+---
+
+### 7.6 The price table is reused, not rebuilt; real prices are never invented by a builder or planner
+- Decided: `packages/gateway/src/pricing/prices.yaml` (task 2.4) is read-only to this task; no USD
+  value is added or changed here.
+- Why: business-sensitive numbers need a named human, per the lead's hard constraint; the file
+  already exists and its own comment names this task as the moment to re-check it (Phase B, by a
+  human, after merge).
+- risk: low
+
+---
+
+### 7.6 Phase A: plain turns only; no `TurnInput` change for `skill`/`persona`
+- Decided: `buildLiveEvalAgent` sends every turn as a plain `{ kind: 'message', text }`; a case that
+  names `EvalTurnInput.skill` or `.persona` is run as if neither were set, not forced onto the real
+  pipeline.
+- Why: `TurnInput` has no direct `skill`/`persona` field for a plain message turn (`skill` only
+  exists under `kind: 'skill_action'`); adding one would be a `packages/contracts` change needing an
+  ADR, out of this task's scope (lead answer Q2, 21 Oct 2026).
+- risk: low
+
+---
+
+### 7.6 Phase A: a fresh `ChatSetup` per `reply()` call, not shared across a run
+- Decided: every `EvalAgent.reply()` call builds a brand-new in-memory `ChatSetup` (`buildChatDeps`)
+  rather than reusing one deps object across a suite or model run.
+- Why: simplest and matches the design's "one case = one fresh session" literally; no in-memory
+  world state (sessions, help state) can leak between unrelated cases. The cost is rebuilding
+  content/locale/prompt-pack reads per call, which is cheap (in-memory, no I/O beyond local files)
+  and not a live-call cost.
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 6.5 merge: student memory view, reset and export · decided by lead · risk: high
 - Decided: merge 6.5. `learnerProfiles.reset(scope)` ends the pair's open sessions, deletes its evidence and clears mastery, mistakes and the last summary in one transaction, and writes a counts-only audit row. `evidenceEvents.list` is capped at 10,000 rows on the server. GET and DELETE `/api/me/memory/:agentId` resolve the scope through `studentTurnScope` and never read the request body. A minimal `/learn/[agentId]/memory` page shows the memory, downloads the JSON and resets it.
 - Why: security-reviewer, database-reviewer and typescript-reviewer (all sonnet) approve with no CRITICAL or HIGH. Two MEDIUMs are deferred: the profile lock on plain `append` to 6.5a, and the `(teacher_id, student_id, ts, id)` index to 6.2a. Three LOWs go to 6.5b.
