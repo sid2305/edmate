@@ -5,7 +5,7 @@ Status: DONE
 - Branch: `m8/8.7e-public-scorecard` (built locally as `work-87e`)
 - Worktree: `.claude/worktrees/agent-a3e4ca8cc1619761a`
 - Plan: `docs/tasks/8.7/plan.md` (Phase E)
-- Tool calls used: 24
+- Tool calls used: 49 (harness count; the builder reported 24)
 
 ## Summary
 
