@@ -2,16 +2,17 @@
 // Task 9.3 Phase C: the /home route passes both the chat links (9.4) and the new "start a
 // package" links (9.3) through to HomeView, from the same candidate list and the same opened
 // repos, so a database failure in either is isolated to its own list (see liveChats.test.ts).
+//
+// Task 9.3b: `homeChatLinks`/`homeStartLinks`/`homePausedLinks` are replaced by one `homeLinks`
+// call (one shared scan, classified into all three lists plus the teacher ids the live-classes
+// loader needs); `agents.owner` is no longer called a second time from this page.
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   requireRole: vi.fn(),
   chatAgentCandidates: vi.fn(),
-  homeChatLinks: vi.fn(),
-  homeStartLinks: vi.fn(),
-  homePausedLinks: vi.fn(),
-  ownerByAgent: {} as Record<string, string | null>,
+  homeLinks: vi.fn(),
   listUpcomingForStudent: vi.fn(),
 }));
 
@@ -19,12 +20,6 @@ vi.mock('../../src/auth', () => ({
   requireRole: state.requireRole,
   serverDatabase: () => ({
     repos: {
-      agents: {
-        owner: vi.fn(async ({ agentId }: { agentId: string }) => {
-          const teacherId = state.ownerByAgent[agentId];
-          return teacherId == null ? null : { teacherId };
-        }),
-      },
       liveClasses: { listUpcomingForStudent: state.listUpcomingForStudent },
     },
   }),
@@ -34,9 +29,7 @@ vi.mock('../../src/turn/runtime', () => ({
 }));
 vi.mock('../../src/chat/liveChats', () => ({
   chatAgentCandidates: state.chatAgentCandidates,
-  homeChatLinks: state.homeChatLinks,
-  homeStartLinks: state.homeStartLinks,
-  homePausedLinks: state.homePausedLinks,
+  homeLinks: state.homeLinks,
 }));
 vi.mock('./view', () => ({
   HomeView: vi.fn(
@@ -66,54 +59,47 @@ import HomePage from './page';
 beforeEach(() => {
   state.requireRole.mockReset();
   state.chatAgentCandidates.mockReset();
-  state.homeChatLinks.mockReset();
-  state.homeStartLinks.mockReset();
-  state.homePausedLinks.mockReset();
+  state.homeLinks.mockReset();
   state.listUpcomingForStudent.mockReset();
-  state.ownerByAgent = {};
   state.requireRole.mockResolvedValue({ userId: 'stu_1', role: 'student' });
   state.chatAgentCandidates.mockReturnValue(['agt_a', 'agt_b']);
-  state.homeChatLinks.mockResolvedValue(['agt_a']);
-  state.homeStartLinks.mockResolvedValue(['agt_b']);
-  state.homePausedLinks.mockResolvedValue([]);
-  state.ownerByAgent = { agt_a: 'tch_a', agt_b: 'tch_b' };
+  state.homeLinks.mockResolvedValue({
+    chats: ['agt_a'],
+    startable: ['agt_b'],
+    paused: [],
+    teacherIds: ['tch_a', 'tch_b'],
+  });
   state.listUpcomingForStudent.mockResolvedValue([]);
 });
 
 describe('/home page', () => {
-  it('passes chats and startable links from the same candidate list to HomeView', async () => {
+  it('passes chats and startable links from one shared scan to HomeView', async () => {
     render(await HomePage());
-    expect(state.homeChatLinks).toHaveBeenCalledWith(
+    expect(state.homeLinks).toHaveBeenCalledWith(
       expect.any(Function),
       { userId: 'stu_1', role: 'student' },
       ['agt_a', 'agt_b'],
       expect.anything(),
     );
-    expect(state.homeStartLinks).toHaveBeenCalledWith(
-      expect.any(Function),
-      { userId: 'stu_1', role: 'student' },
-      ['agt_a', 'agt_b'],
-      expect.anything(),
-    );
+    expect(state.homeLinks).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('chats')).toHaveTextContent('agt_a');
     expect(screen.getByTestId('startable')).toHaveTextContent('agt_b');
   });
 
-  // Task 9.6e: the paused list uses the same candidate list and opened repos.
-  it('passes the paused links from the same candidate list to HomeView', async () => {
-    state.homePausedLinks.mockResolvedValue(['agt_c']);
+  // Task 9.6e: the paused list comes from the same shared scan.
+  it('passes the paused links from the same shared scan to HomeView', async () => {
+    state.homeLinks.mockResolvedValue({
+      chats: [],
+      startable: [],
+      paused: ['agt_c'],
+      teacherIds: [],
+    });
     render(await HomePage());
-    expect(state.homePausedLinks).toHaveBeenCalledWith(
-      expect.any(Function),
-      { userId: 'stu_1', role: 'student' },
-      ['agt_a', 'agt_b'],
-      expect.anything(),
-    );
     expect(screen.getByTestId('paused')).toHaveTextContent('agt_c');
   });
 
-  // Task 11.1c Phase C: upcoming live classes.
-  it('loads upcoming live classes per distinct candidate teacher and sorts by start time', async () => {
+  // Task 11.1c Phase C: upcoming live classes, by the shared scan's own teacher ids.
+  it('loads upcoming live classes per distinct teacher from the shared scan and sorts by start time', async () => {
     state.listUpcomingForStudent.mockImplementation(async (scope: { teacherId: string }) => {
       if (scope.teacherId === 'tch_a') {
         return [{ id: 'lc_2', title: 'B', link: null, startsAt: '2099-01-02T00:00:00.000Z', window: 'later' }];
@@ -132,11 +118,9 @@ describe('/home page', () => {
     expect(screen.getByTestId('chats')).toHaveTextContent('agt_a');
   });
 
-  it('with no candidates, live classes are never queried', async () => {
+  it('with no candidates (and so no teacher ids), live classes are never queried', async () => {
     state.chatAgentCandidates.mockReturnValue([]);
-    state.homeChatLinks.mockResolvedValue([]);
-    state.homeStartLinks.mockResolvedValue([]);
-    state.homePausedLinks.mockResolvedValue([]);
+    state.homeLinks.mockResolvedValue({ chats: [], startable: [], paused: [], teacherIds: [] });
     render(await HomePage());
     expect(state.listUpcomingForStudent).not.toHaveBeenCalled();
     expect(screen.getByTestId('liveClasses')).toHaveTextContent('');
