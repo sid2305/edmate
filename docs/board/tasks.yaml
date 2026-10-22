@@ -5078,9 +5078,29 @@ tasks:
   deps:
   - 12.5a
   risk: high
-  status: running
+  status: done
   branch: m12/12.5c-staff-alert-inbox
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 24
+    tokens_in: 78
+    tokens_out: 226
+    cache_read_tokens: 1467207
+    wall_time_seconds: 102
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 12.2a
   milestone: M12
   title: 'Reports repository: a student files a report on a chat reply, staff list and review it (12.2 Phase A)'
@@ -5304,9 +5324,28 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: running
+  status: done
   branch: m12/12.4b-publish-regulated-block
   model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 43
+    tokens_in: 154
+    tokens_out: 1213
+    cache_read_tokens: 2705284
+    wall_time_seconds: 161
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.4c
   milestone: M12
   title: Staff API /api/staff/agents to flag and approve regulated subjects (12.4 Phase C)
@@ -5314,9 +5353,28 @@ tasks:
   deps:
   - 12.4a
   risk: high
-  status: running
+  status: done
   branch: m12/12.4c-staff-agents-api
   model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 20
+    tokens_in: 68
+    tokens_out: 592
+    cache_read_tokens: 870363
+    wall_time_seconds: 83
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.4d
   milestone: M12
   title: Staff page /staff/agents and the teacher's publish refusal text (12.4 Phase D)
@@ -5440,7 +5498,8 @@ tasks:
   model: null
 - id: 8.2m
   milestone: M13
-  title: '8.2j review LOWs: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad file reports its own error first'
+  title: '8.2j review LOWs: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the title so a bad
+    file reports its own error first'
   accept: both changes with a test each; ingest typecheck, lint and test green
   deps:
   - 8.2j
