@@ -148,3 +148,28 @@ Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → 10/
 Status: DONE
 
 Tool calls used: 124 (harness count: build 76, fix round 48; the agents reported 32 and 25)
+
+## CI fix (22 Oct 2026)
+
+Cause: CI run 39849275288 failed at spec line 54 — `page.getByRole('button', { name: 'Free
+starter' })` resolved to two elements. Playwright's `name` string match is a case-insensitive
+substring match by default, so "Free starter" also matched the seeded package's edit button,
+"Edit Free starter" (packages/db seed seeds two packages, named "Free starter" and "Full
+course"). The same substring risk applied to the "Full course" preset button against the
+seeded "Edit Full course" edit button.
+
+Fix: added `exact: true` to both preset-button locators (`apps/web/e2e/teacher-packages-
+walkthrough.spec.ts`, the "Free starter" and "Full course" preset clicks). Checked every other
+locator in the spec against the two seeded package names and found no other ambiguity:
+`getByRole('heading', { level: 1, name: 'Packages' })` and `getByText('New package')` have no
+overlapping substrings in the UI; `getByLabel('Package name')` and `getByRole('button', { name:
+'Create package' })` are each the only element with that accessible name/label
+(`apps/web/app/teacher/packages/PackagesView.tsx`, `apps/web/messages/en.json`); the
+`firstName`/`secondName` heading assertions use a `Date.now()`-tagged name that never collides
+with the seeded "Free starter"/"Full course" package names.
+
+Check: did not start a disposable Postgres/`next dev`/Playwright-browser stack for this fix —
+building `@edmate/web` and its workspace deps plus installing Playwright browsers was outside
+the ~6-call local-run budget for a two-line locator change; skipping per the brief's guidance.
+Ran `corepack pnpm turbo run typecheck lint --filter=@edmate/web` (9/9 tasks successful) and
+`python3 .githooks/secret-scan.py --all` (clean) instead.

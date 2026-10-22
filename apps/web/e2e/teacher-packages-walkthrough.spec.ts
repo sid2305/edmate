@@ -51,7 +51,7 @@ test('teacher creates two packages from the presets in under 15 minutes', async 
 
     await test.step('create the first package from the Free starter preset', async () => {
       await expect(page.getByText('New package')).toBeVisible({ timeout: STEP_TIMEOUT });
-      await page.getByRole('button', { name: 'Free starter' }).click();
+      await page.getByRole('button', { name: 'Free starter', exact: true }).click();
       const nameInput = page.getByLabel('Package name');
       await nameInput.fill('');
       await nameInput.fill(firstName);
@@ -63,7 +63,7 @@ test('teacher creates two packages from the presets in under 15 minutes', async 
     logStep('first package created (Free starter)', start);
 
     await test.step('create the second package from the Full course preset', async () => {
-      await page.getByRole('button', { name: 'Full course' }).click();
+      await page.getByRole('button', { name: 'Full course', exact: true }).click();
       const nameInput = page.getByLabel('Package name');
       await nameInput.fill('');
       await nameInput.fill(secondName);
