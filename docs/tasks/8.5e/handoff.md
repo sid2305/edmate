@@ -1,7 +1,7 @@
 # Task 8.5e handoff: teacher test-chat page (8.5 Phase C)
 
 Status: DONE
-Tool calls used: 46
+Tool calls used: 69 (harness count)
 
 - Branch: `m8/8.5e-test-chat-ui` (built on local branch `work-85e`)
 - Worktree: `.claude/worktrees/agent-ab86a684e39c08223`
