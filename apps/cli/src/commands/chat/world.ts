@@ -20,6 +20,7 @@ import {
   type AgentConfig,
   type Entitlement,
   type LocalePack,
+  type ModelPolicy,
   type PackageConfig,
   type StyleCard,
 } from '@edmate/contracts';
@@ -69,6 +70,8 @@ export interface ChatWorldOptions {
   source: Extract<Entitlement['source'], 'teacher_preview' | 'eval'>;
   /** The eval runner's student id; ignored for `teacher_preview` (student = the teacher). */
   evalStudentId?: string;
+  /** Overrides `DEFAULT_MODEL_POLICY` (task 7.6: the live sweep picks a model per run). */
+  modelPolicy?: ModelPolicy;
 }
 
 export interface ChatWorld {
@@ -156,7 +159,11 @@ function buildStyleCard(content: DemoTeacherContent): StyleCard {
   });
 }
 
-function buildAgentConfig(content: DemoTeacherContent, promptPackVersion: string): AgentConfig {
+function buildAgentConfig(
+  content: DemoTeacherContent,
+  promptPackVersion: string,
+  modelPolicy: ModelPolicy = DEFAULT_MODEL_POLICY,
+): AgentConfig {
   return AgentConfigSchema.parse({
     id: CHAT_IDS.agent,
     version: 1,
@@ -165,7 +172,7 @@ function buildAgentConfig(content: DemoTeacherContent, promptPackVersion: string
     styleCardId: CHAT_IDS.styleCard,
     promptPackVersion,
     languages: ['en'],
-    modelPolicy: DEFAULT_MODEL_POLICY,
+    modelPolicy,
   });
 }
 
@@ -193,7 +200,7 @@ export function buildChatWorld(content: DemoTeacherContent, opts: ChatWorldOptio
   const { version: promptPackVersion } = loadChatPromptPacks();
 
   const styleCard = buildStyleCard(content);
-  const agentConfig = buildAgentConfig(content, promptPackVersion);
+  const agentConfig = buildAgentConfig(content, promptPackVersion, opts.modelPolicy);
   const free = buildPackageConfig(CHAT_IDS.packageFree, content, 'free');
   const paid = buildPackageConfig(CHAT_IDS.packagePaid, content, 'paid');
   const chosen = opts.packageId === 'free' ? free : paid;

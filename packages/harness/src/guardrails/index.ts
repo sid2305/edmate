@@ -72,7 +72,7 @@ export {
   hasDistressKeyword,
   normaliseForDistress,
 } from './distressKeywords.js';
-export { BLOCK_REPLIES, type BlockCode, blockReplyFor } from './blockReplies.js';
+export { BLOCK_REPLIES, type BlockCode, blockReplyFor, isBlockReply } from './blockReplies.js';
 export {
   DECODE_INPUT_MAX,
   DECODE_MAX_LEVELS,

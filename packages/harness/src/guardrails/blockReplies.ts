@@ -46,3 +46,12 @@ export const BLOCK_REPLIES: Readonly<Record<BlockCode, string>> = {
 export function blockReplyFor(code: BlockCode): string {
   return BLOCK_REPLIES[code];
 }
+
+/**
+ * True iff `text` is exactly one of `BLOCK_REPLIES`' fixed strings (task 7.6: lets a caller
+ * outside the pipeline, e.g. a live eval agent reading only the public `TurnEvent` stream, tell
+ * a moderationIn/jailbreak guard block apart from an ordinary reply without a dedicated event).
+ */
+export function isBlockReply(text: string): boolean {
+  return (Object.values(BLOCK_REPLIES) as string[]).includes(text);
+}

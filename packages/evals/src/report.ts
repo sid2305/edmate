@@ -3,6 +3,16 @@
 import type { CalibrationSummary } from './calibration.js';
 import type { CaseResult } from './runner.js';
 
+/** Cost per turn for one (model, suite) run (task 7.6 Phase B), from the run's usage rows. */
+export interface ReportCost {
+  /** Sum of every priced call's `costMicroUsd`, divided by the suite's total turn count. */
+  perTurnMicroUsd: number;
+  /** The same sum, split by the tier (`small`/`main`) the call actually used (lead answer Q3). */
+  byTier: Record<string, number>;
+  /** Calls with no price in the price table (`costMicroUsd: null`); never silently free. */
+  unpricedCalls: number;
+}
+
 export interface JsonReport {
   suite?: string;
   generatedAt?: string;
@@ -10,6 +20,10 @@ export interface JsonReport {
   judgeModel?: string;
   /** Present only when a human double-check pass has been run against this report. */
   calibration?: CalibrationSummary;
+  /** The configured model label this run used (task 7.6 Phase B, `evals/live-models.yaml`). */
+  model?: string;
+  /** Cost per turn for this (model, suite) run, from `memoryUsageMeter().rows` (task 7.6 Phase B). */
+  cost?: ReportCost;
   total: number;
   passed: number;
   failed: number;
@@ -23,6 +37,8 @@ export function toJsonReport(
     generatedAt?: string;
     judgeModel?: string;
     calibration?: CalibrationSummary;
+    model?: string;
+    cost?: ReportCost;
   } = {},
 ): JsonReport {
   const passed = results.filter((r) => r.pass).length;
@@ -31,6 +47,8 @@ export function toJsonReport(
     ...(meta.generatedAt === undefined ? {} : { generatedAt: meta.generatedAt }),
     ...(meta.judgeModel === undefined ? {} : { judgeModel: meta.judgeModel }),
     ...(meta.calibration === undefined ? {} : { calibration: meta.calibration }),
+    ...(meta.model === undefined ? {} : { model: meta.model }),
+    ...(meta.cost === undefined ? {} : { cost: meta.cost }),
     total: results.length,
     passed,
     failed: results.length - passed,
