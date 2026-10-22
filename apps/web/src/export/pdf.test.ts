@@ -63,6 +63,28 @@ describe('renderPdf', () => {
     expect(text).toContain('a (b) \\ c');
   });
 
+  it('maps the bullet to WinAnsi 0x95 in the raw PDF stream, not a stray quote', () => {
+    const bytes = renderPdf([{ kind: 'li', text: 'point' }]);
+    const str = Buffer.from(bytes).toString('latin1');
+    const pointIdx = str.indexOf('point');
+    expect(pointIdx).toBeGreaterThan(1);
+    expect(str.charCodeAt(pointIdx - 1)).toBe(0x20);
+    expect(str.charCodeAt(pointIdx - 2)).toBe(0x95);
+  });
+
+  it('counts the bullet-and-space width when wrapping, so a boundary item wraps to two lines', async () => {
+    const text = Array.from({ length: 40 }, () => 'M').join(' ');
+    const doc = await parsePdf(renderPdf([{ kind: 'li', text }]), 'notes');
+    const lines = doc.units.map((u) => u.text).join('\n').split('\n');
+    expect(lines.length).toBe(2);
+    expect(lines[1]!.trim()).toBe('M');
+  });
+
+  it('strips C1 control characters (U+0080-U+009F) from input text', async () => {
+    const text = await textOf(renderPdf([{ kind: 'p', text: 'a\u0085b\u0095c' }]));
+    expect(text).toContain('abc');
+  });
+
   it('gives an empty notes document as still one valid page', async () => {
     const doc = await parsePdf(renderPdf([]), 'notes');
     expect(doc.units.length).toBeGreaterThanOrEqual(1);

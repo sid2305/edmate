@@ -29,6 +29,9 @@ export const ids = {
   agent: (t: Teacher) => `agt_${t.toLowerCase()}`,
   pkg: (t: Teacher) => `pkg_${t.toLowerCase()}`,
   packageVersion: (t: Teacher) => `pv_${t.toLowerCase()}`,
+  // A second, live package of the same agent (task 9.6c): changePackage's own target.
+  pkg2: (t: Teacher) => `pkg2_${t.toLowerCase()}`,
+  packageVersion2: (t: Teacher) => `pv2_${t.toLowerCase()}`,
   session: (p: Pair) => `ses_${lc(p)}`,
   question: (p: Pair) => `tq_${lc(p)}`,
   subscription: (p: Pair) => `sub_${lc(p)}`,
@@ -50,10 +53,11 @@ export function packageConfig(
   t: Teacher,
   version = 1,
   moduleIds = [ids.module(t, 1)],
+  packageId = ids.pkg(t),
 ): PackageConfig {
   return {
     ...demoPackageFree,
-    id: ids.pkg(t),
+    id: packageId,
     version,
     teacherId: teacherId(t),
     agentId: ids.agent(t),
@@ -127,6 +131,22 @@ export async function seed(db: Db): Promise<void> {
       packageId: ids.pkg(t),
       version: 1,
       config: packageConfig(t),
+    });
+    // Task 9.6c: a second, also-live package of the same agent, so changePackage's positive
+    // control has a real target to switch to (a live version, same teacher, same agent).
+    await db.insert(s.packages).values({
+      id: ids.pkg2(t),
+      teacherId: tid,
+      agentId: ids.agent(t),
+      name: `[${t}] package 2`,
+      liveVersion: 1,
+    });
+    await db.insert(s.packageVersions).values({
+      id: ids.packageVersion2(t),
+      teacherId: tid,
+      packageId: ids.pkg2(t),
+      version: 1,
+      config: packageConfig(t, 1, [ids.module(t, 1)], ids.pkg2(t)),
     });
   }
 

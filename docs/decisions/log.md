@@ -10,6 +10,189 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6c security review MEDIUMs go to 9.6h before the pilot · decided by lead · risk: high
+- Decided: the three security MEDIUMs (cancel then start gets round a cost-alarm pause, resume trusts any pause_student row, changePackage skips the verified-teacher check) and the security LOWs are fixed in 9.6h (M9), not in this PR.
+- Why: no payment exists until M10, no app code writes a pause row for another actor, and the student UI for plan changes (9.6d) isn't built yet. So none is reachable in a way that costs money today, and the one-fix-round rule keeps this PR moving.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6c downgrade and cancel apply at once until 10.3 (B-44 open) · decided by lead · risk: high
+
+- Decided: `changePackage` and `cancel` both apply immediately — no `cancel_at_period_end`, no
+  proration, no migration. `changePackage` leaves `status`/`period_end` unchanged; `cancel` sets
+  `status = 'ended'` right away.
+- Why: there's no payment integration yet (M10 comes last per the current focus), so "apply at
+  period end" has nothing real to wait for. A future answer to open question Q1 that chooses (b)
+  (delay to period end) becomes a follow-up task that adds a `cancel_at_period_end` flag and a
+  scheduled package-version change, once task 10.3 exists to drive it off real billing periods.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6c resume only restores the student's own pause · decided by builder · risk: medium
+
+- Decided: `resume` looks at the *latest* audit row for the subscription and only proceeds if its
+  `action` is `subscription.pause_student` (the action this task names for the student-initiated
+  pause); any other latest action (a future cost-alarm pause, a staff action, or no audit row at
+  all) rejects `invalid`.
+- Why: the plan didn't specify what resume should do about a pause it didn't cause (e.g. a future
+  cost-alarm auto-pause from another task). Restoring blindly from "any past pause" could resume a
+  subscription a cost alarm or staff member paused for a reason the student doesn't see. Picking
+  the latest row and checking its action is the narrowest rule that keeps resume a pure inverse of
+  the student's own pause.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.6c a second live package per teacher in the shared isolation seed · decided by builder · risk: low
+
+- Decided: added `pkg2`/`packageVersion2` (same agent, also live) to every teacher in
+  `test/isolation-seed.ts`, rather than only to a task-local fixture.
+- Why: `changePackage`'s isolation-grid positive control needs a real, live, different package of
+  the *same* agent to switch to; a task-local fixture can't be reached from the shared grid's
+  `CASES` runner, which always acts against the shared A/B seed. This is additive only (new ids,
+  no changes to existing rows) and two existing tests (`corrections.int.test.ts`'s
+  `listForAgent` test and `repositories.int.test.ts`'s `liveForAgent` isolation case) needed their
+  expected lists updated to include the new package — both are now exact about which packages
+  they expect, so a future addition to the seed will fail loudly here again rather than silently
+  passing.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6c one defensive branch marked `v8 ignore` · decided by builder · risk: low
+
+- Decided: `changePackage`'s "the subscription's own current package version row is missing"
+  check (`if (!current) throw new RepositoryError('integrity', ...)`) is marked `/* v8 ignore
+  next */`, matching the existing convention in `publish.ts` for FK-guaranteed-unreachable checks.
+- Why: `subscriptions.package_version_id` has a foreign key into `package_versions`, which itself
+  has a foreign key into `packages`; neither row can be deleted while referenced, so this branch
+  cannot be exercised by any test without first removing the FK (confirmed by trying: Postgres
+  rejects the delete). Kept as defense-in-depth in case a future migration relaxes that FK.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3a The insights privacy floor counts distinct students, in the repository's own SQL · decided by builder · risk: high
+- Decided: every insights aggregate (question groups, open-question groups, sticking topics, the unhelpful-answer count) needs `count(distinct student_id) >= 5`, enforced with SQL `HAVING` inside `insightsRepo`. Below the floor, a group or topic is dropped and the count is `null`. No read selects or returns `student_id`. The payload schema also refuses anything under the floor before it is stored. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
+- Why: the lead's answer (22 Oct 2026) says the floor counts students, never rows; acceptance says "no student identifiable". Doing it in SQL keeps student ids out of process memory and out of every caller.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.3a The insights payload stays a local zod schema in @edmate/db · decided by builder · risk: low
+- Decided: `WeeklyInsightsPayloadSchema` lives in `insights.ts`, with no `packages/contracts` change and no ADR.
+- Why: plan decision 1. No UI reads it yet; a later studio task decides whether to promote it.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3a "Unhelpful answers" = ask_teacher move or failed grounding guard · decided by builder · risk: low
+- Decided: count turns in the week whose move is `ask_teacher`, or whose `guards` hold `{name: 'grounding', ok: false}`; teacher ownership comes through the session join.
+- Why: plan decision 3. There is no rating feature yet.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3a Weeks are stored by their Monday date; openQuestionGroups has no time window · decided by builder · risk: low
+- Decided: `computeAndSaveWeek`/`getWeek` and the windowed reads take the ISO week's Monday as `YYYY-MM-DD` and refuse any other day. `openQuestionGroups` counts open questions of any age.
+- Why: the `insights.week` column comment says "Monday of the ISO week". "Currently open" means not yet answered, whatever its age.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.3a Teacher preview rows never count toward insights · decided by lead · risk: high
+- Decided: every insights read excludes the teacher's own 8.5 test-chat rows (`student_id <> teacher_id` for question groups, open question groups and sticking topics; `sessions.student_id <> sessions.teacher_id` for the unhelpful-answer count). Each read has a test with 4 real students plus a preview row: the group is dropped or the count is `null`. Risky path `packages/db/src/repositories/**`: reviewer security-reviewer.
+- Why: security review HIGH. Preview turns run with studentId = teacherId, so the teacher could be the fifth "student" and a group of 4 real students would pass the floor.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.3a Question groups carry only ids and counts: no sample text, no oldestAt · decided by lead · risk: high
+- Decided: `sample` (one student's verbatim question) and `oldestAt` (one question's exact time) are dropped from the reads and the payload schema; a group is `{ groupId, students, questions }`. A later studio view resolves `groupId` to live text through `teacherQuestions.listGroupsForTeacher`, so erasure and answer state still apply. This also clears the `left()` vs zod length mismatch and the `array_agg` cost.
+- Why: security review MEDIUM. A sample is one student's free text that can carry a name or contact detail and would outlive the student's erasure inside `insights.payload`; `oldestAt` is a per-student timestamp.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.3a Insights read a fixed week, and only computeAndSaveWeek writes · decided by lead · risk: high
+- Decided: the reads take `weekStart` (a Monday, validated like the stored week) instead of a caller-chosen `since`; the repo derives [weekStart 00:00 UTC, +7 days) with both bounds in SQL. A new `computeAndSaveWeek(scope, weekStart)` runs the four reads, builds the payload and upserts it. `saveWeek` is internal and not on the repo object (the isolation grid tests `computeAndSaveWeek` instead), so no caller can store a forged payload. The file header now states exactly what the floor and window guarantee.
+- Why: security review MEDIUM. With a caller-chosen open-ended window, two nested windows could be differenced down to one student; a delayed run would also count rows from after its week.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 11.3a Open question groups stay cumulative · decided by lead · risk: low
+- Decided: `openQuestionGroups` keeps no time window ("currently open"), so its `students` count is cumulative; comparing two weeks can show that one new student asked a group. Accepted, not banded.
+- Why: security review LOW. The teacher already sees each question in the 8.8 inbox, so the comparison reveals nothing new.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6g answeredPairs pairs by exact same-transaction timestamp, not packages/db · decided by builder · risk: low
+- Decided: Fixed the question/answer pairing bug using only fields already in `ExportJson`
+  (`teacherQuestions[].answeredAt`/`createdAt`, `messages[].createdAt`) by matching on exact
+  timestamp equality first, instead of adding an id link. No `packages/db` or `packages/contracts`
+  change was made.
+- Why: `Message` has no `questionId` field and `TeacherQuestion` has no message-id field (checked
+  `packages/contracts/src/turn.ts`); the db's `teacherQuestions.answer` text column exists but
+  isn't selected by `listForStudent` and isn't in the contracts schema, so exposing it would need a
+  `packages/contracts` schema change (ADR-gated) as well as a `packages/db` select change — out of
+  scope for this task per the brief. Exact-timestamp matching is correct rather than approximate
+  because `teacherQuestions.answer`'s single transaction writes both the question's `answeredAt`
+  and the teacher message's `createdAt` from the same Postgres `now()`, so for any questions closed
+  together they are identical, not merely close; this also correctly maps every such question to
+  the one shared message a grouped answer produces, rather than only the first.
+- risk: low — read-only pairing logic inside a student's own export; no new field is exposed,
+  no schema changes.
+
+---
+
+### 22 Oct 2026 · 9.6g bullet width uses a fixed AFM constant, not a full table · decided by builder · risk: low
+- Decided: Added one named constant (`BULLET_WIDTH = 350`, the standard Helvetica AFM value) for
+  the bullet glyph's width instead of building out a full width table for the Latin-1 supplement
+  range; documented `DEFAULT_WIDTH` as the deliberate fallback for the rest of that range (the
+  brief's "or document the fallback" option).
+- Why: the review's LOW finding and the brief treat the bullet (reachable from every `li` block)
+  and the general Latin-1 fallback (reachable only for the accented/punctuation characters in that
+  range, which the pilot's English-only content rarely uses) as separable in severity; the bullet's
+  width is load-bearing for every bulleted line's wrap, so it gets an exact value, while the rest
+  keeps the existing deliberate approximation, now documented inline.
+- risk: low — wrapping accuracy only, never shown text or injection-relevant.
+
+---
+
+### 22 Oct 2026 · 8.2d ADR-0014 accepted; review MEDIUM and LOW findings go to 8.2e · decided by lead · risk: high
+- Decided: ADR-0014 is Accepted, after architect, security-reviewer and typescript-reviewer (all opus) approved with no CRITICAL or HIGH findings. The lead made the ADR wording fixes (no SNI for IP literals, headers dropped after decompressing, x-gzip, 8.2g named, uncancellable DNS noted). The code MEDIUM and LOW findings are fixed in 8.2e before the fetcher runs on the production path: the timer crash in pinnedTransport, the orphaned promise in untilAborted, the exported redactUrl, repeated trailing dots, the cancellable resolver, explicit rejectUnauthorized, one DNS error message, 3fff::/20, retryable DNS errors and the cancel error mask.
+- Why: nothing calls the fetcher in production until 8.2e, so no finding is reachable today, and 8.2e works in the same files.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.2d Web-link egress policy: pinned address per hop, ADR-0014 · decided by builder · risk: high
+- Decided: The web fetcher resolves each hop once, inside the 15 s deadline. Every answer must be public, and the transport connects only to the first answer (`node:https` with a pinned `lookup`, `agent: false`, `autoSelectFamily: false`, SNI from the host name and none for an IP literal, certificate checks on). Further rules:
+  - https on port 443 only, with no userinfo and at most 2048 characters;
+  - a denylist of internal names (trailing dot stripped);
+  - at most 3 redirects, each checked again;
+  - HTML only, a 5 MB cap counted on decompressed bytes, and a fixed header list;
+  - three allow-list modes: unset refuses everything, `*` allows any public host, or a list of exact hosts;
+  - YouTube is refused as `unsupported`;
+  - robots.txt isn't checked.
+
+  ADR-0014 is written from the architect's draft with Decision 9 updated to the lead answers.
+- Why: closes the DNS-rebinding gap between check and connect before anything in production calls the fetcher; ADR-0005 set the precedent of recording egress policy as an ADR.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.2d Allow-list entries are bare host names only · decided by builder · risk: low
+- Decided: `EDMATE_WEB_LINK_HOSTS` entries with a port, a path, a `*` wildcard or an empty item fail at startup with the code `web_link_hosts_invalid`. The error never includes the value.
+- Why: only port 443 is allowed, and an entry that could never match would silently refuse every link with no sign of why.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 11.1a new `liveClasses` repository on a risky path · decided by builder · risk: high
 - Decided: `packages/db/src/repositories/live-classes.ts` is a new repository on the risky path
   `packages/db/src/repositories/**`. It follows the existing repository rules exactly (scope
