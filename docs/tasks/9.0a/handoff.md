@@ -3,7 +3,7 @@
 - **Status:** DONE
 - **Branch:** `m9/9.0a-web-wiring` (built on local `work-90a`)
 - **Worktree:** `.claude/worktrees/agent-a7afc7f8b6969956e`
-- **Tool calls used:** 38 (budget 60)
+- **Tool calls used:** 60 (harness count; the builder counted 38; budget 60)
 
 ## What changed
 
@@ -58,6 +58,11 @@ Environment note: the shared `edmate-redis-1` container on 56379 (another sessio
 `security-reviewer` should read `apps/web/src/turn/devModel.ts` and the `runtime.ts` change (D2), even though neither path is on the risky list. Also `code-reviewer` and `typescript-reviewer`.
 
 ## Decisions
+
+### 22 Oct 2026 · 9.0a The dev model's local-only check is a string check on AUTH_URL · decided by lead · risk: medium
+- Decided: accept the dev-model guard as built. `EDMATE_DEV_MODEL=scripted` runs only when AUTH_URL is plain http on localhost, 127.0.0.1 or [::1], and fails closed with a 503 otherwise. The security review found no bypass (case, IPv6, trailing dot, userinfo, https, look-alike hosts).
+- Why: the human needs a local stack to test tomorrow. Turning the dev model on in a public deploy would take two separate mistakes (a public host left with a localhost AUTH_URL, plus the flag set), and that setup would also break sign-in redirects. Deploy hardening (1.4d) will drop the local defaults.
+- risk: medium
 
 ### 22 Oct 2026 · 9.0a Dev model `EDMATE_DEV_MODEL=scripted`, local only · decided by builder · risk: medium
 - Decided: The plan's D2. The scripted provider adapter is honoured only when the value is exactly `scripted` and `AUTH_URL` is `http:` on `localhost`, `127.0.0.1` or `[::1]` with no userinfo. Any other value, or any other or unset `AUTH_URL`, fails the runtime closed (`EDMATE_DEV_MODEL`, 503, with the reason code only in the log). It replaces only `factories.anthropic`. Replies start `[dev model]` and quote the first retrieved material. Classifiers get fixed all-clear verdicts, and unknown schemas and `embed` throw. Compose leaves it off by default.
