@@ -92,6 +92,43 @@ describe('HomeView', () => {
     expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
   });
 
+  // Task 9.6e: a paused subscription's own entry point, linking to the plan page.
+  describe('paused plans (task 9.6e)', () => {
+    it('with a paused agent, shows a Paused list linking to the plan page', async () => {
+      const { container } = render(await HomeView({ paused: ['demo-agent'] }));
+      expect(screen.getByText('Paused')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Manage plan' })).toHaveAttribute(
+        'href',
+        '/learn/demo-agent/plan',
+      );
+      expect(await axe(container)).toHaveNoViolations();
+    });
+
+    it('a paused plan alone suppresses the empty-state placeholder (the placeholder shows only when all three lists are empty)', async () => {
+      render(await HomeView({ chats: [], startable: [], paused: ['demo-agent'] }));
+      expect(screen.queryByText(/teacher.*agent.*here soon/i)).toBeNull();
+      expect(screen.getByText('Paused')).toBeInTheDocument();
+    });
+
+    it('the placeholder shows only when all three lists are empty', async () => {
+      render(await HomeView({ chats: [], startable: [], paused: [] }));
+      expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
+    });
+
+    it('with chats and a paused plan, no placeholder, both lists show', async () => {
+      render(await HomeView({ chats: ['agt_a'], paused: ['agt_b'] }));
+      expect(screen.queryByText(/teacher.*agent.*here soon/i)).toBeNull();
+      expect(screen.getByRole('link', { name: "Chat with your teacher's agent" })).toHaveAttribute(
+        'href',
+        '/learn/agt_a',
+      );
+      expect(screen.getByRole('link', { name: 'Manage plan' })).toHaveAttribute(
+        'href',
+        '/learn/agt_b/plan',
+      );
+    });
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(await HomeView());
     const results = await axe(container);

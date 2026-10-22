@@ -103,6 +103,47 @@ describe('/packages/[agentId]', () => {
     expect(state.liveForAgent).not.toHaveBeenCalled();
   });
 
+  // Task 9.6e (9.3b follow-up): a paused subscription gets its own text and a plan link, not the
+  // "already subscribed" chat link.
+  it('a paused subscription shows its own text and links to the plan page', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'std_amy', role: 'student' });
+    state.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
+    state.findLive.mockResolvedValueOnce({
+      id: 'sub_1',
+      packageVersionId: 'pv_1',
+      status: 'paused',
+      periodEnd: '2026-11-01T00:00:00.000Z',
+    });
+    render(await PackagesPage({ params: Promise.resolve({ agentId: 'agt_demo' }) }));
+    expect(screen.getByText('Your plan with this teacher is paused.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage plan' })).toHaveAttribute(
+      'href',
+      '/learn/agt_demo/plan',
+    );
+    expect(screen.queryByRole('link', { name: 'Continue to chat' })).toBeNull();
+    expect(state.liveForAgent).not.toHaveBeenCalled();
+  });
+
+  it('an active subscription adds a Change plan link beside the chat link', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'std_amy', role: 'student' });
+    state.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });
+    state.findLive.mockResolvedValueOnce({
+      id: 'sub_1',
+      packageVersionId: 'pv_1',
+      status: 'active',
+      periodEnd: '2026-11-01T00:00:00.000Z',
+    });
+    render(await PackagesPage({ params: Promise.resolve({ agentId: 'agt_demo' }) }));
+    expect(screen.getByRole('link', { name: 'Continue to chat' })).toHaveAttribute(
+      'href',
+      '/learn/agt_demo',
+    );
+    expect(screen.getByRole('link', { name: 'Change plan' })).toHaveAttribute(
+      'href',
+      '/learn/agt_demo/plan',
+    );
+  });
+
   it('a rejected teacher (liveForAgent empty) is notFound, not an empty compare view', async () => {
     state.requireRole.mockResolvedValueOnce({ userId: 'std_amy', role: 'student' });
     state.owner.mockResolvedValueOnce({ teacherId: 'tch_asha' });

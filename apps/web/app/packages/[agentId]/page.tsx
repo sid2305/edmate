@@ -36,6 +36,25 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
   const t = await getTranslations('packages');
 
   if (live !== null) {
+    // Task 9.6e (9.3b follow-up): a paused subscription gets its own text and a link to the plan
+    // page, not the chat link (managing a paused plan -- resuming it -- is 9.6, not chat).
+    if (live.status === 'paused') {
+      return (
+        <AppShell
+          brand={shell('brand')}
+          skipLabel={shell('skipToContent')}
+          nav={[{ href: '/home', label: home('nav') }]}
+          signOutAction={signOutAndRedirect}
+          signOutLabel={shell('signOut')}
+        >
+          <h1>{t('title')}</h1>
+          <p>{t('pausedNotice')}</p>
+          <a className="button" href={`/learn/${encodeURIComponent(agentId)}/plan`}>
+            {t('managePlan')}
+          </a>
+        </AppShell>
+      );
+    }
     return (
       <AppShell
         brand={shell('brand')}
@@ -48,6 +67,9 @@ export default async function PackagesPage({ params }: PackagesPageProps) {
         <p>{t('alreadySubscribed')}</p>
         <a className="button" href={`/learn/${encodeURIComponent(agentId)}`}>
           {t('continueToChat')}
+        </a>
+        <a className="button" href={`/learn/${encodeURIComponent(agentId)}/plan`}>
+          {t('changePlan')}
         </a>
       </AppShell>
     );

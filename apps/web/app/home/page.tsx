@@ -11,7 +11,12 @@
 import { studentScope, type StudentScope, type UpcomingLiveClass } from '@edmate/db';
 import { requireRole, serverDatabase } from '../../src/auth';
 import type { Principal } from '../../src/auth/guard';
-import { chatAgentCandidates, homeChatLinks, homeStartLinks } from '../../src/chat/liveChats';
+import {
+  chatAgentCandidates,
+  homeChatLinks,
+  homePausedLinks,
+  homeStartLinks,
+} from '../../src/chat/liveChats';
 import { consoleLog } from '../../src/turn/runtime';
 import { errorName, type ServerLog } from '../../src/turn/routes';
 import type { AgentOwners } from '../../src/turn/scope';
@@ -61,6 +66,7 @@ export default async function HomePage() {
   const open = () => serverDatabase().repos;
   const chats = await homeChatLinks(open, principal, candidates, log);
   const startable = await homeStartLinks(open, principal, candidates, log);
+  const paused = await homePausedLinks(open, principal, candidates, log);
   const liveClasses = await homeLiveClasses(open, principal, candidates, log);
-  return <HomeView chats={chats} startable={startable} liveClasses={liveClasses} />;
+  return <HomeView chats={chats} startable={startable} paused={paused} liveClasses={liveClasses} />;
 }

@@ -26,11 +26,18 @@ export interface HomeViewProps {
   chats?: readonly string[];
   /** Agent ids the student can start a package with -- no live subscription yet (task 9.3). */
   startable?: readonly string[];
+  /** Agent ids with a paused subscription -- links to the plan page, not chat (task 9.6e). */
+  paused?: readonly string[];
   /** The scope's own upcoming, entitled live classes, soonest first (task 11.1c). */
   liveClasses?: readonly UpcomingLiveClass[];
 }
 
-export async function HomeView({ chats = [], startable = [], liveClasses = [] }: HomeViewProps = {}) {
+export async function HomeView({
+  chats = [],
+  startable = [],
+  paused = [],
+  liveClasses = [],
+}: HomeViewProps = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('home');
   // 9.2: a link to the public discovery page; its label lives under `discovery`, not `home` (9.2
@@ -48,7 +55,7 @@ export async function HomeView({ chats = [], startable = [], liveClasses = [] }:
       signOutLabel={shell('signOut')}
     >
       <h1>{t('title')}</h1>
-      {chats.length === 0 && startable.length === 0 ? (
+      {chats.length === 0 && startable.length === 0 && paused.length === 0 ? (
         <p>{t('placeholder')}</p>
       ) : (
         <>
@@ -71,6 +78,20 @@ export async function HomeView({ chats = [], startable = [], liveClasses = [] }:
                   <li key={agentId}>
                     <a className="button" href={`/packages/${encodeURIComponent(agentId)}`}>
                       {t('startLink')}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {paused.length > 0 && (
+            <>
+              <h2>{t('pausedTitle')}</h2>
+              <ul className="home-paused">
+                {paused.map((agentId) => (
+                  <li key={agentId}>
+                    <a className="button" href={`/learn/${encodeURIComponent(agentId)}/plan`}>
+                      {t('pausedLink')}
                     </a>
                   </li>
                 ))}
