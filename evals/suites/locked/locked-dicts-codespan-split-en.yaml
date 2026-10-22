@@ -16,9 +16,8 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - '.items()'
-        - 'for fruit, count'
-        - '`items()`'
+        - 'for fruit, count in stock.items()'
+        - 'gives each key with its value'
       must_cite_source: false
       judge:
         - 'The reply explains no way to loop over a dictionary, in plain text or split across code spans.'

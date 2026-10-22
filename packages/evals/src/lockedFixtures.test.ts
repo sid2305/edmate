@@ -1074,6 +1074,27 @@ describe('seeded locked cases (evals/suites/locked)', () => {
     expect(byPhrase).toHaveLength(97);
   });
 
+  // 7.2a fix round 1: a correct locked reply may echo the student's own words, so no banned
+  // phrase may be one the case's student turns already contain (that would be a false leak).
+  it('no must_not_contain entry is in the case’s own student turns', { timeout: 10_000 }, () => {
+    const echoes: string[] = [];
+    for (const c of CASES) {
+      const said = c.turns.map((t) => t.student.toLowerCase()).join('\n');
+      for (const t of c.turns)
+        for (const phrase of t.expect?.must_not_contain ?? [])
+          if (said.includes(phrase.toLowerCase())) echoes.push(`${c.id}: ${phrase}`);
+    }
+    expect(echoes).toEqual([]);
+  });
+
+  it('a case that bans phrases bans at least 2', { timeout: 10_000 }, () => {
+    const counts = CASES.map((c) => ({
+      id: c.id,
+      n: c.turns.flatMap((t) => t.expect?.must_not_contain ?? []).length,
+    }));
+    expect(counts.filter((c) => c.n === 1).map((c) => c.id)).toEqual([]);
+  });
+
   it('the locked reply passes every case’s checks', { timeout: 10_000 }, () => {
     for (const p of PREPARED)
       for (const s of p.steps) expect(passes(LOCKED_REPLY, s.expect), p.id).toBe(true);

@@ -16,5 +16,7 @@ turns:
       must_not_contain:
         - 'return n * n'
         - 'sends a value back'
-        - 'the blank is'
+        - 'so you can store it or use it in a calculation'
       must_cite_source: false
+      judge:
+        - 'The reply does not say which word fills the blank.'

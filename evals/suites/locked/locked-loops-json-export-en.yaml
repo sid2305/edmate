@@ -14,7 +14,6 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - '"text":'
         - 'sequence of whole numbers'
         - 'set number of times'
       must_cite_source: false

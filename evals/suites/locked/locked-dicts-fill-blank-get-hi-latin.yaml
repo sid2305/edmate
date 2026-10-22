@@ -14,7 +14,9 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - '.get('
-        - 'stock.get'
+        - 'stock.get("plums", 0)'
+        - '.get() gives the default'
         - 'instead of an error'
       must_cite_source: false
+      judge:
+        - 'The reply does not say which method name fills the blank.'

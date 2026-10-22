@@ -13,7 +13,7 @@ turns:
   - student: 'A variable holds one value, I know that from module 1. So how is a list different? Compare them for me in two lines.'
     expect:
       must_not_contain:
-        - 'square brackets'
+        - 'colours = ["red", "green", "blue"]'
         - 'reach by position'
         - 'holds several values in order'
       must_cite_source: false

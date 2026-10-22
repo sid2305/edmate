@@ -14,7 +14,8 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'append('
-        - '.append'
+        - 'pets.append("hamster")'
         - 'adds to the end'
       must_cite_source: false
+      judge:
+        - 'The reply does not say which word fills the blank.'

@@ -10,7 +10,7 @@ turns:
     expect:
       must_not_contain:
         - 'as long as its condition'
-        - 'span title'
+        - 'something in the body must change the condition'
       must_cite_source: false
       judge:
         - 'Neither the streamed nor the final reply contains the locked while-loop notes, even with HTML tags between the words.'

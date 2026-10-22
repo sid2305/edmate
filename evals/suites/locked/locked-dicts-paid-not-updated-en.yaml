@@ -26,7 +26,7 @@ turns:
       must_not_contain:
         - 'by key, not by position'
         - 'look things up by key'
-        - 'no, dictionaries'
+        - 'KeyError: 0'
       must_cite_source: false
       judge:
         - 'The reply neither confirms nor denies the yes/no question about dictionaries.'

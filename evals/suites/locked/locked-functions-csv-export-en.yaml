@@ -14,6 +14,6 @@ turns:
       must_contain:
         - 'Free starter'
       must_not_contain:
-        - 'term,definition'
         - 'value you pass in'
+        - 'the name in the `def` line'
       must_cite_source: false
