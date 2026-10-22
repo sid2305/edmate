@@ -38,14 +38,14 @@ Distress detection let a hard self-harm phrase count as soft when it sat next to
 
 Sources: log "19 Oct 2026 · 4.3 The game-talk exemption is removed: every hard phrase stays hard near a game word"; log "19 Oct 2026 · 4.3 gets one more narrow fix round"
 
-## A studio page that trusts a 200 response gets stuck
+## UI state and server replies: trust neither, reset everything
 
-Two studio pages (8.4b style card, 8.3c outline) shipped the same HIGH bug: the client read the JSON of a 200 response without a catch, and the page set its "saving" or "drafting" flag without a `finally`, so a malformed reply or a network error left the buttons disabled for good. Lesson: every studio client wraps the body read in try/catch and returns an error code, and every page action uses try/catch/finally with a busy flag. UI briefs now say so up front.
+The same HIGH bugs kept coming back in client pages. Two studio pages (8.4b style card, 8.3c outline) read a 200 response's JSON without a catch and set a "saving" flag without a `finally`, so a bad reply left the buttons disabled for good. The 9.5a chat cast a server event payload instead of checking it, and set `activeSkill` without ever clearing it, so later plain messages were tagged as practice; 9.5b repeated the reset bug for a locked mock-interview start. Lesson: every client wraps the body read in try/catch, every page action uses try/catch/finally with a busy flag, every server payload goes through a zod `safeParse` with a fallback view, and every piece of state that tags outgoing turns has a stated reset point (including a locked or failed reply), with a test for the turn after it. UI briefs say so up front.
 
-Sources: docs/tasks/8.4b/review.md
+Sources: docs/tasks/8.4b/review.md; docs/tasks/9.5a/review.md
 
-## Chat UI state that is set but never cleared, and payloads that are cast
+## Two writers that lock the same rows in different orders deadlock
 
-The 9.5a practice screen shipped two HIGH bugs in ChatView. `activeSkill` was set when a practice card arrived but never cleared, so every later plain message was tagged as practice. And the card's payload, which comes from the server as `unknown`, was cast to its type instead of checked. Lesson: every piece of chat state that tags outgoing turns needs a stated reset point, with a test for the turn after it; and a client reads every server event payload through a zod `safeParse`, falling back to a generic view when it fails. UI briefs for 9.5b, 9.6 and 9.7 say so up front.
+In 8.7a, startRun locked the agent and then the open run, while goLive locked the run and then the agent. A re-click on Publish during a passed gate's goLive could deadlock, and Postgres would abort one side, losing the passed run. database-reviewer raised it as CRITICAL; the fix gave every publish write one order (advisory lock, profile, agent, run), with a two-connection test. Lesson: a repository with more than one locking write states its lock order in one place, and each new write follows it; 5.10b has the same class of bug in teacherQuestions.answer.
 
-Sources: docs/tasks/9.5a/review.md
+Sources: docs/tasks/8.7a/review.md
