@@ -281,17 +281,39 @@ export type SafetyEventJob = z.infer<typeof SafetyEventJobSchema>;
 
 // ---- ingest (task 8.2 Phase 2) ----------------------------------------------------------------
 
-/** `@edmate/ingest`'s `DocumentKind` plus the two media kinds its `VideoSource` covers. */
-export const IngestFileKindSchema = z.enum(['pdf', 'docx', 'pptx', 'markdown', 'video', 'audio']);
+/**
+ * `@edmate/ingest`'s `DocumentKind`, the two media kinds its `VideoSource` covers, and `web`: a
+ * teacher's web link (task 8.2e, ADR-0014).
+ */
+export const IngestFileKindSchema = z.enum([
+  'pdf',
+  'docx',
+  'pptx',
+  'markdown',
+  'video',
+  'audio',
+  'web',
+]);
 export type IngestFileKind = z.infer<typeof IngestFileKindSchema>;
 
 const MEDIA_MIME = /^(?:audio|video)\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*$/;
 
+/** ADR-0014's limit; the worker re-checks every rule of the link itself before any lookup. */
+const WEB_LINK_MAX_URL_LENGTH = 2048;
+
+const WebLinkUrlSchema = z
+  .string()
+  .max(WEB_LINK_MAX_URL_LENGTH)
+  .refine((u) => u.startsWith('https://') && URL.canParse(u), { message: 'an https URL' });
+
 /**
  * One document to ingest. `fileKind` picks the parser (bytes for pdf/docx/pptx/markdown, a
  * transcriber for video/audio); `mimeType` is required exactly for video/audio, where the
- * `Transcriber` port needs it. The processor re-reads the document row for its current
- * `storageKey`: this job names only what to parse it as, not where its bytes live now.
+ * `Transcriber` port needs it. `url` is required exactly for `web` (task 8.2e): the link is
+ * stored nowhere else (not in Postgres, not in a log), so this payload is its only copy, and
+ * `enqueueIngest` removes a web job from Redis when it fails for the last time (ADR-0014
+ * Decision 9). The processor re-reads the document row for its current `storageKey`: this job
+ * names only what to parse it as, not where its bytes live now.
  */
 export const IngestJobSchema = z
   .strictObject({
@@ -299,8 +321,12 @@ export const IngestJobSchema = z
     documentId: Id,
     fileKind: IngestFileKindSchema,
     mimeType: z.string().regex(MEDIA_MIME).optional(),
+    url: WebLinkUrlSchema.optional(),
   })
   .refine((j) => (j.fileKind === 'video' || j.fileKind === 'audio') === (j.mimeType !== undefined), {
     message: 'mimeType is required for video/audio and refused otherwise',
+  })
+  .refine((j) => (j.fileKind === 'web') === (j.url !== undefined), {
+    message: 'url is required for web and refused otherwise',
   });
 export type IngestJob = z.infer<typeof IngestJobSchema>;

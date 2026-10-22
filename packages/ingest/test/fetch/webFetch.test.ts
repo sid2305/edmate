@@ -1,14 +1,12 @@
 // The SSRF-safe web fetcher (tasks 5.1 and 8.2d, ADR-0014), driven through a fake resolver and a
 // fake pinned transport: no socket is ever opened (rule 4).
-import { gzipSync } from 'node:zlib';
+import { createGunzip, gzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
-import { createGunzip } from 'node:zlib';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IngestError } from '../../src/errors.js';
 import {
   createWebFetcher,
   normaliseAllowedHosts,
-  redactUrl,
   WEB_FETCH_HEADERS,
   WEB_PAGE_MAX_BYTES,
   type PinnedTransport,
@@ -78,6 +76,10 @@ function fetcher(replies: readonly Reply[], over: Partial<WebFetcherOptions> = {
   });
   return { f, calls: ft.calls, cancels: ft.cancels };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 async function failure(p: Promise<unknown>): Promise<IngestError> {
   try {
@@ -256,36 +258,100 @@ describe('createWebFetcher: SSRF refusals (the transport is never reached)', () 
     expect(calls).toHaveLength(0);
   });
 
-  it('a name that resolves to nothing, or fails to resolve, is not_found', async () => {
-    const empty = fetcher([], { resolveHost: () => Promise.resolve([]) });
-    expect((await failure(empty.f.fetchPage(PAGE))).code).toBe('not_found');
-    const broken = fetcher([], {
-      resolveHost: () => Promise.reject(new Error(`ENOTFOUND ${PAGE}`)),
-    });
-    expect((await failure(broken.f.fetchPage(PAGE))).code).toBe('not_found');
-    expect(broken.calls).toHaveLength(0);
+  it("no answer and a non-public answer get the same refusal, so internal names can't be probed", async () => {
+    const dnsCode = (code: string): Error => Object.assign(new Error(`${code} ${PAGE}`), { code });
+    const replies: (() => Promise<readonly string[]>)[] = [
+      () => Promise.resolve([]),
+      () => Promise.reject(dnsCode('ENOTFOUND')),
+      () => Promise.reject(dnsCode('ENODATA')),
+      () => Promise.resolve(['10.0.0.5']),
+    ];
+    const seen: string[] = [];
+    for (const resolveHost of replies) {
+      const { f, calls } = fetcher([], { resolveHost });
+      const e = await failure(f.fetchPage(PAGE));
+      expect([e.code, e.retryable]).toEqual(['forbidden', false]);
+      seen.push(e.message);
+      expect(calls).toHaveLength(0);
+    }
+    expect(new Set(seen).size).toBe(1);
+  });
+
+  it.each([['EAI_AGAIN'], ['ESERVFAIL'], ['ETIMEOUT'], [undefined]])(
+    'a transient DNS failure (%s) is a retryable provider error, and nothing is fetched',
+    async (code) => {
+      const err = Object.assign(new Error(`dns ${PAGE}`), code === undefined ? {} : { code });
+      const { f, calls } = fetcher([], { resolveHost: () => Promise.reject(err) });
+      const e = await failure(f.fetchPage(PAGE));
+      expect([e.code, e.retryable]).toEqual(['provider_error', true]);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it('the resolver gets the deadline signal, so a slow lookup can be cancelled', async () => {
+    const resolveHost = vi.fn((_h: string, _s?: AbortSignal) => Promise.resolve([PUBLIC_V4]));
+    const { f } = fetcher([{}], { resolveHost });
+    await f.fetchPage(PAGE);
+    expect(resolveHost.mock.calls[0]?.[0]).toBe(HOST);
+    expect(resolveHost.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);
   });
 
   it('a slow DNS answer past the deadline is a retryable timeout, and nothing is fetched', async () => {
+    vi.useFakeTimers();
     const { f, calls } = fetcher([{}], {
       resolveHost: () => new Promise<readonly string[]>(() => undefined),
       timeoutMs: 30,
     });
-    const e = await failure(f.fetchPage(PAGE));
+    const pending = failure(f.fetchPage(PAGE));
+    await vi.advanceTimersByTimeAsync(30);
+    const e = await pending;
     expect([e.code, e.retryable]).toEqual(['provider_error', true]);
     expect(e.message).toContain('timed out');
     expect(calls).toHaveLength(0);
   });
 
   it('a DNS answer that arrives just after the deadline is still not fetched', async () => {
+    vi.useFakeTimers();
     const { f, calls } = fetcher([{}], {
       resolveHost: () =>
         new Promise<readonly string[]>((resolve) => setTimeout(() => resolve([PUBLIC_V4]), 60)),
       timeoutMs: 20,
     });
-    expect((await failure(f.fetchPage(PAGE))).message).toContain('timed out');
-    await new Promise((r) => setTimeout(r, 80));
+    const pending = failure(f.fetchPage(PAGE));
+    await vi.advanceTimersByTimeAsync(20);
+    expect((await pending).message).toContain('timed out');
+    await vi.advanceTimersByTimeAsync(60);
     expect(calls).toHaveLength(0);
+  });
+
+  it('a lookup that fails after the deadline already passed is handled, not left unhandled', async () => {
+    vi.useFakeTimers();
+    // The first hop's async cancel() outlives the deadline, so the second hop's lookup starts on an
+    // already-aborted signal; its later rejection must still be caught.
+    let lookups = 0;
+    let rejectLate: (err: Error) => void = () => undefined;
+    const late = new Promise<readonly string[]>((_resolve, reject) => {
+      rejectLate = reject;
+    });
+    const ft = fakeTransport([{ status: 302, headers: { location: '/next' } }]);
+    const f = createWebFetcher({
+      allowedHosts: 'any-public',
+      timeoutMs: 20,
+      resolveHost: () => {
+        lookups += 1;
+        return lookups === 1 ? Promise.resolve([PUBLIC_V4]) : late;
+      },
+      transport: async (req) => {
+        const res = await ft.transport(req);
+        return { ...res, cancel: () => new Promise<void>((r) => setTimeout(r, 50)) };
+      },
+    });
+    const pending = failure(f.fetchPage(PAGE));
+    await vi.advanceTimersByTimeAsync(50);
+    expect((await pending).message).toContain('timed out');
+    rejectLate(new Error('ENOTFOUND late'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lookups).toBe(2);
   });
 });
 
@@ -493,7 +559,8 @@ describe('createWebFetcher: transport failures', () => {
     expect([e.code, e.retryable]).toEqual(['provider_error', true]);
     expect(e.message).toContain('could not download');
     const s = fetcher([], {
-      transport: () => Promise.reject(new Error('x', { cause: 'boom' }).cause),
+      // A transport port may reject with a non-Error; the fetcher must still map it.
+      transport: () => Promise.reject('boom'),
     });
     expect((await failure(s.f.fetchPage(PAGE))).code).toBe('provider_error');
   });
@@ -510,6 +577,7 @@ describe('createWebFetcher: transport failures', () => {
   });
 
   it('the deadline covers every hop, the body included', async () => {
+    vi.useFakeTimers();
     const slowBody = (async function* (): AsyncIterable<Uint8Array> {
       await new Promise((r) => setTimeout(r, 200));
       yield enc.encode('late');
@@ -525,17 +593,45 @@ describe('createWebFetcher: transport failures', () => {
         return ft.transport(req);
       },
     });
-    expect((await failure(f.fetchPage(PAGE))).message).toContain('timed out');
+    const pending = failure(f.fetchPage(PAGE));
+    await vi.advanceTimersByTimeAsync(20);
+    expect((await pending).message).toContain('timed out');
     expect(seen?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(200);
+  });
+
+  it('a cancel() that rejects never hides the real error', async () => {
+    const ft = fakeTransport([{ body: 'x'.repeat(64) }]);
+    const f = createWebFetcher({
+      allowedHosts: 'any-public',
+      resolveHost: () => Promise.resolve([PUBLIC_V4]),
+      maxBytes: 8,
+      transport: async (req) => ({
+        ...(await ft.transport(req)),
+        cancel: () => Promise.reject(new Error(`cancel failed ${PAGE}`)),
+      }),
+    });
+    const e = await failure(f.fetchPage(PAGE));
+    expect(e.code).toBe('input_too_large');
+  });
+
+  it('a cancel() that throws after a good page still returns the page', async () => {
+    const ft = fakeTransport([{ body: '<p>fine</p>' }]);
+    const f = createWebFetcher({
+      allowedHosts: 'any-public',
+      resolveHost: () => Promise.resolve([PUBLIC_V4]),
+      transport: async (req) => ({
+        ...(await ft.transport(req)),
+        cancel: () => {
+          throw new Error('cancel failed');
+        },
+      }),
+    });
+    await expect(f.fetchPage(PAGE)).resolves.toEqual({ html: '<p>fine</p>' });
   });
 });
 
 describe('helpers', () => {
-  it('redactUrl keeps scheme, host and path only', () => {
-    expect(redactUrl(`https://u:p@${HOST}/a/b?key=${LEAK_MARK}#frag`)).toBe(`https://${HOST}/a/b`);
-    expect(redactUrl('::nope')).toBe('[unparseable url]');
-  });
-
   it('normaliseAllowedHosts lower-cases bare host names and rejects anything else', () => {
     expect([
       ...normaliseAllowedHosts(['Lessons.Example.org', 'a.example.', '93.184.216.34', '[::1]']),

@@ -1,5 +1,5 @@
-// The worker's web-link fetcher (task 8.2d, ADR-0014 Decision 10). Nothing calls it yet: task 8.2e
-// wires it into the ingest processor.
+// The worker's web-link fetcher (tasks 8.2d and 8.2e, ADR-0014 Decision 10), passed to the ingest
+// processor for `web` jobs.
 //
 // EDMATE_WEB_LINK_HOSTS picks the allow-list mode:
 // - unset or empty: every link is refused (fail closed);
@@ -7,8 +7,12 @@
 // - a comma list of bare host names: exact match only.
 // A malformed value throws WebLinkConfigError with a fixed code, never the value itself, so the
 // caller can log it and turn off web links only.
-import { createWebFetcher, systemResolveHost, type WebFetcher } from '@edmate/ingest';
-import { normaliseAllowedHosts } from '@edmate/ingest';
+import {
+  createWebFetcher,
+  normaliseAllowedHosts,
+  systemResolveHost,
+  type WebFetcher,
+} from '@edmate/ingest';
 import { createPinnedTransport, type RequestFn } from './pinnedTransport.js';
 
 export {
@@ -45,7 +49,7 @@ export function parseWebLinkHosts(raw: string | undefined): readonly string[] | 
 }
 
 export interface WorkerWebFetcherDeps {
-  readonly resolveHost?: (host: string) => Promise<readonly string[]>;
+  readonly resolveHost?: (host: string, signal: AbortSignal) => Promise<readonly string[]>;
   readonly request?: RequestFn;
   readonly timeoutMs?: number;
 }

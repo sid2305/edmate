@@ -13,6 +13,15 @@
 // never reaches a log line), which would erase a dedicated "stale" error's identity. Reporting
 // "nothing written" as a normal (empty) result and checking the flag afterwards survives that.
 // No status write follows a stale drop: the job that owns the new `storageKey` gets to set it.
+//
+// Task 8.2e adds two things:
+// - `web` jobs (a teacher's web link, ADR-0014). The URL is in the job payload only; the row's
+//   `storageKey` is a `.link` token with no stored object. The link is re-checked here
+//   (`checkWebLinkUrl`) and fetched through the worker's pinned `WebFetcher`. The URL is never
+//   logged or put in an error: only the document id and fixed codes are.
+// - The last-attempt rule: a retryable failure on the job's final attempt marks the document
+//   `failed` with its code (`provider_error` for an unexpected error) instead of leaving it
+//   `processing` forever. This covers file jobs too.
 import type { Repositories } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
 import {
@@ -22,7 +31,11 @@ import {
   indexDocument,
   MAX_DOCUMENT_BYTES,
   type IndexDocumentDeps,
+  type ParsedSource,
   type VideoSource,
+  type WebFetcher,
+  checkWebLinkUrl,
+  parseWebLink,
 } from '@edmate/ingest';
 import { IngestJobSchema } from '@edmate/queue';
 import type { Log } from '../log.js';
@@ -35,6 +48,10 @@ export interface IngestJobLike {
   readonly id?: string | undefined;
   readonly name: string;
   readonly data: unknown;
+  /** Attempts already made before this one (BullMQ's `attemptsMade`). */
+  readonly attemptsMade?: number;
+  /** BullMQ's own default is a single attempt when `attempts` is unset. */
+  readonly opts?: { readonly attempts?: number | undefined };
 }
 
 /**
@@ -49,6 +66,8 @@ export interface IngestProcessorDeps {
   readonly repos: Pick<Repositories, 'documents' | 'chunks'>;
   readonly storage: StorageClient;
   readonly gateway: IngestGateway;
+  /** The pinned web-link fetcher (task 8.2e); without one every web link fails as unsupported. */
+  readonly webFetcher?: WebFetcher;
 }
 
 /** How long a video/audio signed GET URL stays valid: long enough for Whisper to fetch it. */
@@ -114,6 +133,12 @@ function buildWriter(
   };
 }
 
+/** True when this attempt is the job's last: a retryable failure now is final. */
+function isLastAttempt(job: IngestJobLike): boolean {
+  const attempts = job.opts?.attempts ?? 1;
+  return (job.attemptsMade ?? 0) + 1 >= attempts;
+}
+
 async function buildSource(
   storage: StorageClient,
   storageKey: string,
@@ -147,8 +172,25 @@ export function ingestProcessor(
   return async (job) => {
     const parsed = IngestJobSchema.safeParse(job.data);
     if (!parsed.success) throw new PermanentJobError(`${job.name}: invalid job payload`);
-    const { teacherId, documentId, fileKind, mimeType } = parsed.data;
+    const { teacherId, documentId, fileKind, mimeType, url } = parsed.data;
     const scope = { teacherId };
+
+    /**
+     * Marks the document failed with `code` and ends the job for good, or reports a stale skip
+     * when the row moved on (deleted or replaced) first. Only the code is in the error.
+     */
+    const failWith = async (code: string): Promise<IngestOutcome> => {
+      try {
+        await deps.repos.documents.updateStatus(scope, documentId, 'failed', code);
+      } catch (error) {
+        if (error instanceof RepositoryError && error.kind === 'not_found') {
+          log({ level: 'info', event: 'ingest.stale_skipped', documentId });
+          return 'stale_skipped';
+        }
+        return classifyRepoError(job.name, error);
+      }
+      throw new PermanentJobError(`${job.name}: ${code}`);
+    };
 
     let row;
     try {
@@ -167,16 +209,17 @@ export function ingestProcessor(
     // and distinct from `packages/ingest`'s own 'validation' code for a job that *should* have a
     // transcriber but doesn't get one.
     if (RECORDING_KINDS.has(fileKind) && deps.gateway.transcriber === undefined) {
-      try {
-        await deps.repos.documents.updateStatus(scope, documentId, 'failed', 'unsupported');
-      } catch (error) {
-        if (error instanceof RepositoryError && error.kind === 'not_found') {
-          log({ level: 'info', event: 'ingest.stale_skipped', documentId });
-          return 'stale_skipped';
-        }
-        return classifyRepoError(job.name, error);
-      }
-      throw new PermanentJobError(`${job.name}: unsupported`);
+      return failWith('unsupported');
+    }
+
+    // A web link is re-checked before anything else (the route checked it too): a YouTube link is
+    // unsupported, any other refusal forbidden. With no fetcher configured, links are unsupported.
+    let webLink: { readonly url: string; readonly fetcher: WebFetcher } | undefined;
+    if (fileKind === 'web') {
+      const check = checkWebLinkUrl(url ?? '');
+      if (!check.ok) return failWith(check.code === 'youtube_unsupported' ? 'unsupported' : 'forbidden');
+      if (deps.webFetcher === undefined) return failWith('unsupported');
+      webLink = { url: check.url, fetcher: deps.webFetcher };
     }
 
     const { writer, stale } = buildWriter(deps.repos, storageKey);
@@ -190,13 +233,20 @@ export function ingestProcessor(
     };
 
     try {
-      const source = await buildSource(
-        deps.storage,
-        storageKey,
-        row.sourceTitle,
-        fileKind,
-        mimeType,
-      );
+      const source: DocumentInput | ParsedSource | VideoSource =
+        webLink === undefined
+          ? await buildSource(
+              deps.storage,
+              storageKey,
+              row.sourceTitle,
+              fileKind as Exclude<typeof fileKind, 'web'>,
+              mimeType,
+            )
+          : {
+              kind: 'parsed',
+              document: await parseWebLink(webLink.url, webLink.fetcher, row.sourceTitle),
+              headings: true,
+            };
       await indexDocument(indexDeps, { scope, documentId, source });
     } catch (error) {
       if (stale()) {
@@ -206,24 +256,14 @@ export function ingestProcessor(
         log({ level: 'info', event: 'ingest.stale_skipped', documentId });
         return 'stale_skipped';
       }
-      if (error instanceof IngestError) {
-        // A retryable IngestError (a transient provider failure) is rethrown as-is so BullMQ
-        // retries it; the document stays `processing` (its current state) until it either
-        // succeeds or exhausts its attempts and lands in `failed` below.
-        if (error.retryable) throw error;
-        try {
-          await deps.repos.documents.updateStatus(scope, documentId, 'failed', error.code);
-        } catch (updateError) {
-          if (updateError instanceof RepositoryError && updateError.kind === 'not_found') {
-            log({ level: 'info', event: 'ingest.stale_skipped', documentId });
-            return 'stale_skipped';
-          }
-          return classifyRepoError(job.name, updateError);
-        }
-        throw new PermanentJobError(`${job.name}: ${error.code}`, { cause: error });
-      }
-      // An unexpected failure (storage/network): retryable by default.
-      throw error;
+      const ingestError = error instanceof IngestError ? error : undefined;
+      // A retryable failure (a transient provider, storage or network error) is rethrown as-is so
+      // BullMQ retries it, and the document stays `processing`, unless this was the last attempt:
+      // then it lands in `failed` like a permanent one, never stuck in `processing`. The raw
+      // error is not kept: an unexpected one could quote a URL or a storage key.
+      const retryable = ingestError === undefined || ingestError.retryable;
+      if (retryable && !isLastAttempt(job)) throw error;
+      return failWith(ingestError?.code ?? 'provider_error');
     }
 
     if (stale()) {

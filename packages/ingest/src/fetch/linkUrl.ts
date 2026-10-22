@@ -37,9 +37,9 @@ export type WebLinkCheck =
   | { readonly ok: true; readonly url: string; readonly displayTitle: string }
   | { readonly ok: false; readonly code: WebLinkRefusal };
 
-/** A host name in lower case without its trailing root dot (`Example.ORG.` -> `example.org`). */
+/** A host name in lower case without any trailing dots (`Example.ORG..` -> `example.org`). */
 export function bareHostName(hostname: string): string {
-  return hostname.toLowerCase().replace(/\.$/, '');
+  return hostname.toLowerCase().replace(/\.+$/, '');
 }
 
 export function isYouTubeHost(hostname: string): boolean {
@@ -59,7 +59,10 @@ export function webLinkRefusal(u: URL): WebLinkRefusal | undefined {
   if (u.username !== '' || u.password !== '') return 'has_credentials';
   if (u.href.length > WEB_LINK_MAX_URL_LENGTH) return 'too_long';
   if (u.port !== '') return 'bad_port';
-  if (isIpLiteral(u.hostname)) return isPublicAddress(u.hostname) ? undefined : 'private_address';
+  // Judged on the bare name: `https://127.0.0.1../` is a domain to WHATWG but loopback once the
+  // trailing dots go, and the fetcher connects to the bare name.
+  const bareHost = bareHostName(u.hostname);
+  if (isIpLiteral(bareHost)) return isPublicAddress(bareHost) ? undefined : 'private_address';
   if (isDeniedHostName(u.hostname)) return 'internal_name';
   return isYouTubeHost(u.hostname) ? 'youtube_unsupported' : undefined;
 }

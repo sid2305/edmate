@@ -2,7 +2,7 @@
 // carrier-grade NAT, link-local (including the 169.254.169.254 cloud metadata service), unique-local,
 // documentation, benchmarking, multicast, reserved, NAT64, 6to4 and Teredo ranges are all refused,
 // as is IPv4 hidden inside IPv6 (::ffff:a.b.c.d) when the IPv4 part is not public.
-import { lookup } from 'node:dns/promises';
+import { Resolver } from 'node:dns/promises';
 
 /** Dotted-decimal IPv4 as four bytes; anything else is undefined. */
 function parseV4(s: string): number[] | undefined {
@@ -55,8 +55,9 @@ function isPublicV6(g: readonly number[]): boolean {
   if (leadingZero && g5 === 0xffff) return isPublicV4([g6 >> 8, g6 & 0xff, g7 >> 8, g7 & 0xff]);
   // Only global unicast (2000::/3), minus the special-purpose blocks inside it: Teredo
   // (2001::/32), benchmarking (2001:2::/48), ORCHID (2001:10::/28, 2001:20::/28), documentation
-  // (2001:db8::/32) and 6to4 (2002::/16).
+  // (2001:db8::/32 and 3fff::/20, RFC 9637) and 6to4 (2002::/16).
   if ((g0 & 0xe000) !== 0x2000) return false;
+  if (g0 === 0x3fff && (g1 & 0xf000) === 0) return false;
   if (g0 === 0x2001) {
     if (g1 === 0 || g1 === 0xdb8 || (g1 === 2 && g2 === 0)) return false;
     if ((g1 & 0xfff0) === 0x10 || (g1 & 0xfff0) === 0x20) return false;
@@ -85,8 +86,46 @@ export function isPublicAddress(ip: string): boolean {
   return v6 !== undefined && isPublicV6(v6);
 }
 
-/** Every address the system resolver returns for `host` (the production `resolveHost`). */
-export async function systemResolveHost(host: string): Promise<string[]> {
-  const found = await lookup(host, { all: true, verbatim: true });
-  return found.map((a) => a.address);
+/** Resolver answers that mean the name has no address: refused, not retried. */
+const NO_SUCH_NAME: ReadonlySet<string> = new Set(['ENOTFOUND', 'ENODATA', 'ENONAME']);
+
+/** Per-query time limit and attempts for the web-link resolver (inside the fetch deadline). */
+const RESOLVER_OPTIONS = { timeout: 5_000, tries: 2 } as const;
+
+/** A DNS failure with a code and fixed words: never the host name. */
+function dnsFailure(code: string): Error {
+  const words = code === 'ENOTFOUND' ? 'no such name' : 'lookup failed';
+  return Object.assign(new Error(`dns: ${words}`), { code });
+}
+
+const codeOf = (reason: unknown): string => {
+  const code = (reason as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : 'EUNKNOWN';
+};
+
+/**
+ * Every A then AAAA address for `host` (the production `resolveHost`). It queries DNS through its
+ * own c-ares resolver, not getaddrinfo, so `signal` can cancel a slow lookup and no libuv thread is
+ * held past the fetch deadline; /etc/hosts and search domains are not consulted. A name with no
+ * address throws code ENOTFOUND; any other failure keeps its code (SERVFAIL, timeout, cancelled)
+ * so the caller can retry it.
+ */
+export async function systemResolveHost(host: string, signal?: AbortSignal): Promise<string[]> {
+  const resolver = new Resolver(RESOLVER_OPTIONS);
+  const cancel = (): void => {
+    resolver.cancel();
+  };
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    const answers = Promise.allSettled([resolver.resolve4(host), resolver.resolve6(host)]);
+    if (signal?.aborted === true) cancel();
+    const settled = await answers;
+    const found = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    if (found.length > 0) return found;
+    const codes = settled.map((r) => (r.status === 'rejected' ? codeOf(r.reason) : 'ENODATA'));
+    const transient = codes.find((c) => !NO_SUCH_NAME.has(c));
+    throw dnsFailure(transient ?? 'ENOTFOUND');
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+  }
 }
