@@ -7,7 +7,7 @@ import { axe, toHaveNoViolations } from 'jest-axe';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderIntl } from '../../../test/intl';
 import type { DocumentView, PutFile } from '../../../src/studio/uploadClient';
-import { UploadsView } from './UploadsView';
+import { POLL_MAX_MS, POLL_MS, UploadsView } from './UploadsView';
 
 beforeAll(() => {
   expect.extend(toHaveNoViolations);
@@ -274,6 +274,77 @@ describe('UploadsView', () => {
       await vi.advanceTimersByTimeAsync(12_000);
     });
     expect(lists()).toBe(before + 1);
+  });
+
+  it('stops polling after the poll cap and tells the teacher to check back later (11.4g)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const s = api([doc({ status: 'processing' })]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    expect(await screen.findByText('Processing')).toBeInTheDocument();
+    const lists = () => s.calls.filter((c) => c.method === 'GET').length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MAX_MS + POLL_MS);
+    });
+    const callsAtCap = lists();
+    expect(callsAtCap).toBeGreaterThan(0);
+    expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+    });
+    expect(lists()).toBe(callsAtCap);
+  });
+
+  it('a row past the poll cap does not stop a newer row from polling to completion (11.4g fix round)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const s = api([doc({ id: 'doc_old', sourceTitle: 'Stuck.pdf', status: 'processing' })]);
+    renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
+    expect(await screen.findByText('Processing')).toBeInTheDocument();
+    const lists = () => s.calls.filter((c) => c.method === 'GET').length;
+
+    // doc_old sits past its own window; polling for it alone stops (same as the cap test above).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MAX_MS + POLL_MS);
+    });
+    const callsAtCap = lists();
+    expect(screen.getByText('Still processing. Check back later.')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+    });
+    expect(lists()).toBe(callsAtCap);
+
+    // A brand-new upload (doc_new) must get its own full poll window, even while doc_old is
+    // still sitting there, stuck past its cap.
+    checkRights();
+    s.next('POST /api/studio/documents', ticket('doc_new', 'application/pdf'));
+    s.state.docs = [
+      doc({ id: 'doc_old', sourceTitle: 'Stuck.pdf', status: 'processing' }),
+      doc({ id: 'doc_new', sourceTitle: 'Fresh.pdf', status: 'uploading' }),
+    ];
+    pick(
+      screen.getByLabelText('Upload a file'),
+      new File(['x'], 'Fresh.pdf', { type: 'application/pdf' }),
+    );
+    s.next('POST /api/studio/documents/doc_new/complete', {
+      status: 202,
+      body: { documentId: 'doc_new', status: 'processing' },
+    });
+    await screen.findByText('Fresh.pdf');
+
+    s.state.docs = [
+      doc({ id: 'doc_old', sourceTitle: 'Stuck.pdf', status: 'processing' }),
+      doc({ id: 'doc_new', sourceTitle: 'Fresh.pdf', status: 'ready' }),
+    ];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+    });
+    await waitFor(() => expect(lists()).toBeGreaterThan(callsAtCap));
+    const list = await screen.findByRole('list', { name: 'Your files' });
+    expect(within(list).getByText('Fresh.pdf')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(screen.getByRole('list', { name: 'Your files' })).getAllByText('Ready').length).toBe(1),
+    );
   });
 
   it('replaces a file through the hidden picker, then completes it', async () => {

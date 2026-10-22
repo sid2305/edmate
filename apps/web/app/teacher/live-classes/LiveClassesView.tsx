@@ -5,7 +5,7 @@
 // shows an error and re-enables the form (lessons: "a studio page that trusts a 200 response gets
 // stuck" -- the body read is wrapped in try/catch, and the busy flag always clears in `finally`).
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import type { ErrorCode } from '@edmate/contracts';
 import type {
@@ -40,6 +40,11 @@ export interface LiveClassesViewProps {
 
 /** 11.4c: how often the class rows re-read recording statuses while one is pending. */
 export const RECORDING_POLL_MS = 5000;
+
+/** 11.4g (code/typescript-reviewer, MEDIUM): a stuck "uploading"/"processing" row (e.g. the
+ * server's own processing step wedges) must not poll forever while the page stays open; stop
+ * after about 10 minutes per page visit and tell the teacher to check back later. */
+export const RECORDING_POLL_MAX_MS = 10 * 60 * 1000;
 
 /** The poll's payload, checked before use; a bad one keeps the last good view (lessons). */
 const PollSchema = z.array(
@@ -107,16 +112,54 @@ export function LiveClassesView({
   const tu = useTranslations('uploads');
   const [recordings, setRecordings] = useState(initialRecordings);
   const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const [timedOutIds, setTimedOutIds] = useState<Set<string>>(new Set());
   const pending = recordings.some(isPending);
+  // 11.4g fix round (code/typescript-reviewer, MEDIUM): the poll-cap clock is per row, keyed by
+  // documentId, not one shared clock keyed off the `pending` boolean -- a row that is already
+  // capped out must not block a newer row from getting its own full RECORDING_POLL_MAX_MS window.
+  const recordingsRef = useRef(recordings);
+  useEffect(() => {
+    recordingsRef.current = recordings;
+  }, [recordings]);
+  const pollStart = useRef<Map<string, number>>(new Map());
 
   // 11.4c: while a shown recording is uploading or processing, re-read statuses every 5 s. Stops
   // when none is pending and on unmount. A failed or malformed read keeps the last good view and
   // the next tick tries again; one read at a time.
+  // 11.4g: each pending row gets its own RECORDING_POLL_MAX_MS window from when it first appears;
+  // polling keeps going as long as any row is still inside its window, even if another row has
+  // already capped out.
   useEffect(() => {
-    if (!pending) return undefined;
+    if (!pending) {
+      pollStart.current.clear();
+      setTimedOutIds(new Set());
+      return undefined;
+    }
     let alive = true;
     let inFlight = false;
+    const sync = (): boolean => {
+      const now = Date.now();
+      const pendingIds = new Set(
+        recordingsRef.current.filter(isPending).map((r) => r.documentId),
+      );
+      for (const id of pendingIds) {
+        if (!pollStart.current.has(id)) pollStart.current.set(id, now);
+      }
+      for (const id of Array.from(pollStart.current.keys())) {
+        if (!pendingIds.has(id)) pollStart.current.delete(id);
+      }
+      const timedOut = new Set<string>();
+      for (const [id, startedAt] of pollStart.current) {
+        if (now - startedAt >= RECORDING_POLL_MAX_MS) timedOut.add(id);
+      }
+      if (alive) setTimedOutIds(timedOut);
+      return pendingIds.size > 0 && Array.from(pendingIds).every((id) => timedOut.has(id));
+    };
+    sync();
     const timer = setInterval(() => {
+      // A row already past its own window is skipped, but the interval keeps running (not
+      // cleared) so a later, still-fresh pending row still gets polled for its own full window.
+      if (sync()) return;
       if (inFlight) return;
       inFlight = true;
       void (async () => {
@@ -221,6 +264,7 @@ export function LiveClassesView({
           <li key={r.documentId}>
             <span>{r.sourceTitle}</span> <span>{tu(`status.${r.status}`)}</span>
             {r.status === 'failed' ? <span> {tu(`reasons.${reasonKey(r.failureReason)}`)}</span> : null}
+            {isPending(r) && timedOutIds.has(r.documentId) ? <span> {tu('pollTimeout')}</span> : null}
           </li>
         ))}
       </ul>
