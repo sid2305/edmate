@@ -4155,7 +4155,9 @@ tasks:
   deps:
   - 9.6a
   risk: medium
-  status: todo
+  status: running
+  branch: m9/9.6b-progress-export
+  model: plan:sonnet build:sonnet
 - id: 9.6c
   milestone: M9
   title: 'Plan changes in subscriptions: changePackage, pause, resume, cancel; start takes only the live version (9.6 Phase C, packages/db; waits for B-44)'
