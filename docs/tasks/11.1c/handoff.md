@@ -68,4 +68,4 @@ are tracked follow-ups outside this task (per the plan's "Lead answers").
 
 Status: DONE
 
-Tool calls used: 33
+Tool calls used: 71 (harness count; the builder reported 33)
