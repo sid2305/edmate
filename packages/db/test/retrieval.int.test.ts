@@ -73,7 +73,7 @@ async function material(
   texts: string[],
   embed = true,
 ): Promise<string[]> {
-  await repos.documents.create(scope, { id: docId, moduleId, kind, sourceTitle: `${docId} title` });
+  await repos.documents.create(scope, { id: docId, moduleId, kind, sourceTitle: `${docId} title`, rightsDeclared: true });
   const { ids } = await repos.chunks.insertMany(
     scope,
     docId,
@@ -518,6 +518,7 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
         moduleId: MOD.allowed,
         kind: 'material',
         sourceTitle: 'rev',
+        rightsDeclared: true,
       });
       expect(await repos.retrieval.revision(A)).toBe(a0 + 1);
       const { ids } = await repos.chunks.insertMany(A, 'doc_rev', [
@@ -543,6 +544,7 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
           moduleId: MOD.other,
           kind: 'material',
           sourceTitle: 'x',
+          rightsDeclared: true,
         }),
       );
       const missingModule = await rejection(
@@ -551,6 +553,7 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
           moduleId: 'mod_missing',
           kind: 'material',
           sourceTitle: 'x',
+          rightsDeclared: true,
         }),
       );
       const takenId = await rejection(
@@ -559,6 +562,7 @@ describe.skipIf(!up)(`retrieval on Postgres 16 + pgvector${up ? '' : ` (${SKIP_R
           moduleId: MOD.allowed,
           kind: 'material',
           sourceTitle: 'x',
+          rightsDeclared: true,
         }),
       );
       for (const e of [foreignModule, missingModule, takenId]) expect(e.kind).toBe('not_found');

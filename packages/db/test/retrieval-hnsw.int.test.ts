@@ -38,7 +38,7 @@ function near(axis: number, i: number): number[] {
 
 async function fill(moduleId: string, axis: number, count: number): Promise<void> {
   const docId = `doc_${moduleId}`;
-  await repos.documents.create(scope, { id: docId, moduleId, kind: 'material', sourceTitle: docId });
+  await repos.documents.create(scope, { id: docId, moduleId, kind: 'material', sourceTitle: docId, rightsDeclared: true });
   for (let start = 0; start < count; start += 500) {
     const n = Math.min(500, count - start);
     const drafts = Array.from({ length: n }, (_, j) => ({

@@ -53,6 +53,7 @@ async function doc(texts: string[], storageKey = `uploads/${RA}/f${++n}.pdf`): P
     kind: 'material',
     sourceTitle: `${id} title`,
     storageKey,
+    rightsDeclared: true,
   });
   if (texts.length > 0) {
     await repos.chunks.insertMany(
@@ -145,6 +146,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         moduleId: MOD.allowed,
         kind: 'teacher_note',
         sourceTitle: 'note',
+        rightsDeclared: true,
       });
       const row = await repos.documents.get(A, 'doc_note_1');
       expect(row && Object.keys(row)).not.toContain('storageKey');
@@ -156,12 +158,14 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         moduleId: MOD.other,
         kind: 'material',
         sourceTitle: 'b',
+        rightsDeclared: true,
       });
       await repos.documents.create(A, {
         id: 'doc_locked_1',
         moduleId: MOD.locked,
         kind: 'material',
         sourceTitle: 'locked',
+        rightsDeclared: true,
       });
       const all = await repos.documents.listForTeacher(A);
       expect(all.length).toBeGreaterThan(2);
@@ -293,6 +297,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         moduleId: MOD.allowed,
         kind: 'teacher_note',
         sourceTitle: 'n',
+        rightsDeclared: true,
       });
       expect(await repos.documents.delete(A, 'doc_note_del')).toEqual({ storageKey: null });
     });
@@ -330,7 +335,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       await repos.documents.updateStatus(A, id, 'failed', 'parse_failed');
       const before = await repos.retrieval.revision(A);
 
-      const res = await repos.documents.startReplace(A, id, { storageKey: 'uploads/new.pdf' });
+      const res = await repos.documents.startReplace(A, id, { storageKey: 'uploads/new.pdf', rightsDeclared: true });
 
       expect(res).toEqual({ previousStorageKey: 'uploads/old.pdf' });
       const row = await repos.documents.get(A, id);
@@ -352,7 +357,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
         [A, 'doc_nope'],
       ] as const) {
         const err = await rejection(
-          repos.documents.startReplace(scope, target, { storageKey: 'uploads/evil.pdf' }),
+          repos.documents.startReplace(scope, target, { storageKey: 'uploads/evil.pdf', rightsDeclared: true }),
         );
         expect(err.kind).toBe('not_found');
       }
@@ -389,10 +394,11 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       kind: 'material' as const,
       sourceTitle: id,
       storageKey: `uploads/${id}.pdf`,
+      rightsDeclared: true as const,
       ...extra,
     });
 
-    it('create with rightsDeclared: true stores now(); without it the column stays null', async () => {
+    it('create with rightsDeclared: true stores now()', async () => {
       const t0 = Date.now();
       await repos.documents.create(A, input('doc_rd_yes', { rightsDeclared: true }));
       const at = await declaredAt('doc_rd_yes');
@@ -401,8 +407,27 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect((await repos.documents.get(A, 'doc_rd_yes'))?.rightsDeclaredAt).toBe(
         at!.toISOString(),
       );
-      await repos.documents.create(A, input('doc_rd_none'));
-      expect(await declaredAt('doc_rd_none')).toBeNull();
+    });
+
+    it('12.3f: a create or replace without rightsDeclared is invalid and writes nothing', async () => {
+      const noRights: Record<string, unknown> = { ...input('doc_rd_none') };
+      delete noRights.rightsDeclared;
+      expect(Object.keys(noRights)).not.toContain('rightsDeclared');
+      const err = await rejection(repos.documents.create(A, noRights as never));
+      expect(err.kind).toBe('invalid');
+      expect(await repos.documents.get(A, 'doc_rd_none')).toBeNull();
+      // A web link is a create too (kind material, a `links/` key): the same rule holds.
+      const link = { ...noRights, id: 'doc_rd_link', storageKey: 'links/doc_rd_link' };
+      expect((await rejection(repos.documents.create(A, link as never))).kind).toBe('invalid');
+      expect(await repos.documents.get(A, 'doc_rd_link')).toBeNull();
+      const id = await doc([], 'uploads/rd-none-keep.pdf');
+      const mid = await repos.retrieval.revision(A);
+      const rep = await rejection(
+        repos.documents.startReplace(A, id, { storageKey: 'uploads/rd-x.pdf' } as never),
+      );
+      expect(rep.kind).toBe('invalid');
+      expect((await repos.documents.get(A, id))?.storageKey).toBe('uploads/rd-none-keep.pdf');
+      expect(await repos.retrieval.revision(A)).toBe(mid);
     });
 
     it('rightsDeclared: false (or any non-true value) is invalid and writes nothing', async () => {
@@ -421,7 +446,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect((await repos.documents.get(A, id))?.storageKey).toBe('uploads/rd-keep.pdf');
     });
 
-    it('replace with rightsDeclared: true sets a fresh time; without it clears to null', async () => {
+    it('replace with rightsDeclared: true sets a fresh time', async () => {
       await repos.documents.create(A, input('doc_rd_rep', { rightsDeclared: true }));
       await raw.query(
         `update documents set rights_declared_at = '2020-01-01T00:00:00Z' where id = 'doc_rd_rep'`,
@@ -432,10 +457,8 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       });
       const fresh = await declaredAt('doc_rd_rep');
       expect(fresh!.getTime()).toBeGreaterThan(Date.parse('2020-01-02T00:00:00Z'));
-      await repos.documents.startReplace(A, 'doc_rd_rep', { storageKey: 'uploads/rd-rep-3.pdf' });
-      expect(await declaredAt('doc_rd_rep')).toBeNull();
-      expect(Object.keys((await repos.documents.get(A, 'doc_rd_rep'))!)).not.toContain(
-        'rightsDeclaredAt',
+      expect((await repos.documents.get(A, 'doc_rd_rep'))?.rightsDeclaredAt).toBe(
+        fresh!.toISOString(),
       );
     });
   });
@@ -454,7 +477,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
 
     it('is stale and writes nothing once a replace changed the key', async () => {
       const id = await doc([], 'uploads/before.pdf');
-      await repos.documents.startReplace(A, id, { storageKey: 'uploads/after.pdf' });
+      await repos.documents.startReplace(A, id, { storageKey: 'uploads/after.pdf', rightsDeclared: true });
       const before = await repos.retrieval.revision(A);
       const res = await repos.chunks.insertManyIfStorageKey(A, id, 'uploads/before.pdf', draft);
       expect(res).toEqual({ stale: true });
@@ -530,6 +553,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       kind: 'transcript' as const,
       sourceTitle: `Live class: ${id}`,
       storageKey: `uploads/${id}.vtt`,
+      rightsDeclared: true as const,
       ...(liveClassId ? { liveClassId } : {}),
     });
 
@@ -572,6 +596,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
           repos.documents.create(A, {
             ...recording('doc_rec_malformed'),
             liveClassId: bad as never,
+            rightsDeclared: true,
           }),
         );
         expect(err.kind).toBe('invalid');
@@ -581,7 +606,7 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
 
     it('startReplace keeps the link', async () => {
       await repos.documents.create(A, recording('doc_rec_replace', LC_PAST));
-      await repos.documents.startReplace(A, 'doc_rec_replace', { storageKey: 'uploads/v2.vtt' });
+      await repos.documents.startReplace(A, 'doc_rec_replace', { storageKey: 'uploads/v2.vtt', rightsDeclared: true });
       expect(await linkOf('doc_rec_replace')).toBe(LC_PAST);
     });
 

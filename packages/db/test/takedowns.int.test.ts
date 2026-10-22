@@ -67,7 +67,7 @@ const agentRow = async (agentId: string) =>
 const revision = () => repos.retrieval.revision(A);
 
 async function material(docId: string, moduleId: string, text: string): Promise<void> {
-  await repos.documents.create(A, { id: docId, moduleId, kind: 'material', sourceTitle: docId });
+  await repos.documents.create(A, { id: docId, moduleId, kind: 'material', sourceTitle: docId, rightsDeclared: true });
   const { ids: chunkIds } = await repos.chunks.insertMany(A, docId, [
     { ord: 0, text, locator: 'p1' },
   ]);
@@ -288,7 +288,7 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
         targetId: DOC,
         category: 'copyright',
       });
-      await repos.documents.startReplace(A, DOC, { storageKey: 'uploads/replaced.pdf' });
+      await repos.documents.startReplace(A, DOC, { storageKey: 'uploads/replaced.pdf', rightsDeclared: true });
       await repos.chunks.insertMany(A, DOC, [{ ord: 0, text: DOC_TEXT, locator: 'p1' }]);
       await raw.query(`update documents set status = 'ready' where id = $1`, [DOC]);
       const index = retrievalIndexFor(repos);

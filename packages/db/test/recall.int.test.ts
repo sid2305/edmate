@@ -134,6 +134,7 @@ describe.skipIf(!up)('recall@5 on the demo Q&A set (5.3 Phase D)', () => {
         moduleId: m.moduleId,
         kind: 'material',
         sourceTitle: m.parsed.sourceTitle,
+        rightsDeclared: true,
       });
       // No embedder: full text only, every embedding NULL until a hybrid run sets them.
       const res = await indexDocument(

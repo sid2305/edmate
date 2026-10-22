@@ -319,6 +319,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         moduleId: ids.module(target, 1),
         kind: 'material',
         sourceTitle: `[${actor}] doc`,
+        rightsDeclared: true,
       }),
     verify: async (_r, actor, res) => {
       expect(await ownerOfRow('documents', (res as { id: string }).id)).toBe(teacherId(actor));
@@ -332,6 +333,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
             moduleId: ids.module(a, 1),
             kind: 'material',
             sourceTitle: 'x',
+            rightsDeclared: true,
           }),
         'not_found',
       ],
@@ -396,6 +398,7 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     attempt: (r, scope, actor, target) =>
       r.documents.startReplace(scope, repDoc(target), {
         storageKey: `[${actor}] key ${++counter}`,
+        rightsDeclared: true,
       }),
     verify: async (r, actor) => {
       const row = await r.documents.get(tScope(actor), repDoc(actor));
@@ -4106,6 +4109,7 @@ describe.skipIf(!up)(
           moduleId: ids.module(t, 1),
           kind: 'material',
           sourceTitle: `[${t}] doc`,
+          rightsDeclared: true,
         });
         await repos.chunks.insertMany(tScope(t), isoDoc(t), [
           { ord: 0, text: `[${t}] isolation marker`, locator: 'p1' },
@@ -4119,6 +4123,7 @@ describe.skipIf(!up)(
           kind: 'material',
           sourceTitle: `[${t}] keyed doc`,
           storageKey: keyOf(t),
+          rightsDeclared: true,
         });
         await repos.chunks.insertMany(tScope(t), keyDoc(t), [
           { ord: 0, text: `[${t}] keyed marker`, locator: 'p1' },
@@ -4132,6 +4137,7 @@ describe.skipIf(!up)(
             kind: 'material',
             sourceTitle: `[${target}] deletable`,
             storageKey: `[${target}] del`,
+            rightsDeclared: true,
           });
           await repos.chunks.insertMany(tScope(target), delDoc(actor, target), [
             { ord: 0, text: `[${target}] deletable chunk`, locator: 'p1' },
@@ -4143,6 +4149,7 @@ describe.skipIf(!up)(
           kind: 'material',
           sourceTitle: `[${target}] replaceable`,
           storageKey: `[${target}] rep`,
+          rightsDeclared: true,
         });
       }
       await raw.query(
@@ -4336,6 +4343,7 @@ describe.skipIf(!up)(
           kind: 'transcript',
           sourceTitle: `[${t}] class recording`,
           liveClassId: lc_,
+          rightsDeclared: true,
         });
       }
     });

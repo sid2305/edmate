@@ -137,6 +137,7 @@ async function seedWorld(): Promise<Map<string, string[]>> {
       moduleId: m,
       kind: 'material',
       sourceTitle: `Notes ${moduleMark(m)}`,
+      rightsDeclared: true,
     });
     const own = Array.from({ length: CHUNKS_PER_MODULE }, (_, k) => chunkText(rand, m, k));
     const { ids: chunkIds } = await repos.chunks.insertMany(
