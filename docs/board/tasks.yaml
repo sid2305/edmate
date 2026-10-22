@@ -4772,7 +4772,9 @@ tasks:
   deps:
   - 9.6c
   risk: risky
-  status: todo
+  status: running
+  branch: m9/9.6h-subscription-hardening
+  model: build:opus
 - id: 11.3c
   milestone: M13
   title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference
