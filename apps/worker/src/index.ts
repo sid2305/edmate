@@ -21,6 +21,13 @@ import { COST_ALARM_QUEUE } from './alarms/schedule.js';
 import { createTurnWorkers, pruneDeadLetters } from './commit/index.js';
 import { createGateWorker, livePrepareGate } from './gate/workers.js';
 import { createIngestGateway, createIngestWorker } from './ingest/index.js';
+import {
+  createWeeklyInsightsWorker,
+  insightsContentDir,
+  insightsTimezone,
+  scheduleWeeklyInsights,
+  WEEKLY_INSIGHTS_QUEUE,
+} from './insights/index.js';
 import { createWorkerWebFetcher, WebLinkConfigError } from './webLink/index.js';
 import type { WebFetcher } from '@edmate/ingest';
 import { describeError, jsonLog } from './log.js';
@@ -35,6 +42,7 @@ const connection = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', 
 const db = openDatabase();
 const deadLetter = new Queue(DEAD_LETTER_QUEUE, { connection });
 const costAlarmQueue = new Queue(COST_ALARM_QUEUE, { connection });
+const weeklyInsightsQueue = new Queue(WEEKLY_INSIGHTS_QUEUE, { connection });
 const alertQueue = new Queue(ALERT_QUEUE, { connection });
 
 const noop = createNoopWorker(connection, { autorun: true });
@@ -51,6 +59,17 @@ const costAlarm = createCostAlarmWorker({
       sink: logCostAlarmSink(),
       now: () => new Date(),
     },
+    log,
+  },
+});
+const weeklyInsights = createWeeklyInsightsWorker({
+  connection,
+  deadLetter,
+  autorun: true,
+  deps: {
+    teacherIds: (scope) => db.repos.usageLedger.teacherIdsWithUsageSince(scope),
+    insights: db.repos.insights,
+    now: () => new Date(),
     log,
   },
 });
@@ -131,6 +150,7 @@ const workers = [
   turn.meter,
   turn.commit,
   costAlarm,
+  weeklyInsights,
   alert,
   safetyEvent,
   gate,
@@ -146,6 +166,17 @@ scheduleCostAlarm(costAlarmQueue).catch((error: unknown) => {
   process.exitCode = 1;
 });
 
+try {
+  const tz = insightsTimezone(insightsContentDir(process.env));
+  scheduleWeeklyInsights(weeklyInsightsQueue, tz).catch((error: unknown) => {
+    log({ level: 'error', event: 'weekly_insights.schedule_failed', error: describeError(error) });
+    process.exitCode = 1;
+  });
+} catch (error) {
+  log({ level: 'error', event: 'weekly_insights.schedule_failed', error: describeError(error) });
+  process.exitCode = 1;
+}
+
 // Dead-letter entries expire after 7 days (FAILED_JOB_TTL_SECONDS): prune at start, then hourly.
 const PRUNE_EVERY_MS = 60 * 60 * 1_000;
 void pruneDeadLetters(deadLetter, log);
@@ -157,7 +188,12 @@ async function shutdown(signal: string): Promise<void> {
   log({ level: 'info', event: 'worker.shutdown', signal });
   clearInterval(pruneTimer);
   await Promise.all(workers.map((w) => w.close()));
-  await Promise.all([deadLetter.close(), costAlarmQueue.close(), alertQueue.close()]);
+  await Promise.all([
+    deadLetter.close(),
+    costAlarmQueue.close(),
+    weeklyInsightsQueue.close(),
+    alertQueue.close(),
+  ]);
   await db.close();
   await connection.quit();
 }
