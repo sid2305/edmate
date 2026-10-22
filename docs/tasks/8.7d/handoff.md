@@ -5,7 +5,7 @@ Status: DONE
 - Branch: `m8/8.7d-publish-page` (built locally as `work-87d`)
 - Worktree: `.claude/worktrees/agent-a64a34abaf6988d28`
 - Plan: `docs/tasks/8.7/plan.md` (Phase D)
-- Tool calls used: 62
+- Tool calls used: 84 (harness count; the builder reported 62)
 
 ## Summary
 
@@ -119,3 +119,8 @@ Tests 3 passed (3)
 - **Dev-stack browser walkthrough** with a scripted-gate worker build: start, see running, then passed, on the real web and worker containers. Not done here (see Walkthrough). A live-model walkthrough waits on B-40.
 - **"Changed since last publish" note** in the studio (lead answer Q10): needs a read that compares the current basis (material revision, package versions, style card) with the last published run. Not in Phase D's file list; suggest a small follow-up or fold it into Phase E or 13.regate.
 - **Scorecard on the public teacher page:** Phase E (needs 9.2c).
+
+### 22 Oct 2026 · 8.7d review: the pick() narrowing cast stays · decided by lead · risk: low
+- Decided: the `(v as K)` cast in PublishView.tsx pick() is kept (wontfix); 8.7d's other MEDIUM and LOW review findings go to board task 8.7l.
+- Why: the cast follows an `.includes()` check against the same literal list, which is the usual way to narrow in TypeScript; nothing in the deferred findings blocks a teacher from publishing.
+- risk: low
