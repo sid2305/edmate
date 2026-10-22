@@ -103,4 +103,4 @@ Earlier failures, now fixed in the spec:
   out to come from trace writes (not confirmed). Both are out of scope for 9.7b.
 
 Status: DONE
-Tool calls used: 45
+Tool calls used: 60 (harness count; the builder reported 45)
