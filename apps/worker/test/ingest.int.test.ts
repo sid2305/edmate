@@ -242,6 +242,55 @@ describe.skipIf(!up)(`ingest worker on Redis + Postgres${up ? '' : ` (${SKIP})`}
     }
   });
 
+  it('EDMATE_INGEST_EMBEDDINGS=off: a markdown job reaches ready with no embedder, and full text finds it', async () => {
+    const storage = fakeStorage();
+    const { id, storageKey } = await createDocument(
+      db.repos,
+      `ingest/${randomBytes(4).toString('hex')}.md`,
+    );
+    storage.put(storageKey, md('# Off canary\n\nINGEST-INT-CANARY-off-mode content.'));
+    await db.repos.documents.updateStatus(scope, id, 'processing');
+
+    const lines: LogLine[] = [];
+    const queue = createIngestQueue(connection, { prefix });
+    const worker = createIngestWorker({
+      connection,
+      deps: { repos: db.repos, storage, gateway: {} },
+      deadLetter,
+      log: (l) => lines.push(l),
+      prefix,
+      autorun: true,
+    });
+    try {
+      await enqueueIngest(
+        queue,
+        { teacherId: scope.teacherId, documentId: id, fileKind: 'markdown' } satisfies IngestJob,
+        storageKey,
+      );
+
+      const row = await until(
+        () => db.repos.documents.get(scope, id),
+        (r) => r?.status === 'ready',
+      );
+      expect(row?.status).toBe('ready');
+      expect(await chunkCount(id)).toBeGreaterThan(0);
+
+      const hits = await until(
+        () =>
+          db.repos.retrieval.search(scope, {
+            q: 'INGEST-INT-CANARY-off-mode',
+            allowedModuleIds: ['mod_ing_01'],
+            k: 10,
+          }),
+        (hs) => hs.length > 0,
+      );
+      expect(hits.some((h) => h.documentId === id)).toBe(true);
+    } finally {
+      await worker.close();
+      await queue.close();
+    }
+  });
+
   it('an unsupported or corrupt file fails with a fixed reason', async () => {
     const storage = fakeStorage();
     const { id, storageKey } = await createDocument(db.repos, `ingest/${randomBytes(4).toString('hex')}.md`);

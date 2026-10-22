@@ -70,6 +70,11 @@ const safetyEvent = createSafetyEventWorker({
 // dev box with no provider keys configured for the turn-side adapters.
 let ingest: ReturnType<typeof createIngestWorker> | undefined;
 try {
+  // Task 9.0 D3: explicit, never a silent fallback -- logged once, distinct from the
+  // ingest.worker_disabled path below (which fires on a real config/key failure).
+  if (process.env.EDMATE_INGEST_EMBEDDINGS === 'off') {
+    log({ level: 'info', event: 'ingest.embeddings_off' });
+  }
   const gateway = await createIngestGateway(process.env);
   const storageConfig = storageConfigFromEnv(process.env);
   const s3Client = new S3Client({

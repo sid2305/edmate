@@ -414,6 +414,17 @@ tasks:
         deferred: 0
         wontfix: 2
     human_questions: 0
+- id: '0.22'
+  milestone: M7
+  title: 'Review the parallelization change (human request 22 Oct 2026): on 24 Oct 2026 the lead compares the two days before and after 22 Oct 2026: tasks merged per day, builder-slot idle time, HIGH findings
+    per task and fix rounds (`board.py metrics --last 20`, plus the sessions'' usage), and says whether 1 Opus + 2 Sonnet with the no-shared-files rule works better than 1 + 1 with one builder per package;
+    recommends keep, revert or adjust in a blocker for the human'
+  accept: a short comparison (before/after table, 10 lines) in docs/decisions/log.md under a 24 Oct 2026 entry and a blocker with the recommendation; no code change.
+  deps: []
+  risk: normal
+  status: todo
+  branch: null
+  model: null
 - id: '0.19'
   milestone: M7
   title: 'Agent factory, memory (human decision 21 Oct 2026): the decision log gets a per-area digest (`docs/decisions/digest.md`: risk-high decisions and standing rules only, superseded entries marked)
@@ -2015,7 +2026,7 @@ tasks:
   model: plan:opus build:opus-5.5/medium+sonnet fixes review:sonnet+security opus
 - id: '8.3'
   milestone: M8
-  title: Outline editor with source links; reorder, rename, merge, split
+  title: 'Outline editor with source links; reorder, rename, merge, split (Phase C: the editor page; plan docs/tasks/8.3/plan.md)'
   accept: outline for 20 files in < 10 minutes; edits versioned.
   deps:
   - '1.3'
@@ -2023,7 +2034,8 @@ tasks:
   - '5.11'
   - '5.2'
   - '8.1'
-  status: planning
+  - 8.3b
+  status: todo
   branch: null
   model: plan:sonnet
 - id: '8.4'
@@ -2140,12 +2152,14 @@ tasks:
   accept: docs/try-it.md exists and a person following it from a clean clone reaches a streamed chat reply about uploaded content in under 30 minutes; every wiring fix has a test; the run is recorded in
     the handoff with screenshots or trimmed logs (no keys).
   deps:
+  - 9.0a
+  - 9.0b
   - '9.4'
   - '8.2'
   - '9.3'
-  status: planning
-  branch: null
-  model: plan:opus
+  status: running
+  branch: m9/9.0-try-it
+  model: plan:opus build:opus
 - id: '9.2'
   milestone: M9
   title: Discovery and teacher pages (server-rendered) with packages and the teaching scorecard
@@ -2225,8 +2239,10 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 0.21 review follow-ups for apps/web test/turn-backend.ts
-    deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for both sleep branches'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 9.0b review LOW: apps/worker gateway.test.ts
+    asserts the transcriber is defined before calling it; 9.0a review LOW: devModel.test.ts generateObject tests use the real harness schemas instead of hand-copied ones; 0.21 review follow-ups for apps/web
+    test/turn-backend.ts deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for
+    both sleep branches'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2418,7 +2434,7 @@ tasks:
   accept: a Budget section with a decoy number earlier in the prose parses the real cap or fails visibly; the 4 real Budget sections on main still parse; .claude tests green
   deps:
   - '0.17'
-  status: review
+  status: running
   branch: m0/0.17a-budget-parse
   model: plan:lead build:sonnet
 - id: 0.16b
@@ -2760,7 +2776,7 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: running
+  status: review
   branch: m7/7.2c-leak-cases
   model: plan:sonnet build:sonnet
 - id: 7.2d
@@ -2897,6 +2913,112 @@ tasks:
         deferred: 3
         wontfix: 0
     human_questions: 0
+- id: 9.0a
+  milestone: M9
+  title: '9.0 Phase A: web runtime, image and compose wiring (prompt packs and skills in the web image, compose env, dev-only scripted model switch guarded to localhost) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase A exit conditions.
+  deps:
+  - '9.4'
+  risk: normal
+  status: done
+  branch: m9/9.0a-web-wiring
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 113
+    tokens_in: 368
+    tokens_out: 16961
+    cache_read_tokens: 10133102
+    wall_time_seconds: 768
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
+- id: 9.0b
+  milestone: M9
+  title: '9.0 Phase B: worker ingest without embeddings (EDMATE_INGEST_EMBEDDINGS=off) (plan docs/tasks/9.0/plan.md)'
+  accept: 9.0 plan Phase B exit conditions.
+  deps:
+  - '8.2'
+  risk: normal
+  status: done
+  branch: m9/9.0b-worker-ingest
+  model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 78
+    tokens_in: 260
+    tokens_out: 14006
+    cache_read_tokens: 6939870
+    wall_time_seconds: 675
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
+- id: 8.3a
+  milestone: M8
+  title: '8.3 Phase A: packages/db topic_chunks table, outline and courses repositories (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase A exit conditions.
+  deps:
+  - '8.1'
+  risk: high
+  status: review
+  branch: m8/8.3a-outline-db
+  model: plan:sonnet build:opus
+- id: 8.3b
+  milestone: M8
+  title: '8.3 Phase B: apps/web studio outline API (GET, PUT, generate) (plan docs/tasks/8.3/plan.md)'
+  accept: 8.3 plan Phase B exit conditions.
+  deps:
+  - 8.3a
+  - 9.0a
+  risk: normal
+  status: todo
+  branch: null
+  model: plan:sonnet
+- id: 7.2g
+  milestone: M7
+  title: 'Leak-suite follow-ups from 7.2c: rewrite the 4 new "-deva" cases (mcq-range-step, authority-dict-update, pressure-sum-loop, partialreveal-mod-remainder) in Devanagari script, as the older -deva
+    cases are; tighten the ~21 older leak cases that echo a banned phrase in the student turn or ban only one phrase, then widen the suites.test.ts banned-phrase guards from the 7.2c ids to the whole leak
+    suite'
+  accept: the leak banned-phrase guards cover all leak cases and pass; the 4 cases use Devanagari script.
+  deps:
+  - 7.2c
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 8.3c
+  milestone: M13
+  title: '8.3a review follow-ups: an outline edit that merges away a studied topic moves its evidence_events to the surviving topic instead of being refused; batch replaceOutline''s per-module and per-topic
+    writes (jsonb_to_recordset); expected outlineVersion on save so a stale save is refused; teacher-deletion handling for topic_chunks.teacher_id; note the advisory-lock hash collision'
+  accept: the follow-ups are done, with tests.
+  deps:
+  - 8.3a
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

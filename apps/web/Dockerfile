@@ -33,9 +33,12 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
-# The age gate (1.7) reads the locale packs and privacy notices at run time.
+# The age gate (1.7) reads the locale packs and privacy notices at run time; the turn runtime
+# (9.4) also reads the prompt packs and the signed personas in skills/ (task 9.0, W1).
 COPY --from=build --chown=node:node /repo/content/locales ./content/locales
 COPY --from=build --chown=node:node /repo/content/legal ./content/legal
+COPY --from=build --chown=node:node /repo/content/prompt-packs ./content/prompt-packs
+COPY --from=build --chown=node:node /repo/content/skills ./content/skills
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
