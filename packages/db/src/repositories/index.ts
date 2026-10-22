@@ -131,6 +131,7 @@ export { TEACHER_TRACES_MAX_LIMIT, type TurnTraceRow } from './turn-traces.js';
 export {
   COST_ALARM_ACTOR,
   COST_ALARM_PAUSE_ACTION,
+  STALE_PACKAGE_VERSION_REASON,
   type LiveSubscription,
   type PausedSubscription,
   type PauseFreeOptions,
