@@ -1,7 +1,7 @@
 # Task 8.5b handoff: test chat API, teacher_preview composition (8.5 Phase B)
 
 Status: DONE
-Tool calls used: 38
+Tool calls used: 53
 
 - Branch: `m8/8.5b-test-chat-api` (built on local branch `work-85b`)
 - Worktree: `.claude/worktrees/agent-a530986b47036281d`
@@ -73,6 +73,11 @@ corrections map to 404/400. Coverage of `src/studio/testChat/**`: 93% lines, 92%
 - `apps/web/src/auth/**` untouched: no risky-path edit.
 
 ## Decisions
+### 22 Oct 2026 · 8.5b Preview writes to the teacher's own inbox until 8.5d · decided by lead · risk: medium
+- Decided: the test-chat API merges with preview turns reusing the student write ports. A preview question the agent can't answer goes to the teacher's own Ask-the-teacher inbox, and profile, evidence and safety-event rows are written for the teacher as both sides. Follow-up 8.5d gives preview its own no-op question, profile and evidence ports (safety events stay recorded) before the pilot.
+- Why: the code reviewer's MEDIUM in apps/web/src/studio/testChat/deps.ts. It is visible only to the teacher who ran the preview and leaks nothing across teachers, so it doesn't block a testable studio; the fix needs its own small task.
+- risk: medium
+
 
 ### 22 Oct 2026 · 8.5b preview deps reuse the student turn deps · decided by builder · risk: low
 - Decided: `testChatDepsFor` returns `{ ...turnDepsFor({ ...p, entitlements: previewEntitlementsFor(p, packageId) }, scope), entitlementSource: 'teacher_preview' }` rather than copying turnDepsFor's 40 lines.
