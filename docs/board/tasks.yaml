@@ -3554,9 +3554,31 @@ tasks:
   deps:
   - 8.6b
   risk: medium
-  status: running
+  status: done
   branch: m8/8.6c-packages-api
-  model: plan:opus build:opus
+  model: plan:opus build:opus fix:sonnet review:sonnet
+  metrics:
+    tool_calls: 44
+    tokens_in: 158
+    tokens_out: 6363
+    cache_read_tokens: 3236693
+    wall_time_seconds: 2910
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 3
+      by_status:
+        fixed: 1
+        open: 0
+        deferred: 4
+        wontfix: 0
+    human_questions: 0
 - id: 8.6d
   milestone: M8
   title: '8.6 Phase D: apps/web package builder page, presets and the timed walkthrough (plan docs/tasks/8.6/plan.md)'
