@@ -4804,8 +4804,9 @@ tasks:
   deps:
   - 8.2e
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.2f-web-link-ui
+  model: plan:sonnet build:sonnet
 - id: 8.2c
   milestone: M8
   title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the
