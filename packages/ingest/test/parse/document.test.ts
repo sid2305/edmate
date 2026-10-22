@@ -50,6 +50,28 @@ describe('parseDocument', () => {
     expect(doc.units.map((u) => u.locator)).toEqual(['slide 1', 'slide 3']);
   });
 
+  it('dispatches vtt bytes to the caption parser', async () => {
+    const doc = await parseDocument({
+      kind: 'vtt',
+      bytes: new TextEncoder().encode(
+        'WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello from a caption file.\n',
+      ),
+      sourceTitle: 'Captions',
+    });
+    expect(doc.units).toEqual([{ text: 'Hello from a caption file.', locator: '0:00' }]);
+  });
+
+  it('dispatches srt bytes to the caption parser', async () => {
+    const doc = await parseDocument({
+      kind: 'srt',
+      bytes: new TextEncoder().encode(
+        '1\n00:00:00,000 --> 00:00:01,000\nHello from an srt file.\n',
+      ),
+      sourceTitle: 'Captions',
+    });
+    expect(doc.units).toEqual([{ text: 'Hello from an srt file.', locator: '0:00' }]);
+  });
+
   it('refuses empty input and input over the size cap before parsing', async () => {
     await expect(
       parseDocument({ kind: 'markdown', bytes: new Uint8Array(0), sourceTitle: 'x' }),
@@ -57,6 +79,19 @@ describe('parseDocument', () => {
     await expect(
       parseDocument({
         kind: 'markdown',
+        bytes: new Uint8Array(MAX_DOCUMENT_BYTES + 1),
+        sourceTitle: 'x',
+      }),
+    ).rejects.toMatchObject({ code: 'input_too_large' });
+  });
+
+  it('refuses an empty vtt and an over-size srt file before parsing', async () => {
+    await expect(
+      parseDocument({ kind: 'vtt', bytes: new Uint8Array(0), sourceTitle: 'x' }),
+    ).rejects.toMatchObject({ code: 'validation' });
+    await expect(
+      parseDocument({
+        kind: 'srt',
         bytes: new Uint8Array(MAX_DOCUMENT_BYTES + 1),
         sourceTitle: 'x',
       }),

@@ -113,13 +113,70 @@ jobs:
       # way to catch a bundler bug that source-level tests can't see (task 1.7b).
       - name: 'Build smoke (apps/web: the age gate on a real production build)'
         run: corepack pnpm turbo run build-smoke --filter=@edmate/web
-      # Task 9.7: the student/teacher full-flow e2e suite, against a real `next dev` and this
-      # job's own Postgres (`playwright.config.ts`'s `globalSetup`); every model-shaped turn is a
-      # `page.route` fixture (apps/web/e2e/fixtures.ts), so no real model or payment call ever
-      # runs. `testIgnore: ['stack/**']` keeps task 9.0's docker-compose stack suite out of this
-      # job. Chromium only.
+
+  # Task 9.7 (split out in 0.23): the student/teacher full-flow e2e suite, against a real
+  # `next dev` and this job's own Postgres (`playwright.config.ts`'s `globalSetup`); every
+  # model-shaped turn is a `page.route` fixture (apps/web/e2e/fixtures.ts), so no real model or
+  # payment call ever runs, and no Redis service is needed (`global-setup.ts`'s `REDIS_URL` is
+  # syntactically valid but unreachable on purpose). `testIgnore: ['stack/**']` keeps task 9.0's
+  # docker-compose stack suite out of this job. Chromium only. Split from `node` because
+  # `playwright install --with-deps chromium` pushed that job past its 20-minute limit (PR #188).
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
+        env:
+          POSTGRES_USER: edmate
+          POSTGRES_PASSWORD: edmate-ci
+          POSTGRES_DB: edmate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edmate -d edmate"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      TEST_DATABASE_URL: postgres://edmate:edmate-ci@localhost:5432/edmate
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Install (pnpm from package.json via corepack)
+        run: corepack pnpm install --frozen-lockfile
+      # `global-setup.ts` spawns packages/db's built CLIs (migrate.js/seed.js) and the gateway
+      # reads its bundled prices.yaml at runtime, so @edmate/web and its workspace dependencies
+      # need a real build first (confirmed locally: `next dev` 503s on the first session call
+      # without it).
+      - name: Build (apps/web and its workspace dependencies)
+        run: corepack pnpm turbo run build --filter=@edmate/web...
+      - name: Read the installed @playwright/test version (pnpm-lock.yaml)
+        id: playwright-version
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 "^  '@playwright/test@" pnpm-lock.yaml | sed -E "s/^  '@playwright\/test@([^']+)':/\1/")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: corepack pnpm --filter @edmate/web exec playwright install --with-deps chromium
+      - name: Install Playwright OS dependencies (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: corepack pnpm --filter @edmate/web exec playwright install-deps chromium
       - name: Student/teacher e2e (scripted turns)
         run: corepack pnpm --filter @edmate/web e2e
 

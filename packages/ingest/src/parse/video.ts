@@ -3,7 +3,7 @@
 // Within-unit splitting (paragraph -> sentence -> word) is left to 5.3's unchanged chunkDocument.
 import type { Transcript } from '@edmate/contracts';
 import { IngestError } from '../errors.js';
-import type { ParsedDocument } from '../types.js';
+import type { ParsedDocument, ParsedUnit } from '../types.js';
 import { collapse, requireTitle } from './sections.js';
 
 /** 90 seconds: ordinary speech density lands at roughly one chunk per unit (lead decision, 5.2). */
@@ -22,15 +22,19 @@ export function formatTimestamp(ms: number): string {
 }
 
 /**
- * Buckets `transcript.segments` by their time window (`floor(startMs / VIDEO_UNIT_WINDOW_MS)`);
- * each non-empty bucket becomes one unit, its segments' trimmed text joined by spaces and its
- * locator the window's start timestamp. `Transcript.segments` is contract-guaranteed non-empty
- * (`TranscriptSchema.segments.min(1)`), so this always returns >= 1 unit.
+ * Buckets timed segments by their time window (`floor(startMs / VIDEO_UNIT_WINDOW_MS)`); each
+ * non-empty bucket becomes one unit, its segments' trimmed text joined by spaces and its locator
+ * the window's start timestamp. Shared by `parseVideoTranscript` (2.7 recordings) and the caption
+ * parsers (8.2c `.vtt`/`.srt`), so a caption file lands in the same 90 s units a Whisper transcript
+ * gives. Segment order does not need to be window-sorted: buckets are keyed by window, not by
+ * iteration order (the caller still sorts by `startMs` first, so text within a shared window
+ * reads in chronological order).
  */
-export function parseVideoTranscript(transcript: Transcript, sourceTitle: string): ParsedDocument {
-  const title = requireTitle(sourceTitle);
+export function unitsFromTimedText(
+  segments: readonly { readonly startMs: number; readonly text: string }[],
+): ParsedUnit[] {
   const buckets = new Map<number, string[]>();
-  for (const segment of transcript.segments) {
+  for (const segment of segments) {
     const text = collapse(segment.text);
     if (text === '') continue;
     const window = Math.floor(segment.startMs / VIDEO_UNIT_WINDOW_MS);
@@ -39,10 +43,19 @@ export function parseVideoTranscript(transcript: Transcript, sourceTitle: string
     else bucket.push(text);
   }
   const windows = [...buckets.keys()].sort((a, b) => a - b);
-  const units = windows.map((window) => ({
+  return windows.map((window) => ({
     text: (buckets.get(window) ?? []).join(' '),
     locator: formatTimestamp(window * VIDEO_UNIT_WINDOW_MS),
   }));
+}
+
+/**
+ * `Transcript.segments` -> `ParsedDocument`. `Transcript.segments` is contract-guaranteed
+ * non-empty (`TranscriptSchema.segments.min(1)`), so this always returns >= 1 unit.
+ */
+export function parseVideoTranscript(transcript: Transcript, sourceTitle: string): ParsedDocument {
+  const title = requireTitle(sourceTitle);
+  const units = unitsFromTimedText(transcript.segments);
   // Every real segment carries non-blank text (contracts min(1)), so this only guards the
   // theoretical case of a transcript whose segments are all whitespace.
   if (units.length === 0) {
