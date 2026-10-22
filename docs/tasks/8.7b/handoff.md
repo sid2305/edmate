@@ -111,17 +111,66 @@ python3 .githooks/secret-scan.py --all   -> clean (no findings)
 - `models.test.ts` checks the env fail-closed cases, the B-42 tier routing, that unpriced usage is counted as unmetered (never $0), and the judge.
 
 ## Decisions
-1. Platform cases are labelled `package: free|paid`. A label first matches a package id exactly. Otherwise `free`/`paid` picks the widest candidate package of that price tier (price 0 = free), with ties broken by id. A label no package fits gets an agent that rejects, so those cases fail and are never skipped.
-2. `outOfCourse` is `[]` for now. Phase B has no content loading; Phase C or 8.7 content work fills it.
-3. Any non-blank `EDMATE_DEV_MODEL` makes the gate unavailable, not only `scripted`. The scripted dev model answers every classifier "all clear", so a gate over it would pass by default.
-4. The judge must be Anthropic (`judge_provider` otherwise). The judge model comes only from `EDMATE_JUDGE_MODEL`, as the decision log's eval-judge entry requires (pinned per release, no default). Judge calls are metered into the same run meter as `eval` usage.
-5. Unpriced or unknown usage is counted as `unmetered` with its reason, never as free.
-6. A turn that ends in an `error` event (other than `guard_blocked`), or that has any background failure, fails its case. The one exception is `LockedLeakDetected`: the locked-stream guard withheld text and replaced the reply, and that reply is what the case scores. Every background report is still counted in `effects.backgroundFailures`.
-7. The gate fixture agent is English-only (`languages: ['en']`), as the English-only pilot requires. Otherwise `PilotLanguageClamped` is reported in the background, and under decision 6 that fails the case. Agents with other languages will fail gate cases this way until that policy changes.
-8. `GateBasis` is a local type until Phase A's contract or db shape lands. Phase C should switch to it.
-9. `gateFallbackReplies` and `collectReply` copy the web and CLI versions. A shared composition module is an M13 follow-up (plan scope 10).
-10. `@edmate/contracts` and `@edmate/harness` moved from devDependencies to dependencies, because worker runtime code now imports them.
-11. The gate's `TurnConfigStore` is its own: the production `turnConfigStoreFor` needs session rows, and the gate writes none.
+
+### 22 Oct 2026 · 8.7b Lead accepts that non-English agents fail gate cases during the pilot · decided by lead · risk: medium
+- Decided: under builder decisions 6 and 7, a PilotLanguageClamped background report fails a gate case, so an agent with non-English languages cannot pass the gate until the English-only pilot policy changes. A retryable guard_blocked (failed pre-guard chain) also fails the case after the fix round.
+- Why: the pilot is English-only (human decision); a gate that passed with background failures, or counted a failed guard chain as a block, would overstate safety.
+- risk: medium
+
+### 22 Oct 2026 · 8.7b Platform case package labels pick a package by id or price tier · decided by builder · risk: low
+- Decided: Platform cases are labelled `package: free|paid`. A label first matches a package id exactly. Otherwise `free`/`paid` picks the widest candidate package of that price tier (price 0 = free), with ties broken by id. A label no package fits gets an agent that rejects, so those cases fail and are never skipped.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b outOfCourse is empty in Phase B · decided by builder · risk: low
+- Decided: `outOfCourse` is `[]` for now. Phase B has no content loading; Phase C or 8.7 content work fills it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b Any EDMATE_DEV_MODEL value makes the gate unavailable · decided by builder · risk: low
+- Decided: Any non-blank `EDMATE_DEV_MODEL` makes the gate unavailable, not only `scripted`. The scripted dev model answers every classifier "all clear", so a gate over it would pass by default.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b The judge must be Anthropic and comes only from EDMATE_JUDGE_MODEL · decided by builder · risk: low
+- Decided: The judge must be Anthropic (`judge_provider` otherwise). The judge model comes only from `EDMATE_JUDGE_MODEL`, as the decision log's eval-judge entry requires (pinned per release, no default). Judge calls are metered into the same run meter as `eval` usage.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b Unpriced usage is counted as unmetered · decided by builder · risk: low
+- Decided: Unpriced or unknown usage is counted as `unmetered` with its reason, never as free.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b Turn errors and background failures fail a case, except LockedLeakDetected · decided by builder · risk: low
+- Decided: A turn that ends in an `error` event (other than `guard_blocked`), or that has any background failure, fails its case. The one exception is `LockedLeakDetected`: the locked-stream guard withheld text and replaced the reply, and that reply is what the case scores. Every background report is still counted in `effects.backgroundFailures`.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b The gate fixture agent is English-only · decided by builder · risk: low
+- Decided: The gate fixture agent is English-only (`languages: ['en']`), as the English-only pilot requires. Otherwise `PilotLanguageClamped` is reported in the background, and under decision 6 that fails the case. Agents with other languages will fail gate cases this way until that policy changes.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b GateBasis is a local type until Phase A · decided by builder · risk: low
+- Decided: `GateBasis` is a local type until Phase A's contract or db shape lands. Phase C should switch to it.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b gateFallbackReplies and collectReply copy the web and CLI versions · decided by builder · risk: low
+- Decided: `gateFallbackReplies` and `collectReply` copy the web and CLI versions. A shared composition module is an M13 follow-up (plan scope 10).
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b contracts and harness become worker dependencies · decided by builder · risk: low
+- Decided: `@edmate/contracts` and `@edmate/harness` moved from devDependencies to dependencies, because worker runtime code now imports them.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
+
+### 22 Oct 2026 · 8.7b The gate has its own TurnConfigStore · decided by builder · risk: low
+- Decided: The gate's `TurnConfigStore` is its own: the production `turnConfigStoreFor` needs session rows, and the gate writes none.
+- Why: see the decision text; Phase B scope per docs/tasks/8.7/plan.md.
+- risk: low
 
 ## Left to do (Phase C and follow-ups)
 - Queue and processor; persisting run results; reading Phase A's basis.
@@ -131,4 +180,4 @@ python3 .githooks/secret-scan.py --all   -> clean (no findings)
 - The gateway's `MODEL_MIX.paid` names Haiku as `claude-haiku-4-5`, but the brief says `claude-haiku-4-5-20251001`. Not changed, because `packages/**` is out of bounds. The lead should decide whether the gateway id needs the date suffix.
 - `fakeRepos` only lets the gate's read set through. If Phase C adds reads, it must widen `GATE_READ_REPOS`.
 
-Tool calls used: 115
+Tool calls used: 157 (harness count: build 130 + fix 27)
