@@ -10,6 +10,34 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 7.4c budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 46 tool calls against a 30-call budget (1.53×); accepted without a fix round.
+- Why: one phase, tests-first across two packages, 26/26 turbo tasks green, both reviewers approve with LOWs only; the overrun is the test setup for the deadline cases, not rework.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4c review LOWs deferred to 7.4a · decided by lead · risk: low
+- Decided: the two review LOWs (gateScope.ts DEFAULT_GATE_DEADLINE_MS duplicates GATE_DEADLINE_MS; selectGateCases validates the change set twice) go to board task 7.4a.
+- Why: MVP first; neither changes behaviour.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.4c two-tier default and the 120-minute constant · decided by builder · risk: medium
+- Decided: `material`, `packages`, `style_card` (and unions of only those) keep the existing
+  15-minute `GATE_DEADLINE_MS` default; `first_publish` or `prompt_pack_bump` (alone or unioned
+  with anything) default to a new `FULL_SCOPE_GATE_DEADLINE_MS = 2 * 60 * 60_000` (120 min). An
+  explicit `GateInput.deadlineMs` / CLI `--deadline-ms` still overrides either tier.
+- Why: the lead's plan answer (21 Oct 2026) already accepted this two-tier split and the 120-min
+  number, following 7.2's "Risks" estimate (~80 min at MVP target suite sizes, ~2 h at the
+  eventual full Evals-table size). 120 min covers the MVP target with margin and the full-table
+  size exactly.
+- risk: medium — the 120-minute constant is provisional, same footing as 7.4's
+  `ASSUMED_CALL_SECONDS` / `GATE_CONCURRENCY`, until 7.6 / 7.7 measure real p95.
+
+---
+
 ### 21 Oct 2026 · 0.20 merge: test-only timeout changes under packages/harness/src/guardrails · decided by lead · risk: high
 - Decided: merge. Under `src/guardrails/` only `*.test.ts` timeout arguments changed (each one raised to 20 s). code-reviewer checked that every changed constant is used only as an `it()` timeout. No guardrails source, assertion or latency check changed.
 - Why: the risky path matches the folder, not the kind of change. Flaky timeouts failed PR #118 twice and slow every merge.
