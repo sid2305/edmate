@@ -102,7 +102,11 @@ describe('role x route matrix', () => {
   for (const row of ROUTE_POLICY) {
     const path = sample(row.pattern);
     for (const method of METHODS) {
-      const listed = row.methods.includes(method);
+      // Whether this method is actually routed to this row's access at this sample path: either
+      // this row lists the method itself, or (6.5: `/api/me/memory/*` DELETE nests under
+      // `/api/me/**` GET) a broader overlapping row with the same access serves it instead.
+      const rule = ruleFor(method, path);
+      const listed = row.methods.includes(method) || (rule !== null && sameAccess(rule.access, row.access));
       // Public and provider wrappers can't see unlisted methods; the coverage test keeps every
       // real export listed, so only listed methods are meaningful for them.
       if (typeof row.access === 'string' && !listed) continue;
@@ -245,6 +249,7 @@ describe('Origin check on unsafe methods', () => {
     ['POST', '/api/subscriptions'],
     ['PATCH', '/api/subscriptions/sub_1'],
     ['DELETE', '/api/me'],
+    ['DELETE', '/api/me/memory/agt_1'],
   ];
 
   it.each(unsafe)(
@@ -385,6 +390,10 @@ describe('policy table', () => {
     expect(policyFor('POST', '/api/sessions/s_1/turns')).toEqual(['student']);
     expect(policyFor('GET', '/api/me')).toBeNull();
     expect(policyFor('DELETE', '/api/me')).toEqual(['student']);
+    // 6.5: memory export (GET, under /api/me/**) and reset (DELETE, its own row).
+    expect(policyFor('GET', '/api/me/memory/agt_1')).toEqual(['student']);
+    expect(policyFor('DELETE', '/api/me/memory/agt_1')).toEqual(['student']);
+    expect(policyFor('DELETE', '/api/me/progress')).toBeNull();
     // 8.2: teachers delete their uploads (`DELETE /api/studio/documents/:id`); nobody else may.
     expect(policyFor('DELETE', '/api/studio/documents/doc_1')).toEqual(['teacher']);
     expect(policyFor('DELETE', '/api/studio')).toBeNull();
@@ -431,6 +440,7 @@ describe('age clearance x route matrix (1.7)', () => {
     expect(ruleFor('PATCH', '/api/subscriptions/sub_1')?.clearance).toBe('age');
     expect(ruleFor('GET', '/api/me/progress')?.clearance).toBe('age');
     expect(ruleFor('DELETE', '/api/me')?.clearance).toBe('age');
+    expect(ruleFor('DELETE', '/api/me/memory/agt_1')?.clearance).toBe('age');
     expect(ruleFor('GET', '/api/studio/x')?.clearance).toBe('age');
     expect(ruleFor('GET', '/api/nowhere')).toBeNull();
     for (const row of ROUTE_POLICY) {
