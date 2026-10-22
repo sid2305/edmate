@@ -10,6 +10,50 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.0c builder ran over budget · decided by lead · risk: low
+- Decided: accept the 64-call build against a 50-call budget (65 was the stop line); no change to the result.
+- Why: the extra calls went to the Next.js standalone build check and the vitest include change; the diff is three small files and all three reviewers approved.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0c Warm the pool via an existing discovery read, not a new @edmate/db ping · decided by builder · risk: low
+- Decided: Reused `repos.discovery.search({})` (existing, public, 9.2) as the warm-up query
+  instead of adding a new ping method to `packages/db`.
+- Why: The plan allowed adding new `@edmate/db` surface only if no cheap existing read already
+  existed; `discovery.search` already takes every input as optional and is documented as the
+  public, no-scope read, so it satisfied "prefer reuse" without touching the risky
+  `identity/**`/`repositories/**` globs at all.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0c instrumentation.ts avoids importing src/turn/routes for errorName · decided by builder · risk: low
+- Decided: Reimplemented the one-line `errorName` helper locally in `instrumentation.ts` instead of
+  importing it from `apps/web/src/turn/routes.ts`.
+- Why: A static import of `src/turn/routes.ts` pulls in the whole turn runtime's dependency graph
+  (`@edmate/harness`, `@edmate/gateway`, `@edmate/queue`), which is unbuilt/unresolved outside the
+  full turbo pipeline and fails module resolution in an isolated vitest run; a one-line local
+  helper keeps this file's own dependency surface minimal, matching its "Edge must never pull in
+  pg (or anything heavier)" intent.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.0c vitest.config.ts updated to include root-level test and coverage files · decided by builder · risk: low
+- Decided: Added `*.test.ts` to `test.include` and `instrumentation.ts` to `coverage.include` in
+  `apps/web/vitest.config.ts`.
+- Why: `instrumentation.ts` must live at the app root (Next.js convention, not under `src/`), but
+  the existing vitest config's globs (`app/**`, `src/**`, `e2e/**`) never match a root-level file;
+  without this edit the new test would never run and the new file would never appear in coverage.
+  Not in the plan's named file list, but necessary infrastructure to make the named test executable
+  at all; no risky-path glob matches this file.
+- risk: low
+
+Tool calls used: 64 (harness count; the builder reported 32)
+
+---
+
 ### 22 Oct 2026 · 9.1b builder ran over budget · decided by lead · risk: low
 - Decided: accept the run at 128 tool calls against a budget of 45 (stop at 60); the work is complete and every reviewer approved with no findings.
 - Why: replacing the route literals touched 44 files (pages, their tests and the auth mocks in each test), which the lead's brief underestimated; the builder did not stop at the PARTIAL limit. Future briefs for repo-wide substitutions budget per file touched.
