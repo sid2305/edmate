@@ -457,6 +457,24 @@ alert row FOR UPDATE): an alert already acknowledged returns `acknowledged: fals
 nothing; otherwise the ack fields and one `safety_alert.ack` audit row (the note as its reason,
 at most 500 characters, never the excerpt) commit together.
 
+## Regulated subjects (12.4)
+
+Staff flag an agent as covering a regulated subject and approve it (columns on `agents`,
+migration 0023; 12.4b makes publish refuse a flagged, unapproved agent). Every method takes the
+acting user id `by` first, which must be staff right now (role-lock.ts), else `scope` and nothing
+is written. `listForStaff(by)` returns every agent newest first, capped at `REGULATED_LIST_MAX`
+(200): agent id, the teacher's public slug, status, `liveVersion`, `regulatedSubject`,
+`approvedAt` and `approvedBy` (an id); never a name, email or phone.
+`setSubject(by, { agentId, subject, note? })` sets one of `REGULATED_SUBJECTS` (`investing`,
+`health`, `law`, equal to the contracts enum) or `null`; `setApproval(by, { agentId, approved,
+note? })` approves or revokes. Both run in one transaction in the file header's lock order (the
+acting user's role FOR SHARE, then the agent FOR UPDATE; an unknown agent is `not_found`). The
+same state is a no-op (`changed: false`, no audit row); a subject change clears the approval;
+approving an unflagged agent is `invalid`. Each change writes one `agent.regulated_flag` or
+`agent.regulated_approval` audit row (actorRole `staff`, before and after, the note as its reason,
+at most 500 characters). The migration backfilled each agent's subject from its newest version's
+config, unapproved.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

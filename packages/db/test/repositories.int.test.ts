@@ -2959,6 +2959,73 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       return cases + 1;
     },
   },
+  // Task 12.4a: the staff regulated-subject flag takes a bare staff id, so it is checked like
+  // the public cases: every non-staff caller (each teacher, each student, an unknown id) is
+  // `scope` and writes nothing; only a staff user reads or writes. Each check leaves the flag
+  // cleared, so later cases see unflagged agents.
+  'regulatedSubjects.listForStaff': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const by of [...TEACHERS.map((t) => teacherId(t)), studentId('1'), 'stf_ghost']) {
+        await expectFailsClosed(() => r.regulatedSubjects.listForStaff(by), ['scope'], `${by} listing`);
+        cases += 1;
+      }
+      const rows = await r.regulatedSubjects.listForStaff(ISO_STAFF);
+      expect(rows.map((x) => x.agentId)).toEqual(expect.arrayContaining(TEACHERS.map((t) => ids.agent(t))));
+      return cases + 1;
+    },
+  },
+  'regulatedSubjects.setSubject': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const t of TEACHERS) {
+        for (const by of [...TEACHERS.map((x) => teacherId(x)), studentId('1'), 'stf_ghost']) {
+          await expectFailsClosed(
+            () => r.regulatedSubjects.setSubject(by, { agentId: ids.agent(t), subject: 'health' }),
+            ['scope'],
+            `${by} flagging ${t}`,
+          );
+          cases += 1;
+        }
+        const set = { agentId: ids.agent(t), subject: 'health' } as const;
+        expect(await r.regulatedSubjects.setSubject(ISO_STAFF, set)).toEqual({ changed: true });
+        expect(
+          await r.regulatedSubjects.setSubject(ISO_STAFF, { agentId: ids.agent(t), subject: null }),
+        ).toEqual({ changed: true });
+        cases += 1;
+      }
+      return cases;
+    },
+  },
+  'regulatedSubjects.setApproval': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let cases = 0;
+      for (const t of TEACHERS) {
+        const agentId = ids.agent(t);
+        await r.regulatedSubjects.setSubject(ISO_STAFF, { agentId, subject: 'law' });
+        for (const by of [...TEACHERS.map((x) => teacherId(x)), studentId('1'), 'stf_ghost']) {
+          await expectFailsClosed(
+            () => r.regulatedSubjects.setApproval(by, { agentId, approved: true }),
+            ['scope'],
+            `${by} approving ${t}`,
+          );
+          cases += 1;
+        }
+        expect(await r.regulatedSubjects.setApproval(ISO_STAFF, { agentId, approved: true })).toEqual({
+          changed: true,
+        });
+        await r.regulatedSubjects.setSubject(ISO_STAFF, { agentId, subject: null });
+        cases += 1;
+      }
+      return cases;
+    },
+  },
   // Task 5.10: grouping, answering, and the student's own notifications.
   'teacherQuestions.listGroupsForTeacher': {
     scope: 'teacher',

@@ -161,6 +161,34 @@ describe('driver errors are scrubbed', () => {
     }
   });
 
+  it('regulatedSubjects: a driver error never carries the ids or the note (task 12.4a)', async () => {
+    const secrets = [...SECRETS, 'agt_leak_12', 'stf_leak_12', 'private flag note'];
+    const calls: [string, () => Promise<unknown>][] = [
+      ['regulatedSubjects.listForStaff', () => repos.regulatedSubjects.listForStaff('stf_leak_12')],
+      [
+        'regulatedSubjects.setSubject',
+        () =>
+          repos.regulatedSubjects.setSubject('stf_leak_12', {
+            agentId: 'agt_leak_12',
+            subject: 'health',
+            note: 'private flag note',
+          }),
+      ],
+      [
+        'regulatedSubjects.setApproval',
+        () =>
+          repos.regulatedSubjects.setApproval('stf_leak_12', {
+            agentId: 'agt_leak_12',
+            approved: true,
+            note: 'private flag note',
+          }),
+      ],
+    ];
+    for (const [method, call] of calls) {
+      expectScrubbed(await call().catch((e: unknown) => e), method, secrets);
+    }
+  });
+
   it('safetyAlerts: a driver error never carries the excerpt or the note (task 12.5a)', async () => {
     const alert = {
       id: 'alr_leak_2',

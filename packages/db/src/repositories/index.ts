@@ -16,6 +16,7 @@ import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
 import { publishRepo } from './publish.js';
+import { regulatedSubjectsRepo } from './regulated-subjects.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyAlertsRepo } from './safety-alerts.js';
 import { safetyEventsRepo } from './safety-events.js';
@@ -79,6 +80,7 @@ export function createRepositories(db: Db) {
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
+    regulatedSubjects: guardAll('regulatedSubjects', regulatedSubjectsRepo(db)),
   };
 }
 
@@ -276,3 +278,14 @@ export {
   type SafetyAlertListOptions,
   type SafetyAlertRow,
 } from './safety-alerts.js';
+export {
+  REGULATED_APPROVAL_ACTION,
+  REGULATED_FLAG_ACTION,
+  REGULATED_LIST_MAX,
+  REGULATED_NOTE_MAX,
+  REGULATED_SUBJECTS,
+  type RegulatedApprovalInput,
+  type RegulatedSubject,
+  type RegulatedSubjectInput,
+} from './regulated-subjects.js';
+export type { RegulatedAgentRow } from './map.js';
