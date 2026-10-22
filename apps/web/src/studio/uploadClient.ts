@@ -47,6 +47,8 @@ export const CLIENT_UPLOAD_TYPES: readonly { contentType: string; ext: string }[
   { contentType: 'audio/mp4', ext: 'm4a' },
   { contentType: 'video/mp4', ext: 'mp4' },
   { contentType: 'video/webm', ext: 'webm' },
+  { contentType: 'text/vtt', ext: 'vtt' },
+  { contentType: 'application/x-subrip', ext: 'srt' },
 ];
 
 /** The file picker's `accept`: every extension, then every type. */

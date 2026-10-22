@@ -26,6 +26,19 @@ describe('upload types', () => {
     expect(uploadTypeFor('video/mp4')?.fileKind).toBe('video');
   });
 
+  it('maps caption files to transcript chunks at the document cap (task 8.2c)', () => {
+    expect(uploadTypeFor('text/vtt')).toMatchObject({
+      fileKind: 'vtt',
+      chunkKind: 'transcript',
+      maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
+    });
+    expect(uploadTypeFor('application/x-subrip')).toMatchObject({
+      fileKind: 'srt',
+      chunkKind: 'transcript',
+      maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
+    });
+  });
+
   it('refuses anything not on the list, including near misses', () => {
     for (const t of ['text/html', 'image/svg+xml', 'application/PDF', 'application/pdf; x=1', '']) {
       expect(uploadTypeFor(t)).toBeNull();

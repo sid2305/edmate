@@ -198,6 +198,36 @@ describe('POST /api/studio/documents (create)', () => {
     expect(s.rows.get('doc_1')!.storageKey).toMatch(/\.mp3$/);
   });
 
+  it('files a caption file as a transcript chunk under its own extension (task 8.2c)', async () => {
+    const s = setup();
+    const vtt = await s.h.create(req('POST', '/x', { ...NEW_PDF, contentType: 'text/vtt' }), ctx(ASHA));
+    expect(vtt.status).toBe(201);
+    expect(s.rows.get('doc_1')).toMatchObject({ kind: 'transcript' });
+    expect(s.rows.get('doc_1')!.storageKey).toMatch(/\.vtt$/);
+
+    const srt = await s.h.create(
+      req('POST', '/x', { ...NEW_PDF, contentType: 'application/x-subrip' }),
+      ctx(ASHA),
+    );
+    expect(srt.status).toBe(201);
+    expect(s.rows.get('doc_2')).toMatchObject({ kind: 'transcript' });
+    expect(s.rows.get('doc_2')!.storageKey).toMatch(/\.srt$/);
+  });
+
+  it('refuses a caption file over the 20 MB document cap (task 8.2c)', async () => {
+    const s = setup();
+    const res = await s.h.create(
+      req('POST', '/x', {
+        ...NEW_PDF,
+        contentType: 'text/vtt',
+        byteSize: MAX_DOCUMENT_UPLOAD_BYTES + 1,
+      }),
+      ctx(ASHA),
+    );
+    expect(res.status).toBe(413);
+    expect((await json(res)).error?.code).toBe('input_too_large');
+  });
+
   it('ignores any teacher id, key or kind the client sends', async () => {
     const s = setup();
     const res = await s.h.create(
@@ -511,6 +541,17 @@ describe('POST /api/studio/documents/:id/complete', () => {
       documentId,
       fileKind: 'video',
       mimeType: 'video/webm',
+    });
+  });
+
+  it('enqueues a caption file with its fileKind and no mimeType (task 8.2c)', async () => {
+    const s = setup();
+    const { documentId } = await uploaded(s, { contentType: 'text/vtt' });
+    await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(s.enqueued[0]!.job).toEqual({
+      teacherId: 't_asha',
+      documentId,
+      fileKind: 'vtt',
     });
   });
 

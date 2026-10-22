@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer and typescript-reviewer). Task 8.2b Phase A (board 8.2d). Amended in 8.2e (22 Oct 2026, after review by architect, security-reviewer and typescript-reviewer): 3fff::/20 refused; every trailing dot stripped before the name and IP-literal checks; names resolved with a cancellable `dns.promises.Resolver`.
+Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer and typescript-reviewer). Task 8.2b Phase A (board 8.2d). Amended in 8.2e (22 Oct 2026, after review by architect, security-reviewer and typescript-reviewer): 3fff::/20 refused; every trailing dot stripped before the name and IP-literal checks; names resolved with a cancellable `dns.promises.Resolver`. Amended in 8.2c (22 Oct 2026, after review by architect, security-reviewer and typescript-reviewer): B-47 answered: YouTube material comes from the owner's exported caption file; the pilot allow-list mode is `*`.
 
 ## Date
 
@@ -53,8 +53,8 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
     - a comma list: exact host match only;
     - exactly `*`: any host that passes rules 1 to 3.
 
-    A malformed entry fails at startup with a code (never the value) and turns off web links only. The example env and the dev compose file use `*`. The pilot value is part of B-47, and `*` stands until the human answers. In every mode rules 1 to 9 still apply: the list can only narrow what is allowed, never widen it.
-11. **YouTube is not fetched.** `youtube.com`, `www.`, `m.` and `music.youtube.com`, `youtu.be`, `youtube-nocookie.com` and `www.youtube-nocookie.com` are refused when a link is added (400 with fixed words pointing to "upload the video file"). The worker refuses them too, as `unsupported`. This holds until B-47 (Q1) is answered. Any YouTube fetch needs its own ADR.
+    A malformed entry fails at startup with a code (never the value) and turns off web links only. The example env and the dev compose file use `*`. The pilot value is `*` (B-47, answered 22 Oct 2026). In every mode rules 1 to 9 still apply: the list can only narrow what is allowed, never widen it.
+11. **YouTube is not fetched.** `youtube.com`, `www.`, `m.` and `music.youtube.com`, `youtu.be`, `youtube-nocookie.com` and `www.youtube-nocookie.com` are refused when a link is added (400 with fixed words pointing to the caption file (.vtt or .srt) the owner exports from YouTube Studio, or the video file). The worker refuses them too, as `unsupported`. B-47 (22 Oct 2026): YouTube material comes only from the owner's exported caption file or the video file; Edmate never calls YouTube. Any YouTube fetch needs its own ADR.
 
 ## Alternatives
 
@@ -84,4 +84,4 @@ Accepted (22 Oct 2026, by the lead after review by architect, security-reviewer 
 
 ## Reviewers
 
-architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer. The 8.2e amendment was reviewed by architect (opus), security-reviewer (opus) and typescript-reviewer (opus).
+architect, security-reviewer, typescript-reviewer (opus). The lead approves and logs it `risk: high`. Phases B and C (8.2e, 8.2f) also get security-reviewer. The 8.2e amendment was reviewed by architect (opus), security-reviewer (opus) and typescript-reviewer (opus). The 8.2c amendment (8.2l) was reviewed by architect (opus), security-reviewer (sonnet) and typescript-reviewer (opus).
