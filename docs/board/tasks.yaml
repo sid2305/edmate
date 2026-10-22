@@ -4870,49 +4870,49 @@ tasks:
 - id: 12.2a
   milestone: M12
   title: 'Reports repository: a student files a report on a chat reply, staff list and review it (12.2 Phase A)'
-  accept: 'per docs/tasks/12.2/plan.md Phase A and Lead answers; db typecheck, lint and test green.'
+  accept: per docs/tasks/12.2/plan.md Phase A and Lead answers; db typecheck, lint and test green.
   deps:
   - '12.1'
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m12/12.2a-reports-repo
+  model: plan:opus build:opus
 - id: 12.2b
   milestone: M12
   title: 'Takedowns repository: retrieval, material and module lists skip taken-down documents at once; an agent takedown suspends it (12.2 Phase B)'
-  accept: 'per docs/tasks/12.2/plan.md Phase B and Lead answers; db typecheck, lint and test green.'
+  accept: per docs/tasks/12.2/plan.md Phase B and Lead answers; db typecheck, lint and test green.
   deps:
-  - '12.2a'
+  - 12.2a
   risk: high
   status: todo
   branch: null
   model: null
 - id: 12.2c
   milestone: M12
-  title: 'Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)'
-  accept: 'per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  title: Report button in the chat and POST /api/sessions/[id]/reports (12.2 Phase C)
+  accept: per docs/tasks/12.2/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
-  - '12.2a'
+  - 12.2a
   status: todo
   branch: null
   model: null
 - id: 12.2d
   milestone: M12
-  title: 'Staff reports and takedowns API (12.2 Phase D)'
-  accept: 'per docs/tasks/12.2/plan.md Phase D and Lead answers; web typecheck, lint and test green.'
+  title: Staff reports and takedowns API (12.2 Phase D)
+  accept: per docs/tasks/12.2/plan.md Phase D and Lead answers; web typecheck, lint and test green.
   deps:
-  - '12.2b'
-  - '12.2c'
+  - 12.2b
+  - 12.2c
   risk: high
   status: todo
   branch: null
   model: null
 - id: 12.2e
   milestone: M12
-  title: '/staff/reports page that re-reads the queue every 60 s (12.2 Phase E)'
-  accept: 'per docs/tasks/12.2/plan.md Phase E and Lead answers; web typecheck, lint and test green.'
+  title: /staff/reports page that re-reads the queue every 60 s (12.2 Phase E)
+  accept: per docs/tasks/12.2/plan.md Phase E and Lead answers; web typecheck, lint and test green.
   deps:
-  - '12.2d'
+  - 12.2d
   risk: high
   status: todo
   branch: null
@@ -4920,17 +4920,17 @@ tasks:
 - id: 12.2f
   milestone: M13
   title: '12.2 follow-ups: page the trust inbox when a report arrives (with the 12.5 alert channel and 4.3c); a "Removed by Edmate staff" badge for the teacher on taken-down material or agents'
-  accept: 'each follow-up has a test; touched packages green.'
+  accept: each follow-up has a test; touched packages green.
   deps:
-  - '12.2e'
+  - 12.2e
   risk: high
   status: todo
   branch: null
   model: null
 - id: 12.3a
   milestone: M12
-  title: 'Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)'
-  accept: 'per docs/tasks/12.3/plan.md Phase A and Lead answers; content typecheck, lint and test green.'
+  title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
+  accept: per docs/tasks/12.3/plan.md Phase A and Lead answers; content typecheck, lint and test green.
   deps:
   - '12.1'
   risk: high
@@ -4939,21 +4939,21 @@ tasks:
   model: null
 - id: 12.3b
   milestone: M12
-  title: 'Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)'
-  accept: 'per docs/tasks/12.3/plan.md Phase B and Lead answers; db typecheck, lint and test green.'
+  title: Store the rights declaration per document and count a teachers active copyright takedowns in 12.2s takedowns repo (12.3 Phase B)
+  accept: per docs/tasks/12.3/plan.md Phase B and Lead answers; db typecheck, lint and test green.
   deps:
-  - '12.3a'
-  - '12.2b'
+  - 12.3a
+  - 12.2b
   risk: high
   status: todo
   branch: null
   model: null
 - id: 12.3c
   milestone: M12
-  title: 'Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)'
-  accept: 'per docs/tasks/12.3/plan.md Phase C and Lead answers; web typecheck, lint and test green.'
+  title: Upload checkbox for the rights declaration and the public /legal/rights page with the grievance placeholder (12.3 Phase C)
+  accept: per docs/tasks/12.3/plan.md Phase C and Lead answers; web typecheck, lint and test green.
   deps:
-  - '12.3b'
+  - 12.3b
   risk: high
   status: todo
   branch: null
@@ -4961,19 +4961,23 @@ tasks:
 - id: 12.3d
   milestone: M13
   title: 'Repeat-infringer enforcement (12.3 Q2): a threshold and action on active copyright takedowns, decided with B-12s strike policy'
-  accept: 'per the humans answer; touched packages green.'
+  accept: per the humans answer; touched packages green.
   deps:
-  - '12.3c'
+  - 12.3c
   risk: high
   status: todo
   branch: null
   model: null
 - id: 9.6i
   milestone: M9
-  title: '9.6h security re-check follow-ups (before the pilot): changePackage applies the alarm-paused-free check like start (paid then change to free must not get round it), with a test; the web start route maps the alarm refusal to its own fixed words (check findLive on invalid) instead of ''you already have a package'', with a route test; the refusal re-read keeps the verified and live joins (not_found, not invalid); the alarm marker when nothing was paused; an actorRole-only forged-row test for resume; restore teacher verification in a finally in the 9.6h tests; note for 10.3: resume''s created_at tie-break adds no order. From the 9.6d review: apps/web/src/subscriptions/change.ts logs the error name on the 500 path; the plan page fails closed when packageVersions.getById misses (no fallback to the internal version id), with a test. Until M10, a paid package starts with no payment and is never alarm-paused, so the free-tier block can be bypassed by starting a paid package; 10.x closes that'
-  accept: 'each MEDIUM has a failing-then-passing test; db and web typecheck, lint and test green; security-reviewer re-checks.'
+  title: '9.6h security re-check follow-ups (before the pilot): changePackage applies the alarm-paused-free check like start (paid then change to free must not get round it), with a test; the web start
+    route maps the alarm refusal to its own fixed words (check findLive on invalid) instead of ''you already have a package'', with a route test; the refusal re-read keeps the verified and live joins (not_found,
+    not invalid); the alarm marker when nothing was paused; an actorRole-only forged-row test for resume; restore teacher verification in a finally in the 9.6h tests; note for 10.3: resume''s created_at
+    tie-break adds no order. From the 9.6d review: apps/web/src/subscriptions/change.ts logs the error name on the 500 path; the plan page fails closed when packageVersions.getById misses (no fallback to
+    the internal version id), with a test. Until M10, a paid package starts with no payment and is never alarm-paused, so the free-tier block can be bypassed by starting a paid package; 10.x closes that'
+  accept: each MEDIUM has a failing-then-passing test; db and web typecheck, lint and test green; security-reviewer re-checks.
   deps:
-  - '9.6h'
+  - 9.6h
   risk: high
   status: todo
   branch: null
