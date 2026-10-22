@@ -112,7 +112,7 @@ Mix: 12 / 8 / 8 / 8 / 8 / 5 / 4 / 6, as the plan lists (the largest bucket is 20
 - risk: medium
 
 ### 21 Oct 2026 · 7.2b the builder's three open questions are answered as built · decided by lead · risk: medium
-- Decided: (1) a question about another school subject (AP Chem) may be redirected or sent to the teacher, and the case accepts either; (2) "give me 5 questions at once" still gets one practice item at a time; (3) "makes sense, what's next" gets one check question before moving on.
+- Decided: (1) a question about another school subject (AP Chem) may be redirected or sent to the teacher, and the case accepts either (evals/suites/pedagogy/pedagogy-redirect-ap-chem-en.yaml); (2) "give me 5 questions at once" still gets one practice item at a time; (3) "makes sense, what's next" gets one check question before moving on.
 - Why: (1) the router's off_topic intent leads to redirect, while an uncovered question leads to ask_teacher (build plan § Access filter item 3), and an adjacent school subject can fairly land on either. (2) and (3) follow the pedagogy suite's "one question at a time" (build plan line 513) and the explain-then-check move (line 364). None of them needs the human.
 - risk: medium
 
