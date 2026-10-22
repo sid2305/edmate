@@ -10,6 +10,141 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7e the loader reads the first agent id only · decided by builder · risk: low
+- Decided: `teacherScorecard` calls `publicScorecard` with `teacher.agentIds[0]`, not every agent
+  id the page lists packages for.
+- Why: 8.7 and the MVP rules fix one agent per teacher; `agentIds` on the discovery row is a list
+  only because the packages section was written generically (9.2c). Reading just the first id
+  avoids a second, redundant call and keeps the scorecard tied to the agent whose packages the
+  page already shows first.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.1c Subject change resets verification in the same UPDATE · decided by builder · risk: high
+- Decided: `teacherProfiles.update` sets `verification_status` to `pending` inside the same `UPDATE` as the subject change, via a `CASE` on the row's old subject; no extra read, no new lock, so the repository's lock order is unchanged. Touches the risky path `packages/db/src/repositories/**`; reviewer: security-reviewer.
+- Why: human answer B-30; a single statement leaves no window for a concurrent `setVerification` to be overwritten or skipped.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.1c A rejected teacher who changes subject returns to pending · decided by builder · risk: medium
+- Decided: the `CASE` resets any status (not only `verified`) to `pending` on a real subject change, so a rejected teacher who changes subject re-enters the staff queue.
+- Why: matches the plan's statement as written; a new subject is a new claim staff should look at, and `pending` grants nothing (the publish guard still refuses). If the human prefers rejected to stick, it is a one-word change to the `CASE`.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.1c "Same subject" means equal after the schema's trim, case-sensitive · decided by builder · risk: low
+- Decided: the comparison runs on the zod-trimmed input with SQL `<>`, so "  Maths  " equals "Maths" but "maths" counts as a change.
+- Why: the stored value is already trimmed; case-folding would be a new rule the spec didn't make, and erring towards re-verification is the safe side.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1b Staff role boundary for the verification API and the new risk-paths line · decided by builder · risk: high
+- Decided: `/api/staff/verifications` GET/POST are `withRole(['staff'])` only (signed-out 401,
+  student and teacher 403, cross-site POST 403); the acting staff id is only ever the session
+  principal, the POST body is a strict object (a `by` or any unknown key is 400), and the existing
+  `setVerification` stays the only write path (its staff re-check, not-self rule and
+  `teacher.verify` audit row are unchanged; not-self surfaces as a fixed 403 `forbidden`).
+  `apps/web/app/api/staff/**` is added to `risk-paths.txt` under `# reviewers: security-reviewer`
+  (one line, lead answer Q4; no architect sign-off needed).
+- Why: this is the first staff-auth route and it changes who may publish; the plan and lead
+  treat the staff boundary and the `.claude/**` edit as risky.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 12.1b Handlers live next to route.ts, not in src/ · decided by builder · risk: low
+- Decided: the injectable handler factory is `apps/web/app/api/staff/verifications/handlers.ts`
+  (a file the plan didn't list), not `src/staff/…`.
+- Why: Next route files may only export handlers, so the factory needs its own module; keeping it
+  under `app/api/staff/` puts it under the new security-reviewer risk glob, which a `src/` file
+  would escape.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.1b Real-Postgres route test gated on an explicit TEST_DATABASE_URL · decided by builder · risk: medium
+- Decided: `route.int.test.ts` runs the real handlers, guard and repositories against
+  `TEST_DATABASE_URL` only when it is set (no default URL, so a local run never touches the dev
+  compose database); unset it logs a SKIPPED line, and under `CI=true` it fails instead. It migrates
+  that database (idempotent, locked) and writes only fresh random ids/emails, leaving both test
+  teachers `rejected` so nothing pending or discoverable is left for the e2e run sharing CI's
+  database.
+- Why: the acceptance needs proof that approve/reject is audited and unverified teachers stay
+  unpublished, which a memory fake alone can't give; apps/web has no `pg` dependency to create a
+  throwaway database, and adding one was out of scope.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 12.1b GET maps invalid/not_found to 403 and the console runs one action at a time · decided by builder · risk: low
+- Decided: on GET, a repository `invalid`/`not_found` (only possible when the session's own id is
+  not a staff user) is 403 `forbidden`, like `scope`. In the console, any in-flight action disables
+  every approve/reject/reload button until it settles.
+- Why: neither case is the caller's input error; one action at a time avoids racing list updates.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b answered-question pairing in the notes PDF · decided by builder · risk: low
+- Decided: `notesDocument()` pairs each `answered` `TeacherQuestion` with the next unused
+  `role: 'teacher'` chat message whose `createdAt` is on or after the question's `answeredAt`
+  (falling back to `createdAt`), in chronological order of both lists.
+- Why: `TeacherQuestion` (packages/contracts) has no `answer` field -- the teacher's answer text is
+  only ever written as a chat message into whichever session happens to be open at answer-time.
+  This heuristic is the closest available approximation given the current schema; it can mis-pair
+  in pathological message timing but never leaks another student's or another question's data,
+  since it only ever reads from this one student's own messages.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b en.json namespace · decided by builder · risk: low
+- Decided: only a `progress` namespace was added to `apps/web/messages/en.json`, not a separate
+  `export` namespace.
+- Why: every string this phase needed (including the two export link labels) fit naturally under
+  `progress`; adding an empty or redundant `export` namespace would have been dead weight. No other
+  builder's lines were touched; `git merge origin/main` was clean (fast-forward, no conflicts).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b clearance-scan exception · decided by builder · risk: low
+- Decided: added `/learn/[agentId]/progress/page.tsx` to `clearance-scan.test.ts`'s one deliberate
+  default-clearance exception list, alongside the existing memory page.
+- Why: the progress page intentionally asks for the default clearance (`age`, not `agent`) for the
+  same reason the memory page does -- it is the student's own view and exports, not the chat itself,
+  and should stay reachable while a parent's consent is outstanding. Without this the pre-existing
+  scan test (not part of Phase B's own file list, but a shared guard over all of `app/learn/**`)
+  would fail on a correct, intended page.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6b the handoff was recovered from the builder's transcript · decided by lead · risk: low
+- Decided: the builder wrote this handoff but never committed it, and the lead removed its worktree before checking. The lead rebuilt the file word for word from the builder's own Write and Edit calls in its transcript and committed it; only the tool-call line changed, to the harness count.
+- Why: the builder could not be resumed once its worktree was gone, and its decisions must reach the log as written. From now on the lead checks `git status` in a builder's worktree before removing it, and briefs ask builders to confirm a clean tree before returning.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7h UUID-shaped values are exempt from the phone digit-run rule · decided by builder · risk: high
+- Decided: in `redactPersonalData`'s string scrubber, a UUID-shaped span (whole value or embedded
+  in free text, case-insensitive) is never treated as a phone-number candidate, even when one of
+  its hyphen-separated groups is all digits. A phone number elsewhere in the same string, including
+  right next to a UUID, is still redacted.
+- Why: about 1 in 40 real UUIDs (crypto-random) have a group that is all digits, and the previous
+  phone regex redacted that group, corrupting `runId`/`entityId` in audit rows. Exempting the UUID
+  shape (not loosening the phone digit-run length/format rules) fixes this without weakening
+  phone/PII detection for ordinary text.
+- risk: high (this file is on the risky-paths list for `packages/db/src/repositories/**`; it
+  changes what the audit scrubber redacts).
+
+---
+
 ### 22 Oct 2026 · 8.7d the web pins the judge from EDMATE_JUDGE_MODEL without importing @edmate/evals · decided by builder · risk: low
 - Decided: `publishRuntime.ts` reads `EDMATE_JUDGE_MODEL` itself, parsed the same way as `resolveJudgeModel`, and stores `<provider>:<model>` as the run's judge. The worker accepts that form. If the variable is missing or malformed, POST answers 503 and the reason `judge_model` is logged.
 - Why: the worker refuses a run pinned to a different judge, so the web must pin the same one. Adding `@edmate/evals` to the web bundle for five lines of parsing is not worth it.

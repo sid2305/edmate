@@ -44,9 +44,7 @@ describe('OnboardingForm', () => {
   });
 
   it('create mode: submits a POST with the entered fields, then switches to edit mode', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse(201, { profile: PROFILE('pending') }),
-    );
+    const fetchMock = vi.fn(async () => jsonResponse(201, { profile: PROFILE('pending') }));
     vi.stubGlobal('fetch', fetchMock);
     renderIntl(<OnboardingForm initialProfile={null} />);
     fireEvent.change(screen.getByLabelText(/Profile URL/i), { target: { value: 'asha-math' } });
@@ -71,9 +69,7 @@ describe('OnboardingForm', () => {
   });
 
   it('edit mode: slug is read-only, submits a PUT with the changed fields', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse(200, { profile: PROFILE('pending') }),
-    );
+    const fetchMock = vi.fn(async () => jsonResponse(200, { profile: PROFILE('pending') }));
     vi.stubGlobal('fetch', fetchMock);
     renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
     expect(screen.queryByLabelText(/Profile URL/i)).not.toBeInTheDocument();
@@ -108,7 +104,13 @@ describe('OnboardingForm', () => {
 
   it('a submit error is shown in an alert, and the submit stays enabled again', async () => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse(400, { error: { code: 'validation', message: 'Check the request and try again.', retryable: false } }),
+      jsonResponse(400, {
+        error: {
+          code: 'validation',
+          message: 'Check the request and try again.',
+          retryable: false,
+        },
+      }),
     );
     vi.stubGlobal('fetch', fetchMock);
     renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
@@ -129,7 +131,9 @@ describe('OnboardingForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.'),
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Something went wrong. Please try again.',
+      ),
     );
     expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled();
   });
@@ -147,7 +151,9 @@ describe('OnboardingForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.'),
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Something went wrong. Please try again.',
+      ),
     );
     expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled();
   });
@@ -168,6 +174,19 @@ describe('OnboardingForm', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled(),
     );
+  });
+
+  it('edit mode: the subject field says a subject change needs re-verification', () => {
+    renderIntl(<OnboardingForm initialProfile={PROFILE('verified')} />);
+    const hint = 'Changing your subject sends your profile back for re-verification.';
+    expect(screen.getByText(hint)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Subject/i)).toHaveAccessibleDescription(hint);
+  });
+
+  it('create mode: no re-verification hint (a new profile has nothing to reset)', () => {
+    renderIntl(<OnboardingForm initialProfile={null} />);
+    expect(screen.queryByText(/re-verification/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Subject/i)).not.toHaveAttribute('aria-describedby');
   });
 
   it('has no axe violations in create mode', async () => {
