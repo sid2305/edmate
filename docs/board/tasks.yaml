@@ -5934,6 +5934,14 @@ tasks:
   - 12.4f
   risk: low
   status: todo
+- id: 11.4e
+  milestone: M13
+  title: '11.4a review LOWs (packages/db tests): a listRecordingsForTeacher test that fails if the .limit() cap at live-classes.ts:216 is removed, and a test for the same-teacher join check at live-classes.ts:212'
+  accept: 'Both tests fail with the cap or the join check removed and pass with them in place.'
+  deps:
+  - 11.4a
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
