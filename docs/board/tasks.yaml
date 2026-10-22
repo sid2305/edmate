@@ -2217,9 +2217,8 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams
-    SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause; on PR #118 it failed again, together with packages/harness src/pipeline/steps/route.accuracy.test.ts
-    timing out at the 5 s default under CI load (raise its timeout or speed it up)'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; 0.21 review follow-ups for apps/web test/turn-backend.ts
+    deadlineSafeClock: a long real fallback timer so a hung step fails with a timeout status, a doc note that a test needing a deadline to fire uses its own clock, and a unit test for both sleep branches'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2722,9 +2721,30 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: review
+  status: done
   branch: m7/7.2b-pedagogy-cases
-  model: plan:sonnet build:opus
+  model: plan:sonnet build:opus review:sonnet
+  metrics:
+    tool_calls: 78
+    tokens_in: 256
+    tokens_out: 7306
+    cache_read_tokens: 10359126
+    wall_time_seconds: 1101
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 7.2c
   milestone: M7
   title: '7.2 Phase D: leak suite 44 to 80 cases (plan docs/tasks/7.2/plan.md)'
@@ -2732,9 +2752,9 @@ tasks:
   deps:
   - 7.2a
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m7/7.2c-leak-cases
+  model: plan:sonnet build:sonnet
 - id: 7.2d
   milestone: M7
   title: '7.2 Phase E: safety suite 214 to 250 cases (plan docs/tasks/7.2/plan.md)'
@@ -2845,9 +2865,30 @@ tasks:
   accept: The test passes 20 runs in a row under CI-like load, and the cause is written in the handoff.
   deps: []
   risk: normal
-  status: review
+  status: done
   branch: m0/0.21-sse-route-flake
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 122
+    tokens_in: 432
+    tokens_out: 10509
+    cache_read_tokens: 13607309
+    wall_time_seconds: 1540
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating

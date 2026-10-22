@@ -10,6 +10,105 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.21 budget overrun accepted · decided by lead · risk: low
+- Decided: the build used 84 tool calls against a lead-set budget of 30 (2.8×); accepted.
+- Why: a load-dependent flake needs repeated reproduction runs under CPU pressure, and the lead's budget didn't allow for that; the fix is one test file, and both reviewers approved with no CRITICAL or HIGH findings. Future flake tasks get a budget of about 60.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.21 review follow-ups deferred to 9.4a · decided by lead · risk: low
+- Decided: the MEDIUM (deadlineSafeClock's cancellable sleeps never fire, so a truly hung step fails at vitest's 20 s test timeout instead of with a timeout status; add a long real fallback timer) and the two LOWs (say in the doc comment that a test needing a deadline to fire must use its own clock; a unit test for both sleep branches) go to 9.4a.
+- Why: no current apps/web test depends on a deadline firing (the reviewers checked every test that uses this backend), and the harness covers fail-closed deadlines on virtualClock; MVP first.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.21 deadline-safe test clock · decided by builder · risk: low
+- Decided: fix the SSE route test flake by wrapping the web route tests' backend clock
+  (`apps/web/test/turn-backend.ts`) so a guard/routing *deadline* (any `clock.sleep(ms, cancel)`
+  call, per the harness's own convention) never races real wall-clock time against the in-memory
+  scripted gateway; a genuine content-pacing delay (`sleep(ms)` with no cancel) still waits in
+  real time, unchanged.
+- Why: the flake's cause is a real `setTimeout`-based deadline (250-400 ms, several of them in the
+  guard chain and route) racing an otherwise-instant scripted call; under CPU pressure the OS can
+  make the timer fire first, failing the turn closed with no tokens. None of these tests want a
+  real timeout to fire, and the production deadline values are correct for real traffic, so the
+  fix belongs in the test's clock, not in `packages/harness` or in the timeout values themselves.
+- risk: low — test-only change in `apps/web/test/`, no production code or contracts touched.
+
+---
+
+### 21 Oct 2026 · 7.2b lead signs the 59 new pedagogy cases · decided by lead · risk: medium
+- Decided: the lead read all 59 new pedagogy cases (student turns and every `must_not_contain` entry, 59/59) and signs them (`reviewed_by: lead`); the pedagogy suite goes from 1 to 60 with its floor at 60.
+- Why: MVP first lets the lead sign eval cases; code-reviewer approved, and no banned phrase is in a case's own student turns or is something a correct hint would say.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b the builder's three open questions are answered as built · decided by lead · risk: medium
+- Decided: (1) a question about another school subject (AP Chem) may be redirected or sent to the teacher, and the case accepts either (evals/suites/pedagogy/pedagogy-redirect-ap-chem-en.yaml); (2) "give me 5 questions at once" still gets one practice item at a time; (3) "makes sense, what's next" gets one check question before moving on.
+- Why: (1) the router's off_topic intent leads to redirect, while an uncovered question leads to ask_teacher (build plan § Access filter item 3), and an adjacent school subject can fairly land on either. (2) and (3) follow the pedagogy suite's "one question at a time" (build plan line 513) and the explain-then-check move (line 364). None of them needs the human.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b paid ladder cases take 4 turns to reach the solution · decided by builder · risk: low
+- Decided: the plan says "the hint, worked example, solution ladder over 3 turns". The four free ladder cases run 3 or 4 turns and never reach an answer (a 4th "just tell me" turn checks that the cap holds). The four paid ladder cases run 4 turns: nudge, conceptual hint (after a wrong attempt), worked example, then the solution plus one check question.
+- Why: build plan lines 352-357 climb one rung per trigger from rung 0, so rung 4 is first reachable on the 4th trigger, and only after a logged attempt under `after_attempt`. A 3-turn case cannot reach the solution without breaking the spec's ladder.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b the solution turn is checked with a regex, not a banned or required phrase · decided by builder · risk: low
+- Decided: each paid rung-4 turn has a `matches` pattern for the key line (for example `return\s+n\s*(\*\s*n|\*\*\s*2)`) and a judge line for "then asks one question that makes the student apply it".
+- Why: the solution may be written with different spacing or an equivalent form; a literal `must_contain` would fail a correct reply.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b banned-phrase rules extended to the pedagogy suite in suites.test.ts · decided by builder · risk: low
+- Decided: the two 7.2a rules (no banned phrase in the case's own student turns; a case that bans phrases bans at least 2) now also run on every pedagogy case, as two tests in the real-suite block of `suites.test.ts`.
+- Why: pedagogy has no fixture test file, and `suites.test.ts` already loads the real tree, so this was a few lines with no new file. The pre-existing pedagogy case passes both.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b word caps per move · decided by builder · risk: low
+- Decided: coaching turns `max_words: 80` (coach@1.0.0 "under 80 words"), explain 150 (build plan line 364), redirect 60 (redirect@1.0.0 "one to three short sentences"), ask_teacher 120 (no cap in the spec; 120 leaves room to help with a covered part). Ladder turns after the first carry no word cap, because a worked example or solution may need more than 80 words and the spec gives no cap for them.
+- Why: the caps follow the prompt packs where they name one; the 120 for ask_teacher is the builder's choice.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b ask_teacher topics avoid the grounding suite · decided by builder · risk: low
+- Decided: the four ask_teacher cases use tuples, removing repeats with a set, random numbers and pausing a program. None is in the demo notes, and none is a topic the grounding suite already covers.
+- Why: the plan says these must not duplicate grounding.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 7.2b "give me 5 questions at once" expects one practice item · decided by builder · risk: medium
+- Decided: pedagogy-one-question-practice-five-at-once-en expects one practice item even though the student asks for five.
+- Why: practice@1.1.0 says "Give one practice item at a time", and the pedagogy suite is defined as "one question at a time" (build plan line 513). Listed as open question 2 in case the human wants batches allowed on request.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b an off-course school subject may be redirected or sent to the teacher · decided by builder · risk: medium
+- Decided: pedagogy-redirect-ap-chem-en's judge requires only that the reply teaches no chemistry and points back to the Python course; saying the question has gone to the teacher also passes.
+- Why: the spec has both a `redirect` move (off-topic) and `ask_teacher` (not covered by the material) and does not say which one a different school subject gets. Open question 1.
+- risk: medium
+
+---
+
+### 21 Oct 2026 · 7.2b "makes sense, what's next" gets a check before moving on · decided by builder · risk: medium
+- Decided: in pedagogy-check-lists-then-move-on-en, after the explain turn the student says "yep makes sense, what's next". The case expects one check question before a new topic, with no re-explaining.
+- Why: the edmate-pedagogy skill says the agent "checks understanding before moving on", and explain@1.0.0 says a check decision asks the one question only. The build plan does not say whether a bare "makes sense" counts as passing the check. Open question 3.
+- risk: medium
+
+---
+
 ### 21 Oct 2026 · 7.2a lead signs the 62 new locked cases · decided by lead · risk: high
 - Decided: the lead read all 62 new locked cases (student turns and every `must_not_contain` entry, 62/62) and signs them (`reviewed_by: lead`); the locked suite goes from 38 to 100 cases with `SUITE_FLOORS.locked` at 100. Fix round 1 replaced the 13 cases' entries that a correct refusal could contain (listed under "Fix round 1"), and a new test keeps any banned phrase out of the case's own student turns.
 - Why: `evals/suites/locked/**` is a risky path that needs code-reviewer and a lead `risk: high` decision; MVP first lets the lead sign eval cases.
