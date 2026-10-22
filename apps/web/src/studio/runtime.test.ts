@@ -3,8 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { StudioUnavailableError } from './routes';
 import { consoleLog, createStudioRuntime, realHooks, type StudioHooks } from './runtime';
 
-const shared = vi.hoisted(() => ({ repos: { documents: { tag: 'shared-pool' } } }));
+const shared = vi.hoisted(() => ({
+  repos: {
+    documents: { tag: 'shared-pool' },
+    courses: { tag: 'shared-courses' },
+    outline: { tag: 'shared-outline' },
+    chunks: { tag: 'shared-chunks' },
+  },
+}));
 vi.mock('../auth', () => ({ serverDatabase: vi.fn(() => ({ repos: shared.repos })) }));
+
+/** A key the fake env may carry; the real adapter is never called (it is built, not used). */
+const KEY_ENV = { EDMATE_ANTHROPIC_API_KEY: 'test-only-placeholder' };
 
 function hooks() {
   const add = vi.fn(async () => undefined);
@@ -12,13 +22,14 @@ function hooks() {
     ContentLength: 3,
     ContentType: 'application/pdf',
   }));
+  const repos = { documents: {}, courses: {}, outline: {}, chunks: {} };
   const h: StudioHooks = {
-    repos: vi.fn(() => ({ documents: {} as never })),
+    repos: vi.fn(() => repos as never),
     s3: vi.fn(() => ({ send }) as never),
     queue: vi.fn(() => ({ add })),
     log: { error: vi.fn() },
   };
-  return { h, add, send };
+  return { h, add, send, repos };
 }
 
 describe('createStudioRuntime', () => {
@@ -28,7 +39,7 @@ describe('createStudioRuntime', () => {
     const get = createStudioRuntime(() => env, h);
     await expect(get()).rejects.toBeInstanceOf(StudioUnavailableError);
     await expect(get()).rejects.toMatchObject({ reason: 'REDIS_URL' });
-    env = { REDIS_URL: 'redis://127.0.0.1:1' };
+    env = { REDIS_URL: 'redis://127.0.0.1:1', ...KEY_ENV };
     await expect(get()).resolves.toBeDefined();
     expect(h.queue).toHaveBeenCalledWith('redis://127.0.0.1:1', h.log);
   });
@@ -59,13 +70,20 @@ describe('createStudioRuntime', () => {
   });
 
   it('builds once, over the injected clients', async () => {
-    const { h, add, send } = hooks();
-    const get = createStudioRuntime(() => ({ REDIS_URL: 'redis://x', S3_BUCKET: 'b1' }), h);
+    const { h, add, send, repos } = hooks();
+    const get = createStudioRuntime(
+      () => ({ REDIS_URL: 'redis://x', S3_BUCKET: 'b1', ...KEY_ENV }),
+      h,
+    );
     const b = await get();
     expect(await get()).toBe(b);
     expect(h.repos).toHaveBeenCalledTimes(1);
     expect(b.newDocumentId()).toMatch(/^doc_[0-9a-f-]{36}$/);
     expect(b.newDocumentId()).not.toBe(b.newDocumentId());
+    expect(b.courses).toBe(repos.courses);
+    expect(b.outline).toBe(repos.outline);
+    expect(b.chunks).toBe(repos.chunks);
+    expect(b.gateway.generateObject).toBeInstanceOf(Function);
 
     const job: IngestJob = { teacherId: 't_1', documentId: 'doc_1', fileKind: 'pdf' };
     await b.enqueue(job, 'teachers/t_1/documents/doc_1/k.pdf');
@@ -80,6 +98,17 @@ describe('createStudioRuntime', () => {
       contentType: 'application/pdf',
     });
     expect(send.mock.calls[0]![0]).toMatchObject({ input: { Bucket: 'b1', Key: 'k' } });
+  });
+
+  it('two concurrent calls on a cold runtime build once (the in-flight promise is shared)', async () => {
+    const { h } = hooks();
+    const get = createStudioRuntime(
+      () => ({ REDIS_URL: 'redis://x', S3_BUCKET: 'b1', ...KEY_ENV }),
+      h,
+    );
+    const [a, b] = await Promise.all([get(), get()]);
+    expect(a).toBe(b);
+    expect(h.repos).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -101,6 +130,7 @@ describe('upload URLs', () => {
         REDIS_URL: 'redis://x',
         S3_ENDPOINT: 'http://minio:9000',
         S3_PUBLIC_ENDPOINT: 'http://localhost:9000',
+        ...KEY_ENV,
       }),
       h,
     );
@@ -119,8 +149,20 @@ describe('upload URLs', () => {
 
   it('use the one client when no public endpoint is set', async () => {
     const { h } = hooks();
-    await createStudioRuntime(() => ({ REDIS_URL: 'redis://x' }), h)();
+    await createStudioRuntime(() => ({ REDIS_URL: 'redis://x', ...KEY_ENV }), h)();
     expect(h.s3).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the model gateway', () => {
+  it('a missing provider key is unavailable, same as a missing REDIS_URL', async () => {
+    const { h } = hooks();
+    const get = createStudioRuntime(() => ({ REDIS_URL: 'redis://x' }), h);
+    await expect(get()).rejects.toMatchObject({
+      name: 'StudioUnavailableError',
+      reason: 'provider_key',
+    });
+    expect(h.repos).not.toHaveBeenCalled();
   });
 });
 
