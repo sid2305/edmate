@@ -23,6 +23,11 @@ import {
 /** How often the list refreshes while a file is uploading or processing. */
 export const POLL_MS = 4000;
 
+/** 11.4g (code/typescript-reviewer, MEDIUM): a stuck "uploading"/"processing" row must not poll
+ * forever while the page stays open; stop after about 10 minutes per page visit (same cap and
+ * message as LiveClassesView's recording poll). */
+export const POLL_MAX_MS = 10 * 60 * 1000;
+
 const ERROR_KEYS = [
   'unsupported_type',
   'input_too_large',
@@ -75,6 +80,12 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
   const [banner, setBanner] = useState<ErrorKey | null>(null);
   const [local, setLocal] = useState<Record<string, Local>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
+  // 11.4g fix round (code/typescript-reviewer, MEDIUM): the poll window is per row, keyed by
+  // document id, not one shared clock -- a row already past POLL_MAX_MS must not cap out a
+  // different row that just became active.
+  const pollStart = useRef<Map<string, number>>(new Map());
+  const [timedOutIds, setTimedOutIds] = useState<Set<string>>(new Set());
+  const pollTimedOut = timedOutIds.size > 0;
   const [moduleId, setModuleId] = useState(moduleIds[0] ?? '');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
@@ -100,9 +111,30 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
     void refresh();
   }, [refresh]);
 
-  // One refresh POLL_MS after every list change while anything is still moving.
+  // One refresh POLL_MS after every list change while anything is still moving. 11.4g: each
+  // active row gets its own POLL_MAX_MS window from when it first appears active, so a row
+  // already past its cap doesn't stop a different, newly-active row from being polled.
   useEffect(() => {
-    if (!docs?.some(isActive)) return;
+    const activeIds = new Set((docs ?? []).filter(isActive).map((d) => d.id));
+    if (activeIds.size === 0) {
+      pollStart.current.clear();
+      setTimedOutIds(new Set());
+      return undefined;
+    }
+    const now = Date.now();
+    for (const id of activeIds) {
+      if (!pollStart.current.has(id)) pollStart.current.set(id, now);
+    }
+    for (const id of Array.from(pollStart.current.keys())) {
+      if (!activeIds.has(id)) pollStart.current.delete(id);
+    }
+    const timedOut = new Set<string>();
+    for (const [id, startedAt] of pollStart.current) {
+      if (now - startedAt >= POLL_MAX_MS) timedOut.add(id);
+    }
+    setTimedOutIds(timedOut);
+    const allTimedOut = Array.from(activeIds).every((id) => timedOut.has(id));
+    if (allTimedOut) return undefined;
     const timer = setTimeout(() => void refresh(), POLL_MS);
     return () => clearTimeout(timer);
   }, [docs, refresh]);
@@ -313,6 +345,7 @@ export function UploadsView({ moduleIds, putFile = realPutFile }: UploadsViewPro
           {t(`errors.${banner}`)}
         </p>
       ) : null}
+      {pollTimedOut ? <p className="uploads-notice">{t('pollTimeout')}</p> : null}
       {docs === null ? (
         <p>{t('loading')}</p>
       ) : docs.length === 0 ? (
