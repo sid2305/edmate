@@ -10,6 +10,41 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.6h subscription hardening on a risky path · decided by builder · risk: high
+- Decided: the three 9.6c security MEDIUMs and four LOWs are fixed in `packages/db/src/repositories/subscriptions.ts` (risky path). security-reviewer must re-check this PR before merge, as the board's accept line says.
+- Why: the file is on the merge gate's risk list and the changes touch access to paid/free subscriptions.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 9.6h start refuses a free package while the teacher's free tier is alarm-paused · decided by builder · risk: medium
+- Decided: the lead's preferred option. `start` is `invalid` for a free version when a `subscription.pause_cost_alarm` audit row exists for that teacher since the start of the current UTC month. The block is per teacher, not per pair, so a new student also can't start the free package until the month ends. A staff unpause of an existing subscription doesn't lift it. Paid packages still start.
+- Why: it reuses the alarm's own marker (no schema change) and closes the cancel -> start loop for every student, not just the one who cancelled. Keeping the alarm state on cancel would have left new free starts open until the next daily alarm run. If staff need to reopen a teacher's free tier mid-month, that needs a later task (for example, a staff action that writes an "unblock" row).
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 9.6h a restarted pair gets no second trial · decided by builder · risk: low
+- Decided: if the student has any earlier subscription row with this teacher, a `trial` start becomes `active`, with the caller's `periodEnd` unchanged (that is the trial length the web caller computed). It is not refused.
+- Why: refusing would break restarting a trial-offering package. With no payment until M10, `active` vs `trial` only matters for future billing, and 10.3 revisits trial rules.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6h changePackage ends a trial on a no-trial target · decided by builder · risk: low
+- Decided: `trial` -> a version whose `config.trialDays` is missing, 0 or not a number becomes `active`. `period_end` is kept. Other statuses are unchanged.
+- Why: the review's LOW. Recomputing the period needs billing (10.3).
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.6h resume fails closed on a timestamp tie · decided by builder · risk: low
+- Decided: resume orders by (ts, created_at, id) and rejects `invalid` when the two latest rows tie on both timestamps, because a random id isn't a real order.
+- Why: no schema change was allowed, so there's no sequence column. A paused_by column or a sequence is left for 10.3.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.5a safety alerts are staff-only, the ack is audited and lock-ordered, no personal columns · decided by builder · risk: high
 - Decided: `safety_alerts` stores ids, level, kind, the scrubbed excerpt and timestamps only. `listForStaff` and `acknowledge` require `by` to be staff now (via `role-lock.ts`; the repository never names the users table). `acknowledge` locks the actor's role FOR SHARE, then the alert row FOR UPDATE, and commits exactly one `safety_alert.ack` audit row with the ack (never the excerpt). Worker writes are scoped through the alert's own session. Reviewer: security-reviewer (risky path `packages/db/src/repositories/**`).
 - Why: plan Phase A and lead answers Q1, Q3 and Q4; lessons "lock order".

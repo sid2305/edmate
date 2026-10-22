@@ -4860,9 +4860,30 @@ tasks:
   deps:
   - 9.6c
   risk: risky
-  status: running
+  status: done
   branch: m9/9.6h-subscription-hardening
-  model: build:opus
+  model: plan:opus build:sonnet review:opus
+  metrics:
+    tool_calls: 25
+    tokens_in: 78
+    tokens_out: 463
+    cache_read_tokens: 1786416
+    wall_time_seconds: 625
+    models:
+    - claude-opus-5-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 7
+        wontfix: 0
+    human_questions: 0
 - id: 11.3c
   milestone: M13
   title: '11.3a review follow-ups (packages/db insights.ts): the reads and computeAndSaveWeek return invalid when weekStart + 7 days is after now, so the current week can''t be read twice to difference
