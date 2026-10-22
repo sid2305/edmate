@@ -4445,7 +4445,9 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: todo
+  status: running
+  branch: m11/11.1b-studio-live-classes
+  model: plan:sonnet build:sonnet
 - id: 11.1c
   milestone: M11
   title: Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)
