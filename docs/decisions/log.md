@@ -10,6 +10,75 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.2g dateTime formatting is call-site, not provider-level · decided by builder · risk: low
+- Decided: format `createdAt` with `useFormatter().dateTime(date, { timeZone: 'UTC', ... })` at
+  each call site, rather than adding a `timeZone` prop to the shared `NextIntlClientProvider` in
+  `apps/web/test/intl.tsx`.
+- Why: this task's file scope is `apps/web/app/staff/reports/**` and `apps/web/messages/en.json`
+  only; `test/intl.tsx` is a shared test helper another builder may be using concurrently. An
+  explicit per-call `timeZone` gives the same deterministic test output (`"Oct 22, 2026, 12:00 AM"`
+  for a UTC midnight timestamp) regardless of the machine running the tests, without touching a
+  shared file.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 12.2g refactor-only items have no dedicated behaviour test · decided by builder · risk: low
+- Decided: "drop the agentId cast" and "reuse REPORT_CATEGORIES" (both LOW items) are pure
+  type-level/dead-code cleanups with no observable behaviour change, so they rely on the existing
+  category-rendering and agent-takedown tests rather than a new test that would fail without them.
+- Why: removing a redundant cast or an unreachable fallback branch cannot be exercised by a
+  runtime test that distinguishes the old code from the new -- both produce identical output for
+  every input the type system allows. A contrived test would just restate the type, not the
+  behaviour.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4c recording-consent wording (Q2, pending B-52) · decided by builder · risk: medium
+- Decided: option (a). The form has a required second checkbox, "Everyone heard in this recording
+  agreed to it being used to teach, or I removed their parts.", with the hint "Best: upload your
+  own transcript with students' names removed." Submit stays disabled until it and the 12.3c
+  rights box are ticked. The words live in `apps/web/messages/en.json` under
+  `liveClassesStudio.recording.consentLabel` / `consentHint`, so the human can change them without
+  a code change. The consent tick is not stored server-side (no contracts or db change in this
+  phase).
+- Why: the plan's and lead's instruction while B-52 is unanswered; class recordings can carry
+  students' names and voices and become material other students' agents quote.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 11.4c module picker scope and 5 s status poll · decided by builder · risk: medium
+- Decided: the module picker offers the de-duplicated union of `config.moduleIds` of the packages
+  attached to that class (shown as ids, as in the upload centre). The class row polls
+  `listDocuments()` every 5 s only while one of its shown recordings is `uploading` or
+  `processing`, one request at a time, and stops when none is pending or on unmount.
+- Why: plan Q4 and Phase C; 5 s matches the plan and keeps load low (one list call per open
+  page while something is pending).
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 11.4c rights checkbox reuses 12.3c's wording, not its component · decided by builder · risk: low
+- Decided: `RecordingUpload` has its own checkbox with 12.3c's exact words
+  ("I confirm I hold the rights to upload this material."), stored as
+  `liveClassesStudio.recording.rightsLabel`, rather than importing from `app/teacher/uploads/**`.
+- Why: 12.3c shipped the checkbox inline in `UploadsView.tsx` (no shared component), and
+  `app/teacher/uploads/**` is outside this phase's files.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4c failure reasons reuse uploads.reasons via a local key list · decided by builder · risk: low
+- Decided: `LiveClassesView` keeps its own copy of the upload centre's reason-key list and maps
+  unknown reasons to `uploads.reasons.other`; the words themselves come from the `uploads`
+  namespace passed to the client provider.
+- Why: `UploadsView.tsx`'s `reasonKey` is not exported and that folder is out of bounds.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.6g builder and fixer ran over budget · decided by lead · risk: low
 - Decided: accept 151 tool calls against a 50-call build budget (build 76, fix round 48 against 25, CI selector fix 27 against 25).
 - Why: the extra calls went to static checks of the e2e spec and to proving each new test fails without its fix; the work is correct and verified, so re-running would cost more.

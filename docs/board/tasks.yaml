@@ -5456,9 +5456,28 @@ tasks:
   deps:
   - 12.2e
   risk: medium
-  status: running
+  status: done
   branch: m12/12.2g-staff-reports-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 12.3a
   milestone: M12
   title: Rights-declaration text and loader in packages/content, born pending with a placeholder (12.3 Phase A)
@@ -6077,9 +6096,29 @@ tasks:
   deps:
   - 11.4b
   risk: medium
-  status: running
+  status: done
   branch: m11/11.4c-add-recording
-  model: plan:opus build:opus
+  model: plan:opus build:opus review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        MEDIUM: 1
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 3
+        wontfix: 0
+    human_questions: 0
 - id: 11.4d
   milestone: M13
   title: 'ffmpeg chunker in the worker so MP4, WebM and M4A recordings of any length can be transcribed (needs an ADR: new system binary)'
@@ -6371,10 +6410,10 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: running
+  status: done
   priority: P1
   branch: null
-  model: plan:opus
+  model: phases 11.4a+11.4b+11.4c
 - id: '12.1'
   milestone: M12
   title: Staff console with manual teacher verification
@@ -6393,10 +6432,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   risk: risky
   branch: null
-  model: plan:opus
+  model: phases 12.2a+12.2b+12.2c+12.2d+12.2e+12.2g
 - id: '12.3'
   milestone: M12
   title: Rights declaration per upload, repeat-infringer handling, grievance contact per market

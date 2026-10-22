@@ -31,13 +31,19 @@ export default async function LiveClassesPage() {
       signOutLabel={shell('signOut')}
     >
       <h1>{t('title')}</h1>
-      {/* English-only pilot: only the live-classes studio's strings go to the client. */}
-      <NextIntlClientProvider locale="en" messages={{ liveClassesStudio: messages.liveClassesStudio }}>
+      {/* English-only pilot: only the live-classes studio's strings go to the client, plus the
+          upload centre's status and failure-reason words (11.4c reuses them, not copies). */}
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ liveClassesStudio: messages.liveClassesStudio, uploads: messages.uploads }}
+      >
         <LiveClassesView
           classes={data.classes}
           packages={data.packages}
           studentQueue={data.studentQueue}
           askQueue={data.askQueue}
+          recordings={data.recordings}
+          now={data.now}
         />
       </NextIntlClientProvider>
     </AppShell>

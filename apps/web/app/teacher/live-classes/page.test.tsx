@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   packagesListForTeacher: vi.fn(async () => []),
   listQueueForTeacher: vi.fn(async () => []),
   listGroupsForTeacher: vi.fn(async () => []),
+  listRecordingsForTeacher: vi.fn(async (): Promise<unknown[]> => []),
   seen: [] as unknown[],
 }));
 
@@ -18,7 +19,10 @@ vi.mock('../../../src/auth', () => ({
   requireRole: state.requireRole,
   serverDatabase: () => ({
     repos: {
-      liveClasses: { listForTeacher: state.listForTeacher },
+      liveClasses: {
+        listForTeacher: state.listForTeacher,
+        listRecordingsForTeacher: state.listRecordingsForTeacher,
+      },
       packages: { listForTeacher: state.packagesListForTeacher },
       classQuestions: { listQueueForTeacher: state.listQueueForTeacher },
       teacherQuestions: { listGroupsForTeacher: state.listGroupsForTeacher },
@@ -39,6 +43,8 @@ vi.mock('./LiveClassesView', () => ({
     packages: unknown[];
     studentQueue: unknown[];
     askQueue: unknown[];
+    recordings: unknown[];
+    now: string;
   }) => {
     state.seen.push(props);
     return <p>live classes view</p>;
@@ -53,6 +59,7 @@ beforeEach(() => {
   state.packagesListForTeacher.mockClear();
   state.listQueueForTeacher.mockClear();
   state.listGroupsForTeacher.mockClear();
+  state.listRecordingsForTeacher.mockClear();
   state.seen = [];
 });
 
@@ -65,7 +72,17 @@ describe('/teacher/live-classes', () => {
     expect(state.packagesListForTeacher).toHaveBeenCalledWith({ teacherId: 'tch_a' });
     expect(state.listQueueForTeacher).toHaveBeenCalledWith({ teacherId: 'tch_a' });
     expect(state.listGroupsForTeacher).toHaveBeenCalledWith({ teacherId: 'tch_a' }, { limit: 5 });
-    expect(state.seen).toEqual([{ classes: [], packages: [], studentQueue: [], askQueue: [] }]);
+    expect(state.listRecordingsForTeacher).toHaveBeenCalledWith({ teacherId: 'tch_a' });
+    expect(state.seen).toEqual([
+      {
+        classes: [],
+        packages: [],
+        studentQueue: [],
+        askQueue: [],
+        recordings: [],
+        now: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      },
+    ]);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Live classes');
   });
 
@@ -76,5 +93,27 @@ describe('/teacher/live-classes', () => {
     expect(state.packagesListForTeacher).not.toHaveBeenCalled();
     expect(state.listQueueForTeacher).not.toHaveBeenCalled();
     expect(state.listGroupsForTeacher).not.toHaveBeenCalled();
+    expect(state.listRecordingsForTeacher).not.toHaveBeenCalled();
+  });
+
+  it('passes recordings through and gives each package its module ids (11.4c)', async () => {
+    state.requireRole.mockResolvedValueOnce({ userId: 'tch_a', role: 'teacher' });
+    const recording = {
+      liveClassId: 'lc_1',
+      documentId: 'doc_1',
+      sourceTitle: 'Live class: Ratios review, 2026-10-20',
+      status: 'processing',
+    };
+    state.listRecordingsForTeacher.mockResolvedValueOnce([recording]);
+    state.packagesListForTeacher.mockResolvedValueOnce([
+      { packageId: 'pkg_1', agentId: 'agt_1', liveVersion: 1, config: { name: 'Grade 8', moduleIds: ['mod_1'] } },
+    ] as never);
+    render(await LiveClassesPage());
+    expect(state.seen).toEqual([
+      expect.objectContaining({
+        recordings: [recording],
+        packages: [{ packageId: 'pkg_1', name: 'Grade 8', moduleIds: ['mod_1'] }],
+      }),
+    ]);
   });
 });
