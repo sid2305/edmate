@@ -4630,7 +4630,7 @@ tasks:
   branch: null
 - id: 8.2c
   milestone: M8
-  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube)'
+  title: 'YouTube material, waiting on the human''s answer to B-47 (recommended: the teacher uploads the caption file exported from YouTube Studio for their own video, no call to YouTube); also fixes the 8.2d review findings first (docs/tasks/8.2d/review.md, all deferred 8.2e): the pinnedTransport timer crash, the untilAborted orphaned promise, redactUrl removed or host-only, repeated trailing dots, a cancellable resolver, explicit rejectUnauthorized, one message for unresolved and non-public hosts, 3fff::/20 refused (ADR table too), retryable transient DNS errors, cancel errors not masking the real one, a real https test, and fake timers in the deadline tests'
   accept: per the B-47 answer.
   deps:
   - 8.2f
