@@ -115,4 +115,4 @@ The running `edmate-*` containers were not touched.
 
 Status: DONE
 
-Tool calls used: 55
+Tool calls used: 62 (harness count; the builder reported 55)
