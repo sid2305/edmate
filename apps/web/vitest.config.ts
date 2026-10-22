@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: [
+      '*.test.ts',
       'app/**/*.test.ts',
       'app/**/*.test.tsx',
       'src/**/*.test.ts',
@@ -22,7 +23,7 @@ export default defineConfig({
     server: { deps: { inline: ['next-auth'] } },
     coverage: {
       provider: 'v8',
-      include: ['app/api/**/*.ts', 'src/**/*.ts'],
+      include: ['instrumentation.ts', 'app/api/**/*.ts', 'src/**/*.ts'],
       exclude: ['**/*.test.ts'],
       thresholds: {
         lines: 80,
