@@ -752,6 +752,50 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (c: { text: string; teacherId: string } | null) =>
       c ? [...markers(c.text), teacherOfId(c.teacherId)] : [],
   },
+  'styleCards.latest': {
+    scope: 'teacher',
+    op: 'read',
+    targeted: false,
+    call: (r, scope) => r.styleCards.latest(scope),
+    random: (r, _scope, rid) => r.styleCards.latest({ teacherId: rid }),
+    owners: (c: { text: string; teacherId: string } | null) =>
+      c ? [...markers(c.text), teacherOfId(c.teacherId)] : [],
+  },
+  'styleCards.create': {
+    scope: 'teacher',
+    op: 'write',
+    // Untargeted: the only teacher a create can name is the scope's own (no teacherId input).
+    owns: () => true,
+    attempt: (r, scope, actor) =>
+      r.styleCards.create(scope, { text: `[${actor}] card ${++counter}`, mistakeTags: [] }),
+    verify: async (r, actor, res) => {
+      const card = res as { id: string; teacherId: string };
+      expect(card.teacherId).toBe(teacherId(actor));
+      for (const t of TEACHERS) {
+        const got = await r.styleCards.get(tScope(t), card.id);
+        expect(got !== null, `${t} reading ${actor}'s new style card`).toBe(t === actor);
+        const latest = await r.styleCards.latest(tScope(t));
+        expect(latest?.id === card.id, `${t}'s latest is ${actor}'s new card`).toBe(t === actor);
+      }
+    },
+    mismatches: (a) => [
+      [
+        "a client-set teacherId (another teacher's)",
+        (r) =>
+          r.styleCards.create(tScope(a), {
+            text: 'x',
+            mistakeTags: [],
+            teacherId: teacherId(otherTeacher(a)),
+          } as never),
+        'invalid',
+      ],
+      [
+        'a student scope id',
+        (r) => r.styleCards.create({ teacherId: studentId('1') }, { text: 'x', mistakeTags: [] }),
+        'scope',
+      ],
+    ],
+  },
   'packageVersions.getById': {
     scope: 'teacher',
     op: 'read',
