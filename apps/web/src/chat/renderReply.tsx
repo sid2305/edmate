@@ -46,10 +46,15 @@ export function safeHref(href: unknown): string | null {
   if (typeof href !== 'string') return null;
   // Control/format/whitespace characters are dropped before parsing so `java\tscript:` and
   // zero-width tricks can't hide a protocol; URL() then lower-cases the scheme.
+  // Task 9.4c: every invisible/bidi character the review named (U+200B-U+200F, U+202A-U+202E,
+  // U+2066-U+2069, U+FEFF, U+00AD) is a Unicode format or control character, so \p{Cf}/\p{Cc}
+  // already strips all of them here. The scheme and protocol checks below run on `cleaned`, so a
+  // character that only hides a scheme (e.g. "java<ZWSP>script:") is re-checked after cleaning
+  // and refused; `cleaned`, not `href`, is what gets returned and rendered.
   const cleaned = href.replace(/[\p{Cc}\p{Cf}\s]/gu, '');
   if (!/^[a-z][a-z0-9+.-]*:/i.test(cleaned)) return null;
   try {
-    return SAFE_PROTOCOLS.has(new URL(cleaned).protocol) ? href : null;
+    return SAFE_PROTOCOLS.has(new URL(cleaned).protocol) ? cleaned : null;
   } catch {
     return null;
   }
@@ -74,7 +79,12 @@ const COMPONENTS: Components = {
 // Fenced code (``` or ~~~, to its matching close or the end of the text) and inline code spans
 // are left as-is.
 const CODE = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[`~]*[ \t]*(?=\n|$)|(?![\s\S]))|(`+)[\s\S]*?[^`]\2(?!`)/gm;
-const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?=\S)[^$\n]*?\S\$|\$\S\$/g;
+// Task 9.4c: the single-`$` alternative requires its last character (before the closing `$`) to
+// not be `-`, so a price range written as two separate `$n` tokens without a space ("$5-$10") is
+// never read as one maths span. The old one-character alternative (`\$\S\$`) is dropped: it can
+// never match anything the span above does not already match (a one-char span is the zero-length
+// case of `[^$\n]*?`), so it was unreachable.
+const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?=\S)[^$\n]*?[^-$\n\s]\$/g;
 const ASCII_PUNCT = /[!-/:-@[-`{-~]/g;
 
 function escapeMath(text: string): string {

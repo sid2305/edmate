@@ -238,6 +238,28 @@ describe('renderReply', () => {
     expect(protectMath('```\n$a_b$')).toBe('```\n$a_b$');
   });
 
+  it('protectMath still treats a one-character $x$ span as maths (9.4c: the unreachable `\\$\\S\\$` alternative was dropped)', () => {
+    expect(protectMath('take $x$ now')).toBe('take \\$x\\$ now');
+  });
+
+  it.each([
+    ['digit dash digit, no space', '$5-$10'],
+    ['digit dash digit inside a sentence', 'price is $5-$10 today'],
+    ['two separate amounts joined by "and"', 'costs $5 and $10'],
+  ])('protectMath leaves a price range as plain text (%s) (9.4c)', (_name, text) => {
+    expect(protectMath(text)).toBe(text);
+  });
+
+  it('known limit: protectMath still reads a price range as maths when it uses an en dash (9.4c)', () => {
+    // The price-range exclusion only recognises an ASCII hyphen (`-`) right before the closing
+    // `$`. An en dash (U+2013, as in "$5\u2013$10") is not excluded, so this still gets escaped as
+    // maths. Documented rather than fixed: no clean, narrow rule distinguishes every dash-like
+    // character a model might emit from a genuine subtraction such as `$a-b$`.
+    const text = 'price $5\u2013$10';
+    expect(protectMath(text)).not.toBe(text);
+    expect(protectMath(text)).toBe('price \\$5\u2013\\$10');
+  });
+
   it('safeHref allows only absolute http, https and mailto URLs', () => {
     expect(safeHref('https://example.org')).toBe('https://example.org');
     expect(safeHref('MAILTO:a@example.org')).toBe('MAILTO:a@example.org');
@@ -246,6 +268,26 @@ describe('renderReply', () => {
     expect(safeHref('java\u200bscript:alert(1)')).toBeNull();
     expect(safeHref('https://[bad')).toBeNull();
     expect(safeHref('ftp://example.org')).toBeNull();
+  });
+
+  it('safeHref returns the href with invisible and bidi characters removed, not the original (9.4c)', () => {
+    expect(safeHref('https://exa\u200bmple.com')).toBe('https://example.com');
+    expect(safeHref('https://exa\u202emple.com')).toBe('https://example.com');
+    expect(safeHref('https://exa\ufeffmple.com')).toBe('https://example.com');
+    expect(safeHref('https://exa\u00admple.com')).toBe('https://example.com');
+    // Still refused when the scheme only becomes visible after the invisible characters are
+    // dropped: "java<ZWSP>script:" cleans to "javascript:", which is not a safe protocol.
+    expect(safeHref('java\u200bscript:alert(1)')).toBeNull();
+  });
+
+  it('a U+202E inside an href never reaches the rendered href (9.4c)', () => {
+    // safeHref is the only place that decides what `href` SafeLink renders (COMPONENTS.a in
+    // renderReply.tsx), so this proves the attribute itself. Going through the full markdown
+    // pipeline instead would test micromark's own link-destination percent-encoding, which runs
+    // before safeHref and is outside this task's scope (renderReply.tsx's safeHref/protectMath).
+    const safe = safeHref('https://example.com/\u202epath');
+    expect(safe).toBe('https://example.com/path');
+    expect(safe).not.toContain('\u202e');
   });
 
   it('empty or blank text renders nothing', () => {
