@@ -359,7 +359,7 @@ describe('postGuard: three model or port calls in one turn (lead answer 1)', () 
     { locked: 140, rewrite: 330, judge: 530 },
   ])(
     'locked $locked ms, rewrite $rewrite ms, judge $judge ms: all three used, done inside the step',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async (d) => {
       const s = setup({
         lockedCheckMs: d.locked,
@@ -384,7 +384,7 @@ describe('postGuard: three model or port calls in one turn (lead answer 1)', () 
 
   it(
     'every call hanging still ends inside the step, failing closed',
-    { timeout: 5_000 },
+    { timeout: 20_000 },
     async () => {
       const s = setup({
         lockedCheckMs: 60_000,

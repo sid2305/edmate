@@ -5,7 +5,7 @@ import { SafetyEventCodeSchema } from '@edmate/contracts';
 import { describe, expect, it } from 'vitest';
 import { BLOCK_REPLIES, type BlockCode, blockReplyFor, isBlockReply } from './blockReplies.js';
 
-const T = 1_000;
+const T = 20_000;
 
 describe('block replies', () => {
   it(

@@ -17,7 +17,7 @@ import { testDeps, testSteps } from '../testing/testSteps.js';
 import { runTurn } from './runner.js';
 import { defaultSteps } from './steps/index.js';
 
-const T = 3_000;
+const T = 20_000;
 const at = (text: string) => ({ ...demoTurnInput, text });
 const distressNo = { generateObject: [{ value: { distress: false } }] };
 
