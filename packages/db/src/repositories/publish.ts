@@ -74,7 +74,12 @@ const SCORECARD_RUNS_MAX = 50;
 const INSERT_BATCH = 500;
 
 /** Why `startRun` or `goLive` refused, for the studio's 409s (plan Phase D). */
-export type PublishRefusal = 'no_packages' | 'suspended' | 'nothing_to_publish' | 'gate_running';
+export type PublishRefusal =
+  | 'no_packages'
+  | 'suspended'
+  | 'nothing_to_publish'
+  | 'gate_running'
+  | 'regulated_unapproved';
 
 /**
  * A RepositoryError that also says which publish rule refused (no new contracts error codes:
@@ -248,6 +253,26 @@ const PUBLISH_LOCK_NAMESPACE = 8701;
 const OPEN = ['queued', 'running'] as const;
 const STALE_SUMMARY: GateRunSummary = { groups: [], errorCode: 'stale' };
 
+/** The agent's staff-set regulated subject (task 12.4); the column check keeps it to the enum. */
+const RegulatedColumn = AgentConfigSchema.shape.regulatedSubject.unwrap().nullable();
+type RegulatedSubject = z.infer<typeof RegulatedColumn>;
+
+/**
+ * Task 12.4: a flagged agent publishes only once staff approve it. Throws `invalid` /
+ * `regulated_unapproved` when the agent row (read under its FOR UPDATE lock) carries a subject
+ * with no approval. Returns the subject (null when unflagged).
+ */
+function regulatedSubjectOf(
+  agent: { regulatedSubject: string | null; regulatedApprovedAt: Date | null },
+  method: string,
+): RegulatedSubject {
+  const subject = stored(RegulatedColumn, agent.regulatedSubject, method);
+  if (subject !== null && agent.regulatedApprovedAt === null) {
+    throw new PublishRefusedError('invalid', method, 'regulated_unapproved');
+  }
+  return subject;
+}
+
 /** Parses a stored value or throws `integrity`: a bad row is never returned. */
 function stored<T>(schema: z.ZodType<T>, value: unknown, method: string): T {
   const r = schema.safeParse(value);
@@ -403,12 +428,14 @@ export function publishRepo(db: Db) {
      * Starts a publish run for one of the scope's agents. In one transaction (serialised per
      * teacher by an advisory lock): the teacher must be verified (profile FOR SHARE, else
      * `scope`); the agent, course and style card must be the scope's (`not_found`); a suspended
-     * agent is refused (`suspended`); an open run is refused (`gate_running`) unless it is stale,
+     * agent is refused (`suspended`); an agent staff flagged with a regulated subject and have not
+     * approved is refused (`regulated_unapproved`, task 12.4), before any write; an open run is refused (`gate_running`) unless it is stale,
      * when it is ended `error` / `stale` first; at least one package must have a version
      * (`no_packages`). The basis (pins, material revision, every package's newest version) is
      * compared with the last published run's for the change kinds; an unchanged live agent is
-     * refused (`nothing_to_publish`). Then agent version N+1 is cut from the pins (languages and
-     * regulated subject carried from version N) and a `queued` run is stored.
+     * refused (`nothing_to_publish`). Then agent version N+1 is cut from the pins (languages
+     * carried from version N; the regulated subject is the agent row's staff-set column, its only
+     * source, never copied from version N) and a `queued` run is stored.
      */
     async startRun(scope: TeacherScope, pins: PublishPins): Promise<GateRunRow> {
       const method = 'publish.startRun';
@@ -419,7 +446,11 @@ export function publishRepo(db: Db) {
           await publishLock(tx, teacherId);
           await lockVerified(tx, teacherId, method);
           const [agent] = await tx
-            .select({ status: agents.status })
+            .select({
+              status: agents.status,
+              regulatedSubject: agents.regulatedSubject,
+              regulatedApprovedAt: agents.regulatedApprovedAt,
+            })
             .from(agents)
             .where(and(eq(agents.id, p.agentId), eq(agents.teacherId, teacherId)))
             .for('update');
@@ -437,6 +468,8 @@ export function publishRepo(db: Db) {
           if (agent.status === 'suspended') {
             throw new PublishRefusedError('invalid', method, 'suspended');
           }
+          // Before any write (the stale-run update below included).
+          const regulatedSubject = regulatedSubjectOf(agent, method);
 
           const [open] = await tx
             .select({
@@ -534,9 +567,7 @@ export function publishRepo(db: Db) {
               styleCardId: p.styleCardId,
               promptPackVersion: p.promptPackVersion,
               languages: latest.config.languages,
-              ...(latest.config.regulatedSubject === undefined
-                ? {}
-                : { regulatedSubject: latest.config.regulatedSubject }),
+              ...(regulatedSubject === null ? {} : { regulatedSubject }),
               modelPolicy: p.modelPolicy,
             },
             method,
@@ -661,7 +692,10 @@ export function publishRepo(db: Db) {
      * `gatedPublish`'s publish step, in one transaction: the teacher must still be verified
      * (profile FOR SHARE, else `scope`, nothing changes); the run must be the scope's
      * (`not_found`) and `running` (`invalid`); an agent suspended meanwhile is refused
-     * (`suspended`). Then the agent goes `live` at the run's agent version, every package in the
+     * (`suspended`); a regulated subject staff have not approved (`regulated_unapproved`, task
+     * 12.4), or a run whose agent version's subject is not the agent's current staff-set subject
+     * (staff flagged, changed or cleared it after the run started), is refused the same way, so a
+     * version never goes live without the subject staff approved. Then the agent goes `live` at the run's agent version, every package in the
      * basis gets its basis version as `live_version`, the run is `passed` with `published_at`,
      * summary and scorecard, and `agent.publish` / `package.publish` audit rows are written.
      */
@@ -686,7 +720,12 @@ export function publishRepo(db: Db) {
           if (!ref) throw new RepositoryError('not_found', method);
           const agentId = stored(IdSchema, ref.agentId, method);
           const [agent] = await tx
-            .select({ status: agents.status, liveVersion: agents.liveVersion })
+            .select({
+              status: agents.status,
+              liveVersion: agents.liveVersion,
+              regulatedSubject: agents.regulatedSubject,
+              regulatedApprovedAt: agents.regulatedApprovedAt,
+            })
             .from(agents)
             .where(and(eq(agents.id, agentId), eq(agents.teacherId, teacherId)))
             .for('update');
@@ -699,6 +738,19 @@ export function publishRepo(db: Db) {
           const basis = stored(BasisSchema, run.basis, method);
           if (agent.status === 'suspended') {
             throw new PublishRefusedError('invalid', method, 'suspended');
+          }
+          const regulatedSubject = regulatedSubjectOf(agent, method);
+          // The run's version, read unlocked: agent versions are never updated.
+          const [cut] = await tx
+            .select({ config: agentVersions.config })
+            .from(agentVersions)
+            .innerJoin(evalRuns, eq(evalRuns.agentVersionId, agentVersions.id))
+            .where(and(eq(evalRuns.id, g.runId), eq(agentVersions.teacherId, teacherId)));
+          /* v8 ignore next -- eval_runs.agent_version_id references agent_versions */
+          if (!cut) throw new RepositoryError('integrity', method);
+          const version = stored(AgentConfigSchema, cut.config, method);
+          if ((version.regulatedSubject ?? null) !== regulatedSubject) {
+            throw new PublishRefusedError('invalid', method, 'regulated_unapproved');
           }
           await tx
             .update(agents)
