@@ -390,6 +390,29 @@ write adds one `package.save` audit row: `target` `package:<id>`, `after` `{ ver
 price, no names). `listForTeacher` reads the scope's packages oldest first (at most
 `PACKAGES_MAX`) and each one's newest version, both filtered by `teacher_id`.
 
+## Publish gate runs (task 8.7a)
+
+`publish` stores the publish gate's runs in `eval_runs` (suite `gate`, migration 0021 adds
+`agent_id`, `status`, `changes`, `basis`, `summary`, `scorecard`, `published_at`; a partial unique
+index allows one open run per agent). Every method takes the teacher id from the scope only, and
+every run is selected by id AND `teacher_id`.
+
+- `startRun(scope, pins)` takes a per-teacher advisory lock, checks the teacher is verified
+  (`FOR SHARE`, else `scope`), locks the agent `FOR UPDATE`, refuses a suspended agent, an open run
+  (unless stale: no progress for its deadline plus 15 minutes, then it is closed as `error`), no
+  packages, or nothing changed since the last published run. It cuts agent version N+1 and inserts
+  a `queued` run whose `basis` snapshots the pins, material revision and each package's newest
+  version. Refusals are `PublishRefusedError` with a `reason`.
+- `markRunning`, `recordResults` (idempotent per case, at most `GATE_RESULTS_MAX`), `finishRun`
+  (`failed` or `error`) move a run along.
+- `goLive(scope, input)` runs in one transaction: verified check `FOR SHARE`, run `FOR UPDATE`
+  (must be `running`), agent `FOR UPDATE` (not suspended), then sets the agent live at the run's
+  version, each basis package's `live_version`, one `agent.publish` and one `package.publish`
+  audit row each, and marks the run `passed` with `published_at`.
+- `latestRun`, `getRun`, `failedCases` (at most `FAILED_CASES_MAX`) are teacher-scoped reads.
+- `publicScorecard({ agentId })` is public: it returns null unless the agent is live and its
+  teacher verified, and carries each category forward from the newest passed run that measured it.
+
 ## Package surface
 
 `@edmate/db` exports `openDatabase`, the repositories, scope parsers and `RepositoryError`, and

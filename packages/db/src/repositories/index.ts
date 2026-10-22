@@ -13,6 +13,7 @@ import { notificationsRepo } from './notifications.js';
 import { coursesRepo, outlineRepo } from './outline.js';
 import { packageVersionsRepo } from './package-versions.js';
 import { packagesRepo } from './packages.js';
+import { publishRepo } from './publish.js';
 import { retrievalRepo } from './retrieval.js';
 import { safetyEventsRepo } from './safety-events.js';
 import { sessionsRepo } from './sessions.js';
@@ -39,7 +40,8 @@ function guardAll<T extends Methods>(repo: string, methods: T): T {
 /**
  * Every repository, as plain objects of plain functions (the isolation test enumerates them).
  * Every method takes a validated TeacherScope or StudentScope first (the public exceptions are
- * `agents.owner`, `packageVersions.liveForAgent` and all of `discovery`, the public reads: see
+ * `agents.owner`, `packageVersions.liveForAgent`, `publish.publicScorecard` and all of
+ * `discovery`, the public reads: see
  * README.md).
  */
 export function createRepositories(db: Db) {
@@ -70,6 +72,7 @@ export function createRepositories(db: Db) {
     notifications: guardAll('notifications', notificationsRepo(db)),
     courses: guardAll('courses', coursesRepo(db)),
     outline: guardAll('outline', outlineRepo(db)),
+    publish: guardAll('publish', publishRepo(db)),
   };
 }
 
@@ -129,6 +132,35 @@ export {
   type PublicTeacherCard,
   type PublicTeacherPage,
 } from './discovery.js';
+export {
+  FAILED_CASES_MAX,
+  type FailedCase,
+  type FinishRunInput,
+  FULL_SCOPE_GATE_DEADLINE_MS,
+  GATE_DEADLINE_MS,
+  GATE_GROUP_NAMES,
+  GATE_RESULTS_MAX,
+  GATE_RUN_STATUSES,
+  GATE_SUITE,
+  type GateCaseDetails,
+  type GateCaseResult,
+  type GateGroupName,
+  type GateRunRow,
+  type GateRunStatus,
+  type GateRunSummary,
+  type GoLiveInput,
+  PUBLISH_CHANGE_KINDS,
+  type PublicScorecard,
+  type PublicScorecardCategory,
+  type PublishBasis,
+  type PublishChangeKind,
+  type PublishPins,
+  PublishRefusedError,
+  type PublishRefusal,
+  STALE_RUN_GRACE_MS,
+  type StoredScorecard,
+  type StoredScorecardCategory,
+} from './publish.js';
 export { PACKAGES_MAX, type PackageDraft, type TeacherPackageRow } from './packages.js';
 export {
   AGENT_PACKAGES_MAX,

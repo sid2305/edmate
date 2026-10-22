@@ -3,6 +3,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -13,7 +14,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { auditActorRole, id, timestamps, tstz } from './_shared.js';
-import { agentVersions } from './agents.js';
+import { agents, agentVersions } from './agents.js';
 import { teacherId, users } from './users.js';
 
 /** Quality gate: one suite run against one agent version. */
@@ -30,11 +31,36 @@ export const evalRuns = pgTable(
     /** 0..1; null while running. */
     passRate: doublePrecision('pass_rate'),
     finishedAt: tstz('finished_at'),
+    // Task 8.7: publish-gate runs (`suite = 'gate'`). Additive and nullable: rows from before
+    // migration 0021 (offline suite runs) keep these null.
+    /** The agent being published; the run cut `agent_version_id` for it. */
+    agentId: text('agent_id').references(() => agents.id),
+    /** queued | running | passed | failed | error (publish gate runs only). */
+    status: text('status'),
+    /** The gate's change kinds, derived from `basis` against the last published run. */
+    changes: text('changes').array(),
+    /** What the run publishes: pins, style card, material revision, package versions. */
+    basis: jsonb('basis'),
+    /** Gate groups, stats, cost in micro-USD and an error code. */
+    summary: jsonb('summary'),
+    /** The teaching scorecard of a finished run (7.8's `Scorecard`). */
+    scorecard: jsonb('scorecard'),
+    /** When `goLive` made the run's agent version and package versions live. */
+    publishedAt: tstz('published_at'),
     ...timestamps(),
   },
   (t) => [
     index('eval_runs_teacher_id_idx').on(t.teacherId),
     index('eval_runs_agent_version_id_suite_idx').on(t.agentVersionId, t.suite),
+    index('eval_runs_agent_id_created_at_idx').on(t.agentId, t.createdAt),
+    // One open publish run per agent.
+    uniqueIndex('eval_runs_agent_id_open_key')
+      .on(t.agentId)
+      .where(sql`${t.status} in ('queued', 'running')`),
+    check(
+      'eval_runs_status_check',
+      sql`${t.status} is null or ${t.status} in ('queued', 'running', 'passed', 'failed', 'error')`,
+    ),
   ],
 );
 
