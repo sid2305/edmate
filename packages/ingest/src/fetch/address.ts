@@ -49,13 +49,18 @@ function isPublicV4([a = 0, b = 0, c = 0]: readonly number[]): boolean {
 }
 
 function isPublicV6(g: readonly number[]): boolean {
-  const [g0 = 0, g1 = 0, , , , g5 = 0, g6 = 0, g7 = 0] = g;
+  const [g0 = 0, g1 = 0, g2 = 0, , , g5 = 0, g6 = 0, g7 = 0] = g;
   const leadingZero = g.slice(0, 5).every((x) => x === 0);
   // ::ffff:a.b.c.d is IPv4 in disguise: judge the IPv4 address.
   if (leadingZero && g5 === 0xffff) return isPublicV4([g6 >> 8, g6 & 0xff, g7 >> 8, g7 & 0xff]);
-  // Only global unicast (2000::/3), minus Teredo, documentation and 6to4 inside it.
+  // Only global unicast (2000::/3), minus the special-purpose blocks inside it: Teredo
+  // (2001::/32), benchmarking (2001:2::/48), ORCHID (2001:10::/28, 2001:20::/28), documentation
+  // (2001:db8::/32) and 6to4 (2002::/16).
   if ((g0 & 0xe000) !== 0x2000) return false;
-  if (g0 === 0x2001 && (g1 === 0 || g1 === 0xdb8)) return false;
+  if (g0 === 0x2001) {
+    if (g1 === 0 || g1 === 0xdb8 || (g1 === 2 && g2 === 0)) return false;
+    if ((g1 & 0xfff0) === 0x10 || (g1 & 0xfff0) === 0x20) return false;
+  }
   return g0 !== 0x2002;
 }
 

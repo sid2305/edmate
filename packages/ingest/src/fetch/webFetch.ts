@@ -1,23 +1,31 @@
-// Fetching a teacher's web link, SSRF-safe. Modelled on the gateway's recording download
-// (packages/gateway/src/transcriber/source.ts):
+// Fetching a teacher's web link, SSRF-safe (tasks 5.1 and 8.2d; the policy is ADR-0014).
 //
-// - https only, no userinfo, and the URL's host (with port) must match the allowlist exactly; an
-//   empty list refuses everything.
-// - The host must reach public addresses only: an IP literal is checked as it stands, a name is
-//   resolved and every address it resolves to must be public (no loopback, private, link-local or
-//   cloud metadata address). This runs again on every redirect hop.
-// - Redirects are followed by hand, at most MAX_REDIRECTS, and only to targets passing the same
-//   checks; only HTML is accepted, and the body is capped while it streams.
-// - The URL never appears in an error: it can carry a token in its query string.
+// - Every hop is checked by the pure shape rules in linkUrl.ts (https on port 443, no userinfo, no
+//   internal name, a public IP literal, not YouTube) and, in list mode, an exact-host allow-list.
+// - A name is resolved ONCE per hop; every address must be public, and the first is pinned. The
+//   transport connects to exactly that address, with no second lookup, so a DNS-rebinding host
+//   can't answer public to the check and private to the connection.
+// - Redirects are followed by hand, at most MAX_REDIRECTS, each re-checked and re-pinned. Only HTML
+//   is accepted, the body is capped (decompressed bytes) while it streams, and one deadline covers
+//   every hop: DNS, connection and body.
+// - The URL never appears in an error: it can carry a token in its query string or path.
 import { IngestError } from '../errors.js';
-import { MAX_DOCUMENT_BYTES } from '../types.js';
 import { isIpLiteral, isPublicAddress } from './address.js';
-
-type Fetch = typeof globalThis.fetch;
+import { bareHostName, webLinkRefusal, type WebLinkRefusal } from './linkUrl.js';
 
 const MAX_REDIRECTS = 3;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const HTML_TYPES = new Set(['text/html', 'application/xhtml+xml']);
+
+/** A page is capped at 5 MB, counted after any decompression (ADR-0014 Decision 5). */
+export const WEB_PAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** The only request headers ever sent: no cookie, no authorization, no compression asked for. */
+export const WEB_FETCH_HEADERS: Readonly<Record<string, string>> = Object.freeze({
+  'user-agent': 'EdmateBot/0.1',
+  accept: 'text/html,application/xhtml+xml',
+  'accept-encoding': 'identity',
+});
 
 export interface FetchedPage {
   readonly html: string;
@@ -28,13 +36,41 @@ export interface WebFetcher {
   fetchPage(url: string): Promise<FetchedPage>;
 }
 
+/** One request to one already-checked address. */
+export interface TransportRequest {
+  readonly url: URL;
+  /** The checked public address to connect to; the transport must not look the host up again. */
+  readonly address: string;
+  readonly family: 4 | 6;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly signal: AbortSignal;
+}
+
+/**
+ * A response as the fetcher reads it. A transport that decompresses the body must drop
+ * `content-encoding` and `content-length`; one that can't decode an encoding leaves the header,
+ * and the fetcher refuses the page.
+ */
+export interface TransportResponse {
+  readonly status: number;
+  /** A header value by lower-case name, or undefined. */
+  header(name: string): string | undefined;
+  readonly body: AsyncIterable<Uint8Array>;
+  /** Stop reading and close the connection; safe to call more than once. */
+  cancel(): Promise<void> | void;
+}
+
+/** Connects to `address` only (production: apps/worker/src/webLink/pinnedTransport.ts). */
+export type PinnedTransport = (req: TransportRequest) => Promise<TransportResponse>;
+
 export interface WebFetcherOptions {
-  /** Bare hosts (optionally `:port`) from the composition root, matched exactly. */
-  readonly allowedHosts: readonly string[];
-  readonly fetch: Fetch;
+  /** Bare host names matched exactly, or 'any-public' for any host that passes every check. */
+  readonly allowedHosts: readonly string[] | 'any-public';
+  readonly transport: PinnedTransport;
   /** Every address a host name resolves to; production passes systemResolveHost. */
   readonly resolveHost: (host: string) => Promise<readonly string[]>;
   readonly maxBytes?: number;
+  /** One deadline for the whole fetch, every hop and DNS lookup included. */
   readonly timeoutMs?: number;
 }
 
@@ -48,17 +84,22 @@ export function redactUrl(url: string): string {
   }
 }
 
-/** The allowlist as lower-case hosts; a mistyped entry fails at startup, not silently later. */
+/** Letters, digits and hyphens in dot-separated labels: no `*` wildcard, no empty label. */
+const HOST_NAME = /^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/;
+
+/** The allow-list as bare lower-case host names; a mistyped entry fails at startup, not later. */
 export function normaliseAllowedHosts(hosts: readonly string[]): ReadonlySet<string> {
   const out = new Set<string>();
   for (const raw of hosts) {
     let host: string | undefined;
     try {
-      host = new URL(`https://${raw}`).host;
+      const u = new URL(`https://${raw}`);
+      host = u.port === '' ? bareHostName(u.hostname) : undefined;
     } catch {
       host = undefined;
     }
-    if (host === undefined || host === '' || host !== raw.toLowerCase()) {
+    const plain = host !== undefined && (HOST_NAME.test(host) || isIpLiteral(host));
+    if (host === undefined || !plain || host !== bareHostName(raw)) {
       throw new Error(
         'ingest: every allowedHosts entry must be a bare host such as docs.example.org',
       );
@@ -70,6 +111,22 @@ export function normaliseAllowedHosts(hosts: readonly string[]): ReadonlySet<str
 
 const forbidden = (why: string): IngestError =>
   new IngestError('forbidden', false, `the web link ${why}; refused`);
+
+const REFUSAL_WORDS: Readonly<Record<Exclude<WebLinkRefusal, 'youtube_unsupported'>, string>> = {
+  invalid_url: 'is not a valid URL',
+  not_https: 'is not https',
+  has_credentials: 'carries a user name or password',
+  too_long: 'is too long',
+  bad_port: 'names a port other than 443',
+  internal_name: 'names an internal host',
+  private_address: 'points at a non-public address',
+};
+
+function refusalError(code: WebLinkRefusal): IngestError {
+  return code === 'youtube_unsupported'
+    ? new IngestError('unsupported', false, "YouTube links aren't supported yet")
+    : forbidden(REFUSAL_WORDS[code]);
+}
 
 function statusError(status: number): IngestError {
   const http = `(HTTP ${String(status)})`;
@@ -90,34 +147,35 @@ const tooLarge = (maxBytes: number): IngestError =>
     `the web page is larger than the ${String(maxBytes)}-byte limit`,
   );
 
-/** The declared length, when it is the length of the bytes we will read (not compressed). */
-function declaredLength(res: Response): number | undefined {
-  const encoding = res.headers.get('content-encoding');
-  if (encoding !== null && encoding.trim().toLowerCase() !== 'identity') return undefined;
-  const raw = res.headers.get('content-length');
-  const n = raw === null ? Number.NaN : Number(raw);
+/** The declared length, when it is a usable number. */
+function declaredLength(res: TransportResponse): number | undefined {
+  const raw = res.header('content-length');
+  const n = raw === undefined ? Number.NaN : Number(raw);
   return Number.isSafeInteger(n) && n >= 0 ? n : undefined;
 }
 
-async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> {
-  const declared = declaredLength(res);
-  if (declared !== undefined && declared > maxBytes) {
-    await res.body?.cancel();
-    throw tooLarge(maxBytes);
+async function readCapped(
+  res: TransportResponse,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const encoding = (res.header('content-encoding') ?? '').trim().toLowerCase();
+  if (encoding !== 'identity' && encoding !== '') {
+    throw new IngestError('unsupported', false, 'the web page uses an unsupported encoding');
   }
-  if (res.body === null) return new Uint8Array(0);
-  const reader = res.body.getReader();
+  const declared = declaredLength(res);
+  if (declared !== undefined && declared > maxBytes) throw tooLarge(maxBytes);
   const parts: Uint8Array[] = [];
   let size = 0;
+  const chunks = res.body[Symbol.asyncIterator]();
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel();
-      throw tooLarge(maxBytes);
-    }
-    parts.push(value);
+    // Each read races the deadline, so a body that trickles can't outlive it.
+    const step = await untilAborted(chunks.next(), signal);
+    if (step.done === true) break;
+    const chunk = step.value;
+    size += chunk.byteLength;
+    if (size > maxBytes) throw tooLarge(maxBytes);
+    parts.push(chunk);
   }
   if (declared !== undefined && size !== declared) {
     throw new IngestError('provider_error', true, 'the web page download ended early');
@@ -140,30 +198,89 @@ function decode(bytes: Uint8Array, contentType: string): string {
   }
 }
 
+/** Settles with `p`, or rejects as soon as the signal aborts (a slow DNS answer can't stall). */
+function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    signal.throwIfAborted();
+    const onAbort = (): void => {
+      reject(new Error('aborted'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort);
+    });
+  });
+}
+
+interface Target {
+  readonly address: string;
+  readonly family: 4 | 6;
+}
+
+const unbracket = (host: string): string => host.replace(/^\[(.*)\]$/, '$1');
+const familyOf = (address: string): 4 | 6 => (address.includes(':') ? 6 : 4);
+
 export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
-  const allowed = normaliseAllowedHosts(opts.allowedHosts);
-  const maxBytes = opts.maxBytes ?? MAX_DOCUMENT_BYTES;
+  const allowed =
+    opts.allowedHosts === 'any-public' ? undefined : normaliseAllowedHosts(opts.allowedHosts);
+  const maxBytes = opts.maxBytes ?? WEB_PAGE_MAX_BYTES;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  /** Scheme, userinfo, allowlist, then the addresses the host reaches. */
-  async function checkTarget(u: URL): Promise<void> {
-    if (u.protocol !== 'https:') throw forbidden('is not https');
-    if (u.username !== '' || u.password !== '') throw forbidden('carries a user name or password');
-    if (!allowed.has(u.host)) throw forbidden('is not on an allowed host');
-    if (isIpLiteral(u.hostname)) {
-      if (!isPublicAddress(u.hostname)) throw forbidden('points at a non-public address');
-      return;
+  /** Shape rules, the allow-list, then one lookup whose every answer must be public. */
+  async function checkTarget(u: URL, signal: AbortSignal): Promise<Target> {
+    const refusal = webLinkRefusal(u);
+    if (refusal !== undefined) throw refusalError(refusal);
+    const host = bareHostName(u.hostname);
+    if (allowed !== undefined && !allowed.has(host)) throw forbidden('is not on an allowed host');
+    if (isIpLiteral(host)) {
+      const address = unbracket(host);
+      return { address, family: familyOf(address) };
     }
     let addresses: readonly string[];
     try {
-      addresses = await opts.resolveHost(u.hostname);
+      addresses = await untilAborted(opts.resolveHost(host), signal);
     } catch {
+      signal.throwIfAborted();
       addresses = [];
     }
-    if (addresses.length === 0) {
+    const [first] = addresses;
+    if (first === undefined) {
       throw new IngestError('not_found', false, "the web link's host could not be resolved");
     }
     if (!addresses.every(isPublicAddress)) throw forbidden('resolves to a non-public address');
+    return { address: first, family: familyOf(first) };
+  }
+
+  /** One hop's response: the redirect target to follow next, or the page. */
+  async function readResponse(
+    res: TransportResponse,
+    current: URL,
+    hop: number,
+    signal: AbortSignal,
+  ): Promise<URL | FetchedPage> {
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.header('location');
+      if (location === undefined) {
+        throw new IngestError('provider_error', false, 'the site sent a redirect with no location');
+      }
+      if (hop >= MAX_REDIRECTS) {
+        throw new IngestError('provider_error', false, 'the site redirected too many times');
+      }
+      try {
+        return new URL(location, current);
+      } catch {
+        throw new IngestError('provider_error', false, 'the site sent an unusable redirect');
+      }
+    }
+    if (res.status < 200 || res.status >= 300) throw statusError(res.status);
+    const contentType = res.header('content-type') ?? '';
+    const mime = contentType.replace(/;.*$/s, '').trim().toLowerCase();
+    if (!HTML_TYPES.has(mime)) {
+      throw new IngestError('unsupported', false, 'the web link is not an HTML page');
+    }
+    const bytes = await readCapped(res, maxBytes, signal);
+    if (bytes.byteLength === 0) throw new IngestError('validation', false, 'the web page is empty');
+    return { html: decode(bytes, contentType) };
   }
 
   async function fetchPage(url: string): Promise<FetchedPage> {
@@ -176,45 +293,33 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
     const signal = AbortSignal.timeout(timeoutMs);
     try {
       for (let hop = 0; ; hop += 1) {
-        await checkTarget(current);
-        const res = await opts.fetch(current.href, { redirect: 'manual', signal });
-        if (res.status >= 300 && res.status < 400) {
-          await res.body?.cancel();
-          const location = res.headers.get('location');
-          if (location === null) {
-            throw new IngestError(
-              'provider_error',
-              false,
-              'the site sent a redirect with no location',
-            );
-          }
-          if (hop >= MAX_REDIRECTS) {
-            throw new IngestError('provider_error', false, 'the site redirected too many times');
-          }
-          current = new URL(location, current);
-          continue;
+        const target = await checkTarget(current, signal);
+        const res = await untilAborted(
+          opts.transport({
+            url: current,
+            address: target.address,
+            family: target.family,
+            headers: WEB_FETCH_HEADERS,
+            signal,
+          }),
+          signal,
+        );
+        let next: URL | FetchedPage;
+        try {
+          next = await readResponse(res, current, hop, signal);
+        } finally {
+          await res.cancel();
         }
-        if (res.status < 200 || res.status >= 300) {
-          await res.body?.cancel();
-          throw statusError(res.status);
-        }
-        const contentType = res.headers.get('content-type') ?? '';
-        const mime = contentType.replace(/;.*$/s, '').trim().toLowerCase();
-        if (!HTML_TYPES.has(mime)) {
-          await res.body?.cancel();
-          throw new IngestError('unsupported', false, 'the web link is not an HTML page');
-        }
-        const bytes = await readCapped(res, maxBytes);
-        if (bytes.byteLength === 0)
-          throw new IngestError('validation', false, 'the web page is empty');
-        return { html: decode(bytes, contentType) };
+        if (!(next instanceof URL)) return next;
+        current = next;
       }
     } catch (err) {
       if (err instanceof IngestError) throw err;
-      // The original error is dropped, not kept as `cause`: fetch errors can quote the URL.
-      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-        throw new IngestError('provider_error', true, 'the web page download timed out');
-      }
+      // The original error is dropped, not kept as `cause`: transport errors can quote the URL.
+      const timeout =
+        signal.aborted ||
+        (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError'));
+      if (timeout) throw new IngestError('provider_error', true, 'the web page download timed out');
       throw new IngestError('provider_error', true, 'could not download the web page');
     }
   }
