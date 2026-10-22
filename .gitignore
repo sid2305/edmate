@@ -35,6 +35,9 @@ node_modules/
 dist/
 build/
 coverage/
+# Playwright output (screenshots, traces)
+test-results/
+playwright-report/
 packages/evals/reports/
 evals/reports/live/
 *.tsbuildinfo

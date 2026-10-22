@@ -8,6 +8,7 @@
 // the guard never looks at NODE_ENV. Anything else set fails closed (`EDMATE_DEV_MODEL`).
 import type { ModelChunk, ModelRequest } from '@edmate/contracts';
 import type { ModelAdapter, ProviderAdapterFactories } from '@edmate/gateway';
+import { ADVICE_JUDGE_SYSTEM, GROUNDING_JUDGE_SYSTEM } from '@edmate/harness';
 import type { ZodType } from 'zod';
 import { TurnUnavailableError } from './routes';
 
@@ -68,6 +69,15 @@ export function firstMaterial(system: string): string | undefined {
   return text === undefined || text === '' ? undefined : text;
 }
 
+/**
+ * The post-guard judges (grounding 4.7, advice 4.8) ask for strict JSON as streamed text, keyed by
+ * their exact fixed rubric: they get the "all clear" verdict, like the classifiers (9.0 Phase C).
+ */
+const JUDGE_VERDICTS: ReadonlyMap<string, string> = new Map([
+  [GROUNDING_JUDGE_SYSTEM, '{"grounded": true}'],
+  [ADVICE_JUDGE_SYSTEM, '{"personalAdvice": false}'],
+]);
+
 /** A rough token count for usage (about 4 characters a token, at least 1). */
 function tokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
@@ -88,9 +98,10 @@ export function devModelAdapter(model: string): ModelAdapter {
     stream(req: ModelRequest): AsyncIterable<ModelChunk> {
       const material = firstMaterial(req.system);
       const reply =
-        material === undefined
+        JUDGE_VERDICTS.get(req.system) ??
+        (material === undefined
           ? DEV_MODEL_NO_MATERIAL
-          : `${DEV_MODEL_PREFIX} From your teacher's material: "${material}"`;
+          : `${DEV_MODEL_PREFIX} From your teacher's material: "${material}"`);
       const input = req.system + req.messages.map((m) => m.content).join('\n');
       return (async function* devStream(): AsyncGenerator<ModelChunk> {
         for (const part of reply.match(/\S+\s*/g) ?? [reply]) yield { type: 'text', text: part };

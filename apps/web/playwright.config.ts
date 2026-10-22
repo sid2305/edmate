@@ -15,6 +15,8 @@ const TEST_DATABASE_URL =
 
 export default defineConfig({
   testDir: './e2e',
+  // The stack run (task 9.0) has its own config, playwright.stack.config.ts.
+  testIgnore: ['stack/**'],
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
