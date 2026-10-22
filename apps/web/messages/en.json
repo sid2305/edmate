@@ -24,7 +24,8 @@
     "uploadsLink": "Uploads",
     "outlineLink": "Outline",
     "onboardingLink": "Your profile",
-    "styleCardLink": "Teaching style"
+    "styleCardLink": "Teaching style",
+    "questionsLink": "Questions"
   },
   "onboarding": {
     "title": "Your profile",
@@ -276,6 +277,25 @@
     "errors": {
       "validation": "That correction couldn't be saved. Check the fields are filled in and not too long.",
       "not_found": "That module isn't yours any more. Reload the page and try again.",
+      "generic": "Something went wrong. Please try again."
+    }
+  },
+  "questionsInbox": {
+    "title": "Questions inbox",
+    "intro": "Students asked these questions and your agent couldn't answer. Pick a module and send one answer to every student who asked.",
+    "empty": "No open questions right now.",
+    "countLabel": "Asked by {count} students",
+    "moduleLabel": "Module",
+    "answerLabel": "Your answer",
+    "sendButton": "Send answer",
+    "sending": "Sending…",
+    "dismissButton": "Dismiss",
+    "dismissing": "Dismissing…",
+    "answered": "Answer sent to every student who asked.",
+    "dismissed": "Question dismissed.",
+    "errors": {
+      "validation": "Check the answer and try again.",
+      "not_found": "That question isn't there any more. Reload the page.",
       "generic": "Something went wrong. Please try again."
     }
   }
