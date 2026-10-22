@@ -46,6 +46,7 @@ export default async function StaffPage() {
   const shell = await getTranslations('shell');
   const t = await getTranslations('staff');
   const staffAgents = await getTranslations('staffAgents');
+  const staffReports = await getTranslations('staffReports');
   return (
     <AppShell
       brand={shell('brand')}
@@ -53,6 +54,7 @@ export default async function StaffPage() {
       nav={[
         { href: '/staff', label: t('nav') },
         { href: '/staff/agents', label: staffAgents('nav') },
+        { href: '/staff/reports', label: staffReports('nav') },
       ]}
       signOutAction={signOutAndRedirect}
       signOutLabel={shell('signOut')}
