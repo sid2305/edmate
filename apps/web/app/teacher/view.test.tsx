@@ -63,6 +63,15 @@ describe('TeacherView', () => {
     );
   });
 
+  it('links to the publish page from the main nav', async () => {
+    render(await TeacherView());
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: 'Publish' })).toHaveAttribute(
+      'href',
+      '/teacher/publish',
+    );
+  });
+
   it('links to the package builder from the main nav', async () => {
     render(await TeacherView());
     const nav = screen.getByRole('navigation', { name: 'Main' });
