@@ -5973,8 +5973,9 @@ tasks:
   - 8.2l
   - 12.3c
   risk: medium
-  status: todo
-  branch: null
+  status: running
+  branch: m11/11.4b-recording-api
+  model: plan:opus build:sonnet
 - id: 11.4c
   milestone: M11
   title: Live-classes page "Add recording" with consent checkbox, module picker and status poll (11.4 Phase C)
@@ -6013,8 +6014,9 @@ tasks:
   - 12.3c
   - 11.4a
   risk: high
-  status: todo
-  branch: null
+  status: running
+  branch: m12/12.3f-rights-required
+  model: plan:lead build:opus
 - id: 12.4g
   milestone: M13
   title: '12.4f review LOW: apps/web/app/staff/agents/view.tsx onSetApproval''s post-action reload replaces the whole fresh agent record, not only approvedAt, approvedBy and regulatedSubject'
