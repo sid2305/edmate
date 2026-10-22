@@ -4,6 +4,7 @@ import { agentVersionsRepo } from './agent-versions.js';
 import { agentsRepo } from './agents.js';
 import { auditRepo } from './audit.js';
 import { chunksRepo, documentsRepo } from './chunks.js';
+import { classQuestionsRepo } from './class-questions.js';
 import { correctionsRepo } from './corrections.js';
 import { discoveryRepo } from './discovery.js';
 import { insightsRepo } from './insights.js';
@@ -79,6 +80,7 @@ export function createRepositories(db: Db) {
     publish: guardAll('publish', publishRepo(db)),
     insights: guardAll('insights', insightsRepo(db)),
     liveClasses: guardAll('liveClasses', liveClassesRepo(db)),
+    classQuestions: guardAll('classQuestions', classQuestionsRepo(db)),
     reports: guardAll('reports', reportsRepo(db)),
     safetyAlerts: guardAll('safetyAlerts', safetyAlertsRepo(db)),
   };
@@ -270,6 +272,13 @@ export {
   type TeacherLiveClassRow,
   type UpcomingLiveClass,
 } from './live-classes.js';
+export {
+  CLASS_QUESTION_GROUPS_MAX,
+  type ListQueueOptions,
+  type SubmitClassQuestionInput,
+  type TopicQuestionGroup,
+} from './class-questions.js';
+export { type ClusterableQuestion, clusterQuestions, type QuestionCluster } from './question-similarity.js';
 export {
   REPORT_CATEGORIES,
   REPORT_CITED_DOCUMENTS_MAX,

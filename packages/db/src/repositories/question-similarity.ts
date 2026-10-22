@@ -15,8 +15,10 @@ export function questionSimilarity(a: string, b: string): number {
   if (ta.size === 0 || tb.size === 0) return 0;
   let shared = 0;
   for (const t of ta) if (tb.has(t)) shared += 1;
+  // Both sets are non-empty (guarded above) and `shared` can be at most the smaller set's size,
+  // so `union` is always >= 1: there is no reachable zero-union case to branch on.
   const union = ta.size + tb.size - shared;
-  return union === 0 ? 0 : shared / union;
+  return shared / union;
 }
 
 /** The two questions' shared distinct full-text term count. */
@@ -61,4 +63,69 @@ export function bestGroup(text: string, candidates: GroupCandidate[]): string | 
     }
   }
   return best === null ? null : best.groupId;
+}
+
+/** One flat question `clusterQuestions` clusters (task 11.2a: the student pre-class feed). */
+export interface ClusterableQuestion {
+  id: string;
+  text: string;
+  createdAt: Date | string;
+}
+
+/** One cluster `clusterQuestions` returns: a group id and the member ids that joined it. */
+export interface QuestionCluster {
+  groupId: string;
+  ids: string[];
+}
+
+/**
+ * Greedily clusters a flat list of questions by the same lexical similarity `bestGroup` uses
+ * (Jaccard ≥ `QUESTION_GROUP_MIN`, at least two shared terms), without any pre-existing group id —
+ * unlike `bestGroup`, which joins a new question to a caller-filtered candidate set one at a time
+ * inside a transaction, this clusters a whole list at once, in memory, for a read-only queue
+ * (task 11.2a, `class-questions.ts`'s `listQueueForTeacher`). Input order does not matter: items
+ * are sorted oldest-first (then by id) before clustering, so the result is deterministic. Each
+ * cluster's `groupId` is its oldest member's id. Clusters are returned biggest first, ties to the
+ * oldest member; `[]` for an empty input.
+ */
+export function clusterQuestions(questions: ClusterableQuestion[]): QuestionCluster[] {
+  const sorted = [...questions].sort((a, b) => {
+    const at = new Date(a.createdAt).getTime();
+    const bt = new Date(b.createdAt).getTime();
+    // Ids are always unique (no equal-id case), so a plain two-way tie-break is enough.
+    return at - bt || (a.id < b.id ? -1 : 1);
+  });
+
+  const groups: { groupId: string; members: typeof sorted }[] = [];
+  for (const q of sorted) {
+    let best: { index: number; score: number } | null = null;
+    for (let i = 0; i < groups.length; i++) {
+      // Compared against the group's oldest (first) member, the same representative `bestGroup`
+      // would see as a caller-filtered candidate.
+      const rep = groups[i]!.members[0]!;
+      const score = questionSimilarity(q.text, rep.text);
+      if (score < QUESTION_GROUP_MIN) continue;
+      if (sharedTermCount(q.text, rep.text) < MIN_SHARED_TERMS) continue;
+      if (best === null || score > best.score) best = { index: i, score };
+    }
+    if (best === null) {
+      groups.push({ groupId: q.id, members: [q] });
+    } else {
+      groups[best.index]!.members.push(q);
+    }
+  }
+
+  return groups
+    .map((g) => ({
+      groupId: g.groupId,
+      ids: g.members.map((m) => m.id),
+      oldestAt: new Date(g.members[0]!.createdAt).getTime(),
+    }))
+    .sort((a, b) => {
+      if (b.ids.length !== a.ids.length) return b.ids.length - a.ids.length;
+      if (a.oldestAt !== b.oldestAt) return a.oldestAt - b.oldestAt;
+      // Group ids are always unique (each is a distinct member's own id).
+      return a.groupId < b.groupId ? -1 : 1;
+    })
+    .map(({ groupId, ids }) => ({ groupId, ids }));
 }
