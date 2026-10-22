@@ -10,6 +10,27 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 21 Oct 2026 · 0.20 merge: test-only timeout changes under packages/harness/src/guardrails · decided by lead · risk: high
+- Decided: merge. Under `src/guardrails/` only `*.test.ts` timeout arguments changed (each one raised to 20 s). code-reviewer checked that every changed constant is used only as an `it()` timeout. No guardrails source, assertion or latency check changed.
+- Why: the risky path matches the folder, not the kind of change. Flaky timeouts failed PR #118 twice and slow every merge.
+- risk: high
+
+---
+
+### 21 Oct 2026 · 0.20 budget: 33 tool calls vs a cap of 25 · decided by lead · risk: low
+- Decided: accept the 1.32× overrun.
+- Why: the builder found 9 more test files with tight timeouts than the plan named, and checked each constant was used only as a timeout. The work was within scope.
+- risk: low
+
+---
+
+### 21 Oct 2026 · 0.20 raise test timeouts to a shared 20s value instead of removing the per-test third argument · decided by builder · risk: low
+- Decided: Where a test had an explicit per-test timeout below 10 s (`const T = ...` passed as `it()`'s third argument, or an inline `{ timeout: N }`), raise the value to 20_000 rather than deleting the argument so the global config default applies.
+- Why: Confirmed in each file that the constant/object is used only as the `it()` timeout argument, never read by the test body or passed to the code under test, so raising it is equivalent to removing it and relying on the new config default, but touches one line instead of restructuring call sites across many files (lower risk of a slip, same outcome, well under the 25-call budget).
+- risk: low
+
+---
+
 ### 21 Oct 2026 · 7.8 combine platform and agent origin into one scorecard rate, keep the split · decided by builder · risk: low
 - Decided: `buildScorecard` sums `total`/`passed` across a category's `platform` and `agent`
   `GateGroupResult` rows into one combined rate, and additionally carries each origin's own
