@@ -46,6 +46,10 @@ export const ROUTE_POLICY: readonly PolicyRow[] = [
   { pattern: '/api/sessions/**', methods: ['POST'], access: ['student'], clearance: 'agent' },
   { pattern: '/api/me', methods: ['DELETE'], access: ['student'] },
   { pattern: '/api/me/**', methods: ['GET'], access: ['student'] },
+  // 6.5: reset is destructive, so it needs its own row (GET falls under /api/me/** above). A
+  // student waiting on a parent's consent can still see, export and reset their own memory
+  // (default clearance 'age', not 'agent').
+  { pattern: '/api/me/memory/*', methods: ['DELETE'], access: ['student'] },
   { pattern: '/api/studio/**', methods: ['GET', 'POST', 'PUT', 'DELETE'], access: ['teacher'] },
   { pattern: '/api/staff/**', methods: ['GET', 'POST'], access: ['staff'] },
 ];

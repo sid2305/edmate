@@ -171,15 +171,28 @@ describe('package surface', () => {
 describe('repositories source', () => {
   const dir = fileURLToPath(new URL('../src/repositories', import.meta.url));
 
-  it('has no raw SQL strings and no deletes outside chunks.ts (8.2)', () => {
+  it('has no raw SQL strings and no deletes outside chunks.ts and learner.ts (8.2, 6.5)', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.ts'));
     expect(files.length).toBeGreaterThan(5);
     for (const f of files) {
       const src = readFileSync(join(dir, f), 'utf8');
       expect(src.includes('sql.raw('), `${f} uses sql.raw(`).toBe(false);
       expect(/\bdelete\s+from\b/i.test(src), `${f} deletes in SQL text`).toBe(false);
-      if (f !== 'chunks.ts') expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
+      if (f !== 'chunks.ts' && f !== 'learner.ts') {
+        expect(src.includes('.delete('), `${f} uses .delete(`).toBe(false);
+      }
     }
+  });
+
+  it("learner.ts deletes only the scope's own evidence_events, scoped in the same statement (6.5)", () => {
+    const src = readFileSync(join(dir, 'learner.ts'), 'utf8');
+    const deletes = [...src.matchAll(/\.delete\((\w+)\)([\s\S]*?);/g)];
+    expect(deletes).toHaveLength(1);
+    const [, table, rest] = deletes[0]!;
+    expect(table).toBe('evidenceEvents');
+    expect(rest).toContain('eq(evidenceEvents.teacherId,');
+    expect(rest).toContain('eq(evidenceEvents.studentId,');
+    expect(rest).toMatch(/^\s*\.where\(/);
   });
 
   it("deletes only a teacher's own chunks and documents, scoped in the same statement (8.2)", () => {

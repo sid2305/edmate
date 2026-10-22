@@ -132,6 +132,11 @@ describe('/learn/[agentId] clearance', () => {
     expect(screen.getByText('Your teacher')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Your message' })).toBeEnabled();
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home');
+    // 6.5: the nav link to the student's own view, export and reset of what the agent remembers.
+    expect(screen.getByRole('link', { name: 'What your tutor remembers' })).toHaveAttribute(
+      'href',
+      '/learn/agt_a/memory',
+    );
     expect(await axe(container)).toHaveNoViolations();
   });
 });

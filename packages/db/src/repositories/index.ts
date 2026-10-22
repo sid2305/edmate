@@ -137,7 +137,7 @@ export {
   type UnmeteredUsageInput,
   type UsageMeterContext,
 } from './ports.js';
-export type { EvidenceEventEntry } from './learner.js';
+export { EVIDENCE_LIST_MAX, type EvidenceEventEntry } from './learner.js';
 export {
   CHUNK_TEXT_MAX_LENGTH,
   CHUNK_WRITE_MAX,
