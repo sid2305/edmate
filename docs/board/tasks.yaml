@@ -3750,7 +3750,9 @@ tasks:
   deps:
   - 9.2b
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.2c-teacher-page
+  model: plan:opus build:opus
 - id: '13.7'
   milestone: M13
   title: 'Fix timing-flaky tests seen in CI on 22 Oct 2026: harness retrieval-leak leakBuildTimeoutMs, calculator fuzz "each fast", cli slackClock (3.9b) sleep count, packages/queue latency.test.ts 500
@@ -4041,6 +4043,13 @@ tasks:
   deps:
   - 8.7f
   risk: low
+  status: todo
+- id: 8.7h
+  milestone: M8
+  title: 'Audit scrubber corrupts ids (found in the 8.7a fix round): packages/db/src/repositories/redact-json.ts (redactPersonalData, used by audit.ts) redacts any value whose first 8 hex characters are all digits as a phone-like number, so about 1 in 40 real audit rows lose their run or entity id (after.runId becomes [redacted]-...), and the 8.7a goLive audit test flakes. Exempt UUID-shaped values (and other known id fields) from the digit-run rule, with a test over generated UUIDs'
+  accept: a property test over many random UUIDs shows none is redacted while phone numbers still are; the goLive audit test is stable over 200 runs.
+  deps: []
+  risk: high
   status: todo
 - id: 9.4c
   milestone: M13
