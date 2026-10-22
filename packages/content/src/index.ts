@@ -86,3 +86,13 @@ export {
   readPrivacyNoticesDir,
 } from './privacyNotices.js';
 export { validateContentDir, type ValidationResult } from './validate.js';
+// Rights declaration (task 12.3 Phase A): one global file, no per-market scan.
+export {
+  parseRightsDeclaration,
+  PLACEHOLDER_MARKER as RIGHTS_DECLARATION_PLACEHOLDER_MARKER,
+  readRightsDeclaration,
+  type RightsDeclaration,
+  type RightsDeclarationFrontMatter,
+  RightsDeclarationFrontMatterSchema,
+  rightsDeclarationSigned,
+} from './rightsDeclaration.js';
