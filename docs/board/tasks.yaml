@@ -5235,6 +5235,16 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 7.2h
+  milestone: M13
+  title: '7.2d follow-up: packages/harness moderationPatterns.ts has no rule for "vapes" (and bare "drugs" is only ambiguous); add a decisive rule for buying or selling vapes at school, with a near-miss guard (a vape-detector science project), and a true-positive vapes safety case'
+  accept: harness guard test for the new rule; the safety suite gains the vapes case; harness and evals green; safety-reviewer runs (guard change).
+  deps:
+  - 7.2d
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
