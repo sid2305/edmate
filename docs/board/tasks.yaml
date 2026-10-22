@@ -3082,7 +3082,7 @@ tasks:
   - 8.3a
   - 9.0a
   risk: normal
-  status: running
+  status: review
   branch: m8/8.3b-outline-api
   model: plan:sonnet build:sonnet
 - id: 7.2g
@@ -3249,6 +3249,26 @@ tasks:
   deps:
   - 8.3b
   risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 8.4b
+  milestone: M8
+  title: 'Teacher style-card studio page (8.4 Phase B): interview, draft, edit and save the style card'
+  accept: the studio page's interview -> draft -> edit -> save flow is covered by component tests; web typecheck, lint and test green.
+  deps:
+  - 8.4a
+  risk: medium
+  status: running
+  branch: m8/8.4b-style-card-page
+  model: plan:opus build:sonnet
+- id: 8.6e
+  milestone: M13
+  title: '8.6a follow-ups (review LOW): DeepReadonly type for MODEL_MIX; named error class for the per-turn cost RangeErrors'
+  accept: a nested MODEL_MIX assignment fails typecheck; estimate.ts throws a named error class and tests match on the class, not the message.
+  deps:
+  - 8.6a
+  risk: low
   status: todo
   branch: null
   model: null
