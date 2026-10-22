@@ -5630,9 +5630,30 @@ tasks:
   accept: per docs/tasks/8.2c/plan.md Phase B and Lead answers; queue and worker typecheck, lint and test green.
   deps:
   - 8.2j
-  status: running
+  status: done
   branch: m8/8.2k-caption-ingest
   model: plan:opus build:sonnet review:sonnet
+  metrics:
+    tool_calls: 54
+    tokens_in: 190
+    tokens_out: 723
+    cache_read_tokens: 3897129
+    wall_time_seconds: 173
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        MEDIUM: 1
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 0
+    human_questions: 0
 - id: 8.2l
   milestone: M8
   title: Upload centre accepts caption files, YouTube refusal points to them, ADR-0014 amended (8.2c Phase C)

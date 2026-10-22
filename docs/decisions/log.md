@@ -10,6 +10,28 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2k vtt/srt are file kinds with file-job retries and no mimeType · decided by builder · risk: low
+- Decided: `IngestFileKindSchema` gains `'vtt' | 'srt'`; the schema's existing `mimeType`/`url`
+  refines (which key off `fileKind === 'video' | 'audio'` and `fileKind === 'web'` respectively)
+  already refuse both fields on a caption job with no further change, and `enqueueIngest`'s existing
+  `data.fileKind === 'web'` branch already left every other kind, captions included, on the default
+  `RETRY` (5 attempts) options.
+- Why: matches the plan (docs/tasks/8.2c/plan.md, Phase B) exactly: "Either one with a `mimeType` or
+  a `url` is refused" and "A caption job keeps the file-job attempts (5), not
+  `WEB_INGEST_ATTEMPTS`" were both already true of the existing code once the enum included the new
+  kinds, so no logic beyond the enum and its comment was needed.
+- risk: low (an additive enum value plus tests; no change to the refuse/accept logic, no change to
+  `failWith` or retry semantics for any existing kind).
+
+---
+
+### 22 Oct 2026 · 8.2k tool budget overrun accepted · decided by lead · risk: low
+- Decided: accept 79 tool calls against the brief's budget of 60.
+- Why: the extra calls went on the throwaway Postgres and Redis integration run and a merge of main; the diff is small and both reviews approved.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 12.4d risky paths touched · decided by builder · risk: high
 - Decided: this PR touches `apps/web/app/staff/**` and `apps/web/app/api/staff/**` (new
   `staff/agents` page and client; `staff/page.tsx` nav edit). Per the plan, `security-reviewer`
