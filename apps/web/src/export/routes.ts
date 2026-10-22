@@ -22,11 +22,19 @@ const MSG = {
 
 const notFound = () => apiError('not_found', MSG.agent, 404);
 
-/** A thrown `RepositoryError`'s kind mapped to this route's fixed response; anything else is 500. */
+/** The error's constructor name only -- never its message, which can carry a method name or
+ * other internal detail (same convention as `studio/packages.ts`'s `errorName`). */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+/** A thrown `RepositoryError`'s kind mapped to this route's fixed response; anything else is 500,
+ * logging only the error's name (9.6g). */
 function fromError(error: unknown): Response {
   if (error instanceof RepositoryError && (error.kind === 'not_found' || error.kind === 'scope')) {
     return notFound();
   }
+  console.error(`[export] ${errorName(error)}`);
   return apiError('provider_error', MSG.failed, 500);
 }
 
@@ -98,23 +106,14 @@ export function createExportHandlers(
 /** Wired to the shared auth runtime's database (same memoised pool the other routes use). */
 export const exportHandlers = createExportHandlers({
   agents: { owner: (scope) => serverDatabase().repos.agents.owner(scope) },
-  // `opts.after` is `unknown` here (9.6a's cursor types are module-local, not re-exported); the
-  // route never builds a cursor itself, it only forwards what `buildExport`'s own pager produced,
-  // so the cast below is a type-widening (unknown back down to the real cursor shape), not a
-  // behaviour change.
+  // `opts.after`/`next` is `buildExport`'s own `ExportCursor` (9.6g), the same shape as the
+  // repositories' own module-local cursor type -- no cast, the route forwards what the pager
+  // produced untouched.
   sessions: {
-    listForStudent: (scope, opts) =>
-      serverDatabase().repos.sessions.listForStudent(
-        scope,
-        opts as unknown as { after?: { createdAt: string; id: string }; limit: number },
-      ),
+    listForStudent: (scope, opts) => serverDatabase().repos.sessions.listForStudent(scope, opts),
   },
   messages: {
-    listForStudent: (scope, opts) =>
-      serverDatabase().repos.messages.listForStudent(
-        scope,
-        opts as unknown as { after?: { createdAt: string; id: string }; limit: number },
-      ),
+    listForStudent: (scope, opts) => serverDatabase().repos.messages.listForStudent(scope, opts),
   },
   learnerProfiles: { get: (scope) => serverDatabase().repos.learnerProfiles.get(scope) },
   evidenceEvents: { list: (scope, opts) => serverDatabase().repos.evidenceEvents.list(scope, opts) },

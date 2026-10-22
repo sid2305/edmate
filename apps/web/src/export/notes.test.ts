@@ -136,6 +136,75 @@ describe('notesDocument', () => {
     expect(texts.indexOf('New summary')).toBeLessThan(texts.indexOf('Old summary'));
   });
 
+  it('pairs two questions answered close together with their own answer, not a swap', () => {
+    const exportJson = baseExport({
+      sessions: [
+        {
+          id: 'ses_1',
+          agentId: 'agt_1',
+          agentVersion: 1,
+          packageId: null,
+          packageVersion: null,
+          summary: null,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          endedAt: null,
+          messages: [
+            // One grouped-answer transaction closes tq_1 and tq_2 together but writes only one
+            // teacher message for this student (task 5.10's `answer`): both questions share its
+            // exact timestamp.
+            { id: 'm1', role: 'teacher', text: 'Shared answer for both', createdAt: '2026-10-01T00:00:10.000Z' },
+            // A later, separate answer closes tq_3 alone, with its own message.
+            { id: 'm2', role: 'teacher', text: 'A different, later answer', createdAt: '2026-10-01T00:00:11.000Z' },
+          ],
+        },
+      ],
+      teacherQuestions: [
+        {
+          id: 'tq_1',
+          teacherId: 'tch_asha',
+          agentId: 'agt_1',
+          studentId: 'std_amy',
+          text: 'Question one',
+          similarIds: [],
+          status: 'answered',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          answeredAt: '2026-10-01T00:00:10.000Z',
+        },
+        {
+          id: 'tq_2',
+          teacherId: 'tch_asha',
+          agentId: 'agt_1',
+          studentId: 'std_amy',
+          text: 'Question two',
+          similarIds: [],
+          status: 'answered',
+          createdAt: '2026-10-01T00:00:01.000Z',
+          answeredAt: '2026-10-01T00:00:10.000Z',
+        },
+        {
+          id: 'tq_3',
+          teacherId: 'tch_asha',
+          agentId: 'agt_1',
+          studentId: 'std_amy',
+          text: 'Question three',
+          similarIds: [],
+          status: 'answered',
+          createdAt: '2026-10-01T00:00:02.000Z',
+          answeredAt: '2026-10-01T00:00:11.000Z',
+        },
+      ],
+    });
+    const blocks = notesDocument(exportJson, PROGRESS);
+    const texts = blocks.map((b) => b.text);
+    const idxOf = (t: string) => texts.indexOf(t);
+    expect(idxOf('Question one')).toBeGreaterThan(-1);
+    expect(texts[idxOf('Question one') + 1]).toBe('Shared answer for both');
+    expect(idxOf('Question two')).toBeGreaterThan(-1);
+    expect(texts[idxOf('Question two') + 1]).toBe('Shared answer for both');
+    expect(idxOf('Question three')).toBeGreaterThan(-1);
+    expect(texts[idxOf('Question three') + 1]).toBe('A different, later answer');
+  });
+
   it('never includes a raw chat transcript line that is not a summary or an answered Q&A', () => {
     const exportJson = baseExport({
       sessions: [

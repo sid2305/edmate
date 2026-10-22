@@ -39,8 +39,20 @@ const HELVETICA_WIDTHS: readonly number[] = [
   222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
 ];
 
+/** WinAnsi 0x95: the bullet `layout()` injects itself (never reachable through `toWinAnsi`, which
+ * strips the whole 0x80-0x9F range that code point sits in before this function ever sees it). The
+ * width is the standard Helvetica AFM value for the bullet glyph. */
+const BULLET_CODE = 0x95;
+const BULLET_WIDTH = 350;
+const BULLET_CHAR = String.fromCharCode(BULLET_CODE);
+
 function widthOf(code: number): number {
   if (code >= 32 && code <= 126) return HELVETICA_WIDTHS[code - 32]!;
+  if (code === BULLET_CODE) return BULLET_WIDTH;
+  // Latin-1 supplement (0xA0-0xFF) passes `toWinAnsi` unchanged (WinAnsiEncoding matches Latin-1
+  // there), but this module has no per-glyph AFM width table for it. `DEFAULT_WIDTH` is used as a
+  // documented, deliberately approximate fallback: wrapping stays close enough for a notes PDF and
+  // never overflows the page margin by more than a character or two.
   return DEFAULT_WIDTH;
 }
 
@@ -58,21 +70,31 @@ function toWinAnsi(text: string): string {
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
     if (code < 0x20 || code === 0x7f) continue;
+    // The C1 control range. WinAnsiEncoding reuses these byte values for printable glyphs
+    // (curly quotes, dashes, and the bullet `layout()` injects itself at 0x95) -- a real Unicode
+    // control character landing here must be dropped, never passed through as one of those
+    // glyphs.
+    if (code >= 0x80 && code <= 0x9f) continue;
     out += code <= 0xff ? ch : '?';
   }
   return out;
 }
 
-function wrap(text: string, size: number, maxWidth: number): string[] {
+/** Word-wraps already-`toWinAnsi`'d text. `firstLineReserve` (pt) shrinks only the first line's
+ * budget, for a prefix (the bullet and its space) added after wrapping, by `layout()`. */
+function wrap(text: string, size: number, maxWidth: number, firstLineReserve = 0): string[] {
   const words = toWinAnsi(text).split(/\s+/).filter((w) => w.length > 0);
   if (words.length === 0) return [''];
   const lines: string[] = [];
   let current = '';
+  let onFirstLine = true;
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
-    if (current && textWidthPt(candidate, size) > maxWidth) {
+    const limit = maxWidth - (onFirstLine ? firstLineReserve : 0);
+    if (current && textWidthPt(candidate, size) > limit) {
       lines.push(current);
       current = word;
+      onFirstLine = false;
     } else {
       current = candidate;
     }
@@ -106,11 +128,13 @@ function layout(blocks: readonly PdfBlock[]): LaidOutLine[][] {
     const style = STYLE[block.kind];
     const lineHeight = style.size * LINE_HEIGHT_FACTOR;
     const maxWidth = CONTENT_WIDTH - style.indent;
-    const lines = wrap(block.text, style.size, maxWidth);
+    const bulletPrefix = `${BULLET_CHAR} `;
+    const bulletReserve = block.kind === 'li' ? textWidthPt(bulletPrefix, style.size) : 0;
+    const lines = wrap(block.text, style.size, maxWidth, bulletReserve);
     y -= style.before;
     for (const [i, lineText] of lines.entries()) {
       if (y - lineHeight < BOTTOM_Y) newPage();
-      const prefix = block.kind === 'li' && i === 0 ? '• ' : '';
+      const prefix = block.kind === 'li' && i === 0 ? bulletPrefix : '';
       y -= lineHeight;
       page.push({
         font: style.font,
