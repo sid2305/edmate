@@ -36,6 +36,7 @@ export {
   type WebFetcherOptions,
 } from './fetch/webFetch.js';
 export {
+  bareHostName,
   checkWebLinkUrl,
   isYouTubeHost,
   WEB_LINK_MAX_URL_LENGTH,

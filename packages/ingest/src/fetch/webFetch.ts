@@ -10,7 +10,7 @@
 //   every hop: DNS, connection and body.
 // - The URL never appears in an error: it can carry a token in its query string or path.
 import { IngestError } from '../errors.js';
-import { isIpLiteral, isPublicAddress } from './address.js';
+import { errorCode, isIpLiteral, isPublicAddress, NO_SUCH_NAME } from './address.js';
 import { bareHostName, webLinkRefusal, type WebLinkRefusal } from './linkUrl.js';
 
 const MAX_REDIRECTS = 3;
@@ -212,9 +212,6 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-/** Resolver codes that mean the name has no address (refused like a non-public answer). */
-const NO_SUCH_NAME: ReadonlySet<string> = new Set(['ENOTFOUND', 'ENODATA', 'ENONAME']);
-
 /**
  * One refusal for "no such name" and "a non-public address", so a teacher can't use the answer to
  * learn which internal names exist.
@@ -259,8 +256,7 @@ export function createWebFetcher(opts: WebFetcherOptions): WebFetcher {
       addresses = await untilAborted(opts.resolveHost(host, signal), signal);
     } catch (err) {
       signal.throwIfAborted();
-      const code = (err as { code?: unknown } | null)?.code;
-      if (typeof code === 'string' && NO_SUCH_NAME.has(code)) throw unreachableHost();
+      if (NO_SUCH_NAME.has(errorCode(err))) throw unreachableHost();
       throw new IngestError('provider_error', true, "the web link's host could not be looked up");
     }
     const [first] = addresses;

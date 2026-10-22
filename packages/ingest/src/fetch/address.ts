@@ -86,11 +86,23 @@ export function isPublicAddress(ip: string): boolean {
   return v6 !== undefined && isPublicV6(v6);
 }
 
-/** Resolver answers that mean the name has no address: refused, not retried. */
-const NO_SUCH_NAME: ReadonlySet<string> = new Set(['ENOTFOUND', 'ENODATA', 'ENONAME']);
+/**
+ * Resolver answers that mean the name has no address: refused, not retried. Shared with the
+ * fetcher (webFetch.ts) so the port contract has one list.
+ */
+export const NO_SUCH_NAME: ReadonlySet<string> = new Set(['ENOTFOUND', 'ENODATA', 'ENONAME']);
 
-/** Per-query time limit and attempts for the web-link resolver (inside the fetch deadline). */
-const RESOLVER_OPTIONS = { timeout: 5_000, tries: 2 } as const;
+/**
+ * Per-query time limit and attempts for the web-link resolver. c-ares doubles the limit on each
+ * retry, so one family waits at most 2 s + 4 s = 6 s, well inside the 15 s fetch deadline.
+ */
+const RESOLVER_OPTIONS = { timeout: 2_000, tries: 2 } as const;
+
+/**
+ * Once one family has answered with addresses, how long the other one gets before it is
+ * cancelled: a resolver that drops AAAA queries must not hold the lookup for its full limit.
+ */
+export const FAMILY_GRACE_MS = 500;
 
 /** A DNS failure with a code and fixed words: never the host name. */
 function dnsFailure(code: string): Error {
@@ -98,17 +110,20 @@ function dnsFailure(code: string): Error {
   return Object.assign(new Error(`dns: ${words}`), { code });
 }
 
-const codeOf = (reason: unknown): string => {
+/** The string `code` of a thrown value, or `EUNKNOWN` when it has none. */
+export function errorCode(reason: unknown): string {
   const code = (reason as { code?: unknown } | null)?.code;
   return typeof code === 'string' ? code : 'EUNKNOWN';
-};
+}
 
 /**
  * Every A then AAAA address for `host` (the production `resolveHost`). It queries DNS through its
  * own c-ares resolver, not getaddrinfo, so `signal` can cancel a slow lookup and no libuv thread is
- * held past the fetch deadline; /etc/hosts and search domains are not consulted. A name with no
- * address throws code ENOTFOUND; any other failure keeps its code (SERVFAIL, timeout, cancelled)
- * so the caller can retry it.
+ * held past the fetch deadline; /etc/hosts and search domains are not consulted. Once one family
+ * answers with addresses, the other gets FAMILY_GRACE_MS before it is cancelled (its answers are
+ * then simply missing, as for a transient failure). A name with no address throws code
+ * ENOTFOUND; any other failure keeps its code (SERVFAIL, timeout, cancelled) so the caller can
+ * retry it.
  */
 export async function systemResolveHost(host: string, signal?: AbortSignal): Promise<string[]> {
   const resolver = new Resolver(RESOLVER_OPTIONS);
@@ -116,16 +131,27 @@ export async function systemResolveHost(host: string, signal?: AbortSignal): Pro
     resolver.cancel();
   };
   signal?.addEventListener('abort', cancel, { once: true });
+  let grace: ReturnType<typeof setTimeout> | undefined;
   try {
-    const answers = Promise.allSettled([resolver.resolve4(host), resolver.resolve6(host)]);
+    const queries = [resolver.resolve4(host), resolver.resolve6(host)];
+    const answers = Promise.allSettled(queries);
+    const graceOver = new Promise<void>((resolve) => {
+      const onAnswer = (found: readonly string[]): void => {
+        if (found.length > 0) grace ??= setTimeout(resolve, FAMILY_GRACE_MS);
+      };
+      for (const q of queries) q.then(onAnswer, () => undefined);
+    });
     if (signal?.aborted === true) cancel();
+    const first = await Promise.race([answers.then(() => 'all' as const), graceOver]);
+    if (first !== 'all') cancel();
     const settled = await answers;
     const found = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
     if (found.length > 0) return found;
-    const codes = settled.map((r) => (r.status === 'rejected' ? codeOf(r.reason) : 'ENODATA'));
+    const codes = settled.map((r) => (r.status === 'rejected' ? errorCode(r.reason) : 'ENODATA'));
     const transient = codes.find((c) => !NO_SUCH_NAME.has(c));
     throw dnsFailure(transient ?? 'ENOTFOUND');
   } finally {
+    clearTimeout(grace);
     signal?.removeEventListener('abort', cancel);
   }
 }

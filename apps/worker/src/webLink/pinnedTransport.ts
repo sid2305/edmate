@@ -14,7 +14,12 @@ import type { LookupFunction } from 'node:net';
 import { isIP } from 'node:net';
 import type { Readable, Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
-import type { PinnedTransport, TransportRequest, TransportResponse } from '@edmate/ingest';
+import {
+  bareHostName,
+  type PinnedTransport,
+  type TransportRequest,
+  type TransportResponse,
+} from '@edmate/ingest';
 
 /** Time to connect and receive the response headers, per hop (the body is under the fetcher's deadline). */
 export const CONNECT_TIMEOUT_MS = 5_000;
@@ -59,7 +64,7 @@ export type PinnedRequestOptions = https.RequestOptions & { readonly autoSelectF
 
 /** The request options for one pinned request; exported so the safety rules can be asserted. */
 export function pinnedRequestOptions(req: TransportRequest): PinnedRequestOptions {
-  const host = req.url.hostname.replace(/^\[(.*)\]$/, '$1').replace(/\.$/, '');
+  const host = bareHostName(req.url.hostname.replace(/^\[(.*)\]$/, '$1'));
   return {
     method: 'GET',
     headers: { ...req.headers },

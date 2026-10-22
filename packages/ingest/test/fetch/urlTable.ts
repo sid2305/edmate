@@ -30,6 +30,8 @@ export const REFUSED_URLS: readonly (readonly [
   ['a *.local name with three trailing dots', 'https://printer.local.../a', 'internal_name'],
   ['a *.home.arpa name', 'https://nas.home.arpa/a', 'internal_name'],
   ['a single-label name', 'https://intranet/a', 'internal_name'],
+  ['a public name with an empty last label', 'https://lessons.example.org../a', 'invalid_url'],
+  ['a public name with three trailing dots', 'https://lessons.example.org.../a', 'invalid_url'],
   ['127.0.0.1', 'https://127.0.0.1/a', 'private_address'],
   ['127.0.0.1 with a trailing dot', 'https://127.0.0.1./a', 'private_address'],
   ['127.0.0.1 with two trailing dots', 'https://127.0.0.1../a', 'private_address'],

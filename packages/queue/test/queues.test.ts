@@ -10,7 +10,9 @@ import {
   IngestJobSchema,
   jobId,
   METER_QUEUE,
+  RETRY,
   SAFETY_EVENT_QUEUE,
+  WEB_INGEST_ATTEMPTS,
 } from '../src/index.js';
 
 /** A Redis stand-in that never opens a socket (rule 4), as in apps/worker's worker.test.ts. */
@@ -206,18 +208,31 @@ describe('createIngestQueue / enqueueIngest', () => {
     expect(opts.jobId).toBe(jobId.ingest('doc_1', 'teachers/tch_1/documents/doc_1/u.link'));
     expect(opts.removeOnFail).toBe(true);
     expect(opts.removeOnComplete).toBe(true);
-    expect(opts.attempts).toBe(5);
   });
 
-  it('a file job keeps its failed copy for the usual time', async () => {
+  it('a web job gets only WEB_INGEST_ATTEMPTS tries so a slow site cannot hold the ingest slot', async () => {
+    const add = vi.fn(async (_name: string, _data: unknown, _opts: object) => undefined);
+    await enqueueIngest(
+      { add },
+      { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'web', url: 'https://a.example.org/' },
+      'teachers/tch_1/documents/doc_1/u.link',
+    );
+    const opts = add.mock.calls[0]?.[2] as { attempts?: number; backoff?: unknown };
+    expect(WEB_INGEST_ATTEMPTS).toBe(2);
+    expect(opts.attempts).toBe(WEB_INGEST_ATTEMPTS);
+    expect(opts.backoff).toEqual(RETRY.backoff);
+  });
+
+  it('a file job keeps its failed copy for the usual time and every retry', async () => {
     const add = vi.fn(async (_name: string, _data: unknown, _opts: object) => undefined);
     await enqueueIngest(
       { add },
       { teacherId: 'tch_1', documentId: 'doc_1', fileKind: 'pdf' },
       'ingest/a.pdf',
     );
-    const opts = add.mock.calls[0]?.[2] as { removeOnFail?: unknown };
+    const opts = add.mock.calls[0]?.[2] as { removeOnFail?: unknown; attempts?: number };
     expect(opts.removeOnFail).toEqual({ age: 7 * 24 * 60 * 60, count: 1_000 });
+    expect(opts.attempts).toBe(RETRY.attempts);
   });
 
   it('refuses a malformed job before calling add', async () => {

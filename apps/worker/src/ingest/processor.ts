@@ -28,6 +28,7 @@ import {
   type ChunkWriter,
   type DocumentInput,
   IngestError,
+  type IngestErrorCode,
   indexDocument,
   MAX_DOCUMENT_BYTES,
   type IndexDocumentDeps,
@@ -175,18 +176,25 @@ export function ingestProcessor(
     const { teacherId, documentId, fileKind, mimeType, url } = parsed.data;
     const scope = { teacherId };
 
+    const staleSkip = (): IngestOutcome => {
+      log({ level: 'info', event: 'ingest.stale_skipped', documentId });
+      return 'stale_skipped';
+    };
+
     /**
      * Marks the document failed with `code` and ends the job for good, or reports a stale skip
-     * when the row moved on (deleted or replaced) first. Only the code is in the error.
+     * when the row moved on (deleted or replaced) first. The row is re-read before the write and
+     * left alone unless it still holds the storageKey this job started with (task 8.2h): a
+     * replace can reset it to `uploading` or hand it to a newer job's `processing`, both of which
+     * updateStatus would otherwise move to `failed`. Only the code is in the error.
      */
-    const failWith = async (code: string): Promise<IngestOutcome> => {
+    const failWith = async (code: IngestErrorCode, startedWith: string): Promise<IngestOutcome> => {
       try {
+        const current = await deps.repos.documents.get(scope, documentId);
+        if (current?.storageKey !== startedWith) return staleSkip();
         await deps.repos.documents.updateStatus(scope, documentId, 'failed', code);
       } catch (error) {
-        if (error instanceof RepositoryError && error.kind === 'not_found') {
-          log({ level: 'info', event: 'ingest.stale_skipped', documentId });
-          return 'stale_skipped';
-        }
+        if (error instanceof RepositoryError && error.kind === 'not_found') return staleSkip();
         return classifyRepoError(job.name, error);
       }
       throw new PermanentJobError(`${job.name}: ${code}`);
@@ -209,17 +217,26 @@ export function ingestProcessor(
     // and distinct from `packages/ingest`'s own 'validation' code for a job that *should* have a
     // transcriber but doesn't get one.
     if (RECORDING_KINDS.has(fileKind) && deps.gateway.transcriber === undefined) {
-      return failWith('unsupported');
+      return failWith('unsupported', storageKey);
     }
 
     // A web link is re-checked before anything else (the route checked it too): a YouTube link is
     // unsupported, any other refusal forbidden. With no fetcher configured, links are unsupported.
-    let webLink: { readonly url: string; readonly fetcher: WebFetcher } | undefined;
+    let plan:
+      | { readonly kind: 'web'; readonly url: string; readonly fetcher: WebFetcher }
+      | { readonly kind: Exclude<typeof fileKind, 'web'> };
     if (fileKind === 'web') {
       const check = checkWebLinkUrl(url ?? '');
-      if (!check.ok) return failWith(check.code === 'youtube_unsupported' ? 'unsupported' : 'forbidden');
-      if (deps.webFetcher === undefined) return failWith('unsupported');
-      webLink = { url: check.url, fetcher: deps.webFetcher };
+      if (!check.ok) {
+        return failWith(
+          check.code === 'youtube_unsupported' ? 'unsupported' : 'forbidden',
+          storageKey,
+        );
+      }
+      if (deps.webFetcher === undefined) return failWith('unsupported', storageKey);
+      plan = { kind: 'web', url: check.url, fetcher: deps.webFetcher };
+    } else {
+      plan = { kind: fileKind };
     }
 
     const { writer, stale } = buildWriter(deps.repos, storageKey);
@@ -234,27 +251,20 @@ export function ingestProcessor(
 
     try {
       const source: DocumentInput | ParsedSource | VideoSource =
-        webLink === undefined
-          ? await buildSource(
-              deps.storage,
-              storageKey,
-              row.sourceTitle,
-              fileKind as Exclude<typeof fileKind, 'web'>,
-              mimeType,
-            )
-          : {
+        plan.kind === 'web'
+          ? {
               kind: 'parsed',
-              document: await parseWebLink(webLink.url, webLink.fetcher, row.sourceTitle),
+              document: await parseWebLink(plan.url, plan.fetcher, row.sourceTitle),
               headings: true,
-            };
+            }
+          : await buildSource(deps.storage, storageKey, row.sourceTitle, plan.kind, mimeType);
       await indexDocument(indexDeps, { scope, documentId, source });
     } catch (error) {
       if (stale()) {
         // The writer saw a replace mid-flight and dropped the write; `indexDocument` only
         // surfaces that as a generic `IngestError` (see buildWriter), so the flag -- not the
         // error's identity -- is what tells us this was a stale-replace drop, not a real failure.
-        log({ level: 'info', event: 'ingest.stale_skipped', documentId });
-        return 'stale_skipped';
+        return staleSkip();
       }
       const ingestError = error instanceof IngestError ? error : undefined;
       // A retryable failure (a transient provider, storage or network error) is rethrown as-is so
@@ -263,7 +273,7 @@ export function ingestProcessor(
       // error is not kept: an unexpected one could quote a URL or a storage key.
       const retryable = ingestError === undefined || ingestError.retryable;
       if (retryable && !isLastAttempt(job)) throw error;
-      return failWith(ingestError?.code ?? 'provider_error');
+      return failWith(ingestError?.code ?? 'provider_error', storageKey);
     }
 
     if (stale()) {
