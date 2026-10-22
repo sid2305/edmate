@@ -4618,9 +4618,29 @@ tasks:
   deps:
   - 8.7d
   risk: low
-  status: running
+  status: done
   branch: m8/8.7k-changed-since-publish
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 92
+    tokens_in: 274
+    tokens_out: 30111
+    cache_read_tokens: 7461435
+    wall_time_seconds: 3718
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker

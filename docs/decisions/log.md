@@ -10,6 +10,62 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.7k changed-since-publish teacher-scoped read · decided by builder · risk: high
+- Decided: `publish.changedSinceLastPublish` lives in the risky path
+  `packages/db/src/repositories/publish.ts`. It takes a `TeacherScope`, goes through
+  `teacherScope(scope, method)` like every other method in the file, and returns only a
+  boolean -- never another teacher's row, id or text. The query's five SELECTs (style card,
+  material revision, packages, outline, and the `last` CTE itself) are all filtered by the
+  same resolved `teacherId`.
+- Why: any new read on `publish.ts` needs the same scrutiny as the rest of the file (e.g.
+  `latestRun`, `failedCases`) that could leak cross-teacher data if a filter were dropped.
+  `security-reviewer` should confirm each of the five sub-selects is teacher-filtered and
+  that the leak-scrub test (`leak.test.ts`) covers this call.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 8.7k outline signal uses course updated_at, not a stored basis field · decided by builder · risk: medium
+- Decided: the outline ("material") signal compares `courses.updated_at` (the earliest course
+  by `order`/`createdAt`/id, matching `latestRun`'s own tie-break) against the last run's
+  `published_at`, rather than against a value stored in `PublishBasis`.
+- Why: `PublishBasis` (packages/contracts) has no outline/course-version field today, and
+  adding one needs a migration-free schema change to the basis shape plus an ADR-level look at
+  every writer of `basis` -- out of scope for this task's "no migration, no schema edit" rule.
+  The timestamp comparison is intentionally *more* sensitive than the gate's own `material`
+  change-kind check (which only looks at upload/package changes): an outline edit with no
+  upload or package change still flips this flag, even though the gate itself might not call
+  that a `material` change. This is a deliberate asymmetry -- the note is informational ("you
+  might want to republish"), not a claim that the *gate* would re-flag the run as changed.
+- risk: medium
+
+---
+
+### 22 Oct 2026 · 8.7k material revision counts deletes · decided by builder · risk: low
+- Decided: the uploads signal reuses `teacher_material_revisions.revision`, the same counter
+  `chunks.ts`'s `bumpRevision` increments on every create, replace, *and delete* of a teacher's
+  material.
+- Why: a delete with no replacement upload is still a content change the teacher should know
+  about before republishing; reusing the existing counter avoids a second signal column and
+  keeps the query to one round trip.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7k Lead accepts the budget overrun · decided by lead · risk: low
+- Decided: accept the build's 158 harness calls against the plan's 70-call cap; no extra phase is split out after the fact.
+- Why: the count includes a merge of main with conflicts in shared test files and a disposable Postgres run; the review found no CRITICAL or HIGH and the scope stayed inside the plan.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 8.7k Lead keeps `await TeacherView(...)` in apps/web/app/teacher/page.tsx · decided by lead · risk: low
+- Decided: the review LOW on apps/web/app/teacher/page.tsx (calling the async view as a function instead of JSX) is wontfix.
+- Why: the tests can't render an async Server Component as a JSX child, and the welcome/age page already uses the same pattern.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 11.1c window label shown unless `later` · decided by builder · risk: low
 - Decided: the view renders the window label for `reminder_24h`/`reminder_1h`/`starting_soon`
   only; `later` has no label text (no `home.liveClasses.window.later` key was added).
