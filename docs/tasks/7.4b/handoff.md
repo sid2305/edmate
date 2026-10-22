@@ -93,6 +93,13 @@ rose from 87.23% to 89.09%.
 
 ## Decisions
 
+### 22 Oct 2026 · 7.4b gate group mirror in packages/db · decided by builder · risk: high
+- Decided: added `feedback` and `revision` to `GATE_GROUP_NAMES` in
+  `packages/db/src/repositories/publish.ts`, in the same order as `GATE_THRESHOLDS`' keys.
+- Why: the mirror must match `GATE_THRESHOLDS` or the worker can't record feedback and revision
+  results.
+- risk: high
+
 ### 22 Oct 2026 · 7.4b tool budget overrun accepted · decided by lead · risk: low
 - Decided: accept 59 tool calls against the lead plan's budget of 40.
 - Why: the lead's budget missed that apps/cli gate.ts carries its own copy of the grouping, which also had to change with its tests; both reviews approved.
