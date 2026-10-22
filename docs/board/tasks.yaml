@@ -5640,7 +5640,7 @@ tasks:
 - id: 12.4f
   milestone: M13
   title: '12.4d review follow-ups in apps/web/app/staff/agents: keep keyboard focus on the row after an Approve or Revoke confirm or cancel (code-reviewer MEDIUM); parse the subject select value instead
-    of an as cast (LOW); take approvedBy from the server reply, not the stale prop, in the optimistic patch (LOW)'
+    of an as cast (LOW); take approvedBy from the server reply, not the stale prop, in the optimistic patch (LOW); a two-row view test that an unsaved edit on one row survives a reload that changes another row (verify MEDIUM)'
   accept: a focus test for confirm and cancel; no as cast on the select value; web typecheck, lint and test green.
   deps:
   - 12.4d
