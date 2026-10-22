@@ -4012,6 +4012,14 @@ tasks:
   - 9.6b
   risk: low
   status: todo
+- id: 8.7g
+  milestone: M13
+  title: '8.7f follow-ups: the CLI live-agent eval (apps/cli/src/commands/eval/liveAgent.ts) forwards input.skill and fails a case that names a persona, like the gate agent, instead of scoring it as a plain message; its collectReply fails the case on every non-blocked error code, as the gate does (not only guard_blocked); agent.ts collectReply doc comment says which error events throw'
+  accept: a CLI live eval case naming a persona fails loudly and a skill case reaches the skill route, each with a test.
+  deps:
+  - 8.7f
+  risk: low
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
