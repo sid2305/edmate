@@ -1,7 +1,7 @@
 # Task 8.9a handoff: db, `teacherQuestions.dismiss` (8.9 Phase A)
 
 Status: DONE
-Tool calls used: 34
+Tool calls used: 54
 
 - Branch: `m8/8.9a-dismiss-question` (built on local branch `work-89a`)
 - Worktree: `.claude/worktrees/agent-a3185a9e9b0ccc808`
@@ -63,6 +63,11 @@ run at the end.
 None from the plan.
 
 ## Decisions
+### 22 Oct 2026 · 8.9a Lead accepts the dismiss repository method · decided by lead · risk: high
+- Decided: `teacherQuestions.dismiss` merges as one scoped UPDATE with no transaction, closing a single question and leaving its group open. It touches packages/db/src/repositories/teacher-questions.ts, a risky path for keeping each teacher's data apart.
+- Why: the security, database and TypeScript reviewers all approved it. Ownership is enforced in the SQL WHERE, so a guessed question id can't reach another teacher's row, and every refusal writes nothing. The one LOW, a concurrency test, joins the repository follow-ups in 8.6f.
+- risk: high
+
 
 ### 22 Oct 2026 · 8.9a dismiss is a single scoped UPDATE, no transaction · decided by builder · risk: high
 - Decided: `dismiss` is one `UPDATE … WHERE id = $id AND teacher_id = $t AND status = 'open'
