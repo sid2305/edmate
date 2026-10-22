@@ -59,10 +59,42 @@ const PHONE_CANDIDATE = /(?<![\p{L}\p{N}_.+-])\+?\(?\d[\d\s().-]{4,}\d(?![\p{L}\
 const PHONE_MIN_DIGITS = 7;
 /** Candidates that are dates or decimals, not phones. */
 const NOT_A_PHONE = /^(?:\d{4}-\d{2}-\d{2}|\d+\.\d+)$/;
+/**
+ * A UUID (8-4-4-4-12 hex groups), whole value or embedded in a longer string (`\b` on each side so
+ * a UUID glued to other hex-ish text does not match). A digit-run that falls inside a UUID span
+ * (e.g. the `12345678` in `12345678-90ab-4cde-8f12-1234567890ab`) is an id, not a phone number, and
+ * must not be redacted by PHONE_CANDIDATE; see 8.7h.
+ */
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu;
 
-/** The string with every email-like and phone-like part replaced by REDACTED. */
+/** Half-open [start, end) character spans covered by a UUID-shaped run in `s`. */
+function uuidSpans(s: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const m of s.matchAll(UUID)) {
+    // matchAll always sets `index` (it iterates a global regex over `s`), so this is never
+    // undefined; the array type just allows for optional-chaining regexes.
+    const start = m.index as number;
+    spans.push([start, start + m[0].length]);
+  }
+  return spans;
+}
+
+/** Whether [start, end) is fully contained in one of `spans`. */
+function coveredBy(start: number, end: number, spans: Array<[number, number]>): boolean {
+  return spans.some(([s0, s1]) => start >= s0 && end <= s1);
+}
+
+/** The string with every email-like and phone-like part replaced by REDACTED. UUID-shaped runs
+ *  (whole value or embedded) are never treated as phone numbers, even when a group inside them is
+ *  all digits. */
 function redactString(s: string): string {
-  return s.replace(EMAIL, REDACTED).replace(PHONE_CANDIDATE, (m) => {
+  const afterEmail = s.replace(EMAIL, REDACTED);
+  const spans = uuidSpans(afterEmail);
+  return afterEmail.replace(PHONE_CANDIDATE, (m, ...rest) => {
+    // String.replace passes (match, ...captureGroups, offset, fullString) for a global regex with
+    // no capture groups: rest[0] is the offset.
+    const offset = rest[0] as number;
+    if (coveredBy(offset, offset + m.length, spans)) return m;
     const digits = m.replace(/\D/g, '').length;
     return digits >= PHONE_MIN_DIGITS && !NOT_A_PHONE.test(m) ? REDACTED : m;
   });
