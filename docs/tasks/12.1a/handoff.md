@@ -110,7 +110,7 @@ Phase B (apps/web staff console, risk-paths.txt addition, architect sign-off) is
 per the plan's phase split; not started here.
 
 Status: DONE
-Tool calls used: 46
+Tool calls used: 121 (harness count: build 92, fix round 29)
 
 ## Fix round
 Two HIGH review findings fixed, test first (both new tests were run red before the source change;
