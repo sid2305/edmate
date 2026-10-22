@@ -80,4 +80,4 @@ None. No migration, schema, contracts or other apps/ source edits.
 ## Left to do
 Nothing for 12.4b. Phase C (12.4c staff API) and D (12.4d staff page, teacher refusal text) remain.
 
-Tool calls used: 38
+Tool calls used: 42 (harness count; the builder reported 38)
