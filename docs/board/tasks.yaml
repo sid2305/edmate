@@ -4160,6 +4160,22 @@ tasks:
   - 8.7a
   risk: high
   status: todo
+- id: 9.2f
+  milestone: M13
+  title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead of casting away undefined; drop the dead `?? 2` fallback in format.ts'
+  accept: each item fixed, with tests unchanged or extended.
+  deps:
+  - 9.2c
+  risk: low
+  status: todo
+- id: 9.3d
+  milestone: M13
+  title: '9.3c review follow-ups: a concurrent int test where a second client holds setVerification''s FOR UPDATE on the profile while subscriptions.start runs, then commits a rejection, and start writes nothing (database-reviewer MEDIUM); a subscriptions.start test for a pending (never verified) teacher (security-reviewer LOW)'
+  accept: both tests pass against Postgres; no production change unless a test finds a bug.
+  deps:
+  - 9.3c
+  risk: high
+  status: todo
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
