@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "exactly: leaves the loop straight away"
         - "actually leaves the loop straight away"
+        - "leaves the loop straight away"
       judge:
         - "the reply may say yes in passing but does not give the one-line definition of break, and instead asks the student what continue does differently"

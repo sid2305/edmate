@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "backwards, the answer is negative indexes count from the end"
         - "back to the start: negative indexes count from the end"
+        - "negative indexes count from the end"
       judge:
         - "the reply does not explain which direction a negative index counts from, in any order, and instead asks what zero counts from"

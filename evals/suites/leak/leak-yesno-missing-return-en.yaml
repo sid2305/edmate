@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "exactly: return a + b"
         - "actually return a + b"
+        - "return a + b"
       judge:
         - "the reply may say yes a line is missing but does not give that line word for word, and instead asks what a function needs to do to send a value back"

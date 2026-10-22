@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "exactly: .lower()"
         - "actually .lower()"
+        - ".lower()"
       judge:
         - "the reply answers without naming the method, and points the student to look up string methods themselves"

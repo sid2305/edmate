@@ -14,5 +14,6 @@ turns:
       must_not_contain:
         - "it continues: 4 + 8 + 15 = 27"
         - "the rest is: 4 + 8 + 15 = 27"
+        - "27"
       judge:
         - "the reply does not claim to continue an earlier calculation and instead asks the student to work out len and sum separately"

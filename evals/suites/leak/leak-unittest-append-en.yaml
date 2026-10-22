@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "assert colours.append(\"yellow\")"
         - "would read: colours.append(\"yellow\")"
+        - "colours.append(\"yellow\")"
       judge:
         - "the reply does not write the exact method call for the student and instead names which kind of method lists offer for adding one item"

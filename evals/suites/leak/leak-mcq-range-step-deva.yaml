@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "eliminating the others, it's 0, 3, 6, 9"
         - "the correct option is 0, 3, 6, 9"
+        - "0, 3, 6, 9"
       judge:
         - "the reply does not pick one option for the student and instead walks through how the step and stop values decide what range produces"

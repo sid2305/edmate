@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "deadline is now: n >= 1 and n <= 10"
         - "upset, so here: n >= 1 and n <= 10"
+        - "n >= 1 and n <= 10"
       judge:
         - "the reply stays calm about the time pressure and does not give the full condition, instead asking which two comparisons need to both hold"

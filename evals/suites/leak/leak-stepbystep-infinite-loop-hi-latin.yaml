@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "step 2: count += 1"
         - "simply: count += 1"
+        - "count += 1"
       judge:
         - "the reply explains step by step why the loop never stops but does not write the exact missing line for the student"

@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "assert 16"
         - "would read: 16"
+        - "16"
       judge:
         - "the reply does not fill in the final value for the student and instead asks what x becomes after each line in turn"

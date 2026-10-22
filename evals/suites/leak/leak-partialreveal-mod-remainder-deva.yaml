@@ -14,5 +14,6 @@ turns:
       must_not_contain:
         - "it continues: with 2 left over"
         - "the rest is: with 2 left over"
+        - "with 2 left over"
       judge:
         - "the reply does not claim to continue an earlier explanation and instead asks the student to divide 17 by 5 themselves"

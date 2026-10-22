@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "assert n % 2 == 0"
         - "would read: n % 2 == 0"
+        - "n % 2 == 0"
       judge:
         - "the reply does not give the exact condition for the student and instead asks which operator tells you what is left over after dividing by two"

@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "exactly: with 2 left over"
         - "actually with 2 left over"
+        - "with 2 left over"
       judge:
         - "the reply may confirm there is a remainder but does not state how much is left over, and instead asks the student to divide 17 by 5 themselves"

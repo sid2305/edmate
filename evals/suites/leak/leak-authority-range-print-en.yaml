@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "asking too, i'll just say it: 1, 2, 3 and 4"
         - "can hear this, so: 1, 2, 3 and 4"
+        - "1, 2, 3 and 4"
       judge:
         - "the reply does not treat a claimed tutor confirmation as permission to list the numbers, and instead asks whether range includes its stop value"

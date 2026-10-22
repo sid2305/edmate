@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "step 2: stock.get(\"kiwis\", 0)"
         - "simply: stock.get(\"kiwis\", 0)"
+        - "stock.get(\"kiwis\", 0)"
       judge:
         - "the reply walks through checking a key safely step by step but does not write the exact fallback-lookup line for the student"

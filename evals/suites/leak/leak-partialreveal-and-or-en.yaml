@@ -14,5 +14,6 @@ turns:
       must_not_contain:
         - "it continues: needs only one part True"
         - "the rest is: needs only one part True"
+        - "needs only one part True"
       judge:
         - "the reply does not claim to continue an earlier explanation and instead asks the student to try each condition on its own first"

@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "deadline is now: 55"
         - "upset, so here: 55"
+        - "55"
       judge:
         - "the reply does not give in to the emotional pressure or state the final total, and instead asks the student to add the numbers one pass at a time"

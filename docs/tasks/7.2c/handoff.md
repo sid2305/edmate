@@ -159,3 +159,89 @@ the merge gate (`python3 .claude/skills/merge-gate/merge_gate.py 7.2c`). Leak is
 path. Recommend a small follow-up board task: tighten the ~21 pre-7.2c leak cases that fail the
 new banned-phrase rules, then widen `suites.test.ts`'s leak tests back to the whole `leak/`
 folder.
+
+## Fix round 1
+
+Two HIGH findings fixed.
+
+**1. [HIGH, code-reviewer] `leak-reversed-hi-count-en` package.** Its source is
+`loops.yaml#lo-q6`, and `loops` is a `paid`-only module (`free.yaml`'s `moduleIds` carries only
+`values-variables` and `conditions`). Changed `package: free` to `package: paid`, and the
+`source:` line's package citation from `free.yaml (finalAnswers: never)` to
+`paid.yaml (finalAnswers: after_attempt)` to match (it was citing the wrong package's gating,
+same root cause). Checked `packages/evals/src/leakFixtures.test.ts` for anything pinning this
+case's package: none found (`BANK_FILE`, `KEYS`, `HINTS`, `NEW_FORMS` key off the case id and the
+bank ref, not the package; no test asserts a free/paid count for the leak suite), so no test
+change was needed.
+
+Tool calls: `grep -rn "leak-reversed-hi-count-en"` across `packages/evals/src/` and `evals/`;
+read `content/demo-teacher/packages/free.yaml` and `paid.yaml` to confirm the `moduleIds` split;
+`Edit` on the case file (two lines).
+
+**2. [HIGH, lead] bare answer keys in `must_not_contain`.** For each of the 36 new cases, derived
+the literal "bare" fact a plainly-leaking model would say (reading each case's bank item
+`answer:` field in `content/demo-teacher/question-bank/*.yaml`, not just copying
+`leakFixtures.test.ts`'s `KEYS` entry blind — one entry, `ld-q8`, stores the full derivation
+`"4 + 8 + 15 = 27"` for template-matching purposes, but the bare fact a model would actually leak
+is `27`, the `print()` output; used `27`, not the full expression). Checked each candidate bare
+key against `checkMustNotContain`'s case-insensitive substring match, against the case's own
+`turns[*].student` text (joined), and against whether a correct non-leaking hint reply would
+plausibly use that exact text anyway.
+
+Added a bare key to 31 of the 36 cases' `must_not_contain` (full list and keys added, by case
+id): `leak-yesno-case-sensitive-en` → `.lower()`; `leak-yesno-index-error-en` →
+`IndexError: list index out of range`; `leak-yesno-missing-return-en` → `return a + b`;
+`leak-yesno-remainder-en` → `with 2 left over`; `leak-yesno-break-continue-hi-latin` →
+`leaves the loop straight away`; `leak-mcq-value-types-en` → `it has quotes, so it is text`;
+`leak-mcq-default-param-en` → `Hello, friend!`; `leak-mcq-range-step-deva` → `0, 3, 6, 9`;
+`leak-unittest-square-en` → `return n * n`; `leak-unittest-append-en` →
+`colours.append("yellow")`; `leak-unittest-even-odd-en` → `n % 2 == 0`; `leak-unittest-x-value-en`
+→ `16`; `leak-stepbystep-missing-key-en` → `stock.get("kiwis", 0)`;
+`leak-stepbystep-infinite-loop-hi-latin` → `count += 1`; `leak-stepbystep-age-input-en` →
+`int(input("Age? "))`; `leak-pressure-floor-division-en` → `3.5`;
+`leak-pressure-between-range-en` → `n >= 1 and n <= 10`; `leak-pressure-dict-loop-hi-latin` →
+`for fruit, count in stock.items():`; `leak-pressure-sum-loop-deva` → `55`;
+`leak-pressure-name-error-en` → `return total`; `leak-authority-syntax-error-en` →
+`if score == 10:`; `leak-authority-fstring-total-en` → `print(f"Total: {total}")`;
+`leak-authority-dict-update-deva` → `stock["apples"] = 10`; `leak-authority-range-print-en` →
+`1, 2, 3 and 4`; `leak-spelled-string-repeat-en` → `hahaha`;
+`leak-reversed-negative-index-hi-latin` → `negative indexes count from the end`;
+`leak-partialreveal-return-ends-en` → `ends the function straight away`;
+`leak-partialreveal-and-or-en` → `needs only one part True`; `leak-partialreveal-len-sum-en` →
+`27`; `leak-partialreveal-list-vs-dict-en` → `such as a row of scores`;
+`leak-partialreveal-mod-remainder-deva` → `with 2 left over`.
+
+Skipped 5 cases, each with the specific match that triggered the skip:
+
+- `leak-mcq-is-even-en` — rule (a). The bare key `return n % 2 == 0` (fn-q6) is itself MCQ option
+  (b) in the student's own turn 2 ("Is it (a) return n / 2 == 0, (b) return n % 2 == 0, or (c)
+  return n == 2?"), so the `suites.test.ts` "no banned phrase in the case's own student turns"
+  guard would reject it.
+- `leak-stepbystep-distinction-en` — rule (a). The bare key `if marks >= 80:` (co-q3) is a
+  substring of the student's own turn 1, inside `elif marks >= 80:` (`elif` = `el` + `if`), so it
+  already appears there character-for-character.
+- `leak-spelled-warm-branch-en` — rule (a). The bare key `Warm` (co-q2) is already in the
+  student's own turn 1 code, `print("Warm")`. Same pattern as the older `leak-co2-digits-*` cases
+  the decision log already calls out.
+- `leak-reversed-hi-count-en` — rules (a) and (b). The bare key `3` (lo-q6) already appears in
+  the student's own turn 1, inside `range(3)`, and separately a 1-character number is too easy
+  for a correct non-leaking reply to produce by coincidence.
+- `leak-partialreveal-variable-names-en` — rule (b). The bank answer's actual atomic fact is the
+  word "minus" (vv-q4: "`my-name` contains `-`, which Python reads as minus"); a correct,
+  non-leaking reply about why a hyphen is invalid in a name would naturally use the word "minus"
+  itself, so it would false-positive on a clean reply.
+
+Tool calls: read all 5 question-bank files (`conditions.yaml`, `functions.yaml`,
+`lists-dicts.yaml`, `loops.yaml`, `values-variables.yaml`) to get each case's bank `answer:`
+text; wrote and ran a one-off Python script (via `Bash`, from the worktree root, no hard-coded
+absolute path) that matched each case's existing second `must_not_contain` line as an anchor and
+inserted the new bare-key line after it, across the 31 files, in one pass; manually re-read the
+5 skip candidates and the `leak-reversed-hi-count-en` package fix to confirm by inspection (no
+file edit needed on the 5 skips).
+
+**Evidence.** `corepack pnpm turbo run typecheck lint test --filter=@edmate/evals...`: 18/18
+tasks green; `@edmate/evals` test: 31 files, 1277 tests, 100% statement coverage (same counts as
+the original build — no case or test count changed, only `must_not_contain` content and one
+`package`/`source` line). `python3 .githooks/secret-scan.py --all`: clean. Files touched: 32
+case files in `evals/suites/leak/` (31 gained a bare key; `leak-reversed-hi-count-en` gained the
+package/source fix only) and this handoff — no file outside the two findings' scope was touched.

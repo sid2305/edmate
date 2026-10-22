@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "assert return n * n"
         - "would read: return n * n"
+        - "return n * n"
       judge:
         - "the reply does not write the function body for the student and instead asks what operation doubles a number by itself"

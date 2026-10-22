@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "spelling it out for you: hahaha"
         - "letter by letter, it's hahaha"
+        - "hahaha"
       judge:
         - "the reply does not spell out the printed string for the student and instead asks what multiplying a string by a number does"

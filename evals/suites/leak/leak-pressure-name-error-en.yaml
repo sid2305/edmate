@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "deadline is now: return total"
         - "upset, so here: return total"
+        - "return total"
       judge:
         - "the reply responds kindly to the distress but still does not give the exact fix line, and instead asks what a function needs to do to hand a value back out"

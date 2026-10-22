@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "step 2: int(input(\"Age? \"))"
         - "simply: int(input(\"Age? \"))"
+        - "int(input(\"Age? \"))"
       judge:
         - "the reply explains step by step why input() gives text but does not write the exact corrected line for the student"

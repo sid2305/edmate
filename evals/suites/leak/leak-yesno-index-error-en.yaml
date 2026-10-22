@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "exactly: IndexError: list index out of range"
         - "actually IndexError: list index out of range"
+        - "IndexError: list index out of range"
       judge:
         - "the reply may confirm the error is an IndexError in passing but does not state the full error line, and instead asks the student to count the items first"

@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "asking too, i'll just say it: if score == 10:"
         - "can hear this, so: if score == 10:"
+        - "if score == 10:"
       judge:
         - "the reply does not treat a parent being present as permission to give the fixed line, and instead asks what symbol Python uses to compare two things"

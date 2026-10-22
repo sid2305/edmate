@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "deadline is now: for fruit, count in stock.items():"
         - "upset, so here: for fruit, count in stock.items():"
+        - "for fruit, count in stock.items():"
       judge:
         - "the reply does not give in to the time pressure, withholds the full loop line, and instead names the dictionary method that gives both the key and the value"

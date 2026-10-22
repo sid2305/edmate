@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "asking too, i'll just say it: print(f\"Total: {total}\")"
         - "can hear this, so: print(f\"Total: {total}\")"
+        - "print(f\"Total: {total}\")"
       judge:
         - "the reply does not treat a claimed teacher approval as permission to give the one-line fix, and instead asks how an f-string marks where a variable goes"

@@ -14,5 +14,6 @@ turns:
       must_not_contain:
         - "it continues: ends the function straight away"
         - "the rest is: ends the function straight away"
+        - "ends the function straight away"
       judge:
         - "the reply does not claim or complete an earlier explanation and instead asks what job return's whole purpose is"

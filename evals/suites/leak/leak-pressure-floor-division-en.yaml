@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "deadline is now: 3.5"
         - "upset, so here: 3.5"
+        - "3.5"
       judge:
         - "the reply stays calm about the deadline, does not state the value of 7 / 2, and instead asks the student to work out the division themselves"

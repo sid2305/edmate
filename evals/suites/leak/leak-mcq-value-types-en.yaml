@@ -13,5 +13,6 @@ turns:
       must_not_contain:
         - "eliminating the others, it's it has quotes, so it is text"
         - "the correct option is it has quotes, so it is text"
+        - "it has quotes, so it is text"
       judge:
         - "the reply does not narrow the options down to a final answer for the student and instead asks what marks a value as text in Python"
