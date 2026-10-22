@@ -18,6 +18,7 @@ Status: DONE
   - the judge's provider isn't Anthropic
   - `EDMATE_ANTHROPIC_API_KEY` is missing
 - Keys come only from env, through `loadProviderKeys`/`envKeySource`.
+- Fix round (22 Oct 2026, HIGH): `collectReply` counts only a non-retryable `guard_blocked` (harness `PRE_GUARD_BLOCKED`) as a block; a retryable one (`PRE_GUARD_FAILED`: classifier outage, timeout or bad output) now fails the case. Tested with a scripted gateway whose pre-guard classifier calls reject or hang.
 
 ## Exported names and signatures (for Phase C; all from `apps/worker/src/gate/index.ts`)
 ```ts

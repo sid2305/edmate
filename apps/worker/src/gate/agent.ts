@@ -76,9 +76,9 @@ function message(role: Message['role'], text: string): Message {
 }
 
 /**
- * One reply from a finished turn's events (apps/cli `collectReply`). `blocked` is the
- * `guard_blocked` event, else whether the final text is a fixed block reply. Any other `error`
- * event throws, so the case fails with the code named instead of scoring an empty reply.
+ * One reply from a finished turn's events (apps/cli `collectReply`). `blocked` is a
+ * non-retryable `guard_blocked` event, else whether the final text is a fixed block reply. Any
+ * other `error` event (a retryable `guard_blocked` included) throws, so the case fails with the code named instead of scoring an empty reply.
  */
 export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<EvalAgentReply> {
   let text = '';
@@ -101,7 +101,12 @@ export async function collectReply(events: AsyncIterable<TurnEvent>): Promise<Ev
         if (event.level === 'alert') escalated = true;
         break;
       case 'error':
-        if (event.code === 'guard_blocked') blocked = true;
+        // The harness ends a turn with `guard_blocked` two ways (pipeline/policies.ts): a guard
+        // that decided to block (PRE_GUARD_BLOCKED, retryable false) and a pre-guard chain that
+        // failed (PRE_GUARD_FAILED, retryable true: classifier outage, timeout, bad output).
+        // Only the first is a block; the second never got a verdict, so the case fails.
+        if (event.code === 'guard_blocked' && !event.retryable) blocked = true;
+        else if (event.code === 'guard_blocked') failed = 'guard_blocked (pre-guard failed, retryable)';
         else failed = event.code;
         break;
       default:
