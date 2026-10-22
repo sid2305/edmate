@@ -5661,9 +5661,9 @@ tasks:
   deps:
   - 8.2k
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m8/8.2l-caption-upload-ui
+  model: plan:opus build:sonnet
 - id: '0.23'
   milestone: M7
   title: 'CI node job runs out of its 20-minute limit now that the Playwright e2e runs in it (#188 cancelled twice at "Install Playwright browsers", 22 Oct 2026): move the e2e into its own job (or raise
