@@ -1,0 +1,14 @@
+# Configured models for `edmate eval --models` (task 7.6 Phase B). Each entry stands in for both
+# the `small` and `main` tier at once: the sweep builds one agent per entry with
+# modelPolicy.tiers.small == modelPolicy.tiers.main == { provider, model } (lead answer Q3: cost
+# is split by which tier a call actually used, not by model). Only the two models already priced
+# in packages/gateway/src/pricing/prices.yaml (lead answer Q5) — no new, unpriced model invented
+# here. Before a human runs the live sweep, re-check each price against the provider's current
+# published price page (prices.yaml's own header comment).
+- label: claude-haiku-4-5
+  provider: anthropic
+  model: claude-haiku-4-5
+
+- label: claude-sonnet-4-5
+  provider: anthropic
+  model: claude-sonnet-4-5

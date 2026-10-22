@@ -1830,9 +1830,30 @@ tasks:
   - '7.1'
   - M3
   - M4
-  status: running
+  status: done
   branch: m7/7.6-live-model-runs
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet x2 review:sonnet x3
+  metrics:
+    tool_calls: 356
+    tokens_in: 1208
+    tokens_out: 93144
+    cache_read_tokens: 45932807
+    wall_time_seconds: 6191
+    models:
+    - claude-sonnet-5
+    builder_phases: 2
+    fix_rounds: 0
+    findings:
+      total: 7
+      by_severity:
+        MEDIUM: 1
+        LOW: 6
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 7
+        wontfix: 0
+    human_questions: 0
 - id: '7.7'
   milestone: M7
   title: Turn traces and health metrics
@@ -2130,7 +2151,7 @@ tasks:
 - id: 9.4a
   milestone: M13
   title: '9.4 follow-ups: per-student rate limit on session starts; read the student''s market from identity per turn (replaces EDMATE_MARKET); a scoped student-subscription lookup in packages/db for /home
-    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically'
+    chat links (replaces EDMATE_CHAT_AGENTS); count .tsx in web coverage; Playwright webServer back to next dev --webpack now that bundled prices load statically; apps/web src/turn/routes.test.ts "streams SSE with the right headers" flaked once in CI (empty tokens after a 2.6 s cold start, PR #116, passed on re-run): find the cause'
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
@@ -2495,7 +2516,7 @@ tasks:
   model: null
 - id: 7.3b
   milestone: M13
-  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.'
+  title: 'Per-agent suite generator polish (7.3 review LOWs): PerAgentSuiteError gets readonly name, a structured field and a { cause } option like the sibling errors; the locked loop iterates LOCKED_TEMPLATES.; NoCasesFoundError uses displayPath(dir) like CaseLoadError (7.6a review LOW)'
   accept: The evals package's error classes share one style and the 7.3 tests still pass.
   deps:
   - '7.3'
@@ -2535,6 +2556,50 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 7.4a
+  milestone: M13
+  title: 'Quality gate hardening (7.4 review MEDIUM/LOW): race each case against the time left on the deadline (a hung agent or judge call must not hang the gate or pass late) and thread an AbortSignal
+    later; resolve agentFor per package before the pool starts so a throw cannot leave workers running; count not-run cases structurally, not by error text; GateGroupResult as a union on pass; drop the
+    as ScopedCase cast; de-duplicate changes'
+  accept: A hung case fails the gate within the deadline, an agentFor throw stops all workers, and the 7.4 tests still pass.
+  deps:
+  - '7.4'
+  risk: normal
+  status: todo
+  branch: null
+  model: null
+- id: 7.6a
+  milestone: M7
+  title: 'Live sweep follow-ups (7.6 review): an openai-compatible factory in the chat gateway the sweep uses, so a second (low-cost) provider can run (the harness exit gate needs two providers); runModelSweep
+    records a per-(model, suite) failure and still writes summary.json; empty-suite detection by a typed loader error, not message text; drop the cost non-null assertion; reject --models with --fixtures/--report;
+    drop the as string[] cast in isBlockReply; a never-add-a-key comment on the live-models schema'
+  accept: A live-models.yaml with one anthropic and one openai-compatible entry sweeps both under scripted gateways, one failing pair still yields summary.json, and the 7.6 tests still pass.
+  deps:
+  - '7.6'
+  risk: normal
+  status: done
+  branch: m7/7.6a-sweep-followups
+  model: plan:lead build:sonnet review:sonnet x2
+  metrics:
+    tool_calls: 102
+    tokens_in: 332
+    tokens_out: 24569
+    cache_read_tokens: 9054277
+    wall_time_seconds: 644
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 2
+      by_severity:
+        LOW: 2
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 1
+        wontfix: 1
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
