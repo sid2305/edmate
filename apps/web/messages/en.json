@@ -756,7 +756,7 @@
     "nav": "Reports",
     "title": "Reports and takedowns",
     "intro": "Open reports on agent and teacher replies, oldest first. A takedown removes material from retrieval at once and can be lifted.",
-    "openCount": "{count} open reports",
+    "openCount": "{count, plural, one {# open report} other {# open reports}}",
     "reload": "Reload",
     "reloading": "Reloading…",
     "pollError": "Could not refresh the queue. Showing the last list.",
@@ -772,10 +772,14 @@
       "agent": "Agent"
     },
     "lift": "Lift",
+    "liftAriaLabel": "Lift takedown on {targetId}",
     "working": "Working…",
     "noTeacherSlug": "No teacher profile",
     "whenLabel": "Reported",
     "teacherLabel": "Teacher",
+    "takedownTargetLabel": "Target",
+    "takedownCategoryLabel": "Category",
+    "takedownWhenLabel": "Since",
     "messageGone": "This message is no longer available.",
     "citedDocumentsLabel": "Cited documents",
     "alreadyTakenDown": "Taken down",
@@ -783,6 +787,7 @@
     "dismiss": "Dismiss",
     "takedownAgent": "Take down this agent",
     "confirmText": "This can't be undone from here. Confirm?",
+    "confirmTextTakedown": "Takes it out of retrieval now; you can lift it below. Confirm?",
     "confirmYes": "Yes, confirm",
     "confirmCancel": "Cancel",
     "category": {
@@ -795,7 +800,7 @@
     "errors": {
       "forbidden": "You can't do that: your staff access may have changed.",
       "not_found": "That was not found. Reload the list.",
-      "validation": "Check the note (up to 500 characters) and try again.",
+      "validation": "This was already actioned or is no longer open. Reload the list.",
       "generic": "Something went wrong. Try again.",
       "loadFailed": "Could not load the reports console. Try again."
     }
