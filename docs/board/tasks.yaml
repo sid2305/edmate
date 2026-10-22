@@ -2237,9 +2237,10 @@ tasks:
   accept: a verified teacher who changes subject is pending again; a bio-only edit leaves verified; covered by a db integration test.
   deps:
   - 8.1a
-  status: todo
-  branch: null
+  status: running
+  branch: m8/8.1c-subject-reverify
   risk: risky
+  model: build:opus-5.5/medium
 - id: 8.2b
   milestone: M8
   title: 'Web-link and YouTube uploads in the upload centre (deferred from 8.2 by the human, B-31): the worker fetches a teacher-given URL or YouTube transcript behind an allow-listed, SSRF-safe fetcher,
@@ -4466,7 +4467,8 @@ tasks:
 - id: 8.7l
   milestone: M13
   title: '8.7d review follow-ups: a publish run left queued when enqueue and finishRun both fail shows "running" for up to the stale deadline (GET should report an error for a queued run with no worker
-    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard in one Promise.all, and the duplicate "draft agent" null test is merged or renamed'
+    ack past N seconds, or a sweep ends it); publishClient fetches get a timeout; error bodies go through a zod schema; batch independent reads in start(); 8.7e: the teacher page reads offers and the scorecard
+    in one Promise.all, and the duplicate "draft agent" null test is merged or renamed'
   accept: a test where enqueue and finishRun both fail shows an error view within N seconds, not "running"; a hung fetch surfaces as pollFailed; failure() uses safeParse.
   deps:
   - 8.7d
