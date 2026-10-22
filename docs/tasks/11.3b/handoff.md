@@ -98,4 +98,4 @@ model calls.
 ## Left to do
 None for this phase. 11.3c (repository-level refusal of a current/future week) is a separate task.
 
-Tool calls used: 44
+Tool calls used: 82 (harness count; the builder reported 44)
