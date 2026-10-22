@@ -2077,11 +2077,11 @@ tasks:
   - '5.1'
   - '5.2'
   - '8.1'
-  status: planning
+  status: done
   needs_decision:
   - default-model-mix
   branch: null
-  model: null
+  model: phases 8.6a+8.6b+8.6c+8.6d+8.6g
 - id: '8.7'
   milestone: M8
   title: 'Publish flow with quality-gate results, the teaching scorecard and the public profile page (7.4: publish goes through gatedPublish)'
@@ -2093,9 +2093,9 @@ tasks:
   - '7.4'
   - '7.8'
   - '8.6'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 8.7a+8.7b+8.7c+8.7d+8.7e+8.7f+8.7h+8.7k
 - id: '8.8'
   milestone: M8
   title: Insights view (earnings view moves to 10.7)
@@ -2195,9 +2195,9 @@ tasks:
   - '1.7'
   - '7.8'
   - '9.1'
-  status: planning
+  status: done
   branch: null
-  model: plan:opus
+  model: phases 9.2a+9.2b+9.2c
 - id: '9.3'
   milestone: M9
   title: Package compare and start; until M10 a paid package starts as an active subscription with no payment (checkout moves to 10.8)
@@ -2270,7 +2270,7 @@ tasks:
   accept: a teacher adds a web link or YouTube video and it reaches ready or a fixed failure reason; private and internal addresses are refused.
   deps:
   - '8.2'
-  status: planning
+  status: done
   branch: null
   risk: risky
 - id: 9.4b
@@ -5031,7 +5031,7 @@ tasks:
   accept: per the B-47 answer.
   deps:
   - 8.2f
-  status: planning
+  status: done
   branch: null
 - id: 8.2g
   milestone: M13
@@ -6184,9 +6184,9 @@ tasks:
   - '1.3'
   - '1.7'
   - '9.1'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 9.6a+9.6b+9.6c+9.6d+9.6e+9.6g+9.6h+9.6i
 - id: '9.7'
   milestone: M9
   title: 'E2E: discover → free package → subscribe → learn → locked request → upgrade → unlocked → uncovered question → teacher answer'
@@ -6197,9 +6197,9 @@ tasks:
   - '8.9'
   - '9.3'
   - '9.4'
-  status: todo
+  status: done
   branch: null
-  model: null
+  model: phases 9.7a+9.7b
 - id: '10.1'
   milestone: M10
   title: Payment provider adapter for the pilot market behind the `Payments` port, using the provider's subscriptions
@@ -6300,9 +6300,9 @@ tasks:
   - '8.1'
   - '9.1'
   - M6
-  status: planning
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases 11.2a+11.2b
 - id: '11.3'
   milestone: M11
   title: 'Weekly insights worker: top questions, sticking topics, unhelpful answers, open teacher questions; aggregated with a minimum group size of 5'
@@ -6360,9 +6360,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   branch: null
-  model: plan:sonnet
+  model: phases 12.3a+12.3b+12.3c+12.3f
 - id: '12.4'
   milestone: M12
   title: Regulated-subject flag set manually by staff before publish
@@ -6371,10 +6371,10 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   risk: risky
   branch: null
-  model: plan:opus
+  model: phases 12.4a+12.4b+12.4c+12.4d
 - id: '12.5'
   milestone: M12
   title: Safety alert inbox with acknowledgement
@@ -6383,9 +6383,9 @@ tasks:
   - '1.6'
   - '12.1'
   - '4.3'
-  status: planning
+  status: done
   branch: null
-  model: plan:opus
+  model: phases 12.5a+12.5b+12.5c
 - id: '13.1'
   milestone: M13
   title: 'Accessibility: axe in CI and a manual WCAG 2.2 AA pass'
