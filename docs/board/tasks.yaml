@@ -3847,7 +3847,9 @@ tasks:
   deps:
   - 9.5a
   risk: low
-  status: todo
+  status: running
+  branch: m9/9.5b-feedback-interview
+  model: plan:sonnet build:sonnet
 - id: 13.skillpresent
   milestone: M13
   title: 'Harness: wire feedback (5.7) and mock-interview (5.8) present() hooks so they emit structured skill events (interview progress), then show them in 9.5 screens'
@@ -4156,6 +4158,22 @@ tasks:
   accept: each item fixed or recorded, with tests where behaviour changes.
   deps:
   - 8.7a
+  risk: high
+  status: todo
+- id: 9.2f
+  milestone: M13
+  title: '9.2c review follow-ups (LOW): scope the next-intl Translate double cast in teachers/[slug]/page.tsx and discovery/format.ts to the dynamic skills key only; scorecard.ts guards byKey.get(key) instead of casting away undefined; drop the dead `?? 2` fallback in format.ts'
+  accept: each item fixed, with tests unchanged or extended.
+  deps:
+  - 9.2c
+  risk: low
+  status: todo
+- id: 9.3d
+  milestone: M13
+  title: '9.3c review follow-ups: a concurrent int test where a second client holds setVerification''s FOR UPDATE on the profile while subscriptions.start runs, then commits a rejection, and start writes nothing (database-reviewer MEDIUM); a subscriptions.start test for a pending (never verified) teacher (security-reviewer LOW)'
+  accept: both tests pass against Postgres; no production change unless a test finds a bug.
+  deps:
+  - 9.3c
   risk: high
   status: todo
 - id: 9.4c
