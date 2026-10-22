@@ -86,4 +86,4 @@ Branch: `m9/9.2c-teacher-page` (built on local `work-92c`). Worktree: `.claude/w
 
 Status: DONE
 
-Tool calls used: 38
+Tool calls used: 59 (harness)
