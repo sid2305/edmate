@@ -73,6 +73,11 @@ One-line change: `Object.values(BLOCK_REPLIES) as string[]` → `Object.values(B
 - Why: a risky path needs its required reviewers and a risk: high entry.
 - risk: high
 
+### 21 Oct 2026 · 7.6a wontfix: apps/cli/src/commands/eval.ts per-pair error messages · decided by lead
+- Decided: keep writing `Error.message` from a failed (model, suite) pair to stderr and the gitignored summary.json, as code-reviewer's LOW noted.
+- Why: it is the same surface as the file's existing error handling, and errors that could carry key material are key-safe by their own class invariant; no fix needed.
+- risk: low
+
 ### 21 Oct 2026 · 7.6a budget: 73 tool calls against 60 · decided by lead
 - Decided: accept the overrun (1.22×, the handoff's ~55 was the builder's estimate).
 - Why: all seven deferred findings and the second provider landed in one green run.
