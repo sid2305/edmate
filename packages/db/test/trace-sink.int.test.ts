@@ -162,8 +162,10 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
     await raw.query(
       `update turn_traces set created_at = '2020-01-01T00:00:00Z' where turn_id = 'trn_window_old'`,
     );
+    // Far in the future so this row sorts newest even against other tests' leftover rows
+    // (this suite doesn't always clean up every seeded trace, and "now" keeps moving).
     await raw.query(
-      `update turn_traces set created_at = '2026-06-01T00:00:00Z' where turn_id = 'trn_window_new'`,
+      `update turn_traces set created_at = '2030-06-01T00:00:00Z' where turn_id = 'trn_window_new'`,
     );
 
     const windowed = await repos.turnTraces.listForTeacherSince(teacherA, '2025-01-01T00:00:00Z');
@@ -181,6 +183,8 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
       1,
     );
     expect(capped).toHaveLength(1);
+    // Capped to 1 keeps the newest trace (trn_window_new, 2026-06-01), not the oldest.
+    expect(capped[0]?.turnId).toBe('trn_window_new');
 
     const unlimited = await repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z');
     expect(unlimited.length).toBeGreaterThan(1);
@@ -188,6 +192,37 @@ describe.skipIf(!up)(`traceSinkFor on Postgres${up ? '' : ` (${SKIP_REASON})`}`,
 
     await raw.query(
       `delete from turn_traces where turn_id in ('trn_window_old', 'trn_window_new')`,
+    );
+  });
+
+  it('listForTeacherSince returns the newest `limit` traces, oldest first, when capped', async () => {
+    const teacherA = { teacherId: teacherId('A') };
+    const turnIds = ['trn_cap_1', 'trn_cap_2', 'trn_cap_3', 'trn_cap_4'];
+    for (const turnId of turnIds) {
+      await traceSinkFor(repos, own).record(trace({ turnId }));
+    }
+    // Set createdAt explicitly, far in the future, so "newest" is unambiguous regardless of
+    // insert order/speed or other tests' leftover rows (this suite doesn't always clean up
+    // every seeded trace, and "now" keeps moving).
+    await raw.query(
+      `update turn_traces set created_at = '2030-01-01T00:00:00Z' where turn_id = 'trn_cap_1'`,
+    );
+    await raw.query(
+      `update turn_traces set created_at = '2030-01-02T00:00:00Z' where turn_id = 'trn_cap_2'`,
+    );
+    await raw.query(
+      `update turn_traces set created_at = '2030-01-03T00:00:00Z' where turn_id = 'trn_cap_3'`,
+    );
+    await raw.query(
+      `update turn_traces set created_at = '2030-01-04T00:00:00Z' where turn_id = 'trn_cap_4'`,
+    );
+
+    const capped = await repos.turnTraces.listForTeacherSince(teacherA, '2000-01-01T00:00:00Z', 2);
+    // The newest 2 (trn_cap_3, trn_cap_4), returned oldest first.
+    expect(capped.map((r) => r.turnId)).toEqual(['trn_cap_3', 'trn_cap_4']);
+
+    await raw.query(
+      `delete from turn_traces where turn_id in (${turnIds.map((id) => `'${id}'`).join(',')})`,
     );
   });
 

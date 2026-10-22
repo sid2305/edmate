@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { TurnTraceSchema, type TurnTrace } from '@edmate/contracts';
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import { sessions, turnTraces } from '../schema/index.js';
@@ -170,10 +170,10 @@ export function turnTracesRepo(db: Db) {
     },
 
     /**
-     * The scope's teacher's traces across every session, created at or after `since`, oldest
-     * first, capped at `limit` (default `TEACHER_TRACES_MAX_LIMIT`): the health-metrics read
-     * (task 7.7), mirroring `usageLedger.sumForTeacherSince`'s join-on-session-ownership shape.
-     * Another teacher's traces never appear.
+     * The newest `limit` traces (default `TEACHER_TRACES_MAX_LIMIT`) of the scope's teacher's
+     * traces across every session, created at or after `since`, returned oldest first: the
+     * health-metrics read (task 7.7), mirroring `usageLedger.sumForTeacherSince`'s
+     * join-on-session-ownership shape. Another teacher's traces never appear.
      */
     async listForTeacherSince(
       scope: TeacherScope,
@@ -189,9 +189,9 @@ export function turnTracesRepo(db: Db) {
         .from(turnTraces)
         .innerJoin(sessions, eq(sessions.id, turnTraces.sessionId))
         .where(and(eq(sessions.teacherId, sc.teacherId), gte(turnTraces.createdAt, from)))
-        .orderBy(asc(turnTraces.createdAt), asc(turnTraces.id))
+        .orderBy(desc(turnTraces.createdAt), desc(turnTraces.id))
         .limit(lim);
-      return rows.map((r) => toRow(r, method));
+      return rows.map((r) => toRow(r, method)).reverse();
     },
   };
 }
