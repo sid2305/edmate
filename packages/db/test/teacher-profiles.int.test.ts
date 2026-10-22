@@ -225,6 +225,45 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
   });
 
+  describe('listPendingForStaff (staff only)', () => {
+    it.each([
+      ['the teacher themself', () => teacherId('A')],
+      ['a user who is no longer staff', () => FORMER_STAFF],
+      ['an id that is no user', () => 'stf_ghost'],
+    ])('refuses %s as scope', async (_label, by) => {
+      expect(await failure(repos.teacherProfiles.listPendingForStaff(by()))).toEqual({
+        kind: 'scope',
+        method: 'teacherProfiles.listPendingForStaff',
+      });
+    });
+
+    it('a staff user sees only pending teachers, oldest first, capped, with name and email joined', async () => {
+      const a = await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+      await new Promise((r) => setTimeout(r, 10));
+      const b = await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Science' });
+      // Verified teachers never show up in the queue.
+      await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
+
+      const rows = await repos.teacherProfiles.listPendingForStaff(STAFF);
+      expect(rows).toEqual([
+        {
+          id: b.id,
+          teacherId: teacherId('B'),
+          slug: 'mr-beta',
+          subject: 'Science',
+          verificationStatus: 'pending',
+          name: '[B] teacher',
+          email: null,
+        },
+      ]);
+      expect(rows.map((r) => r.teacherId)).not.toContain(a.teacherId);
+    });
+
+    it('is empty when nothing is pending, and never exceeds STAFF_QUEUE_MAX_LIMIT rows', async () => {
+      expect(await repos.teacherProfiles.listPendingForStaff(STAFF)).toEqual([]);
+    });
+  });
+
   describe('assertVerifiedForPublish: an unverified teacher cannot publish', () => {
     const publish = (s: { teacherId: string }) => repos.teacherProfiles.assertVerifiedForPublish(s);
     const SCOPE = { kind: 'scope', method: 'teacherProfiles.assertVerifiedForPublish' };
