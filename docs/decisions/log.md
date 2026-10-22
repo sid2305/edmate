@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 13.7 Widen all three timings in the retrieval-leak int test · decided by builder · risk: low
+- Decided: widened `leakTimeoutMs` (20 → 1000 ms), `leakBuildTimeoutMs` (40 → 400 ms) and the post-drop sleep (80 → 800 ms), not just the one named in the brief.
+- Why: a real Postgres round trip on the second `leakCheck` call could exceed the old 40 ms build timeout even outside CI. Lead note (from code-reviewer): this flips the order of the two timeouts, so the first call's fallback now comes from the build's own overrun (`leak_failed`) rather than the outer race (`leak_timeout`). The test doesn't assert which code fired, and a build that is never dropped still fails it, so the regression it guards is still caught.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 13.7 Queue latency bound stays absolute at 2,500 ms · decided by builder · risk: low
+- Decided: the bound stays an absolute constant (2,500 ms) rather than `DB_DELAY_MS / n`.
+- Why: it matches the file's named top-level constants; 2,500 ms is still half of `DB_DELAY_MS` (5,000 ms), so "done arrives well before the slow write" still holds.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 8.6d "Full course" preset price is $55, not the plan's example $29 · decided by builder · risk: low
 - Decided: with the plan's provisional per-turn cost (21,000 micro-USD under the real B-42 Sonnet 5
   / Haiku 4.5 prices: 5,000/500 main tokens + 4×1,200/60 small tokens) and 20 messages/day, the

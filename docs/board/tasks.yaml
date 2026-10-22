@@ -3737,9 +3737,27 @@ tasks:
   accept: each test uses a fake clock or a loose bound per docs/lessons.md "Wall-clock bounds fail on shared CI runners"; 20 repeated CI-style runs pass.
   deps: []
   risk: low
-  status: running
+  status: done
   branch: m13/13.7-timing-tests
-  model: build:sonnet-5/medium
+  model: build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.5e
   milestone: M8
   title: 'Teacher test-chat page (8.5 Phase C, apps/web UI): package picker, chat, mark wrong, correction form'
