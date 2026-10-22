@@ -2339,8 +2339,9 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.3b-home-followups
+  model: plan:lead build:sonnet
 - id: 0.16a
   milestone: M0
   title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
@@ -6205,9 +6206,9 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m11/11.4g-recording-upload-followups
+  model: plan:lead build:sonnet
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
