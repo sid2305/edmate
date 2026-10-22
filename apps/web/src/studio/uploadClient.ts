@@ -58,6 +58,43 @@ export const ACCEPT = [
 ].join(',');
 
 /**
+ * Task 11.4 Phase B: the extensions a class recording may be -- the transcript-kind types
+ * (captions, audio, video). A subset of `CLIENT_UPLOAD_TYPES`; a test checks each one maps on the
+ * server to `chunkKind: 'transcript'` (table check against `@edmate/web`'s `UPLOAD_TYPES`).
+ */
+export const RECORDING_UPLOAD_EXTS = ['vtt', 'srt', 'mp3', 'wav', 'm4a', 'mp4', 'webm'] as const;
+
+const RECORDING_TYPES = CLIENT_UPLOAD_TYPES.filter((t) =>
+  (RECORDING_UPLOAD_EXTS as readonly string[]).includes(t.ext),
+);
+
+/** The recording picker's `accept`: the same shape as `ACCEPT`, restricted to recording types. */
+export const RECORDING_ACCEPT = [
+  ...RECORDING_TYPES.map((t) => `.${t.ext}`),
+  ...RECORDING_TYPES.map((t) => t.contentType),
+].join(',');
+
+/**
+ * Task 11.4 Phase B (Q3): the Whisper-split cap for M4A, MP4 and WebM -- a client-side mirror of
+ * `MAX_UNSPLIT_MEDIA_BYTES` in `studio/files.ts` (which needs node:crypto, so the browser can't
+ * import it; a test keeps the two numbers equal). MP3 and WAV keep the ordinary 500 MB media cap.
+ */
+export const UNSPLIT_MEDIA_MAX_BYTES = 24 * 1024 * 1024;
+
+const UNSPLIT_EXTS = new Set(['m4a', 'mp4', 'webm']);
+
+/**
+ * Whether a file needs a smaller alternative before it's worth uploading: an M4A, MP4 or WebM
+ * over `UNSPLIT_MEDIA_MAX_BYTES`. Lets the recording form show the 24 MB message at once, instead
+ * of after a slow upload the server would refuse anyway.
+ */
+export function needsSmallerFile(file: File, contentType: string | null): boolean {
+  const ext = CLIENT_UPLOAD_TYPES.find((t) => t.contentType === contentType)?.ext;
+  if (ext === undefined || !UNSPLIT_EXTS.has(ext)) return false;
+  return file.size > UNSPLIT_MEDIA_MAX_BYTES;
+}
+
+/**
  * The content type to declare for a file: the browser's own when it is allowed, else the one its
  * extension names (browsers often report '' for Markdown or a vendor type for m4a), else null.
  */
@@ -117,6 +154,8 @@ export function createDocument(input: {
   byteSize: number;
   /** Task 12.3c: sent only once the upload centre's rights checkbox is checked; never `false`. */
   rightsDeclared: true;
+  /** Task 11.4 Phase B: a live-class recording, linked to one of the teacher's own classes. */
+  liveClassId?: string;
 }): Promise<ApiResult<UploadTicket>> {
   return call(
     BASE,

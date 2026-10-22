@@ -4,6 +4,7 @@
 // complete route learns the type from the key it stored, never from the client.
 import { randomUUID } from 'node:crypto';
 import type { ChunkKind } from '@edmate/contracts';
+import { WHISPER_MAX_UPLOAD_BYTES } from '@edmate/gateway';
 import type { IngestFileKind } from '@edmate/queue';
 
 /** Ingest's own document limit (`MAX_DOCUMENT_BYTES` in @edmate/ingest): 20 MB. */
@@ -13,6 +14,15 @@ export const MAX_DOCUMENT_UPLOAD_BYTES = 20 * 1024 * 1024;
  * uploads can always be fetched for transcription.
  */
 export const MAX_MEDIA_UPLOAD_BYTES = 500 * 1024 * 1024;
+/**
+ * Task 11.4 Phase B (Q3): the worker composes `createWhisperTranscriber` with no chunker, so only
+ * WAV and MP3 over `WHISPER_MAX_UPLOAD_BYTES` can be split before transcription. An M4A, MP4 or
+ * WebM over this cap uploads today (the 500 MB media cap) and then fails minutes later as
+ * `input_too_large`, after the download. This equals `@edmate/gateway`'s own Whisper cap, so the
+ * two caps can never drift apart; a test pins the number too. A real fix is an ffmpeg chunker in
+ * the worker image, tracked as board task 11.4d (M13; needs an ADR for the new system binary).
+ */
+export const MAX_UNSPLIT_MEDIA_BYTES = WHISPER_MAX_UPLOAD_BYTES;
 
 export interface UploadType {
   contentType: string;
@@ -29,12 +39,18 @@ const doc = (contentType: string, ext: string, fileKind: IngestFileKind): Upload
   chunkKind: 'material',
   maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
 });
-const media = (contentType: string, ext: string, fileKind: IngestFileKind): UploadType => ({
+/** `splittable`: whether the worker's Whisper transcriber can split this type when it is large. */
+const media = (
+  contentType: string,
+  ext: string,
+  fileKind: IngestFileKind,
+  splittable: boolean,
+): UploadType => ({
   contentType,
   ext,
   fileKind,
   chunkKind: 'transcript',
-  maxBytes: MAX_MEDIA_UPLOAD_BYTES,
+  maxBytes: splittable ? MAX_MEDIA_UPLOAD_BYTES : MAX_UNSPLIT_MEDIA_BYTES,
 });
 /**
  * Task 8.2c, Phase C: a caption file (.vtt or .srt) the teacher exports from YouTube Studio.
@@ -55,11 +71,11 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
   doc('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'docx', 'docx'),
   doc('application/vnd.openxmlformats-officedocument.presentationml.presentation', 'pptx', 'pptx'),
   doc('text/markdown', 'md', 'markdown'),
-  media('audio/mpeg', 'mp3', 'audio'),
-  media('audio/wav', 'wav', 'audio'),
-  media('audio/mp4', 'm4a', 'audio'),
-  media('video/mp4', 'mp4', 'video'),
-  media('video/webm', 'webm', 'video'),
+  media('audio/mpeg', 'mp3', 'audio', true),
+  media('audio/wav', 'wav', 'audio', true),
+  media('audio/mp4', 'm4a', 'audio', false),
+  media('video/mp4', 'mp4', 'video', false),
+  media('video/webm', 'webm', 'video', false),
   // Task 8.2c: no IANA type exists for SubRip; `application/x-subrip` is the common convention
   // (decisions, risk: low). The client falls back to the extension when the browser reports none.
   caption('text/vtt', 'vtt', 'vtt'),
@@ -69,6 +85,15 @@ export const UPLOAD_TYPES: readonly UploadType[] = [
 /** The upload type for an exact content type, or null (anything not on the list). */
 export function uploadTypeFor(contentType: string): UploadType | null {
   return UPLOAD_TYPES.find((t) => t.contentType === contentType) ?? null;
+}
+
+/**
+ * Task 11.4 Phase B: whether a type may carry `liveClassId` -- captions, audio and video, the
+ * same types a class recording can be (the transcript-kind rows). A plain document (PDF, DOCX,
+ * PPTX, Markdown) never links to a live class.
+ */
+export function isRecordingType(type: UploadType): boolean {
+  return type.chunkKind === 'transcript';
 }
 
 /** `teachers/<teacherId>/documents/<documentId>/<random>.<ext>`, built only on the server. */
