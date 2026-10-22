@@ -4434,7 +4434,9 @@ tasks:
   deps:
   - 8.6d
   risk: low
-  status: todo
+  status: running
+  branch: m8/8.6g-package-builder-followups
+  model: plan:lead build:sonnet
 - id: 9.7a
   milestone: M9
   title: '9.7 Phase A: e2e full-flow spec (subscribe free, learn, locked, uncovered question, teacher answer) and the Playwright job in CI (plan docs/tasks/9.7/plan.md)'
