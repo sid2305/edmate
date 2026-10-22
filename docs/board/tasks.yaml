@@ -5268,6 +5268,26 @@ tasks:
   status: todo
   branch: null
   model: null
+- id: 12.4e
+  milestone: M13
+  title: 'Regulated subjects follow-up: an index backing listForStaff''s (created_at desc, id desc) sort on agents (12.4a review)'
+  accept: per docs/tasks/12.4a/review.md deferred finding; db typecheck, lint and test green.
+  deps:
+  - 12.4a
+  risk: low
+  status: todo
+  branch: null
+  model: null
+- id: 12.5e
+  milestone: M13
+  title: 'Alert worker follow-up: alert.raise logs a store.record failure before awaiting notify, so a joint DB and notifier outage still logs safety_alert.store_failed (12.5b review)'
+  accept: per docs/tasks/12.5b/review.md deferred finding; worker typecheck, lint and test green.
+  deps:
+  - 12.5b
+  risk: high
+  status: todo
+  branch: null
+  model: null
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
