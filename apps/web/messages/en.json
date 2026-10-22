@@ -15,7 +15,16 @@
     "placeholder": "Your teacher's agent will be here soon.",
     "chatLink": "Chat with your teacher's agent",
     "startableTitle": "Packages you can start",
-    "startLink": "Start a package"
+    "startLink": "Start a package",
+    "liveClasses": {
+      "title": "Upcoming live classes",
+      "join": "Join",
+      "window": {
+        "reminder_24h": "Starting in 24 hours",
+        "reminder_1h": "Starting in 1 hour",
+        "starting_soon": "Starting soon"
+      }
+    }
   },
   "teacher": {
     "title": "Teacher studio",

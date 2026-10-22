@@ -9,11 +9,14 @@ import messages from '../../messages/en.json';
 vi.mock('./actions', () => ({ signOutAndRedirect: vi.fn() }));
 // Same reason as `app/sign-in/page.test.tsx`: next-intl's real server API isn't callable under
 // jsdom (no server/client runtime split there); the mock reads the same `en.json` the production
-// `src/i18n/request.ts` loads, so a typo'd or missing key still fails the test.
+// `src/i18n/request.ts` loads, so a typo'd or missing key still fails the test. 11.1c: `liveClasses`
+// keys are nested (e.g. `liveClasses.window.reminder_24h`), so the lookup walks a dotted path --
+// same behaviour as real next-intl's own flattening of nested JSON within a namespace.
 vi.mock('next-intl/server', () => ({
   getTranslations: async (namespace: keyof typeof messages) => {
-    const bundle = messages[namespace] as Record<string, string>;
-    return (key: string) => bundle[key];
+    const bundle = messages[namespace];
+    return (key: string) =>
+      key.split('.').reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], bundle);
   },
 }));
 
@@ -83,5 +86,106 @@ describe('HomeView', () => {
     const { container } = render(await HomeView());
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+
+  // Task 11.1c Phase C: upcoming live classes (docs/tasks/11.1/plan.md "Phase C").
+  describe('live classes (task 11.1c)', () => {
+    it('with no live classes, no section shows and the existing placeholder is unchanged', async () => {
+      render(await HomeView({ liveClasses: [] }));
+      expect(screen.queryByText('Upcoming live classes')).toBeNull();
+      expect(screen.getByText(/teacher.*agent.*here soon/i)).toBeInTheDocument();
+    });
+
+    it('shows a class far out with no window label', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_1',
+              title: 'Algebra basics',
+              link: 'https://meet.example.com/algebra',
+              startsAt: '2099-01-01T00:00:00.000Z',
+              window: 'later',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByText('Upcoming live classes')).toBeInTheDocument();
+      expect(screen.getByText('Algebra basics')).toBeInTheDocument();
+      expect(screen.queryByText('Starting in 24 hours')).toBeNull();
+      expect(screen.queryByText('Starting in 1 hour')).toBeNull();
+      expect(screen.queryByText('Starting soon')).toBeNull();
+    });
+
+    it('shows the 24h window label inside 24 hours', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_2',
+              title: 'Geometry',
+              link: 'https://meet.example.com/geometry',
+              startsAt: '2099-01-02T00:00:00.000Z',
+              window: 'reminder_24h',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByText('Starting in 24 hours')).toBeInTheDocument();
+    });
+
+    it('shows the 1h window label inside 1 hour', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_3',
+              title: 'Trigonometry',
+              link: 'https://meet.example.com/trig',
+              startsAt: '2099-01-03T00:00:00.000Z',
+              window: 'reminder_1h',
+            },
+          ],
+        }),
+      );
+      expect(screen.getByText('Starting in 1 hour')).toBeInTheDocument();
+    });
+
+    it('join link always opens in a new tab with rel="noopener noreferrer"', async () => {
+      render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_4',
+              title: 'Calculus',
+              link: 'https://meet.example.com/calc',
+              startsAt: '2099-01-04T00:00:00.000Z',
+              window: 'starting_soon',
+            },
+          ],
+        }),
+      );
+      const link = screen.getByRole('link', { name: 'Join' });
+      expect(link).toHaveAttribute('href', 'https://meet.example.com/calc');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('no axe violations with a live class shown', async () => {
+      const { container } = render(
+        await HomeView({
+          liveClasses: [
+            {
+              id: 'lc_5',
+              title: 'Chemistry',
+              link: 'https://meet.example.com/chem',
+              startsAt: '2099-01-05T00:00:00.000Z',
+              window: 'reminder_1h',
+            },
+          ],
+        }),
+      );
+      expect(await axe(container)).toHaveNoViolations();
+    });
   });
 });

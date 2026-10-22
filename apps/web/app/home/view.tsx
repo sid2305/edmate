@@ -2,7 +2,11 @@
 // it directly). 9.4: a link to the chat for each live subscription; with none, the placeholder.
 // 9.3 Phase C: a second list, "packages you can start", for a live agent with no live
 // subscription -- each links to the compare-and-start page, not straight to chat.
+// 11.1c Phase C: a third block, "Upcoming live classes" -- title, start time, the join link (new
+// tab, since it leaves the app) and the window label. Shown whenever there is at least one
+// entitled class; it never affects the existing chats/startable placeholder.
 import { getTranslations } from 'next-intl/server';
+import type { UpcomingLiveClass } from '@edmate/db';
 import { AppShell } from '../../src/ui/AppShell';
 import { signOutAndRedirect } from './actions';
 
@@ -11,9 +15,11 @@ export interface HomeViewProps {
   chats?: readonly string[];
   /** Agent ids the student can start a package with -- no live subscription yet (task 9.3). */
   startable?: readonly string[];
+  /** The scope's own upcoming, entitled live classes, soonest first (task 11.1c). */
+  liveClasses?: readonly UpcomingLiveClass[];
 }
 
-export async function HomeView({ chats = [], startable = [] }: HomeViewProps = {}) {
+export async function HomeView({ chats = [], startable = [], liveClasses = [] }: HomeViewProps = {}) {
   const shell = await getTranslations('shell');
   const t = await getTranslations('home');
   // 9.2: a link to the public discovery page; its label lives under `discovery`, not `home` (9.2
@@ -60,6 +66,27 @@ export async function HomeView({ chats = [], startable = [] }: HomeViewProps = {
               </ul>
             </>
           )}
+        </>
+      )}
+      {liveClasses.length > 0 && (
+        <>
+          <h2>{t('liveClasses.title')}</h2>
+          <ul className="home-live-classes">
+            {liveClasses.map((liveClass) => (
+              <li key={liveClass.id}>
+                <span>{liveClass.title}</span>{' '}
+                <time dateTime={liveClass.startsAt}>{liveClass.startsAt}</time>{' '}
+                {liveClass.window !== 'later' && (
+                  <span>{t(`liveClasses.window.${liveClass.window}`)}</span>
+                )}{' '}
+                {liveClass.link !== null && (
+                  <a href={liveClass.link} target="_blank" rel="noopener noreferrer">
+                    {t('liveClasses.join')}
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </AppShell>
