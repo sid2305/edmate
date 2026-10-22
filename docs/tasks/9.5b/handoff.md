@@ -101,4 +101,4 @@ No code changes were needed beyond what the WIP commit already contained.
   tasks); `python3 .githooks/secret-scan.py --all` clean.
 
 Status: DONE
-Tool calls used: 15 (build) + 20 (fix round) = 35
+Tool calls used: 53 (harness: resumed build 27 + fix round 26; the cut-off first run is not counted)
