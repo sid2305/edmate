@@ -27,15 +27,23 @@ export {
   createWebFetcher,
   normaliseAllowedHosts,
   redactUrl,
+  WEB_FETCH_HEADERS,
+  WEB_PAGE_MAX_BYTES,
   type FetchedPage,
+  type PinnedTransport,
+  type TransportRequest,
+  type TransportResponse,
   type WebFetcher,
   type WebFetcherOptions,
 } from './fetch/webFetch.js';
 export {
-  buildOutlineModuleRequest,
-  draftOutline,
-  OUTLINE_SYSTEM,
-} from './outline/draftOutline.js';
+  checkWebLinkUrl,
+  isYouTubeHost,
+  WEB_LINK_MAX_URL_LENGTH,
+  type WebLinkCheck,
+  type WebLinkRefusal,
+} from './fetch/linkUrl.js';
+export { buildOutlineModuleRequest, draftOutline, OUTLINE_SYSTEM } from './outline/draftOutline.js';
 export type {
   ModuleOutlineDraft,
   OutlineChunkInput,

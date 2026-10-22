@@ -24,6 +24,10 @@ describe('isPublicAddress', () => {
     '100.128.0.0',
     '2606:4700:4700::1111',
     '2a00:1450:4001:80b::200e',
+    '2001:3::1',
+    '2001:2:1::1',
+    '2001:30::1',
+    '2001:4860:4860::8888',
   ])('%s is public', (ip) => {
     expect(isPublicAddress(ip)).toBe(true);
   });
@@ -53,6 +57,15 @@ describe('isPublicAddress', () => {
     ['NAT64', '64:ff9b::7f00:1'],
     ['discard', '100::1'],
     ['Teredo', '2001::1'],
+    ['benchmarking v6 (2001:2::/48)', '2001:2::1'],
+    ['benchmarking v6, top of the /48', '2001:2:0:ffff::1'],
+    ['ORCHID (2001:10::/28)', '2001:10::1'],
+    ['ORCHID top of the /28', '2001:1f:ffff::1'],
+    ['ORCHIDv2 (2001:20::/28)', '2001:20::1'],
+    ['ORCHIDv2 top of the /28', '2001:2f::1'],
+    ['IPv4-compatible (::/96)', '::7f00:1'],
+    ['discard-only (100::/64), top', '100::ffff:ffff:ffff:ffff'],
+    ['NAT64 local-use (64:ff9b:1::/48)', '64:ff9b:1::1'],
     ['documentation v6', '2001:db8::1'],
     ['6to4', '2002:7f00:1::1'],
     ['unique local', 'fd00:ec2::254'],
