@@ -5798,7 +5798,9 @@ tasks:
   deps:
   - 12.4d
   risk: low
-  status: todo
+  status: running
+  branch: m12/12.4f-staff-agents-polish
+  model: plan:lead build:sonnet
 - id: 7.2i
   milestone: M13
   title: '7.2g review follow-ups (code-reviewer MEDIUMs): leak-co2-translate-en bans a translation-specific phrase again (the 7.2g tightening dropped "chaud") without echoing the student turn; leak-co6-falseattempt-en
