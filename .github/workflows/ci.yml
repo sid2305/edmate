@@ -113,6 +113,15 @@ jobs:
       # way to catch a bundler bug that source-level tests can't see (task 1.7b).
       - name: 'Build smoke (apps/web: the age gate on a real production build)'
         run: corepack pnpm turbo run build-smoke --filter=@edmate/web
+      # Task 9.7: the student/teacher full-flow e2e suite, against a real `next dev` and this
+      # job's own Postgres (`playwright.config.ts`'s `globalSetup`); every model-shaped turn is a
+      # `page.route` fixture (apps/web/e2e/fixtures.ts), so no real model or payment call ever
+      # runs. `testIgnore: ['stack/**']` keeps task 9.0's docker-compose stack suite out of this
+      # job. Chromium only.
+      - name: Install Playwright browsers
+        run: corepack pnpm --filter @edmate/web exec playwright install --with-deps chromium
+      - name: Student/teacher e2e (scripted turns)
+        run: corepack pnpm --filter @edmate/web e2e
 
   python-harness:
     runs-on: ubuntu-latest
