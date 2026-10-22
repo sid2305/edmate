@@ -1,5 +1,18 @@
 # Handoff: 9.7c — e2e local-DB guard
 
+## Decisions
+### 22 Oct 2026 · 9.7c guard refuses host overrides in the query string · decided by builder · risk: low
+- Decided: `assertLocalDatabaseUrl` now also rejects any `TEST_DATABASE_URL` whose query string
+  carries a `host` or `hostaddr` key (case-insensitively), and compares the authority hostname
+  case-insensitively, before falling back to the existing localhost/127.0.0.1/::1 allowlist.
+- Why: security-reviewer found that pg / pg-connection-string (used by `@edmate/db` and the
+  spawned `migrate.js`/`seed.js`) honour a `?host=`/`?hostaddr=` query parameter that overrides the
+  authority host for the actual connection, so `postgres://localhost:5432/edmate?host=prod-db.example.com`
+  passed the old hostname-only check but would connect to `prod-db.example.com`. Rejecting the
+  override keys outright (rather than parsing with pg-connection-string) keeps the guard pure, adds
+  no dependency, and fails closed.
+- risk: low
+
 ## Summary
 9.7a review follow-ups, both resolved:
 1. `global-setup.ts` now refuses a non-local `TEST_DATABASE_URL` (host not `localhost` /
