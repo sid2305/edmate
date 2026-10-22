@@ -489,6 +489,44 @@ describe('ChatView', () => {
     });
   });
 
+  it('a mock interview that comes back locked clears activeSkill: Pause/Stop hidden, next message has no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Job interview' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push({ type: 'locked', packageName: 'Interview Prep' }, tok('That is in another package.'), done);
+    expect(screen.getByText('This is part of Interview Prep.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+
+    type('Can I try something else?');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Can I try something else?',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
+  it('a practice start that comes back locked also leaves the next message with no skill', async () => {
+    const f = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Practice' }));
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(1));
+    f.push({ type: 'locked', packageName: 'Algebra Plus' }, tok('That is in another package.'), done);
+    expect(screen.getByText('This is part of Algebra Plus.')).toBeInTheDocument();
+
+    type('Something else');
+    await waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+    expect(f.calls[1]?.body).toEqual({
+      agentId: 'agt_a',
+      kind: 'message',
+      text: 'Something else',
+      lang: 'en',
+      clientTs: NOW.toISOString(),
+    });
+  });
+
   it('a practice payload with non-string options falls back to the generic SkillCard', async () => {
     const f = setup();
     type('Practice please');

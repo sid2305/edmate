@@ -144,8 +144,13 @@ export function ChatView({
     // tool-wires a `present()` hook (Q2, 9.5 plan) so no turn ever carries a `skill:
     // 'mock_interview'` event; it is set directly by the start/pause action below and only
     // cleared by Stop, so a reply with no skill cards never silently drops the student out of it.
+    // A locked reply (student without the package) also has no skill cards, but it is never an
+    // in-progress interview turn -- it always clears, so a locked start never gets stuck tagged
+    // `mock_interview` with Pause/Stop left showing.
     const named = turn.skills.at(-1)?.skill;
-    setActiveSkill((prev) => (named !== undefined ? named : prev === 'mock_interview' ? prev : null));
+    setActiveSkill((prev) =>
+      named !== undefined ? named : turn.locked !== null ? null : prev === 'mock_interview' ? prev : null,
+    );
   }, [active, turn]);
 
   const streaming = active && turn.status === 'streaming';

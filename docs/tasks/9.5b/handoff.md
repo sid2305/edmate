@@ -79,5 +79,26 @@ No code changes were needed beyond what the WIP commit already contained.
 - Run `apps/web/e2e/skills.spec.ts` against the compose Postgres stack (command above) — the
   lead or a follow-up session with that stack available should confirm the three e2e cases pass.
 
+## Fix round
+
+- [HIGH, typescript-reviewer] `ChatView.tsx`'s final-turn effect kept `activeSkill` at
+  `'mock_interview'` whenever a final turn had no skill cards — including a `locked` reply (a
+  student without the package), which also has no skill cards. Starting the mock interview then
+  getting a locked reply left Pause/Stop showing for good and tagged every later plain message
+  `skill: 'mock_interview'`, with no way for the student to clear it short of typing the literal
+  `stop` command.
+- Fix: the effect now clears `activeSkill` to `null` whenever the final turn is locked
+  (`turn.locked !== null`), before falling back to the existing "keep `mock_interview`, else
+  clear" rule. A real in-progress interview reply (not locked, no skill cards) is unaffected —
+  it still keeps `mock_interview` so Pause/Stop stay up and typed answers keep carrying the
+  skill, exactly as 9.5b's "Decisions" entry above describes.
+- Tests added to `ChatView.test.tsx`: starting the mock interview and getting a `locked` final
+  turn hides Pause/Stop and the next typed message carries no `skill`; a practice start that
+  comes back locked is covered the same way (that path already cleared correctly — `named`
+  stays `undefined` and `prev` was never `'mock_interview'` — so this is a regression guard, not
+  a second bug).
+- Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web...` green (34/34
+  tasks); `python3 .githooks/secret-scan.py --all` clean.
+
 Status: DONE
-Tool calls used: 15
+Tool calls used: 15 (build) + 20 (fix round) = 35
