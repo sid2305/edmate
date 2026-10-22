@@ -68,18 +68,15 @@ python3 .githooks/secret-scan.py --all
 
 ## Decisions
 
-- Decided: for the db integration test, I widened all three of `leakTimeoutMs`,
-  `leakBuildTimeoutMs`, and the post-drop `sleep`, not just the one named in
-  the brief — the brief's exact original values (20/40/80 ms) could not pass
-  reliably even outside CI, because a real Postgres round trip on the second
-  `leakCheck` call could itself exceed `leakBuildTimeoutMs`. The fix keeps the
-  same ordering and proportions, just scaled up roughly 10x, which is the
-  loose-bound pattern docs/lessons.md asks for.
-- Decided: for the queue latency test, the bound stays absolute (2,500 ms)
-  rather than becoming `DB_DELAY_MS / n`, matching the existing style of that
-  file (both constants are already named top-level constants); the comment
-  spells out that 2,500 ms is still well under `DB_DELAY_MS` so the test's
-  intent is unchanged.
+### 22 Oct 2026 · 13.flaky Widen all three timings in the retrieval-leak int test · decided by builder · risk: low
+- Decided: widened `leakTimeoutMs` (20 → 1000 ms), `leakBuildTimeoutMs` (40 → 400 ms) and the post-drop sleep (80 → 800 ms), not just the one named in the brief.
+- Why: a real Postgres round trip on the second `leakCheck` call could exceed the old 40 ms build timeout even outside CI. Lead note (from code-reviewer): this flips the order of the two timeouts, so the first call's fallback now comes from the build's own overrun (`leak_failed`) rather than the outer race (`leak_timeout`). The test doesn't assert which code fired, and a build that is never dropped still fails it, so the regression it guards is still caught.
+- risk: low
+
+### 22 Oct 2026 · 13.flaky Queue latency bound stays absolute at 2,500 ms · decided by builder · risk: low
+- Decided: the bound stays an absolute constant (2,500 ms) rather than `DB_DELAY_MS / n`.
+- Why: it matches the file's named top-level constants; 2,500 ms is still half of `DB_DELAY_MS` (5,000 ms), so "done arrives well before the slow write" still holds.
+- risk: low
 
 ## Left to do
 
@@ -87,4 +84,4 @@ None.
 
 Status: DONE
 
-Tool calls used: 44
+Tool calls used: 78
