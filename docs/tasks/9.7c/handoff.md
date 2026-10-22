@@ -94,3 +94,19 @@ None for this task's scope.
 
 Status: DONE
 Tool calls used: 71 (harness count: build 49, fix round 22; the agents reported 32 and 20)
+
+## Fix round (22 Oct 2026)
+- Cause: Playwright's `testDir` is `./e2e` and its default `testMatch` includes `*.test.ts`, so CI
+  loaded the new vitest unit test `apps/web/e2e/localDatabaseGuard.test.ts` as a Playwright spec
+  and crashed with `TypeError: Cannot read properties of undefined (reading 'config')` right after
+  the seed.
+- Fix: `apps/web/playwright.config.ts` now sets `testMatch: '**/*.spec.ts'`, scoping Playwright to
+  spec files only. Chosen over adding `'**/*.test.ts'` to `testIgnore` because it states the
+  intended file convention positively (Playwright specs are `*.spec.ts`) and will not need
+  updating if another `*.test.ts` helper is added later. `apps/web/e2e/localDatabaseGuard.test.ts`
+  was not moved.
+- Check: `corepack pnpm exec playwright test --list` (after `turbo run build --filter=@edmate/db`,
+  needed for `@edmate/db/dist` to exist) lists the 15 tests across `chat.spec.ts`,
+  `full-flow.spec.ts` and `skills.spec.ts` only — `localDatabaseGuard.test.ts` no longer appears.
+  `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` — 34/34 tasks green.
+  `python3 .githooks/secret-scan.py --all` — clean.

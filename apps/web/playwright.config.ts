@@ -17,6 +17,9 @@ export default defineConfig({
   testDir: './e2e',
   // The stack run (task 9.0) has its own config, playwright.stack.config.ts.
   testIgnore: ['stack/**'],
+  // Only Playwright specs: without this, the default testMatch also picks up vitest unit tests
+  // like e2e/localDatabaseGuard.test.ts, which Playwright then tries to run and crashes on.
+  testMatch: '**/*.spec.ts',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
