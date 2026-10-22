@@ -92,6 +92,11 @@ tasks green; `python3 .githooks/secret-scan.py --all` clean. Change confined to
   class) without duplicating the form's own test coverage.
 - risk: low — test-only change, no production behaviour affected.
 
+### 22 Oct 2026 · 11.2b budget overrun · decided by lead · risk: low
+- Decided: accept the overrun (132 harness-counted calls against a budget of 90, plus a 39-call fix round); no re-run.
+- Why: the build is complete and green; the one HIGH from the security review is fixed with a red-then-green test; re-running would cost more than it saves.
+- risk: low
+
 ## Left to do
 - A reviewer should confirm the new `/api/live-classes/[id]/questions` `ROUTE_POLICY` row (risk:
   high decision above) — security-reviewer and typescript-reviewer per the plan.
@@ -100,4 +105,4 @@ tasks green; `python3 .githooks/secret-scan.py --all` clean. Change confined to
   scope).
 
 Status: DONE
-Tool calls used: 112
+Tool calls used: 132 (harness count; the builder reported 112), plus 39 in the fix round
