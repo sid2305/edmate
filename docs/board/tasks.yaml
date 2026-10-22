@@ -4467,9 +4467,29 @@ tasks:
   deps:
   - 11.1a
   risk: low
-  status: running
+  status: done
   branch: m11/11.1b-studio-live-classes
-  model: plan:sonnet build:sonnet
+  model: plan:sonnet build:sonnet review:sonnet
+  metrics:
+    tool_calls: 48
+    tokens_in: 166
+    tokens_out: 829
+    cache_read_tokens: 3205766
+    wall_time_seconds: 355
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 3
+      by_severity:
+        LOW: 3
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 2
+        wontfix: 1
+    human_questions: 0
 - id: 11.1c
   milestone: M11
   title: Upcoming live classes on the student /home with 24 h and 1 h labels (11.1 Phase C, apps/web; plan docs/tasks/11.1/plan.md)

@@ -10,6 +10,31 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 11.1b A route-level https-and-length check sits in front of the repository's own URL validation · decided by builder · risk: low
+- Decided: `apps/web/src/studio/liveClasses/routes.ts`'s `CreateSchema` accepts any non-empty
+  `link` string up to 2048 characters, then a separate check rejects anything not starting
+  `https://`, before the input reaches `liveClassesRepo.create` (which does its own stricter
+  `http(s)` + URL-shape zod check). This gives a route-level `validation` 400 for a non-https or
+  over-length link without needing to duplicate the repository's full URL regex at the route.
+- Why: the lead note asked for an explicit route-level check ("https only, at most 2048
+  characters") in addition to whatever the repository already enforces; the repository's own
+  schema already rejects `http://` (its `HTTP_URL` regex matches both schemes, then
+  `z.url({ protocol: /^https?$/ })` would still accept `http`), so the route needed its own
+  narrower gate to enforce https-only ahead of the write.
+- risk: low — additive validation only, no schema or contracts change.
+
+---
+
+### 22 Oct 2026 · 11.1b A standalone `liveClasses/` composition root, mirroring `studio/questions/` · decided by builder · risk: low
+- Decided: built `routes.ts`/`runtime.ts`/`index.ts` as their own folder
+  (`apps/web/src/studio/liveClasses/`), not an extension of the shared `studio/{routes,
+  runtime}.ts` files.
+- Why: the plan names this precedent explicitly ("on the `questions`/`packages` pattern"); it
+  also keeps this task's diff from touching files other in-flight studio work may be editing.
+- risk: low — new files only.
+
+---
+
 ### 22 Oct 2026 · 9.6c security review MEDIUMs go to 9.6h before the pilot · decided by lead · risk: high
 - Decided: the three security MEDIUMs (cancel then start gets round a cost-alarm pause, resume trusts any pause_student row, changePackage skips the verified-teacher check) and the security LOWs are fixed in 9.6h (M9), not in this PR.
 - Why: no payment exists until M10, no app code writes a pause row for another actor, and the student UI for plan changes (9.6d) isn't built yet. So none is reachable in a way that costs money today, and the one-fix-round rule keeps this PR moving.
