@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   loadDemoTeacherContent,
   loadLocalePacks,
+  newestSignedSet,
   pickLocalePack,
   readPersonaLibrary,
   readPromptPackLibrary,
@@ -86,8 +87,10 @@ export function loadChatContent(dir: string = CHAT_CONTENT_DIR): DemoTeacherCont
 }
 
 /**
- * The real prompt-pack set (`content/prompt-packs`) and its version, or the harness's fixture
- * set when the real one fails to load (lead answer Q2: try real first, record which was used).
+ * The real prompt-pack library (`content/prompt-packs`) pinned to its newest signed set, picked
+ * at run time (task 5.8a: manifest and every pinned pack signed, semver precedence), or the
+ * harness's fixture set when the real one fails to load or has no signed set (lead answer Q2:
+ * try real first, record which was used).
  */
 export function loadChatPromptPacks(dir: string = CHAT_PROMPT_PACKS_DIR): {
   library: PromptPackLibrary;
@@ -96,8 +99,8 @@ export function loadChatPromptPacks(dir: string = CHAT_PROMPT_PACKS_DIR): {
 } {
   try {
     const library = readPromptPackLibrary(dir);
-    const [version] = library.keys();
-    if (version === undefined) throw new Error(`${dir}: no prompt-pack set found`);
+    const version = newestSignedSet(library)?.version;
+    if (version === undefined) throw new Error(`${dir}: no signed prompt-pack set`);
     return { library, version, source: 'real' };
   } catch {
     return {

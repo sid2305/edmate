@@ -1,8 +1,9 @@
 # Task 5.8a handoff: role-play wiring
 
-Status: PARTIAL (Phase A DONE; Phase B waits for 5.8c, per the lead's answers of 21 Oct 2026)
+Status: DONE (Phase A and Phase B)
 Branch: `m5/5.8a-roleplay-wiring`
-Worktree: `.claude/worktrees/agent-afce831dbd36a526c` (builder's auto worktree)
+Worktrees: Phase A `.claude/worktrees/agent-afce831dbd36a526c`; Phase B
+`.claude/worktrees/agent-aa09efeebbb0b2bc1` (local branch `work-58a`), each the builder's auto worktree
 
 ## Phase A
 
@@ -64,7 +65,7 @@ Worktree: `.claude/worktrees/agent-afce831dbd36a526c` (builder's auto worktree)
 | every role-play message turn sends `skill: 'mock_interview'` | `chat.test.ts` `chatTurnInput` table: an answer, `/pause need help`, `stop` and a plain line all give `kind: 'message', skill: 'mock_interview'`. After `/leave`, lines have no `skill`. REPL test (scripted gateway plus spy): start, answer, `/pause`, `stop` → 4 main requests with the mock-interview skill and `[[PERSONA]]`. After `/leave` the 5th has neither. |
 | integration test: an answer without it becomes coach | `chat/roleplay.integration.test.ts` uses real `defaultSteps` and `buildChatDeps` on the paid package. Start → "question 1 of 6". Answer with the skill → "Interviewer", "question 2 of 6". The same answer without the skill → "Skill: coach.", with no `[[PERSONA]]` and no persona name. The next answer with the skill → "question 3 of 6", so the count was carried. An unknown id fails closed. |
 | a start sends only the persona id | `chat.test.ts`: `/roleplay job-interview` gives exactly `{ agentId, sessionId, studentId, lang, clientTs, kind: 'skill_action', skill: 'mock_interview', skillPayload: { persona: 'job-interview' } }`, with no `text`. `/roleplay`, `/roleplay   `, `/roleplay a b`, `/roleplay job-interview@1.0.0` and `/roleplay ../x` each give the usage notice and no turn, in both modes. |
-| the CLI and seed pin the newest signed set | Phase B (after 5.8c); not in this run. |
+| the CLI and seed pin the newest signed set | Phase B (see below). `promptPacks.test.ts`, `world.test.ts`, `seed.test.ts`; the run-time pick on the real dir is **1.3.0**. |
 | production behaviour without personas is unchanged | Web: `clientInput.ts` is untouched and the full `apps/web` suite passes (807 passed, 4 skipped). Harness: `resolvePersona` returns `undefined` for non-`mock_interview` turns (5.8 `personas.test.ts`, unchanged). CLI: the existing `chat.test.ts` cases pass unchanged. |
 
 Commands:
@@ -78,12 +79,69 @@ Commands:
   → empty.
 - `python3 .githooks/secret-scan.py --all` → clean (run before the push).
 
-## Left to do (Phase B, after 5.8c merges)
-- Rebase on 5.8c.
-- `isSignedSet` / `newestSignedSet` in `packages/content/src/promptPacks.ts`.
-- The CLI pin in `loadChatPromptPacks`.
-- The seed's run-time pick and its `promptPacksDir` option.
-- Tests 6–8 and the `@edmate/content...` / `@edmate/db...` gate.
+## Phase B (after 5.8c merged)
+
+### Summary
+- Rebased on main with 5.8c (five packs signed; seed literal 1.3.0). No conflicts.
+- `packages/content/src/promptPacks.ts` (risky path) adds `isSignedSet(set)` and
+  `newestSignedSet(library)`, exported from `index.ts`. Signed = the manifest's `reviewedBy` and
+  every pinned pack's `reviewedBy` are not `pending` (trimmed, any case; Lead answer 1). Newest =
+  semver precedence via `comparePersonaVersions`.
+- `apps/cli/src/commands/chat/world.ts`: `loadChatPromptPacks` pins `newestSignedSet(library)`
+  instead of the first key by file order (was `1.0.0`). No signed set throws inside the existing
+  `try`, so the fixture fallback applies.
+- `packages/db/src/seed.ts`: the `PROMPT_PACK_VERSION` literal is gone. New `DEMO_PROMPT_PACKS_DIR`,
+  `pickDemoPromptPackVersion(dir)`, `SeedOptions.promptPacksDir` and `DemoSeedOptions`;
+  `buildDemoSeed(content, { promptPackVersion })` stays pure. `seedDemoTeacher` picks the version
+  before the transaction, so a missing dir or no signed set throws and writes nothing.
+- **Version picked today: 1.3.0** (CLI and seed). No set version is hard-coded in `seed.ts` or
+  `world.ts` (grep for a quoted semver in both: no match).
+- The seed CLI needs no new env var (see Decisions).
+
+### Deviations
+- The rebased branch could not be pushed: the shell hook blocks `git push --force-with-lease`
+  ("No force pushes"). The commits are on local branch `work-58a` in the Phase B worktree; the
+  lead pushes or merges from there.
+
+### Files
+- `packages/content/src/promptPacks.ts`, `packages/content/src/index.ts`
+- `apps/cli/src/commands/chat/world.ts`
+- `packages/db/src/seed.ts`
+- Tests: `packages/content/src/promptPacks.test.ts`, `apps/cli/src/commands/chat/world.test.ts`,
+  `packages/db/test/seed.test.ts`.
+
+### Tests (Phase B, written red first)
+- Test 6, `promptPacks.test.ts` "isSignedSet / newestSignedSet (5.8a)": a pending manifest or one
+  pending pack makes a set unsigned; `" Pending "` and `PENDING` count as unsigned; a newer unsigned
+  manifest is skipped; a signed manifest pinning a pending pack is skipped; 1.10.0 ranks above
+  1.9.0 and 2.0.0 above 2.0.0-rc.1; no signed set or an empty library gives `undefined`; the real
+  `content/prompt-packs` gives `'1.3.0'`.
+- Test 7, `world.test.ts`: `loadChatPromptPacks().version` equals
+  `newestSignedSet(readPromptPackLibrary(CHAT_PROMPT_PACKS_DIR)).version` (and is not `1.0.0`); a
+  temp copy with every set manifest set to pending gives `source: 'fixture'`,
+  `FIXTURE_PROMPT_PACK_VERSION`.
+- Test 8, `seed.test.ts`: `buildDemoSeed(content, { promptPackVersion: '4.5.6' })` puts `4.5.6` in
+  the agent config; `seedDemoTeacher` on the real dir (recording stub `Db`, no Postgres) seeds
+  `newestSignedSet(real).version` = `1.3.0`; a temp copy with set 1.2.0 and 1.3.0 pending seeds
+  `1.0.0` (1.1.0's manifest is still pending on main); a dir with no signed set and a missing dir
+  both throw before the `Db` proxy is touched.
+- The Phase A role-play integration test passes unchanged on set 1.3.0 (it asserts only the
+  persona name and the count line, which both frames render).
+- `seed.int.test.ts` calls `seedDemoTeacher(handle.db)` with defaults only, so it picks 1.3.0 and
+  needs no change; it runs in CI (Postgres), not locally.
+
+Commands:
+- `corepack pnpm turbo run typecheck lint test --continue --filter=@edmate/cli... --filter=@edmate/web... --filter=@edmate/content... --filter=@edmate/db...`
+  → `Tasks: 40 successful, 41 total`. Tests: `@edmate/content` 510 passed; `@edmate/cli` 106
+  passed; `@edmate/db` 476 passed, 419 skipped (Postgres integration, CI only); `@edmate/web` 807
+  passed, 4 skipped.
+  - The one failure is again `@edmate/queue#test` (100% coverage gate with its 14 Redis tests
+    skipped locally); not touched by this task.
+- Without web: `--filter=@edmate/cli... --filter=@edmate/content... --filter=@edmate/db...` →
+  `Tasks: 33 successful, 33 total`.
+- `python3 .githooks/secret-scan.py --all` → clean.
+- `git diff origin/main -- packages/harness packages/contracts content/prompt-packs content/skills docs/adr packages/evals`
+  → empty after the final rebase.
 
 ## Decisions
 
@@ -101,7 +159,19 @@ Commands:
   - Once a set is signed (5.8c and later), the next CLI run and the next fresh seed use it with no
     code change.
 - risk: high (which prompt-pack set goes live; role-play enabled in two composition roots).
-- Phase A has landed the first two points. The run-time pick is Phase B.
+- Phase A landed the first two points; Phase B landed the run-time pick. Today it picks 1.3.0.
+
+### The seed picks its prompt-pack set at seed time; no env override for the pack dir · risk: low
+- `seedDemoTeacher` computes `newestSignedSet(readPromptPackLibrary(promptPacksDir))` before the
+  transaction; `buildDemoSeed` takes the version as an argument, so it stays pure.
+- No signed set, or an unreadable dir, throws and writes nothing.
+- `EDMATE_SEED_CONTENT_DIR` gets no matching prompt-pack variable: prompt packs are shared by every
+  teacher, not part of a teacher's content tree, so the override has no reason to move them. Tests
+  use the `promptPacksDir` option.
+
+### The CLI falls back to the fixture set when no set is signed · risk: low
+- `loadChatPromptPacks` treats "no signed set" like an unreadable dir: it uses the harness fixture
+  set and reports `source: 'fixture'`, instead of running an unsigned set.
 
 ### CLI personas fall back to none; web personas fail closed · risk: low
 - In the CLI, a persona-dir failure means no role-play (coach), with a banner line, like the
@@ -124,4 +194,4 @@ Commands:
   stored help state gains `personaPhase` from this task.
 - Recorded here; 5.8b writes the ADR note.
 
-Tool calls used: 47
+Tool calls used: 89 (Phase A 47, Phase B 42)

@@ -1,15 +1,17 @@
 // Task 1.5: the demo seed's rows, built from content/demo-teacher/ without a database. The
 // Postgres half (inserts, idempotency) is seed.int.test.ts.
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadDemoTeacherContent } from '@edmate/content';
+import { loadDemoTeacherContent, newestSignedSet, readPromptPackLibrary } from '@edmate/content';
 import { AgentConfigSchema, PackageConfigSchema, StyleCardSchema } from '@edmate/contracts';
+import * as internal from '../src/internal.js';
 import {
   buildDemoSeed,
   DEMO_CONTENT_DIR,
   DEMO_IDS,
+  DEMO_PROMPT_PACKS_DIR,
   DEMO_STUDENT_COUNT,
   SEED_TABLES,
   seedDemoTeacher,
@@ -17,9 +19,102 @@ import {
 import type { Db } from '../src/internal.js';
 
 const content = () => loadDemoTeacherContent(DEMO_CONTENT_DIR);
+/** buildDemoSeed is pure: the caller passes the set version in (5.8a). */
+const OPTS = { promptPackVersion: '9.8.7' };
+
+/** A Db whose one transaction records every inserted row and finds nothing on select. */
+function recordingDb(): { db: Db; rows: Record<string, unknown[]> } {
+  const rows: Record<string, unknown[]> = {};
+  const tx = {
+    insert: (t: unknown) => ({
+      values: (v: unknown[]) => {
+        const name = SEED_TABLES.find((n) => internal[n] === t) as string;
+        rows[name] = v;
+        return { onConflictDoNothing: () => ({ returning: async () => v }) };
+      },
+    }),
+    select: () => ({ from: () => ({ where: async () => [] }) }),
+  };
+  const db = { transaction: async (fn: (t: unknown) => unknown) => fn(tx) } as unknown as Db;
+  return { db, rows };
+}
+
+/** A copy of the real prompt-pack dir with the named set manifests set back to pending. */
+function packsWithPending(sets: (v: string) => boolean): string {
+  const dir = mkdtempSync(join(tmpdir(), 'edmate-seed-packs-'));
+  cpSync(DEMO_PROMPT_PACKS_DIR, dir, { recursive: true });
+  for (const f of readdirSync(dir)) {
+    const m = /^set@(.+)\.yaml$/.exec(f);
+    if (m === null || !sets(m[1] as string)) continue;
+    const p = join(dir, f);
+    writeFileSync(p, readFileSync(p, 'utf8').replace(/^reviewed_by:.*$/m, 'reviewed_by: pending'));
+  }
+  return dir;
+}
+
+describe('seedDemoTeacher picks the newest signed prompt-pack set at seed time (5.8a)', () => {
+  let dir: string | undefined;
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+  const agentVersion = (rows: Record<string, unknown[]>) =>
+    AgentConfigSchema.parse((rows.agentVersions?.[0] as { config: unknown }).config)
+      .promptPackVersion;
+
+  it('buildDemoSeed puts the version it is given in the agent config', () => {
+    const seed = buildDemoSeed(content(), { promptPackVersion: '4.5.6' });
+    expect(AgentConfigSchema.parse(seed.agentVersions[0]?.config).promptPackVersion).toBe('4.5.6');
+  });
+
+  it('seeds newestSignedSet of the real content/prompt-packs (1.3.0 today)', async () => {
+    const { db, rows } = recordingDb();
+    await seedDemoTeacher(db);
+    const want = newestSignedSet(readPromptPackLibrary(DEMO_PROMPT_PACKS_DIR))?.version;
+    expect(agentVersion(rows)).toBe(want);
+    expect(want).toBe('1.3.0');
+  });
+
+  it('seeds the older signed set when the newer ones are unsigned', async () => {
+    dir = packsWithPending((v) => v === '1.2.0' || v === '1.3.0');
+    const { db, rows } = recordingDb();
+    await seedDemoTeacher(db, { promptPacksDir: dir });
+    // set@1.1.0's manifest is still pending on main, so the next signed one down is 1.0.0.
+    expect(agentVersion(rows)).toBe('1.0.0');
+  });
+
+  it('throws before touching the database when no set is signed', async () => {
+    dir = packsWithPending(() => true);
+    const db = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('database touched');
+        },
+      },
+    ) as Db;
+    await expect(seedDemoTeacher(db, { promptPacksDir: dir })).rejects.toThrow(
+      /no signed prompt-pack set/,
+    );
+  });
+
+  it('throws before touching the database when the prompt-pack dir cannot be read', async () => {
+    const db = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('database touched');
+        },
+      },
+    ) as Db;
+    await expect(
+      seedDemoTeacher(db, { promptPacksDir: '/nonexistent/edmate-packs' }),
+    ).rejects.toThrow(/no such prompt-pack directory/);
+  });
+});
 
 describe('buildDemoSeed', () => {
-  const seed = buildDemoSeed(content());
+  const seed = buildDemoSeed(content(), OPTS);
 
   it('builds an AgentConfig, two PackageConfigs and a StyleCard the frozen contracts accept', () => {
     const agent = AgentConfigSchema.parse(seed.agentVersions[0]?.config);
@@ -29,7 +124,7 @@ describe('buildDemoSeed', () => {
       teacherId: DEMO_IDS.teacher,
       courseId: 'python-basics-demo',
       styleCardId: DEMO_IDS.styleCard,
-      promptPackVersion: '1.3.0',
+      promptPackVersion: OPTS.promptPackVersion,
       languages: ['en'],
     });
     // Provisional: the same policy as the gateway's DEFAULT_MODEL_POLICY (2.3), no fallback.
@@ -112,7 +207,7 @@ describe('buildDemoSeed', () => {
   });
 
   it('is deterministic: the same content gives the same rows', () => {
-    expect(buildDemoSeed(content())).toEqual(seed);
+    expect(buildDemoSeed(content(), OPTS)).toEqual(seed);
   });
 
   it('names every table it writes', () => {
@@ -160,6 +255,6 @@ describe('seedDemoTeacher content errors', () => {
         '',
       ].join('\n'),
     );
-    expect(() => buildDemoSeed(loadDemoTeacherContent(dir!))).toThrow(/not-a-module/);
+    expect(() => buildDemoSeed(loadDemoTeacherContent(dir!), OPTS)).toThrow(/not-a-module/);
   });
 });

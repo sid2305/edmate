@@ -20,6 +20,7 @@ import {
 } from '@edmate/harness';
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { z } from 'zod';
+import { comparePersonaVersions } from './personaTemplates.js';
 import type { ValidationResult } from './validate.js';
 
 const SET_FILE = /^set@(.+)\.yaml$/;
@@ -204,6 +205,31 @@ function locate(
 export function validatePromptPackDir(dir: string): ValidationResult {
   const { issues } = readPromptPackDir(dir);
   return { ok: issues.length === 0, issues };
+}
+
+const signed = (reviewedBy: string): boolean => reviewedBy.trim().toLowerCase() !== 'pending';
+
+/**
+ * A set is signed when its manifest and every pack it pins carry a reviewer (task 5.8a, lead
+ * answer 1): a signed manifest never lets a pending pack go live. `pending` is matched trimmed
+ * and case-insensitively, like the persona templates.
+ */
+export function isSignedSet(set: Readonly<PromptPackSet>): boolean {
+  return signed(set.reviewedBy) && Object.values(set.packs).every((p) => signed(p.reviewedBy));
+}
+
+/**
+ * The highest-precedence signed set (semver; build metadata ignored, a release above its
+ * prereleases), or `undefined` when none is signed. The CLI and the seed pin this at run time,
+ * so a newly signed set goes live with no code change.
+ */
+export function newestSignedSet(library: PromptPackLibrary): PromptPackSet | undefined {
+  let best: PromptPackSet | undefined;
+  for (const set of library.values()) {
+    if (!isSignedSet(set)) continue;
+    if (best === undefined || comparePersonaVersions(set.version, best.version) > 0) best = set;
+  }
+  return best;
 }
 
 /** The library for `deps.promptPacks`; throws listing every issue if the directory has any. */

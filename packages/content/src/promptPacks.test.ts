@@ -12,7 +12,13 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixturePromptPackLibrary } from '@edmate/harness/testing';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readPromptPackLibrary, validatePromptPackDir } from './promptPacks.js';
+import type { PromptPackLibrary, PromptPackSet } from '@edmate/harness';
+import {
+  isSignedSet,
+  newestSignedSet,
+  readPromptPackLibrary,
+  validatePromptPackDir,
+} from './promptPacks.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const VALID = resolve(here, '../test/fixtures/prompt-packs/valid');
@@ -264,5 +270,61 @@ describe('validatePromptPackDir: each broken fixture gives one named issue', () 
       }),
     );
     expect(r.issues.map((i) => i.split(':')[0])).toEqual(['a.txt', 'z.txt']);
+  });
+});
+
+describe('isSignedSet / newestSignedSet (5.8a)', () => {
+  const REAL = resolve(here, '../../../content/prompt-packs');
+
+  /** A minimal set: only the fields the sign-off rule reads. */
+  function set(version: string, reviewedBy: string, packReviewers = ['sid']): PromptPackSet {
+    const packs = Object.fromEntries(packReviewers.map((r, i) => [`pack${i}`, { reviewedBy: r }]));
+    return { version, reviewedBy, packs } as unknown as PromptPackSet;
+  }
+  const lib = (...sets: PromptPackSet[]): PromptPackLibrary =>
+    new Map(sets.map((s) => [s.version, s]));
+
+  it('a set is signed only when its manifest and every pinned pack are signed', () => {
+    expect(isSignedSet(set('1.0.0', 'sid', ['sid', 'ana']))).toBe(true);
+    expect(isSignedSet(set('1.0.0', 'pending', ['sid']))).toBe(false);
+    expect(isSignedSet(set('1.0.0', 'sid', ['sid', 'pending']))).toBe(false);
+  });
+
+  it('treats " Pending " (any case, padded) as unsigned', () => {
+    expect(isSignedSet(set('1.0.0', ' Pending '))).toBe(false);
+    expect(isSignedSet(set('1.0.0', 'sid', ['PENDING']))).toBe(false);
+  });
+
+  it('skips a newer set whose manifest is unsigned', () => {
+    expect(newestSignedSet(lib(set('1.0.0', 'sid'), set('1.1.0', 'pending')))?.version).toBe(
+      '1.0.0',
+    );
+  });
+
+  it('skips a signed manifest that pins a pending pack', () => {
+    expect(
+      newestSignedSet(lib(set('1.0.0', 'sid'), set('1.2.0', 'sid', ['sid', 'pending'])))?.version,
+    ).toBe('1.0.0');
+  });
+
+  it('ranks by semver precedence, not string order (1.10.0 above 1.9.0)', () => {
+    expect(
+      newestSignedSet(lib(set('1.10.0', 'sid'), set('1.9.0', 'sid'), set('1.2.0', 'sid')))
+        ?.version,
+    ).toBe('1.10.0');
+    expect(newestSignedSet(lib(set('2.0.0', 'sid'), set('2.0.0-rc.1', 'sid')))?.version).toBe(
+      '2.0.0',
+    );
+  });
+
+  it('returns undefined when no set is signed, or the library is empty', () => {
+    expect(
+      newestSignedSet(lib(set('1.0.0', 'pending'), set('1.1.0', 'sid', ['pending']))),
+    ).toBeUndefined();
+    expect(newestSignedSet(lib())).toBeUndefined();
+  });
+
+  it('picks 1.3.0 on the real content/prompt-packs dir (catches a half-signed 5.8c)', () => {
+    expect(newestSignedSet(readPromptPackLibrary(REAL))?.version).toBe('1.3.0');
   });
 });

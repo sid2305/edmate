@@ -1,17 +1,26 @@
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { newestSignedSet, readPromptPackLibrary } from '@edmate/content';
 import {
   AgentConfigSchema,
   EntitlementSchema,
   LocalePackSchema,
   PackageConfigSchema,
 } from '@edmate/contracts';
-import { memoryEntitlementStore, memoryTurnConfigStore } from '@edmate/harness/testing';
+import {
+  FIXTURE_PROMPT_PACK_VERSION,
+  memoryEntitlementStore,
+  memoryTurnConfigStore,
+} from '@edmate/harness/testing';
 import {
   buildChatWorld,
   CHAT_CONTENT_DIR,
   CHAT_IDS,
   loadChatContent,
   CHAT_PERSONAS_DIR,
+  CHAT_PROMPT_PACKS_DIR,
   loadChatLocalePack,
   loadChatPersonas,
   loadChatPromptPacks,
@@ -31,6 +40,29 @@ describe('loadChatPromptPacks', () => {
     const { library, version, source } = loadChatPromptPacks();
     expect(source).toBe('real');
     expect(library.get(version)).toBeDefined();
+  });
+
+  it('pins the newest signed set at run time (5.8a), not the first by file order', () => {
+    const { version } = loadChatPromptPacks();
+    expect(version).toBe(newestSignedSet(readPromptPackLibrary(CHAT_PROMPT_PACKS_DIR))?.version);
+    expect(version).not.toBe('1.0.0');
+  });
+
+  it('falls back to the fixture set when no set in the dir is signed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edmate-chat-packs-'));
+    try {
+      cpSync(CHAT_PROMPT_PACKS_DIR, dir, { recursive: true });
+      for (const f of readdirSync(dir).filter((n) => n.startsWith('set@'))) {
+        const p = join(dir, f);
+        writeFileSync(p, readFileSync(p, 'utf8').replace(/^reviewed_by:.*$/m, 'reviewed_by: pending'));
+      }
+      expect(loadChatPromptPacks(dir)).toMatchObject({
+        source: 'fixture',
+        version: FIXTURE_PROMPT_PACK_VERSION,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

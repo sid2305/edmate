@@ -20,7 +20,13 @@ export {
   validatePersonaTemplateDir,
 } from './personaTemplates.js';
 export { checkPilotLanguages, PILOT_LANGUAGES } from './pilotLanguages.js';
-export { readPromptPackDir, readPromptPackLibrary, validatePromptPackDir } from './promptPacks.js';
+export {
+  isSignedSet,
+  newestSignedSet,
+  readPromptPackDir,
+  readPromptPackLibrary,
+  validatePromptPackDir,
+} from './promptPacks.js';
 export * from './rules.js';
 // Locale packs (task 3.10): loader, rules, safe-regex check and the runtime pick.
 export { isLocalePacksDir, readLocalePack, readLocalePacksDir } from './localeLoader.js';
