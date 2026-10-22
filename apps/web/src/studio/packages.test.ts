@@ -227,6 +227,20 @@ describe('GET /api/studio/packages', () => {
     const { h } = handlersFor(backend);
     expect((await json(await h.list(req('GET'), ctx))).modules).toEqual([]);
   });
+
+  it('an unknown field on the stored config never reaches the client draft', async () => {
+    const row = existingRow();
+    const config: PackageConfig & { internalNote: string } = {
+      ...row.config,
+      internalNote: 'server-only, never for the client',
+    };
+    const { backend } = memoryBackend({ rows: [{ ...row, config }] });
+    const { h } = handlersFor(backend);
+    const body = await json(await h.list(req('GET'), ctx));
+    const draft = (body.packages as { draft: Record<string, unknown> }[])[0]!.draft;
+    expect(draft).not.toHaveProperty('internalNote');
+    expect(draft).toEqual({ ...BODY, pricePerMonth: { amountMinor: 0, currency: 'USD' } });
+  });
 });
 
 describe('POST /api/studio/packages', () => {

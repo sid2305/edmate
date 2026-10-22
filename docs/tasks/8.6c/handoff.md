@@ -88,3 +88,15 @@ response carries `estimate: { typicalMicroUsd, maxMicroUsd, shareOfPrice? }`.
 
 - Phase D (page, nav link, strings, timed walkthrough).
 - Follow-up already noted by 8.6b: share the module-ownership check with `package-versions.ts`.
+
+## Fix round 1
+
+Fixed the HIGH finding on `draftOf` in `apps/web/src/studio/packages.ts`: it built a
+`Partial<PackageConfig>`, deleted the 4 server-owned keys by hand, then cast to `PackageDraft`
+unchecked. `draftOf` now destructures `PackageConfig` into the kept fields by name and assigns
+the result to a `PackageDraft`-typed object literal (no cast): a future field added to
+`PackageConfig` would be missing from that literal and fail to compile, instead of leaking to the
+client through GET/POST/PUT responses. `PackageDraftSchema` isn't exported from `@edmate/db`, so
+this stays in `apps/web` without touching `packages/db` or `packages/contracts`. Added a GET test
+in `apps/web/src/studio/packages.test.ts` with an extra unknown field on the stored config,
+asserting the returned draft neither carries it nor differs otherwise. Harness tool count: 13.

@@ -131,13 +131,38 @@ function toDraft(s: Settings): PackageDraft {
   return draft;
 }
 
+/**
+ * `PackageDraft` is `PackageConfig` minus the four ids the repository owns (`id`, `version`,
+ * `teacherId`, `agentId`). Listing the kept fields explicitly, rather than spreading the config
+ * and deleting the ids, means a future field added to `PackageConfig` fails to compile here (the
+ * object literal below would be missing it) instead of leaking to the client unchecked.
+ */
 function draftOf(config: PackageConfig): PackageDraft {
-  const draft: Partial<PackageConfig> = { ...config };
-  delete draft.id;
-  delete draft.version;
-  delete draft.teacherId;
-  delete draft.agentId;
-  return draft as PackageDraft;
+  const {
+    name,
+    moduleIds,
+    skills,
+    helpCeiling,
+    finalAnswers,
+    dailyMessageLimit,
+    liveClassesPerMonth,
+    pricePerMonth,
+    trialDays,
+    lockedReply,
+  } = config;
+  const draft: PackageDraft = {
+    name,
+    moduleIds,
+    skills,
+    helpCeiling,
+    finalAnswers,
+    dailyMessageLimit,
+    liveClassesPerMonth,
+    pricePerMonth,
+    lockedReply,
+  };
+  if (trialDays !== undefined) draft.trialDays = trialDays;
+  return draft;
 }
 
 function view(b: PackagesBackend, row: TeacherPackageRow): PackageView {
