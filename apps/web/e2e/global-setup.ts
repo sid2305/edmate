@@ -15,10 +15,15 @@
 // guarded by `getUserByEmail` first so a re-run against a persistent dev Postgres does not throw
 // on the unique email; `setVerification` itself is a plain update, safe to repeat. The email is a
 // fixed `@example.invalid` string (seed.ts's own convention) -- no real name or address.
+//
+// Task 9.7c (security-reviewer MEDIUM on 9.7a): refuses a non-local `TEST_DATABASE_URL` before any
+// of the above writes (`localDatabaseGuard.ts`, the same local-host allowlist as
+// `stack/mail.ts`'s `localUrl`).
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase } from '@edmate/db';
+import { assertLocalDatabaseUrl } from './localDatabaseGuard';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(dirname(dirname(HERE)));
@@ -67,6 +72,7 @@ async function verifyDemoTeacher(): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<void> {
+  assertLocalDatabaseUrl(TEST_DATABASE_URL);
   run('migrate.js');
   run('seed.js');
   await verifyDemoTeacher();
