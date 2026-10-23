@@ -36,7 +36,8 @@ async function signInLink(email: string, since: number): Promise<string> {
       const body = (await (await fetch(new URL(`/api/v1/message/${found.ID}`, MAIL))).json()) as {
         Text?: string;
       };
-      const link = /https?:\/\/\S+\/api\/auth\/callback\/\S+/.exec(body.Text ?? '')?.[0];
+      // Task 1.4b: the mailed link opens the confirm page, not Auth.js's callback.
+      const link = /https?:\/\/\S+\/sign-in\/confirm\?\S+/.exec(body.Text ?? '')?.[0];
       if (link) return link;
     }
     await new Promise((r) => setTimeout(r, 500));
@@ -53,9 +54,10 @@ export async function signInByEmail(page: Page, email: string): Promise<void> {
   await page.getByRole('button', { name: /email/i }).click();
   await expect(page).toHaveURL(/verify-request/);
   const link = await signInLink(email, since);
-  // The link carries a single-use token: open it, never print it.
+  // The link carries a single-use token: open it, never print it. This browser asked for it, so
+  // the confirm page forwards straight to Auth.js's callback (task 1.4b).
   await page.goto(link);
-  await expect(page).not.toHaveURL(/\/api\/auth\//);
+  await expect(page).not.toHaveURL(/\/api\/auth\/|\/sign-in\/confirm/);
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
