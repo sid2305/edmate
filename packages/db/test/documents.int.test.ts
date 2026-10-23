@@ -353,6 +353,34 @@ describe.skipIf(!up)(`document lifecycle on Postgres 16${up ? '' : ` (${SKIP_REA
       expect(await chunkCount(id)).toBe(1);
     });
 
+    it('updates the kind when given, both ways; leaves it alone when not (task 8.2n)', async () => {
+      const id = await doc([], 'uploads/kind.pdf');
+      expect((await repos.documents.get(A, id))?.kind).toBe('material');
+      await repos.documents.startReplace(A, id, {
+        storageKey: 'uploads/kind.vtt',
+        rightsDeclared: true,
+        kind: 'transcript',
+      });
+      expect((await repos.documents.get(A, id))?.kind).toBe('transcript');
+      await repos.documents.startReplace(A, id, { storageKey: 'uploads/kind2.vtt', rightsDeclared: true });
+      expect((await repos.documents.get(A, id))?.kind).toBe('transcript');
+      await repos.documents.startReplace(A, id, {
+        storageKey: 'uploads/kind.pdf',
+        rightsDeclared: true,
+        kind: 'material',
+      });
+      expect((await repos.documents.get(A, id))?.kind).toBe('material');
+      const bad = await rejection(
+        repos.documents.startReplace(A, id, {
+          storageKey: 'uploads/x.pdf',
+          rightsDeclared: true,
+          kind: 'teacher_note' as never,
+        }),
+      );
+      expect(bad.kind).toBe('invalid');
+      expect((await repos.documents.get(A, id))?.storageKey).toBe('uploads/kind.pdf');
+    });
+
     it("another teacher's or a missing document is not_found, nothing written", async () => {
       const id = await doc(['wombat marker'], 'uploads/w.pdf');
       for (const [scope, target] of [
