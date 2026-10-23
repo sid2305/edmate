@@ -522,8 +522,9 @@ tasks:
   accept: a link opened in a different browser or by a prefetching scanner does not sign in; the confirm page posts with CSRF; auth tests pass
   deps:
   - '1.4'
-  status: todo
+  status: planning
   risk: risky
+  model: plan:fable
 - id: 1.4d
   milestone: M13
   title: 'Sign-in follow-ups from the 1.4 review: ioredis dev singleton and shutdown; split the Edge-safe guard exports from the Node-only auth runtime (server-only); one shared Redis ready promise; log
