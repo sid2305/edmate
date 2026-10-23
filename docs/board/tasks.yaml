@@ -2422,7 +2422,9 @@ tasks:
   accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
   deps:
   - 5.10b
-  status: todo
+  status: running
+  branch: m13/5.10c-open-race-test
+  model: plan:lead build:sonnet
 - id: 5.10d
   milestone: M13
   title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions
