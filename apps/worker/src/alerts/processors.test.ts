@@ -21,6 +21,8 @@ function world(
     notifyFails?: number;
     ackFails?: boolean;
     recordFails?: boolean;
+    /** When set, `store.record` rejects with exactly this value (12.5f: may be `undefined`). */
+    recordRejectsWith?: { value: unknown };
     markFails?: boolean;
   } = {},
 ) {
@@ -50,6 +52,7 @@ function world(
     store: {
       record: (a) => {
         if (o.recordFails === true) return Promise.reject(new Error('insert failed'));
+        if (o.recordRejectsWith !== undefined) return Promise.reject(o.recordRejectsWith.value);
         recorded.push(a);
         return Promise.resolve({ written: true });
       },
@@ -115,6 +118,39 @@ describe('alert.raise', () => {
     ]);
     expect(JSON.stringify(w.lines)).not.toContain('CANARY');
     expect(JSON.stringify(w.lines)).not.toContain('insert failed');
+  }, 1_000);
+
+  it('a store that rejects with undefined still fails the job after notify, so it retries (12.5f)', async () => {
+    const w = world({ recordRejectsWith: { value: undefined } });
+    let thrown: unknown = 'not thrown';
+    try {
+      await w.process({ name: JOB.alertRaise, data: { alert } });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('safety_alert.store_failed: UnknownError');
+    expect((thrown as Error).cause).toBeUndefined();
+    expect(w.notified).toEqual([{ id: 'alert_1', audience: 'trust_team' }]);
+    expect(w.lines).toEqual([
+      { level: 'error', event: 'safety_alert.store_failed', alertId: 'alert_1', error: 'UnknownError' },
+      { level: 'info', event: 'safety_alert.notified', alertId: 'alert_1', audience: 'trust_team' },
+    ]);
+    expect(JSON.stringify(w.lines)).not.toContain('CANARY');
+  }, 1_000);
+
+  it('a store that rejects with a non-Error value fails the job with an Error that keeps it as cause (12.5f)', async () => {
+    const w = world({ recordRejectsWith: { value: 'ECONNRESET' } });
+    let thrown: unknown;
+    try {
+      await w.process({ name: JOB.alertRaise, data: { alert } });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).cause).toBe('ECONNRESET');
+    expect((thrown as Error).message).not.toContain('ECONNRESET');
+    expect(w.notified).toEqual([{ id: 'alert_1', audience: 'trust_team' }]);
   }, 1_000);
 
   it('a malformed payload is permanent (dead-lettered, not retried forever)', async () => {
