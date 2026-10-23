@@ -23,7 +23,7 @@ def transcripts_dir(repo_root):
     env = os.environ.get("EDMATE_TRANSCRIPTS_DIR")
     if env:
         return Path(env)
-    slug = str(repo_root).replace(os.sep, "-")
+    slug = str(Path(repo_root).resolve()).replace(os.sep, "-")
     return Path.home() / ".claude" / "projects" / slug
 
 
@@ -203,7 +203,7 @@ def collect(repo_root, task_id, branch, board_ids=None):
     """Board-safe metrics for `task_id` on `branch`: counts and short model-name strings only,
     no paths, session ids or raw transcript text. `board_ids` defaults to the ids read from the
     repo's board (tests pass an explicit set)."""
-    repo_root = Path(repo_root)
+    repo_root = Path(repo_root).resolve()
     if board_ids is None:
         board_ids = read_board_ids(repo_root)
     entries = list(iter_entries(transcripts_dir(repo_root), branch, task_id, board_ids))
