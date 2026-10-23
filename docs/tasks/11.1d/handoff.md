@@ -335,4 +335,6 @@ Fix round tool calls: 18
 - Gate: `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force` → 10/10 tasks
   successful; Test Files 145 passed | 4 skipped (149); Tests 2235 passed | 26 skipped (2261).
 - Secret scan: `python3 .githooks/secret-scan.py --all` → clean (no findings).
-- Tool calls used: 17
+- Tool calls used: 27 (harness count; the agent reported 17)
+
+Tool calls used (Phases B and C): 137 (harness count: builder 110 + fixer 27; the agents reported ~95 + 17)
