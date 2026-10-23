@@ -60,6 +60,24 @@ describe('decide', () => {
     ]);
   });
 
+  it('carries `safety: true` only on a rejection that sets it, never `false` (9.3e)', async () => {
+    const f = vi.fn(async (_u: string, init: RequestInit) => {
+      const sent = JSON.parse(init.body as string) as { status: string };
+      return json({ teacherId: 'tch_a', verificationStatus: sent.status });
+    });
+    await decide({ teacherId: 'tch_a', status: 'rejected', reason: 'unsafe', safety: true }, f);
+    await decide({ teacherId: 'tch_a', status: 'rejected', safety: false }, f);
+    await decide({ teacherId: 'tch_a', status: 'verified', safety: true }, f);
+    await decide({ teacherId: 'tch_a', status: 'verified' }, f);
+    const bodies = f.mock.calls.map((c) => JSON.parse(c[1].body as string));
+    expect(bodies).toEqual([
+      { teacherId: 'tch_a', status: 'rejected', reason: 'unsafe', safety: true },
+      { teacherId: 'tch_a', status: 'rejected' },
+      { teacherId: 'tch_a', status: 'verified' },
+      { teacherId: 'tch_a', status: 'verified' },
+    ]);
+  });
+
   it.each([
     ['a network failure', async () => Promise.reject(new TypeError('offline'))],
     ['unreadable JSON', async () => new Response('', { status: 200 })],

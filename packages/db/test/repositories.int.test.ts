@@ -3851,13 +3851,15 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       expect(await r.agents.owner({ agentId: ids.agent('B') })).toEqual({
         teacherId: teacherId('B'),
       });
-      const { id } = await r.takedowns.create(ISO_STAFF, input);
-      expect(await r.agents.owner({ agentId: ids.agent('B') })).toBeNull();
-      await r.takedowns.lift(ISO_STAFF, id, {});
-      expect(await r.agents.owner({ agentId: ids.agent('B') })).toEqual({
-        teacherId: teacherId('B'),
+      return withVerifiedProfile('B', async () => {
+        const { id } = await r.takedowns.create(ISO_STAFF, input);
+        expect(await r.agents.owner({ agentId: ids.agent('B') })).toBeNull();
+        await r.takedowns.lift(ISO_STAFF, id, {});
+        expect(await r.agents.owner({ agentId: ids.agent('B') })).toEqual({
+          teacherId: teacherId('B'),
+        });
+        return 5;
       });
-      return 5;
     },
   },
   'takedowns.lift': {
@@ -3872,11 +3874,16 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
       for (const by of [teacherId('A'), studentId('1'), 'stf_ghost']) {
         await expect(r.takedowns.lift(by, id, {})).rejects.toMatchObject({ kind: 'scope' });
       }
-      await expect(r.takedowns.lift(ISO_STAFF, id, {})).resolves.toEqual({ id, status: 'lifted' });
-      expect(await r.agents.owner({ agentId: ids.agent('A') })).toEqual({
-        teacherId: teacherId('A'),
+      return withVerifiedProfile('A', async () => {
+        await expect(r.takedowns.lift(ISO_STAFF, id, {})).resolves.toEqual({
+          id,
+          status: 'lifted',
+        });
+        expect(await r.agents.owner({ agentId: ids.agent('A') })).toEqual({
+          teacherId: teacherId('A'),
+        });
+        return 4;
       });
-      return 4;
     },
   },
   'takedowns.listActiveForStaff': {
@@ -4033,6 +4040,36 @@ async function freshRun(t: Teacher, status: 'queued' | 'running'): Promise<strin
   const id = uid(`run_iso_${t.toLowerCase()}`);
   await insertRun(t, id, status);
   return id;
+}
+/**
+ * Task 9.3e: `takedowns.lift` restores an agent to `live` only for a verified teacher, and A/B's
+ * profile churns across the grid (absent, pending, rejected). Runs `fn` with `t` verified, then
+ * puts the profile back as it was (removed when there was none).
+ */
+async function withVerifiedProfile<T>(t: Teacher, fn: () => Promise<T>): Promise<T> {
+  const { rows } = await raw.query<{ status: string }>(
+    'select verification_status as status from teacher_profiles where user_id = $1',
+    [teacherId(t)],
+  );
+  await raw.query(
+    `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+     values ($1, $2, $3, '93e subject', 'verified')
+     on conflict (user_id) do update set verification_status = 'verified'`,
+    [uid(`tp_iso_${t.toLowerCase()}`), teacherId(t), profileSlug(t)],
+  );
+  try {
+    return await fn();
+  } finally {
+    if (rows[0]) {
+      await raw.query(
+        `update teacher_profiles set verification_status = $2::teacher_verification_status
+         where user_id = $1`,
+        [teacherId(t), rows[0].status],
+      );
+    } else {
+      await raw.query('delete from teacher_profiles where user_id = $1', [teacherId(t)]);
+    }
+  }
 }
 async function setVerified(t: Teacher, verified: boolean): Promise<void> {
   await raw.query(

@@ -12,7 +12,7 @@
 //   so leakCheck's cache is rebuilt.
 // - An agent takedown sets the agent `suspended`; every student-facing read already requires
 //   `live`, and publish refuses a suspended agent. A lift sets it `live` again when it has a live
-//   version and its teacher is not `rejected` (task 9.3e), else `draft`.
+//   version and its teacher's profile is `verified` (task 9.3e), else `draft`.
 // - Staff checks use `lockRole` (role-lock.ts): this file never names the user table.
 //
 // Lock order (8.7a lesson). `create` and `lift` take, in this order: the staff user's role row
@@ -25,8 +25,9 @@
 // `teacherProfiles.setVerification` (9.3e) also calls `takeDownAgentInTx`, after locking role ->
 // profile -> agents (ascending id): profile before agent, as publish does. For the same reason
 // `lift` of an agent target reads the owner's profile `FOR SHARE` before it locks the agent
-// (role -> profile -> agent -> takedown), and never restores `live` for a `rejected` teacher, so
-// a lift can't reopen a teacher a safety rejection cut off.
+// (role -> profile -> agent -> takedown), and restores `live` only for a `verified` teacher, so
+// a lift can't reopen a teacher a safety rejection cut off (even after a subject edit sent the
+// profile back to `pending`).
 //
 // Repeat infringers (task 12.3b): `countUpheld` is a read only, with no caller and no threshold
 // yet (enforcement is 12.3d, next to B-12's strike policy). It takes no lock.
@@ -336,10 +337,10 @@ export function takedownsRepo(db: Db) {
      * Staff lift an active takedown, in one transaction (same lock order): `by` must be staff
      * now (`scope`); the takedown must exist and still be active once the target is locked
      * (else `not_found`, so a second or concurrent lift writes nothing). It is set `lifted`; an
-     * agent goes back to `live` when it has a live version and its teacher is not `rejected`
-     * (task 9.3e: a safety-rejected teacher stays off), else `draft`; a document bumps the
-     * material revision. Audited `takedown.lift`. A stored target that is malformed or gone is
-     * `integrity`.
+     * agent goes back to `live` when it has a live version and its teacher's profile is
+     * `verified` (task 9.3e: no profile, pending or rejected stays off), else `draft`; a
+     * document bumps the material revision. Audited `takedown.lift`. A stored target that is
+     * malformed or gone is `integrity`.
      */
     async lift(
       by: unknown,
@@ -363,11 +364,11 @@ export function takedownsRepo(db: Db) {
           if (!ref) throw new RepositoryError('not_found', method);
           const t = parseTarget(ref.target);
           if (!t) throw new RepositoryError('integrity', method);
-          // Task 9.3e: an agent never comes back `live` for a rejected teacher. The profile is
+          // Task 9.3e: an agent comes back `live` only for a verified teacher. The profile is
           // read FOR SHARE before the agent is locked (profile before agent, as setVerification
           // and publish take them); an agent's teacher never changes, so the unlocked lookup of
           // its owner is safe.
-          let rejected = false;
+          let unverified = false;
           if (t.kind === 'agent') {
             const [profile] = await tx
               .select({ status: teacherProfiles.verificationStatus })
@@ -375,7 +376,7 @@ export function takedownsRepo(db: Db) {
               .innerJoin(agents, eq(agents.teacherId, teacherProfiles.userId))
               .where(eq(agents.id, t.id))
               .for('share', { of: teacherProfiles });
-            rejected = profile?.status === 'rejected';
+            unverified = profile?.status !== 'verified';
           }
           const locked = await lockTarget(tx, t.kind, t.id);
           if (!locked) throw new RepositoryError('integrity', method);
@@ -393,7 +394,7 @@ export function takedownsRepo(db: Db) {
               staffActions: staffAction(takedowns.staffActions, staff, 'lift', note),
             })
             .where(eq(takedowns.id, id));
-          const restored = locked.agent?.liveVersion == null || rejected ? 'draft' : 'live';
+          const restored = locked.agent?.liveVersion == null || unverified ? 'draft' : 'live';
           if (locked.agent) {
             await tx.update(agents).set({ status: restored }).where(eq(agents.id, t.id));
           } else {

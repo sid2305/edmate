@@ -370,9 +370,8 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
 
     it.each([
       ['rejected', 'draft', null],
-      // Today's rule only keeps a rejected teacher off; verified-only needs the grid test
-      // (repositories.int.test.ts) to give its teachers a verified profile (9.3e handoff).
-      ['pending', 'live', { teacherId: teacherId('A') }],
+      // Verified-only (9.3e lead decision): a pending teacher is not reopened by a lift either.
+      ['pending', 'draft', null],
     ] as const)(
       'a lift while the teacher is %s restores the agent to %s (9.3e)',
       async (status, restored, owner) => {
@@ -402,6 +401,32 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
         }
       },
     );
+
+    it('a safety-rejected teacher who edits their subject (pending) stays off after a lift (9.3e)', async () => {
+      await repos.teacherProfiles.setVerification(
+        { teacherId: teacherId('A') },
+        { by: STAFF, status: 'rejected', reason: 'safety', safety: true },
+      );
+      try {
+        expect((await agentRow('agt_a')).status).toBe('suspended');
+        const edited = await repos.teacherProfiles.update(
+          { teacherId: teacherId('A') },
+          { subject: 'Physics' },
+        );
+        expect(edited.verificationStatus).toBe('pending');
+        const { rows } = await raw.query<{ id: string }>(
+          `select id from takedowns where target = 'agent:agt_a' and status = 'active'`,
+        );
+        expect(rows).toHaveLength(1);
+        await repos.takedowns.lift(STAFF, rows[0]!.id, {});
+        expect(await agentRow('agt_a')).toEqual({ status: 'draft', live_version: 1 });
+        expect(await repos.agents.owner({ agentId: 'agt_a' })).toBeNull();
+      } finally {
+        await raw.query(
+          `update teacher_profiles set verification_status = 'verified', subject = 'Maths' where id = 'tp_a'`,
+        );
+      }
+    });
 
     it('an agent that was never live goes back to draft on lift', async () => {
       const { id } = await repos.takedowns.create(STAFF, {
