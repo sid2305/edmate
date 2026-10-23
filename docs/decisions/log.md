@@ -10,6 +10,33 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 8.2n: replace updates document kind · decided by builder · risk: high
+- Decided: `documents.startReplace` (packages/db/src/repositories/chunks.ts) accepts an optional
+  `kind: 'material' | 'transcript'` and writes it in the same transaction as the new storage key;
+  the studio `replace` route always passes the new file's `chunkKind`. Without `kind` the column is
+  untouched, so no other caller changes behaviour. `teacher_note` is refused (`invalid`).
+- Why: a PDF replaced by a `.vtt` stayed `material`, so its chunks (which copy `d.kind` on insert)
+  would cite as a document instead of a recording with a timestamp; the reverse was wrong too
+  (8.2l LOW, architect and typescript-reviewer). The optional field is the smallest change that
+  fixes it with no migration.
+- risk: high (`packages/db/src/repositories/**` is a risky path). Required reviewers: database-reviewer,
+  typescript-reviewer.
+
+---
+
+### 22 Oct 2026 · 8.2n: the transcription rule is a flag on UploadType · decided by builder · risk: low
+- Decided: `UploadType.transcribe: boolean`, true only for the audio/video rows; `complete` uses it
+  to decide whether the ingest job carries `mimeType`. `UploadType.chunkKind` is narrowed to
+  `FileChunkKind` (no `teacher_note`).
+- Why: the board title asks for it; one table now states each type's whole behaviour, and a future
+  caption-like type can't be mis-classified by a string comparison in the route. The narrowing
+  matches reality (no upload is a note) and lets the route pass the kind to the repository safely.
+- risk: low
+
+Tool calls used: 26 (harness count: builder 26; the agent reported 19)
+
+---
+
 ### 22 Oct 2026 · 12.5e: store failure logged before notify in apps/worker/src/alerts · decided by builder · risk: high
 - Decided: `alert.raise` logs `safety_alert.store_failed` in the `catch` of `store.record`, before
   it awaits the trust-team notify; the throw that makes BullMQ retry stays where it was (after a
