@@ -522,9 +522,10 @@ tasks:
   accept: a link opened in a different browser or by a prefetching scanner does not sign in; the confirm page posts with CSRF; auth tests pass
   deps:
   - '1.4'
-  status: planning
+  status: running
   risk: risky
-  model: plan:fable
+  model: plan:sonnet build:opus review:sonnet
+  branch: m13/1.4b-magic-link-binding
 - id: 1.4d
   milestone: M13
   title: 'Sign-in follow-ups from the 1.4 review: ioredis dev singleton and shutdown; split the Edge-safe guard exports from the Node-only auth runtime (server-only); one shared Redis ready promise; log
@@ -7394,7 +7395,8 @@ tasks:
   status: todo
 - id: 9.2g
   milestone: M13
-  title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students will see'
+  title: '9.2d plan Q2 follow-up: staff see the public display name when they verify a teacher (listPendingForStaff returns displayName; verification-row.tsx shows it), so staff approve the name students
+    will see'
   accept: db and web typecheck, lint and test green; a test shows the display name in the staff verification row.
   deps:
   - 9.2d
