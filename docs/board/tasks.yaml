@@ -2506,8 +2506,9 @@ tasks:
   deps:
   - 5.10b
   - 9.4a
-  status: planning
-  model: plan:sonnet
+  status: running
+  model: plan:sonnet build:sonnet
+  branch: m13/5.10d-one-open-session
 - id: 9.3b
   milestone: M13
   title: '9.3 review follow-ups: /home loads chat, start, paused and live-class links in parallel (Promise.all; 9.6e typescript MEDIUM: four sequential candidate scans, each re-querying agents.owner and
