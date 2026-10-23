@@ -1512,9 +1512,9 @@ tasks:
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:opus
 - id: 5.6d
   milestone: M13
   title: '5.6c review LOWs: carried-key entries are z.string().min(1); assemble allow-list test asserts a literal key list; assemble compile-time guard also checks value types; drop the redundant BOM replace
@@ -3852,9 +3852,9 @@ tasks:
   deps:
   - 8.5b
   risk: medium
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/8.5d-preview-ports
+  model: plan:lead build:sonnet review:sonnet
 - id: 9.3c
   milestone: M9
   title: '9.2 plan Q5: the package page and subscriptions.start refuse a package whose teacher is not verified (a teacher rejected after publishing can''t be started by typing the URL)'
@@ -4958,7 +4958,9 @@ tasks:
   milestone: M13
   title: '11.1d review LOWs (packages/db live-classes.ts): the live_class.update audit records the link before/after and normalises after.startsAt with iso(); listUpcomingForStudent returns no link on a
     cancelled row; listForTeacher keeps the newest classes past the 500 cap (order or window); status reads through a checked parse, not `as LiveClassStatus`; fix the "max before regex" comment (zod v4
-    checks do not abort); tests: update moves startsAt and writes exactly one audit row, over-length link on update, repositories.int.test.ts verify reads back for liveClasses.update/cancel'
+    checks do not abort); tests: update moves startsAt and writes exactly one audit row, over-length link on update, repositories.int.test.ts verify reads back for liveClasses.update/cancel; from the Phases
+    B/C review: LiveClassesView applies a successful save to its row even when another row''s edit started mid-save (only skip closing the form), and the Edit and Cancel-class buttons get per-row accessible
+    names'
   accept: db typecheck, lint and test green with the new tests.
   deps:
   - 11.1d
