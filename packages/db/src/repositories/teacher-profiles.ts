@@ -63,8 +63,13 @@ const DISPLAY_NAME_HAS_LETTER = /\p{L}/u;
 /** `://`, `www.` (case-insensitive) or a `word.tld` run with no space (no URL shape). */
 const DISPLAY_NAME_URL_SHAPE = /:\/\/|www\./i;
 const DISPLAY_NAME_WORD_TLD = /[\p{L}\p{N}-]\.[a-z]{2,}/iu;
-/** Seven or more digits, optionally separated by space, `(`, `)`, `.` or `-` (no phone number). */
-const DISPLAY_NAME_PHONE_LIKE = /(?:\d[\s().-]*){7,}/;
+/**
+ * Seven or more digits, optionally separated by space, `(`, `)`, `.` or `-` (no phone number).
+ * `\p{N}` (not `\d`) so non-ASCII digit scripts (Devanagari, Arabic-Indic, ...) can't bypass this
+ * -- NFKC (applied before this test) already folds fullwidth digits to ASCII, but not every
+ * digit script folds under NFKC.
+ */
+const DISPLAY_NAME_PHONE_LIKE = /(?:\p{N}[\s().-]*){7,}/u;
 /** No impersonation of the platform or staff (whole word, case-insensitive). */
 const DISPLAY_NAME_IMPERSONATION = /\b(edmate|staff|admin|official)\b/i;
 
@@ -76,7 +81,11 @@ const DISPLAY_NAME_IMPERSONATION = /\b(edmate|staff|admin|official)\b/i;
  */
 export const DisplayName = z
   .string()
-  .transform((s) => s.trim().replace(/\s+/g, ' '))
+  // NFKC first: folds fullwidth/compatibility letters and digits (e.g. "ＡＤＭＩＮ" -> "ADMIN") to
+  // their canonical form before the shape, phone and impersonation checks below -- otherwise a
+  // fullwidth spelling of a blocked word passes every refine on the raw string. The stored value
+  // is this normalized one.
+  .transform((s) => s.normalize('NFKC').trim().replace(/\s+/g, ' '))
   .pipe(
     z
       .string()

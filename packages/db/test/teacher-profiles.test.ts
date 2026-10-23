@@ -114,6 +114,13 @@ describe('teacherProfiles input checks', () => {
     ['a lone newline', '\n'],
     ['the platform name', 'Edmate Support'],
     ['an impersonation word', 'Official Tutor'],
+    // Task 9.2d fix round: fullwidth Unicode letters spell a blocked word visually but don't
+    // match the impersonation regex until NFKC-normalized to ASCII first.
+    ['a fullwidth impersonation word', 'ＡＤＭＩＮ'],
+    ['a fullwidth impersonation phrase', 'ＯＦＦＩＣＩＡＬ ＥＤＭＡＴＥ'],
+    // Devanagari digits: \p{N} (not \d) so a phone number spelled in a non-ASCII digit script
+    // still trips the phone-like check.
+    ['a phone number (Devanagari digits)', 'Call ४१५५५५०१००'],
   ];
 
   it.each(BAD_DISPLAY_NAMES)('create rejects displayName %s as invalid before any SQL', async (_label, bad) => {
@@ -155,12 +162,17 @@ describe('teacherProfiles input checks', () => {
       'Teacher 2024',
       'Søren Ålesund',
       'प्रिया',
+      'José Núñez',
     ])('accepts %s', (good) => {
       expect(() => DisplayName.parse(good)).not.toThrow();
     });
 
     it.each(BAD_DISPLAY_NAMES)('rejects %s', (_label, bad) => {
       expect(() => DisplayName.parse(bad)).toThrow();
+    });
+
+    it('normalizes fullwidth letters (NFKC) to their canonical form before storage', () => {
+      expect(DisplayName.parse('Ａｄａ')).toBe('Ada');
     });
   });
 

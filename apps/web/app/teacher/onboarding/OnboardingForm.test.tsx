@@ -127,6 +127,20 @@ describe('OnboardingForm', () => {
     expect(body).not.toHaveProperty('displayName');
   });
 
+  it('edit mode: after a save that keeps the stored display name, the field and fallback notice resync to the saved profile', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { profile: PROFILE('pending') }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
+    fireEvent.change(screen.getByLabelText(/Display name/i), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByLabelText(/Display name/i)).toHaveValue('Asha'));
+    expect(
+      screen.queryByText('Until you set one, your public page shows asha-math.'),
+    ).not.toBeInTheDocument();
+  });
+
   it('edit mode: a profile with no display name shows the slug fallback notice', () => {
     const profile = { ...PROFILE('pending'), displayName: null };
     renderIntl(<OnboardingForm initialProfile={profile} />);

@@ -66,6 +66,13 @@ export function OnboardingForm({ initialProfile }: OnboardingFormProps) {
       }
       const { profile: saved } = (await res.json()) as { profile: TeacherProfileRow };
       setProfile(saved);
+      // Resync every field from the saved profile: a patch can omit a key (e.g. clearing
+      // displayName keeps the stored value server-side), so the form must reflect what was
+      // actually persisted, not what the teacher typed.
+      setDisplayName(saved.displayName ?? '');
+      setSubject(saved.subject ?? '');
+      setBio(saved.bio ?? '');
+      setLanguagesText((saved.languages ?? []).join(', '));
     } catch {
       setError(t('errors.generic'));
     } finally {

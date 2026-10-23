@@ -199,3 +199,43 @@ Tool calls used: Phase A 142; Phase B 83 (over the plan's 50/brief's 55-70 budge
 overrun was polling a long-running `@edmate/web` gate run with `TEST_DATABASE_URL` set, which took
 several minutes under load; the work itself completed and all gates are green, so this is filed as
 DONE rather than stopped mid-way).
+
+## Fix round
+
+Three findings from the security and typescript reviews, fixed test-first:
+
+1. **[HIGH]** `packages/db/src/repositories/teacher-profiles.ts` — `DisplayName`'s transform now
+   calls `s.normalize('NFKC')` before trim/collapse, so fullwidth Unicode letters (e.g. "ＡＤＭＩＮ",
+   "ＯＦＦＩＣＩＡＬ ＥＤＭＡＴＥ") are folded to their canonical ASCII form before the shape, phone
+   and impersonation refines run — they now hit `DISPLAY_NAME_IMPERSONATION` like the literal
+   word would. The stored value is the normalized one. Added both fullwidth cases to
+   `BAD_DISPLAY_NAMES` (covers create/update/schema tests via `it.each`) plus a direct
+   `DisplayName.parse('Ａｄａ')` → `'Ada'` normalization test, and an ordinary accented-name
+   acceptance case (`'José Núñez'`) to confirm NFKC doesn't reject legitimate names.
+2. **[MEDIUM]** `DISPLAY_NAME_PHONE_LIKE` widened from `/(?:\d[\s().-]*){7,}/` to
+   `/(?:\p{N}[\s().-]*){7,}/u` so non-ASCII digit scripts the NFKC fold doesn't fully normalize
+   (e.g. Devanagari) still trip the phone-number check. Added a Devanagari-digit phone case
+   (`'Call ४१५५५५०१००'`) to `BAD_DISPLAY_NAMES`.
+3. **[HIGH]** `apps/web/app/teacher/onboarding/OnboardingForm.tsx` — after a successful PUT,
+   `setProfile(saved)` is now followed by `setDisplayName`, `setSubject`, `setBio` and
+   `setLanguagesText` resyncing from `saved`, so clearing the display-name field and saving (the
+   PUT omits the key, server keeps the stored value) shows the kept name and hides/shows the
+   fallback notice correctly instead of an empty input with a hidden notice. Added a test in
+   `OnboardingForm.test.tsx` that clears the field, saves, and asserts the input value and
+   fallback-notice visibility resync to the saved profile.
+
+### Gate (one package at a time, `--force`, `TEST_DATABASE_URL`/`TEST_REDIS_URL` set to the
+running compose services)
+
+- `corepack pnpm turbo run build --filter=@edmate/web^...` → 7/7 successful (fresh worktree
+  dependency build).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db --force` → 8/8 tasks
+  successful; typecheck and lint clean; **Test Files 75 passed (75)**, **Tests 1573 passed | 4
+  skipped (1577)**. No test file skipped (the 4 skips are pre-existing individual cases inside
+  otherwise-passing files, unrelated to this fix).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force` → 10/10 tasks
+  successful; typecheck and lint clean; **Test Files 155 passed (155)**, **Tests 2411 passed
+  (2411)**, no skips.
+- `python3 .githooks/secret-scan.py --all` → clean (no output).
+
+Tool calls used (fix round): 23.
