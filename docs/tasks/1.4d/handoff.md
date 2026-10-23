@@ -104,4 +104,4 @@ Phase B (docs/config, no code):
   get a one-line pointer to it. The real deploy guide (board task 13.6) folds this in later.
 - Why: this is documentation and config comments, not production-path code; low risk.
 
-Tool calls used: 55
+Tool calls used: 70
