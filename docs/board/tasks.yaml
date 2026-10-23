@@ -5317,7 +5317,9 @@ tasks:
   deps:
   - 11.3a
   risk: risky
-  status: todo
+  status: running
+  branch: m13/11.3c-insights-closed-weeks
+  model: plan:lead build:fable
 - id: 8.2h
   milestone: M8
   title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web
