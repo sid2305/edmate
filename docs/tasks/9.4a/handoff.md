@@ -141,7 +141,92 @@ db file, including `repositories.int.test.ts` (`subscriptions.listLiveForStudent
 cases=27 leaks=0`) and `scope.test.ts`, passed. Typecheck and lint green for both packages.
 `python3 .githooks/secret-scan.py --all` → exit 0, no findings.
 
+## Phase D (test hygiene, no risky paths)
+
+**Status:** DONE. Local branch `work-94a-D`, worktree `.claude/worktrees/agent-a445a75d1ec7285e4`.
+
+### Summary per item
+1. **Coverage includes `.tsx`** (`apps/web/vitest.config.ts`): `include` adds `app/**/*.tsx` and
+   `src/**/*.tsx`, `exclude` adds `**/*.test.tsx`. The gate's coverage run with them in:
+   `All files | 95.09 % stmts | 91.3 % branch | 92.54 % funcs | 96.5 % lines`, so every global
+   80 % threshold and the `src/auth/**` 100 % thresholds still hold. Gap, noted, not fixed (no
+   new tests written): three `.tsx` files sit at 0 % statements: `app/layout.tsx` (lines 5-18),
+   `app/teachers/page.tsx` (lines 9-78) and one short `page.tsx` under `app/teacher/` (lines
+   13-20); lowest non-zero is `OutlineView.tsx` (83.6 % stmts, 65.9 % branches). None drops a
+   threshold.
+2. **Playwright `--webpack`: tried, not restored** (`apps/web/playwright.config.ts`, comment
+   updated). The plan's blocker (`loadBundledPrices`) is gone, but a local
+   `next dev --webpack -p 3111` (Next 16.4) still 500s `/api/health`: webpack's dev compile of
+   `instrumentation.ts` and the health route pulls `@edmate/queue` -> bullmq in through
+   `src/auth/rate-limit.ts` and fails `Module not found: Can't resolve 'crypto'`
+   (bullmq `bun-redis-client.js`), plus `pg-native`/`@valkey/valkey-glide` optional-dependency
+   resolutions. That is a `next.config.ts` (`serverExternalPackages`) or `@edmate/queue` matter,
+   outside Phase D's files, so the command stays Turbopack and the stale comment now names the
+   real blocker. The `e2e/chat.spec.ts` run itself was attempted once (Postgres on
+   127.0.0.1:55432 was up; no docker compose run) and failed with
+   `Timed out waiting 60000ms from config.webServer` under a load average of about 89; not re-run.
+3. **Transcriber asserted defined** (`apps/worker/src/ingest/gateway.test.ts`, the file the 9.0b
+   review named; the plan's `apps/worker/src/gate/*.test.ts` has no transcriber test): both
+   builder tests `expect(gateway.transcriber).toBeDefined()` before the call, and the S3-host test
+   calls `transcriber!.transcribe` so a missing transcriber can no longer pass vacuously through
+   `?.` resolving `undefined`.
+4. **devModel schemas** (`apps/web/src/turn/devModel.test.ts`): only the three classifier schemas
+   are harness exports; the grounding, advice, route-intent, route-fallback and session-summary
+   schemas are module-private in `packages/harness` (out of bounds), so the copies stay, with a
+   comment naming each source file and the export it waits for. No code change.
+5. **`deadlineSafeClock.sleep`** (`apps/web/test/turn-backend.ts`): the no-cancel branch now
+   really sleeps `min(max(ms, 0), MAX_REAL_SLEEP_MS = 1000)` instead of an unbounded real wait;
+   doc note says a test that needs a deadline to fire must inject its own clock. `deadlineSafeClock`,
+   `MAX_CLOCK_JUMP_MS` and `MAX_REAL_SLEEP_MS` are exported for the new
+   `apps/web/test/turn-backend.test.ts` (3 tests: no-cancel bounded, cancel-only resolves on
+   cancel with no real sleep, `now()` jump cap and monotonic), added to `vitest.config.ts`'s
+   `include` by exact path (`test/build-smoke.test.ts` has its own config and must not run here).
+6. **Abort test counts work** (`apps/web/src/turn/routes.test.ts`): the `Date.now()` `< 3000`
+   bound is replaced by counting the `.` chunks received (`< 100`, the script's full length), per
+   `docs/lessons.md`; `event: done` absent and `closedEarly === 1` stay.
+7. **`register()` returns `undefined`** (`apps/web/instrumentation.test.ts`):
+   `expect(register()).toBeUndefined()` in the warm-up test pins it non-async.
+
+### Files
+`apps/web/vitest.config.ts`, `apps/web/playwright.config.ts`, `apps/web/instrumentation.test.ts`,
+`apps/web/src/turn/devModel.test.ts`, `apps/web/src/turn/routes.test.ts`,
+`apps/web/test/turn-backend.ts`, `apps/web/test/turn-backend.test.ts` (new),
+`apps/worker/src/ingest/gateway.test.ts`, this handoff.
+
+### Gate
+- `corepack pnpm vitest run test/turn-backend.test.ts src/turn/routes.test.ts
+  instrumentation.test.ts src/turn/devModel.test.ts` → `Test Files 4 passed (4)`, `Tests 66
+  passed (66)`; worker `src/ingest/gateway.test.ts` → `Tests 7 passed (7)`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web` → `Test Files 145 passed |
+  4 skipped (149)`, `Tests 2192 passed | 25 skipped (2217)`, `Tasks: 10 successful, 10 total`.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/worker` → `Test Files 37 passed
+  (37)`, `Tests 383 passed (383)`, `Tasks: 11 successful, 11 total`.
+- `python3 .githooks/secret-scan.py --all` → no findings.
+
 ## Decisions
+
+### 22 Oct 2026 · Playwright keeps Turbopack: webpack dev still breaks the server bundle · decided by builder · risk: low
+- Decided: `apps/web/playwright.config.ts` keeps `next dev` without `--webpack`; the comment names
+  the current blocker (bullmq `crypto`/optional-dependency resolution in webpack's dev compile of
+  `instrumentation.ts` and `/api/health` via `src/auth/rate-limit.ts` -> `@edmate/queue`).
+- Why: The plan assumed `loadBundledPrices` was the only blocker. A local trial of
+  `next dev --webpack` after that fix still 500s `/api/health`, and the fix lives in
+  `next.config.ts` or `@edmate/queue`, outside Phase D's files.
+- risk: low
+
+### 22 Oct 2026 · the 9.0b transcriber fix lands in ingest/gateway.test.ts, not gate/ · decided by builder · risk: low
+- Decided: Item 3's change is in `apps/worker/src/ingest/gateway.test.ts`, the file the 9.0b
+  review named (`[LOW] [deferred 9.4a]`), not `apps/worker/src/gate/*.test.ts` as the plan wrote.
+- Why: No gate test touches a transcriber; the plan's path was a slip for the review's file.
+- risk: low
+
+### 22 Oct 2026 · no-cancel test sleeps cap at 1 s · decided by builder · risk: low
+- Decided: `MAX_REAL_SLEEP_MS = 1000` for `deadlineSafeClock`'s no-cancel branch; negative
+  requests sleep 0.
+- Why: The plan asked for a bounded real fallback but named no bound; scripted pacing delays are
+  100 ms and a production-sized backoff reaching the memory backend should never stall a test
+  for seconds.
+- risk: low
 
 ### 22 Oct 2026 · TurnRuntimeHooks instead of widening RuntimeHooks · decided by builder · risk: low
 - Decided: Add `TurnRuntimeHooks extends RuntimeHooks` (its `redis` returns `RuntimeRedis`), used
@@ -240,7 +325,9 @@ cases=27 leaks=0`) and `scope.test.ts`, passed. Typecheck and lint green for bot
 - risk: low
 
 ## Left to do
-- Phase D: test hygiene (coverage include for `.tsx`, playwright `--webpack`, gate test,
-  devModel schemas, `deadlineSafeClock.sleep`, abort test clock, instrumentation).
+None. (Follow-ups outside 9.4a's files, for the board: restore Playwright `--webpack` once
+webpack's dev compile of `@edmate/queue`/bullmq is fixed in `next.config.ts` or the queue
+package; export the harness's grounding/advice/route/summary schemas so `devModel.test.ts` can
+drop its copies; the three 0 % `.tsx` files named under Phase D item 1.)
 
 Tool calls used: 36

@@ -57,9 +57,19 @@ import type { SessionRateLimiter } from '../src/turn/sessionRateLimit';
  * last one keeps timestamps real (and still monotonic) while never letting one scheduling stall
  * read as hundreds of ms of in-process work.
  */
-const MAX_CLOCK_JUMP_MS = 20;
+export const MAX_CLOCK_JUMP_MS = 20;
 
-function deadlineSafeClock(real: Clock): Clock {
+/**
+ * The longest a no-cancel `sleep` (a pacing delay or a retry backoff) really waits (9.4a Phase D).
+ * A scripted delay is a few hundred ms at most; a production-sized backoff (seconds) reaching
+ * this clock would otherwise stall a route test for real. Not a deadline: a test that needs a
+ * deadline to *fire* must inject its own clock (`virtualClock()` from `@edmate/harness/testing`,
+ * or a `MemoryBackendOptions.gateway` with its own clock), since the cancel branch here never
+ * resolves on its own.
+ */
+export const MAX_REAL_SLEEP_MS = 1_000;
+
+export function deadlineSafeClock(real: Clock): Clock {
   let virtual = real.now();
   return {
     now: () => {
@@ -68,7 +78,9 @@ function deadlineSafeClock(real: Clock): Clock {
       return virtual;
     },
     sleep: (ms, cancel) =>
-      cancel === undefined ? real.sleep(ms) : new Promise((resolve) => cancel.onCancel(resolve)),
+      cancel === undefined
+        ? real.sleep(Math.min(Math.max(ms, 0), MAX_REAL_SLEEP_MS))
+        : new Promise((resolve) => cancel.onCancel(resolve)),
   };
 }
 

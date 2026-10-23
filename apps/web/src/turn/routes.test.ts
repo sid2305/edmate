@@ -430,14 +430,17 @@ describe('POST /api/sessions/:id/turns', () => {
       ctx('ses_1a'),
     );
     // The reply is held until it is checked, so hang up while the model is still streaming.
-    const started = Date.now();
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     setTimeout(() => abort.abort(), 500);
     let text = '';
     for (let c = await reader.read(); !c.done; c = await reader.read()) text += decoder.decode(c.value);
-    // Far less than the 10 s the script would take to the end, and no reply was finished.
-    expect(Date.now() - started).toBeLessThan(3_000);
+    // Count work, don't time it (docs/lessons.md, "Wall-clock bounds fail on shared CI runners"):
+    // the script has 100 dots behind 100 ms pacing sleeps, so a stream that ran to its end would
+    // have emitted every one; the hang-up must have stopped it well short of that. Under load the
+    // count only gets smaller, never larger. The reply is held until checked, so no `done` either.
+    const dots = (text.match(/\./g) ?? []).length;
+    expect(dots).toBeLessThan(100);
     expect(text).not.toContain('event: done');
     await vi_waitFor(() => r.seen.closedEarly === 1);
   }, 20_000);
