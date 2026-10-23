@@ -10,6 +10,33 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · 8.2o: replace refuses class-linked material and notes in apps/web/src/studio/routes.ts and packages/db/src/repositories/chunks.ts · decided by builder · risk: high
+- Decided: `documents.startReplace` refuses (`invalid`, nothing written) a class-linked row
+  (`liveClassId` set) given `kind: 'material'`, and refuses any replace of a `teacher_note` row,
+  under the same `FOR UPDATE` lock already taken for the write; the route turns the first into a
+  409 with a fixed teacher-facing message and checks the note case itself (it already has
+  `existing.kind`) so it can refuse before signing an upload URL.
+- Why: a class recording/transcript becoming a generic material document would silently break
+  the "this is the class's own recording" citation path (task 11.4's create-time guard already
+  refuses this at creation; replace needed the same rule). A note row has no `storageKey` column
+  to replace, so allowing it through would write a storage key the row can never use.
+- risk: high (packages/db/src/repositories/** is a risk path; the guard sits inside the same
+  transaction as every other document write).
+
+---
+
+### 23 Oct 2026 · 8.2o: FileChunkKind named once in packages/db, apps/web re-exports it · decided by builder · risk: low
+- Decided: the upload-file retrieval kind (`'material' | 'transcript'`) is a zod enum in
+  `packages/db/src/repositories/chunks.ts`, exported as `FileChunkKind`; `apps/web/src/studio/
+  files.ts`'s own type of the same name is now `export type { FileChunkKind }` from `@edmate/db`
+  instead of its own `Exclude<ChunkKind, 'teacher_note'>`.
+- Why: two independently-written unions for the same two-value set can drift (that drift is what
+  item 3's test below guards against for `transcribe`); naming it once in the package that owns
+  the document schema removes the chance.
+- risk: low, reversible by reverting the re-export.
+
+---
+
 ### 23 Oct 2026 · Double-cancel is a no-op (200, not an error) in the PUT/DELETE routes too · decided by builder · risk: low
 - Decided: Phase B's `DELETE` route returns the repository's `{cancelled: false}` as a plain 200,
   the same as a first cancel's `{cancelled: true}`, rather than treating "already cancelled" as an
