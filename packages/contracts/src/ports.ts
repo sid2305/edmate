@@ -6,8 +6,17 @@ import type { LocalePack } from './locale.js';
 import type { TranscribeInput, Transcript } from './media.js';
 import type { EvidenceEvent, LearnerProfile } from './memory.js';
 import type { ModelChunk, ModelRequest } from './model.js';
+import type {
+  CheckoutResult,
+  PaymentEvent,
+  PaymentOffer,
+  ProviderId,
+  ProviderRef,
+  ProviderSubscription,
+  RefundResult,
+} from './payments.js';
 import type { GuardResult, SafetyAlert, SafetyEventCode } from './safety.js';
-import type { Skill, ToolName, Usage } from './shared.js';
+import type { Money, Skill, ToolName, Usage } from './shared.js';
 import type { AgentConfig, PackageConfig, StyleCard } from './teacher.js';
 import type { TurnTrace } from './trace.js';
 import type { Chunk, Message, TeacherQuestion, TurnContext, TurnInput } from './turn.js';
@@ -162,4 +171,74 @@ export interface SafetyEventSink {
     code: SafetyEventCode;
     source: 'rule' | 'classifier';
   }): Promise<void>;
+}
+
+/**
+ * One payment provider (ADR-0015). Callers get it only from `paymentsFor(market)` (the market's
+ * LocalePack.payments.provider) or `forProvider(id)` (the webhook route's own config), never by
+ * importing an adapter. Every write takes an idempotency key (`IdempotencyKeySchema`, built from
+ * Edmate ids, never personal data; the caller claims it in a unique DB row first): the same key and input give the same result; the same key with
+ * other input throws `conflict`. Only Edmate's opaque ids, the offer name and price, the return URL
+ * and the key are sent to a provider. An operation the provider can't do natively throws
+ * `unsupported`; it is never emulated with hidden state. Errors are `PaymentsError` (packages/payments)
+ * and never carry a body, key, secret, header or tokened URL.
+ */
+export interface Payments {
+  readonly provider: ProviderId;
+  /** url: the provider's hosted https page; returnUrl is https and built server-side from config. */
+  startCheckout(x: {
+    subscriptionId: string;
+    offer: PaymentOffer;
+    returnUrl: string;
+    idempotencyKey: string;
+  }): Promise<CheckoutResult>;
+  /**
+   * 'now' with 'prorate' is the upgrade; 'period_end' for downgrades. 'now' with 'none' is only the
+   * scheduled-downgrade fallback, never an upgrade. Replaces any scheduled change.
+   */
+  changePlan(
+    x: { providerRef: ProviderRef; offer: PaymentOffer; idempotencyKey: string } & (
+      { when: 'now'; proration: 'prorate' | 'none' } | { when: 'period_end' }
+    ),
+  ): Promise<ProviderSubscription>;
+  pause(x: {
+    providerRef: ProviderRef;
+    when: 'now' | 'period_end';
+    idempotencyKey: string;
+  }): Promise<ProviderSubscription>;
+  /** Ends a pause now; the returned snapshot's periodEnd is the truth about billing. */
+  resume(x: { providerRef: ProviderRef; idempotencyKey: string }): Promise<ProviderSubscription>;
+  cancel(x: {
+    providerRef: ProviderRef;
+    when: 'now' | 'period_end';
+    idempotencyKey: string;
+  }): Promise<ProviderSubscription>;
+  /** Undoes a scheduled plan change, cancel, pause or resume. */
+  clearScheduled(x: {
+    providerRef: ProviderRef;
+    idempotencyKey: string;
+  }): Promise<ProviderSubscription>;
+  getSubscription(providerRef: ProviderRef): Promise<ProviderSubscription>;
+  /**
+   * No amount = full refund. The caller claims the idempotency key first; an adapter whose provider
+   * has no idempotency keys checks the payment's existing refunds first and returns the one with
+   * the same key, so it never refunds twice (ADR-0015 §3).
+   */
+  refund(x: {
+    paymentRef: ProviderRef;
+    amount?: Money;
+    idempotencyKey: string;
+  }): Promise<RefundResult>;
+  /**
+   * Verifies the signature over the exact bytes first (constant time, any configured secret, at
+   * most 300 s of timestamp tolerance where the provider signs one; bodies over 1 MiB refused),
+   * then parses with the provider's own schemas. Header names are lower case. Throws on any
+   * failure (`malformed_event` for an unknown status or a missing subscriptionId); never returns
+   * unverified data and never maps anything to `active` by default.
+   */
+  parseWebhook(x: {
+    rawBody: Uint8Array;
+    headers: Readonly<Record<string, string>>;
+    receivedAt: string;
+  }): Promise<PaymentEvent>;
 }

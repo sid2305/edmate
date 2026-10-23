@@ -10,6 +10,253 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 3.11g test-only change on a risky path · decided by lead · risk: high
+- Decided: merge the linear-time test in packages/harness/src/pedagogy/modelRequest.test.ts (a test-only change; no prompt-pack or production code changes). Leave the six-large-runs timeout-stacking MEDIUM as wontfix: a linear run takes well under a second, so it only delays the failure of an already-failing regression.
+- Why: the file sits on the pedagogy risky path, so the human sees it on the skim list; code-reviewer and typescript-reviewer reviewed it and the lead fixed the overclaiming comments.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 3.11g ran over budget · decided by lead · risk: low
+- Decided: accept 95 tool calls against the lead briefs' 20 + 15. The fixer ran the timing test many times under load to show it doesn't flake.
+- Why: the extra runs are the evidence that the test is stable; the change itself is one test.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 3.11g flaky timing bound → ratio check · decided by builder · risk: low
+
+- Decided: replace the 2000 ms absolute bound with a ratio check comparing best-of-3 timings
+  at `n` and `4n`, asserting the ratio stays under 10, plus a loose 15s gross bound on the
+  `4n` run as a hang guard only.
+- Why: the build plan's lessons say no tight timings; a ratio check still catches a true
+  quadratic/exponential regression (ratio ~16+) without failing on a slower or loaded CI
+  runner, which only scales both timings together and leaves the ratio near 4.
+
+---
+
+### 22 Oct 2026 · 5.6d HelpState carried keys must be non-empty · decided by lead · risk: high
+- Decided: merge the change to packages/harness/src/pedagogy/helpState.ts: a carried answer key must be a non-empty string, and the field comment says it lives for one saved turn. No prompt-pack or teaching-behaviour change.
+- Why: the file is on the pedagogy risky path. The code reviewer checked that a HelpState saved by an older deploy with an empty key does not crash a turn, and that no key can leak into a reply.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 5.6d ran over budget · decided by lead · risk: low
+- Decided: accept 77 tool calls against the lead brief's 35 (stop at 45). Six small items across two packages, with a test per behaviour change.
+- Why: the work is complete and reviewed clean; the overrun is the Sonnet under-reporting pattern the 0.22 review (24 Oct 2026) looks at.
+- risk: low
+
+- Item 5's brief cited `runner.ts:1128`, but no "exactly one turn" HelpState text exists there (or anywhere in `runner.ts`); the matching text is the `practiceCarriedKey` field comment in `helpState.ts` (line ~93). Fixed there instead, since that's clearly the comment the review meant (same "one turn" carried-key wording, same 5.6c/ADR-0011 context).
+- Item 3's type-level guard: used a homomorphic mapped type with the `-?` modifier to strip the optional modifier TurnContext's optional keys (e.g. `persona`) would otherwise carry into the mapped type, which made indexing by `[keyof TurnContext]` include `undefined` and broke the `[Mismatched] extends [never]` check even when every type actually matched. No runtime behaviour change.
+- Item 6's test keeps `loadedA`'s `practiceModuleId`/`practiceServed` (but not `practiceItemId`) so the tool serves the same `b` item as the sibling tests; otherwise the tool picks a different item and the assertion on the new `answerKey` wouldn't isolate the carried-key behaviour being tested.
+
+Tool calls used: 77 (harness count: builder 77; the agent reported 31)
+
+---
+
+### 22 Oct 2026 · 10.1b ran over budget · decided by lead · risk: low
+- Decided: accept 146 tool calls against Phase B's 70. The build itself was on budget (74); the fix round added mutant fakes, eight new suite cases and the per-operation `unsupported` capability.
+- Why: the plan says Phase C (10.1c) must not change the shared suite, so every suite gap the reviewers found had to land now.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b lead approves the contracts edits and the ADR-0015 §9 amendment · decided by lead · risk: high
+- Decided: merge the two contracts edits (the offer-name refusal set now also refuses \p{Cs}, \p{Co} and the Hangul fillers; the refund doc comment) under ADR-0015, with a dated amendment line in §9 and the 10.8 normalisation note updated to match. No new ADR: both edits tighten rules the ADR already states.
+- Why: architect, security-reviewer and an opus typescript-reviewer reviewed them (rule 2); the lead wrote the ADR wording and kept spec-types.ts and the build plan's Core contracts block identical.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b packages/payments: signature check, secrets and no network · decided by builder · risk: high
+- Decided: Webhook signatures are checked with `timingSafeEqual` over the exact bytes, with the length checked first, every candidate and secret compared, and no early exit. A bad candidate never throws, it just doesn't match. Tolerance is at most 300 s, and a larger value is refused as `validation`. `PaymentsError` has fixed words, no `cause`, and JSON with only name, code, retryable and message. Secrets are held in a local `Secret` copy. Tests run with fetch and sockets off, and key-shaped values are built at runtime. Market to provider comes from the locale pack: `tbd`, an unknown market or a provider with no adapter gives `unsupported` (no checkout). An unknown status or a missing `subscriptionId` gives `malformed_event`, never `active`. Required reviewer: **security-reviewer** (recommended: typescript-reviewer, silent-failure-hunter, code-reviewer).
+- Why: ADR-0015 §5–§8 and the plan's 10.1b decisions. `packages/payments/**` is a risky path (payments group).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b Two minimal contracts edits that tighten rules ADR-0015 already states · decided by builder · risk: high
+- Decided: (1) In `packages/contracts/src/payments.ts`, the offer name now also refuses lone surrogates (`\p{Cs}`), private-use characters (`\p{Co}`) and the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0. A ZWJ emoji is refused on purpose (U+200D is `\p{Cf}`), and a test pins it. (2) In `packages/contracts/src/ports.ts`, the refund JSDoc now says an adapter without provider idempotency checks the payment's existing refunds first and returns the one with the same key. No type, schema shape or registry count changed, and no new ADR. Required reviewers: **architect, security-reviewer, typescript-reviewer**.
+- Why: 10.1a review LOWs (deferred to 10.1b). ADR-0015 §9 already says the name is one line with no hidden characters, and §3 already states the refund safeguard; these edits make the code match.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1b The shared input check lives in packages/payments · decided by builder · risk: low
+- Decided: `checkPortInput(op, input)` parses each port call with the contracts helper schemas (strict objects, so an extra field such as a student email is refused). Every failure is `validation`, and zod issues are never surfaced because they echo the input. The fake calls it first for every operation, and the suite tests it for all seven writes.
+- Why: 10.1a review LOW: one check every adapter calls, so they all refuse the same input the same way.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A full refund is explicit, and a fully refunded payment refuses more · decided by builder · risk: low
+- Decided: When the amount is omitted, the fake refunds exactly what is left on the payment. Once nothing is left, a new refund is `conflict`. A refund larger than what is left, or in another currency, is `validation`. The refund safeguard (look up the payment's refunds by key first) is what makes a retry after a timeout safe.
+- Why: 10.1a review LOW; ADR-0015 §3.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1b A local Secret copy, with no dependency on @edmate/gateway · decided by planner · risk: low
+- Decided: `src/secret.ts` is a copy of the gateway's `Secret`, with only the comments changed.
+- Why: The plan's decision, so payments doesn't pull in the model gateway.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4c ran over budget · decided by lead · risk: low
+- Decided: accept 110 tool calls against the lead briefs' 40 + 35. The fix round had to prove the percent-encoded bidi case through the real react-markdown renderer, which took more calls than the brief allowed.
+- Why: the extra calls bought the HIGH fix and real-renderer tests; nothing was left unfinished.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4c price-range exclusion rule · decided by builder · risk: low
+
+- Decided: exclude a `$...$` span from `protectMath`'s maths treatment only when the character
+  immediately before the closing `$` is an ASCII hyphen (`-`). This is a narrow, provable rule
+  (verified against every existing maths test with a standalone regex comparison before editing)
+  that fixes exactly the case the review named (`$5-$10`) without touching genuine TeX subtraction
+  like `$a-b$` (which ends in `b`, not `-`) or any other existing case.
+- Why: the brief allowed documenting a known limit if no clean rule exists; this one is clean for
+  the ASCII-hyphen case the review described, so it's fixed rather than just documented.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4c en-dash known limit · decided by builder · risk: low
+
+- Decided: leave an en-dash price range (`$5–$10`, U+2013) unfixed and document it as a known
+  limit with a named test, rather than widening the exclusion to every dash-like character.
+- Why: a broader dash class risks excluding genuine maths that legitimately ends a span in a
+  non-ASCII symbol, and the brief explicitly allows documenting a known limit when no clean rule
+  exists. KaTeX (noted in 9.4b's handoff) removes `protectMath` entirely, so this limit is
+  temporary.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3b ran over budget · decided by lead · risk: low
+- Decided: accept the overrun (231 harness tool calls against a 70-call build budget plus a 40-call fix round) and merge.
+- Why: the work is complete and both reviewer HIGHs are fixed and re-verified; the Sonnet builder and fixer both under-reported their counts (105 and 45), which the 0.22 review on 24 Oct 2026 takes up.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.3b stale-version detection by version-number comparison · decided by builder · risk: high
+- Decided: "stale version" (item 3) means the package-version row's own `version` number is strictly **lower** than the package's current `liveVersion` — not merely "not equal to the live version." A higher version number is a draft never yet promoted, and stays `not_found`.
+- Why: an existing fixture (`PV1_V2`, version 2 when `liveVersion` is 1) already asserted `not_found` for a draft; a naive not-equal check would have wrongly flagged it `invalid` and broken that test. Edmate's publish flow only ever increments `liveVersion` (never decrements), so "lower" is the only safe signal that a version was once live and has since been superseded.
+- risk: high — touches `packages/db/src/repositories/subscriptions.ts` (risky path). Needs security-reviewer (multi-tenant scope: the join still requires `teacherId` match and `verified`/`live` status, same as the existing `liveTarget` helper) and database-reviewer (index usage, join shape) sign-off before merge.
+
+---
+
+### 22 Oct 2026 · 9.3b unique-violation cause now travels on every RepositoryError, not only `guarded`'s failed · decided by builder · risk: high
+- Decided: `translateWrite` (`packages/db/src/repositories/errors.ts`) attaches a `ScrubbedDbError` cause (SQLSTATE + constraint name only, never the raw driver message) to the thrown `RepositoryError` for every unique-violation, including the existing `onDuplicate`-mapped `invalid`/`not_found` cases, not only to `guarded`'s `failed` path.
+- Why: item 2 needs `apps/web/src/subscriptions/start.ts` to tell the live-per-pair constraint apart from any other unique violation without ever inspecting message text (scrub-compliant). The constraint name was already scrub-safe (it's a fixed schema identifier, never user data); only its *reach* changed.
+- risk: high — touches `packages/db/src/repositories/errors.ts` (risky path, used by every repository write). Needs security-reviewer (confirms the cause carries no user data across the whole write path) and database-reviewer (confirms no repository relies on the old narrower cause-attachment behavior) sign-off before merge.
+
+---
+
+### 22 Oct 2026 · 9.3b no-cause invalid stays 400, not the old unconditional 409 · decided by builder · risk: low
+- Decided: when a `RepositoryError('invalid', ...)` has no `ScrubbedDbError` cause at all (e.g. a non-unique-violation `invalid`, such as a stale-version refusal from item 3), `fromError` returns the ordinary 400 validation response, not the already-subscribed 409.
+- Why: the brief's wording for item 2 only specifically addressed disambiguating *which* unique violation maps to 409; a `RepositoryError('invalid')` with no unique-violation cause at all (the stale-version case from item 3 is exactly this) is not a "you already have this" conflict, so 409 would be misleading. This also means item 3's stale-version refusal surfaces as a 400 (same shape as other `start` refusals), matching the brief's own item-3 wording ("as start already does for other refusals").
+- risk: low — response-shape choice within one route handler, no schema/contract change.
+
+---
+
+### 22 Oct 2026 · 9.3b live-classes stays a dependent second step, not a Promise.all with homeLinks · decided by builder · risk: low
+- Decided: `/home`'s `homeLinks` and `homeLiveClasses` calls run one after another (`await homeLinks(...)` then `await homeLiveClasses(...)`), not wrapped in `Promise.all`, because `homeLiveClasses` now needs `homeLinks`' own resolved `teacherIds` as input — a real data dependency, not an artificial ordering.
+- Why: the brief's goal was to stop four scans from each re-querying `agents.owner`/`subscriptions.findLive` independently. Removing that duplication required consolidating the owner lookup into one scan (`homeLinks`) that the live-classes loader then reuses; inventing a *second*, independent way to list a student's subscribed teacher ids (so the two calls could stay literally parallel) would need a new, redundant `packages/db` read solely to preserve `Promise.all`, which re-introduces the duplicate-query problem the decision was about. The two internal scans within `homeCandidateScan`'s own candidate loop already run concurrently via `Promise.all`; `homeLiveClasses`'s own per-teacher-id calls also already run concurrently via `Promise.all`. This is the only level at which "independent" genuinely applies.
+- risk: low — no schema change, no new repository method; the tradeoff is documented in `apps/web/app/home/page.tsx`'s own comment.
+
+---
+
+### 22 Oct 2026 · 11.4g ran over budget · decided by lead · risk: low
+- Decided: accept 234 tool calls (88 build + 146 fix round) against a 60-call budget; the result is small (three views and their tests) and both reviewers approved after re-verifying.
+- Why: the Sonnet agents under-reported their calls by about 2 to 4 times and didn't stop at the brief's limit; the lead raises this in the 0.22 review rather than redoing the work.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4g no new failureReason key for the client-reported failed row · decided by builder · risk: low
+- Decided: a client-side `failed` row from a PUT/complete failure gets `status: 'failed'` but no
+  `failureReason` set (so `LiveClassesView`'s `reasonKey()` falls back to `'other'`, showing
+  "Processing failed. Replace the file to try again.").
+- Why: the brief's own text ("the status the documents list already uses for a failed upload")
+  already exists (`uploads.status.failed`); a synthetic reason string would either need a new
+  `en.json` key (the brief caps new keys to what's needed) or reuse an existing reason whose
+  wording doesn't match this case. The generic fallback text is accurate and uses no new key.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.4g one shared poll-timeout key and time-based cap · decided by builder · risk: low
+- Decided: both views use the same `uploads.pollTimeout` key and both cap on elapsed time (not
+  attempt count), each via its own small `useEffect`/`useRef` logic (no new shared helper file).
+- Why: the brief allows reusing one helper "if that is simpler"; a shared file would need to sit
+  outside the three named files the brief scopes this task to. Elapsed time is simpler to reason
+  about than counting ticks across `LiveClassesView`'s `setInterval` and `UploadsView`'s
+  self-rescheduling `setTimeout`, and matches "about 10 minutes" from the brief directly.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1a review MEDIUMs fixed before merge · decided by lead · risk: high
+- Decided: fix the review MEDIUMs (exported helper schemas, offer-name and ref rules, ADR notes on caller-claimed idempotency keys and server-set webhook binding) in one fix round before merge instead of deferring them; the lead restored the ADR sentence that adapters without provider idempotency check existing refunds before refunding (typescript re-verify MEDIUM) and noted that 10.8 strips format characters from offer names; ADR-0015 is Accepted.
+- Why: any later fix would be a contracts change needing another ADR and three reviews; the restored sentence is the reviewed original wording. Reviewers: architect, security-reviewer and typescript-reviewer (all re-verified the fix).
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1a ran over budget · decided by lead · risk: low
+- Decided: accept 105 tool calls (58 build + 47 fix round) against the plan's ~60 for Phase A.
+- Why: the fix round was a lead choice to avoid a second contracts ADR; the build itself was within 1.2 × budget.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1a fix round: exported helper schemas and ADR notes · decided by builder · risk: high
+- Decided: export five unregistered helper schemas (`IdempotencyKey`, `ProviderRef`, `CheckoutResult`, `RefundResult`, `PaymentFact`) as part of the port's contract (ADR-0015 §9); tighten the offer name (no Cc, Cf, Zl or Zp; a letter or digit) and `ProviderRef` (a letter or digit); move the https URL rule into a shared `httpsUrl()` helper; add the ADR notes on idempotency claims, server-set binding, instant comparison, the `proration: 'none'` limit, `clearScheduled` and resume, B-54, the body-hash eventId and 10.8 offer building.
+- Why: the reviewers found rules that lived only in comments, an unsafe idempotency promise for stateless adapters, a buyer-editable binding path and spoofable names. Each change is narrower than before, so nothing that followed the ADR breaks.
+- risk: high (contracts and ADR; architect, security-reviewer and typescript-reviewer re-verify)
+
+---
+
+### 22 Oct 2026 · 10.1a The Payments port and its data live in contracts (ADR-0015) · decided by planner + architect · risk: high
+- Decided: `Payments` is a type-only port in `ports.ts`; `PaymentOffer`, `ProviderSubscription` and `PaymentEvent` (with its `PaymentFact` union) are strict Zod schemas in `packages/contracts/src/payments.ts`; one ADR covers the whole M10 surface (checkout, plan change with proration, pause, resume, cancel, clearScheduled, getSubscription, refund, parseWebhook). Reviewers required: architect, security-reviewer, typescript-reviewer (risky paths `packages/contracts/**` and `docs/adr/**`).
+- Why: ADR-0002 puts every port in contracts, and the normalised event must be one shared schema that the web route and the worker both parse. Alternative (port inside `packages/payments`) not chosen. Reversible only by ADR.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1a Adapters verify and normalise webhooks; 10.2 owns storage, idempotency and ordering · decided by planner + architect · risk: high
+- Decided: `parseWebhook` takes the raw bytes and verifies before parsing; `(provider, eventId)` storage and newest-snapshot ordering stay in 10.2.
+- Why: a signature scheme is provider-specific, so it sits behind the port; storage and ordering are provider-neutral.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1a Nothing personal goes to the provider · decided by planner + architect · risk: high
+- Decided: only Edmate's `subscriptionId` and `packageVersionId` (opaque ids), the offer name and price, the return URL and the idempotency key are sent. The strict schemas carry no buyer email, name, address or card data, and extra keys are rejected.
+- Why: the hosted checkout collects the buyer's details; the repo is public and card data must never touch Edmate.
+- risk: high
+
+---
+
+### 22 Oct 2026 · 10.1a Schema details the ADR left open · decided by builder · risk: low
+- Decided: (1) a provider id of `tbd` is rejected by the schemas, not only by the registry; (2) `providerType` uses the same narrow charset as refs (letters, digits, `_ . : -`, 1..64), so it can't carry payload text; (3) a `PaymentEvent` whose `subscription` fact names a different provider than the event fails; (4) the offer name refuses blank text and any control character or line separator, and its 120 cap counts code points; (5) the caps are exported as `PAYMENT_LIMITS` (not added to the shared `LIMITS`); (6) the `PaymentFact` schema is not exported as `*Schema` (the type is), so the registry has the ADR's 39 schemas.
+- Why: each makes the "fail closed" and "never payload text" rules in ADR-0015 concrete. All are narrower than the ADR, so adapters that follow the ADR still pass.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 10.1a Harness fixtures test count bumped with the registry · decided by builder · risk: low
+- Decided: changed the harness test's pinned schema count from 36 to 39, even though the plan lists `packages/harness/**` as out of bounds.
+- Why: that test mirrors the contracts registry count, and the dependants gate needs it. It is test-only and outside every risk path.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.0c builder ran over budget · decided by lead · risk: low
 - Decided: accept the 64-call build against a 50-call budget (65 was the stop line); no change to the result.
 - Why: the extra calls went to the Next.js standalone build check and the vitest include change; the diff is three small files and all three reviewers approved.

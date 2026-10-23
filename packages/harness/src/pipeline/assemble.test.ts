@@ -59,6 +59,25 @@ function fullBuilt(o: Partial<BuiltContext> = {}): Required<BuiltContext> {
 
 describe('assemble: an allow-list of TurnContextSchema keys (5.6c)', () => {
   it('the allow-list is exactly TurnContextSchema’s keys', () => {
+    // A literal list (not TurnContextSchema's own keys): a key dropped from the schema without
+    // dropping it here would otherwise pass this assertion silently.
+    expect([...TURN_CONTEXT_KEYS].sort()).toEqual(
+      [
+        'agent',
+        'pkg',
+        'entitlement',
+        'profile',
+        'locale',
+        'styleCard',
+        'history',
+        'retrieved',
+        'lockedHit',
+        'persona',
+        'helpRung',
+        'intent',
+        'attempt',
+      ].sort(),
+    );
     expect([...TURN_CONTEXT_KEYS].sort()).toEqual(Object.keys(TurnContextSchema.shape).sort());
   });
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Entitlement } from '@edmate/contracts';
-import { and, asc, desc, eq, gte, inArray, ne, notExists, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, ne, notExists, notInArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../client.js';
 import {
@@ -12,7 +12,7 @@ import {
   teacherProfiles,
 } from '../schema/index.js';
 import { insertAuditEntry } from './audit.js';
-import { RepositoryError, translateWrite } from './errors.js';
+import { RepositoryError, ScrubbedDbError, translateWrite } from './errors.js';
 import { insertSelect, written } from './insert.js';
 import { iso } from './map.js';
 import {
@@ -36,6 +36,13 @@ export interface LiveSubscription {
 export const COST_ALARM_ACTOR = 'system_cost_alarm';
 /** The audit action of a cost-alarm pause; also the marker that keeps a pause to once a month. */
 export const COST_ALARM_PAUSE_ACTION = 'subscription.pause_cost_alarm';
+/**
+ * Task 9.3b: `start`'s stale-version refusal (a package version superseded by a publish race)
+ * is told apart from the cost-alarm pause by attaching this fixed reason as the thrown error's
+ * cause -- the same way `translateWrite` attaches a unique-violation constraint -- never ids or
+ * content.
+ */
+export const STALE_PACKAGE_VERSION_REASON = 'subscriptions_stale_package_version';
 
 export interface PauseFreeOptions {
   /** The start of the alarm's month (UTC ISO). A subscription it paused since then is skipped. */
@@ -162,6 +169,39 @@ async function liveTarget(
     .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
     .where(and(eq(packageVersions.id, packageVersionId), eq(packageVersions.teacherId, teacherId)));
   return row ?? null;
+}
+
+/**
+ * Task 9.3b: true when `packageVersionId` is a *stale* (superseded) version of an
+ * otherwise-startable package -- same teacher, a verified teacher, a live agent, a package that
+ * still exists -- whose own `version` is **lower** than the package's current `liveVersion`.
+ * Publishing only ever increases `liveVersion` by one (see `publish.goLive`), so a lower version
+ * number was necessarily live at some point before being superseded; a *higher* version number
+ * (a draft never yet promoted) is never "stale" -- it is `not_found`, same as any other
+ * never-live version. Only called after `liveTarget` has already come back null (so this never
+ * races the alarm-paused branch), and only once `start`'s insert has already failed. Kept
+ * separate from `liveTarget` (which requires an exact version match) so a genuinely missing/
+ * wrong-teacher/unverified/suspended/draft case still falls through to `not_found` below -- only
+ * a stale-but-otherwise-live version is promoted to `invalid`.
+ */
+async function staleVersion(q: Db | Tx, teacherId: string, packageVersionId: string): Promise<boolean> {
+  const [row] = await q
+    .select({ id: packageVersions.id })
+    .from(packageVersions)
+    .innerJoin(
+      teacherProfiles,
+      and(
+        eq(teacherProfiles.userId, packageVersions.teacherId),
+        eq(teacherProfiles.verificationStatus, 'verified'),
+      ),
+    )
+    .innerJoin(
+      packages,
+      and(eq(packages.id, packageVersions.packageId), lt(packageVersions.version, packages.liveVersion)),
+    )
+    .innerJoin(agents, and(eq(agents.id, packages.agentId), eq(agents.status, 'live')))
+    .where(and(eq(packageVersions.id, packageVersionId), eq(packageVersions.teacherId, teacherId)));
+  return row !== undefined;
 }
 
 /**
@@ -311,9 +351,19 @@ export function subscriptionsRepo(db: Db) {
         );
         if (written(result) !== 1) {
           // Same joins as the insert above (task 9.6i), so only a startable version can be the
-          // alarm's `invalid`; anything else stays `not_found` (no alarm-state oracle).
+          // alarm's `invalid`; anything else stays `not_found` (no alarm-state oracle) unless
+          // it's a stale (superseded) version of an otherwise-live package (task 9.3b), which is
+          // also `invalid` -- a conflict the caller can recover from by re-reading the live
+          // version, not a true 404.
           const target = await liveTarget(db, teacherId, i.packageVersionId);
-          throw new RepositoryError(target?.alarmPaused ? 'invalid' : 'not_found', method);
+          if (target?.alarmPaused) throw new RepositoryError('invalid', method);
+          const stale = target === null && (await staleVersion(db, teacherId, i.packageVersionId));
+          if (stale) {
+            throw new RepositoryError('invalid', method, {
+              cause: new ScrubbedDbError(undefined, STALE_PACKAGE_VERSION_REASON),
+            });
+          }
+          throw new RepositoryError('not_found', method);
         }
         return { id, packageVersionId: i.packageVersionId, status, periodEnd: i.periodEnd };
       });

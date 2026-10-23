@@ -19,6 +19,7 @@ import { createDb, type DbHandle } from '../src/internal.js';
 import { EXPORT_PAGE_MAX } from '../src/repositories/sessions.js';
 import {
   CHANGE_PACKAGE_ACTION,
+  STALE_PACKAGE_VERSION_REASON,
   STUDENT_CANCEL_ACTION,
   STUDENT_PAUSE_ACTION,
   STUDENT_RESUME_ACTION,
@@ -5135,15 +5136,26 @@ describe.skipIf(!up)(
         expect(moved.packageVersionId).toBe(PV_PAID_2);
       });
 
-      it('start (LOW): during the alarm, a non-live free version or a rejected teacher\'s free version is not_found, not invalid', async () => {
+      it('start (9.3b): a stale (superseded) version is invalid; a rejected teacher\'s or suspended agent\'s free version is still not_found', async () => {
         const s = sc('stu_96i_b');
+        // 9.3b: a stale version of an otherwise-live, verified package is `invalid`, not
+        // `not_found` -- the student can recover by re-reading the live version. Its cause
+        // carries the stale-version marker so a caller can tell it apart from the alarm's
+        // `invalid` below, which has no cause at all.
         await expect(
           repos.subscriptions.start(s, { packageVersionId: PV_FREE_OLD, status: 'active', periodEnd: PERIOD_END }),
-        ).rejects.toMatchObject({ kind: 'not_found' });
-        // The live free version of a verified teacher is the alarm's invalid.
+        ).rejects.toMatchObject({
+          kind: 'invalid',
+          cause: expect.objectContaining({ constraint: STALE_PACKAGE_VERSION_REASON }),
+        });
+        // The live free version of a verified teacher is the alarm's invalid -- no marker.
         await expect(
           repos.subscriptions.start(s, { packageVersionId: PV_FREE, status: 'active', periodEnd: PERIOD_END }),
-        ).rejects.toMatchObject({ kind: 'invalid' });
+        ).rejects.toSatisfy((err: unknown) => {
+          expect(err).toMatchObject({ kind: 'invalid' });
+          expect((err as RepositoryError).cause).toBeUndefined();
+          return true;
+        });
         await raw.query(`update teacher_profiles set verification_status = 'rejected' where id = 'tp_96i'`);
         try {
           await expect(

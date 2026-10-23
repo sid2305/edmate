@@ -583,6 +583,21 @@ describe('runner: a skipped item key is carried one turn (5.6c, ADR-0011 §2-3)'
     expect(r.help).not.toHaveProperty('practiceCarriedKey');
   });
 
+  it('a loaded non-practice answerKey (no production path today) is carried the same way (5.6d)', async () => {
+    const r = await turn([main(callItem, used), main(say('Next one.'), used)], {
+      build: () =>
+        Promise.resolve(
+          builtWith({
+            answerKey: [A],
+            practiceModuleId: loadedA.practiceModuleId,
+            practiceServed: loadedA.practiceServed,
+          }),
+        ),
+    });
+    expect(r.help?.answerKey).toEqual([B]);
+    expect(r.help?.practiceCarriedKey).toEqual([A]);
+  });
+
   it('a loaded carried key is not carried again when another item goes out', async () => {
     const r = await turn([main(callItem, used), main(say('Next one.'), used)], {
       build: () =>

@@ -105,11 +105,12 @@ describe('PackageCompare', () => {
     expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
   });
 
-  it('a network failure shows the generic error', async () => {
+  it('a network failure shows the generic error and logs the error name only', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
-        throw new Error('network down');
+        throw new TypeError('network down: could not reach 10.0.0.5');
       }),
     );
     renderIntl(<PackageCompare agentId="agt_demo" packages={[PAID]} />);
@@ -118,6 +119,30 @@ describe('PackageCompare', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong. Please try again.'),
     );
+    // Task 9.3b: the name only ('TypeError'), never the message (which may quote a network detail).
+    expect(consoleError).toHaveBeenCalledWith('[packages] start failed', 'TypeError');
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain('10.0.0.5');
+    consoleError.mockRestore();
+  });
+
+  // Task 9.3b: `Intl.NumberFormat` picks each currency's own fraction digits, never hardcoded --
+  // 2 for USD (seen in the first test above), 0 for JPY, 3 for KWD.
+  it('formats a zero-decimal currency (JPY) with no fraction digits', () => {
+    const JPY_PAID: PackageOffer = {
+      ...PAID,
+      pricePerMonth: { amountMinor: 2000, currency: 'JPY' },
+    };
+    renderIntl(<PackageCompare agentId="agt_demo" packages={[JPY_PAID]} />);
+    expect(screen.getByText('¥2,000')).toBeInTheDocument();
+  });
+
+  it('formats a three-decimal currency (KWD) scaled by 1000, not 100', () => {
+    const KWD_PAID: PackageOffer = {
+      ...PAID,
+      pricePerMonth: { amountMinor: 19990, currency: 'KWD' },
+    };
+    renderIntl(<PackageCompare agentId="agt_demo" packages={[KWD_PAID]} />);
+    expect(screen.getByText('KWD 19.990')).toBeInTheDocument();
   });
 
   it('has no accessibility violations', async () => {

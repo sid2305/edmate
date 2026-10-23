@@ -1499,9 +1499,28 @@ tasks:
   accept: each listed LOW is fixed or closed with a logged reason; harness and ingest tests pass
   deps:
   - 5.6c
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/5.6d-carried-key-lows
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 34
+    tokens_in: 110
+    tokens_out: 2401
+    cache_read_tokens: 2729430
+    wall_time_seconds: 338
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.6c
   milestone: M5
   title: '5.6 review follow-ups (before any real practice bank): PracticeBank requires a teacherId scope check (records carry teacherId, a teacher-only test); keep practice keys out of the model''s do-not-say
@@ -2322,9 +2341,10 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
-  status: todo
-  branch: null
+  status: running
+  branch: m13/9.4a-turn-followups
   risk: risky
+  model: plan:sonnet build:opus
 - id: 8.2a
   milestone: M13
   title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
@@ -2359,9 +2379,31 @@ tasks:
   accept: tests cover each item; web and db tests pass
   deps:
   - '9.3'
-  status: running
+  status: done
   branch: m13/9.3b-home-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 177
+    tokens_in: 554
+    tokens_out: 38150
+    cache_read_tokens: 18152513
+    wall_time_seconds: 494
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 2
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 0.16a
   milestone: M0
   title: 'Metrics find no transcripts (0.16 closeout recorded 0 tool calls): metrics.py reads only the top-level *.jsonl, but subagent transcripts live in <session>/subagents/*.jsonl; and matching by gitBranch
@@ -2545,7 +2587,9 @@ tasks:
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
   - 0.16a
-  status: todo
+  status: running
+  branch: m13/0.16b-metrics-root
+  model: plan:lead build:sonnet
 - id: 7.1a
   milestone: M7
   title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
@@ -2714,9 +2758,9 @@ tasks:
   deps:
   - '7.3'
   risk: normal
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/7.3b-suite-polish
+  model: plan:lead build:sonnet
 - id: 0.19b
   milestone: M13
   title: 'closeout.py checks the handoff''s Decisions (each entry has a Decided: line) before it appends to the log. Today it appends first and then refuses, and a re-run skips the bad entries as duplicates
@@ -4735,7 +4779,7 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: todo
+  status: planning
 - id: 8.7i
   milestone: M13
   title: '8.7a review follow-ups (LOW): recordResults bumps eval_runs.updated_at or the stale-run decision and test name say "since markRunning"; latestRun takes an optional agentId; RunShape validates
@@ -5973,9 +6017,30 @@ tasks:
     gross-regression bound or a ratio check (lessons: no tight timings)'
   accept: the test checks linearity without a tight wall-clock bound; harness test green
   deps: []
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m13/3.11g-linear-time-test
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 51
+    tokens_in: 198
+    tokens_out: 1240
+    cache_read_tokens: 3269884
+    wall_time_seconds: 502
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 5
+      by_severity:
+        MEDIUM: 3
+        LOW: 2
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 8.2m
   milestone: M13
   title: '8.2j and 8.2k review follow-ups: the parseDocument DocumentKind switch gets a compile-time exhaustiveness guard (never in default); parseVtt/parseSrt validate the header and timing before the
@@ -6246,9 +6311,30 @@ tasks:
   deps:
   - 11.4c
   risk: low
-  status: running
+  status: done
   branch: m11/11.4g-recording-upload-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 4
+      by_severity:
+        HIGH: 1
+        MEDIUM: 2
+        LOW: 1
+      by_status:
+        fixed: 4
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 9.4c
   milestone: M13
   title: '9.4b review follow-ups: safeHref returns the cleaned href (not the original), so invisible and bidi characters such as U+200B and U+202E never reach the rendered link; protectMath stops treating
@@ -6256,8 +6342,31 @@ tasks:
   accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
   deps:
   - 9.4b
-  status: todo
-  branch: null
+  status: done
+  branch: m13/9.4c-render-followups
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 216
+    tokens_in: 702
+    tokens_out: 58806
+    cache_read_tokens: 23949595
+    wall_time_seconds: 1070
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'
@@ -6314,9 +6423,29 @@ tasks:
   deps:
   - '10.1'
   risk: risky
-  status: running
+  status: done
   branch: m10/10.1a-payments-port
-  model: plan:opus arch:opus build:opus
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 22
+      by_severity:
+        MEDIUM: 5
+        LOW: 17
+      by_status:
+        fixed: 14
+        open: 0
+        deferred: 8
+        wontfix: 0
+    human_questions: 0
 - id: 10.1b
   milestone: M10
   title: 'packages/payments: errors, timing-safe signature check, market-to-provider registry, fake adapter, shared contract suite and a second-provider test (10.1 Phase B); 10.1a review LOWs: one shared
@@ -6327,12 +6456,34 @@ tasks:
   deps:
   - 10.1a
   risk: risky
-  status: todo
-  branch: null
-  model: null
+  status: done
+  branch: m10/10.1b-payments-package
+  model: plan:opus build:opus review:opus
+  metrics:
+    tool_calls: 0
+    tokens_in: 0
+    tokens_out: 0
+    cache_read_tokens: 0
+    wall_time_seconds: 0
+    models: []
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 18
+      by_severity:
+        MEDIUM: 6
+        LOW: 12
+      by_status:
+        fixed: 13
+        open: 0
+        deferred: 5
+        wontfix: 0
+    human_questions: 0
 - id: 10.1c
   milestone: M10
-  title: The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53)
+  title: 'The US merchant-of-record adapter on fixtures, a human-only sandbox test, and the US.yaml provider line (10.1 Phase C; waits on B-53); 10.1b review LOWs (suite hardening only, no caller change):
+    the suite fails an adapter that changes provider state and then throws unsupported; expectFailing is not a public suite option (mutant tests only); Secret.of sets a minimum length and refuses invisible-only
+    secrets'
   accept: the shared contract suite passes on the adapter with recorded fixtures; the sandbox test is skipped without keys.
   deps:
   - 10.1b
@@ -6618,7 +6769,8 @@ tasks:
 - id: '10.8'
   milestone: M10
   title: 'Checkout: paid packages go through the Payments port (replaces the no-payment start from 9.3); payments security review incl. webhooks (moved from 13.3); 10.1a review: match snapshots on subscriptionId
-    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names'
+    and packageVersionId and payments on amount net of tax against price; strip or refuse format characters in package names; 10.1b review: move the offer-name refusal cases into packages/contracts fixtures;
+    an eslint no-restricted-imports rule for @edmate/payments/testing outside tests in apps/*'
   accept: The package unlocks on the next message after payment; no high findings open on webhooks or checkout.
   deps:
   - '10.2'
