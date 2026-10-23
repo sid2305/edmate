@@ -6302,9 +6302,31 @@ tasks:
   accept: a test shows a link with U+202E or U+200B renders without it; "$5-$10" keeps its markdown; the existing renderReply and no-raw-html tests still pass
   deps:
   - 9.4b
-  status: running
+  status: done
   branch: m13/9.4c-render-followups
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 216
+    tokens_in: 702
+    tokens_out: 58806
+    cache_read_tokens: 23949595
+    wall_time_seconds: 1070
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 3
+      by_severity:
+        HIGH: 1
+        LOW: 2
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: '9.5'
   milestone: M9
   title: 'Skill screens: practice, feedback submission, mock interview (from `skill` events)'

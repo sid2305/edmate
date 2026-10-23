@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.4c ran over budget · decided by lead · risk: low
+- Decided: accept 110 tool calls against the lead briefs' 40 + 35. The fix round had to prove the percent-encoded bidi case through the real react-markdown renderer, which took more calls than the brief allowed.
+- Why: the extra calls bought the HIGH fix and real-renderer tests; nothing was left unfinished.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4c price-range exclusion rule · decided by builder · risk: low
+
+- Decided: exclude a `$...$` span from `protectMath`'s maths treatment only when the character
+  immediately before the closing `$` is an ASCII hyphen (`-`). This is a narrow, provable rule
+  (verified against every existing maths test with a standalone regex comparison before editing)
+  that fixes exactly the case the review named (`$5-$10`) without touching genuine TeX subtraction
+  like `$a-b$` (which ends in `b`, not `-`) or any other existing case.
+- Why: the brief allowed documenting a known limit if no clean rule exists; this one is clean for
+  the ASCII-hyphen case the review described, so it's fixed rather than just documented.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4c en-dash known limit · decided by builder · risk: low
+
+- Decided: leave an en-dash price range (`$5–$10`, U+2013) unfixed and document it as a known
+  limit with a named test, rather than widening the exclusion to every dash-like character.
+- Why: a broader dash class risks excluding genuine maths that legitimately ends a span in a
+  non-ASCII symbol, and the brief explicitly allows documenting a known limit when no clean rule
+  exists. KaTeX (noted in 9.4b's handoff) removes `protectMath` entirely, so this limit is
+  temporary.
+- risk: low
+
+---
+
 ### 22 Oct 2026 · 9.3b ran over budget · decided by lead · risk: low
 - Decided: accept the overrun (231 harness tool calls against a 70-call build budget plus a 40-call fix round) and merge.
 - Why: the work is complete and both reviewer HIGHs are fixed and re-verified; the Sonnet builder and fixer both under-reported their counts (105 and 45), which the 0.22 review on 24 Oct 2026 takes up.
