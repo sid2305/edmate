@@ -10,6 +10,38 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · Double-cancel is a no-op (200, not an error) in the PUT/DELETE routes too · decided by builder · risk: low
+- Decided: Phase B's `DELETE` route returns the repository's `{cancelled: false}` as a plain 200,
+  the same as a first cancel's `{cancelled: true}`, rather than treating "already cancelled" as an
+  error status. The route layer makes no decision of its own here; it only carries Phase A's own
+  judgment call (noted in the plan's "Open questions for the lead") through to the HTTP response.
+- Why: a double-click Cancel, or a client retry after a dropped reply, must not show the teacher
+  an error toast for something that already succeeded; `LiveClassesView`'s own Cancel flow relies
+  on this (the button's busy state always clears, whether the server did the write or found it
+  already done).
+- risk: low
+
+---
+
+### 23 Oct 2026 · The join link's new aria-label changes its accessible name; the existing test was updated, not the markup · decided by builder · risk: low
+- Decided: adding `aria-label={t('joinLinkLabel', { title: c.title })}` to the join `<a>`
+  (11.1b review LOW fix) makes that aria-label the link's accessible name, overriding its visible
+  text ("Join link") for `getByRole('link', { name: … })` queries. Kept the visible text as the
+  plan asked and updated `LiveClassesView.test.tsx`'s one existing assertion
+  (`getByRole('link', { name: 'Join link' })` → `{ name: 'Join link for Ratios review' }`, with a
+  separate `toHaveTextContent('Join link')` check added) rather than finding another way to keep
+  the old query passing.
+- Why: this is standard ARIA behaviour (an explicit `aria-label` always wins over text content for
+  the accessible name), not a bug; the plan's own acceptance line for this fix ("a per-class
+  aria-label on the studio join links") only makes sense if the label actually changes the name a
+  screen reader announces per row, which is the whole point of the fix.
+- risk: low
+
+Tool calls used: 149 (harness count: builder 116 + fixer 33; the agents reported 92 + 26)
+Phase B+C tool calls: 95
+
+---
+
 ### 22 Oct 2026 · 9.4d: missing studentMarket fails loudly in packages/db/src/repositories/ports.ts · decided by builder · risk: high
 - Decided: a `subscription` resolve for a learner who passes `learnerClear` but has no `studentMarket` option throws `RepositoryError('integrity')` instead of returning `null`. The option stays optional (preview/eval roots), and a root whose `learnerClear` is always false (studio preview) still gets `null`.
 - Why: a silent `null` turned a wiring mistake into "You need a live package" for every student, with no log line. Throwing is still fail-closed (no entitlement), but it is loud. Checking after `learnerClear` keeps the studio preview store, which is out of bounds here, unchanged.

@@ -4928,30 +4928,30 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: running
+  status: done
   branch: m13/11.1d-live-class-ui
-  model: 'plan:sonnet build:sonnet+fable review:fable (A #239); B+C build:sonnet'
+  model: plan:sonnet build:sonnet review:sonnet
   metrics:
-    tool_calls: 136
-    tokens_in: 4484
-    tokens_out: 51786
-    cache_read_tokens: 10771900
-    wall_time_seconds: 15663
+    tool_calls: 182
+    tokens_in: 4642
+    tokens_out: 52147
+    cache_read_tokens: 14305572
+    wall_time_seconds: 31559
     models:
     - claude-fable-5-1
     - claude-sonnet-5
     builder_phases: 3
-    fix_rounds: 1
+    fix_rounds: 2
     findings:
-      total: 11
+      total: 14
       by_severity:
-        HIGH: 1
-        MEDIUM: 1
-        LOW: 9
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 10
       by_status:
-        fixed: 3
+        fixed: 4
         open: 0
-        deferred: 8
+        deferred: 10
         wontfix: 0
     human_questions: 0
 - id: 11.1e
