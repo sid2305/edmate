@@ -75,6 +75,12 @@ export interface IdentityStore {
     name: string;
   }): Promise<IdentityUser>;
   getUser(id: string): Promise<IdentityUser | null>;
+  /**
+   * The user's own market (9.4a): `global` from signup, the age-gate answer after (1.7). Only the
+   * market column is read, so `IdentityUser` stays identity fields. An unknown user is `null`.
+   * The caller passes the signed-in principal's own id, never a client-supplied one.
+   */
+  getMarket(id: string): Promise<string | null>;
   getUserByEmail(email: string): Promise<IdentityUser | null>;
   getUserByAccount(provider: string, providerAccountId: string): Promise<IdentityUser | null>;
   /** The only profile field sign-in may change. An unknown user is `not_found`. */
@@ -255,6 +261,16 @@ function storeMethods(db: Db, { now, agePolicy, noticeVersion }: StoreConfig) {
 
     async getUser(id: unknown): Promise<IdentityUser | null> {
       return userWhere(eq(users.id, parseArg(IdSchema, id, 'identity.getUser')));
+    },
+
+    async getMarket(id: unknown): Promise<string | null> {
+      const userId = parseArg(IdSchema, id, 'identity.getMarket');
+      const [row] = await db
+        .select({ market: users.market })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      return row?.market ?? null;
     },
 
     async getUserByEmail(email: unknown): Promise<IdentityUser | null> {

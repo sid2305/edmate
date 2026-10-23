@@ -45,9 +45,14 @@ export interface RuntimeHooks {
 
 /**
  * The student turn runtime's hooks (9.4a): its Redis hook also opens the per-student
- * session-start limit. The studio test chat keeps the narrower `RuntimeHooks`.
+ * session-start limit, and its identity also reads the student's own market. The studio test
+ * chat keeps the narrower `RuntimeHooks`.
  */
 export interface TurnRuntimeHooks extends RuntimeHooks {
+  database(): {
+    repos: Repositories;
+    identity: Pick<IdentityStore, 'learnerStatus' | 'getMarket'>;
+  };
   redis(redisUrl: string): RuntimeRedis;
 }
 
@@ -60,20 +65,6 @@ export async function anthropicFactories(env: Env): Promise<ProviderAdapterFacto
 /** `EDMATE_CONTENT_DIR`, else the repo's `content/` (Next runs from apps/web), as the auth does. */
 export function contentDir(env: Env): string {
   return env.EDMATE_CONTENT_DIR?.trim() || resolvePath(process.cwd(), '../../content');
-}
-
-/**
- * The one market turns run in, until the identity store exposes the student's market. It picks
- * the locale pack, and so the distress helplines: production fails closed (`EDMATE_MARKET`) when
- * it is unset or has no locale pack; dev and tests default to `global`.
- */
-function configuredMarket(env: Env, packs: ReadonlyMap<string, unknown>): string {
-  const market = env.EDMATE_MARKET?.trim() ?? '';
-  if (env.NODE_ENV === 'production') {
-    if (!packs.has(market)) throw new TurnUnavailableError('EDMATE_MARKET');
-    return market;
-  }
-  return market || 'global';
 }
 
 async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
@@ -93,12 +84,14 @@ async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
   // Signed role-play personas (5.8a). A broken dir fails the build like a broken prompt pack. The
   // browser can't send a skill until 9.5, so no web turn reaches a persona yet.
   const personas = readPersonaLibrary(join(dir, 'skills', 'mock_interview'));
-  const market = configuredMarket(env, packs);
   if (dev) hooks.log.error('turn.dev_model_on', {});
   const { repos, identity } = hooks.database();
   const { queues, limits, sessionRateLimit } = hooks.redis(redisUrl);
+  // 9.4a: each student's turns run in their own market (`users.market`, NOT NULL, `global` until
+  // the age gate), read fresh per resolve. It picks the locale pack and so the helplines; a market
+  // with no pack runs as `global`. No deploy setting picks it, so there is no boot check for one.
   const ports = processPorts(repos, {
-    market,
+    studentMarket: async (id) => (await identity.getMarket(id)) ?? 'global',
     packMarket: (m) => (packs.has(m) ? m : 'global'),
     locales: (m) => pickLocalePack(m, packs),
     learnerClear: async (id) => (await identity.learnerStatus(id)) === 'clear',

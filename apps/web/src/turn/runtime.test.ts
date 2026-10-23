@@ -50,16 +50,31 @@ const CONTENT = fileURLToPath(new URL('../../../../content/', import.meta.url));
 // Synthetic, not a key: the adapter is built but never called.
 const ENV = { REDIS_URL: 'redis://127.0.0.1:6399', EDMATE_ANTHROPIC_API_KEY: 'test-only-placeholder', EDMATE_CONTENT_DIR: CONTENT };
 
-function hooks() {
+/** Stub repositories: every student has a live subscription to `agt_a` (one module, one skill). */
+function subscribedRepos(): Repositories {
+  const pkg = { id: 'pkg_a', version: 1, agentId: 'agt_a', moduleIds: ['mod_a1'], skills: ['explain'] };
+  return {
+    agents: { tag: 'agents', owner: async () => ({ teacherId: 'tch_a' }) },
+    sessions: { tag: 'sessions' },
+    subscriptions: {
+      findLive: async () => ({ id: 'sub_1', packageVersionId: 'pv_a', status: 'active', periodEnd: '2026-12-01T00:00:00.000Z' }),
+    },
+    packageVersions: { getById: async () => pkg },
+    modules: { ids: async () => ['mod_a1'] },
+  } as unknown as Repositories;
+}
+
+function hooks(markets: Record<string, string | null> = {}) {
   const sessionRateLimit = { take: async () => true };
-  const repos = { agents: { tag: 'agents' }, sessions: { tag: 'sessions' } } as unknown as Repositories;
+  const repos = subscribedRepos();
   const log = vi.fn();
+  const getMarket = vi.fn(async (id: string) => markets[id] ?? null);
   const h = {
-    database: vi.fn(() => ({ repos, identity: { learnerStatus: async () => 'clear' as const } })),
+    database: vi.fn(() => ({ repos, identity: { learnerStatus: async () => 'clear' as const, getMarket } })),
     redis: vi.fn(() => ({ queues: {} as never, limits: {} as never, sessionRateLimit })),
     log: { error: log },
   } satisfies TurnRuntimeHooks;
-  return { h, log, repos, sessionRateLimit };
+  return { h, log, repos, sessionRateLimit, getMarket };
 }
 
 afterEach(() => {
@@ -129,22 +144,8 @@ describe('createTurnRuntime', () => {
     expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'provider_key' });
   });
 
-  it('in production, an unset or unknown EDMATE_MARKET fails closed by its code alone', async () => {
-    for (const market of [undefined, '  ', 'ZZ', 'not-a-market']) {
-      const { h, log } = hooks();
-      const env = { ...ENV, NODE_ENV: 'production', EDMATE_MARKET: market };
-      const runtime = createTurnRuntime(() => env, h);
-      await expect(runtime()).rejects.toBeInstanceOf(TurnUnavailableError);
-      await expect(runtime()).rejects.toThrow('EDMATE_MARKET');
-      expect(log).toHaveBeenCalledTimes(1);
-      expect(log).toHaveBeenCalledWith('turn.runtime_unavailable', { reason: 'EDMATE_MARKET' });
-      expect(JSON.stringify(log.mock.calls)).not.toContain('not-a-market');
-      expect(h.database).not.toHaveBeenCalled();
-    }
-  });
-
-  it('in production, a known EDMATE_MARKET builds', async () => {
-    for (const market of ['IN', ' US ', 'global']) {
+  it('no EDMATE_MARKET is read: production builds without one, whatever it is set to', async () => {
+    for (const market of [undefined, '  ', 'ZZ', 'IN']) {
       const { h, log } = hooks();
       const env = { ...ENV, NODE_ENV: 'production', EDMATE_MARKET: market };
       await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
@@ -152,13 +153,43 @@ describe('createTurnRuntime', () => {
     }
   });
 
-  it('outside production, an unset market keeps the global default', async () => {
-    for (const nodeEnv of [undefined, 'development', 'test']) {
-      const { h, log } = hooks();
-      const env = { ...ENV, NODE_ENV: nodeEnv, EDMATE_MARKET: undefined };
-      await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
-      expect(log).not.toHaveBeenCalled();
-    }
+  describe("a subscription runs in the student's own market (9.4a)", () => {
+    const AT = '2026-10-22T10:00:00.000Z';
+    const marketOf = async (markets: Record<string, string | null>, studentId: string, env = ENV) => {
+      const { h, getMarket } = hooks(markets);
+      const backend = await createTurnRuntime(() => env, h)();
+      const e = await backend.entitlements.resolve({ studentId, agentId: 'agt_a', source: 'subscription' }, AT);
+      return { market: e?.market, getMarket };
+    };
+
+    it("reads each student's market from identity, fresh per resolve, keyed by the student id", async () => {
+      const markets = { stu_in: 'IN', stu_us: 'US' };
+      const env = { ...ENV, NODE_ENV: 'production', EDMATE_MARKET: 'US' };
+      const inStudent = await marketOf(markets, 'stu_in', env);
+      expect(inStudent.market).toBe('IN');
+      expect(inStudent.getMarket).toHaveBeenCalledWith('stu_in');
+      expect((await marketOf(markets, 'stu_us', env)).market).toBe('US');
+    });
+
+    it('a market with no locale pack runs as global; global stays global', async () => {
+      expect((await marketOf({ stu_zz: 'ZZ' }, 'stu_zz')).market).toBe('global');
+      expect((await marketOf({ stu_g: 'global' }, 'stu_g')).market).toBe('global');
+    });
+
+    it('an unknown student id (no market row) falls back to global', async () => {
+      const { market, getMarket } = await marketOf({}, 'stu_gone');
+      expect(market).toBe('global');
+      expect(getMarket).toHaveBeenCalledWith('stu_gone');
+    });
+
+    it('an identity failure fails the resolve, never a default market', async () => {
+      const { h, getMarket } = hooks();
+      getMarket.mockRejectedValue(new Error('identity down'));
+      const backend = await createTurnRuntime(() => ENV, h)();
+      await expect(
+        backend.entitlements.resolve({ studentId: 'stu_in', agentId: 'agt_a', source: 'subscription' }, AT),
+      ).rejects.toThrow('identity down');
+    });
   });
 
   it('any other failure is logged by error name', async () => {
@@ -177,7 +208,7 @@ describe('createTurnRuntime with the dev model (9.0, D2)', () => {
   it('on localhost, builds with no provider key, logs turn.dev_model_on and loads no key', async () => {
     for (const url of ['http://localhost:8080', 'http://127.0.0.1:18080', 'http://[::1]:8080']) {
       const { h, log } = hooks();
-      const env = { ...NO_KEY, NODE_ENV: 'production', EDMATE_MARKET: 'US', AUTH_URL: url };
+      const env = { ...NO_KEY, NODE_ENV: 'production', AUTH_URL: url };
       await expect(createTurnRuntime(() => env, h)()).resolves.toBeDefined();
       expect(log.mock.calls).toEqual([['turn.dev_model_on', {}]]);
     }
