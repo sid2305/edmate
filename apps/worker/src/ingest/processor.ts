@@ -15,8 +15,9 @@
 // No status write follows a stale drop: the job that owns the new `storageKey` gets to set it.
 //
 // Task 8.2c (Phase B, 8.2k) adds `vtt`/`srt`: a teacher-exported YouTube caption file. It is read
-// from storage like any other document file (DOCUMENT_KINDS), with no transcriber needed, so a
-// caption job reaches `ready` even when EDMATE_INGEST_EMBEDDINGS=off leaves no `gateway.transcriber`.
+// from storage like any other document file (categorizeFileKind's 'document' branch), with no
+// transcriber needed, so a caption job reaches `ready` even when EDMATE_INGEST_EMBEDDINGS=off
+// leaves no `gateway.transcriber`.
 //
 // Task 8.2e adds two things:
 // - `web` jobs (a teacher's web link, ADR-0014). The URL is in the job payload only; the row's
@@ -31,6 +32,7 @@ import { RepositoryError } from '@edmate/db';
 import {
   type ChunkWriter,
   type DocumentInput,
+  type DocumentKind,
   IngestError,
   type IngestErrorCode,
   indexDocument,
@@ -42,7 +44,7 @@ import {
   checkWebLinkUrl,
   parseWebLink,
 } from '@edmate/ingest';
-import { IngestJobSchema } from '@edmate/queue';
+import { IngestJobSchema, type IngestFileKind } from '@edmate/queue';
 import type { Log } from '../log.js';
 import { PermanentJobError } from '../commit/processors.js';
 import { ObjectTooLargeError, type StorageClient } from '../storage/client.js';
@@ -78,8 +80,39 @@ export interface IngestProcessorDeps {
 /** How long a video/audio signed GET URL stays valid: long enough for Whisper to fetch it. */
 export const SIGNED_URL_TTL_SECONDS = 600;
 
-const DOCUMENT_KINDS = new Set(['pdf', 'docx', 'pptx', 'markdown', 'vtt', 'srt']);
-const RECORDING_KINDS = new Set(['video', 'audio']);
+/** Every `fileKind` `buildSource` can be asked to fetch (the job's own `web` kind is handled
+ * before `buildSource` is ever called, so it is excluded here). */
+type BuildableFileKind = Exclude<IngestFileKind, 'web'>;
+
+/**
+ * Categorizes a `BuildableFileKind` as a parsed document or a transcribed recording. Written as a
+ * switch with every document and recording kind spelled out (not an untyped `Set<string>`), so
+ * TypeScript narrows `kind` to `DocumentKind` inside the `document` branch and the `default` case's
+ * `never` assignment fails to compile the day `IngestFileKind` gains a kind neither list covers
+ * (8.2k review MEDIUM: the previous sets let an uncovered kind silently fall to `recording`).
+ */
+function categorizeFileKind(
+  kind: BuildableFileKind,
+):
+  | { readonly category: 'document'; readonly documentKind: DocumentKind }
+  | { readonly category: 'recording' } {
+  switch (kind) {
+    case 'pdf':
+    case 'docx':
+    case 'pptx':
+    case 'markdown':
+    case 'vtt':
+    case 'srt':
+      return { category: 'document', documentKind: kind };
+    case 'video':
+    case 'audio':
+      return { category: 'recording' };
+    default: {
+      const _exhaustive: never = kind;
+      throw new Error(`unreachable ingest file kind: ${String(_exhaustive)}`);
+    }
+  }
+}
 
 /** A RepositoryError a retry can't fix becomes a PermanentJobError; `failed` (db down) retries. */
 function classifyRepoError(job: string, error: unknown): never {
@@ -125,7 +158,8 @@ function buildWriter(
             drafts,
           );
         } catch (error) {
-          if (error instanceof RepositoryError && error.kind === 'not_found') return dropped(drafts);
+          if (error instanceof RepositoryError && error.kind === 'not_found')
+            return dropped(drafts);
           throw error;
         }
         return res.stale ? dropped(drafts) : { ids: res.ids };
@@ -148,10 +182,11 @@ async function buildSource(
   storage: StorageClient,
   storageKey: string,
   sourceTitle: string,
-  fileKind: 'pdf' | 'docx' | 'pptx' | 'markdown' | 'video' | 'audio' | 'vtt' | 'srt',
+  fileKind: BuildableFileKind,
   mimeType: string | undefined,
 ): Promise<DocumentInput | VideoSource> {
-  if (DOCUMENT_KINDS.has(fileKind)) {
+  const category = categorizeFileKind(fileKind);
+  if (category.category === 'document') {
     let bytes: Uint8Array;
     try {
       bytes = await storage.getObjectBytes(storageKey, MAX_DOCUMENT_BYTES);
@@ -162,13 +197,9 @@ async function buildSource(
       }
       throw error;
     }
-    return {
-      kind: fileKind as 'pdf' | 'docx' | 'pptx' | 'markdown' | 'vtt' | 'srt',
-      bytes,
-      sourceTitle,
-    };
+    return { kind: category.documentKind, bytes, sourceTitle };
   }
-  // fileKind is 'video' | 'audio'; the schema requires mimeType to be set exactly then.
+  // category.category === 'recording'; the schema requires mimeType to be set exactly then.
   const url = await storage.getSignedDownloadUrl(storageKey, SIGNED_URL_TTL_SECONDS);
   return { kind: 'video', sourceTitle, recording: { url, mimeType: mimeType as string } };
 }
@@ -224,7 +255,11 @@ export function ingestProcessor(
     // refused here, before any storage read or write -- a config fact, not a provider failure,
     // and distinct from `packages/ingest`'s own 'validation' code for a job that *should* have a
     // transcriber but doesn't get one.
-    if (RECORDING_KINDS.has(fileKind) && deps.gateway.transcriber === undefined) {
+    if (
+      fileKind !== 'web' &&
+      categorizeFileKind(fileKind).category === 'recording' &&
+      deps.gateway.transcriber === undefined
+    ) {
       return failWith('unsupported', storageKey);
     }
 
