@@ -2369,9 +2369,32 @@ tasks:
     newline; the migration is additive; the db tests pass
   deps:
   - '5.10'
-  status: running
+  status: done
   branch: m13/5.10b-teacher-questions-locking
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 321
+    tokens_in: 1018
+    tokens_out: 90217
+    cache_read_tokens: 35742992
+    wall_time_seconds: 1552
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 9
+      by_severity:
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 5
+      by_status:
+        fixed: 8
+        open: 0
+        deferred: 1
+        wontfix: 0
+    human_questions: 0
 - id: 5.10c
   milestone: M13
   title: '5.10b review follow-up (code-reviewer re-verify LOW): the open()-vs-answer() deadlock test in packages/db/test/teacher-question-answer.int.test.ts replays open()''s FOR KEY SHARE statement on
