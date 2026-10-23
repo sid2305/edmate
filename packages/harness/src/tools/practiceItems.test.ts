@@ -5,6 +5,9 @@ import { prng } from '../testing/prng.js';
 import {
   GEN_VARIANTS,
   generatedAnswerKeyFor,
+  generatedPrompt,
+  PRACTICE_OPTION_MAX,
+  PRACTICE_PROMPT_MAX,
   parseGeneratedId,
   generateItem,
   pickItem,
@@ -35,6 +38,12 @@ function fixedBank(
       const r = records.find((rec) => rec.item.id === itemId);
       if (r === undefined || !scope.allowedModuleIds.includes(r.item.moduleId)) return undefined;
       return r.answerKey;
+    },
+    itemFor(itemId, scope) {
+      const r = records.find((rec) => rec.item.id === itemId);
+      return r === undefined || !scope.allowedModuleIds.includes(r.item.moduleId)
+        ? undefined
+        : r.item;
     },
   };
 }
@@ -162,6 +171,7 @@ describe('pickItem', () => {
     // that same id/scope; `pickItem` must not hand out an item with no key, so it falls through.
     const noKeyBank: PracticeBank = {
       pick: () => BANK_ITEM,
+      itemFor: () => undefined,
       answerKeyFor: () => undefined,
     };
     const picked = pickItem(noKeyBank, SCOPE, 2, []);
@@ -205,6 +215,7 @@ describe('teacher scope (5.6c)', () => {
           i.level === level &&
           !exclude.includes(i.id),
       ),
+    itemFor: () => undefined,
     answerKeyFor: (id) => (id === BANK_ITEM.id ? ['1/2'] : undefined),
   };
 
@@ -227,10 +238,22 @@ describe('teacher scope (5.6c)', () => {
 
 describe('parseGeneratedId (5.6c: one bounded parser)', () => {
   it.each([
-    ['gen:m1:practice:1:3+4', { topicId: 'm1:practice', moduleId: 'm1', level: 1, a: 3, op: '+', b: 4 }],
-    ['gen:m1:practice:2:87-43', { topicId: 'm1:practice', moduleId: 'm1', level: 2, a: 87, op: '-', b: 43 }],
-    ['gen:m1:practice:3:12*11', { topicId: 'm1:practice', moduleId: 'm1', level: 3, a: 12, op: '*', b: 11 }],
-    ['gen:a:b:c:practice:1:1+999', { topicId: 'a:b:c:practice', moduleId: 'a:b:c', level: 1, a: 1, op: '+', b: 999 }],
+    [
+      'gen:m1:practice:1:3+4',
+      { topicId: 'm1:practice', moduleId: 'm1', level: 1, a: 3, op: '+', b: 4 },
+    ],
+    [
+      'gen:m1:practice:2:87-43',
+      { topicId: 'm1:practice', moduleId: 'm1', level: 2, a: 87, op: '-', b: 43 },
+    ],
+    [
+      'gen:m1:practice:3:12*11',
+      { topicId: 'm1:practice', moduleId: 'm1', level: 3, a: 12, op: '*', b: 11 },
+    ],
+    [
+      'gen:a:b:c:practice:1:1+999',
+      { topicId: 'a:b:c:practice', moduleId: 'a:b:c', level: 1, a: 1, op: '+', b: 999 },
+    ],
   ])('parses %s', (id, want) => {
     expect(parseGeneratedId(id)).toEqual(want);
   });
@@ -273,6 +296,7 @@ describe('pickItem validates every item at runtime (5.6 review)', () => {
       pick: (_scope, level, exclude) =>
         records.find((r) => r.item.level === level && !exclude.includes(r.item.id))?.item,
       answerKeyFor: (itemId) => records.find((r) => r.item.id === itemId)?.answerKey,
+      itemFor: (itemId) => records.find((r) => r.item.id === itemId)?.item,
     };
   }
   const leaky: PracticeItem = { ...BANK_ITEM, id: 'bank:leaky', prompt: 'Is 1/2 the answer?' };
@@ -320,7 +344,11 @@ describe('pickItem validates every item at runtime (5.6 review)', () => {
   });
 
   it('stops asking a bank that keeps returning the same rejected item', () => {
-    const stuck: PracticeBank = { pick: () => leaky, answerKeyFor: () => ['1/2'] };
+    const stuck: PracticeBank = {
+      pick: () => leaky,
+      itemFor: () => undefined,
+      answerKeyFor: () => ['1/2'],
+    };
     expect(pickItem(stuck, SCOPE, 2, [])?.item.id).toMatch(/^gen:/);
   });
 
@@ -360,7 +388,9 @@ describe('generateItem honours the exclude list (5.6 review)', () => {
       ids.push(picked?.item.id ?? '');
     }
     // The same exclude list gives the same next item.
-    expect(generateItem(scope, 1, ids.slice(0, 3))).toEqual(generateItem(scope, 1, ids.slice(0, 3)));
+    expect(generateItem(scope, 1, ids.slice(0, 3))).toEqual(
+      generateItem(scope, 1, ids.slice(0, 3)),
+    );
   });
 
   it('the first variant is unchanged when nothing is excluded', () => {
@@ -380,7 +410,10 @@ describe('generateItem honours the exclude list (5.6 review)', () => {
   });
 
   it('never makes an id over PRACTICE_ID_MAX: a very long module id fails closed', () => {
-    const scope: PracticeScope = { teacherId: 't', allowedModuleIds: ['m'.repeat(PRACTICE_ID_MAX)] };
+    const scope: PracticeScope = {
+      teacherId: 't',
+      allowedModuleIds: ['m'.repeat(PRACTICE_ID_MAX)],
+    };
     expect(generateItem(scope, 1)).toBeUndefined();
   });
 });
@@ -449,7 +482,7 @@ describe('validateItem', () => {
     expect(normaliseForMatch(prompt).includes(normaliseForMatch('6'))).toBe(true);
   });
 
-  it('accepts an mcq item with no options field at all (nothing to collide with)', () => {
+  it('refuses an mcq item with no options, or with an opaque option-id key (5.6b shape)', () => {
     const item: PracticeItem = {
       id: 'x',
       teacherId: 't',
@@ -459,36 +492,10 @@ describe('validateItem', () => {
       kind: 'mcq',
       prompt: 'Which of these numbers is prime?',
     };
-    expect(validateItem(item, ['opt-2'])).toBe(true);
-  });
-
-  it('accepts a well-formed mcq item whose key is an opaque option id, not its text', () => {
-    const item: PracticeItem = {
-      id: 'x',
-      teacherId: 't',
-      topicId: 't',
-      moduleId: 'm',
-      level: 1,
-      kind: 'mcq',
-      prompt: 'Which of these numbers is prime?',
-      options: ['4', '7', '9'],
-    };
-    expect(validateItem(item, ['opt-2'])).toBe(true);
-  });
-
-  it('rejects an mcq item whose key is a bare label equal to one of the option texts', () => {
-    const item: PracticeItem = {
-      id: 'x',
-      teacherId: 't',
-      topicId: 't',
-      moduleId: 'm',
-      level: 1,
-      kind: 'mcq',
-      prompt: 'Which of these numbers is prime?',
-      options: ['4', '7', '9'],
-    };
-    // '7' is the correct option's own visible text, not an opaque id: rejected (point 4).
-    expect(validateItem(item, ['7'])).toBe(false);
+    expect(validateItem(item, ['opt-2'])).toBe(false);
+    expect(validateItem({ ...item, options: ['4', '7', '9'] }, ['opt-2'])).toBe(false);
+    // '7' is the correct option's own visible text, not a label: refused too.
+    expect(validateItem({ ...item, options: ['4', '7', '9'] }, ['7'])).toBe(false);
   });
 
   const short = (fields: Partial<PracticeItem>): PracticeItem => ({
@@ -502,7 +509,7 @@ describe('validateItem', () => {
     ...fields,
   });
 
-  it.each(['short', 'numeric', 'mcq', 'code_output'] as const)(
+  it.each(['short', 'numeric', 'code_output'] as const)(
     'rejects a %s item whose key is in one of its options (5.6c)',
     (kind) => {
       const item = short({ kind, options: ['maybe Warm', 'cold'] });
@@ -536,5 +543,153 @@ describe('validateItem', () => {
       prompt: 'What is 2 + 2?',
     };
     expect(validateItem(item, ['4'])).toBe(true);
+  });
+});
+
+describe('validateItem: the mcq item rules (5.6b)', () => {
+  // A concept question: its prompt neither shows nor computes to the correct option.
+  const mcq = (fields: Partial<PracticeItem> = {}): PracticeItem => ({
+    id: 'bank:loops:1:a',
+    teacherId: 't',
+    topicId: 'loops',
+    moduleId: 'm',
+    level: 1,
+    kind: 'mcq',
+    prompt: 'Which loop always runs its body at least once?',
+    options: ['A) do-while loop', 'B) for loop', 'C) while loop'],
+    ...fields,
+  });
+  const six = ['A) one', 'B) two', 'C) three', 'D) four', 'E) five', 'F) six'];
+
+  it('accepts a well-formed mcq: 3 labelled options, one bare capital key in range', () => {
+    expect(validateItem(mcq(), ['A'])).toBe(true);
+    expect(validateItem(mcq(), ['B'])).toBe(true);
+    expect(validateItem(mcq(), ['C'])).toBe(true);
+  });
+
+  it('accepts 6 options; refuses 2 and 7', () => {
+    const p = 'Which word names how many legs an insect has?';
+    expect(validateItem(mcq({ prompt: p, options: six }), ['F'])).toBe(true);
+    expect(validateItem(mcq({ options: ['A) do-while loop', 'B) for loop'] }), ['A'])).toBe(false);
+    expect(validateItem(mcq({ prompt: p, options: [...six, 'G) seven'] }), ['F'])).toBe(false);
+  });
+
+  it('refuses unlabelled, out-of-order or badly labelled options', () => {
+    for (const options of [
+      ['do-while loop', 'for loop', 'while loop'],
+      ['B) do-while loop', 'A) for loop', 'C) while loop'],
+      ['A) do-while loop', 'C) for loop', 'D) while loop'],
+      ['A. do-while loop', 'B. for loop', 'C. while loop'],
+      ['a) do-while loop', 'b) for loop', 'c) while loop'],
+      ['A) do-while loop', 'B) ', 'C) while loop'],
+    ]) {
+      expect(validateItem(mcq({ options }), ['A'])).toBe(false);
+    }
+  });
+
+  it('refuses any key that is not exactly one bare capital label in range', () => {
+    for (const key of [['(B)'], ['b'], ['B)'], ['opt-2'], ['D'], ['Z'], ['A', 'B'], ['']]) {
+      expect(validateItem(mcq(), key)).toBe(false);
+    }
+  });
+
+  it("refuses a prompt holding the correct option's text, in any form the matcher reads", () => {
+    const options = ['A) 6', 'B) 7', 'C) 8'];
+    expect(validateItem(mcq({ prompt: 'Which equals 7?', options }), ['B'])).toBe(false);
+    expect(validateItem(mcq({ prompt: 'Which equals seven?', options }), ['B'])).toBe(false);
+    // Phase A note (lead answer): a sum prompt computes to its option, so it is refused too.
+    expect(validateItem(mcq({ prompt: 'What is 3 + 4?', options }), ['B'])).toBe(false);
+    expect(validateItem(mcq({ prompt: 'Which of these is a prime number?', options }), ['B'])).toBe(
+      true,
+    );
+  });
+
+  it("refuses a prompt naming the correct option's position in an answer context", () => {
+    expect(validateItem(mcq({ prompt: 'Is the second one right?' }), ['B'])).toBe(false);
+    expect(validateItem(mcq({ prompt: 'Is the second option right?' }), ['A'])).toBe(true);
+  });
+
+  it('checks the key in the prompt, options and id with the label matcher', () => {
+    // The article "a" and an id ending ":a" do not refuse key A.
+    const prime = mcq({
+      id: 'bank:primes:3:a',
+      prompt: 'Which is a prime?',
+      options: ['A) 7', 'B) 8', 'C) 9'],
+    });
+    expect(validateItem(prime, ['A'])).toBe(true);
+    // A real mention does.
+    const hinted = mcq({ prompt: 'Hint: B. Which loop runs its body at least once?' });
+    expect(validateItem(hinted, ['B'])).toBe(false);
+    const inOption = mcq({ options: ['A) do-while loop', 'B) for loop', 'C) not B'] });
+    expect(validateItem(inOption, ['B'])).toBe(false);
+    expect(validateItem(mcq({ id: 'bank:answer-is-b' }), ['B'])).toBe(false);
+  });
+
+  it('a label key on another kind is checked with the label matcher too', () => {
+    const shortA: PracticeItem = {
+      id: 'bank:shapes:1:a',
+      teacherId: 't',
+      topicId: 'shapes',
+      moduleId: 'm',
+      level: 1,
+      kind: 'short',
+      prompt: 'Is a square a rectangle?',
+    };
+    expect(validateItem(shortA, ['A'])).toBe(true);
+    expect(validateItem({ ...shortA, prompt: 'The answer is A.' }, ['A'])).toBe(false);
+  });
+
+  it('caps the prompt and every option, for every kind', () => {
+    const long = (n: number) => 'x'.repeat(n);
+    expect(validateItem(mcq({ prompt: `${long(PRACTICE_PROMPT_MAX - 1)}?` }), ['A'])).toBe(true);
+    expect(validateItem(mcq({ prompt: `${long(PRACTICE_PROMPT_MAX)}?` }), ['A'])).toBe(false);
+    const options = (n: number) => ['A) do-while loop', 'B) for loop', `C) ${long(n - 3)}`];
+    expect(validateItem(mcq({ options: options(PRACTICE_OPTION_MAX) }), ['A'])).toBe(true);
+    expect(validateItem(mcq({ options: options(PRACTICE_OPTION_MAX + 1) }), ['A'])).toBe(false);
+    const numeric: PracticeItem = {
+      id: 'bank:sum:1:a',
+      teacherId: 't',
+      topicId: 'sum',
+      moduleId: 'm',
+      level: 1,
+      kind: 'numeric',
+      prompt: 'What is 2 + 2?',
+    };
+    expect(validateItem(numeric, ['4'])).toBe(true);
+    const longPrompt = `${long(PRACTICE_PROMPT_MAX)} 2 + 2?`;
+    expect(validateItem({ ...numeric, prompt: longPrompt }, ['4'])).toBe(false);
+    const longOption = [long(PRACTICE_OPTION_MAX + 1)];
+    expect(validateItem({ ...numeric, options: longOption }, ['4'])).toBe(false);
+  });
+
+  it('code_output keeps its key-in-prompt exemption, still checked against options and id', () => {
+    const code: PracticeItem = {
+      id: 'bank:py:1:a',
+      teacherId: 't',
+      topicId: 'py',
+      moduleId: 'm',
+      level: 1,
+      kind: 'code_output',
+      prompt: 'What does this print?\nprint(4)\n# one line',
+    };
+    expect(validateItem(code, ['4'])).toBe(true);
+    expect(validateItem({ ...code, options: ['it prints 4'] }, ['4'])).toBe(false);
+    expect(validateItem({ ...code, id: 'bank:py:hello' }, ['hello'])).toBe(false);
+  });
+});
+
+describe('generatedPrompt (5.6b: one source for a generated prompt)', () => {
+  it("rebuilds every generated item's prompt from its id", () => {
+    for (const level of LEVELS) {
+      const exclude: string[] = [];
+      for (let v = 0; v < 8; v++) {
+        const picked = generateItem(SCOPE, level, exclude);
+        if (picked === undefined) throw new Error('no item');
+        const g = parseGeneratedId(picked.item.id);
+        if (g === undefined) throw new Error('unparsed');
+        expect(generatedPrompt(g)).toBe(picked.item.prompt);
+        exclude.push(picked.item.id);
+      }
+    }
   });
 });

@@ -104,9 +104,10 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
       level: 3,
       kind: 'mcq',
       prompt: 'Which value of x solves 2x - 3 = 11?',
-      options: ['6', '7', '8'],
+      // 5.6b: the MCQ item rules (labelled options, one bare label key); still not served.
+      options: ['A) 6', 'B) 7', 'C) 8'],
     },
-    answerKey: ['opt-2'],
+    answerKey: ['B'],
   },
   {
     // Not servable (SERVABLE_KINDS excludes 'code_output'): kept for the same reason.
@@ -170,6 +171,11 @@ export function demoPracticeBank(
       if (record === undefined || record.item.teacherId !== scope.teacherId) return undefined;
       if (!scope.allowedModuleIds.includes(record.item.moduleId)) return undefined;
       return record.answerKey;
+    },
+    itemFor(itemId: string, scope: PracticeScope) {
+      const record = byId.get(itemId);
+      if (record === undefined || record.item.teacherId !== scope.teacherId) return undefined;
+      return scope.allowedModuleIds.includes(record.item.moduleId) ? record.item : undefined;
     },
   };
 }

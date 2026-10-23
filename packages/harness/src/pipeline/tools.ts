@@ -3,8 +3,10 @@
 // is re-exported here, so imports don't churn.
 import type { Skill, Tool, TurnContext } from '@edmate/contracts';
 import { z } from 'zod';
+import type { ItemContext } from './generate/itemContext.js';
 
 export { DuplicateToolError, entitledTools, offeredTools, policyTools } from '../access/tools.js';
+export type { ItemContext } from './generate/itemContext.js';
 
 /** What a tool result shows the student as a `skill` event; written by the tool's author. */
 export interface SkillPresentation {
@@ -34,6 +36,13 @@ export interface RegisteredTool {
    * closed (the model never sees an item whose key the harness can't protect).
    */
   issuedItem?(output: unknown, ctx: TurnContext): IssuedItem | undefined;
+  /**
+   * Optional (5.6b): the active practice item a loaded HelpState names (`practiceItemId`), rebuilt
+   * on the server (its prompt, options and own key) inside `ctx.entitlement`, so the leak matcher
+   * can exempt its re-show. `undefined` for an id outside the entitlement or one the tool never
+   * issued (the key then gets no spans and no derived keys, 5.6b Q6).
+   */
+  activeItem?(itemId: string, ctx: TurnContext): ItemContext | undefined;
 }
 
 /** The session's practice state a tool may read (5.6): never model-chosen. */

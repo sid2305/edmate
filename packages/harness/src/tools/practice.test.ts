@@ -136,6 +136,7 @@ describe('practiceNextItemTool', () => {
       }),
       // 5.6a: not 'a', which the fixture's retrieved chunk holds as a word.
       answerKeyFor: () => ['qzx'],
+      itemFor: () => undefined,
     };
     const withOpt = practiceNextItemTool(withOptions);
     const out = await withOpt.tool.run({ level: 1 }, turnContextFull);
@@ -355,13 +356,23 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
 
   it('issuedItem: shown is the prompt and the options, never the id or level', () => {
     const t = practiceNextItemTool(demoPracticeBank());
-    const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p', options: ['o'] };
+    const out = {
+      id: 'demo:arithmetic:1:a',
+      kind: 'numeric',
+      level: 1,
+      prompt: 'p',
+      options: ['o'],
+    };
     expect(t.issuedItem(out, two)?.shown).toEqual(['p', 'o']);
   });
 
   it('issuedItem: a module id over PRACTICE_ID_MAX fails closed', () => {
     const long = 'm'.repeat(PRACTICE_ID_MAX + 1);
-    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => ['5'] };
+    const bank: PracticeBank = {
+      pick: () => undefined,
+      itemFor: () => undefined,
+      answerKeyFor: () => ['5'],
+    };
     const t = practiceNextItemTool(bank);
     const ctx = ctxWith({
       entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [long] },
@@ -374,6 +385,7 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
     // An inconsistent bank: a key for the whole scope but none for any one module.
     const bank: PracticeBank = {
       pick: () => undefined,
+      itemFor: () => undefined,
       answerKeyFor: (_id, scope) => (scope.allowedModuleIds.length > 1 ? ['5'] : undefined),
     };
     const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
@@ -386,12 +398,20 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
       entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
     });
     const big = 'k'.repeat(PRACTICE_KEYS_MAX_JSON);
-    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [big] };
+    const bank: PracticeBank = {
+      pick: () => undefined,
+      itemFor: () => undefined,
+      answerKeyFor: () => [big],
+    };
     const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
     expect(practiceNextItemTool(bank).issuedItem(out, one)).toBeUndefined();
     // The session's earlier keys count too.
     const half = 'h'.repeat(PRACTICE_KEYS_MAX_JSON / 2);
-    const halfBank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [half] };
+    const halfBank: PracticeBank = {
+      pick: () => undefined,
+      itemFor: () => undefined,
+      answerKeyFor: () => [half],
+    };
     const fresh = practiceNextItemTool(halfBank).forSession({ servedItemIds: [] });
     expect(fresh.issuedItem?.(out, one)).toBeDefined();
     const full = practiceNextItemTool(halfBank).forSession({
@@ -407,12 +427,21 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
       entitlement: { ...turnContextFull.entitlement, teacherId: 'tch_other' },
     });
     const out = { id: 'demo:arithmetic:1:a', kind: 'numeric', level: 1, prompt: 'p' };
-    expect(t.issuedItem(out, { ...other, entitlement: { ...other.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] } })).toBeUndefined();
+    expect(
+      t.issuedItem(out, {
+        ...other,
+        entitlement: { ...other.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
+      }),
+    ).toBeUndefined();
     expect(t.issuedItem(out, two)).toBeDefined();
   });
 
   it('issuedItem: undefined when the id resolves in two allowed modules (5.6c)', () => {
-    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => ['5'] };
+    const bank: PracticeBank = {
+      pick: () => undefined,
+      itemFor: () => undefined,
+      answerKeyFor: () => ['5'],
+    };
     const out = { id: 'bank:1', kind: 'numeric', level: 1, prompt: 'p' };
     expect(practiceNextItemTool(bank).issuedItem(out, two)).toBeUndefined();
   });
@@ -446,7 +475,11 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
 
   it('issuedItem: the cap counts held keys too (5.6c)', () => {
     const half = 'h'.repeat(PRACTICE_KEYS_MAX_JSON / 2);
-    const bank: PracticeBank = { pick: () => undefined, answerKeyFor: () => [half] };
+    const bank: PracticeBank = {
+      pick: () => undefined,
+      itemFor: () => undefined,
+      answerKeyFor: () => [half],
+    };
     const arith = ctxWith({
       entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MODULE_ARITHMETIC] },
     });
@@ -479,7 +512,15 @@ describe('practiceNextItemTool: session state and issued items (5.6 Phase C, ADR
 describe("practiceNextItemTool: no item whose key is in this turn's chunks (5.6a)", () => {
   const MOD = MODULE_ARITHMETIC;
   const rec = (id: string, prompt: string, key: string): DemoPracticeRecord => ({
-    item: { id, teacherId: SCOPE.teacherId, topicId: 'linear', moduleId: MOD, level: 1, kind: 'numeric', prompt },
+    item: {
+      id,
+      teacherId: SCOPE.teacherId,
+      topicId: 'linear',
+      moduleId: MOD,
+      level: 1,
+      kind: 'numeric',
+      prompt,
+    },
     answerKey: [key],
   });
   const RECS = [
@@ -540,5 +581,96 @@ describe("practiceNextItemTool: no item whose key is in this turn's chunks (5.6a
     const t = practiceNextItemTool(demoPracticeBank([rec('fx:s', 'What is 3 + 4?', '7')]));
     const ctx = ctxOf([chunkWith('there are 7 days')]);
     expect(idOf(await t.tool.run({ level: 1 }, ctx))).toBe('fx:s');
+  });
+});
+
+describe('practiceNextItemTool: activeItem (5.6b), scoped to the entitlement', () => {
+  const t = practiceNextItemTool(demoPracticeBank());
+  const inModules = (allowedModuleIds: string[], teacherId = SCOPE.teacherId) =>
+    ctxWith({ entitlement: { ...turnContextFull.entitlement, teacherId, allowedModuleIds } });
+
+  it('rebuilds a bank item in scope: prompt, options and its own key', () => {
+    expect(t.activeItem('demo:arithmetic:1:a', inModules([MODULE_ARITHMETIC]))).toEqual({
+      prompt: 'What is 3 + 4?',
+      answerKey: ['7'],
+    });
+    expect(t.activeItem('demo:algebra:3:a', inModules([MODULE_ALGEBRA]))).toEqual({
+      prompt: 'Which value of x solves 2x - 3 = 11?',
+      options: ['A) 6', 'B) 7', 'C) 8'],
+      answerKey: ['B'],
+    });
+  });
+
+  it('returns undefined for another teacher, another module or an unknown id', () => {
+    expect(t.activeItem('demo:arithmetic:1:a', inModules([MODULE_ARITHMETIC], 'tch_other'))).toBe(
+      undefined,
+    );
+    expect(t.activeItem('demo:arithmetic:1:a', inModules([MODULE_FRACTIONS]))).toBeUndefined();
+    expect(t.activeItem('nonsense-id', inModules([MODULE_ARITHMETIC]))).toBeUndefined();
+  });
+
+  it('round-trips a generated item: its prompt and key recomputed from the id, in scope only', async () => {
+    const gen = practiceNextItemTool(demoPracticeBank([]));
+    const ctx = inModules([MODULE_FRACTIONS]);
+    const out = (await gen.tool.run({ level: 2 }, ctx)) as { id: string; prompt: string };
+    expect(gen.activeItem(out.id, ctx)).toEqual({
+      prompt: out.prompt,
+      answerKey: generatedAnswerKeyFor(out.id),
+    });
+    expect(gen.activeItem(out.id, inModules([MODULE_ARITHMETIC]))).toBeUndefined();
+    expect(gen.activeItem('gen:module-fractions:practice:2:12+3', ctx)).toBeUndefined();
+  });
+
+  it('a bank that knows the item but not its key gives undefined (fail closed)', () => {
+    const odd: PracticeBank = {
+      ...demoPracticeBank(),
+      itemFor: () => undefined,
+      answerKeyFor: () => undefined,
+    };
+    const ctx = inModules([MODULE_ARITHMETIC]);
+    expect(practiceNextItemTool(odd).activeItem('demo:arithmetic:1:a', ctx)).toBeUndefined();
+    const empty: PracticeBank = { ...demoPracticeBank(), answerKeyFor: () => [] };
+    expect(practiceNextItemTool(empty).activeItem('demo:arithmetic:1:a', ctx)).toBeUndefined();
+  });
+
+  it('the session-bound copy has the same hook', () => {
+    const bound = t.forSession({ servedItemIds: [] });
+    expect(bound.activeItem('demo:arithmetic:1:a', inModules([MODULE_ARITHMETIC]))?.prompt).toBe(
+      'What is 3 + 4?',
+    );
+  });
+});
+
+describe('practiceNextItemTool: a held label key and a new listing (5.6b)', () => {
+  const MOD = MODULE_ARITHMETIC;
+  const rec = (id: string, prompt: string): DemoPracticeRecord => ({
+    item: {
+      id,
+      teacherId: SCOPE.teacherId,
+      topicId: 'sums',
+      moduleId: MOD,
+      level: 1,
+      kind: 'short',
+      prompt,
+      options: ['A) 39', 'B) 41', 'C) 44'],
+    },
+    answerKey: ['42'],
+  });
+  const ctx = ctxWith({
+    entitlement: { ...turnContextFull.entitlement, allowedModuleIds: [MOD] },
+    retrieved: [],
+  });
+  const idOf = (out: unknown) => (out as { id: string }).id;
+
+  it('an item whose own listing names the held label is served (its listing is exempt)', async () => {
+    const bank = demoPracticeBank([rec('fx:list', 'Which option is closest to 40 + 2?')]);
+    const t = practiceNextItemTool(bank, { heldKeys: ['B'] });
+    expect(idOf(await t.tool.run({ level: 1 }, ctx))).toBe('fx:list');
+  });
+
+  it('an item whose prompt says the held label is still refused', async () => {
+    const bank = demoPracticeBank([rec('fx:says', 'The answer is B. Which is closest to 40 + 2?')]);
+    const t = practiceNextItemTool(bank, { heldKeys: ['B'] });
+    expect(idOf(await t.tool.run({ level: 1 }, ctx))).not.toBe('fx:says');
   });
 });

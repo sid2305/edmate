@@ -97,9 +97,28 @@ describe('demoPracticeBank: scoped reads (architect review point 1)', () => {
     expect(
       bank.pick({ teacherId: T, allowedModuleIds: ['module-algebra'] }, 3, []),
     ).toBeUndefined();
+    expect(bank.pick({ teacherId: T, allowedModuleIds: ['module-python'] }, 1, [])).toBeUndefined();
+  });
+});
+
+describe('demoPracticeBank: itemFor (5.6b), scoped like answerKeyFor', () => {
+  const bank = demoPracticeBank();
+  const arithmetic = { teacherId: T, allowedModuleIds: ['module-arithmetic'] };
+
+  it('returns the item in scope, and the mcq record with its options', () => {
+    expect(bank.itemFor('demo:arithmetic:1:a', arithmetic)?.prompt).toBe('What is 3 + 4?');
+    const mcq = bank.itemFor('demo:algebra:3:a', scopeAll);
+    expect(mcq?.options).toEqual(['A) 6', 'B) 7', 'C) 8']);
+  });
+
+  it('returns undefined for another teacher, another module or an unknown id', () => {
+    expect(bank.itemFor('demo:arithmetic:1:a', { ...arithmetic, teacherId: 'tch_other' })).toBe(
+      undefined,
+    );
     expect(
-      bank.pick({ teacherId: T, allowedModuleIds: ['module-python'] }, 1, []),
+      bank.itemFor('demo:arithmetic:1:a', { teacherId: T, allowedModuleIds: ['module-python'] }),
     ).toBeUndefined();
+    expect(bank.itemFor('demo:nope:1:a', scopeAll)).toBeUndefined();
   });
 });
 

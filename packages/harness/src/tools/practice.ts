@@ -20,9 +20,15 @@ import { PRACTICE_ID_MAX, PRACTICE_KEYS_MAX_JSON } from '../pedagogy/helpState.j
 import { HarnessError } from '../pipeline/errors.js';
 import { compileAnswerKeys, revealsAnswerKey } from '../pipeline/generate/answerKey.js';
 import { chunkLeaks, contextAnswerKeys } from '../pipeline/generate/answerKeyContext.js';
+import {
+  type ItemContext,
+  issueCheckContext,
+  itemContextOf,
+} from '../pipeline/generate/itemContext.js';
 import type { IssuedItem, RegisteredTool, ToolSessionState } from '../pipeline/tools.js';
 import {
   generatedAnswerKeyFor,
+  generatedPrompt,
   parseGeneratedId,
   pickItem,
   type PracticeBank,
@@ -128,6 +134,7 @@ export interface PracticeRegisteredTool extends RegisteredTool {
    */
   answerKeyFor(itemId: string, scope: PracticeScope): readonly string[] | undefined;
   forSession(s: ToolSessionState): PracticeRegisteredTool;
+  activeItem(itemId: string, ctx: TurnContext): ItemContext | undefined;
   issuedItem(output: unknown, ctx: TurnContext): IssuedItem | undefined;
 }
 
@@ -158,8 +165,12 @@ export function practiceNextItemTool(
       const held = opts.heldKeys ?? [];
       // 5.6a: the turn's chunks are already in the model's context, so an item whose own key
       // (short numbers aside, contextAnswerKeys) shows in any of them is refused too.
+      // 5.6b: the item's shown text is checked as one joined text with its own listing exempt
+      // (an MCQ after an MCQ with the same key is served), as toolLoop and skillEvent do.
       const accept = (item: PracticeItem, answerKey: readonly string[]) => {
-        if (revealsAnswerKey(shownText(item), held)) return false;
+        const shown = shownText(item);
+        const items = [issueCheckContext({ shown, answerKey })];
+        if (revealsAnswerKey(shown.join('\n'), held, { items })) return false;
         const m = compileAnswerKeys(contextAnswerKeys(answerKey));
         return m.empty || !ctx.retrieved.some((c) => chunkLeaks(c, m));
       };
@@ -175,10 +186,27 @@ export function practiceNextItemTool(
     if (moduleId === undefined || !scope.allowedModuleIds.includes(moduleId)) return undefined;
     return generatedAnswerKeyFor(itemId);
   };
+  // 5.6b: the active item, rebuilt inside the turn's entitlement: the bank first, then the
+  // generator (its prompt and key recomputed from the id). Outside scope: undefined.
+  const activeItem = (itemId: string, ctx: TurnContext): ItemContext | undefined => {
+    const scope = scopeOf(ctx);
+    const item = bank.itemFor(itemId, scope);
+    if (item !== undefined) {
+      const answerKey = bank.answerKeyFor(itemId, scope);
+      if (answerKey === undefined || answerKey.length === 0) return undefined;
+      return itemContextOf({ shown: shownText(item), answerKey });
+    }
+    const g = parseGeneratedId(itemId);
+    if (g === undefined || !scope.allowedModuleIds.includes(g.moduleId)) return undefined;
+    // A parsed id always has a key (generatedAnswerKeyFor parses the same id).
+    const answerKey = generatedAnswerKeyFor(itemId) as readonly string[];
+    return { prompt: generatedPrompt(g), answerKey: [...answerKey] };
+  };
   return {
     tool: tool as Tool<unknown, unknown>,
     present: (out) => ({ skill: 'practice', payload: out }),
     answerKeyFor,
+    activeItem,
     forSession: (s) =>
       practiceNextItemTool(bank, {
         exclude: s.servedItemIds,

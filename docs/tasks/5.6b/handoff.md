@@ -64,6 +64,64 @@
 - Position keys are an answer-context check: "It's 2 steps." leaks for a key-B MCQ (safe
   failure). Phase C runner fixtures should avoid such wording in delivered replies.
 
+## Phase B
+
+Branch `m13/5.6b-answer-context` (worked locally as `work-56b-B`). Tests first; each new test was
+seen failing before its code.
+
+### What changed
+
+- `tools/practiceItems.ts`: `validateItem` item rules. An mcq item needs 3 to 6 options, each
+  `"X) text"` in label order with non-empty text, and exactly one in-range letter key. The label is
+  checked with the label matcher in the prompt and in each option text (the listing is the exempt
+  span), and in the id. The correct option's text must not leak in the prompt, and its position
+  must not be named there (full strength, per the lead's answer on the Phase A note). Caps:
+  `PRACTICE_PROMPT_MAX` 600, `PRACTICE_OPTION_MAX` 160. The old opaque option-id mcq path is
+  gone. New `generatedPrompt(id)` (the generator now uses it) and a required
+  `PracticeBank.itemFor(itemId, scope)`.
+- `tools/demoPracticeBank.ts`: `itemFor`, scoped like `answerKeyFor`. The demo mcq record now has
+  real options (A) 6 / B) 7 / C) 8, key B); it is still not served (Phase C).
+- `pipeline/tools.ts`: `RegisteredTool.activeItem?(itemId, ctx)` and the `ItemContext` type
+  re-export.
+- `tools/practice.ts`: `accept()` checks with `issueCheckContext` (as toolLoop and skillEvent do).
+  New `activeItem` hook: the bank item (its prompt, options and key) inside the entitlement, else a
+  generated id in scope (prompt rebuilt with `generatedPrompt`, key recomputed). It fails closed
+  (undefined) for an out-of-scope or unknown id, or a bank item with no key. Session copies get it.
+- `pipeline/generate/streamGate.ts`: `StreamGateInput.items` / `practiceKeys`,
+  `addKeys(keys, items?)`, and the re-show hold-back. One KMP cursor per item per span (the
+  prompt, and the listing joined by newlines), compared in the matcher's folded compact form.
+  - Text that may be the start of a re-show is held until the restatement completes or stops
+    matching.
+  - A completed span is judged as one piece: sentence ends inside it are skipped, and a cap cut
+    never lands inside it.
+  - A window in front that would start inside a shown span starts at the span's start instead.
+    Without this, a cut-off listing reads as bare option text; this showed up as a false trip on
+    the third repeated re-show.
+  - `HOLD_MAX` is 2048 compact units: a longer target is never held.
+  - Text held when `addKeys` brings a new item is fed to that item's cursor.
+
+### Evidence
+
+| Check | Result |
+|---|---|
+| Gate | `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --force --concurrency=1` → `Tasks: 10 successful, 10 total`; harness `Test Files 121 passed (121)`, `Tests 5463 passed (5463)`; contracts 7 files / 444 tests passed; config 2 files / 42 tests passed; no skipped files. |
+| Coverage | `src/tools/**` at 100% (the threshold run passes); `streamGate.ts` fully covered. |
+| Linear work | New test: a capped item (a 561-unit prompt and six 156-unit options) re-shown about five times, under `LIMITS.modelTextMaxLength`, pushed in 7-unit pieces. It is delivered whole, and each check reads at most `2 × (reach + cap + HOLD_MAX)` units. |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → clean. |
+| Scope | Only `packages/harness/src/{tools/practiceItems,tools/demoPracticeBank,tools/practice,pipeline/tools,pipeline/generate/streamGate}.ts` and their tests changed. No contracts, apps, runner, generate, postGuard, answerLeak, grounding or `SERVABLE_KINDS` change. |
+
+### Left to do (Phase C)
+
+- Wire it up in runner, generate, postGuard, `answerLeak.ts` and `grounding.ts`:
+  - resolve the active item through `activeItem`;
+  - pass `items` and `practiceKeys` to the stream gate and the post-checks;
+  - call `addKeys(keys, [issued item context])` on each issued item.
+- Add `mcq` and `code_output` to `SERVABLE_KINDS`, and give the demo code_output record real
+  content.
+- `runner.practiceKinds.test.ts`: end-to-end runs that re-show an MCQ and a code_output item.
+- Phase A note still applies: avoid position wording such as "It's 2 steps." in delivered replies
+  in the runner fixtures.
+
 ## Decisions
 
 ### 23 Oct 2026 · 5.6b The leak matcher gets an answer-context mode · decided by builder · risk: high
@@ -91,4 +149,34 @@
 - Why: lead decision Q5; carried here from the plan so it reaches the log.
 - risk: low
 
-Tool calls used: 46
+### 23 Oct 2026 · 5.6b The demo MCQ record gets real options in Phase B · decided by builder · risk: low
+- Decided: the demo mcq record `demo:algebra:3:a` now has options A) 6 / B) 7 / C) 8 and key B. It is still not served until Phase C adds mcq to `SERVABLE_KINDS`.
+- Why: the test that every demo record passes `validateItem` stays strict under the new mcq rules. Its prompt does not compute to 7, so the full-strength check holds.
+- risk: low
+
+### 23 Oct 2026 · 5.6b An item id may hold its label key only in a non-answer shape · decided by builder · risk: low
+- Decided: for a one-letter key, the id is checked with the label matcher in decoded mode: an answer context, or the label as the whole id, is refused. A bank id ending ":a" is accepted.
+- Why: a whole-word check would refuse common bank ids. The id is never shown with an answer word.
+- risk: low
+
+### 23 Oct 2026 · 5.6b PracticeBank.itemFor is required · decided by builder · risk: low
+- Decided: `itemFor(itemId, scope)` is a required member of `PracticeBank`. Only the harness implements banks today.
+- Why: if it were optional, a bank without it would quietly give no re-show exemption. Required makes the compiler flag every bank.
+- risk: low
+
+### 23 Oct 2026 · 5.6b A label key on a non-mcq item uses the label matcher · decided by builder · risk: low
+- Decided: when a short, numeric or code_output item has a one-letter key, `validateItem` checks its prompt and options with the label matcher, not the whole-word check.
+- Why: the label key is guarded the same way everywhere. A whole-word "a" check would refuse ordinary English prompts.
+- risk: low
+
+### 23 Oct 2026 · 5.6b The re-show hold-back is bounded and widens the window over a shown span · decided by builder · risk: high
+- Decided: the stream gate holds back text that could still become an active item's prompt or listing, up to `HOLD_MAX` (2048 compact units). It judges a completed span as one piece. When the window in front would start inside a shown span, the window starts at the span's start.
+- Why: the matcher only exempts a whole span. A span split across checks, or cut by the window, read as a leak on every re-show. Holding back delays text but never shows more of it, and the work stays linear, as a test checks.
+- risk: high
+
+### 23 Oct 2026 · 5.6b Keys added mid-attempt are practice keys · decided by builder · risk: low
+- Decided: in `answerLeakStreamGate`, keys from `addKeys` count as practice keys, so they never get the own-code exemption. Items from `addKeys` join the matcher's item contexts.
+- Why: design 4. A key from an issued item must not slip through because the student typed it.
+- risk: low
+
+Tool calls used: Phase A 61; Phase B 38
