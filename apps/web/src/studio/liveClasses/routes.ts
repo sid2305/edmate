@@ -5,8 +5,11 @@
 // field; the repository re-checks that every package id is the teacher's own (`not_found`
 // otherwise, nothing written).
 //
-//   GET  /api/studio/live-classes   the teacher's own scheduled classes, soonest first
-//   POST /api/studio/live-classes   schedule one, attached to 1..20 of the teacher's own packages
+//   GET    /api/studio/live-classes       the teacher's own scheduled classes, soonest first
+//   POST   /api/studio/live-classes       schedule one, attached to 1..20 of the teacher's own packages
+//   PUT    /api/studio/live-classes/:id   edit title/link/startsAt of one of the teacher's own
+//                                         classes, before it starts (task 11.1d Phase B)
+//   DELETE /api/studio/live-classes/:id   cancel (soft) one of the teacher's own classes (11.1d)
 import type { CreateLiveClassInput, Repositories, TeacherLiveClassRow, TeacherScope } from '@edmate/db';
 import { RepositoryError } from '@edmate/db';
 import type { NextRequest } from 'next/server';
@@ -15,9 +18,12 @@ import { apiError } from '../../auth/errors';
 import type { RoleContext } from '../../auth/guard';
 import { MAX_BODY_BYTES, readJson, TOO_LARGE, type ServerLog } from '../routes';
 
-/** Everything the live-classes routes need: 11.1a's repository, create and list only. */
+/** Everything the live-classes routes need: 11.1a/11.1d's repository (create/list/update/cancel). */
 export interface LiveClassesBackend {
-  liveClasses: Pick<Repositories['liveClasses'], 'create' | 'listForTeacher'>;
+  liveClasses: Pick<
+    Repositories['liveClasses'],
+    'create' | 'listForTeacher' | 'update' | 'cancel'
+  >;
   log: ServerLog;
 }
 
@@ -40,17 +46,30 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-// Package ids: same shape as the other studio routes' own `Id` (the repository's id format).
+// Package ids and the `:id` path param: same shape as the other studio routes' own `Id` (the
+// repository's id format).
 const Id = z
   .string()
   .regex(/^[A-Za-z0-9_-]+$/)
   .max(122);
+const ParamsSchema = z.object({ id: Id });
+
+/** Shared title/link/startsAt field schemas, used by `create` and `update` (11.1d Phase B). */
+const TitleSchema = z.string().trim().min(1).max(200);
+const LinkSchema = z.string().trim().min(1).max(2048);
+const StartsAtSchema = z.string();
 
 const CreateSchema = z.strictObject({
-  title: z.string().trim().min(1).max(200),
-  link: z.string().trim().min(1).max(2048),
-  startsAt: z.string(),
+  title: TitleSchema,
+  link: LinkSchema,
+  startsAt: StartsAtSchema,
   packageIds: z.array(Id).min(1).max(20),
+});
+
+const UpdateSchema = z.strictObject({
+  title: TitleSchema,
+  link: LinkSchema,
+  startsAt: StartsAtSchema,
 });
 
 async function parseBody<S extends z.ZodType>(
@@ -63,8 +82,21 @@ async function parseBody<S extends z.ZodType>(
   return parsed.success ? parsed.data : validation();
 }
 
+/** The `:id` path param, or `null` when it doesn't match the id shape (mirrors `docId` in `../routes`). */
+async function classId(ctx: RoleContext): Promise<string | null> {
+  const parsed = ParamsSchema.safeParse(await ctx.params);
+  return parsed.success ? parsed.data.id : null;
+}
+
+const HTTPS_MESSAGE = 'The join link must start with https://.';
+
 type Handler = (req: NextRequest, ctx: RoleContext) => Promise<Response>;
-type Work = (b: LiveClassesBackend, scope: TeacherScope, req: NextRequest) => Promise<Response>;
+type Work = (
+  b: LiveClassesBackend,
+  scope: TeacherScope,
+  req: NextRequest,
+  ctx: RoleContext,
+) => Promise<Response>;
 
 const list: Work = async (b, scope) => {
   const classes: TeacherLiveClassRow[] = await b.liveClasses.listForTeacher(scope);
@@ -74,7 +106,7 @@ const list: Work = async (b, scope) => {
 const create: Work = async (b, scope, req) => {
   const body = await parseBody(req, CreateSchema);
   if (body instanceof Response) return body;
-  if (!/^https:\/\//.test(body.link)) return validation('The join link must start with https://.');
+  if (!/^https:\/\//.test(body.link)) return validation(HTTPS_MESSAGE);
   const input: CreateLiveClassInput = {
     title: body.title,
     link: body.link,
@@ -83,6 +115,27 @@ const create: Work = async (b, scope, req) => {
   };
   const result = await b.liveClasses.create(scope, input);
   return ok(result, 201);
+};
+
+const update: Work = async (b, scope, req, ctx) => {
+  const id = await classId(ctx);
+  if (!id) return validation();
+  const body = await parseBody(req, UpdateSchema);
+  if (body instanceof Response) return body;
+  if (!/^https:\/\//.test(body.link)) return validation(HTTPS_MESSAGE);
+  const result = await b.liveClasses.update(scope, id, {
+    title: body.title,
+    link: body.link,
+    startsAt: body.startsAt,
+  });
+  return ok(result);
+};
+
+const cancel: Work = async (b, scope, _req, ctx) => {
+  const id = await classId(ctx);
+  if (!id) return validation();
+  const result = await b.liveClasses.cancel(scope, id);
+  return ok(result);
 };
 
 /**
@@ -94,7 +147,7 @@ const create: Work = async (b, scope, req) => {
 export function createLiveClassesHandlers(
   backend: () => Promise<LiveClassesBackend>,
   fallbackLog: ServerLog,
-): { list: Handler; create: Handler } {
+): { list: Handler; create: Handler; update: Handler; cancel: Handler } {
   const run =
     (work: Work): Handler =>
     async (req, ctx) => {
@@ -111,7 +164,7 @@ export function createLiveClassesHandlers(
       }
       const scope: TeacherScope = { teacherId: ctx.principal.userId };
       try {
-        return await work(b, scope, req);
+        return await work(b, scope, req, ctx);
       } catch (error) {
         if (error instanceof RepositoryError && error.kind === 'not_found') return notFound();
         if (error instanceof RepositoryError && error.kind === 'invalid') return validation();
@@ -119,5 +172,5 @@ export function createLiveClassesHandlers(
         return apiError('provider_error', MSG.failed, 500);
       }
     };
-  return { list: run(list), create: run(create) };
+  return { list: run(list), create: run(create), update: run(update), cancel: run(cancel) };
 }

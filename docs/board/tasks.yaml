@@ -4928,30 +4928,30 @@ tasks:
   deps:
   - 11.1b
   risk: low
-  status: running
+  status: done
   branch: m13/11.1d-live-class-ui
-  model: 'plan:sonnet build:sonnet+fable review:fable (A #239); B+C build:sonnet'
+  model: plan:sonnet build:sonnet review:sonnet
   metrics:
-    tool_calls: 136
-    tokens_in: 4484
-    tokens_out: 51786
-    cache_read_tokens: 10771900
-    wall_time_seconds: 15663
+    tool_calls: 182
+    tokens_in: 4642
+    tokens_out: 52147
+    cache_read_tokens: 14305572
+    wall_time_seconds: 31559
     models:
     - claude-fable-5-1
     - claude-sonnet-5
     builder_phases: 3
-    fix_rounds: 1
+    fix_rounds: 2
     findings:
-      total: 11
+      total: 14
       by_severity:
-        HIGH: 1
-        MEDIUM: 1
-        LOW: 9
+        HIGH: 2
+        MEDIUM: 2
+        LOW: 10
       by_status:
-        fixed: 3
+        fixed: 4
         open: 0
-        deferred: 8
+        deferred: 10
         wontfix: 0
     human_questions: 0
 - id: 11.1e
@@ -6611,9 +6611,28 @@ tasks:
   deps:
   - 8.2n
   risk: high
-  status: running
+  status: done
   branch: m13/8.2o-replace-guards
-  model: plan:lead build:fable+sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 35
+    tokens_in: 116
+    tokens_out: 712
+    cache_read_tokens: 1530699
+    wall_time_seconds: 141
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 12.3f
   milestone: M12
   title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
@@ -7443,4 +7462,12 @@ tasks:
   - 9.2d
   - 9.3e
   risk: medium
+  status: todo
+- id: 5.6f
+  milestone: M13
+  title: '5.6b plan Q5 follow-up (pilot-blocking): release the practice key on a turn that is graded correct, so a confirmation that restates the key ("Yes, B is right!") is not replaced by the safe hint; drop the key from HelpState once the attempt is correct'
+  accept: harness typecheck, lint and test green; a runner test shows a correct MCQ answer gets a confirmation that names the key, and a wrong answer still cannot get the key
+  deps:
+  - 5.6b
+  risk: high
   status: todo
