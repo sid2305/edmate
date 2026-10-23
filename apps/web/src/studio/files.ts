@@ -24,12 +24,21 @@ export const MAX_MEDIA_UPLOAD_BYTES = 500 * 1024 * 1024;
  */
 export const MAX_UNSPLIT_MEDIA_BYTES = WHISPER_MAX_UPLOAD_BYTES;
 
+/** The retrieval kind an uploaded file can have: never `teacher_note` (those rows have no file). */
+export type FileChunkKind = Exclude<ChunkKind, 'teacher_note'>;
+
 export interface UploadType {
   contentType: string;
   ext: string;
   fileKind: IngestFileKind;
-  chunkKind: ChunkKind;
+  chunkKind: FileChunkKind;
   maxBytes: number;
+  /**
+   * Task 8.2n: whether the worker must transcribe the file (audio and video) before it can be
+   * read. The ingest job carries the stored media type only for these. A caption file is already
+   * text, so it is a transcript by chunk kind but needs no transcription.
+   */
+  transcribe: boolean;
 }
 
 const doc = (contentType: string, ext: string, fileKind: IngestFileKind): UploadType => ({
@@ -38,6 +47,7 @@ const doc = (contentType: string, ext: string, fileKind: IngestFileKind): Upload
   fileKind,
   chunkKind: 'material',
   maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
+  transcribe: false,
 });
 /** `splittable`: whether the worker's Whisper transcriber can split this type when it is large. */
 const media = (
@@ -51,6 +61,7 @@ const media = (
   fileKind,
   chunkKind: 'transcript',
   maxBytes: splittable ? MAX_MEDIA_UPLOAD_BYTES : MAX_UNSPLIT_MEDIA_BYTES,
+  transcribe: true,
 });
 /**
  * Task 8.2c, Phase C: a caption file (.vtt or .srt) the teacher exports from YouTube Studio.
@@ -64,6 +75,7 @@ const caption = (contentType: string, ext: string, fileKind: IngestFileKind): Up
   fileKind,
   chunkKind: 'transcript',
   maxBytes: MAX_DOCUMENT_UPLOAD_BYTES,
+  transcribe: false,
 });
 
 export const UPLOAD_TYPES: readonly UploadType[] = [

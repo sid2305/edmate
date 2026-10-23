@@ -41,6 +41,15 @@ describe('upload types', () => {
     });
   });
 
+  it('transcribe is true exactly for audio and video (task 8.2n: the rule lives on the type)', () => {
+    for (const t of UPLOAD_TYPES) {
+      expect(t.transcribe, t.contentType).toBe(t.fileKind === 'audio' || t.fileKind === 'video');
+    }
+    expect(uploadTypeFor('text/vtt')?.transcribe).toBe(false);
+    expect(uploadTypeFor('application/x-subrip')?.transcribe).toBe(false);
+    expect(uploadTypeFor('audio/mp4')?.transcribe).toBe(true);
+  });
+
   it('refuses anything not on the list, including near misses', () => {
     for (const t of ['text/html', 'image/svg+xml', 'application/PDF', 'application/pdf; x=1', '']) {
       expect(uploadTypeFor(t)).toBeNull();

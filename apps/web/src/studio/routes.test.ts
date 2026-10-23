@@ -1,7 +1,7 @@
 // Task 8.2 Phase 3: the studio document API's handlers over a memory backend (no S3, no Redis, no
 // database; rule 4). The teacher always comes from the session's principal: every route has a test
 // where another teacher's document id is `not_found`, with nothing written, deleted or enqueued.
-import { RepositoryError, type DocumentInput, type DocumentRow } from '@edmate/db';
+import { RepositoryError, type DocumentInput, type DocumentRow, type Repositories } from '@edmate/db';
 import type { IngestJob } from '@edmate/queue';
 import { describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -40,6 +40,7 @@ function memoryBackend() {
   const objects = new Map<string, { contentLength?: number; contentType?: string }>();
   const enqueued: { job: IngestJob; storageKey: string }[] = [];
   const createCalls: DocumentInput[] = [];
+  const replaceCalls: Parameters<Repositories['documents']['startReplace']>[2][] = [];
   const deleted: string[] = [];
   const logs: { event: string; fields?: Record<string, string> }[] = [];
   let n = 0;
@@ -93,11 +94,14 @@ function memoryBackend() {
         rows.delete(id);
         return { storageKey: r.storageKey ?? null };
       },
-      async startReplace({ teacherId }, id, { storageKey }) {
+      async startReplace({ teacherId }, id, input) {
+        replaceCalls.push(input);
+        const { storageKey, kind } = input;
         const r = mine(teacherId, id);
         if (!r) throw notFound('documents.startReplace');
         const previousStorageKey = r.storageKey ?? null;
         r.storageKey = storageKey;
+        if (kind !== undefined) r.kind = kind;
         r.status = 'uploading';
         delete r.failureReason;
         return { previousStorageKey };
@@ -124,7 +128,7 @@ function memoryBackend() {
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
     linkRateLimit: fakeLinkRateLimiter(),
   };
-  return { backend, rows, objects, enqueued, createCalls, deleted, logs };
+  return { backend, rows, objects, enqueued, createCalls, replaceCalls, deleted, logs };
 }
 
 function setup() {
@@ -457,7 +461,10 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
     expect(res.status).toBe(400);
     const body = await json(res);
     expect(body.error?.code).toBe('validation');
-    expect(body.error?.message).toMatch(/YouTube/);
+    // Task 8.2n: the exact Q1 words (8.2c Phase C), so a revert to the old words fails here.
+    expect(body.error?.message).toBe(
+      "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.",
+    );
     expect(s.rows.size).toBe(0);
   });
 
@@ -646,6 +653,18 @@ describe('POST /api/studio/documents/:id/complete', () => {
       documentId,
       fileKind: 'vtt',
     });
+  });
+
+  it('enqueues an .srt caption file as fileKind srt with no mimeType (task 8.2n)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s, { contentType: 'application/x-subrip' });
+    expect(row.storageKey).toMatch(/\.srt$/);
+    const res = await s.h.complete(req('POST', '/x'), ctx(ASHA, { id: documentId }));
+    expect(res.status).toBe(202);
+    expect(row.status).toBe('processing');
+    expect(s.enqueued).toEqual([
+      { job: { teacherId: 't_asha', documentId, fileKind: 'srt' }, storageKey: row.storageKey },
+    ]);
   });
 
   it('a class recording (task 11.4 Phase B) enqueues at once, with the same job shape as any upload', async () => {
@@ -856,6 +875,26 @@ describe('POST /api/studio/documents/:id/replace', () => {
     expect(row.storageKey).not.toBe(oldKey);
     expect(row.storageKey).toMatch(/\.wav$/);
     expect(s.deleted).toEqual([oldKey]);
+  });
+
+  it('updates the document kind when the file kind changes, both ways (task 8.2n)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s);
+    expect(row.kind).toBe('material');
+    const toVtt = await s.h.replace(
+      req('POST', '/x', { contentType: 'text/vtt', byteSize: 20, rightsDeclared: true }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(toVtt.status).toBe(200);
+    expect(row.kind).toBe('transcript');
+    expect(s.replaceCalls.at(-1)).toMatchObject({ kind: 'transcript' });
+    const toPdf = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 20, rightsDeclared: true }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(toPdf.status).toBe(200);
+    expect(row.kind).toBe('material');
+    expect(s.replaceCalls.at(-1)).toMatchObject({ kind: 'material' });
   });
 
   it("answers another teacher's document as not_found, writes and signs nothing", async () => {

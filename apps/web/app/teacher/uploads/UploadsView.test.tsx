@@ -122,7 +122,8 @@ describe('UploadsView', () => {
     api([]);
     renderIntl(<UploadsView moduleIds={['mod_1']} putFile={okPut} />);
     await screen.findByText(/No files yet/);
-    const picker = screen.getByLabelText('Upload a file') as HTMLInputElement;
+    const picker = screen.getByLabelText('Upload a file');
+    if (!(picker instanceof HTMLInputElement)) throw new Error('the file picker is not an input');
     expect(picker.accept.split(',')).toEqual(expect.arrayContaining(['.vtt', '.srt']));
     expect(
       await screen.findByText(/In YouTube Studio, download its captions/),

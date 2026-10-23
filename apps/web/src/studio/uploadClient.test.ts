@@ -240,7 +240,7 @@ describe('the JSON calls', () => {
 
   it('a refused link carries the server\'s fixed message through', async () => {
     stubFetch(
-      reply(400, { error: { code: 'validation', message: "YouTube links aren't supported yet.", retryable: false } }),
+      reply(400, { error: { code: 'validation', message: "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.", retryable: false } }),
     );
     await expect(
       addLink({ moduleId: 'm1', url: 'https://youtu.be/x', rightsDeclared: true }),
@@ -248,7 +248,7 @@ describe('the JSON calls', () => {
       ok: false,
       status: 400,
       code: 'validation',
-      message: "YouTube links aren't supported yet.",
+      message: "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.",
     });
   });
 
