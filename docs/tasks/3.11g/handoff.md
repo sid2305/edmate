@@ -41,7 +41,7 @@ re-applying the real fix, confirmed by re-reading the file and re-running the ga
 - Changed test run 5x in a row standalone: all green (~1.0-1.1s each).
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
-Tool calls used: 16
+Tool calls used: 95 (harness count: builder 33 + fixer 62; the agents reported 16 + about 24)
 
 ## Fix round (22 Oct 2026)
 
@@ -99,6 +99,11 @@ below.
 - `python3 .githooks/secret-scan.py --all`: clean, no output.
 
 ## Decisions
+
+### 22 Oct 2026 · 3.11g ran over budget · decided by lead · risk: low
+- Decided: accept 95 tool calls against the lead briefs' 20 + 15. The fixer ran the timing test many times under load to show it doesn't flake.
+- Why: the extra runs are the evidence that the test is stable; the change itself is one test.
+- risk: low
 
 ### 22 Oct 2026 · 3.11g flaky timing bound → ratio check · decided by builder · risk: low
 

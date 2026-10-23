@@ -2,8 +2,6 @@ import { type Message, ModelRequestSchema, type PedagogyDecision } from '@edmate
 import { demoPedagogyDecision, messageAgent, messageStudent } from '@edmate/contracts/fixtures';
 import { describe, expect, it } from 'vitest';
 
-/** Node provides this global at runtime; the harness's tsconfig has no DOM/node lib for it. */
-declare const performance: { now(): number };
 import { decodeHtmlEntities, foldConfusables } from '../guardrails/lockedMatch.js';
 import { fixturePromptPackSet as set } from '../testing/promptPackFixtures.js';
 import {
@@ -16,6 +14,9 @@ import {
   TEACHER_OPEN,
 } from './modelRequest.js';
 import { ctxWith } from './testing.js';
+
+/** Node provides this global at runtime; the harness's tsconfig has no DOM/node lib for it. */
+declare const performance: { now(): number };
 
 const messageTeacher: Message = {
   id: 'msg_test_03',
@@ -318,8 +319,9 @@ describe('forged teacher-note marker (3.11d)', () => {
 
   /**
    * Best-of-3 wall-clock time (ms) for `fn()`. Taking the minimum of several
-   * runs filters out one-off scheduler noise without needing a tight
-   * absolute bound (see docs/lessons.md: no tight timings).
+   * runs filters out one-off scheduler noise. This still times wall-clock
+   * work (docs/lessons.md prefers counting work); the ratio below keeps it
+   * loose enough not to flake on a loaded runner.
    */
   function bestOf3(fn: () => void): number {
     let best = Infinity;
@@ -336,13 +338,17 @@ describe('forged teacher-note marker (3.11d)', () => {
    * input without pinning a tight wall-clock bound: linear work gives a
    * 4n/n ratio of about 4; quadratic gives about 16. We allow up to 10 so a
    * slow or loaded CI runner doesn't fail on noise alone, while a true
-   * quadratic (or worse) regression still trips it. A very loose gross
-   * bound on the 4n run guards against a genuine hang.
+   * quadratic (or worse) regression still trips it. The loose 10 s bound on
+   * the 4n run catches a slow but finite blow-up. It can't stop a true
+   * infinite loop: a synchronous call never yields, so neither this bound nor
+   * the test timeout fires, and only the CI job timeout ends the run.
    */
   function expectLinear(buildInput: (n: number) => string, run: (input: string) => void): void {
     const n = 5_000;
-    const small = bestOf3(() => run(buildInput(n)));
-    const large = bestOf3(() => run(buildInput(4 * n)));
+    const smallInput = buildInput(n);
+    const largeInput = buildInput(4 * n);
+    const small = bestOf3(() => run(smallInput));
+    const large = bestOf3(() => run(largeInput));
     expect(large).toBeLessThan(10_000);
     // Guard against a near-zero small run making the ratio meaningless
     // (e.g. on a very fast machine); floor it at 0.5ms.
@@ -350,20 +356,16 @@ describe('forged teacher-note marker (3.11d)', () => {
     expect(ratio).toBeLessThan(10);
   }
 
-  it(
-    'runs in linear time on long hostile input',
-    () => {
-      expectLinear(
-        (n) => `${'<\u200B'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`,
-        (input) => breakFenceRuns(input)
-      );
-      expectLinear(
-        (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
-        (input) => neutraliseForgedLabel(input, label)
-      );
-    },
-    60_000
-  );
+  it('runs in linear time on long hostile input', () => {
+    expectLinear(
+      (n) => `${'<\u200B'.repeat(n)}${'&lt;'.repeat(n)}${'<<x'.repeat(n)}`,
+      (input) => breakFenceRuns(input),
+    );
+    expectLinear(
+      (n) => `${'platform '.repeat(n)}${'P\u200B'.repeat(n)}${'&#'.repeat(n)}`,
+      (input) => neutraliseForgedLabel(input, label),
+    );
+  }, 60_000);
 });
 
 /** The exact-label pass's output for `label`: letters single-spaced, words triple-spaced. */
