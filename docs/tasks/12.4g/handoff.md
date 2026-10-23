@@ -19,4 +19,4 @@ None.
 ## Left to do
 None.
 
-Tool calls used: 14
+Tool calls used: 27 (harness count: builder 27; the agent reported 14)
