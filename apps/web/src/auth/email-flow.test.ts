@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { memoryIdentity } from '../../test/memory-identity';
 import { memoryMail } from '../../test/memory-mail';
 import { createAuthConfig, principalFromIdentity, sessionCookieName } from './config';
+import { buildEmailCallbackUrl } from './confirm';
+import { CONFIRM_PATH } from './email';
 import { readAuthEnv } from './env';
 import { ADDRESS_LIMIT, createSignInLimiter, IP_LIMIT, type SignInCounter } from './rate-limit';
 
@@ -111,13 +113,24 @@ function setup(opts: { failMail?: boolean } = {}) {
       { 'x-forwarded-for': o.ip ?? '203.0.113.10', ...o.headers },
     );
   }
-  /** The link in the last mail. */
-  function lastLink(): string {
+  /** The link in the last mail, as mailed: the confirm page (task 1.4b). */
+  function mailedLink(): URL {
     const m = mail.sent.at(-1);
     if (!m) throw new Error('no mail sent');
     const found = /^http\S+$/m.exec(m.text);
     if (!found) throw new Error('no link in mail');
-    return found[0];
+    return new URL(found[0]);
+  }
+  /**
+   * The real Auth.js callback the confirm page forwards to for the last mail's link, built by the
+   * confirm page's own `buildEmailCallbackUrl`, so the two hops are exercised together.
+   */
+  function lastLink(): string {
+    const link = mailedLink();
+    if (link.pathname !== CONFIRM_PATH) throw new Error(`mailed link is not the confirm page`);
+    const url = buildEmailCallbackUrl(new URL(ORIGIN), Object.fromEntries(link.searchParams));
+    if (!url) throw new Error('mailed link query is not a valid confirm query');
+    return url;
   }
   async function session() {
     return (await call('GET', '/api/auth/session')).json() as Promise<{
@@ -127,7 +140,20 @@ function setup(opts: { failMail?: boolean } = {}) {
   const advance = (ms: number) => {
     clock += ms;
   };
-  return { identity, mail, counters, logs, jar, call, csrf, requestLink, lastLink, session, advance };
+  return {
+    identity,
+    mail,
+    counters,
+    logs,
+    jar,
+    call,
+    csrf,
+    requestLink,
+    mailedLink,
+    lastLink,
+    session,
+    advance,
+  };
 }
 
 describe('email magic-link sign-in through Auth.js', () => {
@@ -146,6 +172,11 @@ describe('email magic-link sign-in through Auth.js', () => {
       subject: 'Your Edmate sign-in link',
     });
     // The store holds Auth.js's hashed token, never the token in the link.
+    // The mail points at the confirm page, never at the callback that spends the token.
+    const mailed = t.mailedLink();
+    expect(mailed.origin).toBe(ORIGIN);
+    expect(mailed.pathname).toBe('/sign-in/confirm');
+    expect(t.mail.sent[0]?.text).not.toContain('/api/auth/callback/');
     const link = new URL(t.lastLink());
     expect(link.origin).toBe(ORIGIN);
     expect(link.pathname).toBe('/api/auth/callback/email');
@@ -305,14 +336,14 @@ describe('email magic-link sign-in through Auth.js', () => {
       headers: { 'x-forwarded-host': 'evil.test', 'x-forwarded-proto': 'https' },
     });
     expect(res.status).toBe(302);
-    expect(new URL(t.lastLink()).origin).toBe(ORIGIN);
+    expect(t.mailedLink().origin).toBe(ORIGIN);
     expect(t.mail.sent[0]?.html).not.toContain('evil.test');
   });
 
   it('no open redirect: callbackUrl=https://evil.test ends at the app origin after the link', async () => {
     await t.requestLink('redir@example.test', { callbackUrl: 'https://evil.test/steal' });
     const link = new URL(t.lastLink());
-    expect(new URL(link.searchParams.get('callbackUrl')!).href).toBe(`${ORIGIN}/`);
+    expect(new URL(t.mailedLink().searchParams.get('callbackUrl')!).href).toBe(`${ORIGIN}/`);
     const cb = await t.call('GET', link.toString());
     expect(new URL(cb.headers.get('location')!).href).toBe(`${ORIGIN}/`);
   });

@@ -2,6 +2,7 @@ import type { EmailProviderSendVerificationRequestParams } from 'next-auth/provi
 import { describe, expect, it } from 'vitest';
 import { memoryMail } from '../../test/memory-mail';
 import {
+  CONFIRM_PATH,
   EMAIL_PROVIDER_ID,
   emailProvider,
   escapeHtml,
@@ -14,7 +15,10 @@ import {
 
 const ORIGIN = new URL('https://app.example.test');
 const TOKEN = 'a'.repeat(64);
-const CALLBACK = `/api/auth/callback/email?callbackUrl=%2Fteachers&token=${TOKEN}&email=student1%40example.test`;
+const QUERY = `?callbackUrl=%2Fteachers&token=${TOKEN}&email=student1%40example.test`;
+const CALLBACK = `/api/auth/callback/email${QUERY}`;
+/** Task 1.4b: the mailed link goes to the confirm page, never straight to Auth.js's callback. */
+const CONFIRM = `${CONFIRM_PATH}${QUERY}`;
 
 describe('normalizeEmail', () => {
   it.each([
@@ -67,14 +71,15 @@ describe('normalizeEmail', () => {
 });
 
 describe('rebuildLink', () => {
-  it('keeps the path and query of Auth.js\'s URL, on AUTH_URL\'s origin', () => {
-    expect(rebuildLink(`https://app.example.test${CALLBACK}`, ORIGIN)).toBe(`https://app.example.test${CALLBACK}`);
+  it('moves Auth.js\'s URL onto the confirm page, keeping its query, on AUTH_URL\'s origin', () => {
+    expect(CONFIRM_PATH).toBe('/sign-in/confirm');
+    expect(rebuildLink(`https://app.example.test${CALLBACK}`, ORIGIN)).toBe(`https://app.example.test${CONFIRM}`);
   });
 
   it('rebases a forged host (x-forwarded-host: evil.test) on AUTH_URL\'s origin', () => {
     const link = rebuildLink(`http://evil.test:9999${CALLBACK}`, ORIGIN);
     expect(new URL(link).origin).toBe('https://app.example.test');
-    expect(link).toBe(`https://app.example.test${CALLBACK}`);
+    expect(link).toBe(`https://app.example.test${CONFIRM}`);
   });
 
   it.each([
@@ -159,7 +164,7 @@ describe('emailProvider', () => {
     const [sent] = mail.sent;
     expect(sent?.to).toBe('student1@example.test');
     expect(sent?.subject).toBe('Your Edmate sign-in link');
-    expect(sent?.text).toContain(`https://app.example.test${CALLBACK}`);
+    expect(sent?.text).toContain(`https://app.example.test${CONFIRM}`);
     expect(sent?.text).not.toContain('evil.test');
     expect(sent?.html).not.toContain('evil.test');
   });

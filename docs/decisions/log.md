@@ -10,6 +10,40 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · 1.4b A confirm page and an address-bound cookie stop a bare GET from finishing sign-in · decided by builder · risk: high
+- Decided: Mailed links now open `/sign-in/confirm`, not Auth.js's `/api/auth/callback/email`. The reason: `@auth/core@0.41.3` spends the single-use token on the bare GET of its callback, before Edmate's `signIn` callback runs, so a scanner's or a stranger's GET can't be refused from inside Auth.js.
+- Decided: The `/api/auth/signin/email` POST sets a binding cookie only when the request is same-origin (Origin equals AUTH_URL's origin or, with no Origin header, `Sec-Fetch-Site: same-origin`) AND Auth.js answered with its `verify-request` redirect. An error, rate-limit or MissingCSRF answer gets no cookie (fix round: both reviewers found that a cross-site auto-submitting form could plant a cookie for the attacker's own address). The gate looks only at Auth.js's answer, which is the same for known and unknown addresses, so it adds no enumeration signal. The value is `<issuedAt>.HMAC-SHA256(AUTH_SECRET, "linkbound:" + issuedAt + ":" + normalizeEmail(email))`: httpOnly, SameSite=Lax, `__Host-` when secure, 15 minutes. The server refuses it once it is older than 15 minutes, so a captured value can't outlive Max-Age. The confirm page forwards straight to the callback only when this cookie matches the link's own `email` (lead answer to Q3, after the plan security review's CRITICAL). Anyone else sees the address and must click: a scanner, another browser, or a browser that asked for a link to a different address.
+- Decided: `/api/auth/callback/email` has its own literal route, resolved ahead of the `[...nextauth]` catch-all (fix round, closing the security review's HIGH). It passes the GET to Auth.js only when the browser holds either the binding cookie for the request's `email`, or a "confirmed" cookie that the confirm Server Action sets. The confirmed cookie is `<issuedAt>.HMAC(AUTH_SECRET, "linkconfirmed:" + issuedAt + ":" + token + ":" + normalizeEmail(email))`: httpOnly, SameSite=Lax, 2 minutes, compared in constant time. Otherwise the route answers 303 to `/sign-in/confirm` with the same query, and no token is spent. An attacker can no longer send a victim straight to the real callback with the attacker's own token. The route exports no POST (fix round 2): Auth.js reads token and email from the query on any method, so a cross-site form POST would otherwise spend an attacker's token ungated; Next matches this literal path before the method, so a POST gets a 405 and never reaches the catch-all.
+- Decided: The click is a Server Action (Next's Origin check is the CSRF protection). It returns the callback URL and the client opens it as a full page, because Next 16 would otherwise fetch a same-host action redirect on the server and spend the token there.
+- Decided: Referer (LOW from the plan review): the page sets `metadata.referrer = 'same-origin'`, so the token-bearing URL never goes in a cross-origin Referer. `no-referrer` was rejected because it makes browsers send `Origin: null` on the action POST, which would break Next's CSRF check. The `auto` path is a server redirect, and browsers keep the original referrer across redirects, so the confirm URL isn't sent as a Referer there.
+- Why: Auth.js owns token consumption and sessions (1.4 Q2). The only lever Edmate has is where the mailed link points and what runs before Auth.js's route. Binding the cookie to the address closes the auto-forward login-CSRF the review found. 1.4's accepted residual risk stays: a victim who is talked into clicking "Sign in" on someone else's link still signs in as that person. Merely opening a link, or the callback URL itself, never does.
+- risk: high. This touches `apps/web/src/auth/**` and `apps/web/app/api/auth/**`. Reversible: revert `rebuildLink`'s target, the `index.ts` exports, the two new routes (`signin/email`, `callback/email`), and the page, action and form files. No migration, env var, contract or ADR.
+
+---
+
+### 23 Oct 2026 · 1.4b: no Referrer-Policy no-referrer on apps/web/app/sign-in/confirm/page.tsx · decided by lead · risk: low
+- Decided: Keep `metadata.referrer = 'same-origin'` on `apps/web/app/sign-in/confirm/page.tsx`; the review LOW asking for `no-referrer` is wontfix.
+- Why: Under `no-referrer` the browser sends `Origin: null` on the Server Action POST and Next 16 aborts the action, so manual sign-in would break. `same-origin` keeps the token-bearing URL out of every cross-origin Referer; the token is single-use and spent by then.
+- risk: low. Only a same-origin Referer can carry a spent token.
+
+---
+
+### 23 Oct 2026 · 1.4b: live-stack run of apps/web/scripts/sandbox-magic-link.mjs deferred to 1.4d · decided by lead · risk: low
+- Decided: The security re-verify's LOW (the sandbox script and the e2e magic-link flows were not run against a live stack by the fixers) is deferred to 1.4d; CI's e2e job runs the e2e magic-link flows on this PR.
+- Why: Builders do not run docker compose; CI's e2e stack covers route precedence and the Origin check for the e2e flows, and the sandbox script is a manual try-it tool.
+- risk: low. If the sandbox script breaks, a human trying the product sees it at once; nothing reaches students.
+
+---
+
+### 23 Oct 2026 · 1.4b: budget overrun from two security fix rounds · decided by lead · risk: low
+- Decided: Accept 146 tool calls against the plan's cap of 70.
+- Why: The build itself took 68 calls, inside the cap. Two fresh fixers (47 and 31 calls) closed a CRITICAL and two HIGH sign-in findings that the reviews found after the build; each round was a separate short-context agent.
+- risk: low. Usage only; no code risk.
+
+Tool calls used: 146 (harness count: builder 68, fix round 47, fix round 2 31; the agents reported 50, 30 and 22)
+
+---
+
 ### 23 Oct 2026 · 8.2o: replace refuses class-linked material and notes in apps/web/src/studio/routes.ts and packages/db/src/repositories/chunks.ts · decided by builder · risk: high
 - Decided: `documents.startReplace` refuses (`invalid`, nothing written) a class-linked row
   (`liveClassId` set) given `kind: 'material'`, and refuses any replace of a `teacher_note` row,
