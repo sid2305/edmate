@@ -200,8 +200,8 @@ export interface EntitlementStoreOptions {
    * Task 9.4a: the resolving student's own market (the identity store's `getMarket`), asked
    * fresh once a `subscription` entitlement is found; the only market source of that branch.
    * Optional only because preview and eval roots never make a subscription resolve; left out, a
-   * `subscription` resolve fails closed (`null`, so `entitle` answers `no_access`), never the
-   * fixed `market`.
+   * `subscription` resolve throws `RepositoryError('integrity')` (9.4d: a wiring mistake fails
+   * loudly, never a silent `no_access` and never the fixed `market`).
    */
   studentMarket?(studentId: string): Promise<string>;
   /** The locale pack market for a user market: itself when a pack exists, else `global`. */
@@ -224,7 +224,7 @@ export interface EntitlementStoreOptions {
  *   that teacher, and the package version it points at, which must be this agent's. Paused is
  *   returned as is; `entitle` refuses it. A learner held at the age gate (`opts.learnerClear`
  *   false, task 1.7) gets `null`. Its market is `opts.studentMarket(studentId)` (9.4a); with
- *   no `studentMarket` it is `null`.
+ *   no `studentMarket` the resolve throws `RepositoryError('integrity')` (9.4d).
  * - `teacher_preview`: only the agent's own teacher (the student id is the teacher's user id);
  *   drafts allowed; `opts.preview`'s package at its newest version. No subscription.
  * - `eval`: `opts.eval`'s package at its pinned version, of the agent's teacher. No subscription.
@@ -272,6 +272,11 @@ export function entitlementStoreFor(
       if (source === 'subscription') {
         // Second line behind apps/web's guard (1.7): asked first and fresh, never cached.
         if (!(await opts.learnerClear(studentId))) return null;
+        // 9.4d: a root that makes subscription resolves must pass `studentMarket`; leaving it out
+        // is a wiring mistake, so it fails loudly for every clear learner instead of a silent
+        // `no_access`. (A root whose `learnerClear` is always false, like the studio preview,
+        // never gets here.)
+        if (opts.studentMarket === undefined) throw new RepositoryError('integrity', method);
         const owner = await repos.agents.owner({ agentId });
         if (owner === null) return null;
         const { teacherId } = owner;
@@ -279,8 +284,7 @@ export function entitlementStoreFor(
         if (sub === null) return null;
         const pkg = await repos.packageVersions.getById({ teacherId }, sub.packageVersionId);
         if (pkg === null || pkg.agentId !== agentId) return null;
-        // 9.4a: the student's own market, read fresh; no source means no entitlement.
-        if (opts.studentMarket === undefined) return null;
+        // 9.4a: the student's own market, read fresh.
         const market = await opts.studentMarket(studentId);
         return build({
           source,

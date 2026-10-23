@@ -9,7 +9,9 @@ import { createGuard, type CookieReader, type Principal, type RoleContext } from
 import { MAX_DOCUMENT_UPLOAD_BYTES, MAX_MEDIA_UPLOAD_BYTES, isLinkKey, uploadTypeOfKey } from './files';
 import { fakeLinkRateLimiter, failingLinkRateLimiter } from './linkRateLimit';
 import {
+  LINK_REFUSAL_MESSAGE,
   MAX_BODY_BYTES,
+  REPLACE_REFUSAL_MESSAGE,
   StudioUnavailableError,
   createStudioHandlers,
   type StudioBackend,
@@ -37,6 +39,8 @@ function memoryBackend() {
   // Task 11.4 Phase B: a live class owned by the teacher, standing in for 11.4a's own-started-class
   // check (`not_found` for another teacher's, a future, or a missing class).
   const liveClasses = new Map([['lc_asha', 't_asha']]);
+  /** Documents created with a `liveClassId` (the real row's `live_class_id`; not on DocumentRow). */
+  const linked = new Set<string>();
   const objects = new Map<string, { contentLength?: number; contentType?: string }>();
   const enqueued: { job: IngestJob; storageKey: string }[] = [];
   const createCalls: DocumentInput[] = [];
@@ -67,6 +71,7 @@ function memoryBackend() {
         if (d.liveClassId !== undefined && liveClasses.get(d.liveClassId) !== teacherId) {
           throw notFound('documents.create');
         }
+        if (d.liveClassId !== undefined) linked.add(d.id);
         rows.set(d.id, {
           id: d.id,
           teacherId,
@@ -99,6 +104,10 @@ function memoryBackend() {
         const { storageKey, kind } = input;
         const r = mine(teacherId, id);
         if (!r) throw notFound('documents.startReplace');
+        // Task 8.2o: the real repository refuses a note row and a class-linked row turning material.
+        if (r.kind === 'teacher_note' || (linked.has(id) && kind === 'material')) {
+          throw new RepositoryError('invalid', 'documents.startReplace');
+        }
         const previousStorageKey = r.storageKey ?? null;
         r.storageKey = storageKey;
         if (kind !== undefined) r.kind = kind;
@@ -128,7 +137,7 @@ function memoryBackend() {
     log: { error: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }) },
     linkRateLimit: fakeLinkRateLimiter(),
   };
-  return { backend, rows, objects, enqueued, createCalls, replaceCalls, deleted, logs };
+  return { backend, rows, linked, objects, enqueued, createCalls, replaceCalls, deleted, logs };
 }
 
 function setup() {
@@ -462,9 +471,8 @@ describe('POST /api/studio/links (addLink, task 8.2f)', () => {
     const body = await json(res);
     expect(body.error?.code).toBe('validation');
     // Task 8.2n: the exact Q1 words (8.2c Phase C), so a revert to the old words fails here.
-    expect(body.error?.message).toBe(
-      "YouTube links can't be added. Upload your video's caption file (.vtt or .srt) from YouTube Studio, or the video file.",
-    );
+    expect(body.error?.message).toBe(LINK_REFUSAL_MESSAGE.youtube_unsupported);
+    expect(LINK_REFUSAL_MESSAGE.youtube_unsupported).toMatch(/^YouTube links can't be added\. Upload your video's caption file/);
     expect(s.rows.size).toBe(0);
   });
 
@@ -895,6 +903,60 @@ describe('POST /api/studio/documents/:id/replace', () => {
     expect(toPdf.status).toBe(200);
     expect(row.kind).toBe('material');
     expect(s.replaceCalls.at(-1)).toMatchObject({ kind: 'material' });
+  });
+
+  it('refuses a plain document for a class recording (409), row unchanged, nothing deleted (task 8.2o)', async () => {
+    const s = setup();
+    const { documentId, row } = await uploaded(s, { contentType: 'text/vtt', byteSize: 20, liveClassId: 'lc_asha' });
+    row.status = 'ready';
+    const before = { ...row };
+    const res = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 10, rightsDeclared: true }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(res.status).toBe(409);
+    const body = await json(res);
+    expect(body.error).toMatchObject({ code: 'validation', message: REPLACE_REFUSAL_MESSAGE.recording });
+    expect(body.uploadUrl).toBeUndefined();
+    expect(row).toEqual(before);
+    expect(s.linked.has(documentId)).toBe(true);
+    expect(s.deleted).toEqual([]);
+    // Another recording type is still allowed: the caption file becomes an audio recording.
+    const ok = await s.h.replace(
+      req('POST', '/x', { contentType: 'audio/mpeg', byteSize: 10, rightsDeclared: true }),
+      ctx(ASHA, { id: documentId }),
+    );
+    expect(ok.status).toBe(200);
+    expect(row).toMatchObject({ kind: 'transcript', status: 'uploading' });
+    expect(row.storageKey).toMatch(/\.mp3$/);
+    expect(s.deleted).toEqual([before.storageKey]);
+  });
+
+  it('refuses replacing a note (409): it has no file; nothing signed, replaced or deleted (task 8.2o)', async () => {
+    const s = setup();
+    const at = '2026-10-20T00:00:00.000Z';
+    const note: Row = {
+      id: 'doc_note',
+      teacherId: 't_asha',
+      moduleId: 'm_asha',
+      kind: 'teacher_note',
+      sourceTitle: 'A note',
+      status: 'ready',
+      createdAt: at,
+      updatedAt: at,
+    };
+    s.rows.set(note.id, { ...note });
+    const res = await s.h.replace(
+      req('POST', '/x', { contentType: PDF, byteSize: 10, rightsDeclared: true }),
+      ctx(ASHA, { id: note.id }),
+    );
+    expect(res.status).toBe(409);
+    const body = await json(res);
+    expect(body.error).toMatchObject({ code: 'validation', message: REPLACE_REFUSAL_MESSAGE.note });
+    expect(s.rows.get(note.id)).toEqual(note);
+    expect(s.backend.storage.createUploadUrl).not.toHaveBeenCalled();
+    expect(s.replaceCalls).toEqual([]);
+    expect(s.deleted).toEqual([]);
   });
 
   it("answers another teacher's document as not_found, writes and signs nothing", async () => {

@@ -10,6 +10,95 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 23 Oct 2026 · 8.2o: replace refuses class-linked material and notes in apps/web/src/studio/routes.ts and packages/db/src/repositories/chunks.ts · decided by builder · risk: high
+- Decided: `documents.startReplace` refuses (`invalid`, nothing written) a class-linked row
+  (`liveClassId` set) given `kind: 'material'`, and refuses any replace of a `teacher_note` row,
+  under the same `FOR UPDATE` lock already taken for the write; the route turns the first into a
+  409 with a fixed teacher-facing message and checks the note case itself (it already has
+  `existing.kind`) so it can refuse before signing an upload URL.
+- Why: a class recording/transcript becoming a generic material document would silently break
+  the "this is the class's own recording" citation path (task 11.4's create-time guard already
+  refuses this at creation; replace needed the same rule). A note row has no `storageKey` column
+  to replace, so allowing it through would write a storage key the row can never use.
+- risk: high (packages/db/src/repositories/** is a risk path; the guard sits inside the same
+  transaction as every other document write).
+
+---
+
+### 23 Oct 2026 · 8.2o: FileChunkKind named once in packages/db, apps/web re-exports it · decided by builder · risk: low
+- Decided: the upload-file retrieval kind (`'material' | 'transcript'`) is a zod enum in
+  `packages/db/src/repositories/chunks.ts`, exported as `FileChunkKind`; `apps/web/src/studio/
+  files.ts`'s own type of the same name is now `export type { FileChunkKind }` from `@edmate/db`
+  instead of its own `Exclude<ChunkKind, 'teacher_note'>`.
+- Why: two independently-written unions for the same two-value set can drift (that drift is what
+  item 3's test below guards against for `transcribe`); naming it once in the package that owns
+  the document schema removes the chance.
+- risk: low, reversible by reverting the re-export.
+
+---
+
+### 23 Oct 2026 · Double-cancel is a no-op (200, not an error) in the PUT/DELETE routes too · decided by builder · risk: low
+- Decided: Phase B's `DELETE` route returns the repository's `{cancelled: false}` as a plain 200,
+  the same as a first cancel's `{cancelled: true}`, rather than treating "already cancelled" as an
+  error status. The route layer makes no decision of its own here; it only carries Phase A's own
+  judgment call (noted in the plan's "Open questions for the lead") through to the HTTP response.
+- Why: a double-click Cancel, or a client retry after a dropped reply, must not show the teacher
+  an error toast for something that already succeeded; `LiveClassesView`'s own Cancel flow relies
+  on this (the button's busy state always clears, whether the server did the write or found it
+  already done).
+- risk: low
+
+---
+
+### 23 Oct 2026 · The join link's new aria-label changes its accessible name; the existing test was updated, not the markup · decided by builder · risk: low
+- Decided: adding `aria-label={t('joinLinkLabel', { title: c.title })}` to the join `<a>`
+  (11.1b review LOW fix) makes that aria-label the link's accessible name, overriding its visible
+  text ("Join link") for `getByRole('link', { name: … })` queries. Kept the visible text as the
+  plan asked and updated `LiveClassesView.test.tsx`'s one existing assertion
+  (`getByRole('link', { name: 'Join link' })` → `{ name: 'Join link for Ratios review' }`, with a
+  separate `toHaveTextContent('Join link')` check added) rather than finding another way to keep
+  the old query passing.
+- Why: this is standard ARIA behaviour (an explicit `aria-label` always wins over text content for
+  the accessible name), not a bug; the plan's own acceptance line for this fix ("a per-class
+  aria-label on the studio join links") only makes sense if the label actually changes the name a
+  screen reader announces per row, which is the whole point of the fix.
+- risk: low
+
+Tool calls used: 149 (harness count: builder 116 + fixer 33; the agents reported 92 + 26)
+Phase B+C tool calls: 95
+
+---
+
+### 22 Oct 2026 · 9.4d: missing studentMarket fails loudly in packages/db/src/repositories/ports.ts · decided by builder · risk: high
+- Decided: a `subscription` resolve for a learner who passes `learnerClear` but has no `studentMarket` option throws `RepositoryError('integrity')` instead of returning `null`. The option stays optional (preview/eval roots), and a root whose `learnerClear` is always false (studio preview) still gets `null`.
+- Why: a silent `null` turned a wiring mistake into "You need a live package" for every student, with no log line. Throwing is still fail-closed (no entitlement), but it is loud. Checking after `learnerClear` keeps the studio preview store, which is out of bounds here, unchanged.
+- risk: high (the entitlement store, a risky path; behaviour changes only for a misconfigured root).
+
+---
+
+### 22 Oct 2026 · 9.4d: live-class questions resolve teachers from the student's own live subscriptions · decided by builder · risk: low
+- Decided: the ask route uses `subscriptions.listLiveForStudent(principal.userId)` (not-ended rows, paused included) for its candidate teachers and no longer reads `EDMATE_CHAT_AGENTS` or `agents.owner`.
+- Why: the route then matches the source /home lists live classes from, so every class /home shows can be asked. The student id comes only from the session.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4d: session-start limiter bounded twice (client commandTimeout 2 s, route deadline 3 s) · decided by builder · risk: low
+- Decided: the limits Redis client gets `commandTimeout: 2000` and `connectTimeout: 5000`, and `POST /api/sessions` races `take()` against a 3 s deadline, failing closed with 503.
+- Why: a black-holed Redis would otherwise hang every session start. The route deadline also covers any future limiter implementation.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 9.4d: no extra catch on the raced take() in apps/web/src/turn/routes.ts · decided by lead · risk: low
+- Decided: the security reviewer's LOW (a late rejection of `take()` after the deadline wins) is wontfix.
+- Why: `Promise.race` attaches handlers to both promises, so a late rejection is already handled; the code reviewer checked this, and the tests show no leaked timers.
+- risk: low
+
+Tool calls used: 48 (harness count: builder 48; the agent reported 32)
+
+---
+
 ### 22 Oct 2026 · 11.3c: insights refuse a week that has not ended in packages/db/src/repositories/insights.ts · decided by builder · risk: high
 - Decided: `weekWindow` (shared by every insights read and by `computeAndSaveWeek`) throws
   `RepositoryError('invalid', method)` when the window's end (`weekStart` + 7 days) is after

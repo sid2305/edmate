@@ -103,6 +103,30 @@ export function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
+/**
+ * Task 9.4d: the longest a session start waits on its limiter. The Redis limits client already
+ * bounds each command (`commandTimeout`, runtime.ts); this route-level deadline is the backstop for
+ * any limiter that never settles, so the start fails closed (503) instead of hanging.
+ */
+export const SESSION_LIMIT_DEADLINE_MS = 3_000;
+
+class SessionLimitTimeoutError extends Error {
+  override name = 'SessionLimitTimeoutError';
+}
+
+/** `promise`, or a rejection once `ms` has passed; the timer is always cleared. */
+async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new SessionLimitTimeoutError()), ms);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The largest request body either route reads (bytes). A turn's text limit is far below it. */
 export const MAX_BODY_BYTES = 64 * 1024;
 
@@ -225,7 +249,7 @@ export function createSessionHandlers(backend: () => Promise<TurnBackend>) {
     // (never the body). A limiter that can't answer refuses the start (fail closed, 503).
     let allowed: boolean;
     try {
-      allowed = await b.sessionRateLimit.take(principal.userId);
+      allowed = await withDeadline(b.sessionRateLimit.take(principal.userId), SESSION_LIMIT_DEADLINE_MS);
     } catch (error) {
       b.log.error('sessions.rate_limit_failed', { error: errorName(error) });
       return apiError('provider_error', MSG.unavailable, 503);

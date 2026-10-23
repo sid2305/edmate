@@ -7,6 +7,9 @@
 // entitled class; it never affects the existing chats/startable placeholder.
 // 11.2b: each listed class also gets a small "ask a question" form (`AskQuestionForm`), feeding
 // the teacher's pre-class queue (`/api/live-classes/[id]/questions`).
+// 11.1d Phase C: a cancelled class shows a "Cancelled" label instead of the window label, with no
+// join link and no ask-a-question form -- it stays visible (not dropped) until its own `startsAt`
+// passes, same as any other past class (see the task's own decision note).
 // Security review fix (22 Oct 2026): `AskQuestionForm` is a `'use client'` component that calls
 // `useTranslations('home')`; next-intl v4 throws ("No intl context found") when that runs with no
 // `NextIntlClientProvider` ancestor, so without this it crashed `/home` for every student with an
@@ -106,15 +109,21 @@ export async function HomeView({
                 <li key={liveClass.id}>
                   <span>{liveClass.title}</span>{' '}
                   <time dateTime={liveClass.startsAt}>{liveClass.startsAt}</time>{' '}
-                  {liveClass.window !== 'later' && (
-                    <span>{t(`liveClasses.window.${liveClass.window}`)}</span>
-                  )}{' '}
-                  {liveClass.link !== null && (
-                    <a href={liveClass.link} target="_blank" rel="noopener noreferrer">
-                      {t('liveClasses.join')}
-                    </a>
+                  {liveClass.status === 'cancelled' ? (
+                    <span>{t('liveClasses.cancelled')}</span>
+                  ) : (
+                    <>
+                      {liveClass.window !== 'later' && (
+                        <span>{t(`liveClasses.window.${liveClass.window}`)}</span>
+                      )}{' '}
+                      {liveClass.link !== null && (
+                        <a href={liveClass.link} target="_blank" rel="noopener noreferrer">
+                          {t('liveClasses.join')}
+                        </a>
+                      )}
+                      <AskQuestionForm liveClassId={liveClass.id} />
+                    </>
                   )}
-                  <AskQuestionForm liveClassId={liveClass.id} />
                 </li>
               ))}
             </ul>
