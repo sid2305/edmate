@@ -6765,9 +6765,29 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: running
+  status: done
   branch: m13/9.4d-review-mediums
-  model: plan:lead build:opus
+  model: plan:lead build:opus review:sonnet
+  metrics:
+    tool_calls: 199
+    tokens_in: 668
+    tokens_out: 26788
+    cache_read_tokens: 25984265
+    wall_time_seconds: 185309
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.4e
   milestone: M13
   title: '9.4a review LOWs and left-to-do: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works; export the harness grounding/advice/route/summary schemas so devModel.test.ts
