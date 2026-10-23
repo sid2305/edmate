@@ -2422,9 +2422,30 @@ tasks:
   accept: removing .orderBy(teacherQuestions.id) from open()'s lock read fails a test; the db tests pass
   deps:
   - 5.10b
-  status: running
+  status: done
   branch: m13/5.10c-open-race-test
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:fable
+  metrics:
+    tool_calls: 289
+    tokens_in: 1450
+    tokens_out: 121175
+    cache_read_tokens: 32177280
+    wall_time_seconds: 130730
+    models:
+    - claude-fable-5-1
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 5.10d
   milestone: M13
   title: 'One open session per (teacher, student, agent) (5.10b plan item 3, not added): apps/web/src/turn/routes.ts startSession calls sessions.create on every request with no lookup, so two open sessions
@@ -5998,7 +6019,8 @@ tasks:
   model: plan:lead build:fable
 - id: 12.5f
   milestone: M13
-  title: 'Alert worker (12.5e silent-failure LOW): apps/worker/src/alerts/processors.ts uses `storeError !== undefined` as the store-failed sentinel, so a store that rejects with undefined logs but does not retry; track failure with a boolean'
+  title: 'Alert worker (12.5e silent-failure LOW): apps/worker/src/alerts/processors.ts uses `storeError !== undefined` as the store-failed sentinel, so a store that rejects with undefined logs but does
+    not retry; track failure with a boolean'
   accept: a store rejecting with undefined still makes the job fail and retry, with a test; worker typecheck, lint and test green.
   deps:
   - 12.5e

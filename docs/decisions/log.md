@@ -10,6 +10,31 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 5.10c ran over budget · decided by lead · risk: low
+- Decided: accept 74 tool calls against a 30-call budget; the review approves with no findings.
+- Why: the builder counted 53; the harness counted 74 (a failed attempt at a live interleaving, the remove-and-restore proof, and the full db gate with Postgres). The work is done and clean, so another round would only cost more.
+- risk: low
+
+---
+
+### 22 Oct 2026 · open()'s multi-row lock order is pinned by a query-shape test, not a forced live interleaving · decided by builder · risk: low
+
+- Decided: instead of forcing the real `open()` call into the deadlock interleaving (tried and
+  found non-deterministic, matching the reasoning the 5.10b test's own comments already give for
+  the raw-connection replay), 5.10c adds a test-only query-shape assertion on `open()`'s captured
+  SQL text and leaves `packages/db/src/repositories/teacher-questions.ts` unchanged.
+- Why: Postgres doesn't guarantee a row order for an unordered multi-row `IN (...)` lock, so no
+  two-connection timing setup can reliably force `open()`'s statement to lock in a chosen order
+  without the `ORDER BY` already in place to pin it — any such test would be flaky in both
+  directions. Pinning the statement's own SQL text instead directly catches the exact change the
+  accept line names (removing `.orderBy(teacherQuestions.id)`), with no production change and no
+  flakiness.
+- risk: low (test-only change, no files under `packages/db/src/repositories` were touched).
+
+Tool calls used: 74 (harness count: builder 74; the agent reported 53)
+
+---
+
 ### 22 Oct 2026 · 8.2m ran over budget · decided by lead · risk: low
 - Decided: accept 74 tool calls against a 40-call budget; both reviews approve with no findings.
 - Why: the builder counted 32; the harness counted 74 (install, three package gates, and new processor tests). The work is done and clean, so another round would only cost more.
