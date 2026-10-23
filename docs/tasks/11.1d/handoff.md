@@ -8,15 +8,16 @@ Adds a `status` column (`scheduled` | `cancelled`, check-constrained) to `live_c
 
 - Schema: `liveClasses.status` (`text().notNull().default('scheduled')`) with a
   `live_classes_status_check` constraint (same shape as `eval_runs_status_check`). Additive
-  migration `0026_military_power_man.sql` (generated via `db:generate`, not hand-written).
+  migration `0026_live_class_status.sql` (generated via `db:generate`, not hand-written).
 - Link validation is https-only (`HTTPS_URL` regex + `z.url({protocol: /^https$/})`), capped at
   new `LIVE_CLASS_LINK_MAX_LENGTH = 2048`, enforced on both create and the new `update`. Title,
   link and startsAt field schemas are factored into shared `TitleSchema`/`LinkSchema`/
   `StartsAtSchema` used by both `CreateInputSchema` and the new `UpdateInputSchema`.
 - New `LIVE_CLASS_LIST_MAX = 500` (precedent: `RECORDING_LIST_MAX`), applied to both
   `listForTeacher` and `listUpcomingForStudent`.
-- Fixed the one-row-per-class dedup bug in `listUpcomingForStudent` by switching to
-  `.selectDistinct(...)` (see Decisions: chose this over an `EXISTS` rewrite).
+- `listUpcomingForStudent` now uses `.selectDistinct(...)` as defence in depth: the duplicate
+  join row is unreachable today (`subscriptions_one_live_per_pair_key`), so this is not a bug
+  fix (see Decisions: chose this over an `EXISTS` rewrite).
 - `status` added to `TeacherLiveClassRow` and `UpcomingLiveClass`, with a shared exported
   `LiveClassStatus` type. `listUpcomingForStudent`'s WHERE clause is unchanged — a cancelled
   class with a future `startsAt` still appears in the "upcoming" list (status is informational,
@@ -51,11 +52,11 @@ Result: clean, no findings.
 ### Files
 
 - `packages/db/src/schema/operations.ts` — `liveClasses.status` column + check constraint.
-- `packages/db/migrations/0026_military_power_man.sql`,
+- `packages/db/migrations/0026_live_class_status.sql`,
   `packages/db/migrations/meta/0026_snapshot.json`,
   `packages/db/migrations/meta/_journal.json` — generated via `db:generate`.
 - `packages/db/src/repositories/live-classes.ts` — https-only link cap, shared field schemas,
-  `LIVE_CLASS_LIST_MAX`, `.selectDistinct` dedup fix, `status` on both row shapes, `update`,
+  `LIVE_CLASS_LIST_MAX`, `.selectDistinct` defence in depth, `status` on both row shapes, `update`,
   `cancel`.
 - `packages/db/src/repositories/index.ts` — new exports (`UpdateLiveClassInput`,
   `LIVE_CLASS_LINK_MAX_LENGTH`, `LIVE_CLASS_LIST_MAX`, `LiveClassStatus`).
@@ -85,9 +86,11 @@ Result: clean, no findings.
   database-reviewer, code-reviewer, typescript-reviewer) before merge.
 - risk: high
 
-### 22 Oct 2026 · Dedup fix via .selectDistinct, not an EXISTS rewrite · decided by builder · risk: low
-- Decided: fixed `listUpcomingForStudent`'s one-row-per-class dedup bug with
-  `.selectDistinct(...)` rather than a correlated `EXISTS` subquery rewrite.
+### 22 Oct 2026 · selectDistinct as defence in depth, not an EXISTS rewrite · decided by builder · risk: low
+- Decided: `listUpcomingForStudent` uses `.selectDistinct(...)` rather than a correlated `EXISTS`
+  subquery rewrite. This is defence in depth, not a bug fix: `subscriptions_one_live_per_pair_key`
+  already makes the duplicate join row unreachable, and the int test passes with plain `.select`
+  too (code-reviewer MEDIUM, fix round 1).
 - Why: the four selected columns (`id`, `title`, `link`, `startsAt`, now also `status`) are
   identical across duplicate join rows produced by a class matching more than one of a student's
   package ids, so `DISTINCT` collapses them with a one-line change; an `EXISTS` rewrite would
@@ -119,3 +122,40 @@ Result: clean, no findings.
 - risk: low
 
 Tool calls used: 92
+
+## Fix round 1
+
+Review findings fixed (22 Oct 2026, builder on Fable):
+
+- **HIGH (security-reviewer)** — the new required `status` on `TeacherLiveClassRow` /
+  `UpcomingLiveClass` broke `@edmate/web` typecheck. Added `status: 'scheduled'` to the typed
+  fixture literals in `apps/web/src/studio/liveClasses/routes.test.ts` (the `CLASS` row only —
+  `VALID_BODY` is a request body and the create schema rejects extra keys),
+  `apps/web/app/teacher/live-classes/LiveClassesView.test.tsx` (both literals),
+  `apps/web/app/home/view.test.tsx` (7) and `apps/web/app/home/view.intl.test.tsx` (1).
+  Deviation from the brief's "test files only": `apps/web/app/teacher/live-classes/LiveClassesView.tsx`
+  line 241 also failed typecheck (the optimistic row appended after a successful schedule had no
+  `status`). Added `status: 'scheduled' as const` to that one object literal — a newly scheduled
+  class is `scheduled` by definition — because the web gate could not go green otherwise. No
+  other web source touched.
+- **MEDIUM (code-reviewer)** — `.selectDistinct` kept, but the int test title and comment, the
+  repositories README line, the handoff summary and the handoff decision now say it is defence in
+  depth (the duplicate join row is unreachable today because of
+  `subscriptions_one_live_per_pair_key`; the test passes with plain `.select` too), not a bug fix.
+- **LOW (database-reviewer)** — migration renamed `0026_military_power_man.sql` →
+  `0026_live_class_status.sql`; tag updated in `meta/_journal.json`; `0026_snapshot.json`
+  unchanged.
+
+Gate (one package at a time, `--force`):
+
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force` → 10/10 tasks
+  successful; Test Files 143 passed | 4 skipped (147).
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/db --force` → 8/8 tasks
+  successful; Test Files 75 passed (75), no file skipped; Tests 1465 passed | 4 skipped (1469)
+  (the 4 are the pre-existing in-file skips in recall / retrieval-hnsw / video-ingest).
+- Secret scan: the standalone `--all` run was refused by this worktree's command guard (it
+  treats the `.githooks/` path as a git command), so the scan ran through the pre-commit hook on
+  the fix commit instead (the hook hard-blocks any hit; the commit went through). The lead should
+  re-run the `--all` scan from the main checkout before merge.
+
+Fix round tool calls: 18

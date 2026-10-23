@@ -1,6 +1,6 @@
 // Task 11.1d (build plan § 11.1d) on Postgres: editing and cancelling a scheduled live class
 // before it starts (`liveClasses.update` / `liveClasses.cancel`), the https-only/length-capped
-// link shared by `create` and `update`, and `listUpcomingForStudent`'s `.selectDistinct` dedup and
+// link shared by `create` and `update`, and `listUpcomingForStudent`'s `.selectDistinct` defence-in-depth and
 // cancelled-but-visible cases. See test/pg.ts for how to start one. Synthetic text only, no real
 // student data. Every fixture class here is its own, created fresh in its own test (never the
 // shared `liveClassFor` fixture `repositories.int.test.ts`'s own CASES entries depend on).
@@ -308,8 +308,10 @@ describe.skipIf(!up)(`liveClasses on Postgres${up ? '' : ` (${SKIP_REASON})`}`, 
     // The reachable version of the 11.1a review's duplicate-row shape is a class whose own
     // `package_ids` names the same package twice (never possible through `create`'s own
     // `.refine(unique, …)`, only through data written before that check, or directly): this still
-    // exercises the same join, and is exactly what `.selectDistinct` guards.
-    it('a class attached to the same package twice still appears once, not duplicated by the join', async () => {
+    // exercises the same join. Note this passes with plain `.select` too — the duplicate is not
+    // reachable through the repository today — so `.selectDistinct` is defence in depth against a
+    // future join or constraint change, not a bug fix, and this test pins that guard.
+    it('a class attached to the same package twice appears once (selectDistinct defence in depth)', async () => {
       const sid = 'stu_11d_dedupe';
       await raw.query(
         `insert into users (id, name, locale, market, role) values ($1, $1, 'en', 'test', 'student')`,

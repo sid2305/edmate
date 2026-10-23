@@ -468,9 +468,10 @@ started, attached to the base package of the scope's own live (`trial` / `active
 only (`paused` / `past_due` / `ended` see nothing), each with a window label (`reminder_24h` /
 `reminder_1h` / `starting_soon` / `later`) computed here, from `startsAt` vs `now`, inside
 `live-classes.ts` (the one place this label is computed; `options.now` only overrides the clock for
-deterministic tests), at most `LIVE_CLASS_LIST_MAX`, `.selectDistinct`-ed so a student with two
-live subscriptions whose packages both overlap one class sees it once, not once per matching
-subscription. A cancelled class with a future `startsAt` still appears here (status shown, not
+deterministic tests), at most `LIVE_CLASS_LIST_MAX`, `.selectDistinct`-ed as defence in depth (the
+`subscriptions_one_live_per_pair_key` constraint already stops a student holding two live
+subscriptions to one teacher, so the join can't duplicate a class today; `DISTINCT` keeps that
+true if the join or constraint changes). A cancelled class with a future `startsAt` still appears here (status shown, not
 filtered out — see the task's own "cancelled class is marked, not dropped" decision); it drops off
 on its own, like any class, once `startsAt` passes.
 
