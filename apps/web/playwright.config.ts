@@ -48,10 +48,14 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       DATABASE_URL: TEST_DATABASE_URL,
-      // Syntactically valid but unreachable on purpose: starting a session never touches the
-      // queues or the turn limits (only running a real turn does, and the turn route is always
-      // intercepted in this suite -- see fixtures.ts). Decision, handoff `## Decisions`.
+      // Syntactically valid but unreachable on purpose: the queues and the turn limits are only
+      // touched by a real turn, and the turn route is always intercepted in this suite (see
+      // fixtures.ts). The per-student session-start limit (9.4a) would touch it, so the dev
+      // model below swaps it for the in-memory limiter. Decision, handoff `## Decisions`.
       REDIS_URL: 'redis://127.0.0.1:1',
+      // The dev model (9.0, D2): honoured only with a local http AUTH_URL, which BASE_URL is. It
+      // keeps the session-start limit in memory (see above); no turn runs against it here.
+      EDMATE_DEV_MODEL: 'scripted',
       // Never a real key; a turn is never actually run against a provider in this suite.
       EDMATE_ANTHROPIC_API_KEY: 'e2e-not-a-real-key',
       AUTH_SECRET: 'e2e-test-secret-'.padEnd(40, 'x'),

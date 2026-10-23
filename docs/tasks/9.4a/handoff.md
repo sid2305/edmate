@@ -330,6 +330,22 @@ cases=27 leaks=0`) and `scope.test.ts`, passed. Typecheck and lint green for bot
   reach the database instead of failing as a scope.
 - risk: low
 
+### 22 Oct 2026 · 9.4a e2e: session limiter in scripted mode · decided by builder · risk: low
+- Decided: under the dev model (`EDMATE_DEV_MODEL=scripted` with a local http `AUTH_URL`, the 9.0 D2
+  guard) `build()` in `apps/web/src/turn/runtime.ts` uses `fakeSessionRateLimiter()` for the
+  per-student session-start limit instead of the Redis one from the Redis hook. Playwright
+  (`apps/web/playwright.config.ts`) now sets `EDMATE_DEV_MODEL: 'scripted'`; its `REDIS_URL`
+  stays the dead port.
+- Why: CI's e2e job failed every chat and skills spec after Phase A. The suite's dead
+  `REDIS_URL` was fine before because only a real turn touches the queues and the per-message
+  turn limits, and the turn route is always intercepted by `page.route`; Phase A's session-start
+  limiter runs inside `POST /api/sessions`, which is not intercepted, so every start got
+  `ECONNREFUSED` -> fail closed -> 503, and no reply ever streamed. The dev model is the existing
+  explicit flag for "scripted, local-only" (never NODE_ENV), and already stands in for the
+  provider the same way. Production and dev without the flag keep the Redis limiter and still
+  fail closed (503) on a Redis error (lessons.md, "A guard that can't run must fail closed").
+- risk: low. Flag-gated, local-http-only; unit tests in `runtime.test.ts` cover both branches.
+
 ## Left to do
 None. (Follow-ups outside 9.4a's files, for the board: restore Playwright `--webpack` once
 webpack's dev compile of `@edmate/queue`/bullmq is fixed in `next.config.ts` or the queue
@@ -337,3 +353,24 @@ package; export the harness's grounding/advice/route/summary schemas so `devMode
 drop its copies; the three 0 % `.tsx` files named under Phase D item 1.)
 
 Tool calls used: 281 (harness count: Phase A 55 + Phase B 64 + B finisher 26 + Phase C 75 + Phase D 61; the agents reported fewer, e.g. A 36, C 51, D 46)
+
+## Fix round (e2e)
+CI run 39895140480's e2e job: every chat/skills spec failed because `POST /api/sessions` answered
+503 (`turn.redis_error`, `connect ECONNREFUSED 127.0.0.1:1`): Phase A's session-start limiter
+is Redis-backed and fails closed, and Playwright's `REDIS_URL` is a dead port on purpose (only
+real turns, which the suite intercepts, touched Redis before). Fix: under the dev model the
+limiter runs in memory (decision above). Files: `apps/web/src/turn/runtime.ts`,
+`apps/web/src/turn/runtime.test.ts` (+2 tests: scripted mode gets the in-memory limiter; without
+the flag the Redis limiter is kept and still rejects), `apps/web/playwright.config.ts`.
+
+Evidence:
+- `corepack pnpm vitest run src/turn/runtime.test.ts` -> `Tests  21 passed (21)`
+- `corepack pnpm --filter @edmate/web exec playwright test e2e/chat.spec.ts` -> `9 passed, 1 failed`
+  (the first test, 30.1 s: cold Turbopack compile on a heavily loaded machine); re-run of that
+  test alone (`-g "normal:"`) -> `1 passed (4.9s)`. Replies stream again; `turn.dev_model_on`
+  logged once.
+- `corepack pnpm turbo run typecheck lint test --filter=@edmate/web --force` -> `Tasks: 10
+  successful, 10 total`; `Test Files 145 passed | 4 skipped`
+- `python3 .githooks/secret-scan.py --all` -> clean
+
+Fix round tool calls: 15

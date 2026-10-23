@@ -23,7 +23,11 @@ import {
 import { devFactories, devModelEnabled } from './devModel';
 import { processPorts, systemClock, systemIds, turnDepsFor } from './deps';
 import { errorName, TurnUnavailableError, type ServerLog, type TurnBackend } from './routes';
-import { redisSessionRateLimiter, type SessionRateLimiter } from './sessionRateLimit';
+import {
+  fakeSessionRateLimiter,
+  redisSessionRateLimiter,
+  type SessionRateLimiter,
+} from './sessionRateLimit';
 
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -86,7 +90,13 @@ async function build(env: Env, hooks: TurnRuntimeHooks): Promise<TurnBackend> {
   const personas = readPersonaLibrary(join(dir, 'skills', 'mock_interview'));
   if (dev) hooks.log.error('turn.dev_model_on', {});
   const { repos, identity } = hooks.database();
-  const { queues, limits, sessionRateLimit } = hooks.redis(redisUrl);
+  const opened = hooks.redis(redisUrl);
+  const { queues, limits } = opened;
+  // 9.4a fix round (e2e): under the dev model (scripted, local http only) the session-start limit
+  // runs in memory, like the scripted adapter stands in for the provider. Playwright's dead
+  // REDIS_URL never answers, and a Redis-backed limiter would refuse every start (fail closed,
+  // 503). Everywhere else the limiter stays on Redis and keeps failing closed.
+  const sessionRateLimit = dev ? fakeSessionRateLimiter() : opened.sessionRateLimit;
   // 9.4a: each student's turns run in their own market (`users.market`, NOT NULL, `global` until
   // the age gate), read fresh per resolve. It picks the locale pack and so the helplines; a market
   // with no pack runs as `global`. No deploy setting picks it, so there is no boot check for one.

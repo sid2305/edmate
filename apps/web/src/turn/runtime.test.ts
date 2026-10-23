@@ -237,6 +237,26 @@ describe('createTurnRuntime with the dev model (9.0, D2)', () => {
     }
   });
 
+  it('uses an in-memory session-start limiter, not the Redis one (9.4a e2e fix round)', async () => {
+    const { h, sessionRateLimit } = hooks();
+    const failing = { take: () => Promise.reject(new Error('connect ECONNREFUSED')) };
+    h.redis.mockReturnValue({ queues: {} as never, limits: {} as never, sessionRateLimit: failing });
+    const env = { ...NO_KEY, AUTH_URL: 'http://127.0.0.1:3111' };
+    const backend = await createTurnRuntime(() => env, h)();
+    expect(backend.sessionRateLimit).not.toBe(failing);
+    expect(backend.sessionRateLimit).not.toBe(sessionRateLimit);
+    await expect(backend.sessionRateLimit.take('stu_1')).resolves.toBe(true);
+  });
+
+  it('with the dev model off, the Redis limiter is kept and still fails closed', async () => {
+    const { h } = hooks();
+    const failing = { take: () => Promise.reject(new Error('connect ECONNREFUSED')) };
+    h.redis.mockReturnValue({ queues: {} as never, limits: {} as never, sessionRateLimit: failing });
+    const backend = await createTurnRuntime(() => ({ ...ENV, AUTH_URL: 'http://127.0.0.1:3111' }), h)();
+    expect(backend.sessionRateLimit).toBe(failing);
+    await expect(backend.sessionRateLimit.take('stu_1')).rejects.toThrow('ECONNREFUSED');
+  });
+
   it('unset or empty keeps today: no key fails as provider_key', async () => {
     for (const flag of [undefined, '']) {
       const { h, log } = hooks();
