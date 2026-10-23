@@ -10,6 +10,53 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.4d: missing studentMarket fails loudly in packages/db/src/repositories/ports.ts · decided by builder · risk: high
+- Decided: a `subscription` resolve for a learner who passes `learnerClear` but has no `studentMarket` option throws `RepositoryError('integrity')` instead of returning `null`. The option stays optional (preview/eval roots), and a root whose `learnerClear` is always false (studio preview) still gets `null`.
+- Why: a silent `null` turned a wiring mistake into "You need a live package" for every student, with no log line. Throwing is still fail-closed (no entitlement), but it is loud. Checking after `learnerClear` keeps the studio preview store, which is out of bounds here, unchanged.
+- risk: high (the entitlement store, a risky path; behaviour changes only for a misconfigured root).
+
+---
+
+### 22 Oct 2026 · 9.4d: live-class questions resolve teachers from the student's own live subscriptions · decided by builder · risk: low
+- Decided: the ask route uses `subscriptions.listLiveForStudent(principal.userId)` (not-ended rows, paused included) for its candidate teachers and no longer reads `EDMATE_CHAT_AGENTS` or `agents.owner`.
+- Why: the route then matches the source /home lists live classes from, so every class /home shows can be asked. The student id comes only from the session.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4d: session-start limiter bounded twice (client commandTimeout 2 s, route deadline 3 s) · decided by builder · risk: low
+- Decided: the limits Redis client gets `commandTimeout: 2000` and `connectTimeout: 5000`, and `POST /api/sessions` races `take()` against a 3 s deadline, failing closed with 503.
+- Why: a black-holed Redis would otherwise hang every session start. The route deadline also covers any future limiter implementation.
+- risk: low
+
+---
+
+### 23 Oct 2026 · 9.4d: no extra catch on the raced take() in apps/web/src/turn/routes.ts · decided by lead · risk: low
+- Decided: the security reviewer's LOW (a late rejection of `take()` after the deadline wins) is wontfix.
+- Why: `Promise.race` attaches handlers to both promises, so a late rejection is already handled; the code reviewer checked this, and the tests show no leaked timers.
+- risk: low
+
+Tool calls used: 48 (harness count: builder 48; the agent reported 32)
+
+---
+
+### 22 Oct 2026 · 11.3c: insights refuse a week that has not ended in packages/db/src/repositories/insights.ts · decided by builder · risk: high
+- Decided: `weekWindow` (shared by every insights read and by `computeAndSaveWeek`) throws
+  `RepositoryError('invalid', method)` when the window's end (`weekStart` + 7 days) is after
+  `Date.now()`. No injected clock exists on this repository, so this follows the module's
+  existing way of getting "now" rather than adding one. Fixtures that previously used the
+  then-current week were moved into the past instead of pinning a test clock.
+- Why: 11.3a's security review found that a teacher could call a read for the current week
+  twice, once before and once after a single student's activity, and difference the two results
+  to identify that student even though the small-group floor (`INSIGHTS_MIN_STUDENTS`) is meant
+  to prevent singling anyone out. Refusing any week that has not fully closed removes the
+  attack: every payload the repository ever returns is for a week whose contents cannot change
+  again.
+- risk: high (`packages/db/src/repositories/**` is a risk path). Required reviewers:
+  database-reviewer, security-reviewer.
+
+---
+
 ### 22 Oct 2026 · 9.3e Phase A: safety rejection takes down live agents in packages/db/src/repositories · decided by builder · risk: high
 - Decided: `setVerification` takes a `safety: true` flag (rejections only; refine makes it `invalid` on approval) and, in its transaction, takes down every live agent of the teacher via the new module-internal `takeDownAgentInTx` (category `harmful`, note = reason, agent `suspended`, audited; lock order role → profile → agents asc id → takedown rows). The `teacher.verify` audit row names the takedown ids. A re-verification lifts nothing. `takedowns.lift` returns an agent to `live` only when its teacher's profile is `verified`; with no profile, `pending`, `rejected` or any other state it returns it to `draft` (profile read FOR SHARE before the agent lock). Phase A first built "not `rejected`"; the lead kept verified-only and Phase A2 built it, so a safety-rejected teacher who edits their subject (back to `pending`) can't be reopened by a routine lift. A plain rejection is unchanged. The student sees the existing takedown texts; no new error code.
 - Why: B-46 (c): a safety rejection must cut existing subscribers off at once; every student path already refuses a non-live agent, so reusing 12.2b's takedown write needs no migration, contract or harness change and gives staff an audit trail and lift path. The lift rule closes the security review's MEDIUM (a routine lift reopening a rejected teacher).

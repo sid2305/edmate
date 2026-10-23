@@ -160,13 +160,24 @@ export function consoleLog(prefix: string): ServerLog {
 }
 
 /**
+ * The fail-fast limits client's options (task 9.4d): one retry, and every command and the connect
+ * bounded, so a connected-but-unresponsive Redis rejects (the routes then fail closed, 503) instead
+ * of hanging the request.
+ */
+export const LIMITS_REDIS_OPTIONS = {
+  maxRetriesPerRequest: 1,
+  commandTimeout: 2_000,
+  connectTimeout: 5_000,
+} as const;
+
+/**
  * The producer queues and the limits on two Redis clients: BullMQ wants no per-request retry cap;
  * the turn limits and the session-start limit share the fail-fast client (one retry; no third
  * connection). Errors are logged by name only (they can quote the host).
  */
 export function openRedis(url: string, log: ServerLog): RuntimeRedis {
   const forQueues = new Redis(url, { maxRetriesPerRequest: null });
-  const forLimits = new Redis(url, { maxRetriesPerRequest: 1 });
+  const forLimits = new Redis(url, { ...LIMITS_REDIS_OPTIONS });
   for (const client of [forQueues, forLimits]) {
     client.on('error', (error: unknown) => log.error('turn.redis_error', { error: errorName(error) }));
   }

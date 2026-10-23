@@ -3894,9 +3894,9 @@ tasks:
   deps:
   - '9.2'
   risk: medium
-  status: planning
-  branch: null
-  model: plan:fable
+  status: running
+  branch: m13/9.2d-display-name
+  model: plan:sonnet build:sonnet review:sonnet
 - id: 8.6c
   milestone: M8
   title: '8.6 Phase C: apps/web studio packages API with cost estimates (plan docs/tasks/8.6/plan.md)'
@@ -5363,9 +5363,28 @@ tasks:
   deps:
   - 11.3a
   risk: risky
-  status: running
+  status: done
   branch: m13/11.3c-insights-closed-weeks
-  model: plan:lead build:fable+sonnet
+  model: plan:lead build:fable+sonnet review:sonnet
+  metrics:
+    tool_calls: 11
+    tokens_in: 46
+    tokens_out: 451
+    cache_read_tokens: 434279
+    wall_time_seconds: 94
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 0
+      by_severity: {}
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 0
+    human_questions: 0
 - id: 8.2h
   milestone: M8
   title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web
@@ -6746,9 +6765,29 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: running
+  status: done
   branch: m13/9.4d-review-mediums
-  model: plan:lead build:opus
+  model: plan:lead build:opus review:sonnet
+  metrics:
+    tool_calls: 199
+    tokens_in: 668
+    tokens_out: 26788
+    cache_read_tokens: 25984265
+    wall_time_seconds: 185309
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 9.4e
   milestone: M13
   title: '9.4a review LOWs and left-to-do: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works; export the harness grounding/advice/route/summary schemas so devModel.test.ts
