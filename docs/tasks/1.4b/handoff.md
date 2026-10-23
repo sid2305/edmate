@@ -77,3 +77,11 @@ Left to do:
 - The `apps/web/e2e` magic-link flows and `scripts/sandbox-magic-link.mjs` were not run against a live stack in this round (compose was not allowed). Run them once before the pilot.
 
 Tool calls used (fix round): 30
+
+## Fix round 2 (security re-verify)
+
+- HIGH (callback POST ungated): `app/api/auth/callback/email/route.ts` no longer exports POST. Nothing in `apps/web`, `e2e` or `scripts` POSTs to this path (grep), so Next answers 405 and Auth.js never sees the request. A cross-site form POST carrying an attacker's token in the query can no longer spend it.
+- `route.test.ts`: the "POST is Auth.js unchanged" case is replaced by one asserting the module exports only `GET` and `dynamic` (Auth.js POST not called). A new case runs Next's own `getSortedRoutes` and shows `/api/auth/callback/email` sorts ahead of `/api/auth/[...nextauth]`; Next picks the route file by path before method, so a POST here gets this module's 405, never the catch-all's POST.
+- Gate (before merging origin/main): `TEST_DATABASE_URL=… TEST_REDIS_URL=… corepack pnpm turbo run build typecheck lint test --filter=@edmate/web --force` → Tasks 11/11 successful; Test Files 155 passed (155), Tests 2376 passed (2376), none skipped. `python3 .githooks/secret-scan.py --all` → clean.
+
+Tool calls used (fix round 2): 22
