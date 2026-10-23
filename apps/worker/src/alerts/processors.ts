@@ -1,8 +1,9 @@
 // The safety-alert processor (task 4.3; persistence added in 12.5b).
 //
 // - `alert.raise`: persist the alert (`store.record`), then tell the trust team. A failed persist
-//   never blocks the notice: it is logged (`safety_alert.store_failed`, ids and the error name
-//   only) and the job still throws afterwards, so BullMQ retries the write.
+//   never blocks the notice: it is logged at once (`safety_alert.store_failed`, ids and the error
+//   name only; before notify runs, so a joint DB and notifier outage still logs it) and the job
+//   still throws afterwards, so BullMQ retries the write.
 // - `alert.escalate_check` (round n, 15 minutes after the raise and then every 15 minutes): read
 //   the ack from the DB (`store.isAcknowledged`, the source of truth since 12.5b). A failed ack
 //   read counts as *not acknowledged* (fail closed: a DB hiccup must not silently stop paging) and
@@ -91,11 +92,20 @@ export function alertProcessor(d: AlertProcessorDeps) {
     switch (job.name) {
       case JOB.alertRaise: {
         const { alert } = parse(AlertRaiseJobSchema, job);
+        // Logged in the catch, before notify is awaited (12.5e): if the notifier also throws,
+        // the store failure must still have been logged; the notify error then makes the job
+        // retry, and the retry records again.
         let storeError: unknown;
         try {
           await d.store.record(alert);
         } catch (error) {
           storeError = error;
+          d.log({
+            level: 'error',
+            event: 'safety_alert.store_failed',
+            alertId: alert.id,
+            error: errorName(error),
+          });
         }
         await notify(alert, 'trust_team');
         d.log({
@@ -104,15 +114,7 @@ export function alertProcessor(d: AlertProcessorDeps) {
           alertId: alert.id,
           audience: 'trust_team',
         });
-        if (storeError !== undefined) {
-          d.log({
-            level: 'error',
-            event: 'safety_alert.store_failed',
-            alertId: alert.id,
-            error: errorName(storeError),
-          });
-          throw storeError;
-        }
+        if (storeError !== undefined) throw storeError;
         return 'notified';
       }
       case JOB.alertEscalateCheck: {

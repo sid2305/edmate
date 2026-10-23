@@ -776,6 +776,67 @@ describe.skipIf(!up)(
         expect(msg.rows[0]!.text).toBe(trimmed);
         expect(msg.rows[0]!.text.endsWith('\n')).toBe(false);
       });
+
+      it(
+        "open()'s own callerSimilarIds lock statement (query shape): the forced-interleaving " +
+          "deadlock tests above drive that lock's order through a raw connection standing in for " +
+          "it (real open(), without an injectable hook, can't be forced into a chosen multi-row " +
+          'lock order deterministically — Postgres is free to pick any order for an unordered ' +
+          "IN-list, so a timing race on the live call would be flaky either way); this test instead " +
+          "pins the statement's own SQL text, captured straight off the wire, so dropping " +
+          '`.orderBy(teacherQuestions.id)` from it fails here directly.',
+        async () => {
+          const store1 = teacherQuestionStoreFor(repos, { studentId: stu1, teacherId: tA });
+          const tag = uid('shape');
+          const q1 = await store1.open({
+            teacherId: tA,
+            agentId: agentA,
+            studentId: stu1,
+            text: `QUERYSHAPE-${tag}-A: why is the sky blue during the day?`,
+            similarIds: [],
+          });
+          const q2 = await store1.open({
+            teacherId: tA,
+            agentId: agentA,
+            studentId: stu1,
+            text: `QUERYSHAPE-${tag}-B: why is the sky orange at sunset?`,
+            similarIds: [],
+          });
+
+          // Captures every statement's SQL text as the pg driver sends it, so this sees exactly
+          // what `open()` issues — not a re-derivation of it — without touching production code.
+          const captured: string[] = [];
+          type QueryFn = (...args: unknown[]) => unknown;
+          const proto = pg.Client.prototype as unknown as { query: QueryFn };
+          const originalQuery = proto.query;
+          proto.query = function (this: pg.Client, ...args: unknown[]) {
+            const first = args[0] as string | { text?: string } | undefined;
+            const text = typeof first === 'string' ? first : first?.text;
+            if (typeof text === 'string') captured.push(text);
+            return originalQuery.apply(this, args);
+          };
+          try {
+            await store1.open({
+              teacherId: tA,
+              agentId: agentA,
+              studentId: stu1,
+              text: `QUERYSHAPE-${tag}-C: why does the moon look bigger near the horizon?`,
+              similarIds: [q1.id, q2.id],
+            });
+          } finally {
+            proto.query = originalQuery;
+          }
+
+          const lockStatement = captured.find(
+            (t) => /for key share/i.test(t) && /teacher_questions/i.test(t) && /\bin\s*\(/i.test(t),
+          );
+          expect(lockStatement).toBeDefined();
+          // The `ORDER BY` has to sit between the `IN (...)` filter and `FOR KEY SHARE` — this is
+          // exactly the clause 5.10b's fix round added and 5.10c's forced deadlock tests above
+          // assume; removing it from the real statement makes this assertion fail directly.
+          expect(lockStatement).toMatch(/order by\s+"teacher_questions"\."id"[\s\S]*for key share/i);
+        },
+      );
     });
   },
 );
