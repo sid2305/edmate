@@ -143,5 +143,4 @@ answer 2; Phase A built "not `rejected`", Phase A2 tightened it to verified-only
 - Why: B-46 (c) needs staff to mark a rejection as safety-related; the refine mirrors the repository's own so a bad combination never reaches SQL, and dropping `false` keeps a plain rejection's call and audit row exactly as before.
 - risk: high
 
-Tool calls used: 33
-Phase A2+B tool calls: 52
+Tool calls used: 114 (harness count: Phase A 51 + Phase A2+B 63; the agents reported 33 + 52)
