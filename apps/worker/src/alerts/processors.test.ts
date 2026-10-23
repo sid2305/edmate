@@ -98,10 +98,23 @@ describe('alert.raise', () => {
     );
     expect(w.notified).toEqual([{ id: 'alert_1', audience: 'trust_team' }]);
     expect(w.lines).toEqual([
+      { level: 'error', event: 'safety_alert.store_failed', alertId: 'alert_1', error: 'Error' },
       { level: 'info', event: 'safety_alert.notified', alertId: 'alert_1', audience: 'trust_team' },
+    ]);
+    expect(JSON.stringify(w.lines)).not.toContain('CANARY');
+  }, 1_000);
+
+  it('a joint DB and notifier outage still logs the store failure, and the job fails so it retries (12.5e)', async () => {
+    const w = world({ recordFails: true, notifyFails: 1 });
+    await expect(w.process({ name: JOB.alertRaise, data: { alert } })).rejects.toThrow(
+      'mail relay down',
+    );
+    expect(w.notified).toEqual([]);
+    expect(w.lines).toEqual([
       { level: 'error', event: 'safety_alert.store_failed', alertId: 'alert_1', error: 'Error' },
     ]);
     expect(JSON.stringify(w.lines)).not.toContain('CANARY');
+    expect(JSON.stringify(w.lines)).not.toContain('insert failed');
   }, 1_000);
 
   it('a malformed payload is permanent (dead-lettered, not retried forever)', async () => {

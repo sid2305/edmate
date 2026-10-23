@@ -10,6 +10,20 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 12.5e: store failure logged before notify in apps/worker/src/alerts · decided by builder · risk: high
+- Decided: `alert.raise` logs `safety_alert.store_failed` in the `catch` of `store.record`, before
+  it awaits the trust-team notify; the throw that makes BullMQ retry stays where it was (after a
+  successful notify), and a notify error still propagates on its own.
+- Why: the 12.5b review found that a joint DB and notifier outage never logged the store failure
+  because the log sat after an unguarded `await notify`. Logging in the catch costs nothing and
+  keeps the retry and notify-anyway behaviour identical; the log carries ids and the error name
+  only.
+- risk: high (apps/worker/src/alerts is a risky path; behaviour change is log ordering only).
+
+Tool calls used: 24 (harness count: builder 24; the agent reported 19)
+
+---
+
 ### 22 Oct 2026 · 5.10c ran over budget · decided by lead · risk: low
 - Decided: accept 74 tool calls against a 30-call budget; the review approves with no findings.
 - Why: the builder counted 53; the harness counted 74 (a failed attempt at a live interleaving, the remove-and-restore proof, and the full db gate with Postgres). The work is done and clean, so another round would only cost more.
