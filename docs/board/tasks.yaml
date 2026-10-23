@@ -535,8 +535,9 @@ tasks:
     pass
   deps:
   - '1.4'
-  status: todo
+  status: planning
   risk: risky
+  model: plan:sonnet
 - id: 1.4c
   milestone: M13
   title: 'Google sign-in after a link sign-up (1.4 plan Q4): link the accounts when both sides have a verified email instead of OAuthAccountNotLinked (changes a 1.3 risk-high decision)'
