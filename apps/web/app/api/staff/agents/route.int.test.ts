@@ -52,7 +52,10 @@ describe.skipIf(!DB_URL)('staff regulated-subject flag over a real Postgres', ()
     db = openDatabase({ DATABASE_URL: DB_URL });
     staffId = await user('staff', 'staff');
     teacherId = await user('asha', 'teacher');
-    await db.repos.teacherProfiles.create({ teacherId }, { slug: `asha-${tag}`, subject: 'Math' });
+    await db.repos.teacherProfiles.create(
+      { teacherId },
+      { slug: `asha-${tag}`, displayName: 'Asha', subject: 'Math' },
+    );
     await db.repos.teacherProfiles.setVerification(
       { teacherId },
       { status: 'verified', by: staffId, reason: 'int test setup' },

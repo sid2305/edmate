@@ -2509,7 +2509,10 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         (r) =>
           r.teacherProfiles.create(
             { teacherId: studentId('1') },
-            { slug: 'stu', displayName: 'X', subject: 'x' },
+            // displayName must be well-formed (2+ chars) so this case's shape passes CreateInput
+            // validation and actually exercises the scope check it's named for (task 9.2d: a
+            // too-short displayName like 'X' would fail validation first, hiding the scope bug).
+            { slug: 'stu', displayName: 'Student X', subject: 'x' },
           ),
         'scope',
       ],

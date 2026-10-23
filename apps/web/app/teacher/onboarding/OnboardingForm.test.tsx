@@ -20,6 +20,7 @@ const PROFILE = (status: TeacherProfileRow['verificationStatus']): TeacherProfil
   id: 'tp_1',
   teacherId: 't_asha',
   slug: 'asha-math',
+  displayName: 'Asha',
   subject: 'Math',
   bio: 'I teach math.',
   languages: ['en'],
@@ -34,13 +35,23 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('OnboardingForm', () => {
-  it('create mode: shows slug, subject, bio and languages fields with a create button', () => {
+  it('create mode: shows slug, display name, subject, bio and languages fields with a create button', () => {
     renderIntl(<OnboardingForm initialProfile={null} />);
     expect(screen.getByLabelText(/Profile URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Display name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Subject/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Bio/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Languages/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create profile' })).toBeInTheDocument();
+  });
+
+  it('create mode: the display name field has maxLength 60 and a hint', () => {
+    renderIntl(<OnboardingForm initialProfile={null} />);
+    const field = screen.getByLabelText(/Display name/i);
+    expect(field).toHaveAttribute('maxLength', '60');
+    expect(field).toHaveAccessibleDescription(
+      'Shown to students on your public page. 2–60 characters; no web addresses, emails or phone numbers.',
+    );
   });
 
   it('create mode: submits a POST with the entered fields, then switches to edit mode', async () => {
@@ -48,6 +59,7 @@ describe('OnboardingForm', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderIntl(<OnboardingForm initialProfile={null} />);
     fireEvent.change(screen.getByLabelText(/Profile URL/i), { target: { value: 'asha-math' } });
+    fireEvent.change(screen.getByLabelText(/Display name/i), { target: { value: 'Asha' } });
     fireEvent.change(screen.getByLabelText(/Subject/i), { target: { value: 'Math' } });
     fireEvent.change(screen.getByLabelText(/Bio/i), { target: { value: 'I teach math.' } });
     fireEvent.change(screen.getByLabelText(/Languages/i), { target: { value: 'en' } });
@@ -59,6 +71,7 @@ describe('OnboardingForm', () => {
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({
       slug: 'asha-math',
+      displayName: 'Asha',
       subject: 'Math',
       bio: 'I teach math.',
       languages: ['en'],
@@ -68,12 +81,13 @@ describe('OnboardingForm', () => {
     );
   });
 
-  it('edit mode: slug is read-only, submits a PUT with the changed fields', async () => {
+  it('edit mode: slug is read-only, prefills the display name, submits a PUT with the changed fields', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(200, { profile: PROFILE('pending') }));
     vi.stubGlobal('fetch', fetchMock);
     renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
     expect(screen.queryByLabelText(/Profile URL/i)).not.toBeInTheDocument();
     expect(screen.getByText('asha-math')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Display name/i)).toHaveValue('Asha');
     fireEvent.change(screen.getByLabelText(/Subject/i), { target: { value: 'Physics' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -82,10 +96,49 @@ describe('OnboardingForm', () => {
     expect(url).toBe('/api/studio/profile');
     expect(init.method).toBe('PUT');
     expect(JSON.parse(init.body as string)).toEqual({
+      displayName: 'Asha',
       subject: 'Physics',
       bio: 'I teach math.',
       languages: ['en'],
     });
+  });
+
+  it('edit mode: an unchanged (unedited) display name is still sent (the field is non-empty)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { profile: PROFILE('pending') }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ displayName: 'Asha' });
+  });
+
+  it('edit mode: an empty display name field omits the key from the PUT body (keeps the stored value)', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { profile: PROFILE('pending') }));
+    vi.stubGlobal('fetch', fetchMock);
+    const profile = { ...PROFILE('pending'), displayName: null };
+    renderIntl(<OnboardingForm initialProfile={profile} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('displayName');
+  });
+
+  it('edit mode: a profile with no display name shows the slug fallback notice', () => {
+    const profile = { ...PROFILE('pending'), displayName: null };
+    renderIntl(<OnboardingForm initialProfile={profile} />);
+    expect(screen.getByLabelText(/Display name/i)).toHaveValue('');
+    expect(screen.getByText('Until you set one, your public page shows asha-math.')).toBeInTheDocument();
+  });
+
+  it('edit mode: a profile with a display name shows no fallback notice', () => {
+    renderIntl(<OnboardingForm initialProfile={PROFILE('pending')} />);
+    expect(
+      screen.queryByText('Until you set one, your public page shows asha-math.'),
+    ).not.toBeInTheDocument();
   });
 
   it.each([

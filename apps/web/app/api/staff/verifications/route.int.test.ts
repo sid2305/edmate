@@ -51,8 +51,14 @@ describe.skipIf(!DB_URL)('staff verification over a real Postgres', () => {
     staffId = await user('staff', 'staff');
     teacherA = await user('asha', 'teacher');
     teacherB = await user('ben', 'teacher');
-    await db.repos.teacherProfiles.create({ teacherId: teacherA }, { slug: `asha-${tag}`, subject: 'Math' });
-    await db.repos.teacherProfiles.create({ teacherId: teacherB }, { slug: `ben-${tag}`, subject: 'Physics' });
+    await db.repos.teacherProfiles.create(
+      { teacherId: teacherA },
+      { slug: `asha-${tag}`, displayName: 'Asha', subject: 'Math' },
+    );
+    await db.repos.teacherProfiles.create(
+      { teacherId: teacherB },
+      { slug: `ben-${tag}`, displayName: 'Ben', subject: 'Physics' },
+    );
     who.staff = { userId: staffId, role: 'staff' };
     who.teacher = { userId: teacherA, role: 'teacher' };
   }, 120_000);
