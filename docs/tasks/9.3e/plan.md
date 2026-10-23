@@ -203,3 +203,7 @@ Plan review (security-reviewer, PLAN OK, 1 MEDIUM, 4 LOW) folded in:
 3. LOW, Phase A: the verification audit row for a safety rejection names the takedown ids (write it after the takedown loop, or add a second audit row), so these takedowns are distinguishable from content takedowns.
 4. LOW, Phase A: use translateWrite (and the active-row guard pattern) in the enlarged transaction if setVerification's siblings already do; otherwise note it in the handoff.
 5. LOW, deferred: a student cannot pause or cancel via the 404'd plan page (goes into the B-49 follow-up); a subject edit returning a safety-rejected teacher to the queue keeps no history (board follow-up after merge).
+
+### Lead decision after Phase A (22 Oct 2026)
+Phase A returned with the lift rule weakened to "not `rejected`". The lead keeps verified-only: a lift returns an agent to `live` only when its teacher is `verified`, otherwise `draft`, so a safety-rejected teacher who edits their subject (back to `pending`) cannot be reopened by a routine lift. Phase A2 (next builder, before Phase B) makes the change and seeds verified profiles in the repositories.int.test.ts grid cases.
+
