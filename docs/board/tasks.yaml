@@ -2589,9 +2589,29 @@ tasks:
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
   - 0.16a
-  status: running
+  status: done
   branch: m13/0.16b-metrics-root
-  model: plan:lead build:sonnet
+  model: plan:lead build:sonnet review:sonnet
+  metrics:
+    tool_calls: 41
+    tokens_in: 148
+    tokens_out: 1498
+    cache_read_tokens: 2102979
+    wall_time_seconds: 586
+    models:
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 0
+    findings:
+      total: 1
+      by_severity:
+        LOW: 1
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 0
+        wontfix: 1
+    human_questions: 0
 - id: 7.1a
   milestone: M7
   title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
