@@ -12,16 +12,22 @@
 //   so leakCheck's cache is rebuilt.
 // - An agent takedown sets the agent `suspended`; every student-facing read already requires
 //   `live`, and publish refuses a suspended agent. A lift sets it `live` again when it has a live
-//   version, else `draft`.
+//   version and its teacher's profile is `verified` (task 9.3e), else `draft`.
 // - Staff checks use `lockRole` (role-lock.ts): this file never names the user table.
 //
 // Lock order (8.7a lesson). `create` and `lift` take, in this order: the staff user's role row
-// (`FOR SHARE`), the target row (`FOR UPDATE`: the document, or the agent), the takedown row,
-// then the linked report (`FOR UPDATE`, create only). That is reports.review's "role first,
+// (`FOR SHARE`), the target row (`FOR UPDATE`: the document, or the agent), then the linked
+// report (`FOR UPDATE`, create only), then the takedown row (lift locks it; create inserts it). That is reports.review's "role first,
 // report last". publish (startRun, goLive) takes advisory, profile, agent, run and never a user
 // role row, a document, a takedown or a report, so the only row both take is the agent, and
 // neither holds anything the other wants while waiting on it: no cycle. The two-connection test
 // in test/takedowns.int.test.ts forces both queue orders against publish.goLive.
+// `teacherProfiles.setVerification` (9.3e) also calls `takeDownAgentInTx`, after locking role ->
+// profile -> agents (ascending id): profile before agent, as publish does. For the same reason
+// `lift` of an agent target reads the owner's profile `FOR SHARE` before it locks the agent
+// (role -> profile -> agent -> takedown), and restores `live` only for a `verified` teacher, so
+// a lift can't reopen a teacher a safety rejection cut off (even after a subject edit sent the
+// profile back to `pending`).
 //
 // Repeat infringers (task 12.3b): `countUpheld` is a read only, with no caller and no threshold
 // yet (enforcement is 12.3d, next to B-12's strike policy). It takes no lock.
@@ -90,6 +96,64 @@ export function notTakenDown(documentId: PgColumn): SQL {
 }
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** The agent row `takeDownAgentInTx` acts on; the caller has already locked it FOR UPDATE. */
+export interface TakedownAgent {
+  id: string;
+  teacherId: string;
+  status: 'draft' | 'live' | 'suspended';
+}
+
+/**
+ * The agent takedown write, shared by `create` and `teacherProfiles.setVerification` (task
+ * 9.3e). Module-internal: not re-exported from index.ts. The caller must be inside a transaction,
+ * have checked `staff` is staff, have locked the agent row FOR UPDATE and checked it has no
+ * active takedown. Inserts the `agent:<id>` row (`active`, first staff action `create`, plus
+ * `source` when given), sets the agent `suspended` and writes the `takedown.create` audit row.
+ */
+export async function takeDownAgentInTx(
+  tx: Tx,
+  t: {
+    staff: string;
+    agent: TakedownAgent;
+    category: TakedownCreateInput['category'];
+    note: string | null;
+    reportId?: string;
+    source?: string;
+  },
+  method: string,
+): Promise<{ id: string }> {
+  const target = targetOf('agent', t.agent.id);
+  const source = t.source === undefined ? sql`` : sql`, 'source', ${t.source}::text`;
+  const [row] = await tx
+    .insert(takedowns)
+    .values({
+      target,
+      reason: t.category,
+      status: 'active',
+      staffActions: sql`jsonb_build_array(jsonb_build_object('actor', ${t.staff}::text, 'action', 'create', 'note', ${t.note}::text, 'ts', now()${source}))`,
+    })
+    .returning({ id: takedowns.id });
+  /* v8 ignore next -- an insert without a conflict clause returns its row */
+  if (!row) throw new RepositoryError('integrity', method);
+  await tx.update(agents).set({ status: 'suspended' }).where(eq(agents.id, t.agent.id));
+  await insertAuditEntry(tx, method, t.agent.teacherId, null, {
+    actor: t.staff,
+    actorRole: 'staff',
+    action: 'takedown.create',
+    target,
+    ...(t.note === null ? {} : { reason: t.note }),
+    before: { status: t.agent.status, takedown: null },
+    after: {
+      takedown: row.id,
+      status: 'active',
+      category: t.category,
+      reportId: t.reportId ?? null,
+      agentStatus: 'suspended',
+    },
+  });
+  return { id: row.id };
+}
 
 const targetOf = (kind: TakedownKind, id: string) => `${kind}:${id}`;
 
@@ -173,18 +237,8 @@ export function takedownsRepo(db: Db) {
             .where(and(eq(takedowns.target, target), eq(takedowns.status, 'active')));
           if (active) throw new RepositoryError('invalid', method);
 
-          const [row] = await tx
-            .insert(takedowns)
-            .values({
-              target,
-              reason: c.category,
-              status: 'active',
-              staffActions: sql`jsonb_build_array(jsonb_build_object('actor', ${staff}::text, 'action', 'create', 'note', ${note}::text, 'ts', now()))`,
-            })
-            .returning({ id: takedowns.id });
-          /* v8 ignore next -- an insert without a conflict clause returns its row */
-          if (!row) throw new RepositoryError('integrity', method);
-
+          // The linked report is locked and checked before anything is written (the new takedown
+          // row is invisible to everyone else, so this keeps the header's lock order).
           if (c.reportId !== undefined) {
             const [report] = await tx
               .select({ teacherId: sessions.teacherId })
@@ -205,6 +259,52 @@ export function takedownsRepo(db: Db) {
             if (report?.teacherId !== locked.teacherId) {
               throw new RepositoryError('invalid', method);
             }
+          }
+
+          let row: { id: string };
+          if (locked.agent) {
+            row = await takeDownAgentInTx(
+              tx,
+              {
+                staff,
+                agent: { id: c.targetId, teacherId: locked.teacherId, status: locked.agent.status },
+                category: c.category,
+                note,
+                ...(c.reportId === undefined ? {} : { reportId: c.reportId }),
+              },
+              method,
+            );
+          } else {
+            const [inserted] = await tx
+              .insert(takedowns)
+              .values({
+                target,
+                reason: c.category,
+                status: 'active',
+                staffActions: sql`jsonb_build_array(jsonb_build_object('actor', ${staff}::text, 'action', 'create', 'note', ${note}::text, 'ts', now()))`,
+              })
+              .returning({ id: takedowns.id });
+            /* v8 ignore next -- an insert without a conflict clause returns its row */
+            if (!inserted) throw new RepositoryError('integrity', method);
+            row = inserted;
+            await bumpRevision(tx, locked.teacherId);
+            await insertAuditEntry(tx, method, locked.teacherId, null, {
+              actor: staff,
+              actorRole: 'staff',
+              action: 'takedown.create',
+              target,
+              ...(c.note === undefined ? {} : { reason: c.note }),
+              before: { takedown: null },
+              after: {
+                takedown: row.id,
+                status: 'active',
+                category: c.category,
+                reportId: c.reportId ?? null,
+              },
+            });
+          }
+
+          if (c.reportId !== undefined) {
             await tx
               .update(reports)
               .set({
@@ -228,29 +328,6 @@ export function takedownsRepo(db: Db) {
               after: { status: 'actioned', takedown: row.id },
             });
           }
-
-          if (locked.agent) {
-            await tx.update(agents).set({ status: 'suspended' }).where(eq(agents.id, c.targetId));
-          } else {
-            await bumpRevision(tx, locked.teacherId);
-          }
-          await insertAuditEntry(tx, method, locked.teacherId, null, {
-            actor: staff,
-            actorRole: 'staff',
-            action: 'takedown.create',
-            target,
-            ...(c.note === undefined ? {} : { reason: c.note }),
-            before: locked.agent
-              ? { status: locked.agent.status, takedown: null }
-              : { takedown: null },
-            after: {
-              takedown: row.id,
-              status: 'active',
-              category: c.category,
-              reportId: c.reportId ?? null,
-              ...(locked.agent ? { agentStatus: 'suspended' } : {}),
-            },
-          });
           return { id: row.id };
         }),
       );
@@ -260,9 +337,10 @@ export function takedownsRepo(db: Db) {
      * Staff lift an active takedown, in one transaction (same lock order): `by` must be staff
      * now (`scope`); the takedown must exist and still be active once the target is locked
      * (else `not_found`, so a second or concurrent lift writes nothing). It is set `lifted`; an
-     * agent goes back to `live` when it has a live version, else `draft`; a document bumps the
-     * material revision. Audited `takedown.lift`. A stored target that is malformed or gone is
-     * `integrity`.
+     * agent goes back to `live` when it has a live version and its teacher's profile is
+     * `verified` (task 9.3e: no profile, pending or rejected stays off), else `draft`; a
+     * document bumps the material revision. Audited `takedown.lift`. A stored target that is
+     * malformed or gone is `integrity`.
      */
     async lift(
       by: unknown,
@@ -286,6 +364,20 @@ export function takedownsRepo(db: Db) {
           if (!ref) throw new RepositoryError('not_found', method);
           const t = parseTarget(ref.target);
           if (!t) throw new RepositoryError('integrity', method);
+          // Task 9.3e: an agent comes back `live` only for a verified teacher. The profile is
+          // read FOR SHARE before the agent is locked (profile before agent, as setVerification
+          // and publish take them); an agent's teacher never changes, so the unlocked lookup of
+          // its owner is safe.
+          let unverified = false;
+          if (t.kind === 'agent') {
+            const [profile] = await tx
+              .select({ status: teacherProfiles.verificationStatus })
+              .from(teacherProfiles)
+              .innerJoin(agents, eq(agents.teacherId, teacherProfiles.userId))
+              .where(eq(agents.id, t.id))
+              .for('share', { of: teacherProfiles });
+            unverified = profile?.status !== 'verified';
+          }
           const locked = await lockTarget(tx, t.kind, t.id);
           if (!locked) throw new RepositoryError('integrity', method);
           const [row] = await tx
@@ -302,7 +394,7 @@ export function takedownsRepo(db: Db) {
               staffActions: staffAction(takedowns.staffActions, staff, 'lift', note),
             })
             .where(eq(takedowns.id, id));
-          const restored = locked.agent?.liveVersion == null ? 'draft' : 'live';
+          const restored = locked.agent?.liveVersion == null || unverified ? 'draft' : 'live';
           if (locked.agent) {
             await tx.update(agents).set({ status: restored }).where(eq(agents.id, t.id));
           } else {

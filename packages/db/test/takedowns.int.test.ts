@@ -196,8 +196,8 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       [STAFF],
     );
     await raw.query(
-      `insert into teacher_profiles (id, user_id, slug, subject) values
-       ('tp_a', $1, 'teacher-a', 'Maths'), ('tp_b', $2, 'teacher-b', 'Maths')`,
+      `insert into teacher_profiles (id, user_id, slug, subject, verification_status) values
+       ('tp_a', $1, 'teacher-a', 'Maths', 'verified'), ('tp_b', $2, 'teacher-b', 'Maths', 'verified')`,
       [teacherId('A'), teacherId('B')],
     );
     await material(DOC, OPEN, DOC_TEXT);
@@ -366,6 +366,66 @@ describe.skipIf(!up)(`takedowns on Postgres${up ? '' : ` (${SKIP_REASON})`}`, ()
       );
       expect(e).toBeInstanceOf(PublishRefusedError);
       expect((e as PublishRefusedError).reason).toBe('suspended');
+    });
+
+    it.each([
+      ['rejected', 'draft', null],
+      // Verified-only (9.3e lead decision): a pending teacher is not reopened by a lift either.
+      ['pending', 'draft', null],
+    ] as const)(
+      'a lift while the teacher is %s restores the agent to %s (9.3e)',
+      async (status, restored, owner) => {
+        const { id } = await repos.takedowns.create(STAFF, {
+          kind: 'agent',
+          targetId: 'agt_a',
+          category: 'harmful',
+        });
+        await raw.query(`update teacher_profiles set verification_status = $1 where id = 'tp_a'`, [
+          status,
+        ]);
+        try {
+          await repos.takedowns.lift(STAFF, id, {});
+          expect(await agentRow('agt_a')).toEqual({ status: restored, live_version: 1 });
+          expect(await repos.agents.owner({ agentId: 'agt_a' })).toEqual(owner);
+          const [audit] = (
+            await raw.query<{ after: Record<string, unknown> }>(
+              `select after from audit_log where action = 'takedown.lift' and target = 'agent:agt_a'
+               order by created_at desc, id desc limit 1`,
+            )
+          ).rows;
+          expect(audit?.after).toMatchObject({ agentStatus: restored });
+        } finally {
+          await raw.query(
+            `update teacher_profiles set verification_status = 'verified' where id = 'tp_a'`,
+          );
+        }
+      },
+    );
+
+    it('a safety-rejected teacher who edits their subject (pending) stays off after a lift (9.3e)', async () => {
+      await repos.teacherProfiles.setVerification(
+        { teacherId: teacherId('A') },
+        { by: STAFF, status: 'rejected', reason: 'safety', safety: true },
+      );
+      try {
+        expect((await agentRow('agt_a')).status).toBe('suspended');
+        const edited = await repos.teacherProfiles.update(
+          { teacherId: teacherId('A') },
+          { subject: 'Physics' },
+        );
+        expect(edited.verificationStatus).toBe('pending');
+        const { rows } = await raw.query<{ id: string }>(
+          `select id from takedowns where target = 'agent:agt_a' and status = 'active'`,
+        );
+        expect(rows).toHaveLength(1);
+        await repos.takedowns.lift(STAFF, rows[0]!.id, {});
+        expect(await agentRow('agt_a')).toEqual({ status: 'draft', live_version: 1 });
+        expect(await repos.agents.owner({ agentId: 'agt_a' })).toBeNull();
+      } finally {
+        await raw.query(
+          `update teacher_profiles set verification_status = 'verified', subject = 'Maths' where id = 'tp_a'`,
+        );
+      }
     });
 
     it('an agent that was never live goes back to draft on lift', async () => {

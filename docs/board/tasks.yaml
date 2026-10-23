@@ -4928,8 +4928,8 @@ tasks:
   - 11.1b
   risk: low
   status: running
-  branch: m13/11.1d-live-class-edit
-  model: 'plan:sonnet build:sonnet+fable review:fable (Phase A merged #239; B/C next)'
+  branch: m13/11.1d-live-class-ui
+  model: 'plan:sonnet build:sonnet+fable review:fable (A #239); B+C build:sonnet'
   metrics:
     tool_calls: 136
     tokens_in: 4484
@@ -5364,7 +5364,7 @@ tasks:
   risk: risky
   status: running
   branch: m13/11.3c-insights-closed-weeks
-  model: plan:lead build:fable
+  model: plan:lead build:fable+sonnet
 - id: 8.2h
   milestone: M8
   title: '8.2e review follow-ups (before the pilot): the last-attempt failed write checks the row still has the job''s storageKey (a replace race can mark a live row failed), with a processor test; web
@@ -6570,7 +6570,7 @@ tasks:
   risk: high
   status: running
   branch: m13/8.2o-replace-guards
-  model: plan:lead build:fable
+  model: plan:lead build:fable+sonnet
 - id: 12.3f
   milestone: M12
   title: rightsDeclared becomes required in packages/db documents create, web link and replace (12.3b Left to do), with apps/worker/test/ingest.int.test.ts and the db tests that create documents passing
@@ -6705,7 +6705,9 @@ tasks:
   deps:
   - 9.4a
   risk: high
-  status: todo
+  status: running
+  branch: m13/9.4d-review-mediums
+  model: plan:lead build:opus
 - id: 9.4e
   milestone: M13
   title: '9.4a review LOWs and left-to-do: restore Playwright --webpack once webpack''s dev compile of @edmate/queue/bullmq works; export the harness grounding/advice/route/summary schemas so devModel.test.ts
@@ -7332,7 +7334,9 @@ tasks:
   model: null
 - id: 9.3f
   milestone: M13
-  title: '9.3e follow-ups (security-review MEDIUM and builder left-to-do): staff can safety-reject a verified teacher from the console (today the safety checkbox only reaches pending teachers in the verification queue); the B-49 student line, home card and pause/cancel for a subscription whose agent is suspended; the staff queue row shows a teacher''s active takedowns and last decision; subject-edit history for staff'
+  title: '9.3e follow-ups (security-review MEDIUM and builder left-to-do): staff can safety-reject a verified teacher from the console (today the safety checkbox only reaches pending teachers in the verification
+    queue); the B-49 student line, home card and pause/cancel for a subscription whose agent is suspended; the staff queue row shows a teacher''s active takedowns and last decision; subject-edit history
+    for staff'
   accept: a verified teacher with live subscribers can be safety-rejected from the staff console and their students lose access; web and db typecheck, lint and test green; security-reviewer re-checks.
   deps:
   - 9.3e
@@ -7340,7 +7344,9 @@ tasks:
   status: todo
 - id: 9.3g
   milestone: M13
-  title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift with no teacher profile (draft); a two-connection forced-order test for setVerification(safety) against goLive and create; lift returns the agent status so the staff reports page can say a content-takedown lift left the agent in draft (and the README notes it); the rejectedSafety notice says an agent was taken off only when one was'
+  title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift
+    with no teacher profile (draft); a two-connection forced-order test for setVerification(safety) against goLive and create; lift returns the agent status so the staff reports page can say a content-takedown
+    lift left the agent in draft (and the README notes it); the rejectedSafety notice says an agent was taken off only when one was'
   accept: db and web typecheck, lint and test green with the new tests.
   deps:
   - 9.3e

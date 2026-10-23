@@ -271,4 +271,86 @@ describe.skipIf(!up)(`entitlementStoreFor on Postgres${up ? '' : ` (${SKIP_REASO
       await expect(sub('stu_1', 'agt_a', failing)).rejects.toThrow('identity down');
     });
   });
+
+  // Task 9.3e (B-46 (c)), last in the file: it changes agt_a and tch_a's profile, and restores
+  // them afterwards. A plain rejection blocks only new starts; a safety rejection takes the
+  // teacher's live agents down, so an existing subscriber's entitlement is gone at once.
+  describe('a safety rejection cuts existing subscribers off; a plain one does not', () => {
+    const STAFF = 'stf_es_1';
+    const A = { teacherId: 'tch_a' };
+    const START = { packageVersionId: 'pv_a', status: 'active', periodEnd: '2026-12-01T00:00:00.000Z' } as const;
+    const reject = (safety?: true) =>
+      repos.teacherProfiles.setVerification(A, {
+        status: 'rejected',
+        by: STAFF,
+        reason: 'test rejection',
+        ...(safety ? { safety } : {}),
+      });
+    const subRow = async () =>
+      (
+        await raw.query<{ status: string; package_version_id: string }>(
+          `select status, package_version_id from subscriptions where id = 'sub_1a'`,
+        )
+      ).rows[0];
+
+    beforeAll(async () => {
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values ($1, 'Staff', 'en', 'test', 'staff')`,
+        [STAFF],
+      );
+      await raw.query(
+        `insert into teacher_profiles (id, user_id, slug, subject, verification_status)
+         values ('tp_es_a', 'tch_a', 'teacher-es-a', 'Maths', 'verified')`,
+      );
+    });
+
+    afterAll(async () => {
+      await raw.query(`delete from takedowns`);
+      await raw.query(`update agents set status = 'live' where id = 'agt_a'`);
+      await raw.query(`delete from teacher_profiles where user_id = 'tch_a'`);
+    });
+
+    it('plain rejection: the subscriber keeps access; a new start is refused', async () => {
+      const before = await subRow();
+      expect(await sub('stu_1', 'agt_a')).toMatchObject({ subscriptionId: 'sub_1a' });
+      await reject();
+      expect(await sub('stu_1', 'agt_a')).toMatchObject({
+        subscriptionId: 'sub_1a',
+        status: 'active',
+      });
+      expect(await repos.agents.owner({ agentId: 'agt_a' })).toEqual(A);
+      await expect(
+        repos.subscriptions.start({ studentId: EVAL_STUDENT, teacherId: 'tch_a' }, START),
+      ).rejects.toMatchObject({ kind: 'not_found', method: 'subscriptions.start' });
+      expect(await subRow()).toEqual(before);
+    });
+
+    it('safety rejection: the same subscriber resolves to null and the agent has no owner', async () => {
+      await raw.query(`update teacher_profiles set verification_status = 'verified' where user_id = 'tch_a'`);
+      const before = await subRow();
+      expect(await sub('stu_1', 'agt_a')).toMatchObject({ subscriptionId: 'sub_1a' });
+      await reject(true);
+      expect(await sub('stu_1', 'agt_a')).toBeNull();
+      expect(await repos.agents.owner({ agentId: 'agt_a' })).toBeNull();
+      await expect(
+        repos.subscriptions.start({ studentId: EVAL_STUDENT, teacherId: 'tch_a' }, START),
+      ).rejects.toMatchObject({ kind: 'not_found', method: 'subscriptions.start' });
+      // The subscription row itself is untouched: access is cut at the agent, not the plan.
+      expect(await subRow()).toEqual(before);
+    });
+
+    it('a staff lift while the teacher is still rejected does not reopen access', async () => {
+      const [td] = (
+        await raw.query<{ id: string }>(
+          `select id from takedowns where target = 'agent:agt_a' and status = 'active'`,
+        )
+      ).rows;
+      await repos.takedowns.lift(STAFF, td!.id, {});
+      expect(
+        (await raw.query<{ status: string }>(`select status from agents where id = 'agt_a'`))
+          .rows[0]?.status,
+      ).toBe('draft');
+      expect(await sub('stu_1', 'agt_a')).toBeNull();
+    });
+  });
 });
