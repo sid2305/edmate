@@ -29,6 +29,9 @@ PATTERNS = [
     ("JSON web token", r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
     ("Database URL with password", r"(?:postgres(?:ql)?|redis|mysql|mongodb(?:\+srv)?)://[^\s:/@]+:(?!password@|postgres@|changeme@|\$\{)[^\s@/]{3,}@(?!localhost|127\.0\.0\.1|postgres[:/]|redis[:/]|db[:/])"),
     ("Hard-coded secret", r"(?i)\b(?:api[_-]?key|secret|token|passw(?:or)?d|master[_-]?key)\b\s*[:=]\s*['\"][A-Za-z0-9+/_\-]{16,}['\"]"),
+    # .env-style line with a real-looking value and no quotes (templates such as *.example are exempt
+    # from the forbidden-name rule, so a key typed into one must still be caught; 22 Oct 2026)
+    ("Unquoted secret assignment", r"(?im)^\s*(?:export\s+)?[A-Z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|AUTH_TOKEN)\s*=\s*[A-Za-z0-9+/=_\-]{24,}\s*$"),
     ("Personal email", r"\b[A-Za-z0-9._%+-]+@(?!users\.noreply\.github\.com\b|example\.(?:com|org|in)\b|edmate\.(?:org|in|dev)\b)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:com|in|org|net|io|co|edu|gov)\b"),
     ("Personal home path", r"(?:/Users|/home)/(?!runner\b|user\b|you\b|<)[a-z][a-z0-9._-]{2,}/"),
 ]

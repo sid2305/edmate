@@ -276,6 +276,16 @@ export const teacherQuestions = pgTable(
     index('teacher_questions_student_id_idx').on(t.studentId),
     index('teacher_questions_agent_id_idx').on(t.agentId),
     index('teacher_questions_group_id_idx').on(t.groupId),
+    // Task 5.10b (review follow-up, LOW): `open`'s grouping read and `listGroupsForTeacher` both
+    // filter on exactly this (teacher, agent, open) triple and sort by recency; this index covers
+    // both reads instead of the table falling back to `teacher_questions_teacher_id_status_idx`
+    // plus a filter on `agent_id`.
+    index('teacher_questions_teacher_id_agent_id_status_created_at_idx').on(
+      t.teacherId,
+      t.agentId,
+      t.status,
+      t.createdAt,
+    ),
     // Task 3.17: the live (3.7) attempt and the commit-step (3.17) fallback can both try to open
     // the "same" question for one turn; this makes a second attempt land on the first row instead
     // of a duplicate (teacherQuestionsRepo.open is insert-or-return-existing). `md5(text)`, not

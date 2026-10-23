@@ -10,6 +10,14 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · Backup model provider: the same team on Claude models in Microsoft Foundry when the subscription window is exhausted · decided by you · risk: high
+Decided: Sessions start through `scripts/claude-backup.sh`. It probes the subscription with one Haiku call; on a usage-limit error it starts Claude Code against Claude deployments (Opus-, Sonnet- and Haiku-class) in the human's Microsoft Foundry resource, paid per token from the human's Azure credit; on any other error it stops rather than switching to paid usage. Config and key live outside the repo (`~/.config/edmate/foundry.env`, chmod 600, or the Mac Keychain). On the backup, builders run on Sonnet only, no third slot, and closeouts record `provider: foundry`. The backup never serves students. Setup guide: `docs/backup-provider.md`.
+Why: The subscription pool is shared by the lead and every agent and was exhausted on 20 Oct 2026; a Foundry endpoint keeps the same agents, skills, hooks and merge gate running, where a second agent runtime would mean rebuilding all of them. The credit is capped by the Azure spending limit and covers about one backup day a month.
+Alternatives: real Microsoft Foundry Agent Service agents (rejected: a second orchestrator and tool layer to keep in sync); paid extra usage on the subscription (rejected by the human's standing rule).
+Review: security-reviewer (sonnet) on the launcher, template, guide, skill paragraph and scanner; its HIGH (the secret scan missed an unquoted `KEY=value` line, so a key typed into the tracked template would pass) is fixed by a new "Unquoted secret assignment" pattern in `.githooks/secret-scan.py`; its MEDIUMs (arguments logged verbatim; a bare 429 treated as a usage limit) are fixed too.
+Reversible: Yes. Start sessions with `claude` instead of the launcher.
+
+
 ### 22 Oct 2026 · 7.3b ran over budget · decided by lead · risk: low
 - Decided: accept 59 tool calls against a 40-call budget; both reviews approve with no findings.
 - Why: the builder counted 26; the harness counted 59 (install, the evals gate with its dependencies, a merge of main and a re-run). The work is done and clean, so a second round would only cost more.
