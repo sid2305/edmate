@@ -10,6 +10,239 @@ Format and rules: `.claude/skills/merge-gate/SKILL.md`.
 
 ---
 
+### 22 Oct 2026 · 9.4a: unentitled session starts count toward the limit in apps/web/src/turn/routes.ts · decided by lead · risk: low
+
+- Decided: keep counting session starts for an unknown or unentitled agent against the student's own 10-minute window (security-reviewer LOW, wontfix).
+- Why: the limit is keyed by the signed-in student only, so the worst case is a student slowing themselves down after repeated failed starts; counting every start keeps the limiter simple and stops probing.
+- risk: low
+
+---
+
+### 22 Oct 2026 · Playwright keeps Turbopack: webpack dev still breaks the server bundle · decided by builder · risk: low
+- Decided: `apps/web/playwright.config.ts` keeps `next dev` without `--webpack`; the comment names
+  the current blocker (bullmq `crypto`/optional-dependency resolution in webpack's dev compile of
+  `instrumentation.ts` and `/api/health` via `src/auth/rate-limit.ts` -> `@edmate/queue`).
+- Why: The plan assumed `loadBundledPrices` was the only blocker. A local trial of
+  `next dev --webpack` after that fix still 500s `/api/health`, and the fix lives in
+  `next.config.ts` or `@edmate/queue`, outside Phase D's files.
+- risk: low
+
+---
+
+### 22 Oct 2026 · the 9.0b transcriber fix lands in ingest/gateway.test.ts, not gate/ · decided by builder · risk: low
+- Decided: Item 3's change is in `apps/worker/src/ingest/gateway.test.ts`, the file the 9.0b
+  review named (`[LOW] [deferred 9.4a]`), not `apps/worker/src/gate/*.test.ts` as the plan wrote.
+- Why: No gate test touches a transcriber; the plan's path was a slip for the review's file.
+- risk: low
+
+---
+
+### 22 Oct 2026 · no-cancel test sleeps cap at 1 s · decided by builder · risk: low
+- Decided: `MAX_REAL_SLEEP_MS = 1000` for `deadlineSafeClock`'s no-cancel branch; negative
+  requests sleep 0.
+- Why: The plan asked for a bounded real fallback but named no bound; scripted pacing delays are
+  100 ms and a production-sized backoff reaching the memory backend should never stall a test
+  for seconds.
+- risk: low
+
+---
+
+### 22 Oct 2026 · TurnRuntimeHooks instead of widening RuntimeHooks · decided by builder · risk: low
+- Decided: Add `TurnRuntimeHooks extends RuntimeHooks` (its `redis` returns `RuntimeRedis`), used
+  only by `createTurnRuntime`. `openRedis` returns the wider `RuntimeRedis`, which still fits both.
+  The studio is untouched.
+- Why: The plan said `RuntimeHooks.redis`'s return type grows one field. But
+  `apps/web/src/studio/testChat/runtime.test.ts` (out of bounds) satisfies `RuntimeHooks` with a
+  two-field redis, so widening it would break typecheck there.
+- risk: low
+
+---
+
+### 22 Oct 2026 · a limiter failure is 503 provider_error · decided by builder · risk: low
+- Decided: A limiter failure is 503 `provider_error`, the same as an unbuildable backend, logged
+  as `sessions.rate_limit_failed`.
+- Why: The plan said fail closed but didn't name the code.
+- risk: low
+
+---
+
+### 22 Oct 2026 · the limiter runs after the backend loads · decided by builder · risk: low
+- Decided: The limiter runs after the backend loads, since the backend owns it. It still runs
+  before the agent lookup, entitlement and DB writes. A request with an invalid body is not
+  counted. A start for an unknown or unentitled agent is counted, because it's an abuse guard.
+- Why: The backend owns the limiter and must be loaded first; counting unknown/unentitled starts
+  keeps the guard effective against abuse even when the agent lookup later fails.
+- risk: low
+
+---
+
+### 22 Oct 2026 · rate-limit message text and Redis key prefix · decided by builder · risk: low
+- Decided: Message text: "You have started a lot of chats just now. Wait a few minutes and try
+  again." Redis key prefix: `edmate:turn:sessionstart:<studentId>`.
+- Why: The plan left the exact wording and key naming to the builder.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4a Phase B: student market read from identity · decided by builder · risk: high
+- Decided: `packages/db/src/identity/store.ts` gains `getMarket(id)`, a new identity read of the
+  `market` column only (`null` for an unknown id, no `IdentityUser` change).
+  `packages/db/src/repositories/ports.ts` gains `EntitlementStoreOptions.studentMarket`, the only
+  market source of the `subscription` resolve branch; it is optional, and a `subscription`
+  resolve with no `studentMarket` fails closed (`null`, so `no_access`), never the fixed `market`.
+  The turn runtime's production fail-closed `EDMATE_MARKET` boot check is removed: the market is
+  now per-row data (`users.market` is NOT NULL), and an unknown market still maps to `global`.
+  Callers pass the signed-in principal's id only.
+- Why: A student's turns must run in that student's own market, read fresh on every resolve, not
+  from a single env var shared by every student. Making `studentMarket` optional (the plan said
+  required) keeps the studio test chat (`apps/web/src/studio/testChat/deps.ts`) and the worker
+  gate (`apps/worker/src/gate/agent.ts`) untouched, since both build the store too and are out of
+  bounds for this task; failing closed when it is absent, rather than falling back to the fixed
+  `market`, keeps a misconfigured caller from granting access it should not.
+- risk: high
+
+---
+
+### 22 Oct 2026 · EDMATE_MARKET stays in compose, as the studio test chat's market only · decided by builder · risk: low
+- Decided: Compose, env.example and try-it now describe `EDMATE_MARKET` as the studio preview
+  market only. The student runtime never reads it, and a new stack-config test pins that.
+- Why: The plan said to drop it from the deploy surface, but the studio test chat (out of bounds)
+  still fails closed in production without it, so removing it would break the teacher preview on
+  the local stack. Drop it when the studio preview gets its own market source.
+- risk: low
+
+---
+
+### 22 Oct 2026 · when the market is read · decided by builder · risk: low
+- Decided: `studentMarket` is asked only after a subscription and its package are found.
+- Why: A refused resolve then costs no identity read. An unknown id (no row) falls back to
+  `global`, as planned; an identity error fails the resolve.
+- risk: low
+
+---
+
+### 22 Oct 2026 · the identity Pick widens on TurnRuntimeHooks, not RuntimeHooks · decided by builder · risk: low
+- Decided: `TurnRuntimeHooks.database()`'s identity type is narrowed via the same
+  `TurnRuntimeHooks extends RuntimeHooks` pattern as Phase A, not a change to `RuntimeHooks`.
+- Why: Same reason as Phase A: the studio test chat's test satisfies `RuntimeHooks` with
+  `learnerStatus` only.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4a Phase C: listLiveForStudent takes the signed-in student's own id · decided by builder · risk: high
+- Decided: `packages/db/src/repositories/subscriptions.ts` gains `listLiveForStudent(studentId)`,
+  which takes a bare student id, not a `StudentScope`: the one deliberate exception to "student
+  data is always per student x teacher", because it lists the student's own subscriptions across
+  every teacher. packages/db has no branded "own id" or self-scope type, so per lead answer 3 it
+  is a bare id with a comment saying it may only be called with the signed-in principal's own id.
+  The id is parsed with the scope id schema (`scope` error on anything malformed or `undefined`,
+  before any SQL). The only caller is `/home` (`homeLinks`), which passes `principal.userId`.
+- Why: /home must list the student's own chats from their subscriptions, not an env var, in one
+  query instead of a per-candidate loop; a student x teacher scope cannot express "all my
+  teachers". The security reviewer checks the call sites at review.
+- risk: high
+
+---
+
+### 22 Oct 2026 · startable candidates are still checked for a live agent · decided by builder · risk: low
+- Decided: A configured candidate is startable only if `agents.owner` finds it live (as before)
+  and it is not already in the student's live list. Only candidates not already live are looked
+  up. The teacher ids for live classes come from the live list only.
+- Why: The plan said to filter out agents already live; keeping the live-agent check keeps a
+  draft or suspended configured agent from showing a dead "start" link, which was today's
+  behaviour.
+- risk: low
+
+---
+
+### 22 Oct 2026 · the bad-scope unit grid skips listLiveForStudent · decided by builder · risk: low
+- Decided: `packages/db/test/scope.test.ts`'s every-method bad-scope grid skips this method (as it
+  does the staff-id methods) and a dedicated test checks its malformed ids fail `scope` before SQL.
+- Why: The grid's plain string `'tch_a'` is a well-formed id for a bare-id method, so it would
+  reach the database instead of failing as a scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 9.4a e2e: session limiter in scripted mode · decided by builder · risk: low
+- Decided: under the dev model (`EDMATE_DEV_MODEL=scripted` with a local http `AUTH_URL`, the 9.0 D2
+  guard) `build()` in `apps/web/src/turn/runtime.ts` uses `fakeSessionRateLimiter()` for the
+  per-student session-start limit instead of the Redis one from the Redis hook. Playwright
+  (`apps/web/playwright.config.ts`) now sets `EDMATE_DEV_MODEL: 'scripted'`; its `REDIS_URL`
+  stays the dead port.
+- Why: CI's e2e job failed every chat and skills spec after Phase A. The suite's dead
+  `REDIS_URL` was fine before because only a real turn touches the queues and the per-message
+  turn limits, and the turn route is always intercepted by `page.route`; Phase A's session-start
+  limiter runs inside `POST /api/sessions`, which is not intercepted, so every start got
+  `ECONNREFUSED` -> fail closed -> 503, and no reply ever streamed. The dev model is the existing
+  explicit flag for "scripted, local-only" (never NODE_ENV), and already stands in for the
+  provider the same way. Production and dev without the flag keep the Redis limiter and still
+  fail closed (503) on a Redis error (lessons.md, "A guard that can't run must fail closed").
+- risk: low. Flag-gated, local-http-only; unit tests in `runtime.test.ts` cover both branches.
+
+---
+
+### 22 Oct 2026 · 11.1d Phase A ran over budget · decided by lead · risk: low
+- Decided: accept Phase A at 149 harness-counted calls against a budget of 85 (builder 116, fix round 33).
+- Why: the builder ran the db integration gate several times on a heavily loaded machine, and the fix round had to touch four apps/web fixtures the plan had not listed; the work itself is in scope.
+- risk: low
+
+---
+
+### 22 Oct 2026 · 11.1d Phase A: live class status, update and cancel in packages/db/src/repositories · decided by builder · risk: high
+- Decided: added a `status` column + check constraint to `live_classes`, and `update`/`cancel`
+  repository methods with row-level locking, `not_found`-before-other-checks ordering, and an
+  idempotent no-op for double-cancel, exactly as specified in the plan's Phase A.
+- Why: this is the risky-paths group (`packages/db/src/repositories/live-classes.ts` +
+  `README.md`) per the merge gate's risk-paths list; it changes write/audit behaviour on a
+  teacher-facing repository method, so it needs security-reviewer (and recommended
+  database-reviewer, code-reviewer, typescript-reviewer) before merge.
+- risk: high
+
+---
+
+### 22 Oct 2026 · selectDistinct as defence in depth, not an EXISTS rewrite · decided by builder · risk: low
+- Decided: `listUpcomingForStudent` uses `.selectDistinct(...)` rather than a correlated `EXISTS`
+  subquery rewrite. This is defence in depth, not a bug fix: `subscriptions_one_live_per_pair_key`
+  already makes the duplicate join row unreachable, and the int test passes with plain `.select`
+  too (code-reviewer MEDIUM, fix round 1).
+- Why: the four selected columns (`id`, `title`, `link`, `startsAt`, now also `status`) are
+  identical across duplicate join rows produced by a class matching more than one of a student's
+  package ids, so `DISTINCT` collapses them with a one-line change; an `EXISTS` rewrite would
+  need to restructure the join and is not needed for correctness here. `ORDER BY` is valid under
+  `SELECT DISTINCT` because both ordering columns (`startsAt`, `id`) are already in the select
+  list.
+- risk: low
+
+---
+
+### 22 Oct 2026 · Minimal addition to packages/db/test/repositories.int.test.ts despite "do not touch" instruction · decided by builder · risk: low
+- Decided: added exactly two new `CASES` entries (`'liveClasses.update'` and
+  `'liveClasses.cancel'`) to `packages/db/test/repositories.int.test.ts`, immediately before the
+  existing `'liveClasses.listForTeacher'` entry. The cross-teacher (failing) path only reads the
+  shared per-teacher fixture class and never writes to it; the positive-control path creates its
+  own fresh class, so it does not touch any fixture another test depends on.
+- Why: I was told another builder is editing `packages/db/src/repositories/subscriptions.ts` and
+  this same file on another branch, and asked to put new int tests in a separate live-classes
+  test file instead. I did that for all new regression coverage (see
+  `packages/db/test/live-classes.int.test.ts`). But `RepositoryMethod` in
+  `repositories.int.test.ts` is a TypeScript mapped type derived structurally from
+  `createRepositories(db)`'s actual return shape, and `CASES` is typed as
+  `Record<RepositoryMethod, IsolationCase>` — once `update`/`cancel` exist as real methods on
+  `liveClassesRepo` (required by the plan), `tsc` fails without a case for each. There was no
+  way to satisfy the plan's Phase A scope and the gate's typecheck requirement without this
+  small addition; I kept it as minimal and isolated as possible. Flagging this prominently in
+  case it collides with the concurrent builder's edits to the same file on its own branch — the
+  lead may need to resolve a merge conflict between the two PRs (my addition is two small,
+  self-contained map entries, not a structural change, so it should be a low-risk, easy
+  resolution either way).
+- risk: low
+
+Tool calls used: 149 (harness count: builder 116 + fixer 33; the agents reported 92 + 26)
+
+---
+
 ### 22 Oct 2026 · 12.5f: store-failure flag in apps/worker/src/alerts · decided by builder · risk: high
 - Decided: a failed `store.record` is tracked with a boolean; an Error rethrows as is, any non-Error rejection (including `undefined`) is wrapped in an Error whose message is `safety_alert.store_failed: <error name>` and whose `cause` is the original value.
 - Why: BullMQ records the thrown value as the job's failed reason; throwing `undefined` would fail the job with no reason, and the message must not carry driver detail (error name only, matching the log line).

@@ -2363,10 +2363,32 @@ tasks:
   accept: no env var picks a student's market or chat links in production; session starts are rate-limited per student.
   deps:
   - '9.4'
-  status: running
+  status: done
   branch: m13/9.4a-turn-followups
   risk: risky
-  model: plan:sonnet build:opus+fable
+  model: plan:sonnet build:opus+fable review:fable
+  metrics:
+    tool_calls: 347
+    tokens_in: 1132
+    tokens_out: 124759
+    cache_read_tokens: 47928415
+    wall_time_seconds: 159188
+    models:
+    - claude-opus-5-5
+    - claude-sonnet-5
+    builder_phases: 1
+    fix_rounds: 1
+    findings:
+      total: 11
+      by_severity:
+        MEDIUM: 3
+        LOW: 8
+      by_status:
+        fixed: 0
+        open: 0
+        deferred: 10
+        wontfix: 1
+    human_questions: 0
 - id: 8.2a
   milestone: M13
   title: '8.2 follow-ups (review MEDIUM/LOW): the worker''s storageConfigFromEnv fails closed in production like the web (no dev key pair, edmate-dev bucket or http; code-only log), before any deploy; studio
@@ -4907,7 +4929,30 @@ tasks:
   risk: low
   status: running
   branch: m13/11.1d-live-class-edit
-  model: plan:sonnet build:sonnet
+  model: 'plan:sonnet build:sonnet+fable review:fable (Phase A merged #239; B/C next)'
+  metrics:
+    tool_calls: 136
+    tokens_in: 4484
+    tokens_out: 51786
+    cache_read_tokens: 10771900
+    wall_time_seconds: 15663
+    models:
+    - claude-fable-5-1
+    - claude-sonnet-5
+    builder_phases: 3
+    fix_rounds: 1
+    findings:
+      total: 11
+      by_severity:
+        HIGH: 1
+        MEDIUM: 1
+        LOW: 9
+      by_status:
+        fixed: 3
+        open: 0
+        deferred: 8
+        wontfix: 0
+    human_questions: 0
 - id: 11.1e
   milestone: M13
   title: '11.1d review LOWs (packages/db live-classes.ts): the live_class.update audit records the link before/after and normalises after.startsAt with iso(); listUpcomingForStudent returns no link on a
