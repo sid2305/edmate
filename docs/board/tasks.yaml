@@ -5940,9 +5940,9 @@ tasks:
   deps:
   - 9.3c
   risk: high
-  status: todo
+  status: planning
   branch: null
-  model: null
+  model: plan:fable
 - id: 8.2i
   milestone: M13
   title: '8.2h follow-ups: a stuck-`processing` sweeper for link jobs (needs a cross-teacher documents read in packages/db); an atomic compare-and-set on the file key when the worker writes failed (8.2h
@@ -5993,9 +5993,9 @@ tasks:
   deps:
   - 12.5b
   risk: high
-  status: todo
-  branch: null
-  model: null
+  status: running
+  branch: m13/12.5e-alert-store-log
+  model: plan:lead build:fable
 - id: 8.2j
   milestone: M8
   title: Caption files (.vtt, .srt) parsed into timestamped transcript text in packages/ingest (8.2c Phase A)
