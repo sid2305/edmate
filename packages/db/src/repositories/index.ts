@@ -266,10 +266,14 @@ export {
 } from './insights.js';
 export {
   type CreateLiveClassInput,
+  type UpdateLiveClassInput,
+  LIVE_CLASS_LINK_MAX_LENGTH,
+  LIVE_CLASS_LIST_MAX,
   LIVE_CLASS_PACKAGE_IDS_MAX,
   LIVE_CLASS_PACKAGE_IDS_MIN,
   LIVE_CLASS_TITLE_MAX_LENGTH,
   type ListUpcomingOptions,
+  type LiveClassStatus,
   type LiveClassWindow,
   type TeacherLiveClassRow,
   type UpcomingLiveClass,

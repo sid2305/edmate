@@ -12,7 +12,7 @@ import {
   RepositoryError,
   type Repositories,
 } from '../src/index.js';
-import { EVAL_STUDENT, learnerClear, packMarket, seedAccess } from './access-seed.js';
+import { EVAL_STUDENT, learnerClear, packMarket, seedAccess, studentMarket } from './access-seed.js';
 import {
   createDatabase,
   dropDatabase,
@@ -30,12 +30,15 @@ let repos: Repositories;
 let raw: pg.Client;
 
 const AT = '2026-10-18T10:00:00.000Z';
-const OPTS: EntitlementStoreOptions = { market: 'IN', packMarket, learnerClear };
+// `market` is the preview market only (9.4a): a subscription reads the student's own market.
+const OPTS: EntitlementStoreOptions = { market: 'IN', packMarket, learnerClear, studentMarket };
 const PREVIEW: EntitlementStoreOptions = { ...OPTS, preview: { packageId: 'pkg_a' } };
 const EVAL: EntitlementStoreOptions = {
   ...OPTS,
   eval: { teacherId: 'tch_a', packageId: 'pkg_a', version: 1, market: 'US' },
 };
+
+const EVAL_ONLY = { eval: { teacherId: 'tch_a', packageId: 'pkg_a', version: 1, market: 'US' } };
 
 const sub = (studentId: string, agentId: string, opts = OPTS) =>
   entitlementStoreFor(repos, opts).resolve({ studentId, agentId, source: 'subscription' }, AT);
@@ -85,7 +88,8 @@ describe.skipIf(!up)(`entitlementStoreFor on Postgres${up ? '' : ` (${SKIP_REASO
     });
 
     it('an unknown market maps to global', async () => {
-      expect((await sub('stu_1', 'agt_a', { ...OPTS, market: 'ZZ' }))?.market).toBe('global');
+      const zz = { ...OPTS, studentMarket: async () => 'ZZ' };
+      expect((await sub('stu_1', 'agt_a', zz))?.market).toBe('global');
     });
 
     it('returns paused (entitle refuses it) and null for an ended subscription', async () => {
@@ -178,6 +182,53 @@ describe.skipIf(!up)(`entitlementStoreFor on Postgres${up ? '' : ` (${SKIP_REASO
       expect(
         await evalRun('agt_a', { ...OPTS, eval: { ...ev, packageId: 'pkg_a_draft' } }),
       ).toBeNull();
+    });
+  });
+
+  describe("studentMarket (9.4a): a subscription runs in the student's own market", () => {
+    const perStudent = (calls: string[]): EntitlementStoreOptions => ({
+      ...OPTS,
+      market: 'ZZ',
+      studentMarket: async (studentId) => {
+        calls.push(studentId);
+        return studentId === 'stu_1' ? 'IN' : 'global';
+      },
+    });
+
+    it('asks for the resolving student, fresh each time, never the fixed market', async () => {
+      const calls: string[] = [];
+      expect((await sub('stu_1', 'agt_a', perStudent(calls)))?.market).toBe('IN');
+      expect((await sub('stu_2', 'agt_b', perStudent(calls)))?.market).toBe('global');
+      expect((await sub('stu_1', 'agt_a', perStudent(calls)))?.market).toBe('IN');
+      expect(calls).toEqual(['stu_1', 'stu_2', 'stu_1']);
+    });
+
+    it('is not asked when there is no entitlement to build', async () => {
+      const calls: string[] = [];
+      expect(await sub('stu_1', 'agt_b', perStudent(calls))).toBeNull();
+      expect(await sub('stu_1', 'agt_nowhere', perStudent(calls))).toBeNull();
+      expect(calls).toEqual([]);
+    });
+
+    it('preview and eval keep their own market and do not ask', async () => {
+      const calls: string[] = [];
+      // The student market would say global for tch_a; preview keeps the fixed IN.
+      const opts = { ...perStudent(calls), market: 'IN', preview: { packageId: 'pkg_a' } };
+      expect((await preview('tch_a', 'agt_a', opts))?.market).toBe('IN');
+      const evalIn = { eval: { ...EVAL_ONLY.eval, market: 'IN' } };
+      expect((await evalRun('agt_a', { ...perStudent(calls), ...evalIn }))?.market).toBe('IN');
+      expect(calls).toEqual([]);
+    });
+
+    it('left out, a subscription fails closed (null), never the fixed market', async () => {
+      const without: EntitlementStoreOptions = { ...OPTS };
+      delete without.studentMarket;
+      expect(await sub('stu_1', 'agt_a', without)).toBeNull();
+    });
+
+    it('an error from it fails the resolve', async () => {
+      const failing = { ...OPTS, studentMarket: () => Promise.reject(new Error('identity down')) };
+      await expect(sub('stu_1', 'agt_a', failing)).rejects.toThrow('identity down');
     });
   });
 

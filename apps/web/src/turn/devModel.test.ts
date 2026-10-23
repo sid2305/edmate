@@ -132,8 +132,13 @@ describe('devModelAdapter.stream for the post-guard judges (9.0 Phase C)', () =>
 });
 
 describe('devModelAdapter.generateObject', () => {
-  // Copies of the harness schemas it does not export (grounding.ts, adviceGuard.ts,
-  // modelFallback.ts, pipeline/results.ts, sessionSummary.ts); the route test runs the real ones.
+  // The three classifier schemas are the harness's own exports. The other four are hand-copied:
+  // `@edmate/harness` (out of bounds for 9.4a) does not export `guardrails/grounding.ts`'s and
+  // `guardrails/adviceGuard.ts`'s `VerdictSchema`, `routing/modelFallback.ts`'s
+  // `RouteIntentVerdictSchema` (the `routing` module is not re-exported), `pipeline/results.ts`'s
+  // `RouteFallbackSchema` or `memory/sessionSummary.ts`'s `SessionSummarySchema`. Swap each for
+  // the real one as soon as the harness exports it; until then the route test
+  // (`routes.test.ts`, the real pipeline over the dev model) is what pins the real shapes.
   const schemas = {
     moderation: [ModerationVerdictSchema, { category: 'none' }],
     jailbreak: [JailbreakVerdictSchema, { category: 'none' }],

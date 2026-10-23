@@ -6,6 +6,8 @@
 // Task 9.3b: `homeChatLinks`/`homeStartLinks`/`homePausedLinks` are replaced by one `homeLinks`
 // call (one shared scan, classified into all three lists plus the teacher ids the live-classes
 // loader needs); `agents.owner` is no longer called a second time from this page.
+// Task 9.4a Phase C: `homeLinks` reads the student's own subscriptions; the candidates only feed
+// the startable list.
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -118,7 +120,7 @@ describe('/home page', () => {
     expect(screen.getByTestId('chats')).toHaveTextContent('agt_a');
   });
 
-  it('with no candidates (and so no teacher ids), live classes are never queried', async () => {
+  it('with no live subscriptions (and so no teacher ids), live classes are never queried', async () => {
     state.chatAgentCandidates.mockReturnValue([]);
     state.homeLinks.mockResolvedValue({ chats: [], startable: [], paused: [], teacherIds: [] });
     render(await HomePage());

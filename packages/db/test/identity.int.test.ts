@@ -905,6 +905,19 @@ describe.skipIf(!up)(`identity store on Postgres 16${up ? '' : ` (${SKIP_REASON}
       expect(await kindOf(() => aged.learnerStatus(s.id))).toBe('scope');
     });
 
+    it('getMarket (9.4a): global at signup, the answered market after, null for an unknown id', async () => {
+      const u = await student();
+      expect(await aged.getMarket(u.id)).toBe('global');
+      await answer(u.id, 1990, 'US');
+      expect(await aged.getMarket(u.id)).toBe('US');
+      expect(await aged.getMarket('usr_missing_market')).toBeNull();
+      expect(await kindOf(() => aged.getMarket('bad id!'))).toBe('invalid');
+      // Any role: a teacher's own market reads the same (the caller decides who may ask).
+      const t = await student();
+      await identity.grantRole({ userId: t.id, role: 'teacher', by: OPERATOR });
+      expect(await aged.getMarket(t.id)).toBe('global');
+    });
+
     it('with a noticeVersion option, only the version the server shows for that market is taken', async () => {
       const shown = (market: string) => (market === 'IN' ? 'in-3' : 'global-1');
       const store = createIdentityStore(handle.db, {

@@ -2014,6 +2014,37 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
     owners: (x: { id: string; packageVersionId: string } | null) =>
       x ? [x.id.slice(4).toUpperCase()] : [],
   },
+  // Task 9.4a Phase C: a student's own live chats across every teacher, for /home. It takes the
+  // signed-in student's own id, not a student x teacher scope (the one deliberate exception), so
+  // it runs as its own check: each student sees exactly its own pairs, never the other student's.
+  'subscriptions.listLiveForStudent': {
+    scope: 'public',
+    op: 'read',
+    check: async (r) => {
+      let n = 0;
+      for (const st of ['1', '2'] as const) {
+        const got = await r.subscriptions.listLiveForStudent(studentId(st));
+        expect(got, `stu_${st}'s own list`).toEqual(
+          TEACHERS.map((t) => ({ agentId: ids.agent(t), teacherId: teacherId(t), status: 'active' })),
+        );
+        n += 1;
+      }
+      const rand = prng(9404);
+      for (let i = 0; i < 20; i += 1) {
+        expect(await r.subscriptions.listLiveForStudent(randomId(rand))).toEqual([]);
+        n += 1;
+      }
+      for (const bad of ['', 'has space', 'x'.repeat(129), undefined, 42]) {
+        await expectFailsClosed(
+          () => r.subscriptions.listLiveForStudent(bad as never),
+          ['scope'],
+          `listLiveForStudent(${String(bad).slice(0, 10)})`,
+        );
+        n += 1;
+      }
+      return n;
+    },
+  },
   'subscriptions.pauseFreeForTeacher': {
     scope: 'teacher',
     op: 'write',
@@ -3622,6 +3653,60 @@ const CASES: Record<RepositoryMethod, IsolationCase> = {
         'invalid',
       ],
     ],
+  },
+  // Task 11.1d: edit/cancel before a class starts. Isolation only here (ownership, the
+  // RepositoryMethod/CASES type contract); the richer validation and no-op cases
+  // (non-https/over-length link, a past startsAt, double-cancel) are in the dedicated
+  // test/live-classes.int.test.ts, which creates its own fresh classes throughout and never
+  // touches `liveClassFor` (depended on by `listForTeacher`/`listUpcomingForStudent`/
+  // `classQuestions.submit` above). The cross-teacher attempt below only *reads* `liveClassFor`
+  // (as the id to try, and only ever on the failing path, which writes nothing) — it never
+  // mutates it; the same-teacher (positive-control) path creates its own fresh class instead.
+  'liveClasses.update': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) {
+        const { id } = await r.liveClasses.create(scope, {
+          title: `[${actor}] update target ${uid('u')}`,
+          link: 'https://meet.example.com/upd',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: [ids.pkg(actor)],
+        });
+        return r.liveClasses.update(scope, id, {
+          title: `[${actor}] edited`,
+          link: 'https://meet.example.com/upd2',
+          startsAt: LIVE_CLASS_STARTS_AT,
+        });
+      }
+      return r.liveClasses.update(scope, liveClassFor[target]!, {
+        title: `[${actor}] edited`,
+        link: 'https://meet.example.com/upd2',
+        startsAt: LIVE_CLASS_STARTS_AT,
+      });
+    },
+    verify: async (_r, _actor, res) => {
+      expect(res).toEqual({ updated: true });
+    },
+  },
+  'liveClasses.cancel': {
+    scope: 'teacher',
+    op: 'write',
+    attempt: async (r, scope, actor, target) => {
+      if (actor === target) {
+        const { id } = await r.liveClasses.create(scope, {
+          title: `[${actor}] cancel target ${uid('u')}`,
+          link: 'https://meet.example.com/cnl',
+          startsAt: LIVE_CLASS_STARTS_AT,
+          packageIds: [ids.pkg(actor)],
+        });
+        return r.liveClasses.cancel(scope, id);
+      }
+      return r.liveClasses.cancel(scope, liveClassFor[target]!);
+    },
+    verify: async (_r, _actor, res) => {
+      expect(res).toEqual({ cancelled: true });
+    },
   },
   'liveClasses.listForTeacher': {
     scope: 'teacher',
@@ -5941,6 +6026,76 @@ describe.skipIf(!up)(
         status: 'active',
         periodEnd: '2026-12-01T00:00:00.000Z',
       });
+    });
+
+    // Task 9.4a Phase C: /home's chat and paused links come from this one query. A fixture of its
+    // own (one student, five teachers, one subscription each), so nothing is shared with the grid.
+    it('listLiveForStudent: live agents only, ended excluded, paused kept, every teacher, own rows only', async () => {
+      const S = 'stu_94a';
+      const OTHER = 'stu_94a_other';
+      // [teacher suffix, agent status, subscription status]
+      const rows = [
+        ['1', 'live', 'active'],
+        ['2', 'live', 'paused'],
+        ['3', 'suspended', 'active'],
+        ['4', 'draft', 'trial'],
+        ['5', 'live', 'ended'],
+        ['6', 'live', 'past_due'],
+      ] as const;
+      await raw.query(
+        `insert into users (id, name, locale, market, role) values
+           ($1, '94a student', 'en', 'test', 'student'), ($2, '94a other', 'en', 'test', 'student')`,
+        [S, OTHER],
+      );
+      for (const [k, agentStatus, subStatus] of rows) {
+        const t = `tch_94a${k}`;
+        await raw.query(
+          `insert into users (id, name, locale, market, role) values ($1, '94a teacher', 'en', 'test', 'teacher')`,
+          [t],
+        );
+        await raw.query(
+          `insert into agents (id, teacher_id, status, live_version) values ($1, $2, $3, 1)`,
+          [`agt_94a${k}`, t, agentStatus],
+        );
+        await raw.query(
+          `insert into packages (id, teacher_id, agent_id, name, live_version) values ($1, $2, $3, '94a', 1)`,
+          [`pkg_94a${k}`, t, `agt_94a${k}`],
+        );
+        await raw.query(
+          `insert into package_versions (id, teacher_id, package_id, version, config) values ($1, $2, $3, 1, $4)`,
+          [
+            `pv_94a${k}`,
+            t,
+            `pkg_94a${k}`,
+            JSON.stringify({
+              ...packageConfig('A', 1, []),
+              id: `pkg_94a${k}`,
+              agentId: `agt_94a${k}`,
+              teacherId: t,
+            }),
+          ],
+        );
+        await raw.query(
+          `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+           values ($1, $2, $3, $4, $5, '2027-01-01T00:00:00Z')`,
+          [`sub_94a${k}`, S, t, `pv_94a${k}`, subStatus],
+        );
+      }
+      // Another student's live subscription to teacher 1 is never in S's list.
+      await raw.query(
+        `insert into subscriptions (id, student_id, teacher_id, package_version_id, status, period_end)
+         values ('sub_94a_other', $1, 'tch_94a1', 'pv_94a1', 'active', '2027-01-01T00:00:00Z')`,
+        [OTHER],
+      );
+
+      expect(await repos.subscriptions.listLiveForStudent(S)).toEqual([
+        { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
+        { agentId: 'agt_94a2', teacherId: 'tch_94a2', status: 'paused' },
+        { agentId: 'agt_94a6', teacherId: 'tch_94a6', status: 'past_due' },
+      ]);
+      expect(await repos.subscriptions.listLiveForStudent(OTHER)).toEqual([
+        { agentId: 'agt_94a1', teacherId: 'tch_94a1', status: 'active' },
+      ]);
     });
   },
 );
