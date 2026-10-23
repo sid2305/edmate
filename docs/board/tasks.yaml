@@ -1539,7 +1539,7 @@ tasks:
   accept: an MCQ item and a code_output item are served, re-shown and answered without a false leak block, and a real leak of either key is still blocked
   deps:
   - '5.6'
-  status: running
+  status: review
   branch: m13/5.6b-answer-context
   model: plan:opus build:opus
 - id: 5.6d
@@ -4495,7 +4495,7 @@ tasks:
   deps:
   - 8.9b
   risk: low
-  status: running
+  status: review
   branch: m13/8.9d-questions-followups
   model: plan:lead-brief build:sonnet
 - id: 9.2e
@@ -7515,7 +7515,8 @@ tasks:
   deps:
   - 9.3e
   risk: high
-  status: todo
+  status: planning
+  model: plan:opus
 - id: 9.3g
   milestone: M13
   title: '9.3e review LOWs: the stale-active-row branch in teacher-profiles.ts setVerification writes an audit row for the agent it suspends and a staff action on the existing takedown; a test for lift
