@@ -37,6 +37,7 @@ export const QUESTIONS_LIST_LIMIT = 100;
 const MSG = {
   validation: 'Check the request and try again.',
   notFound: 'That question was not found.',
+  forbidden: 'That is outside your scope.',
   bodyTooLarge: 'The request is too large.',
   failed: 'Something went wrong. Try again.',
 } as const;
@@ -115,10 +116,35 @@ const dismiss: Work = async (b, scope, req) => {
 };
 
 /**
+ * A thrown `RepositoryError`'s kind mapped to a fixed response, every kind named explicitly (no
+ * default case falls through silently): `scope` is 403, `not_found` is 404, `invalid` and
+ * `integrity` are 400, `failed` is a logged 500. Anything that is not a `RepositoryError` is also
+ * a logged 500. The logged field is always the error's name, never a question's or an answer's
+ * text. Same shape as `studio/profile.ts`'s `fromError`.
+ */
+function fromError(log: ServerLog, error: unknown): Response {
+  if (error instanceof RepositoryError) {
+    switch (error.kind) {
+      case 'scope':
+        return apiError('forbidden', MSG.forbidden, 403);
+      case 'not_found':
+        return notFound();
+      case 'invalid':
+      case 'integrity':
+        return validation();
+      case 'failed':
+        log.error('questions.failed', { error: errorName(error) });
+        return apiError('provider_error', MSG.failed, 500);
+    }
+  }
+  log.error('questions.failed', { error: errorName(error) });
+  return apiError('provider_error', MSG.failed, 500);
+}
+
+/**
  * The three handlers over a lazily built backend (`runtime.ts`); a backend that can't be built
- * is 503, a repository `not_found` is 404, `invalid` is 400 and anything else is a logged 500 —
- * same mapping as `createStudioHandlers`/`createOutlineHandlers`. The logged field is always the
- * error's name, never a question's or an answer's text.
+ * is 503, every `RepositoryError` kind is mapped by `fromError` and anything else is a logged
+ * 500 — same mapping shape as `createStudioHandlers`/`createOutlineHandlers`'s sibling routes.
  */
 export function createQuestionsHandlers(
   backend: () => Promise<QuestionsBackend>,
@@ -142,10 +168,7 @@ export function createQuestionsHandlers(
       try {
         return await work(b, scope, req);
       } catch (error) {
-        if (error instanceof RepositoryError && error.kind === 'not_found') return notFound();
-        if (error instanceof RepositoryError && error.kind === 'invalid') return validation();
-        b.log.error('questions.failed', { error: errorName(error) });
-        return apiError('provider_error', MSG.failed, 500);
+        return fromError(b.log, error);
       }
     };
   return { list: run(list), answer: run(answer), dismiss: run(dismiss) };
