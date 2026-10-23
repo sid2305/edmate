@@ -49,6 +49,9 @@ $ python3 .githooks/secret-scan.py --all
 
 ## Decisions
 
-None.
+### 22 Oct 2026 · 8.2m ran over budget · decided by lead · risk: low
+- Decided: accept 74 tool calls against a 40-call budget; both reviews approve with no findings.
+- Why: the builder counted 32; the harness counted 74 (install, three package gates, and new processor tests). The work is done and clean, so another round would only cost more.
+- risk: low
 
-Tool calls used: 32
+Tool calls used: 74 (harness count: builder 74; the agent reported 32)
