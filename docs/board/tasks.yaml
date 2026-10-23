@@ -2568,7 +2568,9 @@ tasks:
   accept: collect(".") equals collect(abs root) in a test; .claude tests green
   deps:
   - 0.16a
-  status: todo
+  status: running
+  branch: m13/0.16b-metrics-root
+  model: plan:lead build:sonnet
 - id: 7.1a
   milestone: M7
   title: '7.1 review follow-ups: computeAgreement silently drops a human verdict whose case id is not in the run (the plan says unmatched ids are reported): return an `unmatched` list and show it in the
