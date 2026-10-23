@@ -1,11 +1,12 @@
 // Task 1.4b: the email magic-link request. Auth.js handles it exactly as before (CSRF, rate limit,
 // token, mail); this route then adds one cookie binding this browser to the posted address, so the
 // confirm page (`/sign-in/confirm`) can forward the link straight to Auth.js only in the browser
-// that asked for it, for that address. The cookie is set whatever Auth.js answered, so it says
-// nothing about whether an account exists. Next resolves this literal path ahead of the
+// that asked for it, for that address. The cookie is set only for a same-origin POST that Auth.js
+// answered with its "check your email" redirect (fix round): a cross-site form, which has no valid
+// CSRF token, can't plant a cookie for the attacker's own address. Next resolves this literal path ahead of the
 // `[...nextauth]` catch-all; every other Auth.js path is unaffected.
 import { NextResponse, type NextRequest } from 'next/server';
-import { handlers, linkBindingCookie, publicRoute } from '../../../../../src/auth';
+import { handlers, linkBindingCookie, publicRoute, signInBindsLink } from '../../../../../src/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +35,7 @@ export const GET = publicRoute(handlers.GET);
 export const POST = publicRoute(async (req: NextRequest): Promise<Response> => {
   const email = await postedEmail(req);
   const res = await handlers.POST(req);
+  if (!signInBindsLink(req, res)) return res;
   const cookie = linkBindingCookie(email);
   if (!cookie) return res;
   // A copy, so an immutable Auth.js response is fine; `new Headers(headers)` keeps each Set-Cookie.

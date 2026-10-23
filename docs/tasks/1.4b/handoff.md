@@ -37,10 +37,43 @@
 
 ### 23 Oct 2026 · 1.4b A confirm page and an address-bound cookie stop a bare GET from finishing sign-in · decided by builder · risk: high
 - Decided: Mailed links now open `/sign-in/confirm`, not Auth.js's `/api/auth/callback/email`. The reason: `@auth/core@0.41.3` spends the single-use token on the bare GET of its callback, before Edmate's `signIn` callback runs, so a scanner's or a stranger's GET can't be refused from inside Auth.js.
-- Decided: Every `/api/auth/signin/email` POST with a valid address sets a binding cookie, whatever the outcome. Its value is `HMAC-SHA256(AUTH_SECRET, "linkbound:" + normalizeEmail(email))`: httpOnly, SameSite=Lax, `__Host-` when secure, 15 minutes. The confirm page forwards straight to the callback only when this cookie matches the link's own `email` (lead answer to Q3, after the plan security review's CRITICAL). Anyone else sees the address and must click: a scanner, another browser, or a browser that asked for a link to a different address.
+- Decided: The `/api/auth/signin/email` POST sets a binding cookie only when the request is same-origin (Origin equals AUTH_URL's origin or, with no Origin header, `Sec-Fetch-Site: same-origin`) AND Auth.js answered with its `verify-request` redirect. An error, rate-limit or MissingCSRF answer gets no cookie (fix round: both reviewers found that a cross-site auto-submitting form could plant a cookie for the attacker's own address). The gate looks only at Auth.js's answer, which is the same for known and unknown addresses, so it adds no enumeration signal. The value is `<issuedAt>.HMAC-SHA256(AUTH_SECRET, "linkbound:" + issuedAt + ":" + normalizeEmail(email))`: httpOnly, SameSite=Lax, `__Host-` when secure, 15 minutes. The server refuses it once it is older than 15 minutes, so a captured value can't outlive Max-Age. The confirm page forwards straight to the callback only when this cookie matches the link's own `email` (lead answer to Q3, after the plan security review's CRITICAL). Anyone else sees the address and must click: a scanner, another browser, or a browser that asked for a link to a different address.
+- Decided: `/api/auth/callback/email` has its own literal route, resolved ahead of the `[...nextauth]` catch-all (fix round, closing the security review's HIGH). It passes the GET to Auth.js only when the browser holds either the binding cookie for the request's `email`, or a "confirmed" cookie that the confirm Server Action sets. The confirmed cookie is `<issuedAt>.HMAC(AUTH_SECRET, "linkconfirmed:" + issuedAt + ":" + token + ":" + normalizeEmail(email))`: httpOnly, SameSite=Lax, 2 minutes, compared in constant time. Otherwise the route answers 303 to `/sign-in/confirm` with the same query, and no token is spent. An attacker can no longer send a victim straight to the real callback with the attacker's own token.
 - Decided: The click is a Server Action (Next's Origin check is the CSRF protection). It returns the callback URL and the client opens it as a full page, because Next 16 would otherwise fetch a same-host action redirect on the server and spend the token there.
 - Decided: Referer (LOW from the plan review): the page sets `metadata.referrer = 'same-origin'`, so the token-bearing URL never goes in a cross-origin Referer. `no-referrer` was rejected because it makes browsers send `Origin: null` on the action POST, which would break Next's CSRF check. The `auto` path is a server redirect, and browsers keep the original referrer across redirects, so the confirm URL isn't sent as a Referer there.
-- Why: Auth.js owns token consumption and sessions (1.4 Q2). The only lever Edmate has is where the mailed link points and what runs before Auth.js's route. Binding the cookie to the address closes the auto-forward login-CSRF the review found. 1.4's accepted residual risk stays: a victim who is talked into clicking "Sign in" on someone else's link still signs in as that person. Merely opening a link never does.
-- risk: high. This touches `apps/web/src/auth/**` and `apps/web/app/api/auth/**`. Reversible: revert `rebuildLink`'s target, the three `index.ts` exports and the new route, page, action and form files. No migration, env var, contract or ADR.
+- Why: Auth.js owns token consumption and sessions (1.4 Q2). The only lever Edmate has is where the mailed link points and what runs before Auth.js's route. Binding the cookie to the address closes the auto-forward login-CSRF the review found. 1.4's accepted residual risk stays: a victim who is talked into clicking "Sign in" on someone else's link still signs in as that person. Merely opening a link, or the callback URL itself, never does.
+- risk: high. This touches `apps/web/src/auth/**` and `apps/web/app/api/auth/**`. Reversible: revert `rebuildLink`'s target, the `index.ts` exports, the two new routes (`signin/email`, `callback/email`), and the page, action and form files. No migration, env var, contract or ADR.
 
 Tool calls used: 50
+
+## Fix round (security and TypeScript review)
+
+What changed:
+- `apps/web/app/api/auth/signin/email/route.ts`: the binding cookie is set only for a same-origin POST that Auth.js answered with `verify-request` (`signInBindsLink` → `shouldBindLink` in `confirm.ts`). The route test's "cookie on MissingCSRF" case is replaced by these cases:
+  - no cookie on a MissingCSRF, rate-limited, mail-failure or non-redirect answer;
+  - no cookie from a cross-site, `null` or missing Origin, even on success;
+  - a cookie on a same-origin success, by Origin or by `Sec-Fetch-Site: same-origin`.
+- New `apps/web/app/api/auth/callback/email/route.ts` and `route.test.ts`: the gated callback. The tests cover:
+  - a bare GET → 303 to confirm, and Auth.js is not called (the token isn't spent);
+  - a binding cookie for this address → passed through;
+  - a binding cookie for another address, or an expired one → confirm;
+  - a valid confirmed cookie → passed through;
+  - a confirmed cookie for another token or another address, an expired one, or a binding value in its place → confirm;
+  - a repeated `email` param → confirm;
+  - a malformed query → confirm.
+- `apps/web/src/auth/confirm.ts`: cookie values are now signed with their issue time (`<issuedAt>.<hmac>`, 30 s clock skew allowed). New: the confirmed cookie, `isSameOriginRequest`, `isVerifyRequestRedirect`, `shouldBindLink` and `emailCallbackGate`.
+- `apps/web/src/auth/index.ts`: `confirmEmailSignIn` is now async and sets the confirmed cookie. New exports: `signInBindsLink` and `emailCallbackRedirect`. `actions.ts` awaits `confirmEmailSignIn`.
+- Both sign-in paths still complete:
+  - The `auto` branch redirects to the callback carrying the binding cookie, which the gate accepts.
+  - In the ConfirmForm path, the Server Action sets the confirmed cookie before the client opens the callback.
+- `e2e/stack/mail.ts` needs no change, because a real browser sends Origin on the sign-in form POST.
+- `scripts/sandbox-magic-link.mjs` now sends `Origin` on its POST. It also checks that another browser opening the callback is sent to confirm, and that reusing the link in the same browser is refused.
+- LOW (issue time in the binding cookie): done, as above.
+- LOW (`no-referrer` on the confirm page): not done. It would make the Server Action POST carry `Origin: null` and fail Next's CSRF check, so the earlier lead decision stands. The callback's redirect to confirm does carry `Referrer-Policy: no-referrer`.
+
+Gate: `corepack pnpm turbo run build typecheck lint test --filter=@edmate/web --force` → `Tasks: 11 successful, 11 total`. Web tests: 151 files passed, 4 skipped (155); 2349 tests passed, 26 skipped (2375). The 4 skipped files are `app/api/staff/{reports,agents,verifications,alerts}/route.int.test.ts`. They run only with an explicit, disposable `TEST_DATABASE_URL`, and their own comments say never to point them at the dev compose database, so they were left skipped (CI runs them). `python3 .githooks/secret-scan.py --all` → clean.
+
+Left to do:
+- The `apps/web/e2e` magic-link flows and `scripts/sandbox-magic-link.mjs` were not run against a live stack in this round (compose was not allowed). Run them once before the pilot.
+
+Tool calls used (fix round): 30

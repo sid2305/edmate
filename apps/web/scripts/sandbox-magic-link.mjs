@@ -72,7 +72,8 @@ check(typeof csrfToken === 'string' && csrfToken.length > 0, 'GET /api/auth/csrf
 
 const start = await call(browser, new URL('/api/auth/signin/email', APP), {
   method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  // A browser sends its Origin on a form POST; the binding cookie needs a same-origin one (1.4b).
+  headers: { 'content-type': 'application/x-www-form-urlencoded', origin: APP.origin },
   body: new URLSearchParams({ csrfToken, email: EMAIL, callbackUrl: `${APP.origin}/` }).toString(),
 });
 const startLocation = start.headers.get('location') ?? '';
@@ -102,6 +103,12 @@ const callbackUrl = new URL(confirm.headers.get('location') ?? '/', APP);
 console.log(`GET link (same browser) → ${confirm.status} ${callbackUrl.pathname}`);
 check(callbackUrl.pathname === '/api/auth/callback/email', 'the same browser goes straight to the callback');
 
+// The callback itself is gated too: another browser sent straight to it is bounced to confirm.
+const bounced = await call(jar(), callbackUrl);
+const bouncedTo = new URL(bounced.headers.get('location') ?? '/', APP);
+console.log(`GET callback (another browser) → ${bounced.status} ${bouncedTo.pathname}`);
+check(bouncedTo.pathname === '/sign-in/confirm', 'another browser at the callback is sent to confirm');
+
 const callback = await call(browser, callbackUrl);
 console.log(`GET callback → ${callback.status} ${callback.headers.get('location')}`);
 check(browser.names().some((n) => n.endsWith('authjs.session-token')), 'session cookie set');
@@ -110,7 +117,7 @@ const session = await (await call(browser, new URL('/api/auth/session', APP))).j
 console.log(`GET /api/auth/session → ${JSON.stringify(session)}`);
 check(session?.user?.role === 'student' && typeof session.user.id === 'string', 'signed in as a student');
 
-const replay = await call(jar(), callbackUrl);
+const replay = await call(browser, callbackUrl);
 const replayLocation = replay.headers.get('location') ?? '';
-console.log(`GET same callback again (new browser) → ${replay.status} ${replayLocation}`);
+console.log(`GET same callback again (same browser) → ${replay.status} ${replayLocation}`);
 check(replayLocation.includes('error=Verification'), 'reusing the link is refused');

@@ -1,9 +1,14 @@
 // Task 1.4b: the email sign-in POST runs Auth.js unchanged, then adds the address-bound link
-// binding cookie, whatever the outcome (sent, rate-limited, mail failure), so its presence carries
-// no enumeration signal. Auth.js's own headers and cookies survive untouched.
+// binding cookie only for a same-origin POST that Auth.js answered "check your email" (fix round:
+// a cross-site form without a valid CSRF token must not plant a cookie). Auth.js's own headers and
+// cookies survive untouched.
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLinkBindingCookieValue, linkBindingCookie } from '../../../../../src/auth/confirm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createLinkBindingCookieValue,
+  linkBindingCookie,
+  shouldBindLink,
+} from '../../../../../src/auth/confirm';
 
 const SECRET = ['route', 'test', 'only'].join('-').padEnd(40, 'z');
 const ORIGIN = 'http://localhost:8080';
@@ -15,6 +20,7 @@ vi.mock('../../../../../src/auth', () => ({
   handlers: { GET: (req: NextRequest) => authGet(req), POST: (req: NextRequest) => authPost(req) },
   publicRoute: <H,>(h: H) => h,
   linkBindingCookie: (email: unknown) => linkBindingCookie(SECRET, state.secure, email),
+  signInBindsLink: (req: Request, res: Response) => shouldBindLink(req.headers, res, new URL(ORIGIN)),
 }));
 
 import { GET, POST } from './route';
@@ -27,10 +33,14 @@ function authJsResponse(location: string): Response {
   return new Response(null, { status: 302, headers });
 }
 
-function formPost(body: string, contentType = 'application/x-www-form-urlencoded') {
+function formPost(
+  body: string,
+  contentType = 'application/x-www-form-urlencoded',
+  site: Record<string, string> = { origin: ORIGIN },
+) {
   return new NextRequest(`${ORIGIN}/api/auth/signin/email`, {
     method: 'POST',
-    headers: { 'content-type': contentType },
+    headers: { 'content-type': contentType, ...site },
     body,
   });
 }
@@ -42,9 +52,15 @@ function bindingCookie(res: Response): string | undefined {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-23T12:00:00Z'));
   state.secure = false;
   authPost.mockReset();
   authGet.mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('/api/auth/signin/email', () => {
@@ -92,19 +108,45 @@ describe('/api/auth/signin/email', () => {
     state.secure = true;
     authPost.mockResolvedValue(authJsResponse(VERIFY));
     const bound = bindingCookie(await POST(formPost('email=s%40example.test')))!;
-    expect(bound).toMatch(/^__Host-edmate\.link-bound=[0-9a-f]{64};/);
+    expect(bound).toMatch(/^__Host-edmate\.link-bound=\d+\.[0-9a-f]{64};/);
     expect(bound).toMatch(/;\s*Secure/i);
   });
 
   it.each([
+    ['missing CSRF', `${ORIGIN}/api/auth/signin?error=MissingCSRF`],
     ['rate-limited', `${ORIGIN}/api/auth/error?error=RateLimited`],
     ['mail failure', `${ORIGIN}/api/auth/error?error=Configuration`],
-    ['missing CSRF', `${ORIGIN}/api/auth/signin?error=MissingCSRF`],
-  ])('POST: the binding cookie is set on a %s response too', async (_label, location) => {
-    authPost.mockResolvedValue(authJsResponse(location));
+  ])('POST: no binding cookie on a %s response (only "check your email" earns one)', async (_l, location) => {
+    const original = authJsResponse(location);
+    authPost.mockResolvedValue(original);
     const res = await POST(formPost('email=s%40example.test'));
-    expect(res.headers.get('location')).toBe(location);
-    expect(bindingCookie(res)).toBeDefined();
+    expect(res).toBe(original);
+    expect(bindingCookie(res)).toBeUndefined();
+  });
+
+  it('POST: no binding cookie on a non-redirect Auth.js answer', async () => {
+    authPost.mockResolvedValue(new Response('{}', { status: 200, headers: { location: VERIFY } }));
+    expect(bindingCookie(await POST(formPost('email=s%40example.test')))).toBeUndefined();
+  });
+
+  it.each([
+    ['a cross-site Origin', { origin: 'https://evil.test' }],
+    ['an opaque Origin', { origin: 'null' }],
+    ['a cross-site Origin claiming same-origin fetch', { origin: 'https://evil.test', 'sec-fetch-site': 'same-origin' }],
+    ['Sec-Fetch-Site cross-site', { 'sec-fetch-site': 'cross-site' }],
+    ['no Origin and no Sec-Fetch-Site', {}],
+  ])('POST from %s: no binding cookie, even on a success answer', async (_l, site) => {
+    const original = authJsResponse(VERIFY);
+    authPost.mockResolvedValue(original);
+    const res = await POST(formPost('email=attacker%40example.test', undefined, site));
+    expect(res).toBe(original);
+    expect(bindingCookie(res)).toBeUndefined();
+  });
+
+  it('POST: Sec-Fetch-Site same-origin with no Origin header gets the cookie', async () => {
+    authPost.mockResolvedValue(authJsResponse('/api/auth/verify-request?provider=email'));
+    const res = await POST(formPost('email=s%40example.test', undefined, { 'sec-fetch-site': 'same-origin' }));
+    expect(bindingCookie(res)).toContain(createLinkBindingCookieValue(SECRET, 's@example.test')!);
   });
 
   it('POST: a JSON body is read too', async () => {
@@ -121,7 +163,7 @@ describe('/api/auth/signin/email', () => {
     ['a JSON array', '["a@example.test"]', 'application/json'],
     ['an unknown content type', 'email=a%40example.test', 'text/plain'],
   ])('POST with %s: Auth.js response untouched, no binding cookie', async (_l, body, type) => {
-    const original = authJsResponse(`${ORIGIN}/api/auth/error?error=Configuration`);
+    const original = authJsResponse(VERIFY);
     authPost.mockResolvedValue(original);
     const res = await POST(formPost(body, type));
     expect(res).toBe(original);

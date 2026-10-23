@@ -28,8 +28,13 @@ import {
 import {
   buildEmailCallbackUrl,
   confirmView,
+  emailCallbackGate,
   linkBindingCookie as makeLinkBindingCookie,
   linkBindingCookieName,
+  linkConfirmedCookie,
+  linkConfirmedCookieName,
+  parseConfirmParams,
+  shouldBindLink,
   type ConfirmView,
   type LinkBindingCookie,
 } from './confirm';
@@ -226,15 +231,43 @@ export async function confirmSignInView(params: unknown): Promise<ConfirmView> {
   });
 }
 
-/** The confirm page's click (a Server Action): the real callback URL, or null for bad fields. */
-export function confirmEmailSignIn(fields: unknown): string | null {
-  return buildEmailCallbackUrl(getRuntime().env.url, fields);
+/**
+ * The confirm page's click (a Server Action, Origin-checked by Next): sets the short-lived
+ * "confirmed" cookie for this token and address, which lets the callback through, and returns the
+ * real callback URL; null (and no cookie) for bad fields.
+ */
+export async function confirmEmailSignIn(fields: unknown): Promise<string | null> {
+  const { env } = getRuntime();
+  const params = parseConfirmParams(fields);
+  const cookie = params && linkConfirmedCookie(env.secret, env.secureCookies, params);
+  if (!params || !cookie) return null;
+  (await cookies()).set(cookie.name, cookie.value, cookie.options);
+  return buildEmailCallbackUrl(env.url, params);
 }
 
 /** The binding cookie the `/api/auth/signin/email` POST sets for the posted address, or null. */
 export function linkBindingCookie(email: unknown): LinkBindingCookie | null {
   const { env } = getRuntime();
   return makeLinkBindingCookie(env.secret, env.secureCookies, email);
+}
+
+/** Whether that POST may set it: a same-origin request that Auth.js answered "check your email". */
+export function signInBindsLink(req: Request, res: Response): boolean {
+  return shouldBindLink(req.headers, res, getRuntime().env.url);
+}
+
+/**
+ * The gate on Auth.js's email callback GET (`app/api/auth/callback/email`): null lets it through
+ * (binding or confirmed cookie for this link), else the confirm page URL to redirect to.
+ */
+export function emailCallbackRedirect(req: NextRequest): string | null {
+  const { env } = getRuntime();
+  return emailCallbackGate(req.nextUrl.searchParams, {
+    secret: env.secret,
+    origin: env.url,
+    binding: req.cookies.get(linkBindingCookieName(env.secureCookies))?.value,
+    confirmed: req.cookies.get(linkConfirmedCookieName(env.secureCookies))?.value,
+  });
 }
 
 export type { AgeAnswerResult, AgeGateView, AgeNotice } from './age';

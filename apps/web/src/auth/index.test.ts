@@ -431,10 +431,10 @@ describe('src/auth wiring', () => {
       const cookie = auth.linkBindingCookie('Confirm@Example.TEST');
       expect(cookie).toMatchObject({
         name: 'edmate.link-bound',
-        value: expect.stringMatching(/^[0-9a-f]{64}$/),
+        value: expect.stringMatching(/^\d+\.[0-9a-f]{64}$/),
         options: { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: 900 },
       });
-      expect(auth.linkBindingCookie(EMAIL)?.value).toBe(cookie?.value);
+      expect(auth.linkBindingCookie(EMAIL)?.value.split('.')[1]).toBe(cookie?.value.split('.')[1]);
       expect(auth.linkBindingCookie('not-an-address')).toBeNull();
     });
 
@@ -457,7 +457,7 @@ describe('src/auth wiring', () => {
 
     it.each([
       ['no cookie', null],
-      ['a forged cookie', 'f'.repeat(64)],
+      ['a forged cookie', `${Math.floor(Date.now() / 1000)}.${'f'.repeat(64)}`],
       ['a cookie for another address', 'other@example.test'],
     ])('confirmSignInView: %s → manual', async (_label, cookie) => {
       setAuthEnv();
@@ -471,12 +471,45 @@ describe('src/auth wiring', () => {
       }
     });
 
-    it('confirmEmailSignIn: valid fields → the real callback URL; invalid → null', async () => {
+    it('confirmEmailSignIn: valid fields → the confirmed cookie and the real callback URL; invalid → null, no cookie', async () => {
       setAuthEnv();
       const auth = await load();
-      expect(auth.confirmEmailSignIn(PARAMS)).toBe(CALLBACK);
-      expect(auth.confirmEmailSignIn({ ...PARAMS, token: 'nope' })).toBeNull();
-      expect(auth.confirmEmailSignIn(null)).toBeNull();
+      const set = vi.fn();
+      pageCookies.mockImplementation(async () => ({ get: (_n: string) => undefined, set }));
+      try {
+        expect(await auth.confirmEmailSignIn(PARAMS)).toBe(CALLBACK);
+        expect(set).toHaveBeenCalledExactlyOnceWith(
+          'edmate.link-confirmed',
+          expect.stringMatching(/^\d+\.[0-9a-f]{64}$/),
+          { httpOnly: true, sameSite: 'lax', secure: false, path: '/', maxAge: 120 },
+        );
+        const confirmed = set.mock.calls[0]![1] as string;
+        // That cookie lets this token's callback through; nothing else does.
+        const callback = (cookie?: string) =>
+          new NextRequest(CALLBACK, cookie ? { headers: { cookie } } : {});
+        expect(auth.emailCallbackRedirect(callback(`edmate.link-confirmed=${confirmed}`))).toBeNull();
+        expect(auth.emailCallbackRedirect(callback())).toBe(CALLBACK.replace('/api/auth/callback/email', '/sign-in/confirm'));
+        const bound = auth.linkBindingCookie(EMAIL)!.value;
+        expect(auth.emailCallbackRedirect(callback(`edmate.link-bound=${bound}`))).toBeNull();
+        set.mockClear();
+        expect(await auth.confirmEmailSignIn({ ...PARAMS, token: 'nope' })).toBeNull();
+        expect(await auth.confirmEmailSignIn(null)).toBeNull();
+        expect(set).not.toHaveBeenCalled();
+      } finally {
+        noCookies();
+      }
+    });
+
+    it('signInBindsLink: only a same-origin POST answered with verify-request', async () => {
+      setAuthEnv();
+      const auth = await load();
+      const post = (origin: string) =>
+        new Request(`${ORIGIN}/api/auth/signin/email`, { method: 'POST', headers: { origin } });
+      const verify = new Response(null, { status: 302, headers: { location: `${ORIGIN}/api/auth/verify-request` } });
+      expect(auth.signInBindsLink(post(ORIGIN), verify)).toBe(true);
+      expect(auth.signInBindsLink(post('https://evil.test'), verify)).toBe(false);
+      const csrf = new Response(null, { status: 302, headers: { location: `${ORIGIN}/api/auth/signin?error=MissingCSRF` } });
+      expect(auth.signInBindsLink(post(ORIGIN), csrf)).toBe(false);
     });
   });
 

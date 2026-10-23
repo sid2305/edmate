@@ -7,7 +7,8 @@
 import { confirmEmailSignIn as callbackUrlFor, SIGN_IN_PATH } from '../../../src/auth';
 
 export async function confirmEmailSignIn(_previous: string | null, form: FormData): Promise<string> {
-  const url = callbackUrlFor({
+  // src/auth also sets the short-lived "confirmed" cookie the callback route requires.
+  const url = await callbackUrlFor({
     token: form.get('token'),
     email: form.get('email'),
     callbackUrl: form.get('callbackUrl'),
