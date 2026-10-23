@@ -85,4 +85,4 @@ No output, exit clean — no secrets flagged.
   location; this is a test-only change, no production code, no contracts,
   no prompt-pack behaviour change).
 
-Tool calls used: 13
+Tool calls used: 23 (harness count: builder 23; the agent reported 15)
