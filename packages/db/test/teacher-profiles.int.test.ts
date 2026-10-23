@@ -83,6 +83,7 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     expect(await repos.teacherProfiles.get(A)).toBeNull();
     const made = await repos.teacherProfiles.create(A, {
       slug: 'ms-alpha',
+      displayName: 'Ms Alpha',
       subject: 'Maths',
       bio: 'Fictional test teacher.',
       languages: ['en'],
@@ -90,13 +91,14 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     expect(made).toMatchObject({
       teacherId: teacherId('A'),
       slug: 'ms-alpha',
+      displayName: 'Ms Alpha',
       subject: 'Maths',
       bio: 'Fictional test teacher.',
       languages: ['en'],
       verificationStatus: 'pending',
     });
     expect(Object.keys(made).sort()).toEqual(
-      ['bio', 'id', 'languages', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
+      ['bio', 'displayName', 'id', 'languages', 'slug', 'subject', 'teacherId', 'verificationStatus'].sort(),
     );
     expect(await repos.teacherProfiles.get(A)).toEqual(made);
     expect(await repos.teacherProfiles.get(B)).toBeNull();
@@ -104,20 +106,50 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     const edited = await repos.teacherProfiles.update(A, { subject: 'Physics', languages: [] });
     expect(edited).toEqual({ ...made, subject: 'Physics', languages: [] });
     expect(await repos.teacherProfiles.get(A)).toEqual(edited);
+
+    const renamed = await repos.teacherProfiles.update(A, { displayName: 'New Name' });
+    expect(renamed).toMatchObject({ displayName: 'New Name', verificationStatus: 'pending' });
+    expect(await repos.teacherProfiles.get(A)).toEqual(renamed);
   });
 
-  it('defaults bio and languages to empty', async () => {
-    const made = await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+  it('defaults bio and languages to empty; a profile without a displayName reads back null', async () => {
+    const made = await repos.teacherProfiles.create(A, {
+      slug: 'ms-alpha',
+      displayName: 'Ms Alpha',
+      subject: 'Maths',
+    });
     expect(made).toMatchObject({ bio: '', languages: [] });
+    await raw.query('delete from teacher_profiles');
+    await raw.query(
+      `insert into teacher_profiles (id, user_id, slug, subject) values ($1, $2, $3, 'Maths')`,
+      ['tp-no-name', teacherId('A'), 'ms-alpha'],
+    );
+    expect(await repos.teacherProfiles.get(A)).toMatchObject({ displayName: null });
   });
 
   it('one profile per teacher, one teacher per slug', async () => {
-    await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+    await repos.teacherProfiles.create(A, {
+      slug: 'ms-alpha',
+      displayName: 'Ms Alpha',
+      subject: 'Maths',
+    });
     expect(
-      await failure(repos.teacherProfiles.create(A, { slug: 'ms-alpha-2', subject: 'Maths' })),
+      await failure(
+        repos.teacherProfiles.create(A, {
+          slug: 'ms-alpha-2',
+          displayName: 'Ms Alpha',
+          subject: 'Maths',
+        }),
+      ),
     ).toEqual({ kind: 'invalid', method: 'teacherProfiles.create' });
     expect(
-      await failure(repos.teacherProfiles.create(B, { slug: 'ms-alpha', subject: 'Maths' })),
+      await failure(
+        repos.teacherProfiles.create(B, {
+          slug: 'ms-alpha',
+          displayName: 'Ms Alpha',
+          subject: 'Maths',
+        }),
+      ),
     ).toEqual({ kind: 'invalid', method: 'teacherProfiles.create' });
     expect(await repos.teacherProfiles.get(B)).toBeNull();
   });
@@ -125,13 +157,19 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
   it('only a teacher user gets a profile: a ghost is not_found, a student or staff is scope', async () => {
     expect(
       await failure(
-        repos.teacherProfiles.create({ teacherId: 'tch_ghost' }, { slug: 'ghost', subject: 'X' }),
+        repos.teacherProfiles.create(
+          { teacherId: 'tch_ghost' },
+          { slug: 'ghost', displayName: 'Ghost', subject: 'X' },
+        ),
       ),
     ).toEqual({ kind: 'not_found', method: 'teacherProfiles.create' });
     for (const id of [studentId('1'), STAFF]) {
       expect(
         await failure(
-          repos.teacherProfiles.create({ teacherId: id }, { slug: 'nope', subject: 'X' }),
+          repos.teacherProfiles.create(
+            { teacherId: id },
+            { slug: 'nope', displayName: 'Nope', subject: 'X' },
+          ),
         ),
       ).toEqual({ kind: 'scope', method: 'teacherProfiles.create' });
     }
@@ -148,8 +186,8 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
 
   describe('setVerification (staff only)', () => {
     beforeEach(async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
     });
 
     it.each([
@@ -451,8 +489,8 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
   // UPDATE statement; bio, languages and a same-value subject leave the status alone.
   describe('update: a subject change resets verification', () => {
     beforeEach(async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
       await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
       await repos.teacherProfiles.setVerification(B, { status: 'verified', by: STAFF });
     });
@@ -489,6 +527,7 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       ['a same-value subject edit', { subject: 'Maths' }],
       ['a same-value subject with surrounding spaces', { subject: '  Maths  ' }],
       ['a same-value subject with a bio edit', { subject: 'Maths', bio: 'Updated' }],
+      ['a display-name-only edit', { displayName: 'New Name' }],
     ])('%s leaves a verified teacher verified', async (_label, patch) => {
       const row = await repos.teacherProfiles.update(A, patch);
       expect(row.verificationStatus).toBe('verified');
@@ -520,8 +559,8 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
 
     it('a staff user sees only pending teachers, oldest first, ties broken by id, with name and email joined', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Science' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Science' });
       // Both rows share one created_at, so only the id tie-breaker decides the order. A is
       // inserted (and rewritten) first but gets the larger id, so insertion order would put it first.
       const [idA, idB] = ['tp-tie-2', 'tp-tie-1'];
@@ -578,7 +617,7 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
       for (const tid of [...ids].reverse()) {
         await repos.teacherProfiles.create(
           { teacherId: tid },
-          { slug: tid.replaceAll('_', '-'), subject: 'Maths' },
+          { slug: tid.replaceAll('_', '-'), displayName: 'Cap Teacher', subject: 'Maths' },
         );
       }
       await raw.query(
@@ -604,19 +643,19 @@ describe.skipIf(!up)(`teacherProfiles on Postgres${up ? '' : ` (${SKIP_REASON})`
     });
 
     it('pending: refused', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
       expect(await failure(publish(A))).toEqual(SCOPE);
     });
 
     it('rejected: refused', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
       await repos.teacherProfiles.setVerification(A, { status: 'rejected', by: STAFF });
       expect(await failure(publish(A))).toEqual(SCOPE);
     });
 
     it('verified: allowed, and only for that teacher', async () => {
-      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', subject: 'Maths' });
-      await repos.teacherProfiles.create(B, { slug: 'mr-beta', subject: 'Maths' });
+      await repos.teacherProfiles.create(A, { slug: 'ms-alpha', displayName: 'Ms Alpha', subject: 'Maths' });
+      await repos.teacherProfiles.create(B, { slug: 'mr-beta', displayName: 'Mr Beta', subject: 'Maths' });
       await repos.teacherProfiles.setVerification(A, { status: 'verified', by: STAFF });
       await expect(publish(A)).resolves.toBeUndefined();
       expect(await failure(publish(B))).toEqual(SCOPE);

@@ -257,6 +257,8 @@ const TeacherProfileRowSchema = z.strictObject({
   id: z.string().min(1),
   teacherId: z.string().min(1),
   slug: z.string().min(1),
+  /** The public display name (task 9.2d); null until the teacher sets one. */
+  displayName: z.string().nullable(),
   subject: z.string().min(1),
   bio: z.string(),
   languages: z.array(z.string()),
@@ -274,6 +276,7 @@ export function toTeacherProfile(
     id: string;
     userId: string;
     slug: string;
+    displayName: string | null;
     subject: string;
     bio: string;
     languages: string[];
@@ -287,6 +290,7 @@ export function toTeacherProfile(
       id: row.id,
       teacherId: row.userId,
       slug: row.slug,
+      displayName: row.displayName,
       subject: row.subject,
       bio: row.bio,
       languages: row.languages,
