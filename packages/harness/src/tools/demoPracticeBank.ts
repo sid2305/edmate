@@ -2,9 +2,10 @@
 // default (Phase B). NOT real teacher content — that is 5.11 (outline drafter) / 8.x (teacher
 // authoring), later. Every servable record here passes `validateItem` (demoPracticeBank.test.ts).
 //
-// Two records (`algebra:3:a`, an mcq; `python:1/2:a`, code_output) are kept in the fixture to prove
-// the bank's `SERVABLE_KINDS` filter actually excludes them (architect review point 4: those kinds
-// are modelled, never served, until a later task reviews their leak model).
+// The mcq record (`algebra:3:a`) and the code_output records (`python:1:a`, `python:2:a`) are
+// served since 5.6b Phase C: the leak matcher exempts a re-show of the active item. The mcq uses a
+// concept prompt, so its correct option's text never shows in the prompt; each code_output item's
+// output is computed from its own code (on line 2 of a multi-line prompt for `python:1:a`).
 import type {
   LearnerPracticeProfile,
   PracticeBank,
@@ -95,7 +96,6 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
     answerKey: ['7'],
   },
   {
-    // Not servable (SERVABLE_KINDS excludes 'mcq'): kept to prove the bank's filter works.
     item: {
       id: 'demo:algebra:3:a',
       teacherId: DEMO_PRACTICE_TEACHER_ID,
@@ -103,14 +103,12 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
       moduleId: MODULE_ALGEBRA,
       level: 3,
       kind: 'mcq',
-      prompt: 'Which value of x solves 2x - 3 = 11?',
-      // 5.6b: the MCQ item rules (labelled options, one bare label key); still not served.
+      prompt: 'Which of these numbers is prime?',
       options: ['A) 6', 'B) 7', 'C) 8'],
     },
     answerKey: ['B'],
   },
   {
-    // Not servable (SERVABLE_KINDS excludes 'code_output'): kept for the same reason.
     item: {
       id: 'demo:python:1:a',
       teacherId: DEMO_PRACTICE_TEACHER_ID,
@@ -118,9 +116,21 @@ export const DEMO_PRACTICE_RECORDS: readonly DemoPracticeRecord[] = [
       moduleId: MODULE_PYTHON,
       level: 1,
       kind: 'code_output',
-      prompt: 'What does `print(2 + 2)` print? (it prints 4)',
+      prompt: 'What does this code print?\nx = 4\nprint(x)',
     },
     answerKey: ['4'],
+  },
+  {
+    item: {
+      id: 'demo:python:2:a',
+      teacherId: DEMO_PRACTICE_TEACHER_ID,
+      topicId: 'python-loops',
+      moduleId: MODULE_PYTHON,
+      level: 2,
+      kind: 'code_output',
+      prompt: 'What does this code print?\ntotal = 0\nfor i in range(4):\n    total = total + i\nprint(total)',
+    },
+    answerKey: ['6'],
   },
 ] as const;
 

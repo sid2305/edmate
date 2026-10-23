@@ -595,7 +595,7 @@ describe('practiceNextItemTool: activeItem (5.6b), scoped to the entitlement', (
       answerKey: ['7'],
     });
     expect(t.activeItem('demo:algebra:3:a', inModules([MODULE_ALGEBRA]))).toEqual({
-      prompt: 'Which value of x solves 2x - 3 = 11?',
+      prompt: 'Which of these numbers is prime?',
       options: ['A) 6', 'B) 7', 'C) 8'],
       answerKey: ['B'],
     });

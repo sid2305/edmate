@@ -314,15 +314,36 @@ describe('pickItem validates every item at runtime (5.6 review)', () => {
     expect(picked?.item.id).toMatch(/^gen:module-fractions:practice:2:/);
   });
 
-  it('never serves an mcq (or code_output) item, even from a bank that offers one', () => {
-    const code: PracticeItem = { ...BANK_ITEM, id: 'bank:code', kind: 'code_output' };
-    const bank = carelessBank([
-      { item: mcq, answerKey: ['opt-1'] },
-      { item: code, answerKey: ['42'] },
-    ]);
-    const picked = pickItem(bank, SCOPE, 2, []);
-    expect(picked?.item.kind).toBe('numeric');
-    expect([mcq.id, code.id]).not.toContain(picked?.item.id);
+  it('serves a valid mcq or code_output item (5.6b Phase C) and refuses a malformed one', () => {
+    const good: PracticeItem = {
+      ...mcq,
+      id: 'bank:mcq-good',
+      prompt: 'Which of these numbers is prime?',
+      options: ['A) 6', 'B) 7', 'C) 8'],
+    };
+    const code: PracticeItem = {
+      ...BANK_ITEM,
+      id: 'bank:code',
+      kind: 'code_output',
+      prompt: 'What does this code print?\nx = 4\nprint(x)',
+    };
+    expect(pickItem(carelessBank([{ item: good, answerKey: ['B'] }]), SCOPE, 2, [])?.item).toEqual(
+      good,
+    );
+    expect(pickItem(carelessBank([{ item: code, answerKey: ['4'] }]), SCOPE, 2, [])?.item).toEqual(
+      code,
+    );
+    // Malformed: two unlabelled options and an opaque key, or a lower-case or bracketed label.
+    for (const [item, key] of [
+      [mcq, 'opt-1'],
+      [good, 'b'],
+      [good, '(B)'],
+      [{ ...good, options: ['A) 6', 'B) 7'] }, 'B'],
+      [{ ...good, prompt: 'Which equals 7?' }, 'B'],
+    ] as const) {
+      const picked = pickItem(carelessBank([{ item, answerKey: [key] }]), SCOPE, 2, []);
+      expect(picked?.item.kind).toBe('numeric');
+    }
   });
 
   it('skips an invalid bank item and serves the next valid one from the bank', () => {

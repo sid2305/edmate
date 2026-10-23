@@ -6,11 +6,16 @@
 // the matcher, else the fixed ANSWER_LEAK_SAFE_HINT. The chain's verification pass then re-checks
 // the rewrite with every post guard; if anything still hits, postGuard sends the hint.
 //
+// Answer context (5.6b): the matcher gets the active practice items and the practice keys, so the
+// model may restate an item's prompt and exact option listing; a label key, the correct option's
+// text or position, or ruling out every wrong option still leaks.
+//
 // Its reason is a fixed code, never the key or the text. Paraphrased answers ("the hot-ish one")
 // need a judge and are task 4.5b.
 import type { PedagogyDecision, SourceRef, TurnContext, Usage } from '@edmate/contracts';
 import { LIMITS } from '@edmate/contracts';
-import { compileAnswerKeys } from '../pipeline/generate/answerKey.js';
+import { type AnswerKeyOptions, compileAnswerKeys } from '../pipeline/generate/answerKey.js';
+import type { ItemContext } from '../pipeline/generate/itemContext.js';
 import type { CancelToken } from '../pipeline/clock.js';
 import type { Guard, GuardRun } from './guard.js';
 
@@ -55,6 +60,14 @@ export interface PostGuardCtx {
   readonly decision: PedagogyDecision;
   /** The student's (scrubbed) message: code-shaped keys it holds may be quoted back. */
   readonly studentText?: string;
+  /**
+   * The active practice items (5.6b): the loaded one and every one issued this turn. A re-show of
+   * an item's prompt or exact option listing is exempt; the keys derived from it (the correct
+   * option's text and position, ruling out every wrong option) are guarded.
+   */
+  readonly items?: readonly ItemContext[];
+  /** Practice keys (5.6b, design 4): never quoted back as the student's own code. */
+  readonly practiceKeys?: readonly string[];
   /** One bounded small-tier rewrite of a leaking draft; never throws. Absent: the hint. */
   readonly rewrite?: (draft: string, cancel: CancelToken) => Promise<LeakRewrite>;
   /** lockedLeak's check (4.6). Required, so a chain can't run without it by accident. */
@@ -94,6 +107,21 @@ export interface PostGuardCtx {
 
 const OK: GuardRun = { result: { ok: true }, usage: [] };
 
+/**
+ * The matcher options a post guard judges with (5.6b): the answer context, and the student's text
+ * unless `student` is false (text that is not a reply, such as a retrieved chunk).
+ */
+export function answerKeyOptions(
+  x: Pick<PostGuardCtx, 'studentText' | 'items' | 'practiceKeys'>,
+  student = true,
+): AnswerKeyOptions {
+  return {
+    ...(x.studentText === undefined || !student ? {} : { studentText: x.studentText }),
+    ...(x.items === undefined ? {} : { items: x.items }),
+    ...(x.practiceKeys === undefined ? {} : { practiceKeys: x.practiceKeys }),
+  };
+}
+
 export function createAnswerLeakGuard(): Guard<PostGuardCtx> {
   return {
     name: 'answerLeak',
@@ -101,10 +129,8 @@ export function createAnswerLeakGuard(): Guard<PostGuardCtx> {
     async run(text, x, cancel): Promise<GuardRun> {
       // The platform's fixed texts (4.8: e.g. adviceGuard's fallback) pass as they are.
       if (x.fixedTexts?.includes(text) === true) return OK;
-      const keys = compileAnswerKeys(
-        x.decision.mustNotReveal,
-        x.studentText === undefined ? {} : { studentText: x.studentText },
-      );
+      // One matcher judges the draft and re-checks the rewrite, with the same answer context.
+      const keys = compileAnswerKeys(x.decision.mustNotReveal, answerKeyOptions(x));
       if (!keys.leaks(text)) return OK;
       let out = ANSWER_LEAK_SAFE_HINT;
       let usage: Usage[] = [];

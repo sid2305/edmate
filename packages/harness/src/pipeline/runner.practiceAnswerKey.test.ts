@@ -307,13 +307,13 @@ describe('runner + practice.next_item: a generated item', () => {
     expect(tokens(r.events)).not.toMatch(standalone(key));
   });
 
-  it('a model that restates an arithmetic item is held too (matcher false positive, fail closed)', async () => {
-    // Known limit, reported in the handoff: "What is a + b?" evaluates to the key, so restating
-    // the item counts as a reveal and the student gets the hint instead.
+  it('a model that restates an arithmetic item is delivered (5.6b: the prompt span is exempt)', async () => {
+    // Before 5.6b "What is a + b?" evaluated to the key, so restating the item counted as a
+    // reveal and the student got the hint. The issued item now goes to the gate and postGuard.
     const first = await generated(main(say('Ok.'), used));
     const prompt = (skillEvents(first.events)[0] as { payload: { prompt: string } }).payload.prompt;
     const r = await generated(main(say(`Here is your problem. ${prompt} `), used));
-    expect(r.commit?.replyText).toBe(ANSWER_LEAK_SAFE_HINT);
+    expect(r.commit?.replyText).toBe(`Here is your problem. ${prompt} `);
   });
 });
 

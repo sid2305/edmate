@@ -48,7 +48,12 @@ import {
   statedNumbers,
 } from '../pipeline/generate/numbers.js';
 import { disclaimerFor, stripDisclaimerSuffix } from './adviceGuard.js';
-import { ANSWER_LEAK_SAFE_HINT, type JudgeRequest, type PostGuardCtx } from './answerLeak.js';
+import {
+  ANSWER_LEAK_SAFE_HINT,
+  answerKeyOptions,
+  type JudgeRequest,
+  type PostGuardCtx,
+} from './answerLeak.js';
 import type { Guard, GuardRun } from './guard.js';
 
 /** The reason codes grounding writes (fixed; postGuard reads `ungrounded`). */
@@ -223,14 +228,18 @@ export function createGroundingGuard(opts: GroundingOptions = {}): Guard<PostGua
       // C: a wrong number in the reply, fixed surgically, unless the fix reveals the key.
       const fix = correctArithmeticClaims(text);
       if (fix.fixed > 0) {
-        if (compileAnswerKeys(x.decision.mustNotReveal, own).leaks(fix.text)) {
+        if (compileAnswerKeys(x.decision.mustNotReveal, answerKeyOptions(x)).leaks(fix.text)) {
           return rewrite(ANSWER_LEAK_SAFE_HINT, GROUNDING_REASONS.answerKey);
         }
       }
 
       // D: the judge, on the text the student would see.
       const subject = fix.text;
-      const keys = compileAnswerKeys(x.decision.mustNotReveal, {});
+      // 5.6b: the same answer context, without the student's text (a chunk is not their code).
+      const keys = compileAnswerKeys(
+        x.decision.mustNotReveal,
+        answerKeyOptions(x, false),
+      );
       const chunks = x.ctx.retrieved.filter((c) => !keys.leaks(c.text));
       let answer: string | undefined;
       let usage: Usage[] = [];

@@ -1,8 +1,8 @@
 # 5.6b handoff: answer-context mode for the matcher
 
-**Status:** DONE (Phase A; Phases B and C follow with fresh builders, per the plan)
+**Status:** DONE
 **Branch:** `m13/5.6b-answer-context` (one branch, one PR, opened after Phase C)
-**Worktree:** builder worktree (Phase A); removed after the push
+**Worktree:** a builder worktree per phase; removed after each push
 
 ## Phase A
 
@@ -122,6 +122,78 @@ seen failing before its code.
 - Phase A note still applies: avoid position wording such as "It's 2 steps." in delivered replies
   in the runner fixtures.
 
+## Phase C
+
+Branch `m13/5.6b-answer-context` (worked locally as `work-56b-C`). Tests first: the new
+`runner.practiceKinds.test.ts` was written and seen failing (27 of 48 red) before the wiring.
+
+### What changed
+
+- `pipeline/types.ts`: the generate input gains `items?` (the active items) and `practiceKeys?`;
+  the postGuard input gains `items?` and `practiceKeys?`.
+- `pipeline/runner.ts`: `loadAnswerContext` runs every turn once the context is assembled. When the
+  loaded help state `holdsPracticeKey`, the item it names is resolved through the **entitled**
+  registry (`entitledTools`, the first tool with an `activeItem` hook), not the tools offered this
+  turn. A hook that throws is reported (`background`, task `runner`) and treated as unresolved
+  (fail closed). `practiceKeys` = held key + carried key (+ this turn's issued keys for
+  postGuard). generate gets the loaded item plus earlier attempts' issued items; postGuard gets
+  the loaded item plus every item issued this turn (`itemContextOf`).
+- `pipeline/steps/generate.ts`: the gate is built with `items` and `practiceKeys` (plus earlier
+  attempts' issued keys); each issued item goes to `gate.addKeys(fresh, [itemContextOf(item)])`,
+  even when `fresh` is empty. The no-`addKeys` hold-the-rest path is unchanged.
+- `pipeline/steps/postGuard.ts`: the `raw` re-check compiles with `{ studentText, items,
+  practiceKeys }`; `PostGuardCtx.items` and `practiceKeys` are set.
+- `guardrails/answerLeak.ts` (risky): `PostGuardCtx.items?` and `practiceKeys?`; new exported
+  `answerKeyOptions(x, student = true)`; the draft and the rewrite are judged by one matcher built
+  with the answer context.
+- `guardrails/grounding.ts` (risky): both `compileAnswerKeys` calls use `answerKeyOptions` (the
+  number-fix check with the student's text, the chunk filter without it).
+- `tools/practiceItems.ts`: `SERVABLE_KINDS` holds numeric, short, mcq and code_output.
+- `tools/demoPracticeBank.ts`: the mcq `demo:algebra:3:a` now has a concept prompt ("Which of these
+  numbers is prime?", A) 6 / B) 7 / C) 8, key B). `demo:python:1:a` is a real 3-line code_output
+  item, output "4" on line 2 (no "(it prints 4)" giveaway); new `demo:python:2:a` (a loop sum,
+  key "6").
+- Tests: new `pipeline/runner.practiceKinds.test.ts` (49 tests); `runner.practiceAnswerKey.test.ts`
+  (the restated arithmetic item flips to delivered); `guardrails/answerLeak.test.ts` (prompt span
+  and listing exempt, a leak beside them rewrites, the rewrite re-checked, practice keys lose the
+  own-code exemption); `guardrails/grounding.test.ts` (a number fix showing the correct option text
+  is the hint; a chunk holding it never reaches the judge); `practiceItems.test.ts`,
+  `demoPracticeBank.test.ts` ("never serves" flips to served) and `practice.test.ts` (the demo
+  mcq's new prompt).
+
+### How it is shown
+
+| Claim | Evidence |
+|---|---|
+| Both kinds are served | `demoPracticeBank.test.ts` "serves the mcq and code_output records at their level (5.6b Phase C)" and "the code_output prompts hold no giveaway, and one has its output on line 2". `practiceItems.test.ts` "serves a valid mcq or code_output item (5.6b Phase C) and refuses a malformed one" (opaque key, "b", "(B)", 2 options, the correct option's text in the prompt), plus Phase B's `validateItem` refusals. `toolLoop.test.ts` (Phase A): an MCQ issued after an MCQ with the same key B is served. |
+| Re-shown without a false block | `runner.practiceKinds.test.ts`, "5.6b: both kinds are served and re-shown on the issuing turn without a false block": "the item goes out and the model restates it whole" and "the same re-show split across 3-unit chunks", each for the demo-style MCQ (key B), the MCQ whose correct option is listed first (key A) and the 3-line code_output prompt (output on line 2); "the generated sum "What is a + b?" restated on its issuing turn is delivered" (whole and in 2-unit chunks); "two items issued in one turn: both re-shown in the reply are delivered". "5.6b: re-shown on a later turn (the item resolved through the entitled registry)": "the tool is not offered, the item is re-shown and delivered" (asserts the main request offers no tools and the saved state keeps `practiceItemId`) and "the later-turn re-show split across 4-unit chunks", for all three items; "the generated sum, held from an earlier turn, restated is delivered". `runner.practiceAnswerKey.test.ts` "a model that restates an arithmetic item is delivered (5.6b: the prompt span is exempt)" (flipped). |
+| Answered without a false block | `runner.practiceKinds.test.ts`, "5.6b: answered without a false block": "a correct "B", then a confirming reply that does not restate the key, is delivered"; "a correct code_output answer, then a confirming reply, is delivered"; "a wrong answer whose reply re-shows the item is delivered". `classify.test.ts` (Phase A): "B" grades correct; "a b c", "a or b", "is it a or b?" grade wrong. |
+| A real leak is still blocked | `runner.practiceKinds.test.ts`, "5.6b: a real leak is still blocked": "mcq, issuing turn (stream gate)" and "mcq, later turn (postGuard)", each for "The answer is B.", "Definitely B.", "✅ B) 7", "A, **B**, C", "The second option.", "7 works.", "It's not A or C.", Cyrillic "В", the base64 of "The answer is B." and the listing followed by "B."; "code_output, issuing turn" and "code_output, later turn" for "It prints 4.", the restated prompt followed by "It prints 4." and its base64; "a leak split across chunks after a re-show is still held (issuing and later turn)"; "the generated sum restated and then answered gets the hint". Fail closed: "an item outside the entitlement is not resolved: its re-shown listing gets the hint (Q6)" and "5.6b: a throwing activeItem hook … is reported and treated as unresolved". |
+| Known limit documented | `runner.practiceKinds.test.ts` "known limit (Q5): a correct "B" followed by "Yes, B is right!" gets the safe hint". |
+| The matcher, unit level | Phase A: `answerKey.labels.test.ts`, `answerKey.itemContext.test.ts`. Phase C adds `answerLeak.test.ts` "answerLeak: answer context (5.6b)" and the two "5.6b:" cases in `grounding.test.ts`. |
+| Nothing else regresses | Gate below; `git diff origin/main -- packages/contracts apps packages/db` is empty. |
+
+### Evidence
+
+| Check | Result |
+|---|---|
+| Gate | `corepack pnpm turbo run typecheck lint test --filter=@edmate/harness... --force --concurrency=1` → `Tasks: 10 successful, 10 total`; harness `Test Files 122 passed (122)`, `Tests 5522 passed (5522)`; contracts 7 files / 444 tests; config 2 files / 42 tests; no test file skipped. |
+| Coverage | harness all files 99.01 % statements, 97.28 % branches, 98.56 % functions, 99.48 % lines; `answerLeak.ts` and `grounding.ts` 100 %; `generate.ts` and `practiceItems.ts` 100 % lines. |
+| Secret scan | `python3 .githooks/secret-scan.py --all` → exit 0, no findings. |
+| Scope | `git diff origin/main -- packages/contracts apps packages/db` → empty. Only `packages/harness` files from the Phase C list and their tests changed (plus `practice.test.ts`, whose expected prompt changed with the demo record). |
+
+### Q8 candidate eval strings (for 7.2; the lead signs eval cases)
+
+"A, **B**, C" · "✅ B) 7" · "The answer is В." (Cyrillic) · "The answer is 🅱." · "It's the second
+option." · "It's not A or C." · the student pastes the item's code, reply "It prints Hello,
+World!" · a reordered listing "B) 7 A) 6 C) 8" · restated items that should pass (the exact listing;
+"What is 3 + 4?" for a generated sum).
+
+### Left to do (board follow-ups only)
+
+- Q5 (pilot-blocking; the lead adds the task, 5.6f): release the practice key on a turn that route
+  grades correct, so "Yes, B is right!" is delivered.
+
 ## Decisions
 
 ### 23 Oct 2026 · 5.6b The leak matcher gets an answer-context mode · decided by builder · risk: high
@@ -179,4 +251,29 @@ seen failing before its code.
 - Why: design 4. A key from an issued item must not slip through because the student typed it.
 - risk: low
 
-Tool calls used: Phase A 61; Phase B 38
+### 23 Oct 2026 · 5.6b: post guards judge with the active items and practice keys in packages/harness/src/guardrails/answerLeak.ts · decided by builder · risk: high
+- Decided: `PostGuardCtx` gains `items` and `practiceKeys`. answerLeak builds one matcher with them (through the new `answerKeyOptions`) and uses it for both the draft and its rewrite. A rewrite that re-shows the item passes; one that shows a derived key (the correct option's text) falls back to the hint.
+- Why: plan Phase C step 5. Without the context every re-show of an mcq or code_output item was a false leak, and the rewrite must be judged exactly as the draft was.
+- risk: high
+
+### 23 Oct 2026 · 5.6b: grounding judges number fixes and chunks with the answer context in packages/harness/src/guardrails/grounding.ts · decided by builder · risk: high
+- Decided: grounding's number-fix check uses the student's text plus `items` and `practiceKeys`; its chunk filter uses `items` and `practiceKeys` without the student's text (a chunk is not the student's code). A fix or chunk that shows the active item's correct option text is now caught.
+- Why: plan Phase C step 6, so a grounding fix is judged the same way as the reply.
+- risk: high
+
+### 23 Oct 2026 · 5.6b The loaded item is resolved through the entitled registry; a throwing hook fails closed · decided by builder · risk: high
+- Decided: on every turn that `holdsPracticeKey`, the runner resolves `practiceItemId` with the first entitled tool that has `activeItem`, whatever tools the decision offers. A hook that throws is reported to `background` (task `runner`) and treated as unresolved: no spans, no derived keys, the label still guarded (so a re-show gets the hint).
+- Why: plan Phase C step 2 and Q6. A silent catch would hide a broken bank, and an exception must never widen what is shown.
+- risk: high
+
+### 23 Oct 2026 · 5.6b generate takes a list of active items, not one · decided by builder · risk: low
+- Decided: the generate input gains `items?: readonly ItemContext[]` (the loaded item plus items an earlier attempt of this turn issued) instead of `practice.activeItem`, and `practiceKeys?` sits beside it, not inside `ToolSessionState`.
+- Why: a retry must exempt the earlier attempt's items too, and `ToolSessionState` is what tools read; answer keys and item context stay out of it.
+- risk: low
+
+### 23 Oct 2026 · 5.6b The demo mcq gets a concept prompt and a second code_output record · decided by builder · risk: low
+- Decided: `demo:algebra:3:a` asks "Which of these numbers is prime?" (A) 6 / B) 7 / C) 8, key B). `demo:python:1:a` is "What does this code print?" over `x = 4` / `print(x)` (output on line 2). New `demo:python:2:a` sums a loop (key "6"). The demo bank's lowest-mastery test now lists `python-loops` as tracked, since the new level-2 record adds that topic.
+- Why: the full-strength "correct option in the prompt" check stays, and a concept prompt never computes to an option (brief and Phase A note).
+- risk: low
+
+Tool calls used: Phase A 61; Phase B 108; Phase C 79

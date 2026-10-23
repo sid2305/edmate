@@ -12,9 +12,9 @@
 //   3. The answer key is never part of the model-visible item shape. `PracticeItem` has no
 //      `answerKey` field; a key is obtained only through `PracticeBank.answerKeyFor` (bank items)
 //      or `generatedAnswerKeyFor` (generated items, recomputed from the item id).
-//   4. `mcq` and `code_output` stay as item kinds (so the model, when it exists, is representable)
-//      but are not in `SERVABLE_KINDS`: no bank built here ever hands one out yet (5.6b Phase C
-//      enables them once the pipeline passes item context to the gate and postGuard).
+//   4. `mcq` and `code_output` are served (5.6b Phase C): the pipeline passes the active item's
+//      context to the stream gate and the post guards, so a re-show of the item is exempt while
+//      a real leak of its key (a label, the correct option's text, its output) is still held.
 //
 // 5.6b Phase B: `validateItem` enforces the item rules (an MCQ has 3-6 options labelled "A) ",
 // "B) ", ... in order and one bare capital label key in range; prompts and options are capped;
@@ -52,8 +52,13 @@ export type PracticeLevel = 1 | 2 | 3;
  */
 export type PracticeItemKind = 'numeric' | 'mcq' | 'short' | 'code_output';
 
-/** Kinds a `PracticeBank` built in this task may actually serve (architect review point 4). */
-export const SERVABLE_KINDS: ReadonlySet<PracticeItemKind> = new Set(['numeric', 'short']);
+/** Kinds a `PracticeBank` may serve (architect review point 4; mcq and code_output since 5.6b). */
+export const SERVABLE_KINDS: ReadonlySet<PracticeItemKind> = new Set([
+  'numeric',
+  'short',
+  'mcq',
+  'code_output',
+]);
 
 /** The model-visible item shape: never the answer key (architect review point 3). */
 export interface PracticeItem {

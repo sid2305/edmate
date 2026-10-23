@@ -31,6 +31,7 @@ import { hasAnyDistressKeyword } from '../guardrails/distressKeywords.js';
 import {
   copyHelp,
   type HelpState,
+  holdsPracticeKey,
   INITIAL_HELP_STATE,
   PRACTICE_SERVED_MAX,
   practiceFields,
@@ -54,6 +55,7 @@ import {
 import { EventQueue } from './events.js';
 import { LAST_RESORT_DISTRESS_REPLY } from './replies.js';
 import { ceilingOf, TurnCost } from './generate/costCeiling.js';
+import { type ItemContext, itemContextOf } from './generate/itemContext.js';
 import {
   admitFailure,
   entitledMismatch,
@@ -91,7 +93,7 @@ import {
 } from './spec.js';
 import { openTeacherQuestion } from './teacherQuestion.js';
 import { runWithTimeout, type TimedResult } from './timeout.js';
-import type { IssuedItem, ToolSessionState } from './tools.js';
+import { entitledTools, type IssuedItem, noTools, type ToolSessionState } from './tools.js';
 import { TraceBuilder } from './trace.js';
 import { billingFor, buildTurnGateway, refusingGateway, turnPolicies } from './turnGateway.js';
 import type {
@@ -222,6 +224,10 @@ class Turn {
    * they hold the answer keys. finish() saves them on every outcome.
    */
   private readonly issued: IssuedItem[] = [];
+  /** The active item the loaded help state names, resolved on the server (5.6b); else none. */
+  private loadedItems: ItemContext[] = [];
+  /** The loaded held and carried practice keys (5.6b, design 4). */
+  private loadedPracticeKeys: string[] = [];
 
   constructor(
     private readonly input: TurnInput,
@@ -559,6 +565,7 @@ class Turn {
       this.endWithError({ code: 'no_access', retryable: false });
       return this.finish(e, { outcome: 'error', input: scrubbed, intent }, intent, 'redirect');
     }
+    this.loadAnswerContext(ctx, built.helpState);
 
     // 7. decide with the help state that came with this context; fall back to `ask`.
     const decided = await this.decide(scrubbed, ctx, built.helpState);
@@ -955,6 +962,9 @@ class Turn {
               onPracticeItem: (item) => {
                 this.issued.push(item);
               },
+              // 5.6b: the loaded item and earlier attempts' items; the turn's practice keys.
+              items: this.activeItems(),
+              practiceKeys: this.loadedPracticeKeys,
               ...(this.decideFellBack ? { fromFallback: true as const } : {}),
             },
             this.emitter(cancel, state),
@@ -1013,6 +1023,9 @@ class Turn {
       ...(gen.raw === undefined ? {} : { raw: gen.raw }),
       ...(gen.withheld === undefined ? {} : { withheld: gen.withheld }),
       ...(gen.locked === undefined ? {} : { locked: gen.locked }),
+      // 5.6b: the loaded item plus every item issued this turn, and every practice key.
+      items: this.activeItems(),
+      practiceKeys: [...new Set([...this.loadedPracticeKeys, ...keys])],
     };
     const raw = await this.timed(input, timeoutOf('postGuard'), (env) =>
       this.steps.postGuard(env, x),
@@ -1142,6 +1155,37 @@ class Turn {
   /** The union of this turn's issued practice keys, in order (5.6). */
   private issuedKeys(): string[] {
     return [...new Set(this.issued.flatMap((i) => i.answerKey))];
+  }
+
+  /**
+   * The answer context the loaded help state gives (5.6b). When it holds a practice key, the item
+   * it names is rebuilt through the entitled registry (the first entitled tool with an
+   * `activeItem` hook), not the tools offered this turn, so a turn that offers no tool still
+   * exempts a re-show. The practice keys are the held key and the carried key (design 4). An item
+   * no hook resolves gets no spans and no derived keys (Q6): its key stays guarded by decide's
+   * `mustNotReveal`. A hook that throws is reported and treated as unresolved (fail closed).
+   */
+  private loadAnswerContext(ctx: TurnContext, help: Readonly<HelpState>): void {
+    const holds = holdsPracticeKey(help);
+    this.loadedPracticeKeys = [
+      ...new Set([...(holds ? help.answerKey : []), ...(help.practiceCarriedKey ?? [])]),
+    ];
+    this.loadedItems = [];
+    const itemId = help.practiceItemId;
+    if (!holds || itemId === undefined) return;
+    try {
+      const tools = entitledTools(this.deps.tools ?? noTools, ctx.entitlement);
+      const hook = tools.find((r) => r.activeItem !== undefined);
+      const item = hook?.activeItem?.(itemId, ctx);
+      if (item !== undefined) this.loadedItems = [item];
+    } catch (error) {
+      this.background.push({ task: 'runner', error });
+    }
+  }
+
+  /** The loaded active item, then every item issued this turn so far (5.6b). */
+  private activeItems(): ItemContext[] {
+    return [...this.loadedItems, ...this.issued.map(itemContextOf)];
   }
 
   /**
