@@ -3,7 +3,10 @@
 // page. This literal path (resolved ahead of the `[...nextauth]` catch-all) passes the GET to
 // Auth.js only for a browser holding the binding cookie for the link's address or the confirm
 // click's short-lived cookie for this token; anyone else is redirected to the confirm page with
-// the same query, and no token is spent.
+// the same query, and no token is spent. There is deliberately no POST: Auth.js reads token and
+// email from the query on any method, so a cross-site form POST here would spend an attacker's
+// token with no gate. Next matches this file by path before method, so a POST gets a 405 and never
+// reaches the catch-all.
 import { NextResponse, type NextRequest } from 'next/server';
 import { emailCallbackRedirect, handlers, publicRoute } from '../../../../../src/auth';
 
@@ -17,5 +20,3 @@ export const GET = publicRoute(async (req: NextRequest): Promise<Response> => {
   res.headers.set('referrer-policy', 'no-referrer');
   return res;
 });
-
-export const POST = publicRoute(handlers.POST);

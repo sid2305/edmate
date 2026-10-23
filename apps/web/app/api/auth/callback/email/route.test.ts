@@ -2,6 +2,7 @@
 // binding cookie for the link's address, or the confirm click's cookie for this token and address.
 // Anyone else goes to the confirm page with the same query, and Auth.js is never called.
 import { NextRequest } from 'next/server';
+import { getSortedRoutes } from 'next/dist/shared/lib/router/utils/sorted-routes';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createLinkBindingCookieValue,
@@ -26,7 +27,8 @@ vi.mock('../../../../../src/auth', () => ({
     }),
 }));
 
-import { GET, POST } from './route';
+import * as route from './route';
+import { GET } from './route';
 
 const TOKEN = 'ab'.repeat(32);
 const OTHER_TOKEN = 'cd'.repeat(32);
@@ -103,9 +105,22 @@ describe('/api/auth/callback/email', () => {
     expectConfirmRedirect(await GET(get({}, 'token=nope')), 'token=nope');
   });
 
-  it('POST is Auth.js unchanged', async () => {
-    const original = new Response(null, { status: 405 });
-    authPost.mockResolvedValue(original);
-    expect(await POST(get())).toBe(original);
+  it('POST is refused: no POST handler, so Next answers 405 and Auth.js never sees it', () => {
+    // A cross-site form POST with an attacker's token in the query would otherwise be spent by
+    // Auth.js (it reads token and email from the query on any method). Next resolves this literal
+    // path ahead of `[...nextauth]` by path, before the method, so a missing POST is a 405 here,
+    // never a fall-through to the catch-all.
+    expect(Object.keys(route).sort()).toEqual(['GET', 'dynamic']);
+    expect('POST' in route).toBe(false);
+    expect(authPost).not.toHaveBeenCalled();
+  });
+
+  it("Next's own route order puts this literal path ahead of the [...nextauth] catch-all", () => {
+    // Next picks the route file by path first (this order), then the method, so a POST to this
+    // path lands on this module (405), never on the catch-all's POST.
+    expect(getSortedRoutes(['/api/auth/[...nextauth]', '/api/auth/callback/email'])).toEqual([
+      '/api/auth/callback/email',
+      '/api/auth/[...nextauth]',
+    ]);
   });
 });
