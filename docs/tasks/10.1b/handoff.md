@@ -70,6 +70,16 @@ payments tests (after the 22 Oct fix round): `Tests  579 passed | 20 expected fa
 
 ## Decisions
 
+### 22 Oct 2026 · 10.1b ran over budget · decided by lead · risk: low
+- Decided: accept 146 tool calls against Phase B's 70. The build itself was on budget (74); the fix round added mutant fakes, eight new suite cases and the per-operation `unsupported` capability.
+- Why: the plan says Phase C (10.1c) must not change the shared suite, so every suite gap the reviewers found had to land now.
+- risk: low
+
+### 22 Oct 2026 · 10.1b lead approves the contracts edits and the ADR-0015 §9 amendment · decided by lead · risk: high
+- Decided: merge the two contracts edits (the offer-name refusal set now also refuses \p{Cs}, \p{Co} and the Hangul fillers; the refund doc comment) under ADR-0015, with a dated amendment line in §9 and the 10.8 normalisation note updated to match. No new ADR: both edits tighten rules the ADR already states.
+- Why: architect, security-reviewer and an opus typescript-reviewer reviewed them (rule 2); the lead wrote the ADR wording and kept spec-types.ts and the build plan's Core contracts block identical.
+- risk: high
+
 ### 22 Oct 2026 · 10.1b packages/payments: signature check, secrets and no network · decided by builder · risk: high
 - Decided: Webhook signatures are checked with `timingSafeEqual` over the exact bytes, with the length checked first, every candidate and secret compared, and no early exit. A bad candidate never throws, it just doesn't match. Tolerance is at most 300 s, and a larger value is refused as `validation`. `PaymentsError` has fixed words, no `cause`, and JSON with only name, code, retryable and message. Secrets are held in a local `Secret` copy. Tests run with fetch and sockets off, and key-shaped values are built at runtime. Market to provider comes from the locale pack: `tbd`, an unknown market or a provider with no adapter gives `unsupported` (no checkout). An unknown status or a missing `subscriptionId` gives `malformed_event`, never `active`. Required reviewer: **security-reviewer** (recommended: typescript-reviewer, silent-failure-hunter, code-reviewer).
 - Why: ADR-0015 §5–§8 and the plan's 10.1b decisions. `packages/payments/**` is a risky path (payments group).
@@ -100,7 +110,7 @@ payments tests (after the 22 Oct fix round): `Tests  579 passed | 20 expected fa
 - Phase C (10.1c, the MoR adapter) is blocked on B-53 (Q1 provider, Q2 written OK).
 - Deferred from 10.1a, not in this task: 10.2 (a standalone `PaymentFactSchema` parse skips the provider check) and 10.8 (matching snapshots and payments to the checkout intent).
 
-Tool calls used: 68
+Tool calls used: 146 (harness count: builder 74 + fixer 72; the agents reported 68 + about 60)
 
 ## Fix round (22 Oct 2026)
 
