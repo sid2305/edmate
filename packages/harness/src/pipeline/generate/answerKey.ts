@@ -23,9 +23,40 @@
 // `return` (fix round 1: offering options in prose, "is it .upper() or .lower()?", backticked or
 // not, never counts). Even then, a quote in an answer or confirmation context ("yes", "right",
 // "use", "fix", "sahi", "haan", ...) is a leak. Plain words and numbers are never quoted back.
+// A practice key (`practiceKeys`, or an item's own key) never gets that exemption (5.6b, design 4):
+// code_output keys ("Hello, World!") are often code-shaped.
+//
+// Answer-context mode (task 5.6b): a one-letter key ("B", "(B)") is a label key (labelKeys.ts).
+// With `items` (the active practice items), each item's prompt restated word for word and its
+// exact option listing are exempt spans (itemContext.ts): a match fully inside one is ignored,
+// nothing is deleted. A label is exempt inside any item's span; any other key only inside the
+// spans of an item it belongs to (its own key, or its correct option's text), so an item's
+// prompt never hides a key held from another item. From each item's own key come derived keys:
+// the correct option's text (full strength outside the spans), its position ("the second option",
+// in an answer context or alone) and the ruling-out check (the reply names every wrong option and
+// not the correct one, over the whole text). `reach` grows by the longest span.
 import { foldText } from '../../guardrails/textFold.js';
 import { decodedBase64Spans } from './base64Leak.js';
 import { numberWord, foldWord } from './numberWords.js';
+import {
+  blank,
+  correctIndex,
+  correctOptionText,
+  type ItemContext,
+  itemLabels,
+  listingSpans,
+  optionText,
+  spanLength,
+} from './itemContext.js';
+import {
+  foldLabels,
+  labelLeaks,
+  labelOf,
+  labelsNamedIn,
+  type LabelScope,
+  NO_ITEM_SCOPE,
+  positionLeaks,
+} from './labelKeys.js';
 import { mentionMatches, numberMentions, type NumericKey, numericKey } from './numbers.js';
 
 const SEP = '\u0000';
@@ -285,6 +316,66 @@ const REACH_PER_KEY_UNIT = 4;
 export interface AnswerKeyOptions {
   /** The student's own message: code-shaped keys it holds as code may be quoted back. */
   studentText?: string;
+  /** The active practice items: their spans are exempt and their keys guarded (5.6b). */
+  items?: readonly ItemContext[];
+  /** Practice keys: never quoted back as the student's own code (5.6b, design 4). */
+  practiceKeys?: readonly string[];
+}
+
+type Span = [number, number];
+
+const inside = (s: number, e: number, spans: readonly Span[]): boolean =>
+  spans.some(([a, b]) => s >= a && e <= b);
+
+/** Each word-for-word restatement of `item`'s prompt in `folded`, as [start, end). */
+function promptSpans(folded: string, item: ItemContext): Span[] {
+  const key = normaliseForMatch(foldLabels(item.prompt));
+  return key === '' ? [] : occurrences(compact(folded), key);
+}
+
+/** Each item's exempt spans in `text` (prompt restatements and exact listings). */
+function spansOf(text: string, items: readonly ItemContext[]): Span[][] {
+  if (items.length === 0) return [];
+  const folded = foldLabels(text);
+  return items.map((it) => [...promptSpans(folded, it), ...listingSpans(folded, it)]);
+}
+
+/** The ruling-out check (design 3): every wrong option named, the correct one not. */
+function rulesOut(masked: string, item: ItemContext, k: number): boolean {
+  const options = item.options ?? [];
+  const named = labelsNamedIn(foldLabels(masked));
+  const names = (j: number): boolean => {
+    if (named.has(String.fromCharCode(0x41 + j))) return true;
+    const text = optionText(options[j] as string);
+    return text !== '' && compileAnswerKeys([text]).leaks(masked);
+  };
+  if (names(k)) return false;
+  return options.every((_, j) => j === k || names(j));
+}
+
+/** A key's owners: the items whose spans exempt it (it is their own key or option text). */
+type Owners = readonly number[];
+
+/** A key's identity, so an item's own keys compare with the do-not-say list in any form. */
+function keyId(raw: string): string {
+  const n = numericKey(raw);
+  return n === undefined ? `t:${normaliseForMatch(raw)}` : `n:${n.value}:${n.decimals}`;
+}
+
+/** Each item's own keys: its answer key and its correct option's text (design 3). */
+function ownKeysOf(items: readonly ItemContext[]): string[][] {
+  return items.map((it) => {
+    const text = correctOptionText(it);
+    return [...it.answerKey, ...(text === undefined ? [] : [text])].filter(
+      (k) => typeof k === 'string',
+    );
+  });
+}
+
+/** The labels a list may name: the items' labels, else A-F. */
+function labelScope(items: readonly ItemContext[]): LabelScope {
+  const full = items.map(itemLabels).filter((l) => l.length > 0);
+  return full.length === 0 ? NO_ITEM_SCOPE : { labels: new Set(full.flat()), full };
 }
 
 /** Builds the matcher for one turn's do-not-say list. */
@@ -292,19 +383,37 @@ export function compileAnswerKeys(
   mustNotReveal: readonly string[],
   opts: AnswerKeyOptions = {},
 ): AnswerKeyMatcher {
-  const numbers: NumericKey[] = [];
+  const items = opts.items ?? [];
+  const ownKeys = ownKeysOf(items);
+  const ownIds = ownKeys.map((ks) => new Set(ks.map(keyId)));
+  const ownersOf = (raw: string): Owners => {
+    const id = keyId(raw);
+    return ownIds.flatMap((ids, k) => (ids.has(id) ? [k] : []));
+  };
+  const protectedIds = new Set([...(opts.practiceKeys ?? []), ...ownKeys.flat()].map(keyId));
+
+  const numbers: { key: NumericKey; owners: Owners }[] = [];
   const keyed = new Map<string, string>();
-  for (const raw of mustNotReveal) {
+  const labels = new Set<string>();
+  for (const raw of [...mustNotReveal, ...ownKeys.flat()]) {
     if (typeof raw !== 'string') continue;
+    const label = labelOf(raw);
+    if (label !== undefined) {
+      labels.add(label);
+      continue;
+    }
     const n = numericKey(raw);
     if (n !== undefined) {
-      if (!numbers.some((x) => x.value === n.value && x.decimals === n.decimals)) numbers.push(n);
+      if (!numbers.some((x) => x.key.value === n.value && x.key.decimals === n.decimals)) {
+        numbers.push({ key: n, owners: ownersOf(raw) });
+      }
       continue;
     }
     const k = normaliseForMatch(raw);
     if (k !== '' && !keyed.has(k)) keyed.set(k, raw);
   }
   let texts = [...keyed.keys()];
+  const textOwners = new Map(texts.map((k) => [k, ownersOf(keyed.get(k) as string)]));
   /** The student's own code: allowed back, except in an answer or confirmation context. */
   let own: string[] = [];
   if (opts.studentText !== undefined && opts.studentText !== '') {
@@ -312,41 +421,60 @@ export function compileAnswerKeys(
     const raw = opts.studentText;
     own = texts.filter(
       (k) =>
+        !protectedIds.has(keyId(keyed.get(k) as string)) &&
         codeShaped(keyed.get(k) as string) &&
         writtenAsCode(c, raw, k) &&
         !offeredAsOptions(raw, c, k),
     );
     texts = texts.filter((k) => !own.includes(k));
   }
+  const scope = labelScope(items);
+  const derived = items.flatMap((it, k) => {
+    const index = correctIndex(it);
+    return index === undefined ? [] : [{ k, index }];
+  });
 
   const plainLeak = (text: string, decoded = false): boolean => {
+    const spans = spansOf(text, items);
+    const spansFor = (owners: Owners): Span[] => owners.flatMap((k) => spans[k] ?? []);
     if (texts.length > 0 || own.length > 0) {
       const c = compact(text);
-      if (texts.some((k) => hasTextKey(c, k))) return true;
+      const outside = (k: string): boolean => {
+        const mine = spansFor(textOwners.get(k) ?? []);
+        if (mine.length === 0) return hasTextKey(c, k);
+        return occurrences(c, k).some(([s0, e0]) => !inside(s0, e0, mine));
+      };
+      if (texts.some(outside)) return true;
       // Decoded text is never a quote of the student's code.
       if (decoded && own.some((k) => hasTextKey(c, k))) return true;
       const quoted = own.flatMap((k) => occurrences(c, k));
       if (quoted.some(([start, end]) => confirmedNear(text, start, end))) return true;
     }
-    if (numbers.length === 0) return false;
-    return numberMentions(text).some((m) =>
-      numbers.some(
-        (k) =>
-          mentionMatches(m, k) &&
-          (m.weak
-            ? m.answerContext
-            : k.value.length > 1 || m.answerContext || (m.kind === 'digits' && !decoded)),
-      ),
-    );
+    if (labels.size > 0) {
+      const folded = foldLabels(blank(text, spans.flat()));
+      for (const l of labels) if (labelLeaks(folded, l, scope, decoded)) return true;
+    }
+    for (const { k, index } of derived) {
+      const masked = blank(text, spans[k] ?? []);
+      if (positionLeaks(masked, index)) return true;
+      if (!decoded && rulesOut(masked, items[k] as ItemContext, index)) return true;
+    }
+    return numberLeak(text, numbers, decoded, spansFor);
   };
 
   const tailKeys = [...texts, ...own];
   const longestTail = Math.max(0, ...tailKeys.map((k) => k.length));
-  const empty = tailKeys.length === 0 && numbers.length === 0;
-  const longest = Math.max(0, ...mustNotReveal.map((k) => (typeof k === 'string' ? k.length : 0)));
+  const empty = tailKeys.length === 0 && numbers.length === 0 && labels.size === 0;
+  const allKeys = [...mustNotReveal, ...ownKeys.flat()];
+  const longest = Math.max(0, ...allKeys.map((k) => (typeof k === 'string' ? k.length : 0)));
+  const longestSpan = Math.max(0, ...items.map(spanLength));
   return {
     empty,
-    reach: REACH_BASE + REACH_PER_KEY_UNIT * longest + (numbers.length > 0 ? REACH_NUMBERS : 0),
+    reach:
+      REACH_BASE +
+      REACH_PER_KEY_UNIT * longest +
+      (numbers.length > 0 ? REACH_NUMBERS : 0) +
+      longestSpan,
     leaks(text) {
       if (empty || text === '') return false;
       return plainLeak(text) || decodedBase64Spans(text).some((d) => plainLeak(d, true));
@@ -382,6 +510,39 @@ export function compileAnswerKeys(
       return start;
     },
   };
+}
+
+/**
+ * Whether `text` names a number key. Each key is read on the text with its owners' spans blanked
+ * (5.6b), one reading per owner set; with no items there is one reading, the text itself.
+ */
+function numberLeak(
+  text: string,
+  numbers: readonly { key: NumericKey; owners: Owners }[],
+  decoded: boolean,
+  spansFor: (owners: Owners) => Span[],
+): boolean {
+  const groups = new Map<string, { owners: Owners; keys: NumericKey[] }>();
+  for (const n of numbers) {
+    const sig = n.owners.join(',');
+    const g = groups.get(sig) ?? { owners: n.owners, keys: [] };
+    g.keys.push(n.key);
+    groups.set(sig, g);
+  }
+  for (const { owners, keys } of groups.values()) {
+    const read = blank(text, spansFor(owners));
+    const hit = numberMentions(read).some((m) =>
+      keys.some(
+        (k) =>
+          mentionMatches(m, k) &&
+          (m.weak
+            ? m.answerContext
+            : k.value.length > 1 || m.answerContext || (m.kind === 'digits' && !decoded)),
+      ),
+    );
+    if (hit) return true;
+  }
+  return false;
 }
 
 /** Where the last `n` units that are neither whitespace nor invisible start in `text`. */
@@ -439,10 +600,19 @@ function leaves(value: unknown, out: string[]): string[] {
   return out;
 }
 
-/** True when any non-empty do-not-say string appears in the value (its JSON or any leaf). */
-export function revealsAnswerKey(value: unknown, mustNotReveal: readonly string[]): boolean {
-  const m = compileAnswerKeys(mustNotReveal);
+/**
+ * True when any non-empty do-not-say string appears in the value (its JSON or any leaf). A plain
+ * string is read once: its JSON form adds only quote marks and escapes (5.6b: a joined listing's
+ * newlines must stay newlines for its span).
+ */
+export function revealsAnswerKey(
+  value: unknown,
+  mustNotReveal: readonly string[],
+  opts: AnswerKeyOptions = {},
+): boolean {
+  const m = compileAnswerKeys(mustNotReveal, opts);
   if (m.empty) return false;
+  if (typeof value === 'string') return m.leaks(value);
   const texts = leaves(value, []);
   try {
     const json = JSON.stringify(value) as string | undefined;
